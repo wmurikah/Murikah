@@ -1,0 +1,102 @@
+/**
+ * Murikah design tokens.
+ *
+ * Defined in a Tailwind v4 `@theme` block so every token is available BOTH as a
+ * utility class (e.g. `bg-navy`, `text-slate`, `font-serif`, `text-display`) AND
+ * as a raw CSS custom property (e.g. `var(--color-navy)`). This is the single
+ * source of truth for colour, type, spacing rhythm, radius, shadow and motion.
+ *
+ * Brand tokens are the exact values from the brand spec and must not drift.
+ */
+
+@theme {
+  /* ---- Brand & neutral (exact brand values) ------------------------------ */
+  --color-navy: #0b1733; /* primary: competence, authority, trust */
+  --color-gold: #c9a227; /* accent: the single distinctive highlight */
+  --color-blue: #1e4fa3; /* interactive: links, buttons, active states */
+  --color-ink: #1b2230; /* body text (not pure black) */
+  --color-slate: #5c6475; /* secondary text */
+  --color-paper: #f7f4ee; /* warm off-white background */
+  --color-surface: #ffffff; /* cards / surfaces */
+  --color-hairline: #d7dbe5; /* borders, dividers */
+
+  /* Derived interactive shades for hover/active — darker mixes of the brand
+     colours above, NOT new brand colours. Keeps gold scarce (Von Restorff). */
+  --color-gold-deep: #ae8b1f;
+  --color-blue-deep: #173c7c;
+  --color-navy-deep: #081026;
+  --color-paper-shade: #efeae0;
+
+  /* ---- Status (RAG) — PRODUCT/STATUS ONLY, never in marketing UI --------- */
+  --color-status-low: #2e7d5b;
+  --color-status-med: #d9930a;
+  --color-status-high: #b42318;
+
+  /* ---- Type families ----------------------------------------------------- */
+  /* Outfit drives all UI + headings. Fraunces (serif) is reserved for the
+     hero headline only — applied via the `font-serif` utility, sparingly. */
+  --font-sans:
+    'Outfit Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Fraunces Variable', ui-serif, Georgia, 'Times New Roman', serif;
+
+  /* ---- Modular type scale (~1.2 ratio, 17px base) ------------------------
+     Line-height + tracking are baked per step: tight, slightly negative
+     tracking on large sizes for a precise, premium feel; generous leading on
+     body for readability. Strong jumps make hierarchy obvious at a glance. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.55;
+  --text-base: 1.0625rem; /* 17px body base */
+  --text-base--line-height: 1.6;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.55;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.35;
+  --text-xl--letter-spacing: -0.01em;
+  --text-2xl: 1.875rem;
+  --text-2xl--line-height: 1.2;
+  --text-2xl--letter-spacing: -0.015em;
+  --text-3xl: 2.25rem;
+  --text-3xl--line-height: 1.15;
+  --text-3xl--letter-spacing: -0.02em;
+  --text-4xl: 2.75rem;
+  --text-4xl--line-height: 1.1;
+  --text-4xl--letter-spacing: -0.02em;
+  --text-5xl: 3.25rem;
+  --text-5xl--line-height: 1.05;
+  --text-5xl--letter-spacing: -0.022em;
+  --text-6xl: 4rem;
+  --text-6xl--line-height: 1.02;
+  --text-6xl--letter-spacing: -0.025em;
+  /* Fluid hero display size — scales with viewport, no layout shift. */
+  --text-display: clamp(2.5rem, 1.8rem + 3.4vw, 4.25rem);
+  --text-display--line-height: 1.04;
+  --text-display--letter-spacing: -0.025em;
+
+  /* ---- Layout ------------------------------------------------------------ */
+  --container-page: 75rem; /* ~1200px max content width → max-w-page */
+
+  /* ---- Radius ------------------------------------------------------------ */
+  --radius-btn: 0.5rem; /* → rounded-btn */
+  --radius-card: 0.875rem; /* → rounded-card */
+
+  /* ---- Shadows (subtle, navy-tinted; restraint over drama) --------------- */
+  --shadow-card: 0 1px 2px rgba(11, 23, 51, 0.05), 0 10px 30px -16px rgba(11, 23, 51, 0.18);
+  --shadow-pop: 0 12px 40px -12px rgba(11, 23, 51, 0.22);
+
+  /* ---- Motion ------------------------------------------------------------ */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-fade-up: fade-up 0.5s var(--ease-out-soft) both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

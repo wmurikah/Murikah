@@ -1,0 +1,42 @@
+---
+/**
+ * DemoEmbed — a clearly-labelled frame for a future interactive demo. The demo
+ * logic itself is out of scope (Build Prompt 3+); this only provides the slot
+ * and the "coming soon" affordance. Pass an interactive island as the default
+ * slot, or leave empty to show the placeholder copy.
+ */
+interface Props {
+  title?: string;
+  description?: string;
+  class?: string;
+}
+const {
+  title = 'Interactive demo',
+  description = 'A working, interactive demo will live here in a later release.',
+  class: className,
+} = Astro.props;
+---
+
+<figure
+  class:list={[
+    'rounded-card border border-dashed border-hairline bg-surface p-6 sm:p-8',
+    className,
+  ]}
+>
+  <figcaption class="flex items-center gap-2.5 text-sm font-medium text-slate">
+    <span
+      class="inline-block rounded-full bg-paper-shade px-2.5 py-0.5 text-xs font-semibold tracking-wide text-navy uppercase"
+    >
+      Placeholder
+    </span>
+    {title}
+  </figcaption>
+
+  <div class="mt-4 grid min-h-48 place-items-center rounded-[0.5rem] bg-paper p-6 text-center">
+    <slot>
+      <p class="text-slate">Interactive demo coming here.</p>
+    </slot>
+  </div>
+
+  <p class="mt-4 text-sm text-slate">{description}</p>
+</figure>

@@ -1,0 +1,15 @@
+---
+/** Stat — a single figure with label. Sans (Outfit) per the type rules. */
+interface Props {
+  value: string;
+  label: string;
+  hint?: string;
+}
+const { value, label, hint } = Astro.props;
+---
+
+<div>
+  <div class="text-4xl font-semibold text-navy">{value}</div>
+  <div class="mt-1 font-medium">{label}</div>
+  {hint && <p class="mt-1 text-sm text-slate">{hint}</p>}
+</div>
