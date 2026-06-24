@@ -1,0 +1,27 @@
+# Murikah robots policy.
+# Search and reputable AI crawlers are allowed explicitly; everything else is
+# allowed by the wildcard rule. Update before any staging deployment if you need
+# to disallow non-production environments.
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: *
+Allow: /
+
+Sitemap: https://www.murikah.com/sitemap-index.xml
