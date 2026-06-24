@@ -1,0 +1,42 @@
+---
+/**
+ * Logo — geometric mark (a gold assurance check inside a navy rounded square)
+ * plus the Murikah wordmark. `tone="light"` is for dark/navy surfaces (footer).
+ * Hex values are inlined because SVG presentation attributes don't resolve
+ * CSS custom properties.
+ */
+interface Props {
+  tone?: 'dark' | 'light';
+  withWordmark?: boolean;
+  class?: string;
+}
+const { tone = 'dark', withWordmark = true, class: className } = Astro.props;
+
+const squareFill = tone === 'light' ? 'rgba(255,255,255,0.12)' : '#0B1733';
+const wordmarkClass = tone === 'light' ? 'text-white' : 'text-navy';
+---
+
+<span class:list={['inline-flex items-center gap-2.5', className]}>
+  <svg
+    width="32"
+    height="32"
+    viewBox="0 0 32 32"
+    fill="none"
+    aria-hidden="true"
+    focusable="false"
+    class="shrink-0"
+  >
+    <rect width="32" height="32" rx="8" fill={squareFill}></rect>
+    <path
+      d="M9 16.4l4.4 4.4L23 11"
+      stroke="#C9A227"
+      stroke-width="2.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"></path>
+  </svg>
+  {
+    withWordmark && (
+      <span class:list={['text-xl font-semibold tracking-tight', wordmarkClass]}>Murikah</span>
+    )
+  }
+</span>

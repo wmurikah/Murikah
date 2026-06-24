@@ -1,0 +1,52 @@
+---
+/**
+ * Breadcrumb — orientation aid (recognition over recall) plus BreadcrumbList
+ * JSON-LD for richer search results. The final item is the current page.
+ */
+import type { CrumbItem } from '@/lib/types';
+import { SITE } from '@/site.config';
+
+interface Props {
+  items: CrumbItem[];
+  class?: string;
+}
+const { items, class: className } = Astro.props;
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: items.map((item, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    name: item.label,
+    item: new URL(item.href, SITE.url).href,
+  })),
+};
+---
+
+<nav aria-label="Breadcrumb" class:list={['text-sm', className]}>
+  <ol class="flex flex-wrap items-center gap-1.5 text-slate">
+    {
+      items.map((item, i) => (
+        <li class="flex items-center gap-1.5">
+          {i > 0 && (
+            <span aria-hidden="true" class="text-hairline">
+              /
+            </span>
+          )}
+          {i < items.length - 1 ? (
+            <a href={item.href} class="hover:text-blue">
+              {item.label}
+            </a>
+          ) : (
+            <span aria-current="page" class="text-ink">
+              {item.label}
+            </span>
+          )}
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+
+<script type="application/ld+json" is:inline set:html={JSON.stringify(schema)} />

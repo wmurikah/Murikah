@@ -1,0 +1,29 @@
+---
+/**
+ * FAQPage JSON-LD — emitted on any page with an FAQ block (service pages, some
+ * guides). Pass the same items used to render the visible <Faq> so the markup
+ * and the structured data never diverge.
+ */
+import type { FaqItem } from '@/lib/types';
+
+interface Props {
+  items: FaqItem[];
+}
+
+const { items } = Astro.props;
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: items.map((item) => ({
+    '@type': 'Question',
+    name: item.question,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.answer,
+    },
+  })),
+};
+---
+
+<script type="application/ld+json" is:inline set:html={JSON.stringify(schema)} />
