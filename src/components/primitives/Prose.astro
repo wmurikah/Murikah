@@ -1,0 +1,117 @@
+---
+/**
+ * Prose — long-form/MDX wrapper applying the type system: a constrained measure
+ * (68ch, ~60–75 chars), comfortable rhythm, and styled headings, links, lists,
+ * quotes, code and tables. Hand-written (no typography plugin) to keep deps and
+ * shipped CSS minimal. Styles are `is:global` so they reach slotted MDX nodes.
+ */
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<div class:list={['prose-murikah', className]}>
+  <slot />
+</div>
+
+<style is:global>
+  .prose-murikah {
+    max-width: 68ch;
+    color: var(--color-ink);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+  }
+  .prose-murikah > * + * {
+    margin-top: 1.15em;
+  }
+  .prose-murikah h2 {
+    margin-top: 2em;
+    margin-bottom: 0.4em;
+    font-size: var(--text-2xl);
+    line-height: 1.2;
+    color: var(--color-navy);
+    scroll-margin-top: 6rem;
+  }
+  .prose-murikah h3 {
+    margin-top: 1.6em;
+    margin-bottom: 0.3em;
+    font-size: var(--text-xl);
+    line-height: 1.3;
+    color: var(--color-navy);
+    scroll-margin-top: 6rem;
+  }
+  .prose-murikah a {
+    color: var(--color-blue);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+  .prose-murikah a:hover {
+    color: var(--color-blue-deep);
+  }
+  .prose-murikah strong {
+    color: var(--color-navy);
+    font-weight: 600;
+  }
+  .prose-murikah ul,
+  .prose-murikah ol {
+    padding-left: 1.4em;
+  }
+  .prose-murikah ul {
+    list-style: disc;
+  }
+  .prose-murikah ol {
+    list-style: decimal;
+  }
+  .prose-murikah li + li {
+    margin-top: 0.4em;
+  }
+  .prose-murikah blockquote {
+    border-left: 3px solid var(--color-gold);
+    padding-left: 1em;
+    color: var(--color-slate);
+    font-style: italic;
+  }
+  .prose-murikah code {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    background: var(--color-paper-shade);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+  .prose-murikah pre {
+    background: var(--color-navy-deep);
+    color: #e9edf5;
+    padding: 1.1em 1.25em;
+    border-radius: var(--radius-card);
+    overflow-x: auto;
+  }
+  .prose-murikah pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+  .prose-murikah img {
+    border-radius: var(--radius-card);
+  }
+  .prose-murikah hr {
+    border: 0;
+    border-top: 1px solid var(--color-hairline);
+    margin: 2.5em 0;
+  }
+  .prose-murikah table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+  }
+  .prose-murikah th,
+  .prose-murikah td {
+    border-bottom: 1px solid var(--color-hairline);
+    padding: 0.6em 0.5em;
+    text-align: left;
+  }
+  .prose-murikah th {
+    color: var(--color-navy);
+    font-weight: 600;
+  }
+</style>
