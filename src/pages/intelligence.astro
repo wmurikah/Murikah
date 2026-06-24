@@ -2,54 +2,93 @@
 export const prerender = true;
 
 import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import type { FaqItem } from '@/lib/types';
 
-// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
-const faqs: FaqItem[] = [
+const shows = [
   {
-    question: 'How is client data anonymised?',
-    answer:
-      'Benchmarking uses aggregated, anonymised data with safeguards designed for regulated organisations. No client is identifiable. [placeholder]',
+    title: 'Control maturity',
+    body: 'How developed your controls are compared with peers in your sector, so you can see where you lead and where you lag.',
   },
   {
-    question: 'What is the annual flagship report?',
+    title: 'Finding mix',
+    body: 'The pattern of issues you raise compared with the sector, which points to where attention is worth spending.',
+  },
+  {
+    title: 'Remediation speed',
+    body: 'How quickly issues get fixed in your organisation against the benchmark, a simple measure of whether assurance is working.',
+  },
+];
+
+const faqs: FaqItem[] = [
+  {
+    question: 'What is Murikah Intelligence?',
     answer:
-      'A yearly study on the state of assurance, risk and AI governance across the sectors we serve. [placeholder]',
+      'It turns anonymised, aggregated findings from across Murikah assurance work into a benchmark. Instead of guessing whether your control maturity, finding mix and remediation speed are normal, you will be able to see how they compare with your sector. It also includes an annual report on the state of internal audit and AI governance in the African mid-market.',
+  },
+  {
+    question: 'When will the benchmarking and report be available?',
+    answer:
+      'Both are building now, and they grow more useful as the client base grows, because a benchmark is only as good as the data behind it. We are inviting organisations to join a founding cohort and help shape what gets measured. We will not quote figures until the data genuinely supports them.',
+  },
+  {
+    question: 'How is my data anonymised?',
+    answer:
+      'Benchmarks use aggregated, anonymised data with safeguards designed for regulated organisations. No client is named or identifiable, and nothing that could single out an organisation is published. Participation is on clear, written terms, and you stay in control of what is shared.',
+  },
+  {
+    question: 'How do I take part?',
+    answer:
+      'Join the founding cohort. Tell us about your organisation and we will explain how participation works, what you would contribute, and what you would get back as the benchmark and the annual report take shape.',
   },
 ];
 ---
 
 <ServiceLayout
   slug="intelligence"
-  intro="Anonymised, cross-client benchmarking and an annual flagship report — so you can see how your assurance and governance compare, and where to focus."
-  whatItIs={[
-    'Murikah Intelligence aggregates anonymised insight from across our work into benchmarks leaders can trust.',
-    'It helps you answer "compared to whom?" — and turns that into a clear view of where to invest next.',
-  ]}
-  inclusions={[
-    'Cross-client benchmarking',
-    'Anonymised, aggregated data',
-    'Annual flagship report',
-    'Sector & peer comparisons',
-  ]}
-  whoItIsFor={[
-    'Boards & committees seeking context',
-    'Audit & risk leaders setting priorities',
-    'Executives benchmarking maturity',
-  ]}
-  howItWorks={[
-    {
-      title: 'Aggregate',
-      body: 'Anonymised signals are gathered across engagements. [placeholder]',
-    },
-    {
-      title: 'Benchmark',
-      body: 'Your position is compared against relevant peers. [placeholder]',
-    },
-    {
-      title: 'Act',
-      body: 'Insight points you to where attention pays off most. [placeholder]',
-    },
-  ]}
+  metaTitle="Benchmark your controls against your sector | Murikah Intelligence"
+  metaDescription="Murikah Intelligence will benchmark your control maturity, finding mix and remediation speed against your sector, with an annual mid-market report."
+  heading="Benchmark your controls against your sector."
+  intro="Murikah Intelligence turns anonymised, aggregated findings from across our assurance work into a benchmark, so your organisation can see how its control maturity, finding mix and remediation speed compare with its sector. It will also publish an annual flagship report, the State of Internal Audit and AI Governance in the African Mid-Market. The benchmark and the report are building now, and they get stronger as our client base grows, so we are honest that this is early. We are inviting organisations to join the founding cohort and help shape it."
+  primaryCta={{ label: 'Join the founding cohort', href: '/contact' }}
+  secondaryCta={{ label: 'See Murikah Assurance', href: '/assurance' }}
   faqs={faqs}
-/>
+  closingTitle="Help shape the benchmark, and see where you stand"
+  closingBody="Join the founding cohort and be part of the first picture of the African mid-market."
+>
+  <Section tone="paper" aria-labelledby="what-it-shows">
+    <h2 id="what-it-shows" class="text-2xl sm:text-3xl">What benchmarking will show</h2>
+    <FeatureGrid cols={3} class="mt-8">
+      {
+        shows.map((s) => (
+          <Card>
+            <h3 class="text-lg text-navy">{s.title}</h3>
+            <p class="mt-2 text-slate">{s.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="report">
+    <div class="grid gap-10 lg:grid-cols-12">
+      <div class="lg:col-span-5">
+        <h2 id="report" class="text-2xl sm:text-3xl">The annual report</h2>
+      </div>
+      <div class="lg:col-span-7">
+        <p class="max-w-prose text-ink">
+          Once there is enough anonymised data to stand behind, we will publish the State of
+          Internal Audit and AI Governance in the African Mid-Market: a yearly read on where
+          controls, findings and governance are heading across the sectors we serve. It is
+          forthcoming, and we will not put numbers to it before the data supports them.
+        </p>
+        <p class="mt-4 max-w-prose text-ink">
+          Confidentiality is the foundation. Everything that feeds the benchmark is aggregated and
+          anonymised, on written terms, with no organisation identifiable.
+        </p>
+      </div>
+    </div>
+  </Section>
+</ServiceLayout>
