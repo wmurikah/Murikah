@@ -1,6 +1,6 @@
 /**
  * Forgiving input validation (Postel's Law): accept generously, normalise, and
- * only reject what truly can't be used — with clear, friendly field messages.
+ * only reject what truly can't be used, with clear, friendly field messages.
  * Hand-rolled to avoid an extra dependency.
  */
 
@@ -19,9 +19,11 @@ export interface ContactInput {
 
 export interface SubscribeInput {
   email: string;
+  /** Where the signup came from, e.g. "newsletter" or "iso-42001-checklist". */
+  source: string;
 }
 
-// Pragmatic email check — intentionally permissive (Postel's Law).
+// Pragmatic email check, intentionally permissive (Postel's Law).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function str(value: unknown): string {
@@ -76,5 +78,13 @@ export function validateSubscribe(raw: Record<string, unknown>): {
   if (!EMAIL_RE.test(email)) {
     return { errors: [{ field: 'email', message: 'Please enter a valid email address.' }] };
   }
-  return { data: { email: clamp(email, 200) }, errors: [] };
+  // Sanitise the source tag to a safe slug; default to "website".
+  const source =
+    clamp(
+      str(raw.source)
+        .replace(/[^a-z0-9_-]/gi, '')
+        .toLowerCase(),
+      60,
+    ) || 'website';
+  return { data: { email: clamp(email, 200), source }, errors: [] };
 }

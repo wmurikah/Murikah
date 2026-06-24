@@ -1,4 +1,4 @@
-// Server endpoint — runs on-demand in the Worker (not prerendered).
+// Server endpoint, runs on-demand in the Worker (not prerendered).
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
@@ -51,10 +51,10 @@ export const POST: APIRoute = async ({ request }) => {
 
   try {
     const db = createDbClient(env);
-    // INSERT OR IGNORE — re-subscribing is idempotent, not an error.
+    // INSERT OR IGNORE, re-subscribing is idempotent, not an error.
     await db.execute({
       sql: 'INSERT OR IGNORE INTO subscribers (email, source) VALUES (?, ?)',
-      args: [data.email, 'website'],
+      args: [data.email, data.source],
     });
   } catch (error) {
     console.error('subscribe: failed to persist subscriber', error);
@@ -70,6 +70,6 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   return wantsJson
-    ? json({ ok: true, message: 'Subscribed — thank you.' })
+    ? json({ ok: true, message: 'Subscribed, thank you.' })
     : seeOther('/?status=subscribed');
 };
