@@ -11,12 +11,13 @@ dist/
 .wrangler/
 worker-configuration.d.ts
 
-# Environment & secrets (never commit) — keep the example
+# Environment & secrets (never commit), keep the example
 .dev.vars
 .dev.vars.*
 !.dev.vars.example
 .env
 .env.*
+*.local
 
 # Logs
 *.log
