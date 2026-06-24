@@ -100,8 +100,7 @@ export const SERVICES: ServiceLine[] = [
     name: 'Advisory',
     fullName: 'Murikah Advisory',
     href: '/advisory',
-    summary:
-      'AI strategy, research and analytics, executive decks, and board packs. [placeholder]',
+    summary: 'AI strategy, research and analytics, executive decks, and board packs. [placeholder]',
     serviceType: 'Advisory and analytics',
   },
   {
@@ -118,8 +117,7 @@ export const SERVICES: ServiceLine[] = [
     name: 'Intelligence',
     fullName: 'Murikah Intelligence',
     href: '/intelligence',
-    summary:
-      'Anonymised cross-client benchmarking and an annual flagship report. [placeholder]',
+    summary: 'Anonymised cross-client benchmarking and an annual flagship report. [placeholder]',
     serviceType: 'Benchmarking and research',
   },
 ];

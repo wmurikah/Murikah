@@ -33,10 +33,7 @@ const year = new Date().getFullYear();
         </ul>
       </div>
 
-      <nav
-        aria-label="Footer"
-        class="grid grid-cols-2 gap-8 sm:grid-cols-3 md:col-span-8 md:pl-8"
-      >
+      <nav aria-label="Footer" class="grid grid-cols-2 gap-8 sm:grid-cols-3 md:col-span-8 md:pl-8">
         {
           FOOTER_GROUPS.map((group) => (
             <div>
@@ -84,8 +81,9 @@ const year = new Date().getFullYear();
           ))
         }
         <li>
-          <a href={`mailto:${SITE.email}`} class="text-sm text-paper/75 no-underline hover:text-white"
-            >{SITE.email}</a
+          <a
+            href={`mailto:${SITE.email}`}
+            class="text-sm text-paper/75 no-underline hover:text-white">{SITE.email}</a
           >
         </li>
       </ul>
