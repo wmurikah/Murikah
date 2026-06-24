@@ -66,7 +66,9 @@ const imageUrl = new URL(image, Astro.site).href;
         <meta property="article:modified_time" content={article.modifiedTime} />
       )}
       {article.author && <meta property="article:author" content={article.author} />}
-      {article.tags?.map((tag) => <meta property="article:tag" content={tag} />)}
+      {article.tags?.map((tag) => (
+        <meta property="article:tag" content={tag} />
+      ))}
     </>
   )
 }

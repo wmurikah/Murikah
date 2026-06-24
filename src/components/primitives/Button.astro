@@ -19,8 +19,14 @@ interface Props {
   [key: string]: unknown;
 }
 
-const { variant = 'primary', size = 'md', href, type = 'button', class: className, ...rest } =
-  Astro.props;
+const {
+  variant = 'primary',
+  size = 'md',
+  href,
+  type = 'button',
+  class: className,
+  ...rest
+} = Astro.props;
 
 const base =
   'inline-flex items-center justify-center gap-2 rounded-btn font-medium text-center no-underline transition-colors duration-150 disabled:pointer-events-none disabled:opacity-60';
