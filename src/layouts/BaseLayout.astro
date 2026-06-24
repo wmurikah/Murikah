@@ -19,6 +19,7 @@ import Seo from '@/components/Seo.astro';
 import OrganizationSchema from '@/components/schema/Organization.astro';
 import Header from '@/components/Header.astro';
 import Footer from '@/components/Footer.astro';
+import Assistant from '@/components/assistant/Assistant.tsx';
 import { SITE } from '@/site.config';
 
 interface Props {
@@ -72,5 +73,11 @@ const { mainClass, ...seo } = Astro.props;
     </main>
 
     <Footer />
+
+    {
+      /* Site-wide AI assistant. Loaded lazily (client:idle) so it never blocks
+        the page or shifts layout; it is fixed-positioned and out of flow. */
+    }
+    <Assistant client:idle />
   </body>
 </html>
