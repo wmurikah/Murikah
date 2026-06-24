@@ -1,4 +1,4 @@
-// Server endpoint — runs on-demand in the Worker (not prerendered).
+// Server endpoint, runs on-demand in the Worker (not prerendered).
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
@@ -30,7 +30,7 @@ export const POST: APIRoute = async ({ request }) => {
   // Honeypot: if the hidden field is filled, it's a bot. Feign success silently.
   if (typeof raw.company_website === 'string' && raw.company_website.trim() !== '') {
     return wantsJson
-      ? json({ ok: true, message: "Thanks — we'll be in touch." })
+      ? json({ ok: true, message: "Thanks, we'll be in touch." })
       : seeOther('/contact?status=ok');
   }
 
@@ -79,10 +79,10 @@ export const POST: APIRoute = async ({ request }) => {
       : seeOther('/contact?status=error');
   }
 
-  // Notify by email — non-fatal; skipped when Resend isn't configured.
+  // Notify by email, non-fatal; skipped when Resend isn't configured.
   await sendContactNotification(env, data);
 
   return wantsJson
-    ? json({ ok: true, message: "Thanks — we'll be in touch shortly." })
+    ? json({ ok: true, message: "Thanks, we'll be in touch shortly." })
     : seeOther('/contact?status=ok');
 };

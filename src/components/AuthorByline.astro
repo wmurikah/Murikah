@@ -1,0 +1,34 @@
+---
+/**
+ * AuthorByline, an E-E-A-T signal on every guide: the founder, the credential
+ * line, and a one-line bio, all from site.config so they never drift.
+ */
+import { FOUNDER } from '@/site.config';
+
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+
+// Initials for the monogram avatar.
+const initials = FOUNDER.name
+  .split(' ')
+  .map((part) => part[0])
+  .join('')
+  .slice(0, 2)
+  .toUpperCase();
+---
+
+<div class:list={['flex items-start gap-3', className]}>
+  <span
+    aria-hidden="true"
+    class="grid size-10 shrink-0 place-items-center rounded-full bg-navy text-sm font-semibold text-white"
+  >
+    {initials}
+  </span>
+  <div>
+    <p class="font-medium text-navy">{FOUNDER.name}</p>
+    <p class="text-sm text-slate">{FOUNDER.credentialLine}</p>
+    <p class="mt-1 max-w-prose text-sm text-slate">{FOUNDER.bioByline}</p>
+  </div>
+</div>
