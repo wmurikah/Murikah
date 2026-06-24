@@ -1,0 +1,45 @@
+---
+export const prerender = true;
+
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Button from '@/components/primitives/Button.astro';
+
+const quickLinks = [
+  { label: 'Services', href: '/assurance' },
+  { label: 'Insights', href: '/insights' },
+  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
+];
+---
+
+<BaseLayout
+  title="Page not found"
+  description="The page you were looking for could not be found."
+  noindex={true}
+>
+  <Section tone="surface" aria-labelledby="page-title" class="text-center">
+    <p class="text-sm font-semibold tracking-widest text-gold uppercase">Error 404</p>
+    <h1 id="page-title" class="mx-auto mt-3 max-w-2xl text-4xl text-balance sm:text-5xl">
+      We couldn't find that page
+    </h1>
+    <p class="mx-auto mt-5 max-w-prose text-lg text-slate">
+      The link may be broken or the page may have moved. Let's get you back on track.
+    </p>
+    <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      <Button href="/" variant="primary" size="lg">Back to home</Button>
+      <Button href="/contact" variant="ghost" size="lg">Contact us</Button>
+    </div>
+    <ul class="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+      {
+        quickLinks.map((l) => (
+          <li>
+            <a href={l.href} class="font-medium text-blue hover:text-blue-deep">
+              {l.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </Section>
+</BaseLayout>

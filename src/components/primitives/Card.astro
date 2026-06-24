@@ -1,0 +1,30 @@
+---
+/**
+ * Card — a surface with a hairline ring and soft shadow. Grouping is done with
+ * a shared container + whitespace (Gestalt common region), not heavy borders.
+ * When `href` is set the whole card becomes a link with a hover lift.
+ */
+interface Props {
+  href?: string;
+  class?: string;
+  [key: string]: unknown;
+}
+
+const { href, class: className, ...rest } = Astro.props;
+
+const base = 'block rounded-card bg-surface p-6 ring-1 ring-hairline/70 sm:p-7';
+const interactive =
+  'no-underline transition-shadow duration-150 hover:shadow-card focus-visible:shadow-card';
+---
+
+{
+  href ? (
+    <a href={href} class:list={[base, interactive, className]} {...rest}>
+      <slot />
+    </a>
+  ) : (
+    <div class:list={[base, className]} {...rest}>
+      <slot />
+    </div>
+  )
+}

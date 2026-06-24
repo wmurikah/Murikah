@@ -1,0 +1,19 @@
+# Local Worker variables/secrets. Copy to `.dev.vars` (gitignored) for local dev.
+# `astro dev` reads these via the adapter's platformProxy; `wrangler dev` reads them natively.
+# In production these are set as Cloudflare secrets (see README), NOT committed.
+
+# --- Turso (libSQL) — required for contact/subscribe persistence ---
+TURSO_DATABASE_URL="libsql://your-database-name.turso.io"
+TURSO_AUTH_TOKEN="your-turso-auth-token"
+
+# --- Resend transactional email — OPTIONAL ---
+# If RESEND_API_KEY is empty/unset, email sending is skipped (no-op) and the
+# endpoints still validate + persist. The build never requires a key.
+RESEND_API_KEY=""
+# Notification recipient for contact submissions.
+CONTACT_NOTIFY_EMAIL="hello@murikah.com"
+# Verified sender (must be a verified domain in Resend for production).
+RESEND_FROM_EMAIL="Murikah <noreply@murikah.com>"
+
+# --- Public site URL (canonical/OG fallback for non-production environments) ---
+PUBLIC_SITE_URL="http://localhost:4321"

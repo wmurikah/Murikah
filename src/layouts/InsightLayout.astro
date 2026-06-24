@@ -1,0 +1,123 @@
+---
+/**
+ * InsightLayout — the default layout for guides/articles. Encodes the content
+ * conventions: answer-first lead, clean semantic headings (from the MDX body),
+ * and an optional FAQ block that emits FAQPage schema. Also emits Article
+ * JSON-LD for E-E-A-T and rich results.
+ */
+import type { CollectionEntry } from 'astro:content';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Prose from '@/components/primitives/Prose.astro';
+import Faq from '@/components/primitives/Faq.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import FaqPageSchema from '@/components/schema/FaqPage.astro';
+import { SITE } from '@/site.config';
+import { formatDate, isoDate } from '@/lib/format';
+
+interface Props {
+  entry: CollectionEntry<'insights'>;
+}
+
+const { entry } = Astro.props;
+const { title, description, pubDate, updatedDate, author, tags, faqs } = entry.data;
+
+const url = new URL(`/insights/${entry.id}/`, SITE.url).href;
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Insights', href: '/insights' },
+  { label: title, href: `/insights/${entry.id}/` },
+];
+
+// Article JSON-LD (E-E-A-T: authored, dated, attributed to the Organization).
+const articleSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: title,
+  description,
+  datePublished: pubDate.toISOString(),
+  dateModified: (updatedDate ?? pubDate).toISOString(),
+  author: { '@type': 'Organization', name: author, '@id': `${SITE.url}/#organization` },
+  publisher: { '@id': `${SITE.url}/#organization` },
+  mainEntityOfPage: url,
+  image: new URL(SITE.defaultOgImage, SITE.url).href,
+};
+---
+
+<BaseLayout
+  title={title}
+  description={description}
+  type="article"
+  article={{
+    publishedTime: pubDate.toISOString(),
+    modifiedTime: (updatedDate ?? pubDate).toISOString(),
+    author,
+    tags,
+  }}
+>
+  <script
+    type="application/ld+json"
+    is:inline
+    set:html={JSON.stringify(articleSchema)}
+    slot="head"
+  />
+
+  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
+    <Breadcrumb items={crumbs} class="mb-6" />
+    {
+      tags.length > 0 && (
+        <p class="text-sm font-semibold tracking-widest text-gold uppercase">{tags[0]}</p>
+      )
+    }
+    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">{title}</h1>
+    <p class="mt-5 max-w-prose text-lg text-slate">{description}</p>
+    <p class="mt-6 text-sm text-slate">
+      By {author} · <time datetime={isoDate(pubDate)}>{formatDate(pubDate)}</time>
+      {
+        updatedDate && (
+          <>
+            {' '}
+            · Updated <time datetime={isoDate(updatedDate)}>{formatDate(updatedDate)}</time>
+          </>
+        )
+      }
+    </p>
+  </Section>
+
+  <Section tone="paper">
+    {/* The MDX body renders here with the prose type system. */}
+    <Prose>
+      <slot />
+    </Prose>
+
+    {
+      faqs && faqs.length > 0 && (
+        <div class="mt-16 max-w-3xl">
+          <Faq items={faqs} title="Frequently asked questions" />
+          <FaqPageSchema items={faqs} />
+        </div>
+      )
+    }
+
+    {
+      tags.length > 0 && (
+        <ul class="mt-12 flex flex-wrap gap-2" aria-label="Tags">
+          {tags.map((t) => (
+            <li class="rounded-full bg-surface px-3 py-1 text-sm text-slate ring-1 ring-hairline">
+              {t}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </Section>
+
+  <CtaSection
+    title="Put this into practice"
+    body="Talk to Murikah about applying this in your organisation. [placeholder]"
+    secondaryLabel="Read more insights"
+    secondaryHref="/insights"
+  />
+</BaseLayout>

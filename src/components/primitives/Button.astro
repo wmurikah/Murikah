@@ -1,0 +1,58 @@
+---
+/**
+ * Button — renders an <a> when `href` is set, otherwise a <button>.
+ *
+ * Variants:
+ *  - primary  → the ONE gold action (Von Restorff). Navy text meets AA on gold.
+ *  - secondary→ solid navy (never gold, to keep gold scarce).
+ *  - ghost    → quiet, hairline-ringed action for low-emphasis choices.
+ *
+ * Fitts's Law: min tap target 44×44px (min-h 2.75rem + generous padding).
+ * Doherty Threshold: 150ms colour transition gives instant hover/active feedback.
+ */
+interface Props {
+  variant?: 'primary' | 'secondary' | 'ghost';
+  size?: 'md' | 'lg';
+  href?: string;
+  type?: 'button' | 'submit' | 'reset';
+  class?: string;
+  [key: string]: unknown;
+}
+
+const {
+  variant = 'primary',
+  size = 'md',
+  href,
+  type = 'button',
+  class: className,
+  ...rest
+} = Astro.props;
+
+const base =
+  'inline-flex items-center justify-center gap-2 rounded-btn font-medium text-center no-underline transition-colors duration-150 disabled:pointer-events-none disabled:opacity-60';
+
+const sizeClass: Record<string, string> = {
+  md: 'min-h-[2.75rem] px-5 py-2.5 text-base',
+  lg: 'min-h-[3.25rem] px-7 py-3 text-lg',
+};
+
+const variantClass: Record<string, string> = {
+  primary: 'bg-gold text-navy shadow-card hover:bg-gold-deep active:bg-gold-deep',
+  secondary: 'bg-navy text-white hover:bg-navy-deep active:bg-navy-deep',
+  ghost: 'bg-transparent text-navy ring-1 ring-inset ring-hairline hover:bg-paper-shade',
+};
+
+const cls = [base, sizeClass[size], variantClass[variant], className];
+---
+
+{
+  href ? (
+    <a href={href} class:list={cls} {...rest}>
+      <slot />
+    </a>
+  ) : (
+    <button type={type} class:list={cls} {...rest}>
+      <slot />
+    </button>
+  )
+}

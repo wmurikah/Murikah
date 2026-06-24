@@ -1,0 +1,32 @@
+# Murikah
+
+> AI-native assurance and governance for African organisations. Tagline: "Assurance. Systems. Intelligence." Pronounced moo-REE-kah (rhymes with Eureka).
+
+Murikah helps regulated, mid-market organisations — SACCOs, banks, microfinance and fintechs, and donor-funded NGOs — run, prove, and continuously improve their internal audit and their AI and system governance, at a fraction of the cost and rigidity of the Big 4 and enterprise GRC software. It serves heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance.
+
+Note: parts of the public site currently use clearly-marked placeholder copy pending a content pass.
+
+## Lines of work
+
+- Murikah Assurance: Co-sourced internal audit, systems and IT audits, data-protection reviews, and ISO 42001 / AI-governance readiness. https://www.murikah.com/assurance
+- Murikah Audit OS: Subscription platform for work papers, approvals, remediation, follow-ups, board reporting, and an AI assistant. https://www.murikah.com/audit-os
+- Murikah Labs: Automation builds, CRM and CMS, workflow engineering, and custom automations. https://www.murikah.com/labs
+- Murikah Advisory: AI strategy, research and analytics, executive decks, and board packs. https://www.murikah.com/advisory
+- Murikah Academy: Training and certification — CISA prep, ISO 42001 awareness, and AI and automation masterclasses. https://www.murikah.com/academy
+- Murikah Intelligence: Anonymised cross-client benchmarking and an annual flagship report. https://www.murikah.com/intelligence
+
+## Key pages
+
+- Home: https://www.murikah.com/
+- About & founder: https://www.murikah.com/about
+- Insights (guides): https://www.murikah.com/insights
+- Contact: https://www.murikah.com/contact
+
+## Feeds & metadata
+
+- Sitemap: https://www.murikah.com/sitemap-index.xml
+- RSS (insights): https://www.murikah.com/rss.xml
+
+## Contact
+
+- Email: hello@murikah.com
