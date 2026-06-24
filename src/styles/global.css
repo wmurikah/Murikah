@@ -1,5 +1,5 @@
 /**
- * Global stylesheet — the single Tailwind entry point.
+ * Global stylesheet, the single Tailwind entry point.
  * Pulls in Tailwind v4 and the design tokens, then sets restrained base styles.
  * (Self-hosted fonts are imported from BaseLayout.astro so Vite fingerprints
  *  and preloads them.)
@@ -70,7 +70,7 @@
     height: auto;
   }
 
-  /* WCAG 2.2 — a clearly visible focus indicator on every interactive element. */
+  /* WCAG 2.2, a clearly visible focus indicator on every interactive element. */
   :focus-visible {
     outline: 2px solid var(--color-blue);
     outline-offset: 2px;
@@ -104,7 +104,7 @@
 }
 
 @layer components {
-  /* Skip-to-content link — hidden until focused (familiar a11y convention). */
+  /* Skip-to-content link, hidden until focused (familiar a11y convention). */
   .skip-link {
     position: fixed;
     top: 0.75rem;

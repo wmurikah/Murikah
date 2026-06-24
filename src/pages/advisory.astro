@@ -2,55 +2,118 @@
 export const prerender = true;
 
 import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import type { FaqItem } from '@/lib/types';
 
-// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
-const faqs: FaqItem[] = [
+const areas = [
   {
-    question: 'What does an advisory engagement look like?',
-    answer:
-      'Typically a scoped piece of work — an AI strategy, a research study, or a board pack — with clear deliverables and timelines. [placeholder]',
+    title: 'AI strategy and governance roadmaps',
+    body: 'A clear plan for where AI creates value, where it creates risk, and the governance that keeps the board comfortable, mapped to ISO 42001 and Kenyan rules.',
   },
   {
-    question: 'Do you provide implementation as well as advice?',
+    title: 'Research and analytics',
+    body: 'Sector studies and analysis that answer the specific question in front of your board, grounded in evidence rather than opinion.',
+  },
+  {
+    title: 'Executive decks and board papers',
+    body: 'The decks and papers that turn analysis into a decision your board can actually take, written for the room they go into.',
+  },
+];
+
+const steps = [
+  { title: 'Frame', body: 'We agree the decision to be made and the questions that matter most.' },
+  {
+    title: 'Analyse',
+    body: 'We gather the evidence and run the research or analytics the decision needs.',
+  },
+  {
+    title: 'Decide',
+    body: 'We deliver clear recommendations and the board-ready materials to act on them.',
+  },
+];
+
+const faqs: FaqItem[] = [
+  {
+    question: 'What does an AI governance roadmap actually include?',
     answer:
-      'Yes. Advisory pairs naturally with Murikah Labs for build and automation, and with Assurance for independent review. [placeholder]',
+      'It starts with an honest picture of where AI is used in your organisation and the risks that come with it. From there it sets the policies, roles and decision rights you need, maps them to ISO 42001 (the management-system standard for AI) and Kenyan rules, and lays out the practical steps and order to get there. The output is a plan your board can approve and track.',
+  },
+  {
+    question: 'Who is this for?',
+    answer:
+      'Boards, chief executives, and the strategy and risk leaders who advise them. If your organisation is adopting AI faster than it can govern it, or your board is being asked questions it cannot yet answer, this is for you.',
+  },
+  {
+    question: 'How do you stay current on AI regulation?',
+    answer:
+      'We track the rules that affect Kenyan organisations directly: the National AI Strategy and the advancing AI Bill, the Kenya Data Protection Act and the ODPC, and global frameworks such as the EU AI Act that shape what customers and partners expect. Our advice reflects where the rules are heading, not just where they are today.',
+  },
+  {
+    question: 'Can you present directly to our board?',
+    answer:
+      'Yes. We regularly prepare and present board papers and briefings, and can join the meeting to take questions. The aim is to leave your directors confident they understand the AI risk and the plan to manage it.',
   },
 ];
 ---
 
 <ServiceLayout
   slug="advisory"
-  intro="AI strategy, research and analytics that help leaders decide with confidence — distilled into executive decks and board packs your committee can act on."
-  whatItIs={[
-    'Murikah Advisory helps boards and executives make sense of AI and data: where it creates value, where it creates risk, and what to do next.',
-    'We turn analysis into decisions — clear strategies, research studies, and board-ready materials grounded in evidence rather than hype.',
-  ]}
-  inclusions={[
-    'AI strategy & roadmaps',
-    'Research & analytics',
-    'Executive decks',
-    'Board packs',
-    'Governance & policy input',
-  ]}
-  whoItIsFor={[
-    'CEOs & executive teams setting direction',
-    'Boards & committees weighing AI risk',
-    'Strategy, risk & data leaders',
-  ]}
-  howItWorks={[
-    {
-      title: 'Frame',
-      body: 'Agree the decision to be made and the questions that matter. [placeholder]',
-    },
-    {
-      title: 'Analyse',
-      body: 'Gather evidence and run the research or analytics needed. [placeholder]',
-    },
-    {
-      title: 'Decide',
-      body: 'Deliver clear recommendations and board-ready materials. [placeholder]',
-    },
-  ]}
+  metaTitle="AI strategy and governance advisory for boards | Murikah"
+  metaDescription="Board-ready advice on AI strategy, governance and risk, plus the research, decks and board papers to act on it. Grounded in current AI-governance credentials."
+  heading="Board-ready thinking on AI, risk and governance."
+  intro="Murikah Advisory packages senior governance and AI-policy expertise into work your board can use. We produce AI strategy and governance roadmaps for boards and executives, research and analytics including sector studies, and the executive decks and board papers that turn analysis into decisions. The advice is grounded in current credentials, an ISO 42001 Lead Auditor and an AI-policy fellow with peer-reviewed work, so what your board hears reflects where AI governance is actually heading."
+  primaryCta={{ label: 'Book a session', href: '/contact' }}
+  secondaryCta={{ label: 'Visit Murikah Academy', href: '/academy' }}
   faqs={faqs}
-/>
+  closingTitle="Give your board a clear view of AI and risk"
+  closingBody="Book a session and we will shape the strategy, research or board paper your next meeting needs."
+>
+  <Section tone="paper" aria-labelledby="what-we-do">
+    <h2 id="what-we-do" class="text-2xl sm:text-3xl">What we do</h2>
+    <FeatureGrid cols={3} class="mt-8">
+      {
+        areas.map((a) => (
+          <Card>
+            <h3 class="text-lg text-navy">{a.title}</h3>
+            <p class="mt-2 text-slate">{a.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="how-it-works">
+    <h2 id="how-it-works" class="text-2xl sm:text-3xl">How an engagement works</h2>
+    <ol class="mt-8 grid gap-5 sm:gap-6 lg:grid-cols-3">
+      {
+        steps.map((step, i) => (
+          <li class="rounded-card bg-paper p-6 ring-1 ring-hairline/70 sm:p-7">
+            <span class="inline-flex size-9 items-center justify-center rounded-full bg-navy font-semibold text-white">
+              {i + 1}
+            </span>
+            <h3 class="mt-4 text-xl">{step.title}</h3>
+            <p class="mt-2 text-slate">{step.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="related">
+    <h2 id="related" class="text-2xl sm:text-3xl">Related reading</h2>
+    <ul class="mt-6 grid max-w-3xl gap-3">
+      <li>
+        <a href="/insights/iso-42001-readiness" class="font-medium text-blue hover:text-blue-deep">
+          ISO 42001 readiness: what African organisations actually need to do
+        </a>
+      </li>
+      <li>
+        <a href="/academy" class="font-medium text-blue hover:text-blue-deep">
+          Train your team through Murikah Academy
+        </a>
+      </li>
+    </ul>
+  </Section>
+</ServiceLayout>

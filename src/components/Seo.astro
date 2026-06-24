@@ -1,6 +1,6 @@
 ---
 /**
- * Seo — per-page <head> metadata: title, description, canonical, Open Graph and
+ * Seo, per-page <head> metadata: title, description, canonical, Open Graph and
  * Twitter Card tags. Sensible defaults come from site.config; every field is
  * overridable per page. One <h1> per page is enforced in the page templates,
  * not here.
@@ -8,8 +8,10 @@
 import { SITE, DEFAULT_SEO } from '@/site.config';
 
 interface Props {
-  /** Page-specific title; rendered as "<title> · Murikah". Omit on home. */
+  /** Page-specific phrase; rendered as "phrase | Murikah". Omit on home. */
   title?: string;
+  /** Exact full <title> used verbatim (overrides the `title | Murikah` pattern). */
+  titleFull?: string;
   description?: string;
   /** Social share image (absolute URL or site-relative path). */
   image?: string;
@@ -28,6 +30,7 @@ interface Props {
 
 const {
   title,
+  titleFull,
   description = DEFAULT_SEO.description,
   image = DEFAULT_SEO.image,
   canonical,
@@ -36,7 +39,7 @@ const {
   article,
 } = Astro.props;
 
-const fullTitle = title ? `${title} · ${SITE.name}` : DEFAULT_SEO.defaultTitle;
+const fullTitle = titleFull ?? (title ? `${title} | ${SITE.name}` : DEFAULT_SEO.defaultTitle);
 
 // Resolve canonical + image against the canonical origin (Astro.site).
 const canonicalUrl = canonical ?? new URL(Astro.url.pathname, Astro.site).href;

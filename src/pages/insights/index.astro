@@ -8,6 +8,7 @@ import Card from '@/components/primitives/Card.astro';
 import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
+import SubscribeForm from '@/components/SubscribeForm.astro';
 import { formatDate, isoDate } from '@/lib/format';
 
 const crumbs = [
@@ -21,18 +22,18 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
 ---
 
 <BaseLayout
-  title="Insights"
-  description="Guides and articles on internal audit, AI and system governance, and assurance — written to answer the questions practitioners actually ask."
+  titleFull="Insights on internal audit, AI governance and data protection | Murikah"
+  description="Plain, answer-first guides on internal audit, AI governance, data protection and audit software, written for heads of audit, risk and the board."
 >
   <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
     <Breadcrumb items={crumbs} class="mb-6" />
     <p class="text-sm font-semibold tracking-widest text-gold uppercase">Insights</p>
     <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
-      Guides for assurance, governance &amp; AI
+      Guides for assurance, governance and AI
     </h1>
     <p class="mt-5 max-w-prose text-lg text-slate">
-      Practical, answer-first guides for heads of audit, risk and the board.
-      <span class="text-slate/80">[placeholder]</span>
+      Practical, answer-first guides for heads of internal audit, risk and the board. Each one
+      answers a real question directly, then goes deeper.
     </p>
   </Section>
 
@@ -40,14 +41,14 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
     <h2 id="all-guides" class="sr-only">All guides</h2>
     {
       guides.length === 0 ? (
-        <p class="text-slate">No guides published yet. Check back soon.</p>
+        <p class="text-slate">No guides published yet. Please check back soon.</p>
       ) : (
         <FeatureGrid cols={3}>
           {guides.map((g) => (
             <Card href={`/insights/${g.id}/`} class="flex flex-col">
-              {g.data.tags[0] && (
+              {g.data.category && (
                 <p class="text-xs font-semibold tracking-widest text-gold uppercase">
-                  {g.data.tags[0]}
+                  {g.data.category}
                 </p>
               )}
               <h3 class="mt-2 text-xl text-navy">{g.data.title}</h3>
@@ -66,9 +67,35 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
     </p>
   </Section>
 
+  {
+    /* Lead magnet. The downloadable asset is a placeholder for now.
+      {{ASSET: final ISO 42001 readiness checklist PDF to add (R2)}} */
+  }
+  <Section tone="shade" aria-labelledby="lead-magnet">
+    <div
+      class="grid gap-8 rounded-card bg-surface p-8 ring-1 ring-hairline/70 sm:p-10 md:grid-cols-2 md:items-center"
+    >
+      <div>
+        <h2 id="lead-magnet" class="text-2xl sm:text-3xl">ISO 42001 readiness checklist</h2>
+        <p class="mt-3 max-w-prose text-slate">
+          A practical, plain-English checklist of the steps an African organisation needs to get
+          ready for ISO 42001, the management-system standard for governing AI. Tell us where to
+          send it.
+        </p>
+      </div>
+      <SubscribeForm
+        source="iso-42001-checklist"
+        tone="light"
+        buttonLabel="Send me the checklist"
+        successMessage="Thank you. We will email the checklist shortly."
+        class="md:w-full md:max-w-sm md:justify-self-end"
+      />
+    </div>
+  </Section>
+
   <CtaSection
     title="Bring this rigour to your organisation"
-    body="Book a demo to see how Murikah turns guidance into working assurance. [placeholder]"
+    body="Book a demo to see how Murikah turns guidance into working assurance."
     secondaryLabel="Contact us"
     secondaryHref="/contact"
   />

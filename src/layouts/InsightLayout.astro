@@ -1,19 +1,25 @@
 ---
 /**
- * InsightLayout — the default layout for guides/articles. Encodes the content
- * conventions: answer-first lead, clean semantic headings (from the MDX body),
- * and an optional FAQ block that emits FAQPage schema. Also emits Article
- * JSON-LD for E-E-A-T and rich results.
+ * InsightLayout, the layout for guides. Encodes the content conventions:
+ * answer-first opener shown prominently, semantic H2/H3 from the body, an FAQ
+ * block that emits matching FAQPage JSON-LD, BlogPosting and BreadcrumbList
+ * schema, the author byline (E-E-A-T) on every guide, a related-guides block,
+ * and a closing CTA to the parent service.
  */
 import type { CollectionEntry } from 'astro:content';
+import { getCollection } from 'astro:content';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Prose from '@/components/primitives/Prose.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Faq from '@/components/primitives/Faq.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
 import FaqPageSchema from '@/components/schema/FaqPage.astro';
-import { SITE } from '@/site.config';
+import AuthorByline from '@/components/AuthorByline.astro';
+import { SITE, SERVICES, FOUNDER } from '@/site.config';
+import { buildFounderPerson, organizationId } from '@/lib/schema';
 import { formatDate, isoDate } from '@/lib/format';
 
 interface Props {
@@ -21,9 +27,21 @@ interface Props {
 }
 
 const { entry } = Astro.props;
-const { title, description, pubDate, updatedDate, author, tags, faqs } = entry.data;
+const {
+  title,
+  description,
+  question,
+  summary,
+  pubDate,
+  updatedDate,
+  author,
+  tags,
+  category,
+  service,
+} = entry.data;
 
 const url = new URL(`/insights/${entry.id}/`, SITE.url).href;
+const lead = summary ?? description;
 
 const crumbs = [
   { label: 'Home', href: '/' },
@@ -31,24 +49,44 @@ const crumbs = [
   { label: title, href: `/insights/${entry.id}/` },
 ];
 
-// Article JSON-LD (E-E-A-T: authored, dated, attributed to the Organization).
+// Related guides: explicit `related` slugs first, then same-category siblings.
+const all = await getCollection('insights', ({ data }) => !data.draft);
+const others = all.filter((g) => g.id !== entry.id);
+const explicit = entry.data.related
+  .map((slug) => others.find((g) => g.id === slug))
+  .filter((g): g is CollectionEntry<'insights'> => Boolean(g));
+const sameCategory = others.filter((g) => g.data.category && g.data.category === category);
+const related = [...new Set([...explicit, ...sameCategory])].slice(0, 2);
+
+// Parent service for the up-link and CTA target.
+const parentService = service ? SERVICES.find((s) => s.slug === service) : undefined;
+
+// BlogPosting JSON-LD. Author is the founder Person when authored by them.
 const articleSchema = {
   '@context': 'https://schema.org',
-  '@type': 'Article',
+  '@type': 'BlogPosting',
   headline: title,
   description,
   datePublished: pubDate.toISOString(),
   dateModified: (updatedDate ?? pubDate).toISOString(),
-  author: { '@type': 'Organization', name: author, '@id': `${SITE.url}/#organization` },
-  publisher: { '@id': `${SITE.url}/#organization` },
+  author: author === FOUNDER.name ? buildFounderPerson() : { '@type': 'Person', name: author },
+  publisher: {
+    '@type': 'Organization',
+    '@id': organizationId,
+    name: SITE.name,
+    logo: { '@type': 'ImageObject', url: new URL('/favicon.svg', SITE.url).href },
+  },
+  image: new URL(entry.data.ogImage ?? SITE.defaultOgImage, SITE.url).href,
   mainEntityOfPage: url,
-  image: new URL(SITE.defaultOgImage, SITE.url).href,
+  ...(category ? { articleSection: category } : {}),
+  ...(tags.length ? { keywords: tags.join(', ') } : {}),
 };
 ---
 
 <BaseLayout
   title={title}
   description={description}
+  image={entry.data.ogImage}
   type="article"
   article={{
     publishedTime: pubDate.toISOString(),
@@ -67,56 +105,82 @@ const articleSchema = {
   <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
     <Breadcrumb items={crumbs} class="mb-6" />
     {
-      tags.length > 0 && (
-        <p class="text-sm font-semibold tracking-widest text-gold uppercase">{tags[0]}</p>
+      category && (
+        <p class="text-sm font-semibold tracking-widest text-gold uppercase">{category}</p>
       )
     }
-    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">{title}</h1>
-    <p class="mt-5 max-w-prose text-lg text-slate">{description}</p>
-    <p class="mt-6 text-sm text-slate">
-      By {author} · <time datetime={isoDate(pubDate)}>{formatDate(pubDate)}</time>
-      {
-        updatedDate && (
-          <>
-            {' '}
-            · Updated <time datetime={isoDate(updatedDate)}>{formatDate(updatedDate)}</time>
-          </>
-        )
-      }
-    </p>
+    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
+      {question ?? title}
+    </h1>
+    <p class="mt-5 max-w-prose text-lg text-slate">{lead}</p>
+
+    <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <AuthorByline />
+      <p class="text-sm text-slate">
+        <time datetime={isoDate(pubDate)}>{formatDate(pubDate)}</time>
+        {
+          updatedDate && (
+            <>
+              {' '}
+              · Updated <time datetime={isoDate(updatedDate)}>{formatDate(updatedDate)}</time>
+            </>
+          )
+        }
+      </p>
+    </div>
   </Section>
 
   <Section tone="paper">
-    {/* The MDX body renders here with the prose type system. */}
     <Prose>
       <slot />
     </Prose>
 
     {
-      faqs && faqs.length > 0 && (
+      entry.data.faqs && entry.data.faqs.length > 0 && (
         <div class="mt-16 max-w-3xl">
-          <Faq items={faqs} title="Frequently asked questions" />
-          <FaqPageSchema items={faqs} />
+          <Faq items={entry.data.faqs} title="Frequently asked questions" />
+          <FaqPageSchema items={entry.data.faqs} />
         </div>
       )
     }
 
     {
-      tags.length > 0 && (
-        <ul class="mt-12 flex flex-wrap gap-2" aria-label="Tags">
-          {tags.map((t) => (
-            <li class="rounded-full bg-surface px-3 py-1 text-sm text-slate ring-1 ring-hairline">
-              {t}
-            </li>
-          ))}
-        </ul>
+      parentService && (
+        <p class="mt-12">
+          <a href={parentService.href} class="font-medium text-blue hover:text-blue-deep">
+            Read more about {parentService.fullName}
+          </a>
+        </p>
       )
     }
   </Section>
 
+  {
+    related.length > 0 && (
+      <Section tone="surface" aria-labelledby="related" class="border-t border-hairline">
+        <h2 id="related" class="text-2xl sm:text-3xl">
+          Related guides
+        </h2>
+        <FeatureGrid cols={2} class="mt-8">
+          {related.map((g) => (
+            <Card href={`/insights/${g.id}/`} class="flex flex-col">
+              {g.data.category && (
+                <p class="text-xs font-semibold tracking-widest text-gold uppercase">
+                  {g.data.category}
+                </p>
+              )}
+              <h3 class="mt-2 text-lg text-navy">{g.data.title}</h3>
+              <p class="mt-2 text-slate">{g.data.description}</p>
+            </Card>
+          ))}
+        </FeatureGrid>
+      </Section>
+    )
+  }
+
   <CtaSection
     title="Put this into practice"
-    body="Talk to Murikah about applying this in your organisation. [placeholder]"
+    body="Book a demo and we will map this to your organisation, your regulator and your board."
     secondaryLabel="Read more insights"
     secondaryHref="/insights"
   />
