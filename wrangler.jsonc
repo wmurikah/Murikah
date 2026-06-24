@@ -1,7 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // SOURCE config: @astrojs/cloudflare reads this at build for bindings/vars and
+  // emits the deployable config at dist/server/wrangler.json (with the real
+  // `main` and `assets.directory`). Deploy/dev therefore use the generated file:
+  //   pnpm cf:deploy   (astro build && wrangler deploy -c dist/server/wrangler.json)
+  //   pnpm cf:dev      (astro build && wrangler dev    -c dist/server/wrangler.json)
   "name": "murikah-web",
-  // Unified server entrypoint provided by @astrojs/cloudflare (handles dev + prod).
+  // Dev-time entrypoint provided by @astrojs/cloudflare; the build replaces this.
   "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_date": "2025-05-21",
   // Node built-ins used by libSQL/other deps inside the Worker.
@@ -10,11 +15,11 @@
   // Static assets: serves the prerendered marketing pages from dist/.
   "assets": {
     "directory": "./dist",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
   },
 
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
 
   // KV — response cache, feature flags, and API rate-limit counters.
@@ -23,8 +28,8 @@
   "kv_namespaces": [
     {
       "binding": "CACHE",
-      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
-    }
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID",
+    },
   ],
 
   // R2 — static asset overflow + the future downloadable Intelligence report.
@@ -32,14 +37,14 @@
   "r2_buckets": [
     {
       "binding": "ASSETS_BUCKET",
-      "bucket_name": "murikah-assets"
-    }
+      "bucket_name": "murikah-assets",
+    },
   ],
 
   // Cron PLACEHOLDER — reserved for future Labs sandbox/demo-session resets.
   // A `scheduled` handler must be added before this does anything (out of scope now).
   "triggers": {
-    "crons": ["0 3 * * *"]
+    "crons": ["0 3 * * *"],
   },
 
   // Non-secret vars only. Secrets are referenced, never committed — set them with:
@@ -49,6 +54,6 @@
   //   wrangler secret put CONTACT_NOTIFY_EMAIL
   //   wrangler secret put RESEND_FROM_EMAIL
   "vars": {
-    "PUBLIC_SITE_URL": "https://www.murikah.com"
-  }
+    "PUBLIC_SITE_URL": "https://www.murikah.com",
+  },
 }

@@ -17,8 +17,14 @@ interface Props {
   [key: string]: unknown;
 }
 
-const { id, tone = 'paper', bleed = false, class: className, containerClass, ...rest } =
-  Astro.props;
+const {
+  id,
+  tone = 'paper',
+  bleed = false,
+  class: className,
+  containerClass,
+  ...rest
+} = Astro.props;
 
 const toneClass: Record<string, string> = {
   paper: 'bg-paper text-ink',
