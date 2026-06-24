@@ -1,0 +1,210 @@
+{
+  "metrics": [
+    { "key": "open_findings", "label": "Open findings", "value": "18", "tone": "neutral" },
+    { "key": "high_risk", "label": "High risk, open", "value": "4", "tone": "high" },
+    {
+      "key": "remediation_on_track",
+      "label": "Remediation on track",
+      "value": "72%",
+      "tone": "low"
+    },
+    { "key": "overdue_actions", "label": "Overdue actions", "value": "5", "tone": "med" }
+  ],
+  "findings": [
+    {
+      "ref": "MK-2026-001",
+      "title": "Loan appraisal overrides not independently reviewed",
+      "area": "Credit",
+      "risk": "High",
+      "status": "Open",
+      "owner": "A. Mwangi (Sample)",
+      "dueDate": "2026-07-15",
+      "summary": "Manual overrides on loan limits are applied without a second-person review, so a single officer can approve outside policy.",
+      "actionPlan": "Introduce a mandatory second-person review for any override above the policy limit, evidenced in the core system."
+    },
+    {
+      "ref": "MK-2026-002",
+      "title": "Privileged user access not reviewed quarterly",
+      "area": "IT general controls",
+      "risk": "High",
+      "status": "In progress",
+      "owner": "B. Otieno (Sample)",
+      "dueDate": "2026-07-30",
+      "summary": "Administrator accounts in the core banking system have not had a documented access review in the last two quarters.",
+      "actionPlan": "Run a quarterly privileged-access review with sign-off, and remove dormant administrator accounts."
+    },
+    {
+      "ref": "MK-2026-003",
+      "title": "Records of processing incomplete for member data",
+      "area": "Data protection",
+      "risk": "Medium",
+      "status": "Open",
+      "owner": "C. Achieng (Sample)",
+      "dueDate": "2026-08-12",
+      "summary": "The record of processing activities does not cover all systems that hold member personal data, which is a gap against the Data Protection Act.",
+      "actionPlan": "Complete the record of processing across all member-data systems and assign an owner to keep it current."
+    },
+    {
+      "ref": "MK-2026-004",
+      "title": "Daily cash reconciliation evidence not retained",
+      "area": "Cash",
+      "risk": "Medium",
+      "status": "Overdue",
+      "owner": "D. Kiprop (Sample)",
+      "dueDate": "2026-06-05",
+      "summary": "Branch cash counts are performed but the signed reconciliation is not consistently filed, so the control cannot be evidenced.",
+      "actionPlan": "Store the signed daily reconciliation in the system within one working day of the count."
+    },
+    {
+      "ref": "MK-2026-005",
+      "title": "Supplier onboarding lacks conflict-of-interest check",
+      "area": "Procurement",
+      "risk": "Low",
+      "status": "Open",
+      "owner": "E. Wanjiru (Sample)",
+      "dueDate": "2026-09-01",
+      "summary": "New suppliers are added without a documented conflict-of-interest declaration from the requesting staff member.",
+      "actionPlan": "Add a short conflict-of-interest declaration to supplier onboarding, retained with the supplier record."
+    },
+    {
+      "ref": "MK-2026-006",
+      "title": "Board pack issued without remediation status",
+      "area": "Governance",
+      "risk": "Low",
+      "status": "Closed",
+      "owner": "F. Njoroge (Sample)",
+      "dueDate": "2026-05-20",
+      "summary": "An earlier board pack omitted the status of open remediation actions, reducing the board's visibility of overdue items.",
+      "actionPlan": "Include a remediation status summary in every board pack. Closed: the latest pack now includes it."
+    }
+  ],
+  "workpapers": [
+    {
+      "findingRef": "MK-2026-001",
+      "title": "Loan override testing",
+      "body": "Sample of 25 overrides in the period. 6 were applied by a single officer with no evidence of a second review. Policy requires a second-person review above the limit. Result: control not operating as designed."
+    },
+    {
+      "findingRef": "MK-2026-002",
+      "title": "Privileged access review",
+      "body": "Reviewed administrator accounts in the core system. No documented access review for two quarters. Two accounts belonged to leavers. Result: access governance gap."
+    },
+    {
+      "findingRef": "MK-2026-003",
+      "title": "Records of processing walkthrough",
+      "body": "Walked through the record of processing against the systems inventory. Three systems holding member data were not listed. Result: incomplete record against the Data Protection Act."
+    }
+  ],
+  "boardItems": [
+    {
+      "title": "High-risk findings this quarter",
+      "status": "For discussion",
+      "note": "Two high-risk items open, both with owners and dates. Sample data."
+    },
+    {
+      "title": "Remediation progress",
+      "status": "On track",
+      "note": "72% of actions on track, 5 overdue. Sample data."
+    },
+    {
+      "title": "Data protection readiness",
+      "status": "Attention",
+      "note": "Records of processing being completed ahead of an ODPC review. Sample data."
+    },
+    {
+      "title": "Internal audit plan coverage",
+      "status": "On track",
+      "note": "Plan is 60% delivered for the year. Sample data."
+    }
+  ],
+  "crmContacts": [
+    {
+      "id": "deal-1",
+      "name": "J. Kamau (Sample)",
+      "company": "Sample Sacco Society",
+      "stage": "Lead",
+      "value": 35000
+    },
+    {
+      "id": "deal-2",
+      "name": "L. Hassan (Sample)",
+      "company": "Acme Microfinance (Sample)",
+      "stage": "Qualified",
+      "value": 90000
+    },
+    {
+      "id": "deal-3",
+      "name": "M. Were (Sample)",
+      "company": "Sample Fintech Ltd",
+      "stage": "Proposal",
+      "value": 150000
+    },
+    {
+      "id": "deal-4",
+      "name": "N. Chebet (Sample)",
+      "company": "Sample Donor NGO",
+      "stage": "Qualified",
+      "value": 60000
+    },
+    {
+      "id": "deal-5",
+      "name": "O. Mutua (Sample)",
+      "company": "Riverbank Sacco (Sample)",
+      "stage": "Lead",
+      "value": 35000
+    }
+  ],
+  "invoices": [
+    {
+      "id": "inv-stationers",
+      "filename": "sample-invoice-stationers.pdf",
+      "supplier": "Sample Stationers Ltd",
+      "number": "INV-4821",
+      "date": "2026-05-14",
+      "currency": "KES",
+      "lineItems": [
+        { "description": "A4 paper, 5 reams", "qty": 5, "unitPrice": 650, "amount": 3250 },
+        { "description": "Printer toner", "qty": 2, "unitPrice": 7800, "amount": 15600 },
+        { "description": "Box files", "qty": 12, "unitPrice": 220, "amount": 2640 }
+      ],
+      "subtotal": 21490,
+      "tax": 3438,
+      "total": 24928
+    },
+    {
+      "id": "inv-cloud",
+      "filename": "sample-invoice-cloud.pdf",
+      "supplier": "Sample Cloud Services",
+      "number": "SCS-2026-203",
+      "date": "2026-05-28",
+      "currency": "KES",
+      "lineItems": [
+        { "description": "Hosting, monthly", "qty": 1, "unitPrice": 42000, "amount": 42000 },
+        { "description": "Backup storage", "qty": 1, "unitPrice": 9500, "amount": 9500 }
+      ],
+      "subtotal": 51500,
+      "tax": 8240,
+      "total": 59740
+    },
+    {
+      "id": "inv-training",
+      "filename": "sample-invoice-training.pdf",
+      "supplier": "Sample Training Partners",
+      "number": "STP-0091",
+      "date": "2026-06-02",
+      "currency": "KES",
+      "lineItems": [
+        {
+          "description": "Audit methodology workshop",
+          "qty": 1,
+          "unitPrice": 120000,
+          "amount": 120000
+        },
+        { "description": "Materials, per attendee", "qty": 8, "unitPrice": 1500, "amount": 12000 }
+      ],
+      "subtotal": 132000,
+      "tax": 21120,
+      "total": 153120
+    }
+  ]
+}
