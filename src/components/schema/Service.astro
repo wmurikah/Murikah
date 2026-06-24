@@ -1,0 +1,30 @@
+---
+/**
+ * Service JSON-LD — emitted on each service-line page. Links the offering back
+ * to the Organization as provider (@id reference, no duplication).
+ */
+import { SITE } from '@/site.config';
+
+interface Props {
+  name: string;
+  description: string;
+  serviceType: string;
+  /** Site-relative path of the service page, e.g. "/assurance". */
+  path: string;
+}
+
+const { name, description, serviceType, path } = Astro.props;
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'Service',
+  name,
+  description,
+  serviceType,
+  url: new URL(path, SITE.url).href,
+  areaServed: SITE.areaServed,
+  provider: { '@id': `${SITE.url}/#organization` },
+};
+---
+
+<script type="application/ld+json" is:inline set:html={JSON.stringify(schema)} />

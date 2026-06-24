@@ -1,0 +1,131 @@
+/**
+ * Global stylesheet — the single Tailwind entry point.
+ * Pulls in Tailwind v4 and the design tokens, then sets restrained base styles.
+ * (Self-hosted fonts are imported from BaseLayout.astro so Vite fingerprints
+ *  and preloads them.)
+ */
+@import 'tailwindcss';
+@import './tokens.css';
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    /* Keep anchored content clear of the sticky header. */
+    scroll-padding-top: 5.5rem;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Never synthesise weights from the variable font. */
+    font-synthesis-weight: none;
+  }
+
+  /* Body steps up slightly on larger viewports (17px → 18px). */
+  @media (min-width: 768px) {
+    body {
+      font-size: 1.125rem;
+    }
+  }
+
+  /* Headings default to Outfit; tight leading + slight negative tracking.
+     The hero headline opts into Fraunces via the `font-serif` utility. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--color-navy);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    /* Avoid orphans/awkward breaks in headings. */
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  a {
+    color: var(--color-blue);
+    text-underline-offset: 0.18em;
+  }
+
+  :where(img, svg, video, canvas) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* WCAG 2.2 — a clearly visible focus indicator on every interactive element. */
+  :focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* On navy/dark surfaces, gold focus rings meet contrast far better than blue.
+     Containers with the `.on-dark` class flip the focus colour for descendants. */
+  .on-dark :focus-visible {
+    outline-color: var(--color-gold);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-gold) 32%, transparent);
+  }
+
+  /* Honour reduced-motion: neutralise all transitions/animations + smooth scroll. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Skip-to-content link — hidden until focused (familiar a11y convention). */
+  .skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 100;
+    transform: translateY(-160%);
+    background: var(--color-navy);
+    color: #fff;
+    padding: 0.7rem 1.1rem;
+    border-radius: var(--radius-btn);
+    font-weight: 500;
+    box-shadow: var(--shadow-pop);
+    transition: transform 160ms var(--ease-out-soft);
+  }
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
+  /* Hairline dividers as low-emphasis grouping (Gestalt: common region without
+     heavy borders). */
+  .hairline {
+    border-color: var(--color-hairline);
+  }
+}

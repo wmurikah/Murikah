@@ -1,0 +1,257 @@
+---
+/**
+ * Header — site chrome following familiar conventions (Jakob's Law): logo
+ * top-left links home, primary nav top-right, the single gold CTA furthest
+ * right. The nav is deliberately small (Hick's Law: Services, Insights, About
+ * + one action). Items are ordered by importance (serial-position effect).
+ *
+ * Desktop: a Services disclosure menu (button + aria-expanded, Escape/outside
+ * click to close). Mobile: a keyboard-operable menu with focus trapping and
+ * body-scroll lock. Progressive enhancement — links work without JS.
+ */
+import Container from '@/components/primitives/Container.astro';
+import Button from '@/components/primitives/Button.astro';
+import Logo from '@/components/Logo.astro';
+import { NAV, PRIMARY_CTA, SERVICES } from '@/site.config';
+
+const path = Astro.url.pathname;
+const serviceHrefs = SERVICES.map((s) => s.href);
+
+const isActive = (href: string) =>
+  path === href || (href !== '/' && path.startsWith(href + '/')) || path === href + '/';
+const servicesActive = serviceHrefs.some((h) => path === h || path.startsWith(h + '/'));
+
+const navLink =
+  'inline-flex min-h-[2.75rem] items-center gap-1 rounded-md px-3 font-medium text-ink/90 transition-colors duration-150 hover:bg-paper-shade hover:text-navy';
+const activeLink = 'bg-paper-shade text-navy';
+---
+
+<header class="sticky top-0 z-50 border-b border-hairline bg-paper/85 backdrop-blur">
+  <Container>
+    <div class="flex h-16 items-center justify-between lg:h-20">
+      {/* Logo — top-left, links home (Jakob's Law). */}
+      <a href="/" class="rounded-md no-underline" aria-label="Murikah — home">
+        <Logo />
+      </a>
+
+      {/* Desktop primary nav */}
+      <nav aria-label="Primary" class="hidden items-center gap-1 lg:flex">
+        <div class="relative" data-dropdown>
+          <button
+            type="button"
+            class:list={[navLink, servicesActive && activeLink]}
+            aria-expanded="false"
+            aria-controls="services-menu"
+            aria-haspopup="true"
+            data-dropdown-toggle
+          >
+            Services
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+              class="transition-transform duration-200 data-[expanded]:rotate-180"
+            >
+              <path
+                d="M4 6l4 4 4-4"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"></path>
+            </svg>
+          </button>
+
+          {/* Services menu — each item names what it is (recognition over recall). */}
+          <div
+            id="services-menu"
+            data-dropdown-panel
+            hidden
+            class="absolute right-0 mt-2 w-[22rem] rounded-card bg-surface p-2 shadow-pop ring-1 ring-hairline"
+          >
+            <ul class="grid gap-0.5">
+              {
+                SERVICES.map((s) => (
+                  <li>
+                    <a
+                      href={s.href}
+                      class="block rounded-lg px-3 py-2.5 no-underline transition-colors hover:bg-paper"
+                    >
+                      <span class="block font-medium text-navy">{s.fullName}</span>
+                      <span class="mt-0.5 block text-sm text-slate">
+                        {s.summary.replace(' [placeholder]', '')}
+                      </span>
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        </div>
+
+        {
+          NAV.filter((n) => n.label !== 'Services').map((item) => (
+            <a
+              href={item.href}
+              class:list={[navLink, isActive(item.href) && activeLink]}
+              aria-current={isActive(item.href) ? 'page' : undefined}
+            >
+              {item.label}
+            </a>
+          ))
+        }
+      </nav>
+
+      {/* Desktop CTA — the single gold action (Von Restorff). */}
+      <div class="hidden lg:block">
+        <Button href={PRIMARY_CTA.href} variant="primary">{PRIMARY_CTA.label}</Button>
+      </div>
+
+      {/* Mobile menu toggle — 44px tap target (Fitts's Law). */}
+      <button
+        type="button"
+        class="inline-flex size-11 items-center justify-center rounded-md text-navy hover:bg-paper-shade lg:hidden"
+        aria-expanded="false"
+        aria-controls="mobile-menu"
+        aria-label="Open menu"
+        data-mobile-toggle
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M4 7h16M4 12h16M4 17h16"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"></path>
+        </svg>
+      </button>
+    </div>
+  </Container>
+
+  {/* Mobile menu panel */}
+  <div
+    id="mobile-menu"
+    data-mobile-panel
+    hidden
+    class="border-t border-hairline bg-paper lg:hidden"
+  >
+    <Container>
+      <nav aria-label="Mobile" class="flex flex-col gap-1 py-4">
+        <p class="px-3 pt-2 pb-1 text-xs font-semibold tracking-widest text-slate uppercase">
+          Services
+        </p>
+        {
+          SERVICES.map((s) => (
+            <a
+              href={s.href}
+              class="rounded-lg px-3 py-3 font-medium text-navy no-underline hover:bg-paper-shade"
+            >
+              {s.fullName}
+            </a>
+          ))
+        }
+        <div class="my-2 h-px bg-hairline"></div>
+        {
+          NAV.filter((n) => n.label !== 'Services').map((item) => (
+            <a
+              href={item.href}
+              class:list={[
+                'rounded-lg px-3 py-3 font-medium text-navy no-underline hover:bg-paper-shade',
+                isActive(item.href) && 'bg-paper-shade',
+              ]}
+              aria-current={isActive(item.href) ? 'page' : undefined}
+            >
+              {item.label}
+            </a>
+          ))
+        }
+        <div class="px-1 pt-3">
+          <Button href={PRIMARY_CTA.href} variant="primary" class="w-full">
+            {PRIMARY_CTA.label}
+          </Button>
+        </div>
+      </nav>
+    </Container>
+  </div>
+</header>
+
+<script>
+  // Accessible nav menus — progressive enhancement, no framework.
+  function initNav() {
+    // --- Services disclosure (desktop) ---
+    document.querySelectorAll<HTMLElement>('[data-dropdown]').forEach((dd) => {
+      const toggle = dd.querySelector<HTMLElement>('[data-dropdown-toggle]');
+      const panel = dd.querySelector<HTMLElement>('[data-dropdown-panel]');
+      if (!toggle || !panel) return;
+
+      const setOpen = (open: boolean) => {
+        toggle.setAttribute('aria-expanded', String(open));
+        panel.hidden = !open;
+        if (open) toggle.setAttribute('data-expanded', '');
+        else toggle.removeAttribute('data-expanded');
+      };
+
+      toggle.addEventListener('click', () => {
+        setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+      });
+      dd.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setOpen(false);
+          toggle.focus();
+        }
+      });
+      dd.addEventListener('focusout', (e: FocusEvent) => {
+        if (!dd.contains(e.relatedTarget as Node | null)) setOpen(false);
+      });
+      document.addEventListener('click', (e: MouseEvent) => {
+        if (!dd.contains(e.target as Node)) setOpen(false);
+      });
+    });
+
+    // --- Mobile menu ---
+    const mToggle = document.querySelector<HTMLElement>('[data-mobile-toggle]');
+    const mPanel = document.querySelector<HTMLElement>('[data-mobile-panel]');
+    if (mToggle && mPanel) {
+      const focusables = () =>
+        Array.from(mPanel.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'));
+
+      const setOpen = (open: boolean) => {
+        mToggle.setAttribute('aria-expanded', String(open));
+        mToggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+        mPanel.hidden = !open;
+        document.body.classList.toggle('overflow-hidden', open);
+        if (open) focusables()[0]?.focus();
+      };
+
+      mToggle.addEventListener('click', () => {
+        setOpen(mToggle.getAttribute('aria-expanded') !== 'true');
+      });
+      mPanel.addEventListener('click', (e: MouseEvent) => {
+        if ((e.target as HTMLElement).closest('a')) setOpen(false);
+      });
+      document.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && mToggle.getAttribute('aria-expanded') === 'true') {
+          setOpen(false);
+          mToggle.focus();
+        }
+      });
+      // Trap focus within the open mobile menu.
+      mPanel.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key !== 'Tab') return;
+        const f = focusables();
+        if (f.length === 0) return;
+        const first = f[0];
+        const last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      });
+    }
+  }
+
+  initNav();
+</script>

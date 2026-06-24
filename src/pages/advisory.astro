@@ -1,0 +1,56 @@
+---
+export const prerender = true;
+
+import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import type { FaqItem } from '@/lib/types';
+
+// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const faqs: FaqItem[] = [
+  {
+    question: 'What does an advisory engagement look like?',
+    answer:
+      'Typically a scoped piece of work — an AI strategy, a research study, or a board pack — with clear deliverables and timelines. [placeholder]',
+  },
+  {
+    question: 'Do you provide implementation as well as advice?',
+    answer:
+      'Yes. Advisory pairs naturally with Murikah Labs for build and automation, and with Assurance for independent review. [placeholder]',
+  },
+];
+---
+
+<ServiceLayout
+  slug="advisory"
+  intro="AI strategy, research and analytics that help leaders decide with confidence — distilled into executive decks and board packs your committee can act on."
+  whatItIs={[
+    'Murikah Advisory helps boards and executives make sense of AI and data: where it creates value, where it creates risk, and what to do next.',
+    'We turn analysis into decisions — clear strategies, research studies, and board-ready materials grounded in evidence rather than hype.',
+  ]}
+  inclusions={[
+    'AI strategy & roadmaps',
+    'Research & analytics',
+    'Executive decks',
+    'Board packs',
+    'Governance & policy input',
+  ]}
+  whoItIsFor={[
+    'CEOs & executive teams setting direction',
+    'Boards & committees weighing AI risk',
+    'Strategy, risk & data leaders',
+  ]}
+  howItWorks={[
+    {
+      title: 'Frame',
+      body: 'Agree the decision to be made and the questions that matter. [placeholder]',
+    },
+    {
+      title: 'Analyse',
+      body: 'Gather evidence and run the research or analytics needed. [placeholder]',
+    },
+    {
+      title: 'Decide',
+      body: 'Deliver clear recommendations and board-ready materials. [placeholder]',
+    },
+  ]}
+  faqs={faqs}
+/>
