@@ -14,60 +14,82 @@ const crumbs = [
 ---
 
 <BaseLayout
-  title="Privacy policy"
-  description="How Murikah collects, uses and protects personal data."
-  noindex={true}
+  titleFull="Privacy policy | Murikah"
+  description="How Murikah collects, uses and protects personal data, and your rights under the Kenya Data Protection Act."
 >
   <Section tone="surface" aria-labelledby="page-title">
     <Breadcrumb items={crumbs} class="mb-6" />
     <h1 id="page-title" class="text-4xl sm:text-5xl">Privacy policy</h1>
-    <p class="mt-3 text-slate">Last updated: [placeholder date]</p>
+    <p class="mt-3 text-slate">Last updated: {'{{LEGAL: insert date}}'}</p>
 
     <div
       class="mt-6 rounded-card border border-hairline bg-paper p-4 text-sm text-slate"
       role="note"
     >
-      <strong class="text-navy">Placeholder:</strong> this is a structural stub, not final legal text.
-      A data-protection brand must ship a real, reviewed policy before launch.
+      <strong class="text-navy">{'{{LEGAL REVIEW REQUIRED}}'}</strong> This is a plain-English template.
+      It must be reviewed and finalised by qualified counsel before launch.
     </div>
 
     <Prose class="mt-10">
       <h2>Who we are</h2>
       <p>
-        {SITE.legalName} (“Murikah”, “we”, “us”) provides assurance, governance and related services.
-        This policy explains how we handle personal data. [placeholder]
+        Murikah ("we", "us") is the data controller for personal data collected through this
+        website. For any privacy question, contact us at
+        <a href={`mailto:${SITE.email}`}>{SITE.email}</a>.
       </p>
 
       <h2>What we collect</h2>
-      <p>
-        Information you provide through our contact and subscription forms (such as your name,
-        organisation, role, email and message), and basic technical data needed to operate the site
-        securely. [placeholder]
-      </p>
-
-      <h2>How we use it</h2>
+      <p>We collect only what we need to respond to you and run the site:</p>
       <ul>
-        <li>To respond to enquiries and provide requested services. [placeholder]</li>
-        <li>To send updates you have subscribed to. [placeholder]</li>
-        <li>To secure, maintain and improve the website. [placeholder]</li>
+        <li>
+          Details you submit through the contact form: your name, organisation, role, email and
+          message.
+        </li>
+        <li>Your email address if you subscribe to updates or request a checklist.</li>
+        <li>Basic, privacy-respecting analytics about how the site is used.</li>
       </ul>
 
-      <h2>Legal basis & retention</h2>
+      <h2>Why we use it, and our lawful basis</h2>
       <p>
-        We process data on the bases permitted by applicable law and retain it only as long as
-        necessary for the purposes above. [placeholder]
+        We use contact details to reply to enquiries and provide the services you ask about, and to
+        send updates you have asked for. We rely on your consent for marketing emails, and on our
+        legitimate interest in responding to enquiries and keeping the site secure. You can withdraw
+        consent at any time.
       </p>
 
-      <h2>Your rights</h2>
+      <h2>How long we keep it</h2>
       <p>
-        You may request access, correction or deletion of your personal data, and you may object to
-        certain processing, subject to applicable law. [placeholder]
+        We keep personal data only as long as we need it for the purpose it was collected, and then
+        delete it. {'{{LEGAL: confirm specific retention periods}}'}
       </p>
 
-      <h2>Contact</h2>
+      <h2>Your rights under the Kenya Data Protection Act</h2>
       <p>
-        For any privacy request, contact <a href={`mailto:${SITE.email}`}>{SITE.email}</a>.
-        [placeholder]
+        Under the Data Protection Act, 2019 you have the right to be informed, to access your data,
+        to have it corrected or deleted, to object to certain processing, and to data portability.
+        To exercise any of these, email <a href={`mailto:${SITE.email}`}>{SITE.email}</a>. You may
+        also complain to the Office of the Data Protection Commissioner (ODPC).
+      </p>
+
+      <h2>Service providers</h2>
+      <p>
+        We use a small number of trusted providers to operate the site and our email, for example
+        hosting and email delivery. They process data on our instructions, under written terms.
+        {' '}{'{{LEGAL: list processors}}'}
+      </p>
+
+      <h2>Cookies and analytics</h2>
+      <p>
+        We keep cookies to a minimum and use analytics that respect your privacy. Where consent is
+        required for non-essential cookies, we ask for it. {
+          '{{LEGAL: confirm cookie/analytics tooling}}'
+        }
+      </p>
+
+      <h2>ODPC registration</h2>
+      <p>
+        Murikah is registered as a data controller with the Office of the Data Protection
+        Commissioner. {'{{LEGAL: insert ODPC registration number}}'}
       </p>
     </Prose>
   </Section>

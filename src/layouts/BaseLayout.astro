@@ -1,6 +1,6 @@
 ---
 /**
- * BaseLayout — the document shell for every page: <head> (fonts, SEO, global
+ * BaseLayout, the document shell for every page: <head> (fonts, SEO, global
  * Organization JSON-LD), the skip link, header, <main>, and footer. Semantic
  * landmarks throughout (header/nav/main/footer) for assistive tech.
  *
@@ -23,6 +23,7 @@ import { SITE } from '@/site.config';
 
 interface Props {
   title?: string;
+  titleFull?: string;
   description?: string;
   image?: string;
   canonical?: string;
@@ -61,7 +62,7 @@ const { mainClass, ...seo } = Astro.props;
     <slot name="head" />
   </head>
   <body>
-    {/* Skip link — first focusable element (keyboard + screen-reader users). */}
+    {/* Skip link, first focusable element (keyboard + screen-reader users). */}
     <a href="#main" class="skip-link">Skip to content</a>
 
     <Header />

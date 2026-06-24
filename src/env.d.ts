@@ -2,12 +2,11 @@
 /// <reference types="astro/client" />
 /// <reference types="@cloudflare/workers-types" />
 
-// Cloudflare Worker bindings, declared under the `Cloudflare.Env` namespace —
-// the same shape `wrangler types` generates, and the type behind
+// Cloudflare Worker bindings, declared under the `Cloudflare.Env` namespace, // the same shape `wrangler types` generates, and the type behind
 // `import { env } from 'cloudflare:workers'`. Kept in sync with wrangler.jsonc.
 declare namespace Cloudflare {
   interface Env {
-    /** Static assets binding — serves prerendered marketing pages from dist/. */
+    /** Static assets binding, serves prerendered marketing pages from dist/. */
     ASSETS: Fetcher;
     /** KV: response cache, feature flags, and API rate-limit counters. */
     CACHE: KVNamespace;
@@ -29,7 +28,7 @@ declare namespace Cloudflare {
 // Global Env used by the adapter's Worker handler mirrors Cloudflare.Env.
 interface Env extends Cloudflare.Env {}
 
-// Astro.locals — the v14 adapter exposes the execution context as `cfContext`.
+// Astro.locals, the v14 adapter exposes the execution context as `cfContext`.
 type Runtime = import('@astrojs/cloudflare').Runtime;
 declare namespace App {
   interface Locals extends Runtime {}

@@ -3,73 +3,136 @@ export const prerender = true;
 
 import ServiceLayout from '@/layouts/ServiceLayout.astro';
 import Section from '@/components/primitives/Section.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import DemoEmbed from '@/components/DemoEmbed.astro';
 import SandboxDemo from '@/components/islands/SandboxDemo.tsx';
 import type { FaqItem } from '@/lib/types';
 
-// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
-const faqs: FaqItem[] = [
+const areas = [
   {
-    question: 'What can Murikah Labs build?',
-    answer:
-      'Automations, internal tools, CRM and CMS setups, and workflow engineering — often to remove manual, error-prone steps. [placeholder]',
+    title: 'Workflow and process automation',
+    body: 'Approvals, reconciliations and reporting across finance, operations and compliance, so manual steps stop eating your week.',
   },
   {
-    question: 'Will there be interactive demos here?',
+    title: 'CRM and CMS builds and integrations',
+    body: 'Set up, customise and connect the systems that hold your customers and your content, and make them talk to the rest of your stack.',
+  },
+  {
+    title: 'Custom tools and data pipelines',
+    body: 'Internal tools, data pipelines and reporting automation built around how your team actually works.',
+  },
+];
+
+const examples = [
+  'A finance approval workflow that replaces an email chain',
+  'Automated bank and ledger reconciliation',
+  'A board or management reporting pack generated from live data',
+  'A CRM or CMS set up and integrated with your existing systems',
+  'A data pipeline that feeds clean numbers into your dashboards',
+];
+
+const faqs: FaqItem[] = [
+  {
+    question: 'What kind of automation does Murikah Labs build?',
     answer:
-      'Yes. This page hosts a sandbox for interactive demos; the demos themselves arrive in a later release. [placeholder]',
+      'We build workflow and process automation across finance, operations and compliance, CRM and CMS setups and integrations, and custom internal tools, data pipelines and reporting automation. The common thread is removing manual, repetitive work that is slow and easy to get wrong, and replacing it with something reliable.',
+  },
+  {
+    question: 'How is this different from a normal software agency?',
+    answer:
+      'We come from assurance, so we look at a process the way an auditor does before we build. That means we map how work really happens, find the control weaknesses, and fix the process first, so you are not automating something broken. The result is automation that is safer and easier to trust.',
+  },
+  {
+    question: 'Do you work with the systems we already use?',
+    answer:
+      'Yes. Most builds connect to tools you already run rather than replacing them. We integrate with your accounting, CRM, storage and reporting systems where it makes sense, and only suggest new tools when the gap is real.',
+  },
+  {
+    question: 'Can you automate a process you have just audited for us?',
+    answer:
+      'Often, yes, and it is a natural next step. An audit shows where a process is slow or risky. Labs can then build the automation or control that closes the gap, so the improvement is easy to evidence next time.',
   },
 ];
 ---
 
 <ServiceLayout
   slug="labs"
-  intro="Automation builds, CRM and CMS, workflow engineering and custom automations — the engineering arm that turns manual processes into reliable systems."
-  whatItIs={[
-    'Murikah Labs designs and builds the automations and tools that make assurance and operations faster and more reliable.',
-    'From CRM and CMS to bespoke workflow engineering, Labs ships working software — and this page will host interactive demos of it.',
-  ]}
-  inclusions={[
-    'Workflow automation',
-    'CRM & CMS builds',
-    'Custom internal tools',
-    'Integrations & data pipelines',
-    'Interactive demos (coming soon)',
-  ]}
-  whoItIsFor={[
-    'Teams drowning in manual, repetitive work',
-    'Operations & finance leaders chasing efficiency',
-    'Organisations modernising legacy processes',
-  ]}
-  howItWorks={[
-    {
-      title: 'Map',
-      body: 'We map the process and find the highest-leverage automation. [placeholder]',
-    },
-    {
-      title: 'Build',
-      body: 'We build, test and integrate the solution into your stack. [placeholder]',
-    },
-    {
-      title: 'Run',
-      body: 'We hand over (or operate) with monitoring and support. [placeholder]',
-    },
-  ]}
+  metaTitle="Automation, CRM and workflow engineering | Murikah Labs"
+  metaDescription="Murikah Labs builds the automations, CRMs and internal tools that follow an audit, from a team that maps and tests a process before automating it."
+  heading="Automation, built by people who audit the process first."
+  intro="Murikah Labs builds the automations, integrations and internal tools that organisations need once they have seen their processes clearly. We handle workflow and process automation across finance, operations and compliance, CRM and CMS builds and integrations, and custom internal tools, data pipelines and reporting automation. Because we come from assurance, we map and test a process before we automate it, so you are not automating a broken control. Labs is also the engine that keeps Audit OS and our own tooling moving."
+  primaryCta={{ label: 'Talk to us about a build', href: '/contact' }}
+  secondaryCta={{ label: 'See Murikah Assurance', href: '/assurance' }}
   faqs={faqs}
+  closingTitle="Tell us the process that is costing you time"
+  closingBody="We will look at it the way an auditor would, then build the automation that fixes it."
 >
-  {/* Stubbed sandbox — proves the React island boundary; demo logic is later. */}
+  <Section tone="paper" aria-labelledby="what-we-build">
+    <h2 id="what-we-build" class="text-2xl sm:text-3xl">What we build</h2>
+    <FeatureGrid cols={3} class="mt-8">
+      {
+        areas.map((a) => (
+          <Card>
+            <h3 class="text-lg text-navy">{a.title}</h3>
+            <p class="mt-2 text-slate">{a.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="how-we-think">
+    <div class="grid gap-10 lg:grid-cols-12">
+      <div class="lg:col-span-5">
+        <h2 id="how-we-think" class="text-2xl sm:text-3xl">Audit the process, then build</h2>
+      </div>
+      <div class="lg:col-span-7">
+        <p class="max-w-prose text-ink">
+          Most automation fails because it speeds up a process nobody checked first. We start by
+          mapping how the work really happens and where the control gaps are, the same lens we bring
+          to an audit. Then we build, test and hand over, so the automation is something you can
+          trust and evidence later.
+        </p>
+        <ul class="mt-6 grid gap-2.5">
+          {
+            examples.map((e) => (
+              <li class="flex items-start gap-2.5">
+                <svg
+                  class="mt-1 size-4 shrink-0 text-gold"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 8.5l3 3 7-7.5"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span class="text-ink">{e}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </Section>
+
+  {/* Sandbox stub left exactly as built in Prompt 1; interactive demos are out of scope. */}
   <Section tone="paper" aria-labelledby="sandbox">
     <h2 id="sandbox" class="text-2xl sm:text-3xl">Sandbox</h2>
     <p class="mt-3 max-w-prose text-slate">
-      A space for live, interactive demos of Labs builds. The interactive logic is out of scope for
-      now. <span class="text-slate/80">[placeholder]</span>
+      This is where live, interactive demos of Labs builds will run. Working demos are coming in a
+      later release.
     </p>
     <DemoEmbed
       class="mt-8"
       title="Labs sandbox"
       description="This frame will host a working, interactive demo in a later release."
     >
-      {/* Hydrate only when scrolled into view — keeps the page near-zero JS. */}
       <SandboxDemo client:visible />
     </DemoEmbed>
   </Section>
