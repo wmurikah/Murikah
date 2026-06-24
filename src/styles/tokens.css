@@ -20,21 +20,21 @@
   --color-surface: #ffffff; /* cards / surfaces */
   --color-hairline: #d7dbe5; /* borders, dividers */
 
-  /* Derived interactive shades for hover/active — darker mixes of the brand
+  /* Derived interactive shades for hover/active, darker mixes of the brand
      colours above, NOT new brand colours. Keeps gold scarce (Von Restorff). */
   --color-gold-deep: #ae8b1f;
   --color-blue-deep: #173c7c;
   --color-navy-deep: #081026;
   --color-paper-shade: #efeae0;
 
-  /* ---- Status (RAG) — PRODUCT/STATUS ONLY, never in marketing UI --------- */
+  /* ---- Status (RAG), PRODUCT/STATUS ONLY, never in marketing UI --------- */
   --color-status-low: #2e7d5b;
   --color-status-med: #d9930a;
   --color-status-high: #b42318;
 
   /* ---- Type families ----------------------------------------------------- */
   /* Outfit drives all UI + headings. Fraunces (serif) is reserved for the
-     hero headline only — applied via the `font-serif` utility, sparingly. */
+     hero headline only, applied via the `font-serif` utility, sparingly. */
   --font-sans:
     'Outfit Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-serif: 'Fraunces Variable', ui-serif, Georgia, 'Times New Roman', serif;
@@ -69,7 +69,7 @@
   --text-6xl: 4rem;
   --text-6xl--line-height: 1.02;
   --text-6xl--letter-spacing: -0.025em;
-  /* Fluid hero display size — scales with viewport, no layout shift. */
+  /* Fluid hero display size, scales with viewport, no layout shift. */
   --text-display: clamp(2.5rem, 1.8rem + 3.4vw, 4.25rem);
   --text-display--line-height: 1.04;
   --text-display--letter-spacing: -0.025em;
