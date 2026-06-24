@@ -1,13 +1,13 @@
 ---
 /**
- * Header — site chrome following familiar conventions (Jakob's Law): logo
+ * Header, site chrome following familiar conventions (Jakob's Law): logo
  * top-left links home, primary nav top-right, the single gold CTA furthest
  * right. The nav is deliberately small (Hick's Law: Services, Insights, About
  * + one action). Items are ordered by importance (serial-position effect).
  *
  * Desktop: a Services disclosure menu (button + aria-expanded, Escape/outside
  * click to close). Mobile: a keyboard-operable menu with focus trapping and
- * body-scroll lock. Progressive enhancement — links work without JS.
+ * body-scroll lock. Progressive enhancement, links work without JS.
  */
 import Container from '@/components/primitives/Container.astro';
 import Button from '@/components/primitives/Button.astro';
@@ -29,8 +29,8 @@ const activeLink = 'bg-paper-shade text-navy';
 <header class="sticky top-0 z-50 border-b border-hairline bg-paper/85 backdrop-blur">
   <Container>
     <div class="flex h-16 items-center justify-between lg:h-20">
-      {/* Logo — top-left, links home (Jakob's Law). */}
-      <a href="/" class="rounded-md no-underline" aria-label="Murikah — home">
+      {/* Logo, top-left, links home (Jakob's Law). */}
+      <a href="/" class="rounded-md no-underline" aria-label="Murikah, home">
         <Logo />
       </a>
 
@@ -63,7 +63,7 @@ const activeLink = 'bg-paper-shade text-navy';
             </svg>
           </button>
 
-          {/* Services menu — each item names what it is (recognition over recall). */}
+          {/* Services menu, each item names what it is (recognition over recall). */}
           <div
             id="services-menu"
             data-dropdown-panel
@@ -79,9 +79,7 @@ const activeLink = 'bg-paper-shade text-navy';
                       class="block rounded-lg px-3 py-2.5 no-underline transition-colors hover:bg-paper"
                     >
                       <span class="block font-medium text-navy">{s.fullName}</span>
-                      <span class="mt-0.5 block text-sm text-slate">
-                        {s.summary.replace(' [placeholder]', '')}
-                      </span>
+                      <span class="mt-0.5 block text-sm text-slate">{s.summary}</span>
                     </a>
                   </li>
                 ))
@@ -103,12 +101,12 @@ const activeLink = 'bg-paper-shade text-navy';
         }
       </nav>
 
-      {/* Desktop CTA — the single gold action (Von Restorff). */}
+      {/* Desktop CTA, the single gold action (Von Restorff). */}
       <div class="hidden lg:block">
         <Button href={PRIMARY_CTA.href} variant="primary">{PRIMARY_CTA.label}</Button>
       </div>
 
-      {/* Mobile menu toggle — 44px tap target (Fitts's Law). */}
+      {/* Mobile menu toggle, 44px tap target (Fitts's Law). */}
       <button
         type="button"
         class="inline-flex size-11 items-center justify-center rounded-md text-navy hover:bg-paper-shade lg:hidden"
@@ -176,7 +174,7 @@ const activeLink = 'bg-paper-shade text-navy';
 </header>
 
 <script>
-  // Accessible nav menus — progressive enhancement, no framework.
+  // Accessible nav menus, progressive enhancement, no framework.
   function initNav() {
     // --- Services disclosure (desktop) ---
     document.querySelectorAll<HTMLElement>('[data-dropdown]').forEach((dd) => {
