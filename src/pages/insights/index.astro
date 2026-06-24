@@ -1,0 +1,75 @@
+---
+export const prerender = true;
+
+import { getCollection } from 'astro:content';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import { formatDate, isoDate } from '@/lib/format';
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Insights', href: '/insights' },
+];
+
+const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime(),
+);
+---
+
+<BaseLayout
+  title="Insights"
+  description="Guides and articles on internal audit, AI and system governance, and assurance — written to answer the questions practitioners actually ask."
+>
+  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
+    <Breadcrumb items={crumbs} class="mb-6" />
+    <p class="text-sm font-semibold tracking-widest text-gold uppercase">Insights</p>
+    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
+      Guides for assurance, governance &amp; AI
+    </h1>
+    <p class="mt-5 max-w-prose text-lg text-slate">
+      Practical, answer-first guides for heads of audit, risk and the board.
+      <span class="text-slate/80">[placeholder]</span>
+    </p>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="all-guides">
+    <h2 id="all-guides" class="sr-only">All guides</h2>
+    {
+      guides.length === 0 ? (
+        <p class="text-slate">No guides published yet. Check back soon.</p>
+      ) : (
+        <FeatureGrid cols={3}>
+          {guides.map((g) => (
+            <Card href={`/insights/${g.id}/`} class="flex flex-col">
+              {g.data.tags[0] && (
+                <p class="text-xs font-semibold tracking-widest text-gold uppercase">
+                  {g.data.tags[0]}
+                </p>
+              )}
+              <h3 class="mt-2 text-xl text-navy">{g.data.title}</h3>
+              <p class="mt-2 grow text-slate">{g.data.description}</p>
+              <p class="mt-4 text-sm text-slate">
+                <time datetime={isoDate(g.data.pubDate)}>{formatDate(g.data.pubDate)}</time>
+              </p>
+            </Card>
+          ))}
+        </FeatureGrid>
+      )
+    }
+
+    <p class="mt-10 text-sm text-slate">
+      Subscribe via <a href="/rss.xml" class="font-medium text-blue hover:text-blue-deep">RSS</a>.
+    </p>
+  </Section>
+
+  <CtaSection
+    title="Bring this rigour to your organisation"
+    body="Book a demo to see how Murikah turns guidance into working assurance. [placeholder]"
+    secondaryLabel="Contact us"
+    secondaryHref="/contact"
+  />
+</BaseLayout>

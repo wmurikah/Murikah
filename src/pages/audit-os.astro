@@ -1,0 +1,62 @@
+---
+export const prerender = true;
+
+import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import type { FaqItem } from '@/lib/types';
+
+// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const faqs: FaqItem[] = [
+  {
+    question: 'Is Audit OS a standalone product or part of a service?',
+    answer:
+      'Both. You can subscribe to the platform directly, or use it as part of a co-sourced Murikah Assurance engagement. [placeholder]',
+  },
+  {
+    question: 'Where is our data stored?',
+    answer:
+      'Data residency and protection are designed for regulated organisations. Specifics are covered during onboarding. [placeholder]',
+  },
+  {
+    question: 'Does it include an AI assistant?',
+    answer:
+      'Yes — an assistant supports drafting, summarising and follow-ups. It augments reviewers; it does not replace professional judgement. [placeholder]',
+  },
+];
+---
+
+<ServiceLayout
+  slug="audit-os"
+  intro="The subscription platform that runs your audit — work papers, approvals, remediation, follow-ups and board reporting in one place, with an AI assistant alongside."
+  whatItIs={[
+    'Murikah Audit OS is a purpose-built platform for internal audit teams: planning, fieldwork, evidence, review and reporting in a single, auditable system of record.',
+    'It standardises how work papers are prepared and approved, tracks remediation to closure, and turns a year of work into clear board and audit-committee reporting.',
+  ]}
+  inclusions={[
+    'Work papers & evidence',
+    'Review & approval workflows',
+    'Remediation & follow-up tracking',
+    'Board & committee reporting',
+    'Role-based access & audit trail',
+    'AI assistant for drafting & summaries',
+  ]}
+  whoItIsFor={[
+    'Internal audit teams wanting one system of record',
+    'Audit leaders reporting to a committee or board',
+    'Organisations replacing spreadsheets & shared drives',
+  ]}
+  howItWorks={[
+    {
+      title: 'Plan',
+      body: 'Build the audit universe and annual plan; assign engagements and timelines. [placeholder]',
+    },
+    {
+      title: 'Execute',
+      body: 'Prepare work papers, attach evidence, and route for review and approval. [placeholder]',
+    },
+    {
+      title: 'Report',
+      body: 'Track remediation and generate consistent board-ready reporting. [placeholder]',
+    },
+  ]}
+  faqs={faqs}
+/>

@@ -1,0 +1,62 @@
+---
+export const prerender = true;
+
+import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import type { FaqItem } from '@/lib/types';
+
+// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const faqs: FaqItem[] = [
+  {
+    question: 'Is this a replacement for our internal audit function?',
+    answer:
+      'No — Murikah Assurance is typically co-sourced: we work alongside your team to add capacity, methodology and tooling. We can also run a fully outsourced function where that fits. [placeholder]',
+  },
+  {
+    question: 'How is this different from a Big 4 engagement?',
+    answer:
+      'Same rigour and independence, delivered with a platform and AI assistance that lower cost and turnaround, and without long lock-in. [placeholder]',
+  },
+  {
+    question: 'Can you help us get ready for ISO 42001?',
+    answer:
+      'Yes. We run readiness reviews and AI-governance assessments mapped to ISO/IEC 42001 and your regulatory context. [placeholder]',
+  },
+];
+---
+
+<ServiceLayout
+  slug="assurance"
+  intro="Co-sourced internal audit and assurance that gives your board and your regulator confidence — experienced auditors, a working platform, and AI assistance, without Big 4 cost or lock-in."
+  whatItIs={[
+    'Murikah Assurance delivers internal audit, IT and systems audits, data-protection reviews, and AI-governance readiness as a co-sourced service. We bring the methodology, the people and the platform; you keep ownership and institutional knowledge.',
+    'Every engagement runs on Murikah Audit OS, so work papers, evidence, approvals and remediation are tracked end to end — and your audit committee gets clear, consistent reporting.',
+  ]}
+  inclusions={[
+    'Co-sourced internal audit',
+    'IT & systems audits',
+    'Data-protection reviews',
+    'ISO 42001 & AI-governance readiness',
+    'Remediation tracking & follow-up',
+    'Board & audit-committee reporting',
+  ]}
+  whoItIsFor={[
+    'Heads of internal audit needing capacity and method',
+    'Audit committees & boards seeking assurance',
+    'Risk & compliance leaders in regulated sectors',
+  ]}
+  howItWorks={[
+    {
+      title: 'Scope & risk-assess',
+      body: 'We build (or refresh) the audit universe and annual plan against your risks and obligations. [placeholder]',
+    },
+    {
+      title: 'Execute & evidence',
+      body: 'Fieldwork runs on Audit OS — testing, evidence and work papers in one reviewable place. [placeholder]',
+    },
+    {
+      title: 'Report & remediate',
+      body: 'Findings, ratings and remediation are tracked to closure with clear board reporting. [placeholder]',
+    },
+  ]}
+  faqs={faqs}
+/>

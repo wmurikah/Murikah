@@ -1,0 +1,55 @@
+---
+export const prerender = true;
+
+import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import type { FaqItem } from '@/lib/types';
+
+// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const faqs: FaqItem[] = [
+  {
+    question: 'How is client data anonymised?',
+    answer:
+      'Benchmarking uses aggregated, anonymised data with safeguards designed for regulated organisations. No client is identifiable. [placeholder]',
+  },
+  {
+    question: 'What is the annual flagship report?',
+    answer:
+      'A yearly study on the state of assurance, risk and AI governance across the sectors we serve. [placeholder]',
+  },
+];
+---
+
+<ServiceLayout
+  slug="intelligence"
+  intro="Anonymised, cross-client benchmarking and an annual flagship report — so you can see how your assurance and governance compare, and where to focus."
+  whatItIs={[
+    'Murikah Intelligence aggregates anonymised insight from across our work into benchmarks leaders can trust.',
+    'It helps you answer "compared to whom?" — and turns that into a clear view of where to invest next.',
+  ]}
+  inclusions={[
+    'Cross-client benchmarking',
+    'Anonymised, aggregated data',
+    'Annual flagship report',
+    'Sector & peer comparisons',
+  ]}
+  whoItIsFor={[
+    'Boards & committees seeking context',
+    'Audit & risk leaders setting priorities',
+    'Executives benchmarking maturity',
+  ]}
+  howItWorks={[
+    {
+      title: 'Aggregate',
+      body: 'Anonymised signals are gathered across engagements. [placeholder]',
+    },
+    {
+      title: 'Benchmark',
+      body: 'Your position is compared against relevant peers. [placeholder]',
+    },
+    {
+      title: 'Act',
+      body: 'Insight points you to where attention pays off most. [placeholder]',
+    },
+  ]}
+  faqs={faqs}
+/>
