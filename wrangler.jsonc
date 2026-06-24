@@ -41,11 +41,9 @@
     },
   ],
 
-  // Cron PLACEHOLDER, reserved for future Labs sandbox/demo-session resets.
-  // A `scheduled` handler must be added before this does anything (out of scope now).
-  "triggers": {
-    "crons": ["0 3 * * *"],
-  },
+  // The retention sweep runs from the companion Cron Worker (wrangler.cron.jsonc),
+  // which calls the secured /api/cron/sweep endpoint on schedule. The Astro
+  // adapter does not expose a `scheduled` export, so the trigger lives there.
 
   // Non-secret vars only. Secrets are referenced, never committed, set them with:
   //   wrangler secret put TURSO_DATABASE_URL
@@ -53,7 +51,12 @@
   //   wrangler secret put RESEND_API_KEY
   //   wrangler secret put CONTACT_NOTIFY_EMAIL
   //   wrangler secret put RESEND_FROM_EMAIL
+  //   wrangler secret put ANTHROPIC_API_KEY   (only if using the AI assistant)
+  //   wrangler secret put DEMO_HASH_SALT       (salt for hashing demo IPs)
+  //   wrangler secret put CRON_SECRET          (shared with the Cron Worker)
   "vars": {
     "PUBLIC_SITE_URL": "https://www.murikah.com",
+    // 'anthropic' (needs ANTHROPIC_API_KEY) or 'workers-ai' (needs an AI binding).
+    "AI_PROVIDER": "anthropic",
   },
 }

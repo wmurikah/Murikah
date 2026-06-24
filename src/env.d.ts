@@ -22,6 +22,22 @@ declare namespace Cloudflare {
 
     // Plain vars.
     PUBLIC_SITE_URL?: string;
+
+    // --- AI assistant (Prompt 3) ---
+    /** 'anthropic' (default) or 'workers-ai'. */
+    AI_PROVIDER?: string;
+    /** Anthropic API key. Read server-side only; never sent to the client. */
+    ANTHROPIC_API_KEY?: string;
+    /** Override the chat model id (defaults set in src/lib/ai/config). */
+    AI_MODEL?: string;
+    /** Cloudflare Workers AI binding, used when AI_PROVIDER is 'workers-ai'. */
+    AI?: { run: (model: string, input: unknown) => Promise<unknown> };
+
+    // --- Demo sandbox (Prompt 3) ---
+    /** Salt for hashing visitor IPs stored in demo_sessions. */
+    DEMO_HASH_SALT?: string;
+    /** Shared secret required to call /api/cron/sweep. */
+    CRON_SECRET?: string;
   }
 }
 

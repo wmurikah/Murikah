@@ -25,6 +25,7 @@
     "cf:typegen": "wrangler types",
     "cf:dev": "astro build && wrangler dev --config dist/server/wrangler.json",
     "cf:deploy": "astro build && wrangler deploy --config dist/server/wrangler.json",
+    "cf:deploy:cron": "wrangler deploy --config wrangler.cron.jsonc",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

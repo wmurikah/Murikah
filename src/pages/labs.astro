@@ -5,8 +5,7 @@ import ServiceLayout from '@/layouts/ServiceLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Card from '@/components/primitives/Card.astro';
 import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
-import DemoEmbed from '@/components/DemoEmbed.astro';
-import SandboxDemo from '@/components/islands/SandboxDemo.tsx';
+import LabsSandbox from '@/components/labs/LabsSandbox.tsx';
 import type { FaqItem } from '@/lib/types';
 
 const areas = [
@@ -121,19 +120,18 @@ const faqs: FaqItem[] = [
     </div>
   </Section>
 
-  {/* Sandbox stub left exactly as built in Prompt 1; interactive demos are out of scope. */}
+  {
+    /* Interactive sandbox. Each demo runs against seeded sample data, is
+      session-isolated, rate-limited and auto-resets. Hydrated on view. */
+  }
   <Section tone="paper" aria-labelledby="sandbox">
     <h2 id="sandbox" class="text-2xl sm:text-3xl">Sandbox</h2>
     <p class="mt-3 max-w-prose text-slate">
-      This is where live, interactive demos of Labs builds will run. Working demos are coming in a
-      later release.
+      Try a slice of what we build. Everything here uses sample data, is isolated to your session,
+      and resets automatically.
     </p>
-    <DemoEmbed
-      class="mt-8"
-      title="Labs sandbox"
-      description="This frame will host a working, interactive demo in a later release."
-    >
-      <SandboxDemo client:visible />
-    </DemoEmbed>
+    <div class="mt-8">
+      <LabsSandbox client:visible />
+    </div>
   </Section>
 </ServiceLayout>
