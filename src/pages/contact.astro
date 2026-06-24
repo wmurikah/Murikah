@@ -15,7 +15,7 @@ const crumbs = [
 // No-JS feedback: the endpoint redirects to /contact?status=… on form posts.
 const status = Astro.url.searchParams.get('status');
 const statusMap: Record<string, { kind: 'success' | 'error'; msg: string }> = {
-  ok: { kind: 'success', msg: "Thanks — we'll be in touch shortly." },
+  ok: { kind: 'success', msg: "Thanks, we'll be in touch shortly." },
   invalid: { kind: 'error', msg: 'Please check your details and try again.' },
   ratelimited: { kind: 'error', msg: 'Too many submissions. Please try again later.' },
   error: { kind: 'error', msg: 'Something went wrong. Please email us directly.' },
@@ -28,8 +28,8 @@ const labelCls = 'block text-sm font-medium text-navy';
 ---
 
 <BaseLayout
-  title="Contact"
-  description="Get in touch with Murikah to book a demo or discuss your internal audit, assurance and AI-governance needs."
+  titleFull="Contact Murikah | Book a demo or an assurance conversation"
+  description="Talk to Murikah about co-sourced internal audit, Audit OS, AI governance or training. Tell us about your organisation and we respond within two working days."
 >
   <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
     <Breadcrumb items={crumbs} class="mb-6" />
@@ -38,8 +38,9 @@ const labelCls = 'block text-sm font-medium text-navy';
       Book a demo or start a conversation
     </h1>
     <p class="mt-5 max-w-prose text-lg text-slate">
-      Tell us a little about your organisation and what you're trying to achieve. We'll get back to
-      you. <span class="text-slate/80">[placeholder]</span>
+      Tell us about your organisation and what you are trying to achieve, whether that is co-sourced
+      internal audit, Audit OS, AI governance or training. We will read your message and respond
+      within two working days with the right next step, usually a short call.
     </p>
   </Section>
 
@@ -129,7 +130,7 @@ const labelCls = 'block text-sm font-medium text-navy';
             <p id="message-error" data-error-for="message" class="field-error" hidden></p>
           </div>
 
-          {/* Honeypot — hidden from people, tempting to bots. */}
+          {/* Honeypot, hidden from people, tempting to bots. */}
           <div class="hidden" aria-hidden="true">
             <label for="company_website">Leave this field empty</label>
             <input
@@ -143,7 +144,7 @@ const labelCls = 'block text-sm font-medium text-navy';
 
           <div class="flex items-center gap-4">
             <Button type="submit" variant="primary" size="lg">Send message</Button>
-            <p class="text-sm text-slate">We typically reply within [placeholder] business days.</p>
+            <p class="text-sm text-slate">We respond within two working days.</p>
           </div>
         </form>
       </div>
@@ -170,7 +171,8 @@ const labelCls = 'block text-sm font-medium text-navy';
             }
           </ul>
           <p class="mt-4 text-sm text-slate">
-            Independent, certified and platform-backed assurance. [placeholder]
+            Independent, certified and platform-backed assurance, led by a CISA and ISO 42001 Lead
+            Auditor.
           </p>
         </div>
       </aside>
@@ -180,7 +182,7 @@ const labelCls = 'block text-sm font-medium text-navy';
 
 <style>
   /* Form feedback is the one sanctioned use of status colours in the marketing
-     UI — functional validation, conveyed by text + icon + a thin accent, never
+     UI, functional validation, conveyed by text + icon + a thin accent, never
      colour alone (WCAG). */
   .form-status {
     border-radius: var(--radius-btn);
@@ -266,7 +268,7 @@ const labelCls = 'block text-sm font-medium text-navy';
 
         if (res.ok && data.ok) {
           form.reset();
-          setStatus(data.message ?? "Thanks — we'll be in touch.", 'success');
+          setStatus(data.message ?? "Thanks, we'll be in touch.", 'success');
         } else if (data.errors?.length) {
           data.errors.forEach((err) => setError(err.field, err.message));
           setStatus('Please check the highlighted fields.', 'error');

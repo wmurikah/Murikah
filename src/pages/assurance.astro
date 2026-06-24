@@ -2,61 +2,212 @@
 export const prerender = true;
 
 import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import type { FaqItem } from '@/lib/types';
 
-// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const areas = [
+  {
+    title: 'Co-sourced and outsourced internal audit',
+    body: 'We add capacity and method to your team, or run the whole function for you. Either way you get a risk-based plan, fieldwork, and reporting your audit committee can rely on.',
+  },
+  {
+    title: 'Systems and IT audits',
+    body: 'Application and general IT controls, user access and segregation of duties, change management, and reviews of the core systems your business runs on.',
+  },
+  {
+    title: 'Data protection reviews',
+    body: 'Readiness for the Kenya Data Protection Act and the Office of the Data Protection Commissioner (ODPC): records of processing, controller and processor obligations, and breach response.',
+  },
+  {
+    title: 'ISO 42001 and AI-governance readiness',
+    body: 'AI inventories, risk and impact assessments, model and vendor governance, and the management system that ISO 42001, the standard for governing AI, expects.',
+  },
+];
+
+const steps = [
+  {
+    title: 'Scope and risk assessment',
+    body: 'We agree the audit universe and the risks that matter most to your board and your regulator.',
+  },
+  {
+    title: 'Annual plan',
+    body: 'We turn that into a practical, risk-based plan with clear timing and ownership.',
+  },
+  {
+    title: 'Fieldwork',
+    body: 'Testing, evidence and work papers run on Audit OS, so every conclusion is supported and reviewable.',
+  },
+  {
+    title: 'Reporting',
+    body: 'Findings, ratings and recommendations go to management and the audit committee in plain language.',
+  },
+  {
+    title: 'Remediation and follow-up',
+    body: 'Actions are tracked to closure, with overdue items escalated, so issues actually get fixed.',
+  },
+];
+
+const why = [
+  {
+    title: 'Senior judgement',
+    body: 'The work is led by a Certified Information Systems Auditor and ISO 42001 Lead Auditor, not handed to juniors.',
+  },
+  {
+    title: 'A platform you keep',
+    body: 'Your evidence and reporting live in Audit OS, and the records stay with you when the engagement ends.',
+  },
+  {
+    title: 'Regulatory fluency',
+    body: 'We work to SASRA, Central Bank of Kenya and ODPC expectations and the IIA Global Internal Audit Standards.',
+  },
+  {
+    title: 'Fair pricing',
+    body: 'Big-4-grade work without Big-4 fees, scoped to the African mid-market.',
+  },
+];
+
 const faqs: FaqItem[] = [
   {
-    question: 'Is this a replacement for our internal audit function?',
+    question: 'What is co-sourced internal audit?',
     answer:
-      'No — Murikah Assurance is typically co-sourced: we work alongside your team to add capacity, methodology and tooling. We can also run a fully outsourced function where that fits. [placeholder]',
+      'Co-sourcing means we work alongside your existing internal audit team rather than replacing it. You keep ownership and institutional knowledge, and we add capacity, methodology and tooling where you need them, for example specialist IT or AI-governance work, or simply more hands during a busy plan. It is a practical middle ground between hiring and full outsourcing.',
   },
   {
-    question: 'How is this different from a Big 4 engagement?',
+    question: 'How is this different from hiring the Big 4?',
     answer:
-      'Same rigour and independence, delivered with a platform and AI assistance that lower cost and turnaround, and without long lock-in. [placeholder]',
+      'You get the same rigour and independence, with three differences. The work is led by a senior practitioner throughout, not staffed down to trainees. It runs on our own platform, so reporting and remediation are faster and the evidence stays with you. And it is priced for the mid-market, without long lock-in. We call it co-assurance: built with your team and your board.',
   },
   {
-    question: 'Can you help us get ready for ISO 42001?',
+    question: 'Can you work with our existing internal audit team?',
     answer:
-      'Yes. We run readiness reviews and AI-governance assessments mapped to ISO/IEC 42001 and your regulatory context. [placeholder]',
+      'Yes. That is the most common way we work. We supplement your team on specific audits, bring methodology and a platform, and help raise the function to the standard your audit committee expects. Where you have no in-house team yet, we can run the function and help you build one over time.',
+  },
+  {
+    question: 'Which regulators and standards do you cover?',
+    answer:
+      'For SACCOs we work to SASRA (the SACCO Societies Regulatory Authority) expectations. For banks, microfinance institutions and fintechs we align to Central Bank of Kenya requirements. For data protection we follow the Kenya Data Protection Act and the ODPC. Our internal audit work follows the IIA Global Internal Audit Standards, and our AI-governance work follows ISO 42001.',
+  },
+  {
+    question: 'How quickly can you start, and how are you priced?',
+    answer:
+      'A focused engagement can usually start within a few weeks of scoping. Pricing depends on the size of your audit universe and whether you choose co-sourcing or full outsourcing, and is agreed up front so there are no surprises. Tell us your context on a short call and we will give you a clear proposal.',
   },
 ];
 ---
 
 <ServiceLayout
   slug="assurance"
-  intro="Co-sourced internal audit and assurance that gives your board and your regulator confidence — experienced auditors, a working platform, and AI assistance, without Big 4 cost or lock-in."
-  whatItIs={[
-    'Murikah Assurance delivers internal audit, IT and systems audits, data-protection reviews, and AI-governance readiness as a co-sourced service. We bring the methodology, the people and the platform; you keep ownership and institutional knowledge.',
-    'Every engagement runs on Murikah Audit OS, so work papers, evidence, approvals and remediation are tracked end to end — and your audit committee gets clear, consistent reporting.',
-  ]}
-  inclusions={[
-    'Co-sourced internal audit',
-    'IT & systems audits',
-    'Data-protection reviews',
-    'ISO 42001 & AI-governance readiness',
-    'Remediation tracking & follow-up',
-    'Board & audit-committee reporting',
-  ]}
-  whoItIsFor={[
-    'Heads of internal audit needing capacity and method',
-    'Audit committees & boards seeking assurance',
-    'Risk & compliance leaders in regulated sectors',
-  ]}
-  howItWorks={[
-    {
-      title: 'Scope & risk-assess',
-      body: 'We build (or refresh) the audit universe and annual plan against your risks and obligations. [placeholder]',
-    },
-    {
-      title: 'Execute & evidence',
-      body: 'Fieldwork runs on Audit OS — testing, evidence and work papers in one reviewable place. [placeholder]',
-    },
-    {
-      title: 'Report & remediate',
-      body: 'Findings, ratings and remediation are tracked to closure with clear board reporting. [placeholder]',
-    },
-  ]}
+  metaTitle="Co-sourced internal audit in Kenya and East Africa | Murikah"
+  metaDescription="Co-sourced and outsourced internal audit delivered alongside your team and your board. Risk-based plans, board-ready reports, and tracked remediation, without Big 4 fees."
+  heading="Internal audit, delivered alongside your team."
+  intro="Murikah Assurance gives your organisation a full internal audit function without the cost and rigidity of the Big 4. We work alongside your existing team (co-sourcing) or run the function for you (outsourcing), delivering risk-based annual plans, fieldwork, board-ready reports, and remediation that is actually tracked to closure. The work meets the standards your audit committee and regulator expect, and you keep the evidence and the platform when the engagement ends. We call it co-assurance: assurance built with your team and your board, not handed down and billed by the hour."
+  secondaryCta={{ label: 'Explore Audit OS', href: '/audit-os' }}
   faqs={faqs}
-/>
+  closingTitle="See what assurance looks like when it is built to be proven"
+  closingBody="Book a demo and we will map this to your audit universe, your regulator and your board."
+>
+  <Section tone="paper" aria-labelledby="what-it-is">
+    <div class="grid gap-10 lg:grid-cols-12">
+      <div class="lg:col-span-5">
+        <h2 id="what-it-is" class="text-2xl sm:text-3xl">
+          When to co-source, and when to outsource
+        </h2>
+      </div>
+      <div class="lg:col-span-7">
+        <p class="max-w-prose text-ink">
+          Co-sourcing suits organisations that already have an internal audit function but need more
+          capacity or specific skills, for example IT, data protection or AI governance. You keep
+          control; we strengthen the work. Full outsourcing suits organisations that do not yet have
+          a function, or whose board wants a fully independent one, where we run internal audit end
+          to end and report to your audit committee.
+        </p>
+        <p class="mt-4 max-w-prose text-ink">
+          In both cases the method is the same, the reporting is the same, and the evidence stays
+          with you. You can start with co-sourcing and move either way as you grow.
+        </p>
+      </div>
+    </div>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="what-we-cover">
+    <h2 id="what-we-cover" class="text-2xl sm:text-3xl">What we cover</h2>
+    <FeatureGrid cols={2} class="mt-8">
+      {
+        areas.map((a) => (
+          <Card>
+            <h3 class="text-xl text-navy">{a.title}</h3>
+            <p class="mt-2 text-slate">{a.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="how-it-runs">
+    <h2 id="how-it-runs" class="text-2xl sm:text-3xl">How an engagement runs</h2>
+    <ol class="mt-8 grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-5">
+      {
+        steps.map((step, i) => (
+          <li class="rounded-card bg-surface p-6 ring-1 ring-hairline/70">
+            <span class="inline-flex size-9 items-center justify-center rounded-full bg-navy font-semibold text-white">
+              {i + 1}
+            </span>
+            <h3 class="mt-4 text-lg">{step.title}</h3>
+            <p class="mt-2 text-sm text-slate">{step.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="why-us">
+    <h2 id="why-us" class="text-2xl sm:text-3xl">Why teams choose Murikah</h2>
+    <FeatureGrid cols={2} class="mt-8">
+      {
+        why.map((w) => (
+          <Card>
+            <h3 class="text-xl text-navy">{w.title}</h3>
+            <p class="mt-2 text-slate">{w.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="related">
+    <h2 id="related" class="text-2xl sm:text-3xl">Related reading</h2>
+    <ul class="mt-6 grid max-w-3xl gap-3">
+      <li>
+        <a
+          href="/insights/co-sourced-vs-outsourced-internal-audit"
+          class="font-medium text-blue hover:text-blue-deep"
+        >
+          Co-sourced or outsourced internal audit: which does your organisation need?
+        </a>
+      </li>
+      <li>
+        <a
+          href="/insights/sacco-internal-audit-sasra"
+          class="font-medium text-blue hover:text-blue-deep"
+        >
+          Internal audit for SACCOs: what SASRA expects and how to deliver it
+        </a>
+      </li>
+      <li>
+        <a
+          href="/insights/kenya-data-protection-act"
+          class="font-medium text-blue hover:text-blue-deep"
+        >
+          The Kenya Data Protection Act: what controllers and processors must do
+        </a>
+      </li>
+      <li>
+        <a href="/audit-os" class="font-medium text-blue hover:text-blue-deep">
+          See the platform the work runs on, Murikah Audit OS
+        </a>
+      </li>
+    </ul>
+  </Section>
+</ServiceLayout>
