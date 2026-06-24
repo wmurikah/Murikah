@@ -11,7 +11,7 @@ This repository is the **framework** (Build Prompt 1): project setup, design
 system, layout/navigation, all routes, the component library, the SEO and
 AI-discoverability foundation, and the data/deploy plumbing. **Final marketing
 copy and the interactive Labs demos are out of scope** and arrive in later
-prompts — placeholder copy is clearly marked with `[placeholder]`.
+prompts, placeholder copy is clearly marked with `[placeholder]`.
 
 ---
 
@@ -23,7 +23,7 @@ prompts — placeholder copy is clearly marked with `[placeholder]`.
 | Platform      | Cloudflare **Workers** + static assets (`@astrojs/cloudflare` v14)      |
 | Styling       | Tailwind CSS v4 via `@tailwindcss/vite` + design tokens in `@theme`     |
 | Content       | `@astrojs/mdx` content collection · `@astrojs/rss` · `@astrojs/sitemap` |
-| Interactivity | `@astrojs/react` islands (Labs sandbox — stubbed for now)               |
+| Interactivity | `@astrojs/react` islands (Labs sandbox, stubbed for now)                |
 | Database      | [Turso](https://turso.tech) (libSQL) via `@libsql/client/web`           |
 | Email         | [Resend](https://resend.com) (behind an env check; optional)            |
 | Fonts         | Self-hosted via Fontsource (Outfit + Fraunces), preloaded               |
@@ -60,7 +60,7 @@ pnpm cf:dev    # astro build && wrangler dev --config dist/server/wrangler.json
 The adapter generates the deployable Worker config at
 `dist/server/wrangler.json` during the build (with the correct `main`, the
 `../client` assets directory, and all your bindings), so `wrangler dev`/`deploy`
-point at that generated file — not the root `wrangler.jsonc` (which is the
+point at that generated file, not the root `wrangler.jsonc` (which is the
 human-edited **source** of bindings).
 
 ## Environment variables
@@ -179,8 +179,7 @@ Tokens live in `src/styles/tokens.css` inside a Tailwind v4 `@theme` block, so
 every token is available **both** as a utility (`bg-navy`, `text-gold`,
 `font-serif`, `text-display`) and as a raw var (`var(--color-navy)`).
 
-- **Brand:** navy `#0B1733` (authority), gold `#C9A227` (the _single_ accent —
-  used only for the one primary action, per Von Restorff), blue `#1E4FA3`
+- **Brand:** navy `#0B1733` (authority), gold `#C9A227` (the _single_ accent, used only for the one primary action, per Von Restorff), blue `#1E4FA3`
   (interactive). Warm paper background, ink/slate text.
 - **Type:** Outfit (UI + headings) and Fraunces (the hero headline only),
   self-hosted and preloaded; a ~1.2 modular scale with tight tracking on
@@ -188,8 +187,8 @@ every token is available **both** as a utility (`bg-navy`, `text-gold`,
 - **Status colours** (RAG) are reserved for product/status only (here: the one
   sanctioned marketing use is contact-form validation feedback).
 
-The build is grounded in usability research — Jakob, Hick, Fitts, Miller,
-Gestalt, Von Restorff, Doherty, Tesler, serial-position and peak–end — with
+The build is grounded in usability research, Jakob, Hick, Fitts, Miller,
+Gestalt, Von Restorff, Doherty, Tesler, serial-position and peak-end, with
 code comments marking non-obvious applications.
 
 ## Accessibility & performance
@@ -207,14 +206,23 @@ code comments marking non-obvious applications.
 
 - Per-page title, meta description, canonical, Open Graph + Twitter tags, and a
   default share image (`/og-default.png`).
-- JSON-LD: `Organization` on every page, `Service` per line, `FAQPage` on FAQ
-  pages and guides, `BreadcrumbList`, and `Article` on guides.
+- JSON-LD: `Organization` / `ProfessionalService` with a linked founder
+  `Person` on every page, `Service` per line, `FAQPage` on FAQ pages and guides,
+  `BreadcrumbList`, and `BlogPosting` on guides.
 - `public/robots.txt` (allows Googlebot, Bingbot, GPTBot, OAI-SearchBot,
-  PerplexityBot, Google-Extended), `sitemap-index.xml` (generated), `rss.xml`,
-  and `public/llms.txt`.
+  PerplexityBot, Google-Extended), `sitemap-index.xml` (generated, with
+  priorities), `rss.xml`, and `public/llms.txt`.
 - Guide convention: answer-first opening, semantic H2/H3 mirroring real
-  questions, and an FAQ block — encoded in `InsightLayout` and the example guide.
+  questions, and an FAQ block, encoded in `InsightLayout` and the guides.
+
+### Submit the sitemap after launch
+
+Once the site is live, submit `https://www.murikah.com/sitemap-index.xml` to
+both [Google Search Console](https://search.google.com/search-console) and
+[Bing Webmaster Tools](https://www.bing.com/webmasters). Bing matters beyond
+Bing itself, because ChatGPT search draws on the Bing index, so submitting there
+helps the site surface in AI answers as well as classic search.
 
 ## License
 
-MIT © Murikah — see [LICENSE](./LICENSE).
+MIT © Murikah, see [LICENSE](./LICENSE).

@@ -1,0 +1,151 @@
+---
+/**
+ * SubscribeForm, a single email capture used for both the footer newsletter and
+ * the insights lead magnet. Posts to /api/subscribe (the Prompt 1 endpoint).
+ * Progressively enhanced: with JS it shows inline status; without JS it posts
+ * normally and the endpoint redirects. The `source` field tags where the signup
+ * came from. One script enhances every instance on the page.
+ */
+interface Props {
+  /** Tag stored with the subscriber, e.g. "newsletter" or "iso-42001-checklist". */
+  source: string;
+  heading?: string;
+  blurb?: string;
+  buttonLabel?: string;
+  /** Message shown on success. */
+  successMessage?: string;
+  tone?: 'light' | 'dark';
+  class?: string;
+}
+
+const {
+  source,
+  heading,
+  blurb,
+  buttonLabel = 'Subscribe',
+  successMessage = 'Thank you. You are on the list.',
+  tone = 'light',
+  class: className,
+} = Astro.props;
+
+const isDark = tone === 'dark';
+const fieldId = `email-${source.replace(/[^a-z0-9]/gi, '-')}`;
+const headingClass = isDark ? 'text-white' : 'text-navy';
+const blurbClass = isDark ? 'text-paper/75' : 'text-slate';
+const inputClass = isDark
+  ? 'min-h-[2.75rem] w-full rounded-btn border border-white/20 bg-white/10 px-3.5 py-2.5 text-white placeholder:text-paper/50'
+  : 'min-h-[2.75rem] w-full rounded-btn border border-hairline bg-surface px-3.5 py-2.5 text-ink placeholder:text-slate/60';
+const statusClass = isDark ? 'text-paper/80' : 'text-slate';
+---
+
+<div class:list={[className]}>
+  {heading && <p class:list={['font-medium', headingClass]}>{heading}</p>}
+  {blurb && <p class:list={['mt-1 text-sm', blurbClass]}>{blurb}</p>}
+
+  <form
+    action="/api/subscribe"
+    method="post"
+    novalidate
+    data-subscribe-form
+    data-success={successMessage}
+    class="mt-3"
+  >
+    <input type="hidden" name="source" value={source} />
+    {/* Honeypot */}
+    <div class="hidden" aria-hidden="true">
+      <label for={`${fieldId}-company`}>Leave this field empty</label>
+      <input
+        id={`${fieldId}-company`}
+        name="company_website"
+        type="text"
+        tabindex="-1"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="flex flex-col gap-2.5 sm:flex-row">
+      <label for={fieldId} class="sr-only">Email address</label>
+      <input
+        id={fieldId}
+        name="email"
+        type="email"
+        required
+        autocomplete="email"
+        placeholder="you@organisation.co.ke"
+        class={inputClass}
+        aria-describedby={`${fieldId}-status`}
+      />
+      <button
+        type="submit"
+        class:list={[
+          'inline-flex min-h-[2.75rem] shrink-0 items-center justify-center rounded-btn px-5 py-2.5 font-medium transition-colors duration-150',
+          isDark ? 'bg-gold text-navy hover:bg-gold-deep' : 'bg-navy text-white hover:bg-navy-deep',
+        ]}
+      >
+        {buttonLabel}
+      </button>
+    </div>
+
+    <p
+      id={`${fieldId}-status`}
+      data-subscribe-status
+      class:list={['mt-2 text-sm', statusClass]}
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+    </p>
+  </form>
+</div>
+
+<script>
+  // Enhance every subscribe form on the page (instant feedback, Doherty).
+  function initSubscribeForms() {
+    document.querySelectorAll<HTMLFormElement>('[data-subscribe-form]').forEach((form) => {
+      const status = form.querySelector<HTMLElement>('[data-subscribe-status]');
+      const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      const label = submit?.textContent ?? 'Subscribe';
+
+      const setStatus = (message: string) => {
+        if (!status) return;
+        status.textContent = message;
+        status.hidden = false;
+      };
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setStatus('Sending...');
+        if (submit) submit.disabled = true;
+
+        try {
+          const payload = Object.fromEntries(new FormData(form));
+          const res = await fetch(form.action, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            ok?: boolean;
+            message?: string;
+            errors?: { field: string; message: string }[];
+          };
+          if (res.ok && data.ok) {
+            form.reset();
+            setStatus(form.dataset.success ?? data.message ?? 'Thank you.');
+          } else {
+            setStatus(data.errors?.[0]?.message ?? 'Something went wrong. Please try again.');
+          }
+        } catch {
+          setStatus('Network error. Please try again.');
+        } finally {
+          if (submit) {
+            submit.disabled = false;
+            submit.textContent = label;
+          }
+        }
+      });
+    });
+  }
+
+  initSubscribeForms();
+</script>

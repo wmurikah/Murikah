@@ -1,12 +1,13 @@
 ---
 /**
- * Footer — a recurring "end" moment (Peak–End / serial-position). Compact
+ * Footer, a recurring "end" moment (peak-end / serial-position). Compact
  * grouped sitemap (Miller's Law), the pronunciation cue, certification trust
  * signals (E-E-A-T), social + legal links and copyright. Navy field with
  * `.on-dark` so focus rings flip to gold.
  */
 import Container from '@/components/primitives/Container.astro';
 import Logo from '@/components/Logo.astro';
+import SubscribeForm from '@/components/SubscribeForm.astro';
 import { SITE, FOOTER_GROUPS, SOCIAL, FOUNDER } from '@/site.config';
 
 // Build-time year for the copyright line.
@@ -17,7 +18,7 @@ const year = new Date().getFullYear();
   <Container>
     <div class="grid gap-10 py-14 md:grid-cols-12 lg:py-16">
       <div class="md:col-span-4">
-        <a href="/" class="inline-block no-underline" aria-label="Murikah — home">
+        <a href="/" class="inline-block no-underline" aria-label="Murikah, home">
           <Logo tone="light" />
         </a>
         <p class="mt-4 max-w-xs text-sm text-paper/70">{SITE.tagline}</p>
@@ -56,6 +57,25 @@ const year = new Date().getFullYear();
           ))
         }
       </nav>
+    </div>
+
+    {/* Newsletter, a quiet single-field capture posting to /api/subscribe. */}
+    <div class="border-t border-white/10 py-10">
+      <div class="grid gap-6 md:grid-cols-2 md:items-center">
+        <div>
+          <p class="font-medium text-white">Notes worth reading</p>
+          <p class="mt-1 max-w-md text-sm text-paper/70">
+            Occasional notes on assurance, AI governance and audit software. No noise.
+          </p>
+        </div>
+        <SubscribeForm
+          source="newsletter"
+          tone="dark"
+          buttonLabel="Subscribe"
+          successMessage="Thank you. We will send the occasional note, nothing more."
+          class="md:w-full md:max-w-sm md:justify-self-end"
+        />
+      </div>
     </div>
 
     <div
