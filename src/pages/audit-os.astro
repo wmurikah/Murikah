@@ -2,61 +2,205 @@
 export const prerender = true;
 
 import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
+import { PRICING } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
-// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const features = [
+  {
+    title: 'Engagements and work papers',
+    body: 'Plan engagements, prepare work papers, attach evidence, and route everything for review and sign-off in one reviewable place.',
+  },
+  {
+    title: 'Findings and remediation',
+    body: 'Raise findings, assign action plans, and track remediation with automatic follow-up and overdue escalation, so issues close.',
+  },
+  {
+    title: 'Board and committee reporting',
+    body: 'Generate board and audit-committee reporting from live data. Your quarterly pack is a click, not a week of copying spreadsheets.',
+  },
+  {
+    title: 'AI assistant',
+    body: 'An embedded assistant helps with drafting and analysis. It supports the reviewer and never replaces professional judgement.',
+  },
+  {
+    title: 'Access control and audit logging',
+    body: 'Role-based permissions and a full audit log of every action, so you always know who did what, and when.',
+  },
+];
+
+const forWho = [
+  {
+    title: 'Small teams that are stretched',
+    body: 'Do more with the people you have, and stop running audit out of email and shared drives.',
+  },
+  {
+    title: 'Multi-entity groups',
+    body: 'Run several entities and countries from one place, with a consolidated view for the group.',
+  },
+  {
+    title: 'Regulator-facing organisations',
+    body: 'Keep the evidence and reporting a SASRA, Central Bank or ODPC review will ask for.',
+  },
+];
+
+const security = [
+  'Role-based access, so people see only what they should',
+  'A full audit log of every action in the platform',
+  'Encryption in transit and at rest',
+  'Defined data retention, set to your policy',
+  'Registration with the Office of the Data Protection Commissioner (ODPC)',
+  'Clear controller and processor terms in writing',
+];
+
 const faqs: FaqItem[] = [
   {
-    question: 'Is Audit OS a standalone product or part of a service?',
+    question: 'How much does internal audit software cost in Kenya?',
     answer:
-      'Both. You can subscribe to the platform directly, or use it as part of a co-sourced Murikah Assurance engagement. [placeholder]',
+      'Most mid-market teams pay a monthly subscription rather than a large annual licence. Audit OS is indicative at KES 15,000 to 35,000 a month for a single small team, KES 45,000 to 120,000 for multiple entities or an active board, and from KES 150,000 for groups and regulator-facing organisations. These are positioning ranges, validated on enquiry against your size and needs.',
   },
   {
-    question: 'Where is our data stored?',
+    question: 'Can we run our own audits on Audit OS, or only with your team?',
     answer:
-      'Data residency and protection are designed for regulated organisations. Specifics are covered during onboarding. [placeholder]',
+      'Both. You can subscribe to the platform and run your own internal audit function on it, or use it as part of a co-sourced engagement with Murikah Assurance. Many teams start co-sourced and take more in-house over time, keeping the same system of record throughout.',
   },
   {
-    question: 'Does it include an AI assistant?',
+    question: 'Is our audit data secure, and where is it stored?',
     answer:
-      'Yes — an assistant supports drafting, summarising and follow-ups. It augments reviewers; it does not replace professional judgement. [placeholder]',
+      'Access is role-based, every action is logged, and data is encrypted in transit and at rest, with retention set to your policy. We operate under clear controller and processor terms and are registered with the ODPC. {{DATA: confirm hosting region and data-residency commitments before launch}}',
+  },
+  {
+    question: 'Does it work across multiple entities and countries?',
+    answer:
+      'Yes. Audit OS is built for groups. You can run several entities and countries in one place, keep their work separate where it needs to be, and give the group a consolidated view of plans, findings and remediation.',
+  },
+  {
+    question: 'How hard is it to move off spreadsheets?',
+    answer:
+      'It is straightforward. You can bring your current plan and open findings across at the start, and most teams are running their next engagement on Audit OS within days. We help with the move as part of onboarding, so nothing is lost in the change.',
   },
 ];
 ---
 
 <ServiceLayout
   slug="audit-os"
-  intro="The subscription platform that runs your audit — work papers, approvals, remediation, follow-ups and board reporting in one place, with an AI assistant alongside."
-  whatItIs={[
-    'Murikah Audit OS is a purpose-built platform for internal audit teams: planning, fieldwork, evidence, review and reporting in a single, auditable system of record.',
-    'It standardises how work papers are prepared and approved, tracks remediation to closure, and turns a year of work into clear board and audit-committee reporting.',
-  ]}
-  inclusions={[
-    'Work papers & evidence',
-    'Review & approval workflows',
-    'Remediation & follow-up tracking',
-    'Board & committee reporting',
-    'Role-based access & audit trail',
-    'AI assistant for drafting & summaries',
-  ]}
-  whoItIsFor={[
-    'Internal audit teams wanting one system of record',
-    'Audit leaders reporting to a committee or board',
-    'Organisations replacing spreadsheets & shared drives',
-  ]}
-  howItWorks={[
-    {
-      title: 'Plan',
-      body: 'Build the audit universe and annual plan; assign engagements and timelines. [placeholder]',
-    },
-    {
-      title: 'Execute',
-      body: 'Prepare work papers, attach evidence, and route for review and approval. [placeholder]',
-    },
-    {
-      title: 'Report',
-      body: 'Track remediation and generate consistent board-ready reporting. [placeholder]',
-    },
-  ]}
+  metaTitle="Affordable internal audit software for Africa | Murikah Audit OS"
+  metaDescription="Audit OS runs work papers, findings, remediation and board reporting in one place, with an AI assistant. Built for African mid-market audit teams."
+  heading="The platform your audit work runs on."
+  intro="Murikah Audit OS is internal audit software built for African mid-market teams. It holds your engagements and work papers with review and sign-off, tracks findings and remediation with automatic follow-up and overdue escalation, and generates board and committee reporting from live data, so your quarterly pack is a click, not a week. An embedded AI assistant helps with drafting and analysis, with role-based permissions and full audit logging of every action. It runs on a modern, low-cost edge stack, which is how it serves mid-market price points starting at KES 15,000 a month rather than enterprise licence fees."
+  secondaryCta={{ label: 'See Murikah Assurance', href: '/assurance' }}
   faqs={faqs}
-/>
+  closingTitle="Put your audit on a system built to be proven"
+  closingBody="Book a demo and we will show Audit OS against your own engagements and reporting."
+>
+  <Section tone="paper" aria-labelledby="what-it-does">
+    <h2 id="what-it-does" class="text-2xl sm:text-3xl">What it does</h2>
+    <FeatureGrid cols={3} class="mt-8">
+      {
+        features.map((f) => (
+          <Card>
+            <h3 class="text-lg text-navy">{f.title}</h3>
+            <p class="mt-2 text-slate">{f.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="who-for">
+    <h2 id="who-for" class="text-2xl sm:text-3xl">Who it is for</h2>
+    <FeatureGrid cols={3} class="mt-8">
+      {
+        forWho.map((w) => (
+          <Card>
+            <h3 class="text-lg text-navy">{w.title}</h3>
+            <p class="mt-2 text-slate">{w.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="security">
+    <div class="grid gap-10 lg:grid-cols-12">
+      <div class="lg:col-span-5">
+        <h2 id="security" class="text-2xl sm:text-3xl">Security and trust</h2>
+        <p class="mt-4 max-w-prose text-slate">
+          Audit software holds sensitive findings, so the controls around it matter as much as the
+          features.
+        </p>
+      </div>
+      <ul class="grid gap-2.5 sm:grid-cols-2 lg:col-span-7">
+        {
+          security.map((s) => (
+            <li class="flex items-start gap-2.5">
+              <svg
+                class="mt-1 size-4 shrink-0 text-gold"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M3 8.5l3 3 7-7.5"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span class="text-ink">{s}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="pricing">
+    <h2 id="pricing" class="text-2xl sm:text-3xl">Pricing</h2>
+    <p class="mt-3 max-w-prose text-slate">
+      Indicative monthly ranges, validated on enquiry against your size and needs. No long lock-in.
+    </p>
+    <div class="mt-8 grid gap-5 sm:gap-6 lg:grid-cols-3">
+      {
+        PRICING.map((tier) => (
+          <div class="flex flex-col rounded-card bg-paper p-7 ring-1 ring-hairline/70">
+            <h3 class="text-xl text-navy">{tier.name}</h3>
+            <p class="mt-1 text-sm text-slate">{tier.forWho}</p>
+            <p class="mt-5 text-2xl font-semibold text-navy">{tier.price}</p>
+            <p class="text-sm text-slate">{tier.period}</p>
+          </div>
+        ))
+      }
+    </div>
+    <div class="mt-8 rounded-card bg-paper p-7 ring-1 ring-hairline/70">
+      <h3 class="text-xl text-navy">The assurance bundle</h3>
+      <p class="mt-2 max-w-prose text-slate">
+        Pair a fixed-fee assurance retainer with a discounted Audit OS subscription, and budget for
+        the whole thing as one predictable monthly number. Talk to us about the right mix for your
+        team.
+      </p>
+    </div>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="related">
+    <h2 id="related" class="text-2xl sm:text-3xl">Related reading</h2>
+    <ul class="mt-6 grid max-w-3xl gap-3">
+      <li>
+        <a
+          href="/insights/internal-audit-software-cost-kenya"
+          class="font-medium text-blue hover:text-blue-deep"
+        >
+          How much does internal audit software cost in Kenya? A plain buyer's guide
+        </a>
+      </li>
+      <li>
+        <a href="/assurance" class="font-medium text-blue hover:text-blue-deep">
+          See how co-sourced internal audit uses the platform
+        </a>
+      </li>
+    </ul>
+  </Section>
+</ServiceLayout>

@@ -7,7 +7,7 @@ export function json(data: unknown, status = 200): Response {
   });
 }
 
-/** 303 redirect — used for no-JS form submissions (POST → GET). */
+/** 303 redirect, used for no-JS form submissions (POST → GET). */
 export function seeOther(location: string): Response {
   return new Response(null, { status: 303, headers: { location } });
 }
