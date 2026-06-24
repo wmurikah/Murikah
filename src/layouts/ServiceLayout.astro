@@ -1,0 +1,166 @@
+---
+/**
+ * ServiceLayout — the consistent template for all six service-line pages
+ * (hero → what it is → who it's for → how it works → [optional slot] → FAQ →
+ * CTA). Each service page supplies data; the structure stays identical so the
+ * user always knows where they are (Jakob's Law) and the layout reads the same
+ * everywhere. Placeholder copy is supplied per page and marked there.
+ */
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Button from '@/components/primitives/Button.astro';
+import Card from '@/components/primitives/Card.astro';
+import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
+import Faq from '@/components/primitives/Faq.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import ServiceSchema from '@/components/schema/Service.astro';
+import FaqPageSchema from '@/components/schema/FaqPage.astro';
+import { SERVICES, PRIMARY_CTA } from '@/site.config';
+import type { FaqItem } from '@/lib/types';
+
+interface Step {
+  title: string;
+  body: string;
+}
+
+interface Props {
+  /** Service slug — pulls name/summary/serviceType from site.config. */
+  slug: string;
+  /** Lead paragraph under the H1 [placeholder]. */
+  intro: string;
+  /** "What it is" body paragraphs [placeholder]. */
+  whatItIs: string[];
+  /** Optional "what's included" bullets. */
+  inclusions?: string[];
+  /** "Who it's for" bullets [placeholder]. */
+  whoItIsFor: string[];
+  /** "How it works" steps [placeholder]. */
+  howItWorks: Step[];
+  faqs: FaqItem[];
+}
+
+const { slug, intro, whatItIs, inclusions, whoItIsFor, howItWorks, faqs } = Astro.props;
+
+const service = SERVICES.find((s) => s.slug === slug);
+if (!service) throw new Error(`Unknown service slug: ${slug}`);
+
+const description = service.summary.replace(' [placeholder]', '');
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: service.fullName, href: service.href },
+];
+---
+
+<BaseLayout title={service.fullName} description={description}>
+  {/* Per-page Service JSON-LD. */}
+  <ServiceSchema
+    slot="head"
+    name={service.fullName}
+    description={description}
+    serviceType={service.serviceType}
+    path={service.href}
+  />
+
+  {/* Hero — the page's opening "peak". */}
+  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
+    <Breadcrumb items={crumbs} class="mb-6" />
+    <p class="text-sm font-semibold tracking-widest text-gold uppercase">{service.name}</p>
+    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
+      {service.fullName}
+    </h1>
+    <p class="mt-5 max-w-prose text-lg text-slate">{intro}</p>
+    <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+      <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
+      <Button href="/contact" variant="ghost" size="lg">Talk to us</Button>
+    </div>
+    <p class="mt-6 text-sm text-slate">[Placeholder copy — finalised in a later content pass.]</p>
+  </Section>
+
+  {/* What it is */}
+  <Section tone="paper" aria-labelledby="what-it-is">
+    <div class="grid gap-10 lg:grid-cols-12">
+      <div class="lg:col-span-5">
+        <h2 id="what-it-is" class="text-2xl sm:text-3xl">What it is</h2>
+      </div>
+      <div class="lg:col-span-7">
+        {whatItIs.map((p) => <p class="mt-0 max-w-prose text-ink not-first:mt-4">{p}</p>)}
+        {
+          inclusions && inclusions.length > 0 && (
+            <ul class="mt-6 grid gap-2.5 sm:grid-cols-2">
+              {inclusions.map((item) => (
+                <li class="flex items-start gap-2.5">
+                  <svg
+                    class="mt-1 size-4 shrink-0 text-gold"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M3 8.5l3 3 7-7.5"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span class="text-ink">{item}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </div>
+    </div>
+  </Section>
+
+  {/* Who it's for */}
+  <Section tone="surface" aria-labelledby="who-its-for">
+    <h2 id="who-its-for" class="text-2xl sm:text-3xl">Who it's for</h2>
+    <FeatureGrid cols={3} class="mt-8">
+      {
+        whoItIsFor.map((who) => (
+          <Card>
+            <p class="font-medium text-navy">{who}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  {/* How it works */}
+  <Section tone="paper" aria-labelledby="how-it-works">
+    <h2 id="how-it-works" class="text-2xl sm:text-3xl">How it works</h2>
+    <ol class="mt-8 grid gap-5 sm:gap-6 lg:grid-cols-3">
+      {
+        howItWorks.map((step, i) => (
+          <li class="rounded-card bg-surface p-6 ring-1 ring-hairline/70 sm:p-7">
+            <span class="inline-flex size-9 items-center justify-center rounded-full bg-navy font-semibold text-white">
+              {i + 1}
+            </span>
+            <h3 class="mt-4 text-xl">{step.title}</h3>
+            <p class="mt-2 text-slate">{step.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </Section>
+
+  {/* Optional extra content (e.g. the Labs sandbox). Renders nothing if empty. */}
+  <slot />
+
+  {/* FAQ — progressive disclosure + FAQPage schema from the same data. */}
+  <Section tone="surface" aria-labelledby="faq">
+    <h2 id="faq" class="text-2xl sm:text-3xl">Frequently asked questions</h2>
+    <Faq items={faqs} class="mt-6 max-w-3xl" />
+    <FaqPageSchema items={faqs} />
+  </Section>
+
+  {/* Closing CTA — the "end" peak. */}
+  <CtaSection
+    eyebrow="Get started"
+    title="See how Murikah would work for your organisation"
+    body="Book a focused walkthrough. We'll map this to your context and show the path to value. [placeholder]"
+  />
+</BaseLayout>

@@ -1,0 +1,53 @@
+---
+/**
+ * Faq — accessible accordion built on native <details>/<summary>: fully
+ * keyboard-operable and zero-JS, so it opens instantly (Doherty Threshold) and
+ * implements progressive disclosure (Tesler's Law — detail revealed on demand).
+ *
+ * Pair with the FaqPage schema component using the SAME items array so visible
+ * content and structured data never diverge.
+ */
+import type { FaqItem } from '@/lib/types';
+
+interface Props {
+  items: FaqItem[];
+  title?: string;
+  /** Heading level for the optional section title (correct document outline). */
+  headingLevel?: 2 | 3;
+  class?: string;
+}
+
+const { items, title, headingLevel = 2, class: className } = Astro.props;
+---
+
+<div class:list={[className]}>
+  {
+    title &&
+      (headingLevel === 3 ? (
+        <h3 class="text-2xl sm:text-3xl">{title}</h3>
+      ) : (
+        <h2 class="text-2xl sm:text-3xl">{title}</h2>
+      ))
+  }
+  <div class="mt-6 border-t border-hairline">
+    {
+      items.map((item) => (
+        <details class="group border-b border-hairline">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-lg font-medium text-navy [&::-webkit-details-marker]:hidden">
+            <span>{item.question}</span>
+            <span
+              aria-hidden="true"
+              class="relative grid size-6 shrink-0 place-items-center text-blue"
+            >
+              <span class="absolute h-0.5 w-3.5 rounded bg-current" />
+              <span class="absolute h-3.5 w-0.5 rounded bg-current transition-transform duration-200 group-open:scale-0 group-open:rotate-90" />
+            </span>
+          </summary>
+          <div class="pb-5">
+            <p class="max-w-prose text-slate">{item.answer}</p>
+          </div>
+        </details>
+      ))
+    }
+  </div>
+</div>

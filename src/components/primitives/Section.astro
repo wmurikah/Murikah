@@ -1,0 +1,47 @@
+---
+/**
+ * Section — a vertical-rhythm band with an optional background tone. Wraps its
+ * content in a Container by default (set `bleed` to opt out). The `navy` tone
+ * adds `.on-dark` so descendant focus rings flip to gold for contrast.
+ */
+import Container from './Container.astro';
+
+interface Props {
+  id?: string;
+  tone?: 'paper' | 'surface' | 'shade' | 'navy';
+  /** Skip the inner Container for full-bleed content. */
+  bleed?: boolean;
+  class?: string;
+  containerClass?: string;
+  /** Pass-through for aria-labelledby and other section attributes. */
+  [key: string]: unknown;
+}
+
+const {
+  id,
+  tone = 'paper',
+  bleed = false,
+  class: className,
+  containerClass,
+  ...rest
+} = Astro.props;
+
+const toneClass: Record<string, string> = {
+  paper: 'bg-paper text-ink',
+  surface: 'bg-surface text-ink',
+  shade: 'bg-paper-shade text-ink',
+  navy: 'bg-navy text-paper on-dark',
+};
+---
+
+<section id={id} class:list={['py-16 sm:py-20 lg:py-28', toneClass[tone], className]} {...rest}>
+  {
+    bleed ? (
+      <slot />
+    ) : (
+      <Container class={containerClass}>
+        <slot />
+      </Container>
+    )
+  }
+</section>
