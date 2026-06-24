@@ -88,25 +88,54 @@ when a key is absent.
 
 ## Database (Turso)
 
-1. Create a database and capture its URL + token:
+The database scripts run through `tsx` and resolve credentials the same way the
+app does: **the shell environment is read first, then `.dev.vars` as a fallback**
+(an existing env value always wins). No Turso CLI is required, and you never need
+to `export` anything by hand.
 
-   ```bash
-   turso db create murikah
-   turso db show murikah --url
-   turso db tokens create murikah
+1. Put your two Turso values in `.dev.vars` (copy it from `.dev.vars.example`):
+
+   ```
+   TURSO_DATABASE_URL=libsql://your-database-name.turso.io
+   TURSO_AUTH_TOKEN=your-turso-auth-token
    ```
 
-2. Put the URL/token in `.dev.vars` (or your environment).
+   `.dev.vars` is git-ignored and must never be committed. The same two values
+   go on the deployed Cloudflare Worker: `TURSO_DATABASE_URL` as a plain
+   variable and `TURSO_AUTH_TOKEN` as a Secret. The token is read-write and
+   meant to be rotated; when you rotate it, update `.dev.vars` and the Cloudflare
+   secret. No code changes are needed.
 
-3. Apply the schema and (optionally) seed sample data:
+2. Create the tables and load sample data:
 
    ```bash
-   pnpm db:apply   # runs db/schema.sql against TURSO_DATABASE_URL
-   pnpm db:seed    # inserts a couple of sample rows (dev only)
+   pnpm db:apply          # create the tables from db/schema.sql (idempotent)
+   pnpm db:seed           # load development sample data
+   pnpm db:setup          # do both, in order, for a fresh database
+   pnpm db:seed:content   # full content seed (added by Build Prompt 4)
    ```
 
-   Both scripts auto-load `.dev.vars` if present. Alternatively, apply the schema
-   with the Turso CLI: `turso db shell murikah < db/schema.sql`.
+   `pnpm db:reset` is destructive (drops and recreates every table) and refuses
+   to run without an explicit confirmation: `CONFIRM=1 pnpm db:reset`.
+
+   Note: run these through pnpm (they use `tsx`); a bare `node db/seed.ts` is
+   not expected to work.
+
+### CI and the shell
+
+Because the scripts read the environment first, the same commands work in CI
+with no `.dev.vars` present: in GitHub Actions, set `TURSO_DATABASE_URL` and
+`TURSO_AUTH_TOKEN` as repository secrets and the scripts pick them up. Locally,
+`.dev.vars` provides them. A missing variable produces a clear, specific error
+that names the variable and `.dev.vars`, and exits non-zero.
+
+### Turso CLI alternative
+
+If you prefer the CLI, applying the schema directly still works:
+`turso db shell murikah < db/schema.sql`. The pnpm scripts do not depend on it.
+
+> **Caution:** never paste the TypeScript seed (`db/seed.ts`) into the Turso web
+> console or Drizzle Studio. Those accept SQL only. Use `pnpm db:seed`.
 
 Tables: `leads` (contact submissions), `subscribers` (newsletter), the demo
 sandbox tables (`demo_sessions`, `demo_invoices`, `demo_workflow_runs`,
