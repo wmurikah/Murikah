@@ -7,11 +7,10 @@ Marketing website for **Murikah**, an AI-native assurance and governance company
 helping African organisations run, prove, and continuously improve their internal
 audit and their AI and system governance.
 
-This repository is the **framework** (Build Prompt 1): project setup, design
-system, layout/navigation, all routes, the component library, the SEO and
-AI-discoverability foundation, and the data/deploy plumbing. **Final marketing
-copy and the interactive Labs demos are out of scope** and arrive in later
-prompts, placeholder copy is clearly marked with `[placeholder]`.
+The site includes the full marketing pages and final copy, the SEO and
+AI-discoverability layer, the Insights guides, an interactive **Labs sandbox**,
+and a site-wide **AI assistant**. A few values are clearly marked with
+`{{PLACEHOLDER}}` tokens pending final confirmation before launch.
 
 ---
 
@@ -23,7 +22,7 @@ prompts, placeholder copy is clearly marked with `[placeholder]`.
 | Platform      | Cloudflare **Workers** + static assets (`@astrojs/cloudflare` v14)      |
 | Styling       | Tailwind CSS v4 via `@tailwindcss/vite` + design tokens in `@theme`     |
 | Content       | `@astrojs/mdx` content collection · `@astrojs/rss` · `@astrojs/sitemap` |
-| Interactivity | `@astrojs/react` islands (Labs sandbox, stubbed for now)                |
+| Interactivity | `@astrojs/react` islands (Labs sandbox + AI assistant)                  |
 | Database      | [Turso](https://turso.tech) (libSQL) via `@libsql/client/web`           |
 | Email         | [Resend](https://resend.com) (behind an env check; optional)            |
 | Fonts         | Self-hosted via Fontsource (Outfit + Fraunces), preloaded               |
@@ -68,18 +67,24 @@ human-edited **source** of bindings).
 Set locally in `.dev.vars` (see `.dev.vars.example`); in production set them as
 Cloudflare secrets. **Never commit secrets.**
 
-| Variable               | Required | Purpose                                             |
-| ---------------------- | -------- | --------------------------------------------------- |
-| `TURSO_DATABASE_URL`   | yes\*    | libSQL connection URL (`libsql://…`)                |
-| `TURSO_AUTH_TOKEN`     | yes\*    | Turso auth token                                    |
-| `RESEND_API_KEY`       | no       | Resend key. If unset, email is **skipped** (no-op). |
-| `CONTACT_NOTIFY_EMAIL` | no       | Recipient for contact notifications                 |
-| `RESEND_FROM_EMAIL`    | no       | Verified sender address                             |
-| `PUBLIC_SITE_URL`      | no       | Canonical/OG origin for non-production environments |
+| Variable               | Required | Purpose                                                               |
+| ---------------------- | -------- | --------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`   | yes\*    | libSQL connection URL (`libsql://…`)                                  |
+| `TURSO_AUTH_TOKEN`     | yes\*    | Turso auth token                                                      |
+| `RESEND_API_KEY`       | no       | Resend key. If unset, email is **skipped** (no-op).                   |
+| `CONTACT_NOTIFY_EMAIL` | no       | Recipient for contact notifications                                   |
+| `RESEND_FROM_EMAIL`    | no       | Verified sender address                                               |
+| `PUBLIC_SITE_URL`      | no       | Canonical/OG origin for non-production environments                   |
+| `AI_PROVIDER`          | no       | `anthropic` (default) or `workers-ai`                                 |
+| `ANTHROPIC_API_KEY`    | no       | Assistant model key. If unset, the assistant returns a calm fallback. |
+| `AI_MODEL`             | no       | Override the chat model id                                            |
+| `DEMO_HASH_SALT`       | no       | Salt for hashing demo-session IPs (set in prod)                       |
+| `CRON_SECRET`          | no       | Shared secret for `/api/cron/sweep` and the Cron Worker               |
 
-\* Required for the contact/subscribe endpoints to persist data. The site
-**builds and runs without them**; the endpoints degrade gracefully and return a
-clear error.
+\* Required for the contact/subscribe endpoints and demo logging to persist
+data. The site **builds and runs without any of these**; the demos compute
+server-side and the assistant degrades to a calm fallback, so nothing breaks
+when a key is absent.
 
 ## Database (Turso)
 
@@ -103,8 +108,11 @@ clear error.
    Both scripts auto-load `.dev.vars` if present. Alternatively, apply the schema
    with the Turso CLI: `turso db shell murikah < db/schema.sql`.
 
-Tables: `leads` (contact submissions), `subscribers` (newsletter), and a
-forward-looking `demo_sessions` placeholder for future Labs sandboxes.
+Tables: `leads` (contact submissions), `subscribers` (newsletter), the demo
+sandbox tables (`demo_sessions`, `demo_invoices`, `demo_workflow_runs`,
+`demo_crm_*`, and the read-only Audit OS seed `demo_findings`/`demo_workpapers`/
+`demo_metrics`/`demo_board_items`), and the assistant audit log
+(`assistant_conversations`, `assistant_messages`).
 
 ## Deploy (Cloudflare Workers)
 
@@ -138,18 +146,19 @@ Update the canonical URL in **two** places if your domain differs from
 
 ## Scripts
 
-| Script            | Description                                         |
-| ----------------- | --------------------------------------------------- |
-| `pnpm dev`        | Astro dev server                                    |
-| `pnpm build`      | `astro check` (type-check) + `astro build`          |
-| `pnpm preview`    | Preview the static build                            |
-| `pnpm cf:dev`     | Build + `wrangler dev` on the Workers runtime       |
-| `pnpm cf:deploy`  | Build + deploy to Cloudflare                        |
-| `pnpm cf:typegen` | Generate Worker binding types from `wrangler.jsonc` |
-| `pnpm lint`       | ESLint                                              |
-| `pnpm format`     | Prettier (write)                                    |
-| `pnpm db:apply`   | Apply `db/schema.sql` to Turso                      |
-| `pnpm db:seed`    | Seed sample rows                                    |
+| Script                | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| `pnpm dev`            | Astro dev server                                         |
+| `pnpm build`          | `astro check` (type-check) + `astro build`               |
+| `pnpm preview`        | Preview the static build                                 |
+| `pnpm cf:dev`         | Build + `wrangler dev` on the Workers runtime            |
+| `pnpm cf:deploy`      | Build + deploy the site to Cloudflare                    |
+| `pnpm cf:deploy:cron` | Deploy the companion Cron Worker (`wrangler.cron.jsonc`) |
+| `pnpm cf:typegen`     | Generate Worker binding types from `wrangler.jsonc`      |
+| `pnpm lint`           | ESLint                                                   |
+| `pnpm format`         | Prettier (write)                                         |
+| `pnpm db:apply`       | Apply `db/schema.sql` to Turso                           |
+| `pnpm db:seed`        | Seed sample rows + the Audit OS sandbox sample data      |
 
 ## Project structure
 
@@ -222,6 +231,82 @@ both [Google Search Console](https://search.google.com/search-console) and
 [Bing Webmaster Tools](https://www.bing.com/webmasters). Bing matters beyond
 Bing itself, because ChatGPT search draws on the Bing index, so submitting there
 helps the site surface in AI answers as well as classic search.
+
+## Labs sandbox and AI assistant
+
+`/labs` hosts a tabbed, interactive sandbox, and a floating AI assistant is
+available site-wide. Both are built to be visibly safe for an assurance and
+data-protection brand.
+
+### The demos
+
+- **Audit OS sandbox** (read-only): a dashboard, a filterable findings list with
+  a detail drawer and work paper, and a board-pack preview, all from seeded
+  sample data.
+- **Document extraction**: pick a sample invoice and extract its fields to a CSV.
+  Optional upload (PDF/PNG/JPEG, under 2MB) is processed transiently and never
+  stored; it uses the model when configured, with the output validated against a
+  strict schema before display. Sample invoices work with no key.
+- **Workflow engine**: compose a trigger to condition to action flow from a
+  whitelist, run it against a fixed sample event, and see an audit log.
+- **Mini-CRM**: a seeded pipeline where marking a deal Won fires a simulated
+  automation and an activity log.
+
+### Safety and isolation model (for maintainers)
+
+This is enforced by shared helpers in `src/lib/demo/` so every demo and the
+assistant get the same guarantees.
+
+- **Sessions** (`session.ts`, `guard.ts`): an anonymous UUID in an httpOnly,
+  SameSite=Lax cookie (`mk_demo`, Secure in production, 24h). The
+  `demo_sessions` row stores a salted **hash** of the IP and a truncated
+  user-agent, never a raw IP. Every write is scoped to the session.
+- **Rate limits** (`config.ts` + KV): demos 30 per 10 minutes, the assistant 20
+  per hour, uploads 10 per hour. A breach returns a calm 429.
+- **Auto-reset and retention**: the hourly Cron Worker calls `/api/cron/sweep`,
+  which deletes demo data and sessions older than 24 hours and prunes assistant
+  logs older than 30 days. Demos also compute server-side and deterministically,
+  so they work even before Turso is configured (persistence is then skipped).
+- **No real data**: every surface carries a "Demo environment. Sample data only.
+  Resets automatically." badge. Uploads are transient. The assistant is told not
+  to solicit or retain sensitive data.
+- **No arbitrary code**: the workflow demo only interprets whitelisted blocks
+  server-side. Visitor-supplied code is never executed. (If that is ever wanted,
+  the only acceptable path is Cloudflare's Sandbox SDK with Dynamic Workers in
+  isolated V8 isolates; deferred, not built.)
+- **Secrets**: the model key lives only in a Cloudflare secret, is read
+  server-side in `api/ai/assistant.ts`, and never reaches the client, responses
+  or logs.
+
+### The AI assistant
+
+A provider-agnostic adapter (`src/lib/ai/`) defaults to **Anthropic** (set
+`ANTHROPIC_API_KEY`), with a `workers-ai` seam selected by `AI_PROVIDER`. The
+model id lives in `src/lib/ai/config.ts`. The assistant is grounded in a curated
+brief built from `site.config` (no vector database; Cloudflare Vectorize is a
+deferred option). It streams over Server-Sent Events and is guardrailed to stay
+on topic, never fabricate, never give definitive legal or audit advice, resist
+prompt injection, and offer the demo as the next step. With no key set, it
+returns a calm fallback so nothing breaks.
+
+### Endpoints (all `prerender = false`, all behind the guard)
+
+`demo/auditos/{dashboard,findings,finding/[ref],board}`, `demo/labs/{extract,
+workflow,crm}`, `ai/assistant` (SSE), and `cron/sweep` (secret-guarded).
+
+### Deploy the retention sweep
+
+The Astro adapter does not expose a `scheduled` export, so the sweep runs from a
+small companion Cron Worker:
+
+```bash
+pnpm exec wrangler secret put CRON_SECRET                         # site Worker
+pnpm exec wrangler secret put CRON_SECRET --config wrangler.cron.jsonc
+pnpm cf:deploy:cron   # deploys workers/cron.ts on an hourly trigger
+```
+
+Set `SITE_URL` in `wrangler.cron.jsonc` to the deployed origin, and set
+`DEMO_HASH_SALT` and (optionally) `ANTHROPIC_API_KEY` as site-Worker secrets.
 
 ## License
 
