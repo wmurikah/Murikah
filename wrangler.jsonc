@@ -1,0 +1,54 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "murikah-web",
+  // Unified server entrypoint provided by @astrojs/cloudflare (handles dev + prod).
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2025-05-21",
+  // Node built-ins used by libSQL/other deps inside the Worker.
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Static assets: serves the prerendered marketing pages from dist/.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  // KV — response cache, feature flags, and API rate-limit counters.
+  // Create with: `wrangler kv namespace create CACHE` and paste the id below.
+  // (Local `wrangler dev` simulates KV; a real id is only needed to deploy.)
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+    }
+  ],
+
+  // R2 — static asset overflow + the future downloadable Intelligence report.
+  // Create with: `wrangler r2 bucket create murikah-assets`.
+  "r2_buckets": [
+    {
+      "binding": "ASSETS_BUCKET",
+      "bucket_name": "murikah-assets"
+    }
+  ],
+
+  // Cron PLACEHOLDER — reserved for future Labs sandbox/demo-session resets.
+  // A `scheduled` handler must be added before this does anything (out of scope now).
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  },
+
+  // Non-secret vars only. Secrets are referenced, never committed — set them with:
+  //   wrangler secret put TURSO_DATABASE_URL
+  //   wrangler secret put TURSO_AUTH_TOKEN
+  //   wrangler secret put RESEND_API_KEY
+  //   wrangler secret put CONTACT_NOTIFY_EMAIL
+  //   wrangler secret put RESEND_FROM_EMAIL
+  "vars": {
+    "PUBLIC_SITE_URL": "https://www.murikah.com"
+  }
+}

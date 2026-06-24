@@ -1,0 +1,8 @@
+# Files in the build output (dist/) that must NOT be served as public static
+# assets by the Cloudflare Workers `assets` binding. This file is copied from
+# public/ into dist/ at build time and read by the Workers static-asset server.
+_worker.js
+_worker.js/**
+_routes.json
+.dev.vars
+.dev.vars.*
