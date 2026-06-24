@@ -1,16 +1,15 @@
 ---
 /**
- * ServiceLayout — the consistent template for all six service-line pages
- * (hero → what it is → who it's for → how it works → [optional slot] → FAQ →
- * CTA). Each service page supplies data; the structure stays identical so the
- * user always knows where they are (Jakob's Law) and the layout reads the same
- * everywhere. Placeholder copy is supplied per page and marked there.
+ * ServiceLayout, the consistent shell for the six service pages. It renders the
+ * hero (eyebrow, H1, answer-first opener, CTAs), the Service and BreadcrumbList
+ * JSON-LD, then the page's bespoke body via <slot />, then the FAQ block (with
+ * matching FAQPage JSON-LD) and the closing CTA. Each page supplies its own
+ * sections, so the structure stays familiar (Jakob's Law) while the copy is
+ * specific to each line.
  */
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
-import Card from '@/components/primitives/Card.astro';
-import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Faq from '@/components/primitives/Faq.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
@@ -19,33 +18,43 @@ import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import { SERVICES, PRIMARY_CTA } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
-interface Step {
-  title: string;
-  body: string;
+interface Cta {
+  label: string;
+  href: string;
 }
 
 interface Props {
-  /** Service slug — pulls name/summary/serviceType from site.config. */
+  /** Service slug, pulls name and serviceType from site.config. */
   slug: string;
-  /** Lead paragraph under the H1 [placeholder]. */
+  /** Primary phrase for the page <title> (Murikah is appended). */
+  metaTitle: string;
+  metaDescription: string;
+  /** H1. */
+  heading: string;
+  /** Answer-first opener, shown prominently under the H1. */
   intro: string;
-  /** "What it is" body paragraphs [placeholder]. */
-  whatItIs: string[];
-  /** Optional "what's included" bullets. */
-  inclusions?: string[];
-  /** "Who it's for" bullets [placeholder]. */
-  whoItIsFor: string[];
-  /** "How it works" steps [placeholder]. */
-  howItWorks: Step[];
+  primaryCta?: Cta;
+  secondaryCta?: Cta;
   faqs: FaqItem[];
+  closingTitle: string;
+  closingBody: string;
 }
 
-const { slug, intro, whatItIs, inclusions, whoItIsFor, howItWorks, faqs } = Astro.props;
+const {
+  slug,
+  metaTitle,
+  metaDescription,
+  heading,
+  intro,
+  primaryCta = { label: PRIMARY_CTA.label, href: PRIMARY_CTA.href },
+  secondaryCta,
+  faqs,
+  closingTitle,
+  closingBody,
+} = Astro.props;
 
 const service = SERVICES.find((s) => s.slug === slug);
 if (!service) throw new Error(`Unknown service slug: ${slug}`);
-
-const description = service.summary.replace(' [placeholder]', '');
 
 const crumbs = [
   { label: 'Home', href: '/' },
@@ -53,114 +62,50 @@ const crumbs = [
 ];
 ---
 
-<BaseLayout title={service.fullName} description={description}>
-  {/* Per-page Service JSON-LD. */}
+<BaseLayout titleFull={metaTitle} description={metaDescription}>
   <ServiceSchema
     slot="head"
     name={service.fullName}
-    description={description}
+    description={service.summary}
     serviceType={service.serviceType}
     path={service.href}
   />
 
-  {/* Hero — the page's opening "peak". */}
+  {
+    /* Hero, the page's opening peak. The answer-first opener doubles as the
+      direct answer that search and AI engines can quote. */
+  }
   <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
     <Breadcrumb items={crumbs} class="mb-6" />
     <p class="text-sm font-semibold tracking-widest text-gold uppercase">{service.name}</p>
-    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
-      {service.fullName}
-    </h1>
+    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">{heading}</h1>
     <p class="mt-5 max-w-prose text-lg text-slate">{intro}</p>
     <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-      <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
-      <Button href="/contact" variant="ghost" size="lg">Talk to us</Button>
-    </div>
-    <p class="mt-6 text-sm text-slate">[Placeholder copy — finalised in a later content pass.]</p>
-  </Section>
-
-  {/* What it is */}
-  <Section tone="paper" aria-labelledby="what-it-is">
-    <div class="grid gap-10 lg:grid-cols-12">
-      <div class="lg:col-span-5">
-        <h2 id="what-it-is" class="text-2xl sm:text-3xl">What it is</h2>
-      </div>
-      <div class="lg:col-span-7">
-        {whatItIs.map((p) => <p class="mt-0 max-w-prose text-ink not-first:mt-4">{p}</p>)}
-        {
-          inclusions && inclusions.length > 0 && (
-            <ul class="mt-6 grid gap-2.5 sm:grid-cols-2">
-              {inclusions.map((item) => (
-                <li class="flex items-start gap-2.5">
-                  <svg
-                    class="mt-1 size-4 shrink-0 text-gold"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M3 8.5l3 3 7-7.5"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                  <span class="text-ink">{item}</span>
-                </li>
-              ))}
-            </ul>
-          )
-        }
-      </div>
+      <Button href={primaryCta.href} variant="primary" size="lg">{primaryCta.label}</Button>
+      {
+        secondaryCta && (
+          <Button href={secondaryCta.href} variant="ghost" size="lg">
+            {secondaryCta.label}
+          </Button>
+        )
+      }
     </div>
   </Section>
 
-  {/* Who it's for */}
-  <Section tone="surface" aria-labelledby="who-its-for">
-    <h2 id="who-its-for" class="text-2xl sm:text-3xl">Who it's for</h2>
-    <FeatureGrid cols={3} class="mt-8">
-      {
-        whoItIsFor.map((who) => (
-          <Card>
-            <p class="font-medium text-navy">{who}</p>
-          </Card>
-        ))
-      }
-    </FeatureGrid>
-  </Section>
-
-  {/* How it works */}
-  <Section tone="paper" aria-labelledby="how-it-works">
-    <h2 id="how-it-works" class="text-2xl sm:text-3xl">How it works</h2>
-    <ol class="mt-8 grid gap-5 sm:gap-6 lg:grid-cols-3">
-      {
-        howItWorks.map((step, i) => (
-          <li class="rounded-card bg-surface p-6 ring-1 ring-hairline/70 sm:p-7">
-            <span class="inline-flex size-9 items-center justify-center rounded-full bg-navy font-semibold text-white">
-              {i + 1}
-            </span>
-            <h3 class="mt-4 text-xl">{step.title}</h3>
-            <p class="mt-2 text-slate">{step.body}</p>
-          </li>
-        ))
-      }
-    </ol>
-  </Section>
-
-  {/* Optional extra content (e.g. the Labs sandbox). Renders nothing if empty. */}
+  {/* Page-specific body. */}
   <slot />
 
-  {/* FAQ — progressive disclosure + FAQPage schema from the same data. */}
+  {/* FAQ, progressive disclosure plus FAQPage schema from the same data. */}
   <Section tone="surface" aria-labelledby="faq">
     <h2 id="faq" class="text-2xl sm:text-3xl">Frequently asked questions</h2>
     <Faq items={faqs} class="mt-6 max-w-3xl" />
     <FaqPageSchema items={faqs} />
   </Section>
 
-  {/* Closing CTA — the "end" peak. */}
   <CtaSection
-    eyebrow="Get started"
-    title="See how Murikah would work for your organisation"
-    body="Book a focused walkthrough. We'll map this to your context and show the path to value. [placeholder]"
+    title={closingTitle}
+    body={closingBody}
+    primaryLabel={primaryCta.label}
+    primaryHref={primaryCta.href}
   />
 </BaseLayout>

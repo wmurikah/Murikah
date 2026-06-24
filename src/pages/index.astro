@@ -1,58 +1,87 @@
 ---
 export const prerender = true;
 
+import { getCollection } from 'astro:content';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
 import Card from '@/components/primitives/Card.astro';
 import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
-import Stat from '@/components/primitives/Stat.astro';
+import Faq from '@/components/primitives/Faq.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
-import { SERVICES, PRIMARY_CTA, FOUNDER } from '@/site.config';
+import FaqPageSchema from '@/components/schema/FaqPage.astro';
+import { SITE, SERVICES, PRIMARY_CTA, FOUNDER, AUDIENCE } from '@/site.config';
+import type { FaqItem } from '@/lib/types';
 
-// Audience groups — chunked into roles vs. organisation types (Miller's Law).
-const audienceRoles = [
-  'Heads of internal audit',
-  'Audit committee & board chairs',
-  'CFOs and CEOs',
-  'Heads of risk & compliance',
+// Top three guides, newest first, for the home hub-and-spoke links.
+const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+  .slice(0, 3);
+
+const why = [
+  {
+    title: 'Service and software in one house',
+    body: 'The audit and the platform it runs on come from the same team, so nothing falls between a consultant and a vendor.',
+  },
+  {
+    title: 'Credentialed and AI-native',
+    body: 'Led by a CISA and ISO 42001 Lead Auditor, with AI governance built in from day one, not bolted on later.',
+  },
+  {
+    title: 'Built for the African mid-market',
+    body: 'Designed for SACCOs, banks, fintechs and NGOs here, not a global enterprise template forced to fit.',
+  },
+  {
+    title: 'Big-4-grade work, fair pricing',
+    body: 'Senior judgement and board-ready output without Big-4 fees or enterprise GRC licences.',
+  },
 ];
-const audienceOrgs = ['SACCOs', 'Banks', 'Microfinance & fintechs', 'Donor-funded NGOs'];
+
+const faqs: FaqItem[] = [
+  {
+    question: 'What does Murikah do?',
+    answer:
+      'Murikah helps African organisations run, prove and improve their internal audit and AI governance. We deliver co-sourced and outsourced internal audit, a platform called Audit OS to run it on, advisory and training, and automation builds through Murikah Labs. You get senior judgement and working software in one relationship, priced for the mid-market.',
+  },
+  {
+    question: 'Who is Murikah for?',
+    answer:
+      'Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. Our first focus is SACCOs, banks, microfinance institutions and fintechs, and donor-funded NGOs, with family businesses that have active boards close behind.',
+  },
+  {
+    question: 'How is Murikah different from the Big 4 and from audit software?',
+    answer:
+      'We combine both in one house. The Big 4 bring people but bill heavily and leave little behind. Audit software gives you a tool but no judgement. Murikah gives you senior, credentialed assurance and the platform it runs on, priced for the African mid-market, and you keep the evidence and the system when we step back.',
+  },
+];
 ---
 
 <BaseLayout
-  title={undefined}
-  description="Murikah helps African organisations run, prove, and continuously improve internal audit and AI and system governance — at a fraction of the cost and rigidity of the Big 4 and enterprise GRC software."
+  titleFull="Internal audit and AI governance, built in Africa | Murikah"
+  description={SITE.description}
 >
-  {/* ----------------------------------------------------------------- Hero */}
-  {
-    /* Peak–End: the hero is the strongest opening moment. The H1 is the only
-      place Fraunces (serif) is used, per the type rules. */
-  }
+  {/* Hero, the strongest opening moment. The H1 is the one place Fraunces (serif) is used. */}
   <Section tone="paper" class="relative overflow-hidden" aria-labelledby="hero-title">
     <div class="relative z-10 max-w-3xl">
       <p class="text-sm font-semibold tracking-widest text-gold uppercase">
-        AI-native assurance &amp; governance
+        AI-native assurance and governance, built in Africa
       </p>
       <h1
         id="hero-title"
         class="mt-4 font-serif text-[length:var(--text-display)] leading-[1.04] font-semibold tracking-[-0.025em] text-balance text-navy"
       >
-        Assurance. Systems. Intelligence.
+        Assurance you can run, prove, and keep improving.
       </h1>
       <p class="mt-6 max-w-prose text-lg text-slate sm:text-xl">
-        Run, prove, and continuously improve your internal audit and your AI and system governance —
-        at a fraction of the cost and rigidity of the Big&nbsp;4 and enterprise GRC software. <span
-          class="text-slate/80">[placeholder value statement]</span
-        >
+        Murikah helps African organisations run their internal audit and AI governance, prove it to
+        boards and regulators, and improve it continuously. You get senior judgement and a working
+        platform in one relationship, priced for the mid-market, not the global enterprise.
       </p>
       <div class="mt-9 flex flex-col gap-3 sm:flex-row">
         <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
-        <Button href="/assurance" variant="ghost" size="lg">Explore services</Button>
+        <Button href="/audit-os" variant="ghost" size="lg">Explore Audit OS</Button>
       </div>
     </div>
-
-    {/* Decorative flourish — purely aesthetic, hidden from assistive tech. */}
     <div
       aria-hidden="true"
       class="pointer-events-none absolute -top-24 -right-24 -z-0 hidden h-96 w-96 rounded-full bg-gold/10 blur-3xl lg:block"
@@ -60,23 +89,42 @@ const audienceOrgs = ['SACCOs', 'Banks', 'Microfinance & fintechs', 'Donor-funde
     </div>
   </Section>
 
-  {/* ------------------------------------------------- Six lines of work */}
+  {/* Trust strip */}
+  <Section tone="shade" class="py-10 sm:py-12" aria-label="Credentials">
+    <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <p class="max-w-xl font-medium text-navy">
+        Built and led by a Certified Information Systems Auditor and ISO 27001 and ISO 42001 Lead
+        Auditor.
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        {
+          FOUNDER.credentialChips.map((c) => (
+            <span class="rounded-full bg-surface px-3 py-1 text-sm text-ink ring-1 ring-hairline">
+              {c}
+            </span>
+          ))
+        }
+        <span class="text-sm text-slate">{SITE.pronunciation}</span>
+      </div>
+    </div>
+  </Section>
+
+  {/* Six lines */}
   <Section tone="surface" aria-labelledby="services-title" class="border-y border-hairline">
     <div class="max-w-2xl">
       <p class="text-sm font-semibold tracking-widest text-gold uppercase">What we do</p>
-      <h2 id="services-title" class="mt-3 text-3xl sm:text-4xl">Six lines of work, one standard</h2>
+      <h2 id="services-title" class="mt-3 text-3xl sm:text-4xl">One brand, six ways we help</h2>
       <p class="mt-4 text-slate">
-        From co-sourced assurance to the platform that runs it — each line stands alone or works
-        together. <span class="text-slate/80">[placeholder]</span>
+        From the audit itself to the platform it runs on, each line stands alone or works with the
+        others.
       </p>
     </div>
-
     <FeatureGrid cols={3} class="mt-10">
       {
         SERVICES.map((s) => (
           <Card href={s.href} class="group flex flex-col">
             <h3 class="text-xl text-navy">{s.fullName}</h3>
-            <p class="mt-2 grow text-slate">{s.summary.replace(' [placeholder]', '')}</p>
+            <p class="mt-2 grow text-slate">{s.summary}</p>
             <span class="mt-4 inline-flex items-center gap-1 font-medium text-blue">
               Learn more
               <span aria-hidden="true" class="transition-transform group-hover:translate-x-0.5">
@@ -89,87 +137,78 @@ const audienceOrgs = ['SACCOs', 'Banks', 'Microfinance & fintechs', 'Donor-funde
     </FeatureGrid>
   </Section>
 
-  {/* ----------------------------------------------------- Who it's for */}
+  {/* Who it is for */}
   <Section tone="paper" aria-labelledby="audience-title">
-    <h2 id="audience-title" class="text-3xl sm:text-4xl">Who it's for</h2>
+    <h2 id="audience-title" class="text-3xl sm:text-4xl">Who it is for</h2>
     <p class="mt-4 max-w-prose text-slate">
       Built for regulated, mid-market organisations and the people accountable for assurance.
-      <span class="text-slate/80">[placeholder]</span>
     </p>
-
-    <div class="mt-10 grid gap-10 lg:grid-cols-2">
-      <div>
-        <h3 class="text-sm font-semibold tracking-widest text-slate uppercase">People</h3>
-        <ul class="mt-4 grid gap-3 sm:grid-cols-2">
-          {
-            audienceRoles.map((role) => (
-              <li class="rounded-card bg-surface px-4 py-3.5 font-medium text-navy ring-1 ring-hairline/70">
-                {role}
-              </li>
-            ))
-          }
-        </ul>
-      </div>
-      <div>
-        <h3 class="text-sm font-semibold tracking-widest text-slate uppercase">Organisations</h3>
-        <ul class="mt-4 grid gap-3 sm:grid-cols-2">
-          {
-            audienceOrgs.map((org) => (
-              <li class="rounded-card bg-surface px-4 py-3.5 font-medium text-navy ring-1 ring-hairline/70">
-                {org}
-              </li>
-            ))
-          }
-        </ul>
-      </div>
-    </div>
-  </Section>
-
-  {/* ------------------------------------------------------ Trust strip */}
-  {/* E-E-A-T: real, verifiable founder credentials — no invented metrics. */}
-  <Section tone="shade" aria-labelledby="trust-title">
-    <div class="max-w-2xl">
-      <p class="text-sm font-semibold tracking-widest text-gold uppercase">Why Murikah</p>
-      <h2 id="trust-title" class="mt-3 text-3xl sm:text-4xl">
-        Built and led by a certified practitioner
-      </h2>
-      <p class="mt-4 text-slate">
-        Founded, built and led by {FOUNDER.name} — combining hands-on audit, security and AI-governance
-        credentials with the platform engineering behind Audit&nbsp;OS.
-        <span class="text-slate/80">[placeholder bio summary]</span>
-      </p>
-    </div>
-
-    <div
-      class="mt-10 grid gap-8 rounded-card bg-surface p-8 ring-1 ring-hairline/70 sm:grid-cols-3"
-    >
-      <Stat value="ISO 42001" label="AI management systems" hint="Lead Auditor" />
-      <Stat value="ISO 27001" label="Information security" hint="Lead Auditor" />
-      <Stat value="CISA" label="Information systems audit" hint="Certified" />
-    </div>
-
-    <ul class="mt-6 flex flex-wrap gap-2" aria-label="Founder credentials">
+    <ul class="mt-10 grid gap-5 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
       {
-        FOUNDER.credentials.map((c) => (
-          <li class="rounded-full bg-surface px-3 py-1 text-sm text-ink ring-1 ring-hairline">
-            {c}
+        AUDIENCE.map((seg) => (
+          <li class="rounded-card bg-surface p-6 ring-1 ring-hairline/70">
+            <p class="font-medium text-navy">{seg.name}</p>
+            <p class="mt-1.5 text-sm text-slate">{seg.note}</p>
           </li>
         ))
       }
     </ul>
-
-    <p class="mt-6">
-      <a href="/about" class="font-medium text-blue hover:text-blue-deep">
-        Read about Murikah &amp; the founder &rarr;
-      </a>
-    </p>
   </Section>
 
-  {/* ------------------------------------------------------ Closing CTA */}
+  {/* Why Murikah */}
+  <Section tone="shade" aria-labelledby="why-title">
+    <h2 id="why-title" class="text-3xl sm:text-4xl">Why Murikah</h2>
+    <FeatureGrid cols={2} class="mt-10">
+      {
+        why.map((w) => (
+          <Card>
+            <h3 class="text-xl text-navy">{w.title}</h3>
+            <p class="mt-2 text-slate">{w.body}</p>
+          </Card>
+        ))
+      }
+    </FeatureGrid>
+  </Section>
+
+  {/* Top guides (hub-and-spoke) */}
+  {
+    topGuides.length > 0 && (
+      <Section tone="surface" aria-labelledby="guides-title" class="border-t border-hairline">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <h2 id="guides-title" class="text-3xl sm:text-4xl">
+            Start with a guide
+          </h2>
+          <a href="/insights" class="font-medium text-blue hover:text-blue-deep">
+            All insights
+          </a>
+        </div>
+        <FeatureGrid cols={3} class="mt-10">
+          {topGuides.map((g) => (
+            <Card href={`/insights/${g.id}/`} class="flex flex-col">
+              {g.data.category && (
+                <p class="text-xs font-semibold tracking-widest text-gold uppercase">
+                  {g.data.category}
+                </p>
+              )}
+              <h3 class="mt-2 text-lg text-navy">{g.data.title}</h3>
+              <p class="mt-2 grow text-slate">{g.data.description}</p>
+            </Card>
+          ))}
+        </FeatureGrid>
+      </Section>
+    )
+  }
+
+  {/* Home FAQ + matching schema */}
+  <Section tone="paper" aria-labelledby="home-faq">
+    <h2 id="home-faq" class="text-3xl sm:text-4xl">Common questions</h2>
+    <Faq items={faqs} class="mt-8 max-w-3xl" />
+    <FaqPageSchema items={faqs} />
+  </Section>
+
   <CtaSection
-    eyebrow="Get started"
-    title="Bring rigour, proof and intelligence to your assurance"
-    body="Book a demo and we'll show how Murikah maps to your audit universe and governance obligations. [placeholder]"
+    title="See what assurance looks like when it is built to be proven"
+    body="Book a demo and we will map Murikah to your audit universe, your regulator and your board."
     secondaryLabel="Contact us"
     secondaryHref="/contact"
   />
