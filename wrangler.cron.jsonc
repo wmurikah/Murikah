@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Companion Cron Worker. The Astro site Worker cannot export a `scheduled`
+  // handler, so this small Worker holds the Cron Trigger and calls the site's
+  // secured /api/cron/sweep endpoint on schedule.
+  // Deploy:  wrangler deploy --config wrangler.cron.jsonc
+  // Secret:  wrangler secret put CRON_SECRET --config wrangler.cron.jsonc
+  "name": "murikah-cron",
+  "main": "workers/cron.ts",
+  "compatibility_date": "2025-05-21",
+
+  // Hourly sweep (deletes demo data + sessions > 24h, prunes assistant logs > 30d).
+  "triggers": {
+    "crons": ["0 * * * *"],
+  },
+
+  "vars": {
+    // The deployed site origin this Worker calls. Update for your domain.
+    "SITE_URL": "https://www.murikah.com",
+  },
+  // CRON_SECRET is a secret (must match the site Worker's CRON_SECRET):
+  //   wrangler secret put CRON_SECRET --config wrangler.cron.jsonc
+}
