@@ -1,0 +1,22 @@
+---
+export const prerender = true;
+
+import { getCollection, render } from 'astro:content';
+import InsightLayout from '@/layouts/InsightLayout.astro';
+
+// One static page per (non-draft) guide.
+export async function getStaticPaths() {
+  const entries = await getCollection('insights', ({ data }) => !data.draft);
+  return entries.map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+---
+
+<InsightLayout entry={entry}>
+  <Content />
+</InsightLayout>

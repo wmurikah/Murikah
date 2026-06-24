@@ -1,0 +1,76 @@
+---
+export const prerender = true;
+
+import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import DemoEmbed from '@/components/DemoEmbed.astro';
+import SandboxDemo from '@/components/islands/SandboxDemo.tsx';
+import type { FaqItem } from '@/lib/types';
+
+// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const faqs: FaqItem[] = [
+  {
+    question: 'What can Murikah Labs build?',
+    answer:
+      'Automations, internal tools, CRM and CMS setups, and workflow engineering — often to remove manual, error-prone steps. [placeholder]',
+  },
+  {
+    question: 'Will there be interactive demos here?',
+    answer:
+      'Yes. This page hosts a sandbox for interactive demos; the demos themselves arrive in a later release. [placeholder]',
+  },
+];
+---
+
+<ServiceLayout
+  slug="labs"
+  intro="Automation builds, CRM and CMS, workflow engineering and custom automations — the engineering arm that turns manual processes into reliable systems."
+  whatItIs={[
+    'Murikah Labs designs and builds the automations and tools that make assurance and operations faster and more reliable.',
+    'From CRM and CMS to bespoke workflow engineering, Labs ships working software — and this page will host interactive demos of it.',
+  ]}
+  inclusions={[
+    'Workflow automation',
+    'CRM & CMS builds',
+    'Custom internal tools',
+    'Integrations & data pipelines',
+    'Interactive demos (coming soon)',
+  ]}
+  whoItIsFor={[
+    'Teams drowning in manual, repetitive work',
+    'Operations & finance leaders chasing efficiency',
+    'Organisations modernising legacy processes',
+  ]}
+  howItWorks={[
+    {
+      title: 'Map',
+      body: 'We map the process and find the highest-leverage automation. [placeholder]',
+    },
+    {
+      title: 'Build',
+      body: 'We build, test and integrate the solution into your stack. [placeholder]',
+    },
+    {
+      title: 'Run',
+      body: 'We hand over (or operate) with monitoring and support. [placeholder]',
+    },
+  ]}
+  faqs={faqs}
+>
+  {/* Stubbed sandbox — proves the React island boundary; demo logic is later. */}
+  <Section tone="paper" aria-labelledby="sandbox">
+    <h2 id="sandbox" class="text-2xl sm:text-3xl">Sandbox</h2>
+    <p class="mt-3 max-w-prose text-slate">
+      A space for live, interactive demos of Labs builds. The interactive logic is out of scope for
+      now. <span class="text-slate/80">[placeholder]</span>
+    </p>
+    <DemoEmbed
+      class="mt-8"
+      title="Labs sandbox"
+      description="This frame will host a working, interactive demo in a later release."
+    >
+      {/* Hydrate only when scrolled into view — keeps the page near-zero JS. */}
+      <SandboxDemo client:visible />
+    </DemoEmbed>
+  </Section>
+</ServiceLayout>

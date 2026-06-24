@@ -1,0 +1,56 @@
+---
+export const prerender = true;
+
+import ServiceLayout from '@/layouts/ServiceLayout.astro';
+import type { FaqItem } from '@/lib/types';
+
+// NOTE: All copy below is PLACEHOLDER pending the content pass (Build Prompt 2).
+const faqs: FaqItem[] = [
+  {
+    question: 'Who are the courses for?',
+    answer:
+      'Auditors, risk and compliance professionals, and teams adopting AI who need practical, certification-aligned training. [placeholder]',
+  },
+  {
+    question: 'Do you offer certification preparation?',
+    answer:
+      'Yes — including CISA preparation and ISO 42001 awareness, alongside AI and automation masterclasses. [placeholder]',
+  },
+];
+---
+
+<ServiceLayout
+  slug="academy"
+  intro="Training and certification that build real capability — CISA preparation, ISO 42001 awareness, and practical AI and automation masterclasses."
+  whatItIs={[
+    'Murikah Academy turns the methods behind our assurance and platform work into training your team can use immediately.',
+    'Courses are practical and certification-aligned, taught by practitioners who do the work day to day.',
+  ]}
+  inclusions={[
+    'CISA preparation',
+    'ISO 42001 awareness',
+    'AI & automation masterclasses',
+    'Audit methodology training',
+    'Team & cohort programmes',
+  ]}
+  whoItIsFor={[
+    'Internal auditors building credentials',
+    'Risk & compliance professionals',
+    'Teams adopting AI responsibly',
+  ]}
+  howItWorks={[
+    {
+      title: 'Assess',
+      body: 'Identify the skills and certifications your team needs. [placeholder]',
+    },
+    {
+      title: 'Learn',
+      body: 'Practical, cohort-based training with real examples. [placeholder]',
+    },
+    {
+      title: 'Certify',
+      body: 'Prepare for and pursue recognised certifications. [placeholder]',
+    },
+  ]}
+  faqs={faqs}
+/>
