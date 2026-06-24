@@ -30,8 +30,11 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:apply": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/apply.ts",
-    "db:seed": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/seed.ts",
+    "db:apply": "tsx db/apply.ts",
+    "db:seed": "tsx db/seed.ts",
+    "db:seed:content": "tsx db/seed-content.ts",
+    "db:setup": "pnpm run db:apply && pnpm run db:seed",
+    "db:reset": "tsx db/reset.ts",
     "astro": "astro"
   },
   "dependencies": {
@@ -54,6 +57,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@typescript-eslint/parser": "^8.62.0",
+    "dotenv": "^17.4.2",
     "eslint": "^10.5.0",
     "eslint-plugin-astro": "^2.0.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
@@ -62,6 +66,7 @@
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.3.1",
+    "tsx": "^4.22.4",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.62.0",
     "wrangler": "^4.104.0"

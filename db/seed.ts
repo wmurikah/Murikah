@@ -4,27 +4,23 @@
  * so the seeded Audit OS data matches what the sandbox renders.
  *
  * Run:  pnpm db:seed   (apply the schema first with `pnpm db:apply`)
- * Idempotent for the read-only Audit OS tables (cleared and reloaded each run).
- * Note: the mini-CRM starter contacts ship as constants and are served by the
- * CRM endpoint, so they are not seeded into the session-scoped CRM table.
+ * Uses the shared loader (shell env first, then .dev.vars) and the shared Node
+ * libSQL client. A bare `node db/seed.ts` is not expected to work; run it
+ * through tsx via the pnpm script.
+ *
+ * Idempotent: INSERT OR IGNORE for the sample subscriber, and the read-only
+ * Audit OS tables are cleared and reloaded each run. All rows are clearly
+ * marked development sample data.
  */
-import { createClient } from '@libsql/client/web';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-const url = process.env.TURSO_DATABASE_URL;
-const authToken = process.env.TURSO_AUTH_TOKEN;
-
-if (!url) {
-  console.error('✗ TURSO_DATABASE_URL is not set. Add it to .dev.vars or your environment.');
-  process.exit(1);
-}
+import { createDbClient } from './_env';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sample = JSON.parse(readFileSync(join(here, '../src/lib/demo/sample-data.json'), 'utf8'));
 
-const client = createClient({ url, authToken });
+const client = createDbClient();
 
 const statements = [
   // Marketing sample rows.
