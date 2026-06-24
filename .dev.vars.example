@@ -1,14 +1,16 @@
-# Local Worker variables/secrets. Copy to `.dev.vars` (gitignored) for local dev.
-# `astro dev` reads these via the adapter's platformProxy; `wrangler dev` reads them natively.
-# In production these are set as Cloudflare secrets (see README), NOT committed.
+# Local variables and secrets. Copy to `.dev.vars` (gitignored) and fill in real
+# values. The running app reads these via `astro dev` / `wrangler dev`; the
+# database scripts read the shell environment first and fall back to this file.
+# In production set them as Cloudflare variables and secrets (see README). Never
+# commit real values.
 
-# --- Turso (libSQL) — required for contact/subscribe persistence ---
+# --- Turso (libSQL), required for the app's persistence and the db scripts ---
 TURSO_DATABASE_URL="libsql://your-database-name.turso.io"
 TURSO_AUTH_TOKEN="your-turso-auth-token"
 
-# --- Resend transactional email — OPTIONAL ---
+# --- Resend transactional email, optional ---
 # If RESEND_API_KEY is empty/unset, email sending is skipped (no-op) and the
-# endpoints still validate + persist. The build never requires a key.
+# endpoints still validate and persist. The build never requires a key.
 RESEND_API_KEY=""
 # Notification recipient for contact submissions.
 CONTACT_NOTIFY_EMAIL="hello@murikah.com"
@@ -18,17 +20,22 @@ RESEND_FROM_EMAIL="Murikah <noreply@murikah.com>"
 # --- Public site URL (canonical/OG fallback for non-production environments) ---
 PUBLIC_SITE_URL="http://localhost:4321"
 
-# --- AI assistant (Prompt 3) — OPTIONAL ---
-# Provider: 'anthropic' (default) or 'workers-ai'. If no key/binding is set, the
-# assistant returns a calm fallback message and the build still works.
+# --- AI assistant, optional ---
+# Provider: 'anthropic' (default) or 'workers-ai'. With no key or binding the
+# assistant returns a calm fallback and the build still works.
 AI_PROVIDER="anthropic"
 # Anthropic key, server-side only. Never sent to the browser.
 ANTHROPIC_API_KEY=""
 # Override the chat model id (a sensible default is set in src/lib/ai/config.ts).
 AI_MODEL=""
 
-# --- Demo sandbox (Prompt 3) ---
-# Salt for hashing visitor IPs stored in demo_sessions. Set any long random string.
+# --- Demo sandbox ---
+# Salt for hashing visitor IPs stored in demo_sessions. Set a long random string.
 DEMO_HASH_SALT="change-me-to-a-long-random-string"
-# Shared secret required to call POST /api/cron/sweep (and used by the Cron Worker).
+# Shared secret required to call POST /api/cron/sweep (also used by the Cron Worker).
 CRON_SECRET="change-me-to-a-long-random-string"
+
+# --- Content seed (added by Build Prompt 4) ---
+# Used by `pnpm db:seed:content` to create the first admin user. Placeholders only.
+ADMIN_EMAIL="admin@example.com"
+ADMIN_PASSWORD=""
