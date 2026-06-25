@@ -108,33 +108,69 @@ forward-looking `demo_sessions` placeholder for future Labs sandboxes.
 
 ## Deploy (Cloudflare Workers)
 
-1. **Create the bindings** and paste the KV id into `wrangler.jsonc`:
+The site deploys as a single Cloudflare Worker that serves the prerendered pages
+as static assets, plus the two API endpoints. On `main` the configuration is
+intentionally minimal: it needs no pre-created KV namespace, no R2 bucket, and no
+cron trigger, so it can go straight to a free `workers.dev` preview. The KV
+cache, the R2 bucket, and the scheduled retention all return with the feature
+branches that use them.
 
-   ```bash
-   pnpm exec wrangler kv namespace create CACHE     # paste id → kv_namespaces[].id
-   pnpm exec wrangler r2 bucket create murikah-assets
-   ```
+The deploy must use the config the adapter generates at
+`dist/server/wrangler.json` (it carries the correct entrypoint and the
+`../client` assets directory), not the root `wrangler.jsonc`:
 
-2. **Set production secrets** (against the generated config):
+```bash
+pnpm build
+npx wrangler deploy --config dist/server/wrangler.json
+```
 
-   ```bash
-   pnpm exec wrangler secret put TURSO_DATABASE_URL  --config dist/server/wrangler.json
-   pnpm exec wrangler secret put TURSO_AUTH_TOKEN    --config dist/server/wrangler.json
-   pnpm exec wrangler secret put RESEND_API_KEY      --config dist/server/wrangler.json
-   pnpm exec wrangler secret put CONTACT_NOTIFY_EMAIL --config dist/server/wrangler.json
-   pnpm exec wrangler secret put RESEND_FROM_EMAIL   --config dist/server/wrangler.json
-   ```
+(`pnpm cf:deploy` runs both of those in one step.)
 
-3. **Deploy:**
+If you want the contact and subscribe forms to actually save submissions, set the
+database secrets against the generated config. They are optional: without them the
+forms still work and fail gracefully.
 
-   ```bash
-   pnpm cf:deploy   # astro build && wrangler deploy --config dist/server/wrangler.json
-   ```
+```bash
+npx wrangler secret put TURSO_DATABASE_URL  --config dist/server/wrangler.json
+npx wrangler secret put TURSO_AUTH_TOKEN    --config dist/server/wrangler.json
+# Optional, only if contact notifications should be emailed:
+npx wrangler secret put RESEND_API_KEY      --config dist/server/wrangler.json
+npx wrangler secret put CONTACT_NOTIFY_EMAIL --config dist/server/wrangler.json
+npx wrangler secret put RESEND_FROM_EMAIL   --config dist/server/wrangler.json
+```
 
-Update the canonical URL in **two** places if your domain differs from
-`https://www.murikah.com`: `SITE_URL` in `src/site.config.ts` and `site` in
-`astro.config.ts` (kept intentionally in sync), plus the `Sitemap:` line in
-`public/robots.txt`.
+### Deploy a free preview
+
+A plain, no-cost first deploy to a `workers.dev` address, with no custom domain:
+
+1. In the Cloudflare dashboard, open **Workers and Pages**, choose **Create**,
+   and **import your repository from GitHub** (connect GitHub first and pick
+   `wmurikah/Murikah` if it is not already connected).
+2. Set the **build command** to `pnpm build`.
+3. Set the **deploy command** to
+   `npx wrangler deploy --config dist/server/wrangler.json`. This matters: the
+   deploy has to use the config the adapter generates, not the root
+   `wrangler.jsonc`.
+4. Add one **variable** so the pages show the correct canonical and social-share
+   URLs: `PUBLIC_SITE_URL`. You can leave the committed default for the first
+   deploy and update it to your preview address afterwards (see step 6).
+5. The contact and subscribe forms only need a database **if you want them to
+   save**. They load and submit fine without one. To turn on saving, add these as
+   **secrets** (not plain variables): `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`.
+   To also email the contact notification, add the optional `RESEND_API_KEY`,
+   `CONTACT_NOTIFY_EMAIL`, and `RESEND_FROM_EMAIL`.
+6. On the first deploy, Cloudflare asks you to pick a free `workers.dev`
+   **subdomain**. After that the site is live at
+   `murikah-web.<your-subdomain>.workers.dev`, with no custom domain required. If
+   you set `PUBLIC_SITE_URL` to that address and redeploy, the canonical and
+   social-share tags will match the live preview.
+
+Nothing else needs to exist in your Cloudflare account for the preview: there is
+no KV namespace, R2 bucket, or cron trigger to create.
+
+If your final domain differs from `https://www.murikah.com`, update the canonical
+URL in `SITE_URL` (`src/site.config.ts`) and `site` (`astro.config.ts`), which
+are kept in sync, plus the `Sitemap:` line in `public/robots.txt`.
 
 ## Scripts
 
