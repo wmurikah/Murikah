@@ -22,32 +22,25 @@
     "enabled": true,
   },
 
-  // KV, response cache, feature flags, and API rate-limit counters.
-  // Create with: `wrangler kv namespace create CACHE` and paste the id below.
-  // (Local `wrangler dev` simulates KV; a real id is only needed to deploy.)
-  "kv_namespaces": [
-    {
-      "binding": "CACHE",
-      "id": "REPLACE_WITH_KV_NAMESPACE_ID",
-    },
-  ],
+  // Bindings are intentionally minimal so the Worker deploys to a free
+  // workers.dev preview with no pre-created Cloudflare resources. Each item
+  // below returns with the feature branch that actually uses it:
+  //
+  //   - kv_namespaces "CACHE": only the API rate limiter reads it, and
+  //     src/lib/rate-limit.ts already skips limiting when the binding is absent,
+  //     so the endpoints keep working without it. Re-add it (with a real id from
+  //     `wrangler kv namespace create CACHE`) when rate limiting must be enforced.
+  //   - r2_buckets "ASSETS_BUCKET": no code on main references it yet; it returns
+  //     with the downloadable Intelligence report.
+  //   - triggers.crons: there is no `scheduled` handler on main, so a trigger
+  //     would only fire an event the Worker cannot service. The retention Worker
+  //     on its own branch reintroduces scheduling separately.
+  //
+  // The Astro Sessions KV binding ("SESSION") is also suppressed; see the
+  // `session` setting in astro.config.ts (sessions are unused on main).
 
-  // R2, static asset overflow + the future downloadable Intelligence report.
-  // Create with: `wrangler r2 bucket create murikah-assets`.
-  "r2_buckets": [
-    {
-      "binding": "ASSETS_BUCKET",
-      "bucket_name": "murikah-assets",
-    },
-  ],
-
-  // Cron PLACEHOLDER, reserved for future Labs sandbox/demo-session resets.
-  // A `scheduled` handler must be added before this does anything (out of scope now).
-  "triggers": {
-    "crons": ["0 3 * * *"],
-  },
-
-  // Non-secret vars only. Secrets are referenced, never committed, set them with:
+  // Non-secret vars only. Secrets are set in the Cloudflare dashboard or with
+  // `wrangler secret put` and are never committed:
   //   wrangler secret put TURSO_DATABASE_URL
   //   wrangler secret put TURSO_AUTH_TOKEN
   //   wrangler secret put RESEND_API_KEY
