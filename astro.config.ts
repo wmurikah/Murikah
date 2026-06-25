@@ -25,6 +25,17 @@ export default defineConfig({
     // during `astro dev` automatically, no platformProxy option needed.
   }),
 
+  // Sessions are not used anywhere on main (no Astro.session, no session
+  // middleware). Left unset, the Cloudflare adapter auto-provisions a "SESSION"
+  // KV namespace binding, which would require a real KV resource and block a
+  // no-setup preview deploy. Pointing sessions at the in-memory unstorage driver
+  // means no KV binding is injected and no Cloudflare resource is needed. If a
+  // future feature needs durable sessions, switch back to the adapter default
+  // (drop this) or a real driver.
+  session: {
+    driver: 'memory',
+  },
+
   integrations: [
     // MDX powers the insights/guides content collection.
     mdx(),
