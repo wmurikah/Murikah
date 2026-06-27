@@ -26,8 +26,8 @@ const insights = defineCollection({
     summary: z.string().optional(),
     pubDate: z.coerce.date(),
     updatedDate: z.coerce.date().optional(),
-    /** Author name; defaults to the founder. */
-    author: z.string().default('Wilberforce Murikah'),
+    /** Author name; guides are authored by the company. */
+    author: z.string().default('Murikah'),
     category: z.enum(GUIDE_CATEGORIES).optional(),
     tags: z.array(z.string()).default([]),
     /** Parent service slug for the up-link and CTA, e.g. "assurance". */

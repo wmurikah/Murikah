@@ -1,34 +1,27 @@
 ---
 /**
- * AuthorByline, an E-E-A-T signal on every guide: the founder, the credential
- * line, and a one-line bio, all from site.config so they never drift.
+ * AuthorByline, the authorship signal on a guide. Murikah is a company, so
+ * guides are attributed to the company, never to a named individual, and no
+ * personal credentials appear here.
  */
-import { FOUNDER } from '@/site.config';
+import { SITE } from '@/site.config';
 
 interface Props {
   class?: string;
 }
 const { class: className } = Astro.props;
-
-// Initials for the monogram avatar.
-const initials = FOUNDER.name
-  .split(' ')
-  .map((part) => part[0])
-  .join('')
-  .slice(0, 2)
-  .toUpperCase();
 ---
 
-<div class:list={['flex items-start gap-3', className]}>
+<div class:list={['flex items-center gap-3', className]}>
+  {/* Aperture monogram: the brand mark, a ring of light around a Fraunces M. */}
   <span
     aria-hidden="true"
-    class="grid size-10 shrink-0 place-items-center rounded-full bg-navy text-sm font-semibold text-white"
+    class="grid size-10 shrink-0 place-items-center rounded-full bg-navy font-serif text-lg font-semibold text-gold ring-1 ring-gold/30"
   >
-    {initials}
+    M
   </span>
   <div>
-    <p class="font-medium text-navy">{FOUNDER.name}</p>
-    <p class="text-sm text-slate">{FOUNDER.credentialLine}</p>
-    <p class="mt-1 max-w-prose text-sm text-slate">{FOUNDER.bioByline}</p>
+    <p class="font-medium text-navy">{SITE.name}</p>
+    <p class="text-sm text-slate">Independent assurance and AI governance</p>
   </div>
 </div>

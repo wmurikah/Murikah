@@ -25,16 +25,26 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
   titleFull="Insights on internal audit, AI governance and data protection | Murikah"
   description="Plain, answer-first guides on internal audit, AI governance, data protection and audit software, written for heads of audit, risk and the board."
 >
-  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
-    <Breadcrumb items={crumbs} class="mb-6" />
-    <p class="text-sm font-semibold tracking-widest text-gold uppercase">Insights</p>
-    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
-      Guides for assurance, governance and AI
-    </h1>
-    <p class="mt-5 max-w-prose text-lg text-slate">
-      Practical, answer-first guides for heads of internal audit, risk and the board. Each one
-      answers a real question directly, then goes deeper.
-    </p>
+  <Section
+    tone="surface"
+    aria-labelledby="page-title"
+    class="relative overflow-hidden border-b border-hairline"
+  >
+    <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
+    <div class="relative max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">Insights</p>
+      <h1
+        id="page-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
+      >
+        Guides for assurance, governance and AI
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        Practical, answer-first guides for heads of internal audit, risk and the board. Each one
+        answers a real question directly, then goes deeper.
+      </p>
+    </div>
   </Section>
 
   <Section tone="paper" aria-labelledby="all-guides">
@@ -46,12 +56,8 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
         <FeatureGrid cols={3}>
           {guides.map((g) => (
             <Card href={`/insights/${g.id}/`} class="flex flex-col">
-              {g.data.category && (
-                <p class="text-xs font-semibold tracking-widest text-gold uppercase">
-                  {g.data.category}
-                </p>
-              )}
-              <h3 class="mt-2 text-xl text-navy">{g.data.title}</h3>
+              {g.data.category && <p class="eyebrow text-xs">{g.data.category}</p>}
+              <h3 class="mt-3 text-xl text-navy">{g.data.title}</h3>
               <p class="mt-2 grow text-slate">{g.data.description}</p>
               <p class="mt-4 text-sm text-slate">
                 <time datetime={isoDate(g.data.pubDate)}>{formatDate(g.data.pubDate)}</time>
@@ -76,7 +82,12 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
       class="grid gap-8 rounded-card bg-surface p-8 ring-1 ring-hairline/70 sm:p-10 md:grid-cols-2 md:items-center"
     >
       <div>
-        <h2 id="lead-magnet" class="text-2xl sm:text-3xl">ISO 42001 readiness checklist</h2>
+        <h2
+          id="lead-magnet"
+          class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+        >
+          ISO 42001 readiness checklist
+        </h2>
         <p class="mt-3 max-w-prose text-slate">
           A practical, plain-English checklist of the steps an African organisation needs to get
           ready for ISO 42001, the management-system standard for governing AI. Tell us where to
@@ -94,6 +105,7 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
   </Section>
 
   <CtaSection
+    eyebrow="Book a demo"
     title="Bring this rigour to your organisation"
     body="Book a demo to see how Murikah turns guidance into working assurance."
     secondaryLabel="Contact us"

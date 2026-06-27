@@ -4,12 +4,9 @@ export const prerender = true;
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
-import Card from '@/components/primitives/Card.astro';
-import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
-import { SITE, FOUNDER } from '@/site.config';
-import { buildFounderPerson } from '@/lib/schema';
+import { SITE, STANDARDS } from '@/site.config';
 
 const crumbs = [
   { label: 'Home', href: '/' },
@@ -31,48 +28,69 @@ const values = [
   },
 ];
 
-const personSchema = {
-  '@context': 'https://schema.org',
-  ...buildFounderPerson(),
-};
+const how = [
+  {
+    title: 'We work to recognised standards',
+    body: 'Internal audit planned and run to the IIA Global Internal Audit Standards, with ISO/IEC 27001 and ISO/IEC 42001 framing our security and AI-governance work.',
+  },
+  {
+    title: 'We leave the evidence behind',
+    body: 'You keep the work papers, the findings and the system. When we step back, your function keeps running.',
+  },
+  {
+    title: 'We price for the mid-market',
+    body: 'Senior judgement and board-ready output without Big-4 fees or enterprise GRC licences.',
+  },
+];
 ---
 
 <BaseLayout
-  titleFull="About Murikah and our founder | Murikah"
-  description="Murikah is an AI-native assurance and governance company built in Africa, founded by a CISA and ISO 42001 Lead Auditor who built the platform himself."
+  titleFull="About | Murikah"
+  description="Murikah is an AI-native assurance and governance company built in Africa. We help organisations run, prove and continuously improve their internal audit and AI governance."
 >
-  <script
-    type="application/ld+json"
-    is:inline
-    set:html={JSON.stringify(personSchema)}
-    slot="head"
-  />
-
-  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
-    <Breadcrumb items={crumbs} class="mb-6" />
-    <p class="text-sm font-semibold tracking-widest text-gold uppercase">About</p>
-    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
-      Bringing controls, risks and systems into the light.
-    </h1>
-    <p class="mt-5 max-w-prose text-lg text-slate">
-      {SITE.meaning} Murikah ({SITE.pronunciation}) exists to make controls and risks clear, and to
-      help African organisations prove that what they say is happening, really is.
-    </p>
+  {/* Hero: a calm opening, with one faint touch of the signature light. */}
+  <Section
+    tone="surface"
+    aria-labelledby="page-title"
+    class="relative overflow-hidden border-b border-hairline"
+  >
+    <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
+    <div class="relative max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">About Murikah</p>
+      <h1
+        id="page-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
+      >
+        Bringing controls, risks and systems into the light.
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        {SITE.meaning} Murikah ({SITE.pronunciation}) exists to make controls and risks clear, and
+        to help African organisations prove that what they say is happening, really is.
+      </p>
+    </div>
   </Section>
 
+  {/* What we do, asymmetric. */}
   <Section tone="paper" aria-labelledby="what-we-do">
-    <div class="grid gap-10 lg:grid-cols-12">
-      <div class="lg:col-span-5">
-        <h2 id="what-we-do" class="text-2xl sm:text-3xl">What we do</h2>
+    <div class="grid gap-10 lg:grid-cols-12 lg:gap-16">
+      <div class="reveal lg:col-span-5">
+        <p class="eyebrow">What we do</p>
+        <h2
+          id="what-we-do"
+          class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+        >
+          One company, the judgement and the software
+        </h2>
       </div>
-      <div class="lg:col-span-7">
-        <p class="max-w-prose text-ink">
+      <div class="reveal lg:col-span-7">
+        <p class="max-w-prose text-lg text-ink">
           Murikah is an AI-native assurance and governance company, built in Africa. We help
           organisations run, prove and continuously improve their internal audit and their AI and
           system governance, at a fraction of the cost and rigidity of the Big 4 and enterprise
           governance, risk and compliance software.
         </p>
-        <p class="mt-4 max-w-prose text-ink">
+        <p class="mt-4 max-w-prose text-lg text-ink">
           We do it across six connected lines, from co-sourced internal audit and the Audit OS
           platform to advisory, training, automation and benchmarking. You can start anywhere and
           grow into the rest, with one team that brings both the judgement and the working software.
@@ -81,13 +99,40 @@ const personSchema = {
     </div>
   </Section>
 
-  <Section tone="surface" aria-labelledby="why-now">
-    <h2 id="why-now" class="text-2xl sm:text-3xl">Why now</h2>
-    <div class="mt-6 grid max-w-prose gap-4 text-ink">
+  {/* The signature statement: the meaning of the name, on rich navy. */}
+  <Section tone="navy-rich" class="relative overflow-hidden">
+    <div
+      aria-hidden="true"
+      class="aperture top-1/2 left-1/2 h-[26rem] w-[40rem] -translate-x-1/2 -translate-y-1/2 opacity-90"
+    >
+    </div>
+    <div class="reveal relative mx-auto max-w-3xl text-center">
+      <p class="eyebrow is-centred">The name</p>
+      <p
+        class="mt-6 font-serif text-[length:var(--text-title)] leading-[1.12] font-medium text-balance text-white"
+      >
+        To <span class="text-gold italic">murika</span> is to bring into the light. Good assurance does
+        the same: it makes what is really happening visible, and provable.
+      </p>
+    </div>
+  </Section>
+
+  {/* Why now. */}
+  <Section tone="surface" aria-labelledby="why-now" class="border-b border-hairline">
+    <div class="reveal max-w-2xl">
+      <p class="eyebrow">Why now</p>
+      <h2
+        id="why-now"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+      >
+        The bar for assurance is rising
+      </h2>
+    </div>
+    <div class="reveal mt-8 grid max-w-prose gap-4 text-lg text-ink">
       <p>
-        Four things are happening at once. The IIA Global Internal Audit Standards took effect in
-        January 2025, raising the bar for what an internal audit function is expected to do. AI risk
-        is rising faster than most organisations can govern it.
+        Several things are happening at once. The IIA Global Internal Audit Standards took effect in
+        January 2025, raising the bar for what an internal audit function is expected to do, and AI
+        risk is rising faster than most organisations can govern it.
       </p>
       <p>
         Governance is becoming a board obligation, not a nice to have, as Kenya advances its
@@ -102,73 +147,71 @@ const personSchema = {
     </div>
   </Section>
 
-  {/* Founder, the E-E-A-T trust spine. */}
-  <Section tone="paper" aria-labelledby="founder">
-    <h2 id="founder" class="text-2xl sm:text-3xl">The founder</h2>
-    <div class="mt-8 grid gap-10 lg:grid-cols-12">
-      <div class="lg:col-span-7">
-        <p class="text-xl font-medium text-navy">{FOUNDER.name}</p>
-        <p class="text-slate">{FOUNDER.role}</p>
-        <p class="mt-5 max-w-prose text-ink">
-          {FOUNDER.currentRole} He is a Certified Information Systems Auditor and an ISO 27001 and ISO
-          42001 Lead Auditor, the latter still a rare credential for AI management systems. He holds an
-          MSc in Information Systems and Technology, is a fellow at an international AI policy institute
-          with three peer-reviewed publications, and built the Audit OS platform himself.
-        </p>
-        <p class="mt-4 max-w-prose text-ink">
-          That mix is the point: Murikah ships with the assurance judgement and the working product
-          in one person, so the advice and the tool never pull in different directions.
-        </p>
-      </div>
-      <div class="lg:col-span-5">
-        <div class="rounded-card bg-surface p-8 ring-1 ring-hairline/70">
-          <p class="text-sm font-semibold tracking-widest text-slate uppercase">Credentials</p>
-          <ul class="mt-4 grid gap-2.5">
-            {
-              FOUNDER.credentials.map((c) => (
-                <li class="flex items-start gap-2.5">
-                  <svg
-                    class="mt-1 size-4 shrink-0 text-gold"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M3 8.5l3 3 7-7.5"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                  <span class="text-ink">{c}</span>
-                </li>
-              ))
-            }
-          </ul>
-        </div>
-      </div>
+  {/* How we work. */}
+  <Section tone="paper" aria-labelledby="how-we-work">
+    <div class="reveal max-w-2xl">
+      <p class="eyebrow">How we work</p>
+      <h2
+        id="how-we-work"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+      >
+        Standards in, evidence out
+      </h2>
+    </div>
+    <div class="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-3">
+      {
+        how.map((h) => (
+          <div class="reveal border-t border-hairline pt-6">
+            <h3 class="text-lg text-navy">{h.title}</h3>
+            <p class="mt-2.5 text-slate">{h.body}</p>
+          </div>
+        ))
+      }
+    </div>
+    <div class="reveal mt-10">
+      <p class="text-xs font-semibold tracking-[0.16em] text-slate uppercase">
+        Standards our work follows
+      </p>
+      <ul class="mt-3 flex flex-wrap gap-2">
+        {
+          STANDARDS.map((s) => (
+            <li class="rounded-full bg-surface px-3 py-1 text-sm text-ink ring-1 ring-hairline">
+              {s.name}
+            </li>
+          ))
+        }
+      </ul>
     </div>
   </Section>
 
-  <Section tone="surface" aria-labelledby="values">
-    <h2 id="values" class="text-2xl sm:text-3xl">What we stand for</h2>
-    <FeatureGrid cols={3} class="mt-8">
+  {/* What we stand for. */}
+  <Section tone="surface" aria-labelledby="values" class="border-t border-hairline">
+    <div class="reveal max-w-2xl">
+      <p class="eyebrow">What we stand for</p>
+      <h2
+        id="values"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+      >
+        Three things we will not trade
+      </h2>
+    </div>
+    <div class="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-3">
       {
         values.map((v) => (
-          <Card>
+          <div class="reveal border-t border-hairline pt-6">
             <h3 class="text-xl text-navy">{v.title}</h3>
-            <p class="mt-2 text-slate">{v.body}</p>
-          </Card>
+            <p class="mt-2.5 text-slate">{v.body}</p>
+          </div>
         ))
       }
-    </FeatureGrid>
-    <p class="mt-8">
+    </div>
+    <p class="reveal mt-10">
       <Button href="/contact" variant="secondary">Work with us</Button>
     </p>
   </Section>
 
   <CtaSection
+    eyebrow="Book a demo"
     title="Let us raise the standard of your assurance"
     body="Book a demo, or start a conversation about your audit and governance goals."
     secondaryLabel="Contact us"
