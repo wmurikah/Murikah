@@ -61,9 +61,9 @@ const faqs: FaqItem[] = [
 <ServiceLayout
   slug="advisory"
   metaTitle="AI strategy and governance advisory for boards | Murikah"
-  metaDescription="Board-ready advice on AI strategy, governance and risk, plus the research, decks and board papers to act on it. Grounded in current AI-governance credentials."
+  metaDescription="Board-ready advice on AI strategy, governance and risk, plus the research, decks and board papers to act on it. Grounded in the ISO 42001 standard and current AI rules."
   heading="Board-ready thinking on AI, risk and governance."
-  intro="Murikah Advisory packages senior governance and AI-policy expertise into work your board can use. We produce AI strategy and governance roadmaps for boards and executives, research and analytics including sector studies, and the executive decks and board papers that turn analysis into decisions. The advice is grounded in current credentials, an ISO 42001 Lead Auditor and an AI-policy fellow with peer-reviewed work, so what your board hears reflects where AI governance is actually heading."
+  intro="Murikah Advisory packages senior governance and AI expertise into work your board can use. We produce AI strategy and governance roadmaps for boards and executives, research and analytics including sector studies, and the executive decks and board papers that turn analysis into decisions. The advice is grounded in the ISO 42001 standard and active tracking of the rules that affect African organisations, so what your board hears reflects where AI governance is actually heading."
   primaryCta={{ label: 'Book a session', href: '/contact' }}
   secondaryCta={{ label: 'Visit Murikah Academy', href: '/academy' }}
   faqs={faqs}
@@ -71,7 +71,12 @@ const faqs: FaqItem[] = [
   closingBody="Book a session and we will shape the strategy, research or board paper your next meeting needs."
 >
   <Section tone="paper" aria-labelledby="what-we-do">
-    <h2 id="what-we-do" class="text-2xl sm:text-3xl">What we do</h2>
+    <h2
+      id="what-we-do"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      What we do
+    </h2>
     <FeatureGrid cols={3} class="mt-8">
       {
         areas.map((a) => (
@@ -85,7 +90,12 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="surface" aria-labelledby="how-it-works">
-    <h2 id="how-it-works" class="text-2xl sm:text-3xl">How an engagement works</h2>
+    <h2
+      id="how-it-works"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      How an engagement works
+    </h2>
     <ol class="mt-8 grid gap-5 sm:gap-6 lg:grid-cols-3">
       {
         steps.map((step, i) => (
@@ -102,7 +112,12 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="paper" aria-labelledby="related">
-    <h2 id="related" class="text-2xl sm:text-3xl">Related reading</h2>
+    <h2
+      id="related"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      Related reading
+    </h2>
     <ul class="mt-6 grid max-w-3xl gap-3">
       <li>
         <a href="/insights/iso-42001-readiness" class="font-medium text-blue hover:text-blue-deep">

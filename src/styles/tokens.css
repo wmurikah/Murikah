@@ -69,10 +69,16 @@
   --text-6xl: 4rem;
   --text-6xl--line-height: 1.02;
   --text-6xl--letter-spacing: -0.025em;
-  /* Fluid hero display size, scales with viewport, no layout shift. */
-  --text-display: clamp(2.5rem, 1.8rem + 3.4vw, 4.25rem);
-  --text-display--line-height: 1.04;
-  --text-display--letter-spacing: -0.025em;
+  /* Fluid hero display size, scales with viewport, no layout shift. Confident
+     by design: Fraunces is the personality, so the headline is allowed to be
+     large. */
+  --text-display: clamp(2rem, 0.9rem + 4.4vw, 5.25rem);
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.028em;
+  /* Section-title display size, a step below the hero, used with Fraunces. */
+  --text-title: clamp(1.85rem, 1.2rem + 2.6vw, 3.25rem);
+  --text-title--line-height: 1.08;
+  --text-title--letter-spacing: -0.02em;
 
   /* ---- Layout ------------------------------------------------------------ */
   --container-page: 75rem; /* ~1200px max content width → max-w-page */
@@ -84,6 +90,8 @@
   /* ---- Shadows (subtle, navy-tinted; restraint over drama) --------------- */
   --shadow-card: 0 1px 2px rgba(11, 23, 51, 0.05), 0 10px 30px -16px rgba(11, 23, 51, 0.18);
   --shadow-pop: 0 12px 40px -12px rgba(11, 23, 51, 0.22);
+  /* Premium hover lift, slightly deeper and warmer than the resting card. */
+  --shadow-lift: 0 2px 4px rgba(11, 23, 51, 0.06), 0 24px 60px -24px rgba(11, 23, 51, 0.32);
 
   /* ---- Motion ------------------------------------------------------------ */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
