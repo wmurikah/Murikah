@@ -5,7 +5,7 @@ import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
-import { SITE, FOUNDER } from '@/site.config';
+import { SITE, STANDARDS } from '@/site.config';
 
 const crumbs = [
   { label: 'Home', href: '/' },
@@ -31,17 +31,27 @@ const labelCls = 'block text-sm font-medium text-navy';
   titleFull="Contact Murikah | Book a demo or an assurance conversation"
   description="Talk to Murikah about co-sourced internal audit, Audit OS, AI governance or training. Tell us about your organisation and we respond within two working days."
 >
-  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
-    <Breadcrumb items={crumbs} class="mb-6" />
-    <p class="text-sm font-semibold tracking-widest text-gold uppercase">Contact</p>
-    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
-      Book a demo or start a conversation
-    </h1>
-    <p class="mt-5 max-w-prose text-lg text-slate">
-      Tell us about your organisation and what you are trying to achieve, whether that is co-sourced
-      internal audit, Audit OS, AI governance or training. We will read your message and respond
-      within two working days with the right next step, usually a short call.
-    </p>
+  <Section
+    tone="surface"
+    aria-labelledby="page-title"
+    class="relative overflow-hidden border-b border-hairline"
+  >
+    <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
+    <div class="relative max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">Contact</p>
+      <h1
+        id="page-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
+      >
+        Book a demo or start a conversation
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        Tell us about your organisation and what you are trying to achieve, whether that is
+        co-sourced internal audit, Audit OS, AI governance or training. We will read your message
+        and respond within two working days with the right next step, usually a short call.
+      </p>
+    </div>
   </Section>
 
   <Section tone="paper">
@@ -160,19 +170,19 @@ const labelCls = 'block text-sm font-medium text-navy';
             >.
           </p>
           <hr class="my-6 border-hairline" />
-          <h2 class="text-xl">Why teams choose Murikah</h2>
-          <ul class="mt-3 flex flex-wrap gap-2" aria-label="Credentials">
+          <h2 class="text-xl">Standards our work follows</h2>
+          <ul class="mt-3 flex flex-wrap gap-2" aria-label="Standards our work follows">
             {
-              FOUNDER.credentials.map((c) => (
+              STANDARDS.map((s) => (
                 <li class="rounded-full bg-paper px-3 py-1 text-sm text-ink ring-1 ring-hairline">
-                  {c}
+                  {s.short}
                 </li>
               ))
             }
           </ul>
           <p class="mt-4 text-sm text-slate">
-            Independent, certified and platform-backed assurance, led by a CISA and ISO 42001 Lead
-            Auditor.
+            Independent, standards-based and platform-backed assurance, built for the African
+            mid-market.
           </p>
         </div>
       </aside>

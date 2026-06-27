@@ -128,4 +128,129 @@
   .hairline {
     border-color: var(--color-hairline);
   }
+
+  /* ---- Signature: clarity brought to light --------------------------------
+     One restrained light motif. A soft gold aperture sits behind a single key
+     headline, and a fine gold beam recurs as a structural accent. Used
+     sparingly, never scattered across a page. */
+
+  /* Eyebrow: a tracked uppercase label introduced by a short gold beam. */
+  .eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.7rem;
+    max-inline-size: 100%;
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-gold);
+  }
+  .eyebrow::before {
+    content: '';
+    inline-size: 1.75rem;
+    block-size: 1px;
+    flex: none;
+    background: linear-gradient(90deg, transparent, var(--color-gold));
+  }
+  .eyebrow.is-centred {
+    justify-content: center;
+  }
+
+  /* Beam: a fine gold hairline, fading at both ends, as a structural accent. */
+  .beam {
+    block-size: 1px;
+    border: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-gold) 65%, transparent),
+      transparent
+    );
+  }
+
+  /* Rich navy surface, the premium dark field for hero, CTA and footer. A
+     barely-there gradient adds depth without reading as a SaaS gradient. */
+  .navy-rich {
+    background-color: var(--color-navy);
+    background-image:
+      radial-gradient(120% 130% at 50% -25%, #16264c 0%, rgba(22, 38, 76, 0) 58%),
+      linear-gradient(180deg, var(--color-navy) 0%, var(--color-navy-deep) 100%);
+  }
+
+  /* The aperture, a soft single bloom of light. Render as an aria-hidden child
+     of a relatively-positioned, clipped container and place it behind the
+     headline. Sized and positioned by utilities at the call site. */
+  .aperture {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 9999px;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--color-gold) 26%, transparent) 0%,
+      color-mix(in srgb, var(--color-gold) 9%, transparent) 42%,
+      transparent 72%
+    );
+    filter: blur(6px);
+  }
+
+  /* Fine grain for dark sections, so large navy fields read as rich, not flat.
+     Very low opacity fractal noise; decorative only. */
+  .grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+  }
+
+  /* Reading measure for guides, around 65 to 70 characters. */
+  .measure {
+    max-inline-size: 68ch;
+  }
+}
+
+/* ---- Motion ---------------------------------------------------------------
+   Reveals and the hero load sequence apply only when JavaScript is present
+   (the `js` class is set on <html> before paint), so without JS every element
+   is visible. Reduced motion disables all of it. */
+@layer utilities {
+  .js .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 0.6s var(--ease-out-soft),
+      transform 0.6s var(--ease-out-soft);
+  }
+  .js .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Hero load: a staggered rise. Set --rise-delay inline per element. */
+  .js .rise {
+    opacity: 0;
+    animation: fade-up 0.7s var(--ease-out-soft) both;
+    animation-delay: var(--rise-delay, 0s);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .reveal,
+  .js .reveal.is-visible,
+  .js .rise {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
 }

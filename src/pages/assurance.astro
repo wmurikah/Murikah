@@ -52,7 +52,7 @@ const steps = [
 const why = [
   {
     title: 'Senior judgement',
-    body: 'The work is led by a Certified Information Systems Auditor and ISO 42001 Lead Auditor, not handed to juniors.',
+    body: 'The work is led by senior practitioners and runs to the IIA Global Internal Audit Standards, not handed to juniors.',
   },
   {
     title: 'A platform you keep',
@@ -77,7 +77,7 @@ const faqs: FaqItem[] = [
   {
     question: 'How is this different from hiring the Big 4?',
     answer:
-      'You get the same rigour and independence, with three differences. The work is led by a senior practitioner throughout, not staffed down to trainees. It runs on our own platform, so reporting and remediation are faster and the evidence stays with you. And it is priced for the mid-market, without long lock-in. We call it co-assurance: built with your team and your board.',
+      'You get the same rigour and independence, with three differences. The work is led by senior practitioners throughout, not staffed down to trainees. It runs on our own platform, so reporting and remediation are faster and the evidence stays with you. And it is priced for the mid-market, without long lock-in. We call it co-assurance: built with your team and your board.',
   },
   {
     question: 'Can you work with our existing internal audit team?',
@@ -111,7 +111,10 @@ const faqs: FaqItem[] = [
   <Section tone="paper" aria-labelledby="what-it-is">
     <div class="grid gap-10 lg:grid-cols-12">
       <div class="lg:col-span-5">
-        <h2 id="what-it-is" class="text-2xl sm:text-3xl">
+        <h2
+          id="what-it-is"
+          class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+        >
           When to co-source, and when to outsource
         </h2>
       </div>
@@ -132,7 +135,12 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="surface" aria-labelledby="what-we-cover">
-    <h2 id="what-we-cover" class="text-2xl sm:text-3xl">What we cover</h2>
+    <h2
+      id="what-we-cover"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      What we cover
+    </h2>
     <FeatureGrid cols={2} class="mt-8">
       {
         areas.map((a) => (
@@ -146,7 +154,12 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="paper" aria-labelledby="how-it-runs">
-    <h2 id="how-it-runs" class="text-2xl sm:text-3xl">How an engagement runs</h2>
+    <h2
+      id="how-it-runs"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      How an engagement runs
+    </h2>
     <ol class="mt-8 grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-5">
       {
         steps.map((step, i) => (
@@ -163,7 +176,12 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="surface" aria-labelledby="why-us">
-    <h2 id="why-us" class="text-2xl sm:text-3xl">Why teams choose Murikah</h2>
+    <h2
+      id="why-us"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      Why teams choose Murikah
+    </h2>
     <FeatureGrid cols={2} class="mt-8">
       {
         why.map((w) => (
@@ -177,7 +195,12 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="paper" aria-labelledby="related">
-    <h2 id="related" class="text-2xl sm:text-3xl">Related reading</h2>
+    <h2
+      id="related"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      Related reading
+    </h2>
     <ul class="mt-6 grid max-w-3xl gap-3">
       <li>
         <a

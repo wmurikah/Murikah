@@ -31,7 +31,7 @@ const faqs: FaqItem[] = [
   {
     question: 'Do you prepare people for the CISA exam?',
     answer:
-      'Yes. CISA, the Certified Information Systems Auditor credential, is one of our core preparation programmes. Sessions are run by a CISA holder who uses the certification in practice, so the preparation is grounded in real audit work, not just exam theory.',
+      'Yes. CISA, the Certified Information Systems Auditor credential, is one of our core preparation programmes. Sessions are taught by practitioners and grounded in real audit work, not just exam theory.',
   },
   {
     question: 'Can you train our whole team in-house?',
@@ -51,7 +51,7 @@ const faqs: FaqItem[] = [
   metaTitle="Training in audit, AI governance and automation | Murikah Academy"
   metaDescription="Practical training and certification prep: CISA, ISO 42001 awareness, and masterclasses in AI and automation for finance and internal audit."
   heading="Training that turns your team into the control."
-  intro="Murikah Academy offers certification preparation and practical masterclasses for the people who run assurance and risk. Certification preparation covers CISA and ISO 42001 awareness and lead-auditor readiness. Masterclasses cover AI and automation for finance, internal audit for the mid-market, and data protection for boards. We also deliver in-house team enablement as part of co-sourcing, so your people build real capability while the audit work gets done. Every session is taught by a practitioner who does the work day to day."
+  intro="Murikah Academy offers certification preparation and practical masterclasses for the people who run assurance and risk. Certification preparation covers CISA and ISO 42001 awareness and lead-auditor readiness. Masterclasses cover AI and automation for finance, internal audit for the mid-market, and data protection for boards. We also deliver in-house team enablement as part of co-sourcing, so your people build real capability while the audit work gets done. Every session is taught by practitioners who do this work day to day."
   primaryCta={{ label: 'Enquire about training', href: '/contact' }}
   secondaryCta={{ label: 'See Murikah Advisory', href: '/advisory' }}
   faqs={faqs}
@@ -59,7 +59,12 @@ const faqs: FaqItem[] = [
   closingBody="Tell us your team and your goals, and we will propose the right preparation or masterclass."
 >
   <Section tone="paper" aria-labelledby="tracks">
-    <h2 id="tracks" class="text-2xl sm:text-3xl">What we teach</h2>
+    <h2
+      id="tracks"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      What we teach
+    </h2>
     <FeatureGrid cols={3} class="mt-8">
       {
         tracks.map((t) => (
@@ -75,7 +80,12 @@ const faqs: FaqItem[] = [
   <Section tone="surface" aria-labelledby="formats">
     <div class="grid gap-10 lg:grid-cols-12">
       <div class="lg:col-span-5">
-        <h2 id="formats" class="text-2xl sm:text-3xl">Who it is for, and how it runs</h2>
+        <h2
+          id="formats"
+          class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+        >
+          Who it is for, and how it runs
+        </h2>
       </div>
       <div class="lg:col-span-7">
         <p class="max-w-prose text-ink">
@@ -92,7 +102,12 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="paper" aria-labelledby="related">
-    <h2 id="related" class="text-2xl sm:text-3xl">Related reading</h2>
+    <h2
+      id="related"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      Related reading
+    </h2>
     <ul class="mt-6 grid max-w-3xl gap-3">
       <li>
         <a href="/insights/iso-42001-readiness" class="font-medium text-blue hover:text-blue-deep">
