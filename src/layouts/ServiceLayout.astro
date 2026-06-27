@@ -75,20 +75,33 @@ const crumbs = [
     /* Hero, the page's opening peak. The answer-first opener doubles as the
       direct answer that search and AI engines can quote. */
   }
-  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
-    <Breadcrumb items={crumbs} class="mb-6" />
-    <p class="text-sm font-semibold tracking-widest text-gold uppercase">{service.name}</p>
-    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">{heading}</h1>
-    <p class="mt-5 max-w-prose text-lg text-slate">{intro}</p>
-    <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-      <Button href={primaryCta.href} variant="primary" size="lg">{primaryCta.label}</Button>
-      {
-        secondaryCta && (
-          <Button href={secondaryCta.href} variant="ghost" size="lg">
-            {secondaryCta.label}
-          </Button>
-        )
-      }
+  <Section
+    tone="surface"
+    aria-labelledby="page-title"
+    class="relative overflow-hidden border-b border-hairline"
+  >
+    {/* A single, faint touch of the signature light, warm in the corner. */}
+    <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
+    <div class="relative max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">{service.name}</p>
+      <h1
+        id="page-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
+      >
+        {heading}
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">{intro}</p>
+      <div class="mt-9 flex flex-col gap-3 sm:flex-row">
+        <Button href={primaryCta.href} variant="primary" size="lg">{primaryCta.label}</Button>
+        {
+          secondaryCta && (
+            <Button href={secondaryCta.href} variant="ghost" size="lg">
+              {secondaryCta.label}
+            </Button>
+          )
+        }
+      </div>
     </div>
   </Section>
 
@@ -96,9 +109,15 @@ const crumbs = [
   <slot />
 
   {/* FAQ, progressive disclosure plus FAQPage schema from the same data. */}
-  <Section tone="surface" aria-labelledby="faq">
-    <h2 id="faq" class="text-2xl sm:text-3xl">Frequently asked questions</h2>
-    <Faq items={faqs} class="mt-6 max-w-3xl" />
+  <Section tone="surface" aria-labelledby="faq" class="border-t border-hairline">
+    <p class="eyebrow">Questions</p>
+    <h2
+      id="faq"
+      class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+    >
+      Frequently asked questions
+    </h2>
+    <Faq items={faqs} class="mt-8 max-w-3xl" />
     <FaqPageSchema items={faqs} />
   </Section>
 

@@ -1,4 +1,4 @@
-// Flat ESLint config (ESLint 10) — TypeScript + Astro, kept pragmatic.
+// Flat ESLint config (ESLint 10), TypeScript and Astro, kept pragmatic.
 import tseslint from 'typescript-eslint';
 import astro from 'eslint-plugin-astro';
 import globals from 'globals';

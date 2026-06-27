@@ -1,8 +1,11 @@
 /**
  * Central site configuration, the single source of truth for shared strings:
- * site metadata, navigation, the six service lines, founder facts, pricing
- * anchors, audience, social links and default SEO. Pull from here rather than
- * retyping copy across files.
+ * site metadata, navigation, the six service lines, the standards the company
+ * works to, pricing anchors, audience, social links and default SEO. Pull from
+ * here rather than retyping copy across files.
+ *
+ * Murikah is a company and speaks as one ("we"). No named individual and no
+ * personal qualifications appear anywhere in this file or on the site.
  *
  * Voice rules apply to every string in this file: no em dashes, plain English,
  * British and Kenyan spelling, no superlatives. Unverified specifics use a
@@ -188,41 +191,49 @@ export const FOOTER_GROUPS: { heading: string; links: { label: string; href: str
   },
 ];
 
+export interface Standard {
+  /** Full name as it reads in prose. */
+  name: string;
+  /** Short label for compact chips. */
+  short: string;
+  /** One plain line on how the company uses it. */
+  note: string;
+}
+
 /**
- * Founder facts, the E-E-A-T spine. These are verifiable and stated plainly.
+ * The standards and frameworks the work is built on. These are honest,
+ * company-level trust signals, the standards Murikah works to and helps clients
+ * with, not qualifications the company or any individual holds. Never present
+ * them as certifications Murikah has been awarded.
  */
-export const FOUNDER = {
-  name: 'Wilberforce Murikah',
-  role: 'Founder',
-  /** Current day role, stated plainly. */
-  currentRole:
-    'Group Head of Internal Audit at a multi-country petroleum group operating across nine African countries and Dubai, reporting to the Board Audit and Risk Committee.',
-  /** Short credential line for bylines and trust strips. */
-  credentialLine: 'CISA, ISO 27001 and ISO 42001 Lead Auditor',
-  /** Full credential list for schema and the about page. */
-  credentials: [
-    'CISA (Certified Information Systems Auditor)',
-    'ISO/IEC 27001:2022 Lead Auditor',
-    'ISO/IEC 42001:2023 Lead Auditor',
-    'MSc, Information Systems and Technology',
-    'AI-policy fellow, with three peer-reviewed publications',
-  ],
-  /** Short chips for compact trust strips. */
-  credentialChips: ['CISA', 'ISO 27001 Lead Auditor', 'ISO 42001 Lead Auditor', 'MSc'],
-  /** One-line bio for the guide byline. */
-  bioByline:
-    'Founder of Murikah and a practising Group Head of Internal Audit. He built the Audit OS platform himself.',
-  /** Topics for Person.knowsAbout in JSON-LD. */
-  knowsAbout: [
-    'Internal audit',
-    'IT audit',
-    'Data protection',
-    'AI governance',
-    'ISO/IEC 42001',
-    'ISO/IEC 27001',
-    'Risk management',
-  ],
-} as const;
+export const STANDARDS: Standard[] = [
+  {
+    name: 'IIA Global Internal Audit Standards',
+    short: 'IIA Standards',
+    note: 'The professional standards our internal audit work is planned and run to.',
+  },
+  {
+    name: 'ISO/IEC 27001',
+    short: 'ISO/IEC 27001',
+    note: 'Information security management, which we audit against and help clients prepare for.',
+  },
+  {
+    name: 'ISO/IEC 42001',
+    short: 'ISO/IEC 42001',
+    note: 'The AI management-system standard behind our AI-governance readiness work.',
+  },
+];
+
+/** Topics the company works across, used for Organization.knowsAbout in JSON-LD. */
+export const KNOWS_ABOUT = [
+  'Internal audit',
+  'IT audit',
+  'Data protection',
+  'AI governance',
+  'ISO/IEC 42001',
+  'ISO/IEC 27001',
+  'Risk management',
+] as const;
 
 /**
  * Audit OS indicative pricing, positioning anchors only. Always label as

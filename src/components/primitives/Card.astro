@@ -14,7 +14,7 @@ const { href, class: className, ...rest } = Astro.props;
 
 const base = 'block rounded-card bg-surface p-6 ring-1 ring-hairline/70 sm:p-7';
 const interactive =
-  'no-underline transition-shadow duration-150 hover:shadow-card focus-visible:shadow-card';
+  'no-underline transition-[transform,box-shadow,outline-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] outline outline-1 outline-transparent hover:-translate-y-1 hover:shadow-lift hover:outline-gold/35 focus-visible:shadow-lift';
 ---
 
 {

@@ -3,8 +3,8 @@
  * InsightLayout, the layout for guides. Encodes the content conventions:
  * answer-first opener shown prominently, semantic H2/H3 from the body, an FAQ
  * block that emits matching FAQPage JSON-LD, BlogPosting and BreadcrumbList
- * schema, the author byline (E-E-A-T) on every guide, a related-guides block,
- * and a closing CTA to the parent service.
+ * schema, the company byline (Murikah authors the guides, no individual is
+ * named), a related-guides block, and a closing CTA to the parent service.
  */
 import type { CollectionEntry } from 'astro:content';
 import { getCollection } from 'astro:content';
@@ -18,8 +18,8 @@ import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
 import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import AuthorByline from '@/components/AuthorByline.astro';
-import { SITE, SERVICES, FOUNDER } from '@/site.config';
-import { buildFounderPerson, organizationId } from '@/lib/schema';
+import { SITE, SERVICES } from '@/site.config';
+import { organizationRef, organizationId } from '@/lib/schema';
 import { formatDate, isoDate } from '@/lib/format';
 
 interface Props {
@@ -27,18 +27,8 @@ interface Props {
 }
 
 const { entry } = Astro.props;
-const {
-  title,
-  description,
-  question,
-  summary,
-  pubDate,
-  updatedDate,
-  author,
-  tags,
-  category,
-  service,
-} = entry.data;
+const { title, description, question, summary, pubDate, updatedDate, tags, category, service } =
+  entry.data;
 
 const url = new URL(`/insights/${entry.id}/`, SITE.url).href;
 const lead = summary ?? description;
@@ -61,7 +51,7 @@ const related = [...new Set([...explicit, ...sameCategory])].slice(0, 2);
 // Parent service for the up-link and CTA target.
 const parentService = service ? SERVICES.find((s) => s.slug === service) : undefined;
 
-// BlogPosting JSON-LD. Author is the founder Person when authored by them.
+// BlogPosting JSON-LD. Murikah (the Organization) is the author and publisher.
 const articleSchema = {
   '@context': 'https://schema.org',
   '@type': 'BlogPosting',
@@ -69,7 +59,7 @@ const articleSchema = {
   description,
   datePublished: pubDate.toISOString(),
   dateModified: (updatedDate ?? pubDate).toISOString(),
-  author: author === FOUNDER.name ? buildFounderPerson() : { '@type': 'Person', name: author },
+  author: organizationRef(),
   publisher: {
     '@type': 'Organization',
     '@id': organizationId,
@@ -91,7 +81,7 @@ const articleSchema = {
   article={{
     publishedTime: pubDate.toISOString(),
     modifiedTime: (updatedDate ?? pubDate).toISOString(),
-    author,
+    author: SITE.name,
     tags,
   }}
 >
@@ -102,74 +92,82 @@ const articleSchema = {
     slot="head"
   />
 
+  {/* Guide header, a calm editorial opening on a single centred axis. */}
   <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
-    <Breadcrumb items={crumbs} class="mb-6" />
-    {
-      category && (
-        <p class="text-sm font-semibold tracking-widest text-gold uppercase">{category}</p>
-      )
-    }
-    <h1 id="page-title" class="mt-3 max-w-3xl text-4xl text-balance sm:text-5xl">
-      {question ?? title}
-    </h1>
-    <p class="mt-5 max-w-prose text-lg text-slate">{lead}</p>
+    <div class="mx-auto max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-8" />
+      {category && <p class="eyebrow">{category}</p>}
+      <h1
+        id="page-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
+      >
+        {question ?? title}
+      </h1>
+      <p class="mt-6 text-xl text-slate">{lead}</p>
 
-    <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2">
-      <AuthorByline />
-      <p class="text-sm text-slate">
-        <time datetime={isoDate(pubDate)}>{formatDate(pubDate)}</time>
-        {
-          updatedDate && (
-            <>
-              {' '}
-              · Updated <time datetime={isoDate(updatedDate)}>{formatDate(updatedDate)}</time>
-            </>
-          )
-        }
-      </p>
+      <hr class="beam mt-9 border-0" />
+      <div class="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <AuthorByline />
+        <p class="text-sm text-slate">
+          <time datetime={isoDate(pubDate)}>{formatDate(pubDate)}</time>
+          {
+            updatedDate && (
+              <>
+                {' '}
+                · Updated <time datetime={isoDate(updatedDate)}>{formatDate(updatedDate)}</time>
+              </>
+            )
+          }
+        </p>
+      </div>
     </div>
   </Section>
 
   <Section tone="paper">
-    <Prose>
-      <slot />
-    </Prose>
+    <div class="mx-auto max-w-3xl">
+      <Prose>
+        <slot />
+      </Prose>
 
-    {
-      entry.data.faqs && entry.data.faqs.length > 0 && (
-        <div class="mt-16 max-w-3xl">
-          <Faq items={entry.data.faqs} title="Frequently asked questions" />
-          <FaqPageSchema items={entry.data.faqs} />
-        </div>
-      )
-    }
+      {
+        entry.data.faqs && entry.data.faqs.length > 0 && (
+          <div class="mt-16">
+            <Faq items={entry.data.faqs} title="Frequently asked questions" />
+            <FaqPageSchema items={entry.data.faqs} />
+          </div>
+        )
+      }
 
-    {
-      parentService && (
-        <p class="mt-12">
-          <a href={parentService.href} class="font-medium text-blue hover:text-blue-deep">
-            Read more about {parentService.fullName}
-          </a>
-        </p>
-      )
-    }
+      {
+        parentService && (
+          <p class="mt-12">
+            <a
+              href={parentService.href}
+              class="font-medium text-blue no-underline hover:text-blue-deep hover:underline"
+            >
+              Read more about {parentService.fullName} &rarr;
+            </a>
+          </p>
+        )
+      }
+    </div>
   </Section>
 
   {
     related.length > 0 && (
       <Section tone="surface" aria-labelledby="related" class="border-t border-hairline">
-        <h2 id="related" class="text-2xl sm:text-3xl">
+        <p class="eyebrow">Keep reading</p>
+        <h2
+          id="related"
+          class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+        >
           Related guides
         </h2>
-        <FeatureGrid cols={2} class="mt-8">
+        <FeatureGrid cols={2} class="mt-10">
           {related.map((g) => (
             <Card href={`/insights/${g.id}/`} class="flex flex-col">
-              {g.data.category && (
-                <p class="text-xs font-semibold tracking-widest text-gold uppercase">
-                  {g.data.category}
-                </p>
-              )}
-              <h3 class="mt-2 text-lg text-navy">{g.data.title}</h3>
+              {g.data.category && <p class="eyebrow text-xs">{g.data.category}</p>}
+              <h3 class="mt-3 text-lg text-navy">{g.data.title}</h3>
               <p class="mt-2 text-slate">{g.data.description}</p>
             </Card>
           ))}
@@ -179,6 +177,7 @@ const articleSchema = {
   }
 
   <CtaSection
+    eyebrow="Book a demo"
     title="Put this into practice"
     body="Book a demo and we will map this to your organisation, your regulator and your board."
     secondaryLabel="Read more insights"

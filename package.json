@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Murikah — AI-native assurance and governance. Marketing site framework.",
+  "description": "Murikah, AI-native assurance and governance. Marketing site framework.",
   "engines": {
     "node": ">=22.12.0",
     "pnpm": ">=9.0.0"
