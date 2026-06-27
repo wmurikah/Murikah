@@ -242,9 +242,9 @@ code comments marking non-obvious applications.
 
 - Per-page title, meta description, canonical, Open Graph + Twitter tags, and a
   default share image (`/og-default.png`).
-- JSON-LD: `Organization` / `ProfessionalService` with a linked founder
-  `Person` on every page, `Service` per line, `FAQPage` on FAQ pages and guides,
-  `BreadcrumbList`, and `BlogPosting` on guides.
+- JSON-LD: `Organization` / `ProfessionalService` on every page, `Service` per
+  line, `FAQPage` on FAQ pages and guides, `BreadcrumbList`, and `BlogPosting`
+  (authored by the Organization, Murikah) on guides.
 - `public/robots.txt` (allows Googlebot, Bingbot, GPTBot, OAI-SearchBot,
   PerplexityBot, Google-Extended), `sitemap-index.xml` (generated, with
   priorities), `rss.xml`, and `public/llms.txt`.

@@ -8,7 +8,7 @@ import Container from './Container.astro';
 
 interface Props {
   id?: string;
-  tone?: 'paper' | 'surface' | 'shade' | 'navy';
+  tone?: 'paper' | 'surface' | 'shade' | 'navy' | 'navy-rich';
   /** Skip the inner Container for full-bleed content. */
   bleed?: boolean;
   class?: string;
@@ -31,6 +31,8 @@ const toneClass: Record<string, string> = {
   surface: 'bg-surface text-ink',
   shade: 'bg-paper-shade text-ink',
   navy: 'bg-navy text-paper on-dark',
+  // Premium dark field with depth and fine grain, for the hero, CTA and footer.
+  'navy-rich': 'navy-rich grain text-paper on-dark',
 };
 ---
 

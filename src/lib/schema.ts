@@ -1,28 +1,20 @@
 /**
- * Shared JSON-LD builders so the founder Person and the Organization are
- * described identically wherever they appear (Organization.founder, the About
- * page, and each guide's author). No claim here goes beyond the verifiable
- * founder credentials in site.config.
+ * Shared JSON-LD builders so the Organization is described identically wherever
+ * it appears (the global Organization node, the About page, and each guide's
+ * author and publisher). Murikah is a company: no Person node and no individual
+ * is named, and no claim here goes beyond what the site states plainly.
  */
-import { SITE, FOUNDER, SOCIAL } from '@/site.config';
+import { SITE, SOCIAL, KNOWS_ABOUT } from '@/site.config';
 
 export const organizationId = `${SITE.url}/#organization`;
-export const founderId = `${SITE.url}/#founder`;
 
-/** The founder as a schema.org Person, with credentials as hasCredential. */
-export function buildFounderPerson() {
+/** A compact reference to the Organization, for author/publisher fields. */
+export function organizationRef() {
   return {
-    '@type': 'Person',
-    '@id': founderId,
-    name: FOUNDER.name,
-    jobTitle: 'Founder',
-    description: FOUNDER.currentRole,
-    worksFor: { '@id': organizationId },
-    knowsAbout: [...FOUNDER.knowsAbout],
-    hasCredential: FOUNDER.credentials.map((name) => ({
-      '@type': 'EducationalOccupationalCredential',
-      name,
-    })),
+    '@type': 'Organization',
+    '@id': organizationId,
+    name: SITE.name,
+    url: SITE.url,
   };
 }
 
@@ -41,7 +33,7 @@ export function buildOrganization() {
     email: SITE.email,
     foundingDate: String(SITE.foundingYear),
     areaServed: SITE.areaServed,
+    knowsAbout: [...KNOWS_ABOUT],
     sameAs: SOCIAL.map((s) => s.href),
-    founder: buildFounderPerson(),
   };
 }

@@ -12,17 +12,17 @@ A read-only, point-in-time snapshot of the `wmurikah/Murikah` repository, prepar
 
 Murikah is the marketing website for an AI-native assurance and governance company serving African organisations (internal audit, IT audit, data protection, and AI governance). On `main` the site is a content-led marketing site with final copy and a full SEO/AI-discoverability layer. The Labs interactive sandbox is present only as a **stubbed** React island, and there is no AI assistant on this branch yet.
 
-| Concern | Value (from config on `main`) |
-| --- | --- |
-| Framework | Astro `^7.0.2` (TypeScript, strict) |
-| UI islands | React 19 via `@astrojs/react` (one stubbed island) |
-| Styling | Tailwind CSS v4 via `@tailwindcss/vite` |
-| Content | `@astrojs/mdx` collection, `@astrojs/rss`, `@astrojs/sitemap` |
-| Database | Turso / libSQL (`@libsql/client`) |
-| Email | Resend (optional, behind an env check) |
-| Package manager | pnpm `10.33.0` (pinned via `packageManager`) |
-| Node engine | `>=22.12.0` |
-| Deploy target | **Cloudflare Worker** (`@astrojs/cloudflare` v14) serving prerendered static assets plus two on-demand API endpoints |
+| Concern         | Value (from config on `main`)                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Framework       | Astro `^7.0.2` (TypeScript, strict)                                                                                  |
+| UI islands      | React 19 via `@astrojs/react` (one stubbed island)                                                                   |
+| Styling         | Tailwind CSS v4 via `@tailwindcss/vite`                                                                              |
+| Content         | `@astrojs/mdx` collection, `@astrojs/rss`, `@astrojs/sitemap`                                                        |
+| Database        | Turso / libSQL (`@libsql/client`)                                                                                    |
+| Email           | Resend (optional, behind an env check)                                                                               |
+| Package manager | pnpm `10.33.0` (pinned via `packageManager`)                                                                         |
+| Node engine     | `>=22.12.0`                                                                                                          |
+| Deploy target   | **Cloudflare Worker** (`@astrojs/cloudflare` v14) serving prerendered static assets plus two on-demand API endpoints |
 
 Output model: pages are prerendered to static HTML; only the API endpoints opt out of prerender and run on demand in the Worker. The build reports `output: "static"`, `mode: "server"`, `adapter: @astrojs/cloudflare`.
 
@@ -135,7 +135,7 @@ No `workers/`, no `wrangler.cron.jsonc`, no `src/lib/ai/`, no `src/lib/demo/`, n
   "format:check": "prettier --check .",
   "db:apply": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/apply.ts",
   "db:seed": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/seed.ts",
-  "astro": "astro"
+  "astro": "astro",
 }
 ```
 
@@ -143,41 +143,41 @@ The two database scripts run with Node's native TypeScript stripping and load `.
 
 ### dependencies (11)
 
-| Package | Version |
-| --- | --- |
-| `@astrojs/cloudflare` | `^14.0.0` |
-| `@astrojs/mdx` | `^7.0.0` |
-| `@astrojs/react` | `^6.0.0` |
-| `@astrojs/rss` | `^4.0.18` |
-| `@astrojs/sitemap` | `^3.7.3` |
-| `@fontsource-variable/fraunces` | `^5.2.9` |
-| `@fontsource-variable/outfit` | `^5.2.8` |
-| `@libsql/client` | `^0.17.4` |
-| `astro` | `^7.0.2` |
-| `react` | `^19.2.0` |
-| `react-dom` | `^19.2.0` |
+| Package                         | Version   |
+| ------------------------------- | --------- |
+| `@astrojs/cloudflare`           | `^14.0.0` |
+| `@astrojs/mdx`                  | `^7.0.0`  |
+| `@astrojs/react`                | `^6.0.0`  |
+| `@astrojs/rss`                  | `^4.0.18` |
+| `@astrojs/sitemap`              | `^3.7.3`  |
+| `@fontsource-variable/fraunces` | `^5.2.9`  |
+| `@fontsource-variable/outfit`   | `^5.2.8`  |
+| `@libsql/client`                | `^0.17.4` |
+| `astro`                         | `^7.0.2`  |
+| `react`                         | `^19.2.0` |
+| `react-dom`                     | `^19.2.0` |
 
 ### devDependencies (17)
 
-| Package | Version |
-| --- | --- |
-| `@astrojs/check` | `^0.9.9` |
-| `@cloudflare/workers-types` | `^4.20250109.0` |
-| `@tailwindcss/vite` | `^4.3.1` |
-| `@types/react` | `^19.2.0` |
-| `@types/react-dom` | `^19.2.0` |
-| `@typescript-eslint/parser` | `^8.62.0` |
-| `eslint` | `^10.5.0` |
-| `eslint-plugin-astro` | `^2.0.0` |
-| `eslint-plugin-jsx-a11y` | `^6.10.2` |
-| `globals` | `^17.7.0` |
-| `prettier` | `^3.8.4` |
-| `prettier-plugin-astro` | `^0.14.1` |
-| `prettier-plugin-tailwindcss` | `^0.8.0` |
-| `tailwindcss` | `^4.3.1` |
-| `typescript` | `~6.0.3` |
-| `typescript-eslint` | `^8.62.0` |
-| `wrangler` | `^4.104.0` |
+| Package                       | Version         |
+| ----------------------------- | --------------- |
+| `@astrojs/check`              | `^0.9.9`        |
+| `@cloudflare/workers-types`   | `^4.20250109.0` |
+| `@tailwindcss/vite`           | `^4.3.1`        |
+| `@types/react`                | `^19.2.0`       |
+| `@types/react-dom`            | `^19.2.0`       |
+| `@typescript-eslint/parser`   | `^8.62.0`       |
+| `eslint`                      | `^10.5.0`       |
+| `eslint-plugin-astro`         | `^2.0.0`        |
+| `eslint-plugin-jsx-a11y`      | `^6.10.2`       |
+| `globals`                     | `^17.7.0`       |
+| `prettier`                    | `^3.8.4`        |
+| `prettier-plugin-astro`       | `^0.14.1`       |
+| `prettier-plugin-tailwindcss` | `^0.8.0`        |
+| `tailwindcss`                 | `^4.3.1`        |
+| `typescript`                  | `~6.0.3`        |
+| `typescript-eslint`           | `^8.62.0`       |
+| `wrangler`                    | `^4.104.0`      |
 
 ---
 
@@ -211,7 +211,14 @@ export default defineConfig({
       serialize(item) {
         // Priorities: home and service pages highest, guides next, legal lowest.
         const path = new URL(item.url).pathname.replace(/\/$/, '') || '/';
-        const services = ['/assurance', '/audit-os', '/labs', '/advisory', '/academy', '/intelligence'];
+        const services = [
+          '/assurance',
+          '/audit-os',
+          '/labs',
+          '/advisory',
+          '/academy',
+          '/intelligence',
+        ];
         if (path === '/') item.priority = 1.0;
         else if (services.includes(path)) item.priority = 0.9;
         else if (path === '/insights' || path.startsWith('/insights/')) item.priority = 0.8;
@@ -293,13 +300,13 @@ There is a single Worker on `main` (the site Worker). No companion Cron Worker e
 
 Bindings the site Worker declares or implies:
 
-| Binding | Type | Name / id | Notes |
-| --- | --- | --- | --- |
-| `ASSETS` | Static assets | serves `dist/client` | Generated automatically from the build. |
-| `CACHE` | KV namespace | id `REPLACE_WITH_KV_NAMESPACE_ID` | **Placeholder id; must be replaced with a real KV namespace id before deploy.** Used by the rate limiter and the contact/subscribe endpoints. |
-| `ASSETS_BUCKET` | R2 bucket | `murikah-assets` | Bucket must exist. Reserved for asset overflow and a future downloadable report; not yet read by any code on `main`. |
-| `SESSION` | KV namespace | (no id) | **Injected by the adapter** (Astro Sessions, on by default) into the generated `dist/server/wrangler.json`; not in the source file. The app does not use Astro's session API, so it is functionally inert, but it appears in the deployable config and should be resolved before deploy (bind a KV namespace or disable Astro Sessions). |
-| `PUBLIC_SITE_URL` | Plain var | `https://www.murikah.com` | Non-secret. |
+| Binding           | Type          | Name / id                         | Notes                                                                                                                                                                                                                                                                                                                                    |
+| ----------------- | ------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ASSETS`          | Static assets | serves `dist/client`              | Generated automatically from the build.                                                                                                                                                                                                                                                                                                  |
+| `CACHE`           | KV namespace  | id `REPLACE_WITH_KV_NAMESPACE_ID` | **Placeholder id; must be replaced with a real KV namespace id before deploy.** Used by the rate limiter and the contact/subscribe endpoints.                                                                                                                                                                                            |
+| `ASSETS_BUCKET`   | R2 bucket     | `murikah-assets`                  | Bucket must exist. Reserved for asset overflow and a future downloadable report; not yet read by any code on `main`.                                                                                                                                                                                                                     |
+| `SESSION`         | KV namespace  | (no id)                           | **Injected by the adapter** (Astro Sessions, on by default) into the generated `dist/server/wrangler.json`; not in the source file. The app does not use Astro's session API, so it is functionally inert, but it appears in the deployable config and should be resolved before deploy (bind a KV namespace or disable Astro Sessions). |
+| `PUBLIC_SITE_URL` | Plain var     | `https://www.murikah.com`         | Non-secret.                                                                                                                                                                                                                                                                                                                              |
 
 There is a **cron trigger** `["0 3 * * *"]` in `wrangler.jsonc`, described in its own comment as a placeholder. The Astro Cloudflare adapter produces a Worker that exports only a `fetch` handler (no `scheduled` handler), and this trigger carries through to the generated `dist/server/wrangler.json`. Deploying as-is means Cloudflare would fire a daily scheduled event the Worker cannot handle. See Deployment readiness.
 
@@ -313,23 +320,23 @@ Gathered from the code (`import { env } from 'cloudflare:workers'` in the Worker
 
 ### Site Worker (read at request time)
 
-| Variable | Required | Type in prod | Used for | Read in |
-| --- | --- | --- | --- | --- |
-| `TURSO_DATABASE_URL` | For persistence | Secret/var | libSQL connection URL (`libsql://...`) | `src/lib/db.ts` |
-| `TURSO_AUTH_TOKEN` | For persistence | Secret | Turso auth token `[REDACTED]` | `src/lib/db.ts` |
-| `RESEND_API_KEY` | Optional | Secret | Resend email. If unset, email is skipped (no-op). | `src/lib/email.ts` |
-| `CONTACT_NOTIFY_EMAIL` | Optional | Secret/var | Recipient for contact notifications | `src/lib/email.ts` |
-| `RESEND_FROM_EMAIL` | Optional | Secret/var | Verified sender address | `src/lib/email.ts` |
-| `PUBLIC_SITE_URL` | Optional | Plain var | Canonical/OG origin for non-prod | set in `wrangler.jsonc` |
+| Variable               | Required        | Type in prod | Used for                                          | Read in                 |
+| ---------------------- | --------------- | ------------ | ------------------------------------------------- | ----------------------- |
+| `TURSO_DATABASE_URL`   | For persistence | Secret/var   | libSQL connection URL (`libsql://...`)            | `src/lib/db.ts`         |
+| `TURSO_AUTH_TOKEN`     | For persistence | Secret       | Turso auth token `[REDACTED]`                     | `src/lib/db.ts`         |
+| `RESEND_API_KEY`       | Optional        | Secret       | Resend email. If unset, email is skipped (no-op). | `src/lib/email.ts`      |
+| `CONTACT_NOTIFY_EMAIL` | Optional        | Secret/var   | Recipient for contact notifications               | `src/lib/email.ts`      |
+| `RESEND_FROM_EMAIL`    | Optional        | Secret/var   | Verified sender address                           | `src/lib/email.ts`      |
+| `PUBLIC_SITE_URL`      | Optional        | Plain var    | Canonical/OG origin for non-prod                  | set in `wrangler.jsonc` |
 
 Bindings (not string vars) referenced from code: `CACHE` (KV) in the rate limiter and the contact/subscribe endpoints. The site builds and serves without any of the above set: pages are prerendered, and the two endpoints degrade gracefully and return a clear error when Turso is not configured.
 
 ### Database scripts (Node)
 
-| Variable | Required | Used for |
-| --- | --- | --- |
-| `TURSO_DATABASE_URL` | Yes | Target database for apply/seed |
-| `TURSO_AUTH_TOKEN` | Yes | Auth token `[REDACTED]` |
+| Variable             | Required | Used for                       |
+| -------------------- | -------- | ------------------------------ |
+| `TURSO_DATABASE_URL` | Yes      | Target database for apply/seed |
+| `TURSO_AUTH_TOKEN`   | Yes      | Auth token `[REDACTED]`        |
 
 `pnpm db:apply` / `pnpm db:seed` read these from the environment and also auto-load `.dev.vars` when present (via `--env-file-if-exists`). A missing URL prints a clear error and exits non-zero. Credentials are not printed.
 
@@ -342,11 +349,11 @@ The committed template. It contains no real values. Local secrets live in `.dev.
 # `astro dev` reads these via the adapter's platformProxy; `wrangler dev` reads them natively.
 # In production these are set as Cloudflare secrets (see README), NOT committed.
 
-# --- Turso (libSQL) — required for contact/subscribe persistence ---
+# --- Turso (libSQL), required for contact/subscribe persistence ---
 TURSO_DATABASE_URL="libsql://your-database-name.turso.io"
 TURSO_AUTH_TOKEN="your-turso-auth-token"
 
-# --- Resend transactional email — OPTIONAL ---
+# --- Resend transactional email, OPTIONAL ---
 # If RESEND_API_KEY is empty/unset, email sending is skipped (no-op) and the
 # endpoints still validate + persist. The build never requires a key.
 RESEND_API_KEY=""
@@ -367,42 +374,42 @@ PUBLIC_SITE_URL="http://localhost:4321"
 
 ### Pages (all prerendered, `prerender = true`)
 
-| Route | Source | Kind |
-| --- | --- | --- |
-| `/` | `src/pages/index.astro` | Home |
-| `/about` | `about.astro` | Company |
-| `/assurance` | `assurance.astro` | Service line |
-| `/audit-os` | `audit-os.astro` | Service line |
-| `/labs` | `labs.astro` | Service line + **stubbed** sandbox island |
-| `/advisory` | `advisory.astro` | Service line |
-| `/academy` | `academy.astro` | Service line |
-| `/intelligence` | `intelligence.astro` | Service line |
-| `/contact` | `contact.astro` | Contact form |
-| `/insights` | `insights/index.astro` | Guides index |
-| `/insights/<slug>` | `insights/[...slug].astro` | Guide (5 entries) |
-| `/privacy` | `privacy.astro` | Legal (template, needs review) |
-| `/terms` | `terms.astro` | Legal (template, needs review) |
-| `/404` | `404.astro` | Not found |
-| `/rss.xml` | `rss.xml.ts` | RSS feed (prerendered) |
+| Route              | Source                     | Kind                                      |
+| ------------------ | -------------------------- | ----------------------------------------- |
+| `/`                | `src/pages/index.astro`    | Home                                      |
+| `/about`           | `about.astro`              | Company                                   |
+| `/assurance`       | `assurance.astro`          | Service line                              |
+| `/audit-os`        | `audit-os.astro`           | Service line                              |
+| `/labs`            | `labs.astro`               | Service line + **stubbed** sandbox island |
+| `/advisory`        | `advisory.astro`           | Service line                              |
+| `/academy`         | `academy.astro`            | Service line                              |
+| `/intelligence`    | `intelligence.astro`       | Service line                              |
+| `/contact`         | `contact.astro`            | Contact form                              |
+| `/insights`        | `insights/index.astro`     | Guides index                              |
+| `/insights/<slug>` | `insights/[...slug].astro` | Guide (5 entries)                         |
+| `/privacy`         | `privacy.astro`            | Legal (template, needs review)            |
+| `/terms`           | `terms.astro`              | Legal (template, needs review)            |
+| `/404`             | `404.astro`                | Not found                                 |
+| `/rss.xml`         | `rss.xml.ts`               | RSS feed (prerendered)                    |
 
 `sitemap-index.xml` and `sitemap-0.xml` are generated by `@astrojs/sitemap` at build.
 
 ### API endpoints (all `prerender = false`, run in the Worker)
 
-| Endpoint | Purpose |
-| --- | --- |
-| `POST /api/contact` | Contact form submission (validate, persist lead, optional email) |
-| `POST /api/subscribe` | Newsletter subscribe |
+| Endpoint              | Purpose                                                          |
+| --------------------- | ---------------------------------------------------------------- |
+| `POST /api/contact`   | Contact form submission (validate, persist lead, optional email) |
+| `POST /api/subscribe` | Newsletter subscribe                                             |
 
 ### Feature presence on `main`
 
-| Feature | State on `main` |
-| --- | --- |
-| Marketing pages + final copy | **Present.** All routes, final copy via `site.config.ts`, five Insights guides. |
-| SEO / AI discoverability | **Present.** JSON-LD emitters (Organization/Service/FaqPage), `robots.txt`, `llms.txt`, generated sitemap with priorities, RSS. |
-| Labs interactive demos | **Stub only.** `/labs` embeds `src/components/islands/SandboxDemo.tsx`, a placeholder React island. The four real demos are on an unmerged branch (see below). |
-| Site-wide AI assistant | **Not present** on `main`. |
-| `/admin` area | **Not present** on `main`. |
+| Feature                      | State on `main`                                                                                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Marketing pages + final copy | **Present.** All routes, final copy via `site.config.ts`, five Insights guides.                                                                                |
+| SEO / AI discoverability     | **Present.** JSON-LD emitters (Organization/Service/FaqPage), `robots.txt`, `llms.txt`, generated sitemap with priorities, RSS.                                |
+| Labs interactive demos       | **Stub only.** `/labs` embeds `src/components/islands/SandboxDemo.tsx`, a placeholder React island. The four real demos are on an unmerged branch (see below). |
+| Site-wide AI assistant       | **Not present** on `main`.                                                                                                                                     |
+| `/admin` area                | **Not present** on `main`.                                                                                                                                     |
 
 ---
 
@@ -429,18 +436,18 @@ CREATE TABLE IF NOT EXISTS demo_sessions (
 );
 ```
 
-| Table | Purpose |
-| --- | --- |
-| `leads` | Contact-form submissions (used by `/api/contact`) |
-| `subscribers` | Newsletter subscribers (used by `/api/subscribe`) |
+| Table           | Purpose                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| `leads`         | Contact-form submissions (used by `/api/contact`)                                         |
+| `subscribers`   | Newsletter subscribers (used by `/api/subscribe`)                                         |
 | `demo_sessions` | Reserved placeholder for future Labs sandboxes; not read or written by any code on `main` |
 
 ### Seed and apply scripts
 
-| Script | What it does |
-| --- | --- |
+| Script                          | What it does                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `db/apply.ts` (`pnpm db:apply`) | Reads `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN`, applies `db/schema.sql` via `executeMultiple`. Uses `@libsql/client/web`. |
-| `db/seed.ts` (`pnpm db:seed`) | Inserts a sample subscriber (`demo@example.com`, `INSERT OR IGNORE`) and a sample lead (marked `[placeholder]`). |
+| `db/seed.ts` (`pnpm db:seed`)   | Inserts a sample subscriber (`demo@example.com`, `INSERT OR IGNORE`) and a sample lead (marked `[placeholder]`).         |
 
 There is no `db:reset`, no `db:setup`, and no content seed on this branch.
 
@@ -458,13 +465,13 @@ One collection, `insights` (`src/content.config.ts`), loaded from `src/content/i
 
 ## Build-state read
 
-| Capability | State on `main` |
-| --- | --- |
-| Framework and design system | **In place.** Astro 7 + Cloudflare adapter, Tailwind v4 `@theme` tokens, component primitives, layouts. |
-| Page content and SEO/GEO | **In place.** Final copy via `site.config.ts`, five Insights guides, JSON-LD, `robots.txt`, `llms.txt`, generated sitemap, RSS. Some legal/contact specifics remain as `{{PLACEHOLDER}}`/`[placeholder]` tokens. |
-| Labs demos and AI assistant | **Not on `main`.** `/labs` shows a stubbed island; the real demos and the assistant live on an unmerged branch. |
-| Admin and database-driven content | **Not built.** |
-| Database scripts and seeding | **Basic.** Apply + seed only, via Node `--experimental-strip-types`; the reworked CLI-free tooling is on an unmerged branch. |
+| Capability                        | State on `main`                                                                                                                                                                                                  |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework and design system       | **In place.** Astro 7 + Cloudflare adapter, Tailwind v4 `@theme` tokens, component primitives, layouts.                                                                                                          |
+| Page content and SEO/GEO          | **In place.** Final copy via `site.config.ts`, five Insights guides, JSON-LD, `robots.txt`, `llms.txt`, generated sitemap, RSS. Some legal/contact specifics remain as `{{PLACEHOLDER}}`/`[placeholder]` tokens. |
+| Labs demos and AI assistant       | **Not on `main`.** `/labs` shows a stubbed island; the real demos and the assistant live on an unmerged branch.                                                                                                  |
+| Admin and database-driven content | **Not built.**                                                                                                                                                                                                   |
+| Database scripts and seeding      | **Basic.** Apply + seed only, via Node `--experimental-strip-types`; the reworked CLI-free tooling is on an unmerged branch.                                                                                     |
 
 ### Built but unmerged feature branches
 
@@ -553,4 +560,7 @@ Unfinished or to-confirm items found on `main`:
   - `src/pages/insights/index.astro`: `{{ASSET: final ISO 42001 readiness checklist PDF to add (R2)}}`.
   - `db/seed.ts`: the sample lead message is marked `[placeholder]` (development data only).
 - **Infrastructure placeholders:** `CACHE` KV id (`REPLACE_WITH_KV_NAMESPACE_ID`) in `wrangler.jsonc`; the placeholder cron trigger with no handler; the adapter-injected `SESSION` KV binding; the R2 bucket and a custom domain to create.
+
+```
+
 ```
