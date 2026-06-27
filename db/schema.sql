@@ -1,5 +1,5 @@
 -- Murikah database schema (Turso / libSQL).
--- Apply with:  pnpm db:apply   (see README) — or pipe into the Turso CLI:
+-- Apply with:  pnpm db:apply   (see README), or pipe into the Turso CLI:
 --   turso db shell <your-db> < db/schema.sql
 -- Idempotent: safe to run repeatedly.
 

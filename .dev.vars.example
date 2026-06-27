@@ -2,11 +2,11 @@
 # `astro dev` reads these via the adapter's platformProxy; `wrangler dev` reads them natively.
 # In production these are set as Cloudflare secrets (see README), NOT committed.
 
-# --- Turso (libSQL) — required for contact/subscribe persistence ---
+# --- Turso (libSQL), required for contact/subscribe persistence ---
 TURSO_DATABASE_URL="libsql://your-database-name.turso.io"
 TURSO_AUTH_TOKEN="your-turso-auth-token"
 
-# --- Resend transactional email — OPTIONAL ---
+# --- Resend transactional email, OPTIONAL ---
 # If RESEND_API_KEY is empty/unset, email sending is skipped (no-op) and the
 # endpoints still validate + persist. The build never requires a key.
 RESEND_API_KEY=""
