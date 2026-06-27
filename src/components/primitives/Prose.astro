@@ -19,23 +19,34 @@ const { class: className } = Astro.props;
   .prose-murikah {
     max-width: 68ch;
     color: var(--color-ink);
-    font-size: 1.0625rem;
-    line-height: 1.7;
+    font-size: 1.1875rem;
+    line-height: 1.75;
   }
   .prose-murikah > * + * {
-    margin-top: 1.15em;
+    margin-top: 1.2em;
   }
+  /* The opening paragraph reads as a lead. */
+  .prose-murikah > p:first-of-type {
+    font-size: 1.3125rem;
+    line-height: 1.6;
+    color: var(--color-ink);
+  }
+  /* Headings in Fraunces so the reading experience carries the brand voice. */
   .prose-murikah h2 {
     margin-top: 2em;
-    margin-bottom: 0.4em;
-    font-size: var(--text-2xl);
-    line-height: 1.2;
+    margin-bottom: 0.45em;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: var(--text-3xl);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
     color: var(--color-navy);
     scroll-margin-top: 6rem;
   }
   .prose-murikah h3 {
-    margin-top: 1.6em;
+    margin-top: 1.7em;
     margin-bottom: 0.3em;
+    font-weight: 600;
     font-size: var(--text-xl);
     line-height: 1.3;
     color: var(--color-navy);
@@ -66,11 +77,29 @@ const { class: className } = Astro.props;
   .prose-murikah li + li {
     margin-top: 0.4em;
   }
+  /* Pull quote: Fraunces italic, set larger and quieter, with a short gold beam
+     instead of a heavy rule. A calm editorial pause. */
   .prose-murikah blockquote {
-    border-left: 3px solid var(--color-gold);
-    padding-left: 1em;
-    color: var(--color-slate);
+    margin-top: 1.8em;
+    margin-bottom: 1.8em;
+    padding-top: 0.2em;
+    font-family: var(--font-serif);
     font-style: italic;
+    font-size: 1.5rem;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    color: var(--color-navy);
+  }
+  .prose-murikah blockquote::before {
+    content: '';
+    display: block;
+    inline-size: 2.5rem;
+    block-size: 2px;
+    margin-bottom: 0.7em;
+    background: linear-gradient(90deg, var(--color-gold), transparent);
+  }
+  .prose-murikah blockquote p {
+    margin: 0;
   }
   .prose-murikah code {
     font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;

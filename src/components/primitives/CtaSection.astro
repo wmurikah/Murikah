@@ -30,12 +30,22 @@ const {
 } = Astro.props;
 ---
 
-<Section tone="navy" id={id}>
-  <div class="mx-auto max-w-2xl text-center">
-    {eyebrow && <p class="text-sm font-semibold tracking-widest text-gold uppercase">{eyebrow}</p>}
-    <h2 class="mt-3 text-3xl text-white sm:text-4xl">{title}</h2>
-    {body && <p class="mx-auto mt-4 max-w-prose text-paper/85">{body}</p>}
-    <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+<Section tone="navy-rich" id={id} class="relative overflow-hidden">
+  {/* The signature light, placed once behind the closing statement. */}
+  <div
+    aria-hidden="true"
+    class="aperture top-0 left-1/2 h-[26rem] w-[34rem] -translate-x-1/2 -translate-y-1/2"
+  >
+  </div>
+  <div class="reveal relative mx-auto max-w-2xl text-center">
+    {eyebrow && <p class="eyebrow is-centred">{eyebrow}</p>}
+    <h2
+      class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-balance text-white"
+    >
+      {title}
+    </h2>
+    {body && <p class="mx-auto mt-5 max-w-prose text-lg text-paper/80">{body}</p>}
+    <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
       <Button href={primaryHref} variant="primary" size="lg">{primaryLabel}</Button>
       {
         secondaryLabel && secondaryHref && (
@@ -43,7 +53,7 @@ const {
             href={secondaryHref}
             variant="ghost"
             size="lg"
-            class="text-white ring-white/30 hover:bg-white/10"
+            class="text-white ring-white/25 hover:bg-white/10 hover:ring-white/40"
           >
             {secondaryLabel}
           </Button>
