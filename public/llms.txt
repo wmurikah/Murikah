@@ -2,7 +2,7 @@
 
 > Assurance. Systems. Intelligence. Pronounced moo-REE-kah, rhymes with Eureka.
 
-Murikah is an AI-native assurance and governance company, built in Africa. It helps regulated mid-market organisations run, prove and continuously improve their internal audit and their AI and system governance, at a fraction of the cost and rigidity of the Big 4 and enterprise governance, risk and compliance (GRC) software. The company combines senior, credentialed assurance judgement with a working software platform in one relationship, priced for the African mid-market rather than the global enterprise. Some pages on the site still carry clearly-marked placeholder tokens pending final confirmation.
+Murikah is an AI-native assurance and governance company, built in Africa. It helps regulated mid-market organisations run, prove and continuously improve their internal audit and their AI and system governance, at a fraction of the cost and rigidity of the Big 4 and enterprise governance, risk and compliance (GRC) software. The company combines senior, standards-based assurance judgement with a working software platform in one relationship, priced for the African mid-market rather than the global enterprise. Its work follows the IIA Global Internal Audit Standards and the ISO/IEC 27001 and ISO/IEC 42001 standards. Some pages on the site still carry clearly-marked placeholder tokens pending final confirmation.
 
 ## The six lines of work
 
@@ -17,14 +17,14 @@ Murikah is an AI-native assurance and governance company, built in Africa. It he
 
 Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. The first focus is SACCOs (regulated by SASRA), banks, microfinance institutions and fintechs (supervised by the Central Bank of Kenya), and donor-funded NGOs, with family-owned businesses that have active boards close behind.
 
-## Founder
+## Standards the work follows
 
-Wilberforce Murikah, founder, is a practising Group Head of Internal Audit and holds CISA, ISO/IEC 27001 Lead Auditor and ISO/IEC 42001 Lead Auditor credentials, plus an MSc in Information Systems and Technology, and is an AI-policy fellow. He built the Audit OS platform himself.
+Murikah works to the IIA Global Internal Audit Standards for its internal audit work, and to the ISO/IEC 27001 standard for information security and the ISO/IEC 42001 standard for AI management systems, which it audits against and helps clients prepare for. These are the standards the company works to and helps clients with, not certifications the company holds.
 
 ## Key pages
 
 - Home: https://www.murikah.com/
-- About and founder: https://www.murikah.com/about
+- About: https://www.murikah.com/about
 - Insights (guides): https://www.murikah.com/insights
 - Contact: https://www.murikah.com/contact
 
