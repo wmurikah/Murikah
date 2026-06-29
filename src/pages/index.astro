@@ -14,27 +14,47 @@ import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import { SITE, SERVICES, PRIMARY_CTA, AUDIENCE } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
-// Top three guides, newest first, for the home hub-and-spoke links.
 const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
   .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   .slice(0, 3);
 
-const why = [
+const commandMetrics = [
+  { label: 'Audit plan', value: 'Risk-led' },
+  { label: 'Evidence', value: 'Signed off' },
+  { label: 'Actions', value: 'Tracked' },
+  { label: 'Board pack', value: 'Ready' },
+];
+
+const proofPoints = [
   {
-    title: 'Service and software in one house',
-    body: 'The audit and the platform it runs on come from the same team, so nothing falls between a consultant and a vendor.',
+    step: '01',
+    title: 'Plan with clarity',
+    body: 'Map risks, controls, owners and engagements before fieldwork starts.',
   },
   {
-    title: 'Standards-based and AI-native',
-    body: 'Our assurance work follows the IIA Global Internal Audit Standards, with AI governance built in from the start under ISO 42001, not added on later.',
+    step: '02',
+    title: 'Collect evidence once',
+    body: 'Keep work papers, review notes and sign-offs in a single audit trail.',
   },
   {
-    title: 'Built for the African mid-market',
-    body: 'Designed for SACCOs, banks, fintechs and NGOs here, not a global enterprise template forced to fit.',
+    step: '03',
+    title: 'Close the loop',
+    body: 'Turn findings into owners, deadlines, follow-up and board-visible status.',
+  },
+];
+
+const positionCards = [
+  {
+    title: 'Assurance that reads like a product',
+    body: 'Clear screens, plain language and deliberate hierarchy so executives understand what matters without decoding audit jargon.',
   },
   {
-    title: 'Senior judgement, fair pricing',
-    body: 'Board-ready work without Big-4 fees or enterprise GRC licences, and you keep the evidence and the system when we step back.',
+    title: 'AI governance without theatre',
+    body: 'ISO/IEC 42001 readiness, data protection awareness and pragmatic controls that teams can actually run.',
+  },
+  {
+    title: 'A system your team keeps',
+    body: 'The platform, evidence, finding history and reporting discipline remain useful after the engagement.',
   },
 ];
 
@@ -42,17 +62,17 @@ const faqs: FaqItem[] = [
   {
     question: 'What does Murikah do?',
     answer:
-      'Murikah helps African organisations run, prove and improve their internal audit and AI governance. We deliver co-sourced and outsourced internal audit, a platform called Audit OS to run it on, advisory and training, and automation builds through Murikah Labs. You get senior judgement and working software in one relationship, priced for the mid-market.',
+      'Murikah helps African organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Audit OS, advisory, training and automation builds in one joined-up relationship.',
   },
   {
     question: 'Who is Murikah for?',
     answer:
-      'Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. Our first focus is SACCOs, banks, microfinance institutions and fintechs, and donor-funded NGOs, with family businesses that have active boards close behind.',
+      'Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. Our first focus is SACCOs, banks, microfinance institutions, fintechs, donor-funded NGOs and family businesses with active boards.',
   },
   {
     question: 'How is Murikah different from the Big 4 and from audit software?',
     answer:
-      'We combine both in one house. The Big 4 bring people but bill heavily and leave little behind. Audit software gives you a tool but no judgement. Murikah gives you senior, standards-based assurance and the platform it runs on, priced for the African mid-market, and you keep the evidence and the system when we step back.',
+      'We combine senior assurance judgement and the platform it runs on. You get people who can reason through the work, software that keeps evidence and follow-up moving, and a cost model designed for the African mid-market.',
   },
 ];
 ---
@@ -61,168 +81,204 @@ const faqs: FaqItem[] = [
   titleFull="Internal audit and AI governance, built in Africa | Murikah"
   description={SITE.description}
 >
-  {
-    /* Hero: the signature moment. Rich navy, one soft aperture of light behind a
-      confident Fraunces headline, with a staggered load sequence. */
-  }
-  <section class="navy-rich grain on-dark relative overflow-hidden" aria-labelledby="hero-title">
-    <div
-      aria-hidden="true"
-      class="aperture top-[14%] left-[6%] h-[32rem] w-[44rem] opacity-90 sm:h-[40rem] sm:w-[56rem]"
-    >
-    </div>
-    <Container class="relative">
-      <div class="max-w-3xl py-24 sm:py-28 lg:py-36">
-        <p class="eyebrow rise" style="--rise-delay: 0.05s">
-          AI-native assurance and governance, built in Africa
+  <section class="showpiece relative overflow-hidden" aria-labelledby="hero-title">
+    <div aria-hidden="true" class="showpiece-grid"></div>
+    <div aria-hidden="true" class="showpiece-glow showpiece-glow-a"></div>
+    <div aria-hidden="true" class="showpiece-glow showpiece-glow-b"></div>
+    <Container class="relative py-14 sm:py-16 lg:py-20">
+      <div class="mx-auto max-w-5xl text-center">
+        <p class="eyebrow rise is-centred" style="--rise-delay: 0.05s">
+          Assurance, governance and evidence in one calm operating system
         </p>
         <h1
           id="hero-title"
-          class="rise mt-6 font-serif text-[length:var(--text-display)] leading-[1.02] font-semibold tracking-[-0.028em] text-pretty break-words text-white"
+          class="rise mx-auto mt-5 max-w-4xl text-[clamp(2.75rem,7vw,5.8rem)] leading-[0.9] font-semibold tracking-[-0.06em] text-balance text-white"
           style="--rise-delay: 0.13s"
         >
-          Assurance you can run, prove, and keep improving.
+          The board can see it. The team can run it.
         </h1>
-        <p class="rise mt-7 max-w-2xl text-lg text-paper/80 sm:text-xl" style="--rise-delay: 0.22s">
-          Murikah helps African organisations run their internal audit and AI governance, prove it
-          to boards and regulators, and improve it continuously. Senior judgement and a working
-          platform in one relationship, priced for the mid-market, not the global enterprise.
+        <p
+          class="rise mx-auto mt-6 max-w-2xl text-base leading-7 text-white/70 sm:text-xl sm:leading-8"
+          style="--rise-delay: 0.22s"
+        >
+          Murikah turns internal audit and AI governance into a premium, evidence-led experience:
+          senior judgement, Audit OS and board-ready reporting built for African organisations.
         </p>
-        <div class="rise mt-10 flex flex-col gap-3 sm:flex-row" style="--rise-delay: 0.31s">
+        <div
+          class="rise mt-8 flex flex-col justify-center gap-3 sm:flex-row"
+          style="--rise-delay: 0.31s"
+        >
           <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
           <Button
             href="/audit-os"
             variant="ghost"
             size="lg"
-            class="text-white ring-white/25 hover:bg-white/10 hover:ring-white/40"
+            class="text-white ring-white/25 hover:bg-white/10 hover:ring-white/45"
           >
-            Explore Audit OS
+            See Audit OS
           </Button>
         </div>
-        <div class="rise mt-14 max-w-xl" style="--rise-delay: 0.4s">
-          <hr class="beam border-0" />
-          <p class="mt-4 text-sm text-paper/60">
-            Our work follows the IIA Global Internal Audit Standards, ISO/IEC 27001 and ISO/IEC
-            42001.
-          </p>
+      </div>
+
+      <div class="rise mt-10" style="--rise-delay: 0.4s">
+        <div class="command-shell mx-auto max-w-6xl">
+          <div class="command-rail">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="command-screen">
+            <div class="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+              <div class="command-panel command-panel-dark">
+                <p class="text-xs font-semibold tracking-[0.18em] text-gold uppercase">
+                  Murikah command
+                </p>
+                <h2 class="mt-3 text-2xl leading-tight tracking-[-0.035em] text-white sm:text-3xl">
+                  Assurance status, without the scramble.
+                </h2>
+                <p class="mt-4 text-white/58">
+                  A single view of scope, evidence, actions and board readiness.
+                </p>
+                <div class="mt-5 grid grid-cols-2 gap-2">
+                  {
+                    commandMetrics.map((metric) => (
+                      <div class="rounded-xl bg-white/[0.07] p-3 ring-1 ring-white/10">
+                        <p class="text-xs text-white/45">{metric.label}</p>
+                        <p class="mt-1 text-lg font-medium text-white">{metric.value}</p>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+              <div class="grid gap-3">
+                {
+                  proofPoints.map((item) => (
+                    <div class="command-row">
+                      <span>{item.step}</span>
+                      <div>
+                        <h3>{item.title}</h3>
+                        <p>{item.body}</p>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Container>
   </section>
 
-  {/* Six lines, as an editorial index rather than a card grid. */}
-  <Section tone="paper" aria-labelledby="services-title">
-    <div class="reveal max-w-2xl">
-      <p class="eyebrow">What we do</p>
+  <Section
+    tone="paper"
+    aria-labelledby="position-title"
+    class="border-b border-hairline !py-12 lg:!py-16"
+  >
+    <div class="reveal mx-auto max-w-4xl text-center">
+      <p class="eyebrow is-centred">The new standard</p>
       <h2
-        id="services-title"
-        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+        id="position-title"
+        class="mt-5 text-[clamp(2rem,5vw,4.25rem)] leading-[0.96] font-semibold tracking-[-0.055em] text-balance text-navy"
       >
-        One company, six ways we help
+        Not another consultancy deck. Not another abandoned tool.
       </h2>
-      <p class="mt-4 text-lg text-slate">
-        From the audit itself to the platform it runs on, each line stands alone or works with the
-        others.
+      <p class="mx-auto mt-7 max-w-2xl text-xl text-slate">
+        The service, software and reporting model are designed together, so assurance feels coherent
+        from fieldwork to committee pack.
+      </p>
+    </div>
+    <div class="mt-10 grid gap-4 lg:grid-cols-3">
+      {
+        positionCards.map((item, index) => (
+          <article class:list={['reveal bento-card', index === 0 && 'lg:row-span-2']}>
+            <p class="text-sm font-semibold tracking-[0.16em] text-gold uppercase">0{index + 1}</p>
+            <h3 class="mt-5 text-2xl leading-tight tracking-[-0.035em] text-navy">{item.title}</h3>
+            <p class="mt-4 text-slate">{item.body}</p>
+          </article>
+        ))
+      }
+    </div>
+  </Section>
+
+  <Section
+    tone="surface"
+    aria-labelledby="services-title"
+    class="border-b border-hairline !py-12 lg:!py-16"
+  >
+    <div class="reveal grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
+      <div>
+        <p class="eyebrow">Services</p>
+        <h2
+          id="services-title"
+          class="mt-5 text-[length:var(--text-title)] leading-[1.02] font-semibold tracking-[-0.045em] text-navy"
+        >
+          Six doors into one assurance system.
+        </h2>
+      </div>
+      <p class="max-w-2xl text-lg text-slate lg:justify-self-end">
+        Start with the line you need today. Keep a coherent operating model as your audit,
+        governance, automation and training needs expand.
       </p>
     </div>
 
-    <ul class="mt-14 border-t border-hairline">
+    <div class="mt-12 grid gap-3">
       {
         SERVICES.map((s, i) => (
-          <li class="reveal">
-            <a
-              href={s.href}
-              class="group grid grid-cols-[2.5rem_1fr] items-baseline gap-x-5 gap-y-2 border-b border-hairline py-7 no-underline transition-[padding] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:pl-2 sm:grid-cols-[3rem_1fr_auto] sm:py-8"
-            >
-              <span class="font-serif text-xl text-gold tabular-nums sm:text-2xl">
-                {String(i + 1).padStart(2, '0')}
-              </span>
-              <div>
-                <h3 class="text-xl text-navy transition-colors group-hover:text-blue sm:text-2xl">
-                  {s.fullName}
-                </h3>
-                <p class="mt-2 max-w-2xl text-slate">{s.summary}</p>
-              </div>
-              <span
-                aria-hidden="true"
-                class="col-start-2 mt-1 inline-flex items-center gap-1 font-medium text-blue sm:col-start-3 sm:mt-0 sm:self-center"
-              >
-                <span class="hidden sm:inline">View</span>
-                <span class="transition-transform duration-200 group-hover:translate-x-1">
-                  &rarr;
-                </span>
-              </span>
-            </a>
-          </li>
+          <a href={s.href} class="reveal service-slab group no-underline">
+            <span class="service-slab-number">{String(i + 1).padStart(2, '0')}</span>
+            <div>
+              <h3>{s.name}</h3>
+              <p>{s.summary}</p>
+            </div>
+            <span class="service-slab-arrow" aria-hidden="true">
+              &rarr;
+            </span>
+          </a>
         ))
       }
-    </ul>
-  </Section>
-
-  {/* Who it is for, asymmetric: a statement beside a quiet list. */}
-  <Section tone="surface" aria-labelledby="audience-title" class="border-y border-hairline">
-    <div class="grid gap-10 lg:grid-cols-12 lg:gap-16">
-      <div class="reveal lg:col-span-5">
-        <p class="eyebrow">Who it is for</p>
-        <h2
-          id="audience-title"
-          class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
-        >
-          Built for the people accountable for assurance
-        </h2>
-        <p class="mt-4 text-lg text-slate">
-          Regulated, mid-market organisations and the boards, audit committees and executives who
-          answer for their controls and their risk.
-        </p>
-      </div>
-      <ul class="reveal lg:col-span-7">
-        {
-          AUDIENCE.map((seg) => (
-            <li class="border-t border-hairline py-5 first:border-t-0 lg:py-6">
-              <p class="font-medium text-navy">{seg.name}</p>
-              <p class="mt-1.5 text-slate">{seg.note}</p>
-            </li>
-          ))
-        }
-      </ul>
     </div>
   </Section>
 
-  {/* Why Murikah, depersonalised: company-level reasons, not credentials. */}
-  <Section tone="paper" aria-labelledby="why-title">
-    <div class="reveal max-w-2xl">
-      <p class="eyebrow">Why Murikah</p>
+  <Section
+    tone="paper"
+    aria-labelledby="audience-title"
+    class="border-b border-hairline !py-12 lg:!py-16"
+  >
+    <div class="reveal mx-auto max-w-3xl text-center">
+      <p class="eyebrow is-centred">Who it is for</p>
       <h2
-        id="why-title"
-        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+        id="audience-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.02] font-semibold tracking-[-0.045em] text-navy"
       >
-        The service and the software, from one team
+        Built for organisations where assurance has consequences.
       </h2>
     </div>
-    <div class="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-2">
+    <div class="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
       {
-        why.map((w) => (
-          <div class="reveal border-t border-hairline pt-6">
-            <h3 class="text-xl text-navy">{w.title}</h3>
-            <p class="mt-2.5 text-slate">{w.body}</p>
+        AUDIENCE.map((seg) => (
+          <div class="reveal audience-tile">
+            <p>{seg.name}</p>
+            <span>{seg.note}</span>
           </div>
         ))
       }
     </div>
   </Section>
 
-  {/* Top guides (hub-and-spoke). */}
   {
     topGuides.length > 0 && (
-      <Section tone="surface" aria-labelledby="guides-title" class="border-t border-hairline">
+      <Section
+        tone="surface"
+        aria-labelledby="guides-title"
+        class="border-b border-hairline !py-12 lg:!py-16"
+      >
         <div class="reveal flex flex-wrap items-end justify-between gap-4">
           <div>
             <p class="eyebrow">Insights</p>
             <h2
               id="guides-title"
-              class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+              class="mt-5 text-[length:var(--text-title)] leading-[1.02] font-semibold tracking-[-0.045em] text-navy"
             >
-              Start with a guide
+              Learn the thinking behind the system
             </h2>
           </div>
           <a
@@ -251,15 +307,14 @@ const faqs: FaqItem[] = [
     )
   }
 
-  {/* Home FAQ + matching schema. */}
-  <Section tone="paper" aria-labelledby="home-faq">
+  <Section tone="paper" aria-labelledby="home-faq" class="!py-12 lg:!py-16">
     <div class="reveal max-w-2xl">
       <p class="eyebrow">Questions</p>
       <h2
         id="home-faq"
-        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.02em] text-navy"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.02] font-semibold tracking-[-0.045em] text-navy"
       >
-        Common questions
+        Questions before you book
       </h2>
     </div>
     <Faq items={faqs} class="reveal mt-10 max-w-3xl" />
@@ -268,7 +323,7 @@ const faqs: FaqItem[] = [
 
   <CtaSection
     eyebrow="Book a demo"
-    title="See what assurance looks like when it is built to be proven"
+    title="Make your assurance function feel composed, current and board-ready"
     body="Book a demo and we will map Murikah to your audit universe, your regulator and your board."
     secondaryLabel="Contact us"
     secondaryHref="/contact"

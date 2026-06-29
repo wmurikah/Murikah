@@ -22,20 +22,34 @@ const isActive = (href: string) =>
 const servicesActive = serviceHrefs.some((h) => path === h || path.startsWith(h + '/'));
 
 const navLink =
-  'inline-flex min-h-[2.75rem] items-center gap-1 rounded-md px-3 font-medium text-ink/90 transition-colors duration-150 hover:bg-paper-shade hover:text-navy';
-const activeLink = 'bg-paper-shade text-navy';
+  'inline-flex min-h-[2.75rem] items-center gap-1 rounded-full px-4 text-sm font-medium text-ink/80 transition-colors duration-150 hover:bg-white hover:text-navy';
+const activeLink = 'bg-white text-navy shadow-card';
+
+const serviceMenu = [
+  { href: '/assurance', name: 'Assurance', note: 'Audit and assurance' },
+  { href: '/audit-os', name: 'Audit OS', note: 'Work papers and findings' },
+  { href: '/labs', name: 'Labs', note: 'Automation and workflows' },
+  { href: '/advisory', name: 'Advisory', note: 'AI strategy and governance' },
+  { href: '/academy', name: 'Academy', note: 'Training and enablement' },
+  { href: '/intelligence', name: 'Intelligence', note: 'Benchmarks and reports' },
+];
 ---
 
-<header class="sticky top-0 z-50 border-b border-hairline bg-paper/85 backdrop-blur">
+<header
+  class="sticky top-0 z-50 border-b border-white/60 bg-white/72 shadow-[0_1px_30px_rgba(11,23,51,0.06)] backdrop-blur-xl"
+>
   <Container>
-    <div class="flex h-16 items-center justify-between lg:h-20">
+    <div class="flex h-16 items-center justify-between lg:h-[4.5rem]">
       {/* Logo, top-left, links home (Jakob's Law). */}
       <a href="/" class="rounded-md no-underline" aria-label="Murikah, home">
         <Logo />
       </a>
 
       {/* Desktop primary nav */}
-      <nav aria-label="Primary" class="hidden items-center gap-1 lg:flex">
+      <nav
+        aria-label="Primary"
+        class="hidden items-center gap-1 rounded-full bg-paper/70 p-1 ring-1 ring-hairline/70 lg:flex"
+      >
         <div class="relative" data-dropdown>
           <button
             type="button"
@@ -68,18 +82,32 @@ const activeLink = 'bg-paper-shade text-navy';
             id="services-menu"
             data-dropdown-panel
             hidden
-            class="absolute right-0 mt-2 w-[22rem] rounded-card bg-surface p-2 shadow-pop ring-1 ring-hairline"
+            class="absolute right-0 mt-3 w-[32rem] rounded-[1.4rem] bg-white/95 p-3 shadow-pop ring-1 ring-hairline backdrop-blur-xl"
           >
-            <ul class="grid gap-0.5">
+            <div class="flex items-center justify-between gap-4 border-b border-hairline px-2 pb-2">
+              <p class="text-xs font-semibold tracking-[0.16em] text-slate uppercase">
+                Choose a service
+              </p>
+              <a
+                href="/assurance"
+                class="text-xs font-medium text-blue no-underline hover:underline"
+              >
+                View all
+              </a>
+            </div>
+            <ul class="mt-2 grid grid-cols-2 gap-1">
               {
-                SERVICES.map((s) => (
+                serviceMenu.map((item) => (
                   <li>
                     <a
-                      href={s.href}
-                      class="block rounded-lg px-3 py-2.5 no-underline transition-colors hover:bg-paper"
+                      href={item.href}
+                      class="group flex items-center gap-3 rounded-xl px-3 py-2.5 no-underline transition-colors hover:bg-paper"
                     >
-                      <span class="block font-medium text-navy">{s.fullName}</span>
-                      <span class="mt-0.5 block text-sm text-slate">{s.summary}</span>
+                      <span class="size-2 rounded-full bg-gold transition-transform group-hover:scale-125" />
+                      <span>
+                        <span class="block text-sm font-medium text-navy">{item.name}</span>
+                        <span class="mt-0.5 block text-xs text-slate">{item.note}</span>
+                      </span>
                     </a>
                   </li>
                 ))
@@ -144,7 +172,7 @@ const activeLink = 'bg-paper-shade text-navy';
               href={s.href}
               class="rounded-lg px-3 py-3 font-medium text-navy no-underline hover:bg-paper-shade"
             >
-              {s.fullName}
+              {s.name}
             </a>
           ))
         }

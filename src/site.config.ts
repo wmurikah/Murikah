@@ -67,9 +67,9 @@ export const SITE = {
   locale: 'en',
   /** Pronunciation cue, surfaced at first prominent use and in the footer. */
   pronunciation: 'moo-REE-kah, rhymes with Eureka',
-  /** The meaning behind the name, used on About. */
+  /** Company-level positioning. Do not explain the founder or personal origin of the name. */
   meaning:
-    'The name echoes the Swahili idea of shining a light on something and bringing it into the open, which is exactly what assurance does for an organisation.',
+    'Murikah is an assurance and governance company. The brand stands for clarity, evidence and disciplined improvement.',
   defaultOgImage: '/og-default.png',
   /** {{CONTACT: confirm the final public address}} */
   email: 'hello@murikah.com',
@@ -152,6 +152,7 @@ export const NAV: NavItem[] = [
       description: s.summary,
     })),
   },
+  { label: 'Audit OS', href: '/audit-os' },
   { label: 'Insights', href: '/insights' },
   { label: 'About', href: '/about' },
 ];
