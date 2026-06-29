@@ -254,3 +254,122 @@
     animation: none !important;
   }
 }
+
+@layer components {
+  .hero-luxe {
+    background:
+      radial-gradient(circle at 12% 18%, rgba(201, 162, 39, 0.24), transparent 27rem),
+      radial-gradient(circle at 88% 12%, rgba(81, 126, 214, 0.22), transparent 30rem),
+      linear-gradient(145deg, #030814 0%, #071229 42%, #111827 100%);
+  }
+
+  .orb {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    filter: blur(34px);
+    opacity: 0.72;
+  }
+
+  .orb-one {
+    right: -12rem;
+    top: 7rem;
+    width: 34rem;
+    height: 34rem;
+    background: rgba(201, 162, 39, 0.16);
+  }
+
+  .orb-two {
+    left: 48%;
+    bottom: -18rem;
+    width: 42rem;
+    height: 42rem;
+    background: rgba(30, 79, 163, 0.22);
+  }
+
+  .hero-device {
+    position: relative;
+    overflow: hidden;
+    border-radius: 2rem;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
+    padding: 0.75rem;
+    box-shadow:
+      0 40px 120px -40px rgba(0, 0, 0, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  .hero-device::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.04));
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .device-topbar {
+    display: flex;
+    gap: 0.45rem;
+    padding: 0.75rem 0.85rem 0.95rem;
+  }
+
+  .device-topbar span {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.32);
+  }
+
+  .device-screen {
+    border-radius: 1.55rem;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(201, 162, 39, 0.18), transparent 18rem),
+      rgba(5, 12, 28, 0.86);
+    padding: clamp(1rem, 3vw, 1.6rem);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  }
+
+  .device-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .glass-card {
+    min-height: 12rem;
+    border-radius: 1.35rem;
+    background: rgba(255, 255, 255, 0.075);
+    padding: 1.1rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .premium-card {
+    display: flex;
+    min-height: 22rem;
+    flex-direction: column;
+    border-radius: 1.75rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(247, 244, 238, 0.82)),
+      var(--color-surface);
+    padding: clamp(1.35rem, 3vw, 2rem);
+    box-shadow: var(--shadow-card);
+    border: 1px solid color-mix(in srgb, var(--color-hairline) 80%, transparent);
+    transition:
+      transform 220ms var(--ease-out-soft),
+      box-shadow 220ms var(--ease-out-soft),
+      border-color 220ms var(--ease-out-soft);
+  }
+
+  .premium-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lift);
+    border-color: color-mix(in srgb, var(--color-gold) 42%, var(--color-hairline));
+  }
+}
