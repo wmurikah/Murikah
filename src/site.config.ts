@@ -152,6 +152,7 @@ export const NAV: NavItem[] = [
       description: s.summary,
     })),
   },
+  { label: 'Audit OS', href: '/audit-os' },
   { label: 'Insights', href: '/insights' },
   { label: 'About', href: '/about' },
 ];
