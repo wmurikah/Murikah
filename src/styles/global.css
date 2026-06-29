@@ -258,9 +258,9 @@
 @layer components {
   .hero-luxe {
     background:
-      radial-gradient(circle at 12% 10%, rgba(201, 162, 39, 0.2), transparent 25rem),
-      radial-gradient(circle at 86% 6%, rgba(30, 79, 163, 0.14), transparent 30rem),
-      linear-gradient(180deg, #ffffff 0%, var(--color-paper) 86%);
+      radial-gradient(circle at 12% 18%, rgba(201, 162, 39, 0.24), transparent 27rem),
+      radial-gradient(circle at 88% 12%, rgba(81, 126, 214, 0.22), transparent 30rem),
+      linear-gradient(145deg, #030814 0%, #071229 42%, #111827 100%);
   }
 
   .orb {
@@ -276,7 +276,7 @@
     top: 7rem;
     width: 34rem;
     height: 34rem;
-    background: rgba(201, 162, 39, 0.14);
+    background: rgba(201, 162, 39, 0.16);
   }
 
   .orb-two {
@@ -284,7 +284,7 @@
     bottom: -18rem;
     width: 42rem;
     height: 42rem;
-    background: rgba(30, 79, 163, 0.12);
+    background: rgba(30, 79, 163, 0.22);
   }
 
   .hero-device {
