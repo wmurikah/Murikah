@@ -17,6 +17,13 @@ import { NAV, PRIMARY_CTA, SERVICES } from '@/site.config';
 const path = Astro.url.pathname;
 const serviceHrefs = SERVICES.map((s) => s.href);
 
+// Services disclosure menu: the service lines plus a short note per service,
+// keyed by slug so the template can look up each one as it renders.
+const serviceMenu = SERVICES;
+const serviceMenuNotes: Record<string, string> = Object.fromEntries(
+  SERVICES.map((s) => [s.slug, s.summary])
+);
+
 const isActive = (href: string) =>
   path === href || (href !== '/' && path.startsWith(href + '/')) || path === href + '/';
 const servicesActive = serviceHrefs.some((h) => path === h || path.startsWith(h + '/'));
@@ -88,7 +95,7 @@ const activeLink = 'bg-white text-navy shadow-card';
             </div>
             <ul class="mt-2 grid grid-cols-2 gap-1">
               {
-                serviceMenu.map((item) => (
+                serviceMenu.map((s) => (
                   <li>
                     <a
                       href={s.href}
