@@ -75,16 +75,32 @@ const activeLink = 'bg-white text-navy shadow-card';
             hidden
             class="absolute right-0 mt-3 w-[24rem] rounded-[1.4rem] bg-white/95 p-2 shadow-pop ring-1 ring-hairline backdrop-blur-xl"
           >
-            <ul class="grid gap-0.5">
+            <div class="flex items-center justify-between gap-4 border-b border-hairline px-2 pb-2">
+              <p class="text-xs font-semibold tracking-[0.16em] text-slate uppercase">
+                Choose a service
+              </p>
+              <a
+                href="/assurance"
+                class="text-xs font-medium text-blue no-underline hover:underline"
+              >
+                View all
+              </a>
+            </div>
+            <ul class="mt-2 grid grid-cols-2 gap-1">
               {
                 SERVICES.map((s) => (
                   <li>
                     <a
                       href={s.href}
-                      class="block rounded-lg px-3 py-2.5 no-underline transition-colors hover:bg-paper"
+                      class="group flex items-center gap-3 rounded-xl px-3 py-2.5 no-underline transition-colors hover:bg-paper"
                     >
-                      <span class="block font-medium text-navy">{s.fullName}</span>
-                      <span class="mt-0.5 block text-sm text-slate">{s.summary}</span>
+                      <span class="size-2 rounded-full bg-gold transition-transform group-hover:scale-125" />
+                      <span>
+                        <span class="block text-sm font-medium text-navy">{s.name}</span>
+                        <span class="mt-0.5 block text-xs text-slate">
+                          {serviceMenuNotes[s.slug]}
+                        </span>
+                      </span>
                     </a>
                   </li>
                 ))
@@ -149,7 +165,7 @@ const activeLink = 'bg-white text-navy shadow-card';
               href={s.href}
               class="rounded-lg px-3 py-3 font-medium text-navy no-underline hover:bg-paper-shade"
             >
-              {s.fullName}
+              {s.name}
             </a>
           ))
         }
