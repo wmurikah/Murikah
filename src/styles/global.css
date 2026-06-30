@@ -24,7 +24,7 @@
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: var(--text-base);
-    line-height: 1.6;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -39,8 +39,8 @@
     }
   }
 
-  /* Headings default to Outfit; tight leading + slight negative tracking.
-     The hero headline opts into Fraunces via the `font-serif` utility. */
+  /* Headings use the neutral sans by default, with tight leading and slightly
+     negative tracking for an Apple-like feel. */
   h1,
   h2,
   h3,
@@ -50,7 +50,7 @@
     color: var(--color-navy);
     font-weight: 600;
     line-height: 1.15;
-    letter-spacing: -0.015em;
+    letter-spacing: -0.018em;
     /* Avoid orphans/awkward breaks in headings. */
     text-wrap: balance;
   }
@@ -342,7 +342,7 @@
   }
 
   .glass-card {
-    min-height: 12rem;
+    min-height: 0;
     border-radius: 1.35rem;
     background: rgba(255, 255, 255, 0.075);
     padding: 1.1rem;
@@ -352,7 +352,7 @@
 
   .premium-card {
     display: flex;
-    min-height: 22rem;
+    min-height: 0;
     flex-direction: column;
     border-radius: 1.75rem;
     background:
@@ -371,5 +371,49 @@
     transform: translateY(-4px);
     box-shadow: var(--shadow-lift);
     border-color: color-mix(in srgb, var(--color-gold) 42%, var(--color-hairline));
+  }
+
+  /* Hero rotating panel: slides stack and cross-fade on a timer. The first
+     slide is active in the markup, so without JS (or under reduced motion) it
+     shows statically and the rest stay hidden. */
+  .hero-slides {
+    position: relative;
+    min-height: 9rem;
+  }
+  .hero-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-radius: 1.35rem;
+    background: rgba(255, 255, 255, 0.075);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    padding: 1.25rem;
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+      opacity 0.6s var(--ease-out-soft),
+      transform 0.6s var(--ease-out-soft);
+    pointer-events: none;
+  }
+  .hero-slide.is-active {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  .hero-dot {
+    inline-size: 0.4rem;
+    block-size: 0.4rem;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.25);
+    transition:
+      inline-size 0.3s var(--ease-out-soft),
+      background-color 0.3s var(--ease-out-soft);
+  }
+  .hero-dot.is-active {
+    inline-size: 1.1rem;
+    background: var(--color-gold);
   }
 }
