@@ -4,16 +4,16 @@
  * Organization JSON-LD), the skip link, header, <main>, and footer. Semantic
  * landmarks throughout (header/nav/main/footer) for assistive tech.
  *
- * Fonts are self-hosted via Fontsource (font-display: swap) and the two woff2
- * files are preloaded to protect LCP and prevent late-font layout shift.
+ * The primary sans is a neutral, Apple-adjacent stack: Apple devices render
+ * native San Francisco via -apple-system, everything else gets bundled Inter.
+ * Inter is self-hosted via Fontsource (font-display: swap) and its variable
+ * woff2 is preloaded to protect LCP and prevent late-font layout shift.
  */
-import '@fontsource-variable/outfit/wght.css';
-import '@fontsource-variable/fraunces/wght.css';
+import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
 
-// `?url` → fingerprinted asset URLs for <link rel="preload">.
-import outfitWoff2 from '@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2?url';
-import frauncesWoff2 from '@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2?url';
+// `?url` → fingerprinted asset URL for <link rel="preload">.
+import interWoff2 from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
 
 import Seo from '@/components/Seo.astro';
 import OrganizationSchema from '@/components/schema/Organization.astro';
@@ -59,8 +59,7 @@ const { mainClass, ...seo } = Astro.props;
     <meta name="generator" content={Astro.generator} />
 
     {/* Preload the two self-hosted fonts (LCP + no layout shift). */}
-    <link rel="preload" href={outfitWoff2} as="font" type="font/woff2" crossorigin="anonymous" />
-    <link rel="preload" href={frauncesWoff2} as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href={interWoff2} as="font" type="font/woff2" crossorigin="anonymous" />
 
     <Seo {...seo} />
     <OrganizationSchema />
