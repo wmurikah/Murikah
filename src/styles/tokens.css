@@ -2,9 +2,9 @@
  * Murikah design tokens.
  *
  * Defined in a Tailwind v4 `@theme` block so every token is available BOTH as a
- * utility class (e.g. `bg-navy`, `text-slate`, `font-serif`, `text-display`) AND
- * as a raw CSS custom property (e.g. `var(--color-navy)`). This is the single
- * source of truth for colour, type, spacing rhythm, radius, shadow and motion.
+ * utility class (e.g. `bg-navy`, `text-slate`, `text-title`) AND as a raw CSS
+ * custom property (e.g. `var(--color-navy)`). This is the single source of truth
+ * for colour, type, spacing rhythm, radius, shadow and motion.
  *
  * Brand tokens are the exact values from the brand spec and must not drift.
  */
@@ -33,52 +33,54 @@
   --color-status-high: #b42318;
 
   /* ---- Type families ----------------------------------------------------- */
-  /* Outfit drives all UI + headings. Fraunces (serif) is reserved for the
-     hero headline only, applied via the `font-serif` utility, sparingly. */
+  /* Neutral, Apple-adjacent sans for both headings and body. Apple devices
+     render native San Francisco via -apple-system; everything else falls back
+     to bundled Inter. The serif token is retired: it points at the same stack
+     so the few remaining `font-serif` usages render in the neutral sans rather
+     than reintroducing a display serif. */
   --font-sans:
-    'Outfit Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-serif: 'Fraunces Variable', ui-serif, Georgia, 'Times New Roman', serif;
+    -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Inter', 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-serif: var(--font-sans);
 
-  /* ---- Modular type scale (~1.2 ratio, 17px base) ------------------------
-     Line-height + tracking are baked per step: tight, slightly negative
-     tracking on large sizes for a precise, premium feel; generous leading on
-     body for readability. Strong jumps make hierarchy obvious at a glance. */
-  --text-xs: 0.75rem;
+  /* ---- Type scale (Apple-like: smaller, tighter, neutral) ----------------
+     Sizes reduced from the previous scale; large headings carry tighter
+     letter-spacing and snug line-height, body stays comfortable. Tokens drive
+     the whole site so sizing updates consistently. */
+  --text-xs: 0.75rem; /* 12px, fine print */
   --text-xs--line-height: 1.5;
-  --text-sm: 0.875rem;
-  --text-sm--line-height: 1.55;
+  --text-sm: 0.875rem; /* 14px, eyebrows, labels, captions */
+  --text-sm--line-height: 1.5;
   --text-base: 1.0625rem; /* 17px body base */
-  --text-base--line-height: 1.6;
-  --text-lg: 1.25rem;
-  --text-lg--line-height: 1.55;
-  --text-xl: 1.5rem;
-  --text-xl--line-height: 1.35;
+  --text-base--line-height: 1.55;
+  --text-lg: 1.1875rem; /* 19px, lead paragraphs */
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.3125rem; /* 21px, small subheads */
+  --text-xl--line-height: 1.3;
   --text-xl--letter-spacing: -0.01em;
-  --text-2xl: 1.875rem;
-  --text-2xl--line-height: 1.2;
-  --text-2xl--letter-spacing: -0.015em;
-  --text-3xl: 2.25rem;
-  --text-3xl--line-height: 1.15;
-  --text-3xl--letter-spacing: -0.02em;
-  --text-4xl: 2.75rem;
-  --text-4xl--line-height: 1.1;
-  --text-4xl--letter-spacing: -0.02em;
-  --text-5xl: 3.25rem;
-  --text-5xl--line-height: 1.05;
-  --text-5xl--letter-spacing: -0.022em;
-  --text-6xl: 4rem;
-  --text-6xl--line-height: 1.02;
-  --text-6xl--letter-spacing: -0.025em;
-  /* Fluid hero display size, scales with viewport, no layout shift. Confident
-     by design: Fraunces is the personality, so the headline is allowed to be
-     large. */
-  --text-display: clamp(2rem, 0.9rem + 4.4vw, 5.25rem);
-  --text-display--line-height: 1.02;
-  --text-display--letter-spacing: -0.028em;
-  /* Section-title display size, a step below the hero, used with Fraunces. */
-  --text-title: clamp(1.85rem, 1.2rem + 2.6vw, 3.25rem);
-  --text-title--line-height: 1.08;
-  --text-title--letter-spacing: -0.02em;
+  --text-2xl: 1.5rem; /* 24px, h3 subheads */
+  --text-2xl--line-height: 1.25;
+  --text-2xl--letter-spacing: -0.012em;
+  --text-3xl: 1.75rem; /* 28px */
+  --text-3xl--line-height: 1.2;
+  --text-3xl--letter-spacing: -0.015em;
+  --text-4xl: 2rem; /* 32px */
+  --text-4xl--line-height: 1.15;
+  --text-4xl--letter-spacing: -0.015em;
+  --text-5xl: 2.5rem; /* 40px */
+  --text-5xl--line-height: 1.1;
+  --text-5xl--letter-spacing: -0.018em;
+  --text-6xl: 3rem; /* 48px */
+  --text-6xl--line-height: 1.07;
+  --text-6xl--letter-spacing: -0.02em;
+  /* Hero headline, fluid ~40 to 52px. */
+  --text-display: clamp(2.25rem, 5vw, 3.25rem);
+  --text-display--line-height: 1.07;
+  --text-display--letter-spacing: -0.02em;
+  /* Section title, fluid ~28 to 36px. */
+  --text-title: clamp(1.75rem, 3.5vw, 2.25rem);
+  --text-title--line-height: 1.1;
+  --text-title--letter-spacing: -0.015em;
 
   /* ---- Layout ------------------------------------------------------------ */
   --container-page: 75rem; /* ~1200px max content width → max-w-page */

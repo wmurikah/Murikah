@@ -87,7 +87,7 @@ export const SERVICES: ServiceLine[] = [
   {
     slug: 'assurance',
     name: 'Assurance',
-    fullName: 'Murikah Assurance',
+    fullName: 'Assurance',
     href: '/assurance',
     summary:
       'Co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and ISO 42001 and AI-governance readiness.',
@@ -96,7 +96,7 @@ export const SERVICES: ServiceLine[] = [
   {
     slug: 'audit-os',
     name: 'Audit OS',
-    fullName: 'Murikah Audit OS',
+    fullName: 'Audit OS',
     href: '/audit-os',
     summary:
       'The subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting, and an AI assistant.',
@@ -105,7 +105,7 @@ export const SERVICES: ServiceLine[] = [
   {
     slug: 'labs',
     name: 'Labs',
-    fullName: 'Murikah Labs',
+    fullName: 'Labs',
     href: '/labs',
     summary: 'Automation builds, CRM and CMS, workflow engineering, and custom automations.',
     serviceType: 'Automation and workflow engineering',
@@ -113,7 +113,7 @@ export const SERVICES: ServiceLine[] = [
   {
     slug: 'advisory',
     name: 'Advisory',
-    fullName: 'Murikah Advisory',
+    fullName: 'Advisory',
     href: '/advisory',
     summary:
       'AI strategy and governance roadmaps, research and analytics, executive decks and board papers.',
@@ -122,7 +122,7 @@ export const SERVICES: ServiceLine[] = [
   {
     slug: 'academy',
     name: 'Academy',
-    fullName: 'Murikah Academy',
+    fullName: 'Academy',
     href: '/academy',
     summary:
       'Training and certification: CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses.',
@@ -131,7 +131,7 @@ export const SERVICES: ServiceLine[] = [
   {
     slug: 'intelligence',
     name: 'Intelligence',
-    fullName: 'Murikah Intelligence',
+    fullName: 'Intelligence',
     href: '/intelligence',
     summary: 'Anonymised cross-client benchmarking and an annual flagship report (forthcoming).',
     serviceType: 'Benchmarking and research',
