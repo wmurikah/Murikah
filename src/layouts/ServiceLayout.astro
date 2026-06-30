@@ -121,6 +121,9 @@ const crumbs = [
     <FaqPageSchema items={faqs} />
   </Section>
 
+  {/* Optional section a page can place immediately before the closing CTA. */}
+  <slot name="pre-cta" />
+
   <CtaSection
     title={closingTitle}
     body={closingBody}

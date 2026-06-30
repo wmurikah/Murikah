@@ -5,6 +5,7 @@ import ServiceLayout from '@/layouts/ServiceLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Card from '@/components/primitives/Card.astro';
 import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
+import AuditOsWalkthrough from '@/components/audit-os/AuditOsWalkthrough';
 import { PRICING } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
@@ -227,5 +228,21 @@ const faqs: FaqItem[] = [
         </a>
       </li>
     </ul>
+  </Section>
+
+  {/* Animated how-it-works walkthrough, placed just before the closing CTA. */}
+  <Section slot="pre-cta" tone="paper" aria-labelledby="how-it-works">
+    <h2
+      id="how-it-works"
+      class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+    >
+      How Audit OS works
+    </h2>
+    <p class="mt-3 max-w-prose text-slate">
+      Watch the workflow play through stage by stage, or jump to any stage you want to see.
+    </p>
+    <div class="mt-8">
+      <AuditOsWalkthrough client:visible />
+    </div>
   </Section>
 </ServiceLayout>
