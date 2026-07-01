@@ -3,7 +3,7 @@
  * Header, site chrome following familiar conventions (Jakob's Law): logo
  * top-left links home, primary nav top-right, the single gold CTA furthest
  * right. The nav is deliberately small (Hick's Law: Home, About, Services,
- * Audit OS, Pricing + one action). Items are ordered by importance
+ * Assurance OS, Pricing + one action). Items are ordered by importance
  * (serial-position effect) and come straight from `NAV` in site.config.
  *
  * Desktop: the Services item is a link to the /services hub that also reveals a
@@ -24,7 +24,7 @@ const isActive = (href: string) =>
   path === href || (href !== '/' && path.startsWith(href + '/')) || path === href + '/';
 
 // The Services trigger is "active" on the hub and on any of its five child
-// lines (Audit OS is a separate top-level item, so it is not counted here).
+// lines (Assurance OS is a separate top-level item, so it is not counted here).
 const servicesItem = NAV.find((n) => n.children);
 const serviceGroupHrefs = ['/services', ...(servicesItem?.children?.map((c) => c.href) ?? [])];
 const servicesActive = serviceGroupHrefs.some((h) => path === h || path.startsWith(h + '/'));
@@ -68,7 +68,7 @@ const activeLink = 'bg-white text-navy shadow-card';
                     viewBox="0 0 16 16"
                     fill="none"
                     aria-hidden="true"
-                    class="transition-transform duration-200 group-hover:rotate-180 group-focus-within:rotate-180"
+                    class="transition-transform duration-200 group-focus-within:rotate-180 group-hover:rotate-180"
                   >
                     <path
                       d="M4 6l4 4 4-4"
@@ -82,7 +82,7 @@ const activeLink = 'bg-white text-navy shadow-card';
 
                 {/* Disclosure menu. The pt-3 wrapper is a transparent hover
                     bridge so the pointer never crosses a dead gap. */}
-                <div class="invisible absolute right-0 top-full z-50 w-[24rem] pt-3 opacity-0 transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div class="invisible absolute top-full right-0 z-50 w-[24rem] pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
                   <div class="rounded-[1.4rem] bg-white/95 p-2 shadow-pop ring-1 ring-hairline backdrop-blur-xl">
                     <div class="flex items-center justify-between gap-4 border-b border-hairline px-2 pb-2">
                       <p class="text-xs font-medium tracking-[0.08em] text-slate uppercase">
@@ -153,7 +153,12 @@ const activeLink = 'bg-white text-navy shadow-card';
   </Container>
 
   {/* Mobile menu panel */}
-  <div id="mobile-menu" data-mobile-panel hidden class="border-t border-hairline bg-paper lg:hidden">
+  <div
+    id="mobile-menu"
+    data-mobile-panel
+    hidden
+    class="border-t border-hairline bg-paper lg:hidden"
+  >
     <Container>
       <nav aria-label="Mobile" class="flex flex-col gap-1 py-4">
         {
