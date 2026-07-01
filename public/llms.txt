@@ -6,12 +6,12 @@ Murikah is an AI-native assurance and governance company. It helps regulated mid
 
 ## The six lines of work
 
-- Murikah Assurance: co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and ISO 42001 and AI-governance readiness. https://www.murikah.com/assurance
-- Murikah Audit OS: the subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting and an AI assistant, priced from about KES 15,000 a month. https://www.murikah.com/audit-os
-- Murikah Labs: automation builds, CRM and CMS, workflow engineering and custom automations, from a team that audits a process before automating it. https://www.murikah.com/labs
-- Murikah Advisory: AI strategy and governance roadmaps, research and analytics, and executive decks and board papers. https://www.murikah.com/advisory
-- Murikah Academy: training and certification, including CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses. https://www.murikah.com/academy
-- Murikah Intelligence: anonymised cross-client benchmarking and an annual flagship report, both forthcoming as the client base grows. https://www.murikah.com/intelligence
+- Murikah Assurance: co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and ISO 42001 and AI-governance readiness. https://murikah.com/assurance
+- Murikah Audit OS: the subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting and an AI assistant, priced from about KES 15,000 a month. https://murikah.com/audit-os
+- Murikah Labs: automation builds, CRM and CMS, workflow engineering and custom automations, from a team that audits a process before automating it. https://murikah.com/labs
+- Murikah Advisory: AI strategy and governance roadmaps, research and analytics, and executive decks and board papers. https://murikah.com/advisory
+- Murikah Academy: training and certification, including CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses. https://murikah.com/academy
+- Murikah Intelligence: anonymised cross-client benchmarking and an annual flagship report, both forthcoming as the client base grows. https://murikah.com/intelligence
 
 ## Who it is for
 
@@ -23,23 +23,23 @@ Murikah works to the IIA Global Internal Audit Standards for its internal audit 
 
 ## Key pages
 
-- Home: https://www.murikah.com/
-- About: https://www.murikah.com/about
-- Insights (guides): https://www.murikah.com/insights
-- Contact: https://www.murikah.com/contact
+- Home: https://murikah.com/
+- About: https://murikah.com/about
+- Insights (guides): https://murikah.com/insights
+- Contact: https://murikah.com/contact
 
 ## Top guides
 
-- ISO 42001 readiness: what organisations actually need to do. https://www.murikah.com/insights/iso-42001-readiness
-- Internal audit for SACCOs: what SASRA expects and how to deliver it. https://www.murikah.com/insights/sacco-internal-audit-sasra
-- The Kenya Data Protection Act: what controllers and processors must do. https://www.murikah.com/insights/kenya-data-protection-act
-- How much does internal audit software cost in Kenya? A plain buyer's guide. https://www.murikah.com/insights/internal-audit-software-cost-kenya
-- Co-sourced or outsourced internal audit: which does your organisation need? https://www.murikah.com/insights/co-sourced-vs-outsourced-internal-audit
+- ISO 42001 readiness: what organisations actually need to do. https://murikah.com/insights/iso-42001-readiness
+- Internal audit for SACCOs: what SASRA expects and how to deliver it. https://murikah.com/insights/sacco-internal-audit-sasra
+- The Kenya Data Protection Act: what controllers and processors must do. https://murikah.com/insights/kenya-data-protection-act
+- How much does internal audit software cost in Kenya? A plain buyer's guide. https://murikah.com/insights/internal-audit-software-cost-kenya
+- Co-sourced or outsourced internal audit: which does your organisation need? https://murikah.com/insights/co-sourced-vs-outsourced-internal-audit
 
 ## Feeds and metadata
 
-- Sitemap: https://www.murikah.com/sitemap-index.xml
-- RSS (insights): https://www.murikah.com/rss.xml
+- Sitemap: https://murikah.com/sitemap-index.xml
+- RSS (insights): https://murikah.com/rss.xml
 
 ## Contact
 

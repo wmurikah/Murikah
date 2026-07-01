@@ -168,7 +168,7 @@ A plain, no-cost first deploy to a `workers.dev` address, with no custom domain:
 Nothing else needs to exist in your Cloudflare account for the preview: there is
 no KV namespace, R2 bucket, or cron trigger to create.
 
-If your final domain differs from `https://www.murikah.com`, update the canonical
+If your final domain differs from `https://murikah.com`, update the canonical
 URL in `SITE_URL` (`src/site.config.ts`) and `site` (`astro.config.ts`), which
 are kept in sync, plus the `Sitemap:` line in `public/robots.txt`.
 
@@ -253,7 +253,7 @@ code comments marking non-obvious applications.
 
 ### Submit the sitemap after launch
 
-Once the site is live, submit `https://www.murikah.com/sitemap-index.xml` to
+Once the site is live, submit `https://murikah.com/sitemap-index.xml` to
 both [Google Search Console](https://search.google.com/search-console) and
 [Bing Webmaster Tools](https://www.bing.com/webmasters). Bing matters beyond
 Bing itself, because ChatGPT search draws on the Bing index, so submitting there
