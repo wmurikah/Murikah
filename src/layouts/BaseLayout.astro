@@ -10,10 +10,13 @@
  * woff2 is preloaded to protect LCP and prevent late-font layout shift.
  */
 import '@fontsource-variable/inter/wght.css';
+// Fraunces, an elegant variable serif, for the large display headlines only.
+import '@fontsource-variable/fraunces/index.css';
 import '@/styles/global.css';
 
 // `?url` → fingerprinted asset URL for <link rel="preload">.
 import interWoff2 from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import frauncesWoff2 from '@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2?url';
 
 import Seo from '@/components/Seo.astro';
 import OrganizationSchema from '@/components/schema/Organization.astro';
@@ -76,11 +79,16 @@ const { mainClass, ...seo } = Astro.props;
       })();
     </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#0B1733" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#070B12" />
     <meta name="generator" content={Astro.generator} />
 
-    {/* Preload the self-hosted body font (LCP + no layout shift). */}
+    {
+      /* Preload the self-hosted fonts (LCP + no layout shift): body sans and the
+       display serif used by the hero headline. */
+    }
     <link rel="preload" href={interWoff2} as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href={frauncesWoff2} as="font" type="font/woff2" crossorigin="anonymous" />
 
     <Seo {...seo} />
     <OrganizationSchema />
