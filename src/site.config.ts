@@ -138,23 +138,35 @@ export const SERVICES: ServiceLine[] = [
   },
 ];
 
+/** Short notes for the Services dropdown rows, keyed by service slug. */
+const SERVICE_NAV_NOTES: Record<string, string> = {
+  assurance: 'Co-sourced and outsourced internal audit',
+  labs: 'Automation, CRM and workflow builds',
+  advisory: 'AI strategy, governance and board papers',
+  academy: 'Training and certification',
+  intelligence: 'Benchmarking and research',
+};
+
 /**
- * Primary navigation, deliberately small (Hick's Law). The primary CTA is
- * rendered separately as the single gold action (Von Restorff).
+ * Primary navigation: five text items in order (Hick's Law). Audit OS is its
+ * own top-level item; the Services item groups the five other lines and links
+ * to the /services hub. The gold "Book a demo" action is rendered separately
+ * (Von Restorff), and Insights lives in the footer, not the top bar.
  */
 export const NAV: NavItem[] = [
+  { label: 'Home', href: '/' },
+  { label: 'About', href: '/about' },
   {
     label: 'Services',
-    href: '/assurance',
-    children: SERVICES.map((s) => ({
-      label: s.fullName,
+    href: '/services',
+    children: SERVICES.filter((s) => s.slug !== 'audit-os').map((s) => ({
+      label: s.name,
       href: s.href,
-      description: s.summary,
+      description: SERVICE_NAV_NOTES[s.slug],
     })),
   },
   { label: 'Audit OS', href: '/audit-os' },
-  { label: 'Insights', href: '/insights' },
-  { label: 'About', href: '/about' },
+  { label: 'Pricing', href: '/pricing' },
 ];
 
 /** The one gold action across the site. */
@@ -169,19 +181,28 @@ export const SOCIAL: SocialLink[] = [
   { label: 'X (Twitter)', href: 'https://x.com/murikah' },
 ];
 
-/** Compact footer sitemap, grouped (Miller's Law). */
+/**
+ * Footer navigation, grouped (Miller's Law). Mirrors the primary five-item nav
+ * and keeps Insights and the individual service lines reachable.
+ */
 export const FOOTER_GROUPS: { heading: string; links: { label: string; href: string }[] }[] = [
   {
-    heading: 'Services',
-    links: SERVICES.map((s) => ({ label: s.fullName, href: s.href })),
+    heading: 'Explore',
+    links: [
+      { label: 'Home', href: '/' },
+      { label: 'About', href: '/about' },
+      { label: 'Services', href: '/services' },
+      { label: 'Audit OS', href: '/audit-os' },
+      { label: 'Pricing', href: '/pricing' },
+      { label: 'Insights', href: '/insights' },
+    ],
   },
   {
-    heading: 'Company',
-    links: [
-      { label: 'About', href: '/about' },
-      { label: 'Insights', href: '/insights' },
-      { label: 'Contact', href: '/contact' },
-    ],
+    heading: 'Services',
+    links: SERVICES.filter((s) => s.slug !== 'audit-os').map((s) => ({
+      label: s.name,
+      href: s.href,
+    })),
   },
   {
     heading: 'Legal',

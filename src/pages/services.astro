@@ -1,0 +1,160 @@
+---
+export const prerender = true;
+
+/**
+ * Services hub. A short intro then a card per service line, drawing name and
+ * one-line summary straight from site.config (single source of truth, copy not
+ * rewritten here). Audit OS keeps its own top-level page, so the five other
+ * lines are the cards; a closing band points to Audit OS and to Pricing.
+ */
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Button from '@/components/primitives/Button.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import { SITE, SERVICES } from '@/site.config';
+
+const serviceLines = SERVICES.filter((s) => s.slug !== 'audit-os');
+const auditOs = SERVICES.find((s) => s.slug === 'audit-os');
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Services', href: '/services' },
+];
+
+// ItemList of the service lines, each pointing to its own page, so search
+// engines can read the set as a structured list.
+const itemListSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: 'Murikah services',
+  itemListElement: serviceLines.map((s, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    name: s.fullName,
+    description: s.summary,
+    url: new URL(s.href, SITE.url).href,
+  })),
+};
+---
+
+<BaseLayout
+  titleFull="Services | Murikah"
+  description="Murikah works across connected lines: Assurance, Labs, Advisory, Academy and Intelligence, alongside the Audit OS platform. Start where you need to and grow into the rest."
+>
+  <script
+    type="application/ld+json"
+    slot="head"
+    is:inline
+    set:html={JSON.stringify(itemListSchema)}
+  />
+
+  {/* Hero: a calm opening on a light canvas. */}
+  <Section
+    tone="surface"
+    aria-labelledby="page-title"
+    class="relative overflow-hidden border-b border-hairline"
+  >
+    <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
+    <div class="relative max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">Services</p>
+      <h1
+        id="page-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.015em] text-balance text-navy"
+      >
+        Connected lines of assurance, systems and intelligence.
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        We work across connected lines, from co-sourced internal audit to automation, advisory,
+        training and benchmarking. Start with the line you need now, and grow into the rest with one
+        team that brings both the judgement and the working software.
+      </p>
+      <div class="mt-9 flex flex-col gap-3 sm:flex-row">
+        <Button href="/contact" variant="primary" size="lg">Book a demo</Button>
+        <Button href="/audit-os" variant="ghost" size="lg">Explore Audit OS</Button>
+      </div>
+    </div>
+  </Section>
+
+  {/* The five service lines. */}
+  <Section tone="paper" aria-labelledby="lines-title">
+    <div class="max-w-2xl">
+      <p class="eyebrow">What we do</p>
+      <h2
+        id="lines-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
+      >
+        Five connected service lines
+      </h2>
+      <p class="mt-4 text-lg text-slate">
+        Each line stands on its own and shares one structure with the rest, so handovers stay light
+        and nothing falls between the gaps.
+      </p>
+    </div>
+
+    <div class="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {
+        serviceLines.map((s, i) => (
+          <a href={s.href} class="group premium-card no-underline">
+            <span class="text-sm font-medium tracking-[0.08em] text-gold uppercase">
+              {String(i + 1).padStart(2, '0')}
+            </span>
+            <h3 class="mt-6 text-2xl text-navy">{s.fullName}</h3>
+            <p class="mt-3 text-slate">{s.summary}</p>
+            <span class="mt-auto inline-flex items-center gap-2 pt-6 font-medium text-blue">
+              View service{' '}
+              <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
+            </span>
+          </a>
+        ))
+      }
+    </div>
+  </Section>
+
+  {/* Audit OS and pricing, kept reachable from the hub. */}
+  <Section tone="surface" aria-labelledby="platform-title" class="border-y border-hairline">
+    <div class="max-w-2xl">
+      <p class="eyebrow">The platform and the price</p>
+      <h2
+        id="platform-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
+      >
+        Audit OS and how we price
+      </h2>
+    </div>
+    <div class="mt-10 grid gap-6 lg:grid-cols-2">
+      <div class="flex flex-col rounded-card bg-paper p-7 ring-1 ring-hairline/70">
+        <h3 class="text-xl text-navy">Audit OS</h3>
+        <p class="mt-3 max-w-prose text-slate">{auditOs?.summary}</p>
+        <a
+          href="/audit-os"
+          class="mt-auto inline-flex items-center gap-2 pt-6 font-medium text-blue no-underline hover:text-blue-deep"
+        >
+          Explore Audit OS <span aria-hidden="true">&rarr;</span>
+        </a>
+      </div>
+      <div class="flex flex-col rounded-card bg-paper p-7 ring-1 ring-hairline/70">
+        <h3 class="text-xl text-navy">Pricing</h3>
+        <p class="mt-3 max-w-prose text-slate">
+          Audit OS has indicative monthly subscription tiers, validated on enquiry. The service lines
+          are scoped and quoted per engagement, so you pay for the work you need.
+        </p>
+        <a
+          href="/pricing"
+          class="mt-auto inline-flex items-center gap-2 pt-6 font-medium text-blue no-underline hover:text-blue-deep"
+        >
+          See pricing <span aria-hidden="true">&rarr;</span>
+        </a>
+      </div>
+    </div>
+  </Section>
+
+  <CtaSection
+    eyebrow="Book a demo"
+    title="Find the line that fits, then grow into the rest"
+    body="Book a demo and we will map Murikah to your audit universe, your regulator and your board."
+    secondaryLabel="Contact us"
+    secondaryHref="/contact"
+  />
+</BaseLayout>
