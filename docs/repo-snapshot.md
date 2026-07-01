@@ -477,7 +477,7 @@ One collection, `insights` (`src/content.config.ts`), loaded from `src/content/i
 
 The repository contains open feature branches (not merged into `main`) that add substantial functionality. They are noted here so the advisor knows the work exists, but **none of it is on `main`** and so none of it would deploy from the default branch today:
 
-- **Labs interactive sandbox**: four demos (Audit OS read-only sandbox, document extraction, workflow engine, mini-CRM) with React components and `/api/demo/*` endpoints, backed by a `src/lib/demo/` isolation layer (anonymous sessions, salted IP hashing, rate limits, retention sweep).
+- **Labs interactive sandbox**: four demos (Assurance OS read-only sandbox, document extraction, workflow engine, mini-CRM) with React components and `/api/demo/*` endpoints, backed by a `src/lib/demo/` isolation layer (anonymous sessions, salted IP hashing, rate limits, retention sweep).
 - **Site-wide AI assistant**: a provider-agnostic adapter (`src/lib/ai/`, Anthropic default with a Workers AI seam) and an `/api/ai/assistant` SSE endpoint.
 - **Retention/cron Worker**: a companion Worker (`workers/cron.ts`, `wrangler.cron.jsonc`) on an hourly trigger that calls a secured `/api/cron/sweep` endpoint, because the Astro adapter cannot export a `scheduled` handler.
 - **Reworked database tooling**: CLI-free `tsx` scripts with a shared env loader (shell-first, then `.dev.vars`), idempotent apply, guarded reset, a content-seed placeholder, and an expanded schema (around 13 tables for the demo and assistant data). This branch also adds `dotenv` and `tsx` as devDependencies and changes the `db:*` scripts to run via `tsx`.

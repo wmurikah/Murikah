@@ -1,0 +1,224 @@
+/**
+ * AccessibilityAssistant styles. A small, calm floating control in the Murikah
+ * system: a navy toggle bottom-right and a white disclosure card above it.
+ * Nothing loud, and it stays clear of the primary calls to action.
+ */
+
+.a11y {
+  position: fixed;
+  right: clamp(1rem, 3vw, 1.5rem);
+  bottom: clamp(1rem, 3vw, 1.5rem);
+  z-index: 80;
+}
+
+.a11y__toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  color: #fff;
+  background: var(--color-navy);
+  border: 1px solid color-mix(in srgb, #fff 14%, transparent);
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease-out-soft),
+    background-color 0.2s var(--ease-out-soft);
+}
+.a11y__toggle:hover {
+  transform: translateY(-2px);
+  background: #101f42;
+}
+/* A small gold dot when any setting is active. */
+.a11y__toggle[data-active='true']::after {
+  content: '';
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 9999px;
+  background: var(--color-gold);
+  border: 2px solid var(--color-navy);
+}
+
+.a11y__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.65rem);
+  width: 17rem;
+  max-width: calc(100vw - 2rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.85rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-pop);
+}
+.js .a11y[data-open='true'] .a11y__panel {
+  animation: a11y-pop 0.22s var(--ease-out-soft) both;
+}
+@keyframes a11y-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.a11y__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+.a11y__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-navy);
+}
+.a11y__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-slate);
+  cursor: pointer;
+}
+.a11y__close:hover {
+  background: var(--color-paper);
+  color: var(--color-navy);
+}
+
+.a11y__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.35rem;
+}
+.a11y__label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-navy);
+}
+
+.a11y__stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.a11y__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-surface);
+  color: var(--color-navy);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-out-soft);
+}
+.a11y__step:hover:not(:disabled) {
+  background: var(--color-paper);
+}
+.a11y__step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.a11y__stepvalue {
+  min-width: 3.9rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-slate);
+}
+
+.a11y__toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.75rem;
+  padding: 0.5rem 0.35rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.a11y__toggleRow:hover {
+  background: var(--color-paper);
+}
+
+.a11y__switch {
+  flex: none;
+  position: relative;
+  width: 2.25rem;
+  height: 1.3rem;
+  border-radius: 9999px;
+  background: var(--color-hairline);
+  transition: background-color 0.2s var(--ease-out-soft);
+}
+.a11y__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.3rem - 4px);
+  height: calc(1.3rem - 4px);
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(11, 23, 51, 0.35);
+  transition: transform 0.2s var(--ease-out-soft);
+}
+.a11y__toggleRow[aria-pressed='true'] .a11y__switch {
+  background: var(--color-blue);
+}
+.a11y__toggleRow[aria-pressed='true'] .a11y__knob {
+  transform: translateX(0.95rem);
+}
+
+.a11y__reset {
+  margin-top: 0.5rem;
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-surface);
+  color: var(--color-navy);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-out-soft);
+}
+.a11y__reset:hover:not(:disabled) {
+  background: var(--color-paper);
+}
+.a11y__reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a11y__toggle,
+  .a11y__panel,
+  .a11y__knob {
+    transition: none !important;
+    animation: none !important;
+  }
+}
