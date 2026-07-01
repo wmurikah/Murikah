@@ -7,7 +7,7 @@ Murikah is an AI-native assurance and governance company. It helps regulated mid
 ## The six lines of work
 
 - Murikah Assurance: co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and ISO 42001 and AI-governance readiness. https://murikah.com/assurance
-- Murikah Assurance Platform: the subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting and an AI assistant, priced from about KES 15,000 a month. https://murikah.com/audit-os
+- Assurance OS (Murikah Assurance Platform): the subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting and an AI assistant, priced from about KES 15,000 a month. https://murikah.com/audit-os
 - Murikah Labs: automation builds, CRM and CMS, workflow engineering and custom automations, from a team that audits a process before automating it. https://murikah.com/labs
 - Murikah Advisory: AI strategy and governance roadmaps, research and analytics, and executive decks and board papers. https://murikah.com/advisory
 - Murikah Academy: training and certification, including CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses. https://murikah.com/academy
