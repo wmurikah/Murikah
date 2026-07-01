@@ -10,7 +10,7 @@ A read-only, point-in-time snapshot of the `wmurikah/Murikah` repository, prepar
 
 ## Overview
 
-Murikah is the marketing website for an AI-native assurance and governance company serving African organisations (internal audit, IT audit, data protection, and AI governance). On `main` the site is a content-led marketing site with final copy and a full SEO/AI-discoverability layer. The Labs interactive sandbox is present only as a **stubbed** React island, and there is no AI assistant on this branch yet.
+Murikah is the marketing website for an AI-native assurance and governance company serving organisations (internal audit, IT audit, data protection, and AI governance). On `main` the site is a content-led marketing site with final copy and a full SEO/AI-discoverability layer. The Labs interactive sandbox is present only as a **stubbed** React island, and there is no AI assistant on this branch yet.
 
 | Concern         | Value (from config on `main`)                                                                                        |
 | --------------- | -------------------------------------------------------------------------------------------------------------------- |
