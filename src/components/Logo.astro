@@ -1,13 +1,14 @@
 ---
 /**
- * Logo: a navy tile carrying a fine brass aperture mark (a hairline ring with a
- * small centre point), plus the "Murikah" wordmark set in the neutral brand
- * sans. The mark is a discreet evidence and verification device, restrained
- * rather than a loud filled dot; it lives in the tile and never interrupts the
- * wordmark, which reads plainly as "Murikah".
+ * Logo: the Murikah "M" monogram (a bold geometric M with a single aged-brass
+ * diagonal accent) next to the "Murikah" wordmark in the neutral brand sans.
  *
- * `tone="light"` is for dark/navy surfaces (the footer). Hex values are inlined
- * in the SVG because presentation attributes do not resolve CSS variables.
+ * The monogram is a crisp, transparent SVG that adapts to its surface: the M
+ * strokes and wordmark inherit `currentColor` (navy on light, ivory on dark via
+ * `tone`), and the one brass diagonal is the scarce accent. No tile, no filled
+ * dot; the mark never interrupts the name, which reads plainly as "Murikah".
+ *
+ * `tone="light"` is for dark surfaces (the dark header and footer).
  */
 interface Props {
   tone?: 'dark' | 'light';
@@ -16,27 +17,29 @@ interface Props {
 }
 const { tone = 'dark', withWordmark = true, class: className } = Astro.props;
 
-const tileFill = tone === 'light' ? 'rgba(255,255,255,0.12)' : '#0B1733';
-const wordmarkColor = tone === 'light' ? 'text-paper' : 'text-navy';
+// One colour drives both the monogram strokes (currentColor) and the wordmark.
+const color = tone === 'light' ? 'text-paper' : 'text-navy';
 ---
 
-<span class:list={['inline-flex items-center gap-2.5', className]}>
+<span class:list={['inline-flex items-center gap-2.5', color, className]}>
   <svg
-    width="32"
-    height="32"
+    width="30"
+    height="30"
     viewBox="0 0 32 32"
     fill="none"
     aria-hidden="true"
     focusable="false"
     class="shrink-0"
   >
-    <rect width="32" height="32" rx="8" fill={tileFill}></rect>
-    <circle cx="16" cy="16" r="6.4" fill="none" stroke="#A9822E" stroke-width="1.5"></circle>
-    <circle cx="16" cy="16" r="1.7" fill="#A9822E"></circle>
+    {/* The M: left bar, valley, right bar. Strokes take the current colour. */}
+    <path
+      d="M4 27 V6 L16 20.5 L28 6 V27"
+      stroke="currentColor"
+      stroke-width="4.6"
+      stroke-linejoin="round"
+      stroke-linecap="round"></path>
+    {/* The single aged-brass accent: a fine diagonal in the right of the valley. */}
+    <path d="M26.4 9 L18.4 18.7" stroke="#A9822E" stroke-width="2.4" stroke-linecap="round"></path>
   </svg>
-  {
-    withWordmark && (
-      <span class:list={['text-xl font-semibold tracking-[-0.02em]', wordmarkColor]}>Murikah</span>
-    )
-  }
+  {withWordmark && <span class="text-xl font-semibold tracking-[-0.02em]">Murikah</span>}
 </span>
