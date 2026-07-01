@@ -3,15 +3,13 @@ export const prerender = true;
 
 import { getCollection } from 'astro:content';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import Container from '@/components/primitives/Container.astro';
 import Section from '@/components/primitives/Section.astro';
-import Button from '@/components/primitives/Button.astro';
 import Card from '@/components/primitives/Card.astro';
 import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Faq from '@/components/primitives/Faq.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
 import FaqPageSchema from '@/components/schema/FaqPage.astro';
-import HeroMotionPanel from '@/components/hero/HeroMotionPanel';
+import HeroStage from '@/components/hero/HeroStage';
 import { SITE, SERVICES, PRIMARY_CTA, AUDIENCE } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
@@ -46,72 +44,17 @@ const faqs: FaqItem[] = [
 ---
 
 <BaseLayout titleFull="Internal audit and AI governance | Murikah" description={SITE.description}>
-  <section class="navy-rich grain on-dark relative overflow-hidden" aria-labelledby="hero-title">
-    {/* One restrained brass bloom behind the headline for cinematic depth. */}
-    <div
-      aria-hidden="true"
-      class="aperture top-[-8rem] left-[-6rem] h-[32rem] w-[38rem] opacity-70"
-    >
-    </div>
-    <Container class="relative">
-      {
-        /* Split hero: copy left, cinematic motion panel right. The grid fills the
-          first screen on desktop (clamped so it is never cramped on small
-          laptops nor blank on very large screens) and stacks with the copy
-          first on mobile. */
-      }
-      <div
-        class="grid items-center gap-10 py-12 sm:py-16 lg:min-h-[clamp(40rem,calc(100svh-var(--header-height)),52rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.02fr)] lg:items-stretch lg:gap-14 lg:py-0"
-      >
-        <div class="flex flex-col justify-center lg:py-16">
-          <p class="eyebrow rise" style="--rise-delay: 0.05s">
-            AI-native assurance for boards that need proof
-          </p>
-          <h1
-            id="hero-title"
-            class="rise mt-6 max-w-[15ch] font-display text-[clamp(2.5rem,3.2vw+1.4rem,4rem)] leading-[1.06] font-semibold tracking-[-0.01em] text-balance text-white"
-            style="--rise-delay: 0.13s"
-          >
-            Make assurance feel inevitable.
-          </h1>
-          {/* Short brass rule, the signature accent under the headline. */}
-          <div class="rise mt-6 h-px w-14 bg-brass" style="--rise-delay: 0.2s" aria-hidden="true">
-          </div>
-          <p class="rise mt-6 max-w-xl text-lg leading-7 text-paper/80" style="--rise-delay: 0.26s">
-            Murikah helps organisations govern risk, prove evidence, strengthen systems and turn
-            assurance into a calm operating rhythm.
-          </p>
-          <div
-            class="rise mt-8 flex flex-col gap-4 sm:flex-row sm:items-center"
-            style="--rise-delay: 0.34s"
-          >
-            <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
-            {/* Secondary as a brass text link with a nudging arrow (matches the reference). */}
-            <a
-              href="/audit-os"
-              class="group inline-flex items-center gap-2 font-medium text-brass no-underline transition-colors hover:text-brass-soft"
-            >
-              <span
-                class="border-b border-brass/40 pb-0.5 transition-colors group-hover:border-brass"
-              >
-                Explore Assurance OS
-              </span>
-              <span aria-hidden="true" class="transition-transform group-hover:translate-x-1">
-                &rarr;
-              </span>
-            </a>
-          </div>
-          <p class="rise mt-7 max-w-md text-sm text-paper/60" style="--rise-delay: 0.4s">
-            Advisory, analytics and Assurance OS work as one operating layer.
-          </p>
-        </div>
-
-        <div class="rise w-full self-stretch lg:py-14" style="--rise-delay: 0.42s">
-          <HeroMotionPanel client:visible />
-        </div>
-      </div>
-    </Container>
-  </section>
+  {
+    /* Full-bleed dark cinematic hero: rotating background scenes with rotating
+      copy and two fixed calls to action. Scene one renders server-side, so the
+      canonical headline is in the HTML. */
+  }
+  <HeroStage
+    client:visible
+    primary={PRIMARY_CTA}
+    secondaryLabel="Explore Assurance OS"
+    secondaryHref="/audit-os"
+  />
 
   <Section tone="surface" aria-labelledby="services-title" class="border-b border-hairline">
     <div class="reveal mx-auto max-w-3xl text-center">
