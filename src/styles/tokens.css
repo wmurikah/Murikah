@@ -71,6 +71,12 @@
     -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Inter', 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
   --font-serif: var(--font-sans);
+  /* Display serif for the large hero and closing headlines only (font-display
+     utility). Fraunces is self-hosted; the stack falls back to premium system
+     serifs, then Georgia, so a serif always shows. */
+  --font-display:
+    'Fraunces Variable', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, Cambria,
+    'Times New Roman', serif;
 
   /* ---- Type scale (Apple-like: smaller, tighter, neutral) ----------------
      Sizes reduced from the previous scale; large headings carry tighter
