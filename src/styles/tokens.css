@@ -27,6 +27,13 @@
   --color-navy-deep: #081026;
   --color-paper-shade: #efeae0;
 
+  /* ---- Extended, narrow-role (product and material surfaces) -------------
+     Formal tokens with deliberately narrow roles, so they never dilute the
+     marketing look. Not for general use. */
+  --color-verified: #0e9c8e; /* product only: verified / assured / evidence complete */
+  --color-champagne: #e7d9a8; /* soft gold wash and aperture glow only, never a fill */
+  --color-silver: #c9cfdb; /* product table rules and inactive controls */
+
   /* ---- Status (RAG), PRODUCT/STATUS ONLY, never in marketing UI --------- */
   --color-status-low: #2e7d5b;
   --color-status-med: #d9930a;

@@ -254,8 +254,16 @@
      not flat. Keeps paper/white as the dominant surface. */
   .hero-luxe {
     background:
-      radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--color-gold) 12%, transparent), transparent 22rem),
-      radial-gradient(circle at 90% 6%, color-mix(in srgb, var(--color-blue) 7%, transparent), transparent 26rem),
+      radial-gradient(
+        circle at 12% 16%,
+        color-mix(in srgb, var(--color-gold) 12%, transparent),
+        transparent 22rem
+      ),
+      radial-gradient(
+        circle at 90% 6%,
+        color-mix(in srgb, var(--color-blue) 7%, transparent),
+        transparent 26rem
+      ),
       linear-gradient(180deg, var(--color-surface) 0%, var(--color-paper) 100%);
   }
 
@@ -283,7 +291,7 @@
     background: color-mix(in srgb, var(--color-blue) 9%, transparent);
   }
 
-  /* The Audit OS preview panel, now a light card on the light hero: a clean
+  /* The Assurance OS preview panel, now a light card on the light hero: a clean
      white surface with a fine hairline and a soft, warm-tinted lift. */
   .hero-device {
     position: relative;
@@ -311,7 +319,11 @@
   .device-screen {
     border-radius: 1.55rem;
     background:
-      radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-gold) 8%, transparent), transparent 16rem),
+      radial-gradient(
+        circle at 50% 0%,
+        color-mix(in srgb, var(--color-gold) 8%, transparent),
+        transparent 16rem
+      ),
       var(--color-paper);
     padding: clamp(1rem, 3vw, 1.6rem);
     border: 1px solid color-mix(in srgb, var(--color-hairline) 70%, transparent);
