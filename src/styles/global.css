@@ -398,13 +398,15 @@
    that pops against navy, earned rather than loud. Ghost actions switch to a
    quiet ivory outline. Left unlayered so these win over the button utilities. */
 .on-dark .btn-primary {
-  background-color: var(--color-brass);
-  color: var(--color-obsidian);
+  /* Near-black fill with a fine brass border, not a brass fill: the CTA reads
+     as premium and restrained on the dark header and hero. */
+  background-color: var(--color-demo-button-bg);
+  color: var(--color-paper);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brass) 55%, transparent);
 }
 .on-dark .btn-primary:hover {
-  /* A lighter brass glint on hover; obsidian text keeps AA contrast. */
-  background-color: #c39a44;
-  color: var(--color-obsidian);
+  background-color: #04101f;
+  box-shadow: inset 0 0 0 1px var(--color-brass);
 }
 .on-dark .btn-ghost {
   color: var(--color-paper);
