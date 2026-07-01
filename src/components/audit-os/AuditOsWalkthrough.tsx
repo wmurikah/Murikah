@@ -1,5 +1,5 @@
 /**
- * Audit OS workflow walkthrough. A self-advancing, controllable, accessible
+ * Assurance OS workflow walkthrough. A self-advancing, controllable, accessible
  * walkthrough of the six workflow stages. It auto-plays (about 17s per stage,
  * roughly 1m 45s in full) and loops gently, with clickable stage tabs, a
  * play/pause control and a progress bar. Each active stage animates a small,
@@ -23,7 +23,11 @@ const STAGES: Stage[] = [
   { key: 'plan', label: 'Plan', line: 'Set the risk-based audit plan and scope.' },
   { key: 'fieldwork', label: 'Fieldwork', line: 'Capture work papers and evidence as you test.' },
   { key: 'review', label: 'Review', line: 'A reviewer checks the work and signs it off.' },
-  { key: 'findings', label: 'Findings', line: 'Raise findings with risk ratings and action plans.' },
+  {
+    key: 'findings',
+    label: 'Findings',
+    line: 'Raise findings with risk ratings and action plans.',
+  },
   {
     key: 'remediation',
     label: 'Remediation',
@@ -141,9 +145,12 @@ export default function AuditOsWalkthrough() {
   useEffect(() => {
     const el = rootRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver((entries) => setInView(entries[0]?.isIntersecting ?? true), {
-      threshold: 0.25,
-    });
+    const io = new IntersectionObserver(
+      (entries) => setInView(entries[0]?.isIntersecting ?? true),
+      {
+        threshold: 0.25,
+      },
+    );
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -160,7 +167,7 @@ export default function AuditOsWalkthrough() {
 
   if (reduced) {
     return (
-      <div ref={rootRef} className="aw-card" role="group" aria-label="How Audit OS works">
+      <div ref={rootRef} className="aw-card" role="group" aria-label="How Assurance OS works">
         <ol className="aw-static">
           {STAGES.map((s, i) => (
             <li key={s.key} className="aw-static-step">
@@ -182,7 +189,7 @@ export default function AuditOsWalkthrough() {
   const running = playing && inView && docVisible;
 
   return (
-    <div ref={rootRef} className="aw-card" role="group" aria-label="How Audit OS works">
+    <div ref={rootRef} className="aw-card" role="group" aria-label="How Assurance OS works">
       <div className="aw-controls">
         <button
           type="button"
@@ -198,7 +205,7 @@ export default function AuditOsWalkthrough() {
             <li key={s.key}>
               <button
                 type="button"
-                className={`aw-tab${i === active ? ' is-active' : ''}`}
+                className={`aw-tab${i === active ? 'is-active' : ''}`}
                 aria-current={i === active ? 'true' : undefined}
                 aria-label={`Show stage ${i + 1}, ${s.label}`}
                 onClick={() => setActive(i)}
