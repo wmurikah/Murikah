@@ -10,7 +10,8 @@ import { SITE, STANDARDS } from '@/site.config';
 
 const crumbs = [
   { label: 'Home', href: '/' },
-  { label: 'About', href: '/about' },
+  { label: 'Who we are', href: '/about' },
+  { label: 'About Murikah', href: '/about' },
 ];
 
 const values = [
@@ -91,8 +92,8 @@ const how = [
           compliance software.
         </p>
         <p class="mt-4 max-w-prose text-lg text-ink">
-          We do it across six connected lines, from co-sourced internal audit and the Assurance OS
-          platform to advisory, training, automation and benchmarking. You can start anywhere and
+          We do it across six connected lines, from co-sourced internal audit and the Assurance
+          Platform to advisory, training, automation and benchmarking. You can start anywhere and
           grow into the rest, with one team that brings both the judgement and the working software.
         </p>
       </div>
@@ -166,7 +167,7 @@ const how = [
         ))
       }
     </div>
-    <div class="reveal mt-10">
+    <div id="standards" class="reveal mt-10">
       <p class="text-xs font-semibold tracking-[0.16em] text-slate uppercase">
         Standards our work follows
       </p>
@@ -183,7 +184,12 @@ const how = [
   </Section>
 
   {/* What we stand for. */}
-  <Section tone="surface" aria-labelledby="values" class="border-t border-hairline">
+  <Section
+    id="what-we-stand-for"
+    tone="surface"
+    aria-labelledby="values"
+    class="border-t border-hairline"
+  >
     <div class="reveal max-w-2xl">
       <p class="eyebrow">What we stand for</p>
       <h2
