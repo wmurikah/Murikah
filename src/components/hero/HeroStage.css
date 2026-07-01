@@ -1,0 +1,277 @@
+/**
+ * HeroStage styles. A full-bleed dark cinematic hero: rotating background over a
+ * left-weighted dark overlay, with ivory copy and one brass-bordered CTA. All
+ * motion is disabled under reduced motion (data-motion="off").
+ */
+
+.hero-stage {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  min-height: clamp(34rem, calc(100svh - var(--header-height)), 54rem);
+  background: var(--color-obsidian);
+}
+
+.hero-stage__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hero-stage__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 62% 50%;
+  opacity: 0;
+  transition: opacity 1.2s var(--ease-out-soft);
+  transform-origin: 65% 45%;
+}
+.hero-stage__img[data-active='true'] {
+  opacity: 1;
+}
+/* A slow, calm zoom on the active background, motion permitting. */
+.hero-stage[data-motion='on'] .hero-stage__img[data-active='true'] {
+  animation: hero-zoom 9s var(--ease-out-soft) both;
+}
+@keyframes hero-zoom {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.09);
+  }
+}
+
+/* Dark overlay: left-weighted for text contrast, with a soft top and bottom
+   darken. rgba(0,10,20) is the header/hero obsidian, so the two connect. */
+.hero-stage__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 10, 20, 0.45) 0%,
+      rgba(0, 10, 20, 0) 26%,
+      rgba(0, 10, 20, 0) 66%,
+      rgba(0, 10, 20, 0.72) 100%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(0, 10, 20, 0.96) 0%,
+      rgba(0, 10, 20, 0.82) 38%,
+      rgba(0, 10, 20, 0.38) 72%,
+      rgba(0, 10, 20, 0.2) 100%
+    );
+}
+
+.hero-stage__inner {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: var(--container-page, 75rem);
+  margin-inline: auto;
+  padding-block: clamp(3rem, 8vh, 5rem);
+  padding-inline: clamp(1.25rem, 5vw, 2rem);
+}
+
+.hero-stage__copy {
+  max-width: 42rem;
+}
+.hero-stage[data-motion='on'] .hero-stage__copy {
+  animation: hero-rise 0.7s var(--ease-out-soft) both;
+}
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-stage__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-brass);
+}
+.hero-stage__label::before {
+  content: '';
+  width: 1.75rem;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-brass), transparent);
+}
+
+.hero-stage__title {
+  margin-top: 1.1rem;
+  max-width: 15ch;
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 3.4vw + 1.4rem, 4.25rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--color-paper);
+  text-wrap: balance;
+}
+
+.hero-stage__rule {
+  margin-top: 1.5rem;
+  width: 3.5rem;
+  height: 1px;
+  background: var(--color-brass);
+}
+
+.hero-stage__desc {
+  margin-top: 1.4rem;
+  max-width: 34rem;
+  font-size: 1.1875rem;
+  line-height: 1.6;
+  color: rgba(248, 244, 234, 0.78);
+}
+
+.hero-stage__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  margin-top: 2.25rem;
+}
+
+.hero-stage__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.75rem 1.6rem;
+  border-radius: var(--radius-btn);
+  font-weight: 500;
+  color: var(--color-paper);
+  background: var(--color-demo-button-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brass) 55%, transparent);
+  text-decoration: none;
+  transition:
+    background-color 0.2s var(--ease-out-soft),
+    box-shadow 0.2s var(--ease-out-soft);
+}
+.hero-stage__cta:hover {
+  background: #04101f;
+  box-shadow: inset 0 0 0 1px var(--color-brass);
+}
+
+.hero-stage__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 500;
+  color: var(--color-brass);
+  text-decoration: none;
+  transition: color 0.2s var(--ease-out-soft);
+}
+.hero-stage__link:hover {
+  color: var(--color-brass-soft);
+}
+.hero-stage__linktext {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-brass) 45%, transparent);
+  padding-bottom: 0.15rem;
+  transition: border-color 0.2s var(--ease-out-soft);
+}
+.hero-stage__link:hover .hero-stage__linktext {
+  border-color: var(--color-brass);
+}
+.hero-stage__arrow {
+  transition: transform 0.2s var(--ease-out-soft);
+}
+.hero-stage__link:hover .hero-stage__arrow {
+  transform: translateX(0.25rem);
+}
+
+.hero-stage__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+}
+
+.hero-stage__play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  color: var(--color-paper);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease-out-soft),
+    border-color 0.2s var(--ease-out-soft);
+}
+.hero-stage__play:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.hero-stage__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+.hero-stage__dot {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0.5rem 0.3rem;
+  display: inline-flex;
+  cursor: pointer;
+}
+.hero-stage__dot::before {
+  content: '';
+  display: block;
+  width: 0.55rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: rgba(248, 244, 234, 0.35);
+  transition:
+    width 0.3s var(--ease-out-soft),
+    background-color 0.3s var(--ease-out-soft);
+}
+.hero-stage__dot:hover::before {
+  background: rgba(248, 244, 234, 0.6);
+}
+.hero-stage__dot[data-active='true']::before {
+  width: 1.5rem;
+  background: var(--color-brass);
+}
+
+.hero-stage__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-stage__img,
+  .hero-stage__copy {
+    transition: none !important;
+    animation: none !important;
+  }
+}
