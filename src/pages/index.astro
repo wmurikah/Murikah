@@ -11,37 +11,13 @@ import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Faq from '@/components/primitives/Faq.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
 import FaqPageSchema from '@/components/schema/FaqPage.astro';
+import HeroMotionPanel from '@/components/hero/HeroMotionPanel';
 import { SITE, SERVICES, PRIMARY_CTA, AUDIENCE } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
 const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
   .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   .slice(0, 3);
-
-// Hero rotating panel: one thread through the audit, from the first risk on the
-// plan to the board pack. Each slide is a real Assurance Platform capability.
-const heroSlides = [
-  {
-    kicker: 'Audit universe',
-    title: 'Risks, controls and plans',
-    body: 'Organised around how your board thinks.',
-  },
-  {
-    kicker: 'Evidence trail',
-    title: 'One system of record',
-    body: 'Work papers, reviews and sign-offs kept in one place.',
-  },
-  {
-    kicker: 'Action loop',
-    title: 'Findings to closure',
-    body: 'From report to owner, deadline, follow-up and closed.',
-  },
-  {
-    kicker: 'Board pack',
-    title: 'Reporting from live data',
-    body: 'Your quarterly pack is a click, not a week of copying.',
-  },
-];
 
 const why = [
   {
@@ -54,7 +30,7 @@ const faqs: FaqItem[] = [
   {
     question: 'What does Murikah do?',
     answer:
-      'Murikah helps organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Assurance Platform, advisory, training and automation builds in one joined-up relationship.',
+      'Murikah helps organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Assurance OS, advisory, training and automation builds in one joined-up relationship.',
   },
   {
     question: 'Who is Murikah for?',
@@ -73,83 +49,42 @@ const faqs: FaqItem[] = [
   <section class="hero-luxe relative overflow-hidden" aria-labelledby="hero-title">
     <div aria-hidden="true" class="orb orb-one"></div>
     <div aria-hidden="true" class="orb orb-two"></div>
-    <Container class="relative py-12 sm:py-16 lg:py-20">
-      <div class="grid items-center gap-10 lg:grid-cols-[1.02fr_0.98fr] lg:gap-16">
-        <div>
+    <Container class="relative">
+      {
+        /* Split hero: copy left, cinematic motion panel right. The grid fills the
+          first screen on desktop (clamped so it is never cramped on small
+          laptops nor blank on very large screens) and stacks with the copy
+          first on mobile. */
+      }
+      <div
+        class="grid items-center gap-10 py-12 sm:py-16 lg:min-h-[clamp(40rem,calc(100svh-var(--header-height)),52rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.02fr)] lg:items-stretch lg:gap-14 lg:py-0"
+      >
+        <div class="flex flex-col justify-center lg:py-16">
           <p class="eyebrow rise" style="--rise-delay: 0.05s">
             AI-native assurance for boards that need proof
           </p>
           <h1
             id="hero-title"
-            class="rise mt-6 max-w-3xl text-[length:var(--text-display)] leading-[1.07] font-semibold tracking-[-0.02em] text-balance text-navy"
+            class="rise mt-6 max-w-[18ch] text-[length:var(--text-display)] leading-[1.07] font-semibold tracking-[-0.02em] text-balance text-navy"
             style="--rise-delay: 0.13s"
           >
             Make assurance feel inevitable.
           </h1>
           <p class="rise mt-5 max-w-xl text-lg leading-7 text-slate" style="--rise-delay: 0.22s">
-            Murikah gives organisations a calm way to run internal audit, govern AI, prove the
-            evidence and keep remediation moving. Senior judgement and the Assurance Platform work
-            as one operating layer.
+            Murikah helps organisations govern risk, prove evidence, strengthen systems and turn
+            assurance into a calm operating rhythm.
           </p>
-          <p class="rise mt-3 text-sm text-slate" style="--rise-delay: 0.26s">
-            Pronounced {SITE.pronunciation}.
-          </p>
-          <div class="rise mt-8 flex flex-col gap-3 sm:flex-row" style="--rise-delay: 0.31s">
+          <div class="rise mt-8 flex flex-col gap-3 sm:flex-row" style="--rise-delay: 0.3s">
             <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
-            <Button href="/audit-os" variant="ghost" size="lg">Explore Assurance Platform</Button>
+            <Button href="/audit-os" variant="ghost" size="lg">Explore Assurance OS</Button>
           </div>
+          <p class="rise mt-7 max-w-md text-sm text-slate" style="--rise-delay: 0.37s">
+            Advisory, analytics and Assurance OS work as one operating layer.
+          </p>
         </div>
 
-        <div
-          class="rise hero-device"
-          style="--rise-delay: 0.38s"
-          aria-label="Assurance Platform preview"
-        >
-          <div class="device-topbar">
-            <span></span><span></span><span></span>
-          </div>
-          <div class="device-screen">
-            <div class="device-header">
-              <div>
-                <p class="text-xs font-medium tracking-[0.08em] text-gold uppercase">
-                  Live assurance
-                </p>
-                <h2 class="mt-2 text-xl text-navy">What we run</h2>
-                <p class="mt-1 text-sm text-slate">
-                  One thread, from the first risk to the board pack.
-                </p>
-              </div>
-              <div
-                class="rounded-full bg-paper-shade px-3 py-1 text-sm text-slate ring-1 ring-hairline"
-              >
-                On track
-              </div>
-            </div>
-            <div class="hero-slides mt-6" data-hero-slides>
-              {
-                heroSlides.map((s, i) => (
-                  <article
-                    class:list={['hero-slide', i === 0 && 'is-active']}
-                    data-hero-slide
-                    aria-hidden={i === 0 ? 'false' : 'true'}
-                  >
-                    <p class="text-xs font-medium tracking-[0.08em] text-gold uppercase">
-                      {s.kicker}
-                    </p>
-                    <h3 class="mt-3 text-xl text-navy">{s.title}</h3>
-                    <p class="mt-2 text-sm text-slate">{s.body}</p>
-                  </article>
-                ))
-              }
-            </div>
-            <div class="mt-5 flex justify-center gap-2" aria-hidden="true">
-              {
-                heroSlides.map((_, i) => (
-                  <span class:list={['hero-dot', i === 0 && 'is-active']} data-hero-dot />
-                ))
-              }
-            </div>
-          </div>
+        <div class="rise w-full self-stretch lg:py-14" style="--rise-delay: 0.42s">
+          <HeroMotionPanel client:visible />
         </div>
       </div>
     </Container>
@@ -295,29 +230,4 @@ const faqs: FaqItem[] = [
     secondaryLabel="Contact us"
     secondaryHref="/contact"
   />
-
-  <script>
-    // Hero rotating panel: cross-fade the slides on a timer. The first slide is
-    // active in the markup, so without JS it shows statically. Auto-rotation is
-    // skipped when the visitor prefers reduced motion.
-    function initHeroSlides() {
-      const root = document.querySelector('[data-hero-slides]');
-      if (!root) return;
-      const slides = Array.from(root.querySelectorAll<HTMLElement>('[data-hero-slide]'));
-      const dots = Array.from(document.querySelectorAll<HTMLElement>('[data-hero-dot]'));
-      if (slides.length < 2) return;
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      let i = 0;
-      setInterval(() => {
-        slides[i].classList.remove('is-active');
-        slides[i].setAttribute('aria-hidden', 'true');
-        dots[i]?.classList.remove('is-active');
-        i = (i + 1) % slides.length;
-        slides[i].classList.add('is-active');
-        slides[i].setAttribute('aria-hidden', 'false');
-        dots[i]?.classList.add('is-active');
-      }, 4000);
-    }
-    initHeroSlides();
-  </script>
 </BaseLayout>

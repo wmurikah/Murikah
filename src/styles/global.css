@@ -10,6 +10,14 @@
 @layer base {
   :root {
     color-scheme: light;
+    /* Sticky header height, used by the hero to fill the first screen. Matches
+       the header: 4rem on mobile, 4.5rem from the large breakpoint up. */
+    --header-height: 4rem;
+  }
+  @media (min-width: 1024px) {
+    :root {
+      --header-height: 4.5rem;
+    }
   }
 
   html {
@@ -291,60 +299,6 @@
     background: color-mix(in srgb, var(--color-blue) 9%, transparent);
   }
 
-  /* The Assurance Platform preview panel, now a light card on the light hero: a clean
-     white surface with a fine hairline and a soft, warm-tinted lift. */
-  .hero-device {
-    position: relative;
-    overflow: hidden;
-    border-radius: 2rem;
-    background: var(--color-surface);
-    padding: 0.75rem;
-    box-shadow: var(--shadow-lift);
-    border: 1px solid color-mix(in srgb, var(--color-hairline) 90%, transparent);
-  }
-
-  .device-topbar {
-    display: flex;
-    gap: 0.45rem;
-    padding: 0.75rem 0.85rem 0.95rem;
-  }
-
-  .device-topbar span {
-    width: 0.65rem;
-    height: 0.65rem;
-    border-radius: 9999px;
-    background: color-mix(in srgb, var(--color-navy) 16%, transparent);
-  }
-
-  .device-screen {
-    border-radius: 1.55rem;
-    background:
-      radial-gradient(
-        circle at 50% 0%,
-        color-mix(in srgb, var(--color-gold) 8%, transparent),
-        transparent 16rem
-      ),
-      var(--color-paper);
-    padding: clamp(1rem, 3vw, 1.6rem);
-    border: 1px solid color-mix(in srgb, var(--color-hairline) 70%, transparent);
-  }
-
-  .device-header {
-    display: flex;
-    align-items: start;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .glass-card {
-    min-height: 0;
-    border-radius: 1.35rem;
-    background: var(--color-surface);
-    padding: 1.1rem;
-    box-shadow: var(--shadow-card);
-    border: 1px solid color-mix(in srgb, var(--color-hairline) 80%, transparent);
-  }
-
   .premium-card {
     display: flex;
     min-height: 0;
@@ -367,48 +321,71 @@
     box-shadow: var(--shadow-lift);
     border-color: color-mix(in srgb, var(--color-gold) 42%, var(--color-hairline));
   }
+}
 
-  /* Hero rotating panel: slides stack and cross-fade on a timer. The first
-     slide is active in the markup, so without JS (or under reduced motion) it
-     shows statically and the rest stay hidden. */
-  .hero-slides {
-    position: relative;
-    min-height: 9rem;
+/* ---- Accessibility assistant settings -------------------------------------
+   Applied to <html> by the assistant (and, before first paint, by the inline
+   script in BaseLayout). Each is a plain, low-risk override so a visitor can
+   read and move through the site on their own terms. */
+@layer utilities {
+  /* Text size steps. Scales the rem-based type across the site. */
+  html[data-a11y-text='1'] {
+    font-size: 106.25%;
   }
-  .hero-slide {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    border-radius: 1.35rem;
-    background: var(--color-surface);
-    border: 1px solid color-mix(in srgb, var(--color-hairline) 75%, transparent);
-    box-shadow: var(--shadow-card);
-    padding: 1.25rem;
-    opacity: 0;
-    transform: translateY(8px);
-    transition:
-      opacity 0.6s var(--ease-out-soft),
-      transform 0.6s var(--ease-out-soft);
-    pointer-events: none;
+  html[data-a11y-text='2'] {
+    font-size: 112.5%;
   }
-  .hero-slide.is-active {
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
+  html[data-a11y-text='3'] {
+    font-size: 120%;
   }
-  .hero-dot {
-    inline-size: 0.4rem;
-    block-size: 0.4rem;
-    border-radius: 9999px;
-    background: color-mix(in srgb, var(--color-navy) 18%, transparent);
-    transition:
-      inline-size 0.3s var(--ease-out-soft),
-      background-color 0.3s var(--ease-out-soft);
+  html[data-a11y-text='4'] {
+    font-size: 131.25%;
   }
-  .hero-dot.is-active {
-    inline-size: 1.1rem;
-    background: var(--color-gold);
+
+  /* Higher contrast: darker secondary text and borders, cleaner backgrounds.
+     Overriding the tokens re-colours every utility that reads them. */
+  .a11y-high-contrast {
+    --color-ink: #0a1020;
+    --color-slate: #333c4f;
+    --color-hairline: #8b93a6;
+    --color-paper: #ffffff;
+    --color-paper-shade: #eceef3;
+  }
+  .a11y-high-contrast body {
+    color: #0a1020;
+  }
+
+  /* Clearer links: underline them everywhere, including nav and card links. */
+  .a11y-highlight-links a {
+    text-decoration: underline !important;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.16em;
+  }
+
+  /* Stronger focus: a heavier, high-contrast ring on any focused control. */
+  .a11y-strong-focus :focus-visible {
+    outline: 3px solid var(--color-navy) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 5px var(--color-gold) !important;
+    border-radius: 4px;
+  }
+
+  /* Reduced motion on request: neutralise animation and transitions, matching
+     the prefers-reduced-motion behaviour. */
+  .a11y-reduce-motion,
+  .a11y-reduce-motion *,
+  .a11y-reduce-motion *::before,
+  .a11y-reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .a11y-reduce-motion .js .reveal,
+  .a11y-reduce-motion .js .reveal.is-visible,
+  .a11y-reduce-motion .js .rise {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
   }
 }

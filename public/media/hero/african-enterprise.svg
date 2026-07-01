@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1500" width="1200" height="1500" role="img">
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B1733"/>
+      <stop offset="1" stop-color="#081026"/>
+    </linearGradient>
+    <radialGradient id="bloom" cx="0.5" cy="0.6" r="0.85">
+      <stop offset="0" stop-color="#16264c" stop-opacity="0.9"/>
+      <stop offset="0.55" stop-color="#16264c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.38"/>
+    </radialGradient>
+    <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.45" stop-color="#081026" stop-opacity="0"/>
+      <stop offset="1" stop-color="#081026" stop-opacity="0.55"/>
+    </linearGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="1500" fill="url(#field)"/>
+  <rect width="1200" height="1500" fill="url(#bloom)"/>
+  <g fill="none">
+    <line x1="150" y1="820" x2="1050" y2="820" stroke="#C9CFDB" stroke-opacity="0.22" stroke-width="3"/>
+    <circle cx="600.0" cy="820" r="470" stroke="#C9CFDB" stroke-opacity="0.16" stroke-width="2"/>
+    <ellipse cx="600.0" cy="820" rx="110" ry="470" stroke="#C9CFDB" stroke-opacity="0.18" stroke-width="2"/>
+    <ellipse cx="600.0" cy="820" rx="240" ry="470" stroke="#C9CFDB" stroke-opacity="0.15" stroke-width="2"/>
+    <ellipse cx="600.0" cy="820" rx="360" ry="470" stroke="#C9CFDB" stroke-opacity="0.12" stroke-width="2"/>
+    <line x1="180" y1="610" x2="1020" y2="610" stroke="#C9CFDB" stroke-opacity="0.12" stroke-width="2"/>
+    <line x1="180" y1="1030" x2="1020" y2="1030" stroke="#C9CFDB" stroke-opacity="0.12" stroke-width="2"/>
+    <ellipse cx="600.0" cy="820" rx="240" ry="470" stroke="#C9A227" stroke-width="3.5"/>
+    <circle cx="450.0" cy="820" r="8" fill="#C9A227"/>
+    <circle cx="810.0" cy="820" r="6" fill="#C9CFDB" fill-opacity="0.4"/>
+  </g>
+  <rect width="1200" height="1500" fill="url(#vignette)"/>
+  <rect width="1200" height="1500" filter="url(#grain)" opacity="0.05"/>
+  <rect width="1200" height="1500" fill="url(#scrim)"/>
+  <rect x="8" y="8" width="1184" height="1484" rx="30" fill="none" stroke="#FFFFFF" stroke-opacity="0.06"/>
+  <line x1="96" y1="120" x2="164" y2="120" stroke="#C9A227" stroke-width="3" stroke-linecap="round"/>
+</svg>
