@@ -62,7 +62,7 @@ export const SITE = {
   tagline: 'Assurance. Systems. Intelligence.',
   /** The one-liner. Used as the default meta description. */
   description:
-    'Murikah helps African organisations run, prove and continuously improve their internal audit and AI governance, with senior judgement and a working platform priced for the mid-market.',
+    'Murikah helps organisations run, prove and continuously improve their internal audit and AI governance, with senior judgement and a working platform priced for the mid-market.',
   url: SITE_URL,
   locale: 'en',
   /** Pronunciation cue, surfaced at first prominent use and in the footer. */
@@ -309,7 +309,7 @@ export const AUDIENCE: AudienceSegment[] = [
 /** Default SEO values, overridable per page via the Seo component. */
 export const DEFAULT_SEO = {
   /** Home and fallback title. */
-  defaultTitle: 'Internal audit and AI governance, built in Africa | Murikah',
+  defaultTitle: 'Internal audit and AI governance | Murikah',
   description: SITE.description,
   image: SITE.defaultOgImage,
 } as const;
