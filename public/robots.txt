@@ -24,4 +24,4 @@ Allow: /
 User-agent: *
 Allow: /
 
-Sitemap: https://www.murikah.com/sitemap-index.xml
+Sitemap: https://murikah.com/sitemap-index.xml

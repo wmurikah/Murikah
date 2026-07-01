@@ -53,7 +53,7 @@ export interface AudienceSegment {
 }
 
 /** Canonical production URL. MUST stay in sync with `site` in astro.config.ts. */
-export const SITE_URL = 'https://www.murikah.com';
+export const SITE_URL = 'https://murikah.com';
 
 export const SITE = {
   name: 'Murikah',
