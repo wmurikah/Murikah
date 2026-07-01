@@ -153,7 +153,13 @@ const activeLink = 'bg-white text-navy shadow-card';
           NAV.map((item) =>
             item.children ? (
               <details class="group/m rounded-lg">
-                <summary class="flex min-h-[2.75rem] cursor-pointer list-none items-center justify-between rounded-lg px-3 py-3 font-medium text-navy hover:bg-paper-shade [&::-webkit-details-marker]:hidden">
+                <summary
+                  class:list={[
+                    'flex min-h-[2.75rem] cursor-pointer list-none items-center justify-between rounded-lg px-3 py-3 font-medium text-navy hover:bg-paper-shade [&::-webkit-details-marker]:hidden',
+                    groupActive(item) && 'bg-paper-shade',
+                  ]}
+                  aria-current={groupActive(item) ? 'page' : undefined}
+                >
                   {item.label}
                   <svg
                     width="18"
