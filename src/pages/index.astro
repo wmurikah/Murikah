@@ -19,7 +19,7 @@ const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
   .slice(0, 3);
 
 // Hero rotating panel: one thread through the audit, from the first risk on the
-// plan to the board pack. Each slide is a real Assurance OS capability.
+// plan to the board pack. Each slide is a real Assurance Platform capability.
 const heroSlides = [
   {
     kicker: 'Audit universe',
@@ -54,7 +54,7 @@ const faqs: FaqItem[] = [
   {
     question: 'What does Murikah do?',
     answer:
-      'Murikah helps organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Assurance OS, advisory, training and automation builds in one joined-up relationship.',
+      'Murikah helps organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Assurance Platform, advisory, training and automation builds in one joined-up relationship.',
   },
   {
     question: 'Who is Murikah for?',
@@ -88,19 +88,23 @@ const faqs: FaqItem[] = [
           </h1>
           <p class="rise mt-5 max-w-xl text-lg leading-7 text-slate" style="--rise-delay: 0.22s">
             Murikah gives organisations a calm way to run internal audit, govern AI, prove the
-            evidence and keep remediation moving. Senior judgement and Assurance OS work as one
-            operating layer.
+            evidence and keep remediation moving. Senior judgement and the Assurance Platform work
+            as one operating layer.
           </p>
           <p class="rise mt-3 text-sm text-slate" style="--rise-delay: 0.26s">
             Pronounced {SITE.pronunciation}.
           </p>
           <div class="rise mt-8 flex flex-col gap-3 sm:flex-row" style="--rise-delay: 0.31s">
             <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
-            <Button href="/audit-os" variant="ghost" size="lg">Explore Assurance OS</Button>
+            <Button href="/audit-os" variant="ghost" size="lg">Explore Assurance Platform</Button>
           </div>
         </div>
 
-        <div class="rise hero-device" style="--rise-delay: 0.38s" aria-label="Assurance OS preview">
+        <div
+          class="rise hero-device"
+          style="--rise-delay: 0.38s"
+          aria-label="Assurance Platform preview"
+        >
           <div class="device-topbar">
             <span></span><span></span><span></span>
           </div>
