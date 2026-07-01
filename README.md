@@ -4,7 +4,7 @@
 > Pronounced _moo-REE-kah_ (rhymes with Eureka).
 
 Marketing website for **Murikah**, an AI-native assurance and governance company
-helping African organisations run, prove, and continuously improve their internal
+helping organisations run, prove, and continuously improve their internal
 audit and their AI and system governance.
 
 This repository is the **framework** (Build Prompt 1): project setup, design

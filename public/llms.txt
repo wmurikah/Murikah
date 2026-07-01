@@ -2,7 +2,7 @@
 
 > Assurance. Systems. Intelligence. Pronounced moo-REE-kah, rhymes with Eureka.
 
-Murikah is an AI-native assurance and governance company, built in Africa. It helps regulated mid-market organisations run, prove and continuously improve their internal audit and their AI and system governance, at a fraction of the cost and rigidity of the Big 4 and enterprise governance, risk and compliance (GRC) software. The company combines senior, standards-based assurance judgement with a working software platform in one relationship, priced for the African mid-market rather than the global enterprise. Its work follows the IIA Global Internal Audit Standards and the ISO/IEC 27001 and ISO/IEC 42001 standards. Some pages on the site still carry clearly-marked placeholder tokens pending final confirmation.
+Murikah is an AI-native assurance and governance company. It helps regulated mid-market organisations run, prove and continuously improve their internal audit and their AI and system governance, at a fraction of the cost and rigidity of the Big 4 and enterprise governance, risk and compliance (GRC) software. The company combines senior, standards-based assurance judgement with a working software platform in one relationship, priced for the mid-market rather than the global enterprise. Its work follows the IIA Global Internal Audit Standards and the ISO/IEC 27001 and ISO/IEC 42001 standards. Some pages on the site still carry clearly-marked placeholder tokens pending final confirmation.
 
 ## The six lines of work
 
@@ -30,7 +30,7 @@ Murikah works to the IIA Global Internal Audit Standards for its internal audit 
 
 ## Top guides
 
-- ISO 42001 readiness: what African organisations actually need to do. https://www.murikah.com/insights/iso-42001-readiness
+- ISO 42001 readiness: what organisations actually need to do. https://www.murikah.com/insights/iso-42001-readiness
 - Internal audit for SACCOs: what SASRA expects and how to deliver it. https://www.murikah.com/insights/sacco-internal-audit-sasra
 - The Kenya Data Protection Act: what controllers and processors must do. https://www.murikah.com/insights/kenya-data-protection-act
 - How much does internal audit software cost in Kenya? A plain buyer's guide. https://www.murikah.com/insights/internal-audit-software-cost-kenya

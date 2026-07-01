@@ -54,7 +54,7 @@ const faqs: FaqItem[] = [
   {
     question: 'What does Murikah do?',
     answer:
-      'Murikah helps African organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Audit OS, advisory, training and automation builds in one joined-up relationship.',
+      'Murikah helps organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Audit OS, advisory, training and automation builds in one joined-up relationship.',
   },
   {
     question: 'Who is Murikah for?',
@@ -64,13 +64,13 @@ const faqs: FaqItem[] = [
   {
     question: 'How is Murikah different from the Big 4 and from audit software?',
     answer:
-      'We combine senior assurance judgement and the platform it runs on. You get people who can reason through the work, software that keeps evidence and follow-up moving, and a cost model designed for the African mid-market.',
+      'We combine senior assurance judgement and the platform it runs on. You get people who can reason through the work, software that keeps evidence and follow-up moving, and a cost model designed for the mid-market.',
   },
 ];
 ---
 
 <BaseLayout
-  titleFull="Internal audit and AI governance, built in Africa | Murikah"
+  titleFull="Internal audit and AI governance | Murikah"
   description={SITE.description}
 >
   <section class="hero-luxe relative overflow-hidden" aria-labelledby="hero-title">
@@ -90,9 +90,12 @@ const faqs: FaqItem[] = [
             Make assurance feel inevitable.
           </h1>
           <p class="rise mt-5 max-w-xl text-lg leading-7 text-slate" style="--rise-delay: 0.22s">
-            Murikah gives African organisations a calm way to run internal audit, govern AI, prove
+            Murikah gives organisations a calm way to run internal audit, govern AI, prove
             the evidence and keep remediation moving. Senior judgement and Audit OS work as one
             operating layer.
+          </p>
+          <p class="rise mt-3 text-sm text-slate" style="--rise-delay: 0.26s">
+            Pronounced {SITE.pronunciation}.
           </p>
           <div class="rise mt-8 flex flex-col gap-3 sm:flex-row" style="--rise-delay: 0.31s">
             <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
