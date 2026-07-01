@@ -1,9 +1,10 @@
 ---
 /**
- * Logo: a navy tile carrying a single gold aperture dot, plus the "Murikah"
- * wordmark set in the neutral brand sans. The dot is a discreet evidence and
- * verification device; it lives in the tile and never interrupts the wordmark,
- * which reads plainly as "Murikah".
+ * Logo: a navy tile carrying a fine brass aperture mark (a hairline ring with a
+ * small centre point), plus the "Murikah" wordmark set in the neutral brand
+ * sans. The mark is a discreet evidence and verification device, restrained
+ * rather than a loud filled dot; it lives in the tile and never interrupts the
+ * wordmark, which reads plainly as "Murikah".
  *
  * `tone="light"` is for dark/navy surfaces (the footer). Hex values are inlined
  * in the SVG because presentation attributes do not resolve CSS variables.
@@ -30,7 +31,8 @@ const wordmarkColor = tone === 'light' ? 'text-paper' : 'text-navy';
     class="shrink-0"
   >
     <rect width="32" height="32" rx="8" fill={tileFill}></rect>
-    <circle cx="16" cy="16" r="6.5" fill="#C9A227"></circle>
+    <circle cx="16" cy="16" r="6.4" fill="none" stroke="#A9822E" stroke-width="1.5"></circle>
+    <circle cx="16" cy="16" r="1.7" fill="#A9822E"></circle>
   </svg>
   {
     withWordmark && (

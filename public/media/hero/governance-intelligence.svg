@@ -81,12 +81,12 @@
     <circle cx="678" cy="1187" r="5" fill="#C9CFDB" fill-opacity="0.22"/>
     <circle cx="834" cy="1172" r="5" fill="#C9CFDB" fill-opacity="0.22"/>
     <circle cx="990" cy="1189" r="5" fill="#C9CFDB" fill-opacity="0.22"/>
-    <circle cx="678" cy="728" r="34" fill="#C9A227" fill-opacity="0.14" filter="url(#soft)"/>
-    <circle cx="678" cy="728" r="9" fill="#C9A227"/>
+    <circle cx="678" cy="728" r="34" fill="#A9822E" fill-opacity="0.14" filter="url(#soft)"/>
+    <circle cx="678" cy="728" r="9" fill="#A9822E"/>
   </g>
   <rect width="1200" height="1500" fill="url(#vignette)"/>
   <rect width="1200" height="1500" filter="url(#grain)" opacity="0.05"/>
   <rect width="1200" height="1500" fill="url(#scrim)"/>
   <rect x="8" y="8" width="1184" height="1484" rx="30" fill="none" stroke="#FFFFFF" stroke-opacity="0.06"/>
-  <line x1="96" y1="120" x2="164" y2="120" stroke="#C9A227" stroke-width="3" stroke-linecap="round"/>
+  <line x1="96" y1="120" x2="164" y2="120" stroke="#A9822E" stroke-width="3" stroke-linecap="round"/>
 </svg>
