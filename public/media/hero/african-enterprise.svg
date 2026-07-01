@@ -34,13 +34,13 @@
     <ellipse cx="600.0" cy="820" rx="360" ry="470" stroke="#C9CFDB" stroke-opacity="0.12" stroke-width="2"/>
     <line x1="180" y1="610" x2="1020" y2="610" stroke="#C9CFDB" stroke-opacity="0.12" stroke-width="2"/>
     <line x1="180" y1="1030" x2="1020" y2="1030" stroke="#C9CFDB" stroke-opacity="0.12" stroke-width="2"/>
-    <ellipse cx="600.0" cy="820" rx="240" ry="470" stroke="#C9A227" stroke-width="3.5"/>
-    <circle cx="450.0" cy="820" r="8" fill="#C9A227"/>
+    <ellipse cx="600.0" cy="820" rx="240" ry="470" stroke="#A9822E" stroke-width="3.5"/>
+    <circle cx="450.0" cy="820" r="8" fill="#A9822E"/>
     <circle cx="810.0" cy="820" r="6" fill="#C9CFDB" fill-opacity="0.4"/>
   </g>
   <rect width="1200" height="1500" fill="url(#vignette)"/>
   <rect width="1200" height="1500" filter="url(#grain)" opacity="0.05"/>
   <rect width="1200" height="1500" fill="url(#scrim)"/>
   <rect x="8" y="8" width="1184" height="1484" rx="30" fill="none" stroke="#FFFFFF" stroke-opacity="0.06"/>
-  <line x1="96" y1="120" x2="164" y2="120" stroke="#C9A227" stroke-width="3" stroke-linecap="round"/>
+  <line x1="96" y1="120" x2="164" y2="120" stroke="#A9822E" stroke-width="3" stroke-linecap="round"/>
 </svg>

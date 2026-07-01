@@ -10,34 +10,56 @@
  */
 
 @theme {
-  /* ---- Brand & neutral (exact brand values) ------------------------------ */
-  --color-navy: #0b1733; /* primary: competence, authority, trust */
-  --color-gold: #c9a227; /* accent: the single distinctive highlight */
-  --color-blue: #1e4fa3; /* interactive: links, buttons, active states */
-  --color-ink: #1b2230; /* body text (not pure black) */
-  --color-slate: #5c6475; /* secondary text */
-  --color-paper: #f7f4ee; /* warm off-white background */
-  --color-surface: #ffffff; /* cards / surfaces */
-  --color-hairline: #d7dbe5; /* borders, dividers */
+  /* ---- Public brand palette (institutional, cinematic, near-monochrome) ---
+     Richer neutrals carry the site; aged brass is the single, scarce accent.
+     Teal, champagne and silver are NOT public brand colours (see the
+     product-only tokens further down). Legacy token names are kept as aliases
+     remapped onto this palette, so existing utilities (bg-paper, text-gold,
+     ...) keep working while new code uses the names below. */
 
-  /* Derived interactive shades for hover/active, darker mixes of the brand
-     colours above, NOT new brand colours. Keeps gold scarce (Von Restorff). */
-  --color-gold-deep: #ae8b1f;
-  --color-blue-deep: #173c7c;
-  --color-navy-deep: #081026;
-  --color-paper-shade: #efeae0;
+  /* Dark, high-trust surfaces */
+  --color-obsidian: #070b12; /* deepest premium surface: hero/CTA/footer depth */
+  --color-navy: #0b1733; /* authority: headings, dark UI, brand depth */
+  --color-navy-deep: #081026; /* derived: navy hover/active */
 
-  /* ---- Extended, narrow-role (product and material surfaces) -------------
-     Formal tokens with deliberately narrow roles, so they never dilute the
-     marketing look. Not for general use. */
-  --color-verified: #0e9c8e; /* product only: verified / assured / evidence complete */
-  --color-champagne: #e7d9a8; /* soft gold wash and aperture glow only, never a fill */
+  /* Text */
+  --color-ink: #111827; /* primary text (not pure black) */
+  --color-graphite: #2a3140; /* secondary dark text, quiet UI */
+  --color-slate: #687080; /* supporting text */
+
+  /* Warm light canvas */
+  --color-ivory: #f8f4ea; /* main warm canvas */
+  --color-porcelain: #fffcf6; /* raised cards, clean surfaces */
+  --color-stone: #e8e0d2; /* subtle section contrast */
+  --color-hairline: #d8d1c3; /* dividers, borders, quiet structure */
+
+  /* The single premium accent, used sparingly */
+  --color-brass: #a9822e; /* aged brass: fine accents, small marks, rare emphasis */
+  --color-brass-deep: #8a6a22; /* derived: brass hover/active */
+  --color-brass-soft: #d6c38a; /* very subtle washes and low-opacity glints only */
+
+  /* Restrained interactive text + accessible focus */
+  --color-blue: #223a63; /* quiet interactive text (links, small affordances) */
+  --color-blue-deep: #16294a; /* derived: interactive hover */
+  --color-focus: #3b82f6; /* accessible focus ring only */
+
+  /* ---- Legacy aliases (kept so existing utilities do not break) -----------
+     These names predate the palette refresh and now point at the restrained
+     values above. Prefer the names above in new code. */
+  --color-gold: #a9822e; /* was loud gold; now aged brass */
+  --color-gold-deep: #8a6a22; /* was gold-deep; now brass-deep */
+  --color-champagne: #d6c38a; /* now soft brass; subtle glints only, never a fill */
+  --color-paper: #f8f4ea; /* now ivory: main canvas */
+  --color-surface: #fffcf6; /* now porcelain: cards */
+  --color-paper-shade: #e8e0d2; /* now warm stone: subtle contrast */
+
+  /* ---- Product-only state colours (never the marketing palette) -----------
+     Narrow roles inside product/dashboard UI. Do not use on marketing pages. */
+  --color-verified: #3f7d6b; /* verified / assured / closed / evidence complete */
   --color-silver: #c9cfdb; /* product table rules and inactive controls */
-
-  /* ---- Status (RAG), PRODUCT/STATUS ONLY, never in marketing UI --------- */
-  --color-status-low: #2e7d5b;
-  --color-status-med: #d9930a;
-  --color-status-high: #b42318;
+  --color-status-low: #2f6b4f;
+  --color-status-med: #b87918;
+  --color-status-high: #9f2a24;
 
   /* ---- Type families ----------------------------------------------------- */
   /* Neutral, Apple-adjacent sans for both headings and body. Apple devices

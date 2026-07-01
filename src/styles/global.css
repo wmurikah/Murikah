@@ -71,17 +71,18 @@
     height: auto;
   }
 
-  /* WCAG 2.2, a clearly visible focus indicator on every interactive element. */
+  /* WCAG 2.2, a clearly visible focus indicator on every interactive element.
+     Focus is the one place a brighter, accessible blue is allowed. */
   :focus-visible {
-    outline: 2px solid var(--color-blue);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
     border-radius: 3px;
   }
 
-  /* On navy/dark surfaces, gold focus rings meet contrast far better than blue.
-     Containers with the `.on-dark` class flip the focus colour for descendants. */
+  /* On navy/dark surfaces, a brass focus ring meets contrast far better than
+     blue. Containers with `.on-dark` flip the focus colour for descendants. */
   .on-dark :focus-visible {
-    outline-color: var(--color-gold);
+    outline-color: var(--color-brass);
   }
 
   ::selection {
@@ -131,11 +132,11 @@
   }
 
   /* ---- Signature: clarity brought to light --------------------------------
-     One restrained light motif. A soft gold aperture sits behind a single key
-     headline, and a fine gold beam recurs as a structural accent. Used
+     One restrained light motif. A soft brass aperture sits behind a single key
+     headline, and a fine brass beam recurs as a structural accent. Used
      sparingly, never scattered across a page. */
 
-  /* Eyebrow: a tracked uppercase label introduced by a short gold beam. */
+  /* Eyebrow: a tracked uppercase label introduced by a short brass beam. */
   .eyebrow {
     display: flex;
     flex-wrap: wrap;
@@ -147,7 +148,10 @@
     font-weight: 500;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-gold);
+    /* Deeper aged brass on light surfaces so the small eyebrow text clears AA
+       contrast; the brighter brass is used on dark surfaces via the rule
+       below (where it has the contrast headroom). */
+    color: var(--color-brass-deep);
   }
   .eyebrow::before {
     content: '';
@@ -158,6 +162,9 @@
   }
   .eyebrow.is-centred {
     justify-content: center;
+  }
+  .on-dark .eyebrow {
+    color: var(--color-brass);
   }
 
   /* Beam: a fine gold hairline, fading at both ends, as a structural accent. */
@@ -175,10 +182,10 @@
   /* Rich navy surface, the premium dark field for hero, CTA and footer. A
      barely-there gradient adds depth without reading as a SaaS gradient. */
   .navy-rich {
-    background-color: var(--color-navy);
+    background-color: var(--color-obsidian);
     background-image:
-      radial-gradient(120% 130% at 50% -25%, #16264c 0%, rgba(22, 38, 76, 0) 58%),
-      linear-gradient(180deg, var(--color-navy) 0%, var(--color-navy-deep) 100%);
+      radial-gradient(120% 130% at 50% -25%, #12203d 0%, rgba(18, 32, 61, 0) 58%),
+      linear-gradient(180deg, var(--color-navy) 0%, var(--color-obsidian) 100%);
   }
 
   /* The aperture, a soft single bloom of light. Render as an aria-hidden child
@@ -257,30 +264,25 @@
 }
 
 @layer components {
-  /* Light hero canvas: white and warm paper dominate, with only the faintest
-     wash of the brand gold and blue in the corners so the field reads as calm,
-     not flat. Keeps paper/white as the dominant surface. */
+  /* Light hero canvas: porcelain and warm ivory dominate, with only the
+     faintest single wash of brass in one corner so the field reads as calm and
+     near-monochrome, not decorative. No second colour. */
   .hero-luxe {
     background:
       radial-gradient(
         circle at 12% 16%,
-        color-mix(in srgb, var(--color-gold) 12%, transparent),
-        transparent 22rem
+        color-mix(in srgb, var(--color-brass) 7%, transparent),
+        transparent 24rem
       ),
-      radial-gradient(
-        circle at 90% 6%,
-        color-mix(in srgb, var(--color-blue) 7%, transparent),
-        transparent 26rem
-      ),
-      linear-gradient(180deg, var(--color-surface) 0%, var(--color-paper) 100%);
+      linear-gradient(180deg, var(--color-porcelain) 0%, var(--color-ivory) 100%);
   }
 
   .orb {
     position: absolute;
     pointer-events: none;
     border-radius: 9999px;
-    filter: blur(46px);
-    opacity: 0.55;
+    filter: blur(52px);
+    opacity: 0.5;
   }
 
   .orb-one {
@@ -288,15 +290,16 @@
     top: 7rem;
     width: 34rem;
     height: 34rem;
-    background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+    background: color-mix(in srgb, var(--color-brass) 9%, transparent);
   }
 
+  /* Neutral, not a second brand colour, so the canvas stays monochrome. */
   .orb-two {
     left: 48%;
     bottom: -18rem;
     width: 42rem;
     height: 42rem;
-    background: color-mix(in srgb, var(--color-blue) 9%, transparent);
+    background: color-mix(in srgb, var(--color-navy) 5%, transparent);
   }
 
   .premium-card {
@@ -388,4 +391,16 @@
     transform: none !important;
     animation: none !important;
   }
+}
+
+/* Primary button on dark surfaces (the CTA band, the footer): invert to an
+   ivory fill with navy text so the one strong action still reads on navy. Left
+   unlayered so it wins over the button's utility classes. The brass hairline
+   from the variant stays as the scarce accent. */
+.on-dark .btn-primary {
+  background-color: var(--color-ivory);
+  color: var(--color-navy);
+}
+.on-dark .btn-primary:hover {
+  background-color: var(--color-porcelain);
 }
