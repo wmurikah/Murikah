@@ -24,19 +24,12 @@
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: var(--text-base);
-    line-height: 1.55;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     /* Never synthesise weights from the variable font. */
     font-synthesis-weight: none;
-  }
-
-  /* Body steps up slightly on larger viewports (17px → 18px). */
-  @media (min-width: 768px) {
-    body {
-      font-size: 1.125rem;
-    }
   }
 
   /* Headings use the neutral sans by default, with tight leading and slightly
@@ -142,9 +135,9 @@
     gap: 0.5rem 0.7rem;
     max-inline-size: 100%;
     font-family: var(--font-sans);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    letter-spacing: 0.16em;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--color-gold);
   }
@@ -256,19 +249,22 @@
 }
 
 @layer components {
+  /* Light hero canvas: white and warm paper dominate, with only the faintest
+     wash of the brand gold and blue in the corners so the field reads as calm,
+     not flat. Keeps paper/white as the dominant surface. */
   .hero-luxe {
     background:
-      radial-gradient(circle at 12% 18%, rgba(201, 162, 39, 0.24), transparent 27rem),
-      radial-gradient(circle at 88% 12%, rgba(81, 126, 214, 0.22), transparent 30rem),
-      linear-gradient(145deg, #030814 0%, #071229 42%, #111827 100%);
+      radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--color-gold) 12%, transparent), transparent 22rem),
+      radial-gradient(circle at 90% 6%, color-mix(in srgb, var(--color-blue) 7%, transparent), transparent 26rem),
+      linear-gradient(180deg, var(--color-surface) 0%, var(--color-paper) 100%);
   }
 
   .orb {
     position: absolute;
     pointer-events: none;
     border-radius: 9999px;
-    filter: blur(34px);
-    opacity: 0.72;
+    filter: blur(46px);
+    opacity: 0.55;
   }
 
   .orb-one {
@@ -276,7 +272,7 @@
     top: 7rem;
     width: 34rem;
     height: 34rem;
-    background: rgba(201, 162, 39, 0.16);
+    background: color-mix(in srgb, var(--color-gold) 12%, transparent);
   }
 
   .orb-two {
@@ -284,32 +280,19 @@
     bottom: -18rem;
     width: 42rem;
     height: 42rem;
-    background: rgba(30, 79, 163, 0.22);
+    background: color-mix(in srgb, var(--color-blue) 9%, transparent);
   }
 
+  /* The Audit OS preview panel, now a light card on the light hero: a clean
+     white surface with a fine hairline and a soft, warm-tinted lift. */
   .hero-device {
     position: relative;
     overflow: hidden;
     border-radius: 2rem;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
+    background: var(--color-surface);
     padding: 0.75rem;
-    box-shadow:
-      0 40px 120px -40px rgba(0, 0, 0, 0.65),
-      inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  }
-
-  .hero-device::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.04));
-    mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    pointer-events: none;
+    box-shadow: var(--shadow-lift);
+    border: 1px solid color-mix(in srgb, var(--color-hairline) 90%, transparent);
   }
 
   .device-topbar {
@@ -322,16 +305,16 @@
     width: 0.65rem;
     height: 0.65rem;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.32);
+    background: color-mix(in srgb, var(--color-navy) 16%, transparent);
   }
 
   .device-screen {
     border-radius: 1.55rem;
     background:
-      radial-gradient(circle at 50% 0%, rgba(201, 162, 39, 0.18), transparent 18rem),
-      rgba(5, 12, 28, 0.86);
+      radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-gold) 8%, transparent), transparent 16rem),
+      var(--color-paper);
     padding: clamp(1rem, 3vw, 1.6rem);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11);
+    border: 1px solid color-mix(in srgb, var(--color-hairline) 70%, transparent);
   }
 
   .device-header {
@@ -344,10 +327,10 @@
   .glass-card {
     min-height: 0;
     border-radius: 1.35rem;
-    background: rgba(255, 255, 255, 0.075);
+    background: var(--color-surface);
     padding: 1.1rem;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow-card);
+    border: 1px solid color-mix(in srgb, var(--color-hairline) 80%, transparent);
   }
 
   .premium-card {
@@ -387,9 +370,9 @@
     flex-direction: column;
     justify-content: center;
     border-radius: 1.35rem;
-    background: rgba(255, 255, 255, 0.075);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    background: var(--color-surface);
+    border: 1px solid color-mix(in srgb, var(--color-hairline) 75%, transparent);
+    box-shadow: var(--shadow-card);
     padding: 1.25rem;
     opacity: 0;
     transform: translateY(8px);
@@ -407,7 +390,7 @@
     inline-size: 0.4rem;
     block-size: 0.4rem;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.25);
+    background: color-mix(in srgb, var(--color-navy) 18%, transparent);
     transition:
       inline-size 0.3s var(--ease-out-soft),
       background-color 0.3s var(--ease-out-soft);
