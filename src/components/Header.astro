@@ -26,24 +26,24 @@ const path = Astro.url.pathname;
 const groupActive = (item: NavItem) =>
   (item.match ?? [item.href]).some((p) => path === p || path.startsWith(p + '/'));
 
-// Inline editorial links: no pill, no boxed tabs. A fine gold underline grows
-// in on hover, on keyboard focus, while the group's menu is open, and stays lit
-// on the active group (aria-current="page"). The underline sits just under the
-// text so the header reads as open and premium, not template-like.
+// Inline editorial links on a dark header: no pill, no boxed tabs. A fine brass
+// underline grows in on hover, on keyboard focus, while the group's menu is
+// open, and stays lit on the active group (aria-current="page"). Links sit in
+// ivory and brighten to white, so the header reads as open, dark and premium.
 const navLink =
-  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-ink/75 transition-colors duration-150 hover:text-navy focus-visible:text-navy aria-[current=page]:text-navy ' +
-  'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[0.7rem] after:h-px after:origin-left after:scale-x-0 after:bg-gold after:transition-transform after:duration-200 ' +
+  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-paper/75 transition-colors duration-150 hover:text-white focus-visible:text-white aria-[current=page]:text-white ' +
+  'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[0.7rem] after:h-px after:origin-left after:scale-x-0 after:bg-brass after:transition-transform after:duration-200 ' +
   'hover:after:scale-x-100 focus-visible:after:scale-x-100 group-hover:after:scale-x-100 group-focus-within:after:scale-x-100 aria-[current=page]:after:scale-x-100';
 ---
 
 <header
-  class="sticky top-0 z-50 border-b border-white/60 bg-white/72 shadow-[0_1px_30px_rgba(11,23,51,0.06)] backdrop-blur-xl"
+  class="on-dark sticky top-0 z-50 border-b border-white/10 bg-obsidian/85 shadow-[0_1px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl"
 >
   <Container>
     <div class="flex h-16 items-center justify-between lg:h-[4.5rem]">
       {/* Logo, top-left, links home (Jakob's Law). */}
       <a href="/" class="rounded-md no-underline" aria-label="Murikah, home">
-        <Logo />
+        <Logo tone="light" />
       </a>
 
       {
@@ -85,18 +85,18 @@ const navLink =
                 {/* Disclosure menu. The pt-3 wrapper is a transparent hover
                     bridge so the pointer never crosses a dead gap. */}
                 <div class="invisible absolute top-full left-1/2 z-50 w-[26rem] -translate-x-1/2 pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
-                  <div class="rounded-[1.4rem] bg-white/95 p-2 shadow-pop ring-1 ring-hairline backdrop-blur-xl">
+                  <div class="rounded-[1.4rem] bg-obsidian/95 p-2 shadow-pop ring-1 ring-white/10 backdrop-blur-xl">
                     <ul class="grid gap-0.5">
                       {item.children.map((c) => (
                         <li>
                           <a
                             href={c.href}
-                            class="group/row flex items-start gap-3 rounded-xl px-3 py-2.5 no-underline transition-colors hover:bg-paper"
+                            class="group/row flex items-start gap-3 rounded-xl px-3 py-2.5 no-underline transition-colors hover:bg-white/5"
                           >
-                            <span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-gold transition-transform group-hover/row:scale-125" />
+                            <span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-brass transition-transform group-hover/row:scale-125" />
                             <span>
-                              <span class="block text-sm font-medium text-navy">{c.label}</span>
-                              <span class="mt-0.5 block text-xs leading-snug text-slate">
+                              <span class="block text-sm font-medium text-white">{c.label}</span>
+                              <span class="mt-0.5 block text-xs leading-snug text-paper/55">
                                 {c.description}
                               </span>
                             </span>
@@ -128,7 +128,7 @@ const navLink =
       {/* Mobile menu toggle, 44px tap target (Fitts's Law). */}
       <button
         type="button"
-        class="inline-flex size-11 items-center justify-center rounded-md text-navy hover:bg-paper-shade lg:hidden"
+        class="inline-flex size-11 items-center justify-center rounded-md text-paper hover:bg-white/10 lg:hidden"
         aria-expanded="false"
         aria-controls="mobile-menu"
         aria-label="Open menu"
@@ -150,7 +150,7 @@ const navLink =
     id="mobile-menu"
     data-mobile-panel
     hidden
-    class="border-t border-hairline bg-paper lg:hidden"
+    class="on-dark border-t border-white/10 bg-obsidian lg:hidden"
   >
     <Container>
       <nav aria-label="Mobile" class="flex flex-col gap-1 py-4">
@@ -160,8 +160,8 @@ const navLink =
               <details class="group/m rounded-lg">
                 <summary
                   class:list={[
-                    'flex min-h-[2.75rem] cursor-pointer list-none items-center justify-between rounded-lg px-3 py-3 font-medium text-navy hover:bg-paper-shade [&::-webkit-details-marker]:hidden',
-                    groupActive(item) && 'bg-paper-shade',
+                    'flex min-h-[2.75rem] cursor-pointer list-none items-center justify-between rounded-lg px-3 py-3 font-medium text-paper hover:bg-white/5 [&::-webkit-details-marker]:hidden',
+                    groupActive(item) && 'bg-white/5',
                   ]}
                   aria-current={groupActive(item) ? 'page' : undefined}
                 >
@@ -172,7 +172,7 @@ const navLink =
                     viewBox="0 0 16 16"
                     fill="none"
                     aria-hidden="true"
-                    class="text-slate transition-transform duration-200 group-open/m:rotate-180"
+                    class="text-paper/60 transition-transform duration-200 group-open/m:rotate-180"
                   >
                     <path
                       d="M4 6l4 4 4-4"
@@ -183,11 +183,11 @@ const navLink =
                     />
                   </svg>
                 </summary>
-                <div class="mt-1 mb-1 flex flex-col gap-0.5 border-l border-hairline pl-3">
+                <div class="mt-1 mb-1 flex flex-col gap-0.5 border-l border-white/10 pl-3">
                   {item.children.map((c) => (
                     <a
                       href={c.href}
-                      class="rounded-lg px-3 py-2.5 text-navy no-underline hover:bg-paper-shade"
+                      class="rounded-lg px-3 py-2.5 text-paper/80 no-underline hover:bg-white/5 hover:text-white"
                     >
                       {c.label}
                     </a>
@@ -198,8 +198,8 @@ const navLink =
               <a
                 href={item.href}
                 class:list={[
-                  'rounded-lg px-3 py-3 font-medium text-navy no-underline hover:bg-paper-shade',
-                  groupActive(item) && 'bg-paper-shade',
+                  'rounded-lg px-3 py-3 font-medium text-paper no-underline hover:bg-white/5',
+                  groupActive(item) && 'bg-white/5',
                 ]}
                 aria-current={groupActive(item) ? 'page' : undefined}
               >
