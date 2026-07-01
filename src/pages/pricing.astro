@@ -2,9 +2,9 @@
 export const prerender = true;
 
 /**
- * Pricing. The full indicative Assurance Platform subscription tiers (validated on
+ * Pricing. The full indicative Assurance OS subscription tiers (validated on
  * enquiry, no invented numbers), with the capabilities each tier includes drawn
- * from the Assurance Platform page. The assurance bundle sits in its own section so it is
+ * from the Assurance OS page. The assurance bundle sits in its own section so it is
  * not mistaken for a fourth tier, the service lines carry a budget-focused note
  * rather than repeating their summaries, and the page has its own FAQ and a
  * price-specific closing call to action.
@@ -24,7 +24,7 @@ const lineNames = serviceLines.map((s) => s.name);
 const lineList = `${lineNames.slice(0, -1).join(', ')} and ${lineNames[lineNames.length - 1]}`;
 
 // What each tier includes, building up. Every capability here is already
-// described on the Assurance Platform page; nothing new is invented. Baseline security
+// described on the Assurance OS page; nothing new is invented. Baseline security
 // applies to every tier and is stated once under the grid, so a lower tier is
 // never implied to lack it. Growth is the common starting point.
 const tierPlans: Record<string, { highlight: boolean; label?: string; features: string[] }> = {
@@ -67,7 +67,7 @@ const faqs: FaqItem[] = [
   {
     question: 'How does billing work?',
     answer:
-      'Assurance Platform is a monthly subscription. The ranges on this page are indicative and validated against your size and setup before you commit, so the figure you agree is the figure you pay. {{PRICING: confirm invoicing cycle and accepted payment methods}}',
+      'Assurance OS is a monthly subscription. The ranges on this page are indicative and validated against your size and setup before you commit, so the figure you agree is the figure you pay. {{PRICING: confirm invoicing cycle and accepted payment methods}}',
   },
   {
     question: 'Can we move between tiers as we grow?',
@@ -89,7 +89,7 @@ const faqs: FaqItem[] = [
 
 <BaseLayout
   titleFull="Pricing | Murikah"
-  description="Indicative Assurance Platform subscription tiers for mid-market teams, validated on enquiry. The service lines are scoped and quoted per engagement."
+  description="Indicative Assurance OS subscription tiers for mid-market teams, validated on enquiry. The service lines are scoped and quoted per engagement."
 >
   <FaqPageSchema slot="head" items={faqs} />
 
@@ -110,22 +110,22 @@ const faqs: FaqItem[] = [
         Pricing you can take to a budget.
       </h1>
       <p class="mt-6 max-w-2xl text-xl text-slate">
-        Assurance Platform runs on a monthly subscription with indicative tiers, validated on
-        enquiry against your size and needs. The service lines are scoped and quoted per engagement,
-        so you pay for the work you need and nothing you do not.
+        Assurance OS runs on a monthly subscription with indicative tiers, validated on enquiry
+        against your size and needs. The service lines are scoped and quoted per engagement, so you
+        pay for the work you need and nothing you do not.
       </p>
     </div>
   </Section>
 
-  {/* Assurance Platform subscription tiers. */}
+  {/* Assurance OS subscription tiers. */}
   <Section tone="paper" aria-labelledby="audit-os-pricing">
     <div class="max-w-2xl">
-      <p class="eyebrow">Assurance Platform</p>
+      <p class="eyebrow">Assurance OS</p>
       <h2
         id="audit-os-pricing"
         class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
       >
-        Assurance Platform subscription
+        Assurance OS subscription
       </h2>
       <p class="mt-4 text-lg text-slate">
         A Big 4 retainer is priced by the hour and hard to flex once it is signed. This is a monthly
@@ -214,7 +214,7 @@ const faqs: FaqItem[] = [
             </li>
             <li class="flex items-center gap-2.5">
               <span class="size-1.5 rounded-full bg-gold"></span>
-              A discounted Assurance Platform subscription
+              A discounted Assurance OS subscription
             </li>
           </ul>
           <div class="mt-6">

@@ -26,9 +26,14 @@ const path = Astro.url.pathname;
 const groupActive = (item: NavItem) =>
   (item.match ?? [item.href]).some((p) => path === p || path.startsWith(p + '/'));
 
+// Inline editorial links: no pill, no boxed tabs. A fine gold underline grows
+// in on hover, on keyboard focus, while the group's menu is open, and stays lit
+// on the active group (aria-current="page"). The underline sits just under the
+// text so the header reads as open and premium, not template-like.
 const navLink =
-  'inline-flex min-h-[2.75rem] items-center gap-1 rounded-full px-4 text-sm font-medium text-ink/80 transition-colors duration-150 hover:bg-white hover:text-navy';
-const activeLink = 'bg-white text-navy shadow-card';
+  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-ink/75 transition-colors duration-150 hover:text-navy focus-visible:text-navy aria-[current=page]:text-navy ' +
+  'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[0.7rem] after:h-px after:origin-left after:scale-x-0 after:bg-gold after:transition-transform after:duration-200 ' +
+  'hover:after:scale-x-100 focus-visible:after:scale-x-100 group-hover:after:scale-x-100 group-focus-within:after:scale-x-100 aria-[current=page]:after:scale-x-100';
 ---
 
 <header
@@ -41,11 +46,11 @@ const activeLink = 'bg-white text-navy shadow-card';
         <Logo />
       </a>
 
-      {/* Desktop primary nav, three groups mapped straight from NAV. */}
-      <nav
-        aria-label="Primary"
-        class="hidden items-center gap-1 rounded-full bg-paper/70 p-1 ring-1 ring-hairline/70 lg:flex"
-      >
+      {
+        /* Desktop primary nav, three groups mapped straight from NAV. Inline
+          text links, no enclosing pill, with calm spacing between groups. */
+      }
+      <nav aria-label="Primary" class="hidden items-center gap-8 lg:flex">
         {
           NAV.map((item) =>
             item.children ? (
@@ -55,7 +60,7 @@ const activeLink = 'bg-white text-navy shadow-card';
                     and focus-within with no JavaScript. */}
                 <a
                   href={item.href}
-                  class:list={[navLink, groupActive(item) && activeLink]}
+                  class={navLink}
                   aria-current={groupActive(item) ? 'page' : undefined}
                 >
                   {item.label}
@@ -105,7 +110,7 @@ const activeLink = 'bg-white text-navy shadow-card';
             ) : (
               <a
                 href={item.href}
-                class:list={[navLink, groupActive(item) && activeLink]}
+                class={navLink}
                 aria-current={groupActive(item) ? 'page' : undefined}
               >
                 {item.label}
