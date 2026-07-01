@@ -1,14 +1,16 @@
 ---
 /**
- * Logo: the Murikah "M" monogram (a bold geometric M with a single aged-brass
- * diagonal accent) next to the "Murikah" wordmark in the neutral brand sans.
+ * Logo lockup: the Murikah "M" monogram, a fine brass divider and the "MURIKAH"
+ * wordmark in tracked caps, recreated in code to match the brand lockups
+ * (docs/brand-assets.md). It is a crisp, transparent SVG plus text, so it stays
+ * sharp at every size and recolours by surface rather than shipping a raster
+ * lockup into the page chrome:
+ *   - monogram strokes and wordmark inherit `currentColor` (navy on light,
+ *     ivory on dark via `tone`)
+ *   - the one aged-brass diagonal, and the divider, are the scarce accent.
  *
- * The monogram is a crisp, transparent SVG that adapts to its surface: the M
- * strokes and wordmark inherit `currentColor` (navy on light, ivory on dark via
- * `tone`), and the one brass diagonal is the scarce accent. No tile, no filled
- * dot; the mark never interrupts the name, which reads plainly as "Murikah".
- *
- * `tone="light"` is for dark surfaces (the dark header and footer).
+ * `tone="light"` is for dark surfaces (the dark header and footer). Set
+ * `withWordmark={false}` for the compact monogram-only mark.
  */
 interface Props {
   tone?: 'dark' | 'light';
@@ -21,7 +23,7 @@ const { tone = 'dark', withWordmark = true, class: className } = Astro.props;
 const color = tone === 'light' ? 'text-paper' : 'text-navy';
 ---
 
-<span class:list={['inline-flex items-center gap-2.5', color, className]}>
+<span class:list={['inline-flex items-center gap-3', color, className]}>
   <svg
     width="30"
     height="30"
@@ -41,5 +43,12 @@ const color = tone === 'light' ? 'text-paper' : 'text-navy';
     {/* The single aged-brass accent: a fine diagonal in the right of the valley. */}
     <path d="M26.4 9 L18.4 18.7" stroke="#A9822E" stroke-width="2.4" stroke-linecap="round"></path>
   </svg>
-  {withWordmark && <span class="text-xl font-semibold tracking-[-0.02em]">Murikah</span>}
+  {
+    withWordmark && (
+      <Fragment>
+        <span class="h-6 w-px shrink-0 bg-brass/70" aria-hidden="true" />
+        <span class="text-lg leading-none font-semibold tracking-[0.2em] uppercase">Murikah</span>
+      </Fragment>
+    )
+  }
 </span>
