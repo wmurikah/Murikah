@@ -291,7 +291,7 @@
     background: color-mix(in srgb, var(--color-blue) 9%, transparent);
   }
 
-  /* The Assurance OS preview panel, now a light card on the light hero: a clean
+  /* The Assurance Platform preview panel, now a light card on the light hero: a clean
      white surface with a fine hairline and a soft, warm-tinted lift. */
   .hero-device {
     position: relative;

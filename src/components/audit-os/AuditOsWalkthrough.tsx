@@ -1,5 +1,5 @@
 /**
- * Assurance OS workflow walkthrough. A self-advancing, controllable, accessible
+ * Assurance Platform workflow walkthrough. A self-advancing, controllable, accessible
  * walkthrough of the six workflow stages. It auto-plays (about 17s per stage,
  * roughly 1m 45s in full) and loops gently, with clickable stage tabs, a
  * play/pause control and a progress bar. Each active stage animates a small,
@@ -167,7 +167,7 @@ export default function AuditOsWalkthrough() {
 
   if (reduced) {
     return (
-      <div ref={rootRef} className="aw-card" role="group" aria-label="How Assurance OS works">
+      <div ref={rootRef} className="aw-card" role="group" aria-label="How Assurance Platform works">
         <ol className="aw-static">
           {STAGES.map((s, i) => (
             <li key={s.key} className="aw-static-step">
@@ -189,7 +189,7 @@ export default function AuditOsWalkthrough() {
   const running = playing && inView && docVisible;
 
   return (
-    <div ref={rootRef} className="aw-card" role="group" aria-label="How Assurance OS works">
+    <div ref={rootRef} className="aw-card" role="group" aria-label="How Assurance Platform works">
       <div className="aw-controls">
         <button
           type="button"

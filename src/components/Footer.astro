@@ -1,10 +1,10 @@
 ---
 /**
- * Footer, a recurring "end" moment. A compact navy field: one brand block (mark
- * plus the wordmark, nothing stacked beneath), a single flat row of
- * navigation links with no column headers, a one-line newsletter capture, and a
- * thin bottom bar. Standards badges live on the About page, not here, and the
- * pronunciation cue sits on the home hero. `.on-dark` flips focus rings to gold.
+ * Footer, a recurring "end" moment. A calm navy field grouped to mirror the
+ * three-part architecture: a brand block, three link columns (Who we are,
+ * What we do, News & Insights), a one-line newsletter capture, and a thin
+ * bottom bar carrying copyright, legal and social. `.on-dark` flips focus rings
+ * to gold for contrast.
  */
 import Container from '@/components/primitives/Container.astro';
 import Logo from '@/components/Logo.astro';
@@ -14,8 +14,8 @@ import { SITE, FOOTER_GROUPS, SOCIAL } from '@/site.config';
 // Build-time year for the copyright line.
 const year = new Date().getFullYear();
 
-// One flat row of links, no headers. Legal moves to the bottom bar.
-const navLinks = FOOTER_GROUPS.filter((g) => g.heading !== 'Legal').flatMap((g) => g.links);
+// Three grouped columns mirror the header; Legal stays in the thin bottom bar.
+const columns = FOOTER_GROUPS.filter((g) => g.heading !== 'Legal');
 const legalLinks = FOOTER_GROUPS.find((g) => g.heading === 'Legal')?.links ?? [];
 
 const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:text-white';
@@ -26,66 +26,77 @@ const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:tex
   <hr class="beam border-0" />
 
   <Container class="relative">
-    <div class="flex flex-col gap-6 py-10">
-      {/* Brand block plus the flat navigation row. */}
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+    {/* Brand block plus the three grouped columns. */}
+    <div class="grid gap-10 py-12 md:grid-cols-12 lg:py-14">
+      <div class="md:col-span-3">
         <a href="/" class="inline-block no-underline" aria-label="Murikah, home">
           <Logo tone="light" />
         </a>
-        <nav aria-label="Footer" class="flex flex-wrap gap-x-5 gap-y-2 lg:justify-end">
-          {
-            navLinks.map((l) => (
+      </div>
+      <nav aria-label="Footer" class="grid grid-cols-2 gap-8 sm:grid-cols-3 md:col-span-9">
+        {
+          columns.map((group) => (
+            <div>
+              <h2 class="text-xs font-semibold tracking-[0.14em] text-white/90 uppercase">
+                {group.heading}
+              </h2>
+              <ul class="mt-4 space-y-2.5">
+                {group.links.map((l) => (
+                  <li>
+                    <a href={l.href} class={footLink}>
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </nav>
+    </div>
+
+    {/* Newsletter, a single compact row. */}
+    <div
+      class="flex flex-col gap-3 border-t border-white/10 py-6 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p class="text-sm text-paper/70">Occasional notes on assurance and governance. No noise.</p>
+      <SubscribeForm
+        source="newsletter"
+        tone="dark"
+        buttonLabel="Subscribe"
+        successMessage="Thank you. We will send the occasional note, nothing more."
+        class="w-full sm:w-auto sm:max-w-sm"
+      />
+    </div>
+
+    {/* Bottom bar: copyright, legal and social, one thin row. */}
+    <div
+      class="flex flex-col gap-3 border-t border-white/10 py-6 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p class="text-sm text-paper/55">© {year} {SITE.legalName}. All rights reserved.</p>
+      <ul class="flex flex-wrap items-center gap-x-5 gap-y-2">
+        {
+          legalLinks.map((l) => (
+            <li>
               <a href={l.href} class={footLink}>
                 {l.label}
               </a>
-            ))
-          }
-        </nav>
-      </div>
-
-      {/* Newsletter, a single compact row: short label, input, button. */}
-      <div
-        class="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <p class="text-sm text-paper/70">Occasional notes on assurance and governance. No noise.</p>
-        <SubscribeForm
-          source="newsletter"
-          tone="dark"
-          buttonLabel="Subscribe"
-          successMessage="Thank you. We will send the occasional note, nothing more."
-          class="w-full sm:w-auto sm:max-w-sm"
-        />
-      </div>
-
-      {/* Bottom bar: copyright, legal and social, one thin row. */}
-      <div
-        class="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <p class="text-sm text-paper/55">© {year} {SITE.legalName}. All rights reserved.</p>
-        <ul class="flex flex-wrap items-center gap-x-5 gap-y-2">
-          {
-            legalLinks.map((l) => (
-              <li>
-                <a href={l.href} class={footLink}>
-                  {l.label}
-                </a>
-              </li>
-            ))
-          }
-          {
-            SOCIAL.map((s) => (
-              <li>
-                <a href={s.href} class={footLink} rel="me noopener" target="_blank">
-                  {s.label}
-                </a>
-              </li>
-            ))
-          }
-          <li>
-            <a href={`mailto:${SITE.email}`} class={footLink}>{SITE.email}</a>
-          </li>
-        </ul>
-      </div>
+            </li>
+          ))
+        }
+        {
+          SOCIAL.map((s) => (
+            <li>
+              <a href={s.href} class={footLink} rel="me noopener" target="_blank">
+                {s.label}
+              </a>
+            </li>
+          ))
+        }
+        <li>
+          <a href={`mailto:${SITE.email}`} class={footLink}>{SITE.email}</a>
+        </li>
+      </ul>
     </div>
   </Container>
 </footer>
