@@ -2,23 +2,90 @@
 export const prerender = true;
 
 /**
- * Pricing. Holds the full indicative Audit OS subscription tiers (moved here
- * from the Audit OS page, unchanged and still labelled indicative and validated
- * on enquiry) plus an honest note that the five service lines are scoped and
- * quoted per engagement. No new numbers are invented on this page.
+ * Pricing. The full indicative Audit OS subscription tiers (validated on
+ * enquiry, no invented numbers), with the capabilities each tier includes drawn
+ * from the Audit OS page. The assurance bundle sits in its own section so it is
+ * not mistaken for a fourth tier, the service lines carry a budget-focused note
+ * rather than repeating their summaries, and the page has its own FAQ and a
+ * price-specific closing call to action.
  */
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
+import Faq from '@/components/primitives/Faq.astro';
+import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import { SERVICES, PRICING } from '@/site.config';
+import type { FaqItem } from '@/lib/types';
 
 const serviceLines = SERVICES.filter((s) => s.slug !== 'audit-os');
+const lineNames = serviceLines.map((s) => s.name);
+const lineList = `${lineNames.slice(0, -1).join(', ')} and ${lineNames[lineNames.length - 1]}`;
+
+// What each tier includes, building up. Every capability here is already
+// described on the Audit OS page; nothing new is invented. Baseline security
+// applies to every tier and is stated once under the grid, so a lower tier is
+// never implied to lack it. Growth is the common starting point.
+const tierPlans: Record<
+  string,
+  { highlight: boolean; label?: string; features: string[] }
+> = {
+  Starter: {
+    highlight: false,
+    features: [
+      'Engagements and work papers, with review and sign-off',
+      'Findings and remediation, with automatic follow-up and overdue escalation',
+      'Board and committee reporting from live data',
+    ],
+  },
+  Growth: {
+    highlight: true,
+    label: 'Most teams start here',
+    features: [
+      'Everything in Starter',
+      'Several entities in one place, kept separate where they need to be',
+      'The embedded AI assistant for drafting and analysis',
+    ],
+  },
+  Enterprise: {
+    highlight: false,
+    features: [
+      'Everything in Growth',
+      'A consolidated group view across entities and countries',
+      '{{PRICING: confirm feature gating per tier}}',
+    ],
+  },
+};
+
+const tiers = PRICING.map((tier) => ({ ...tier, ...tierPlans[tier.name] }));
 
 const crumbs = [
   { label: 'Home', href: '/' },
   { label: 'Pricing', href: '/pricing' },
+];
+
+const faqs: FaqItem[] = [
+  {
+    question: 'How does billing work?',
+    answer:
+      'Audit OS is a monthly subscription. The ranges on this page are indicative and validated against your size and setup before you commit, so the figure you agree is the figure you pay. {{PRICING: confirm invoicing cycle and accepted payment methods}}',
+  },
+  {
+    question: 'Can we move between tiers as we grow?',
+    answer:
+      'Yes. Most teams start on Starter or Growth and move up as they add entities or the board asks for more. Your work papers, findings and history come with you, so nothing is rebuilt in the move.',
+  },
+  {
+    question: 'Is there a contract or lock-in?',
+    answer:
+      'There is no long lock-in. The idea is that you stay because the system is working for you, not because a contract holds you there. {{PRICING: confirm minimum term and notice period}}',
+  },
+  {
+    question: 'What happens after you validate the range on a call?',
+    answer:
+      'We confirm the tier that fits, scope any service work with you, and give you a clear monthly number to take to your budget. No card is needed to get that figure, and there is no obligation to go ahead.',
+  },
 ];
 ---
 
@@ -26,6 +93,8 @@ const crumbs = [
   titleFull="Pricing | Murikah"
   description="Indicative Audit OS subscription tiers for African mid-market teams, validated on enquiry. The service lines are scoped and quoted per engagement."
 >
+  <FaqPageSchema slot="head" items={faqs} />
+
   {/* Hero: a calm opening on a light canvas. */}
   <Section
     tone="surface"
@@ -50,7 +119,7 @@ const crumbs = [
     </div>
   </Section>
 
-  {/* Audit OS subscription tiers, moved here unchanged. */}
+  {/* Audit OS subscription tiers. */}
   <Section tone="paper" aria-labelledby="audit-os-pricing">
     <div class="max-w-2xl">
       <p class="eyebrow">Audit OS</p>
@@ -61,66 +130,155 @@ const crumbs = [
         Audit OS subscription
       </h2>
       <p class="mt-4 text-lg text-slate">
+        A Big 4 retainer is priced by the hour and hard to flex once it is signed. This is a monthly
+        figure you can plan a budget around, for a system your team keeps using between audits rather
+        than a report that lands once and goes stale.
+      </p>
+      <p class="mt-3 text-sm text-slate">
         Indicative monthly ranges, validated on enquiry against your size and needs. No long lock-in.
       </p>
     </div>
+
     <div class="mt-12 grid gap-6 lg:grid-cols-3">
       {
-        PRICING.map((tier) => (
-          <div class="flex flex-col rounded-card bg-surface p-7 ring-1 ring-hairline/70">
+        tiers.map((tier) => (
+          <div
+            class:list={[
+              'flex flex-col rounded-card bg-surface p-7',
+              tier.highlight ? 'ring-2 ring-gold shadow-card' : 'ring-1 ring-hairline/70',
+            ]}
+          >
+            {tier.label && (
+              <span class="mb-3 inline-block text-xs font-medium tracking-[0.08em] text-gold uppercase">
+                {tier.label}
+              </span>
+            )}
             <h3 class="text-xl text-navy">{tier.name}</h3>
             <p class="mt-1 text-sm text-slate">{tier.forWho}</p>
             <p class="mt-5 text-2xl font-semibold text-navy">{tier.price}</p>
             <p class="text-sm text-slate">{tier.period}</p>
+            <ul class="mt-6 grid gap-2.5 border-t border-hairline pt-6">
+              {tier.features?.map((f) => (
+                <li class="flex items-start gap-2.5 text-sm text-ink">
+                  <svg
+                    class="mt-0.5 size-4 shrink-0 text-gold"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M3 8.5l3 3 7-7.5"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         ))
       }
     </div>
-    <div class="mt-6 rounded-card bg-surface p-7 ring-1 ring-hairline/70">
-      <h3 class="text-xl text-navy">The assurance bundle</h3>
-      <p class="mt-2 max-w-prose text-slate">
-        Pair a fixed-fee assurance retainer with a discounted Audit OS subscription, and budget for
-        the whole thing as one predictable monthly number. Talk to us about the right mix for your
-        team.
-      </p>
+    <p class="mt-8 max-w-prose text-sm text-slate">
+      Every tier includes role-based access, full audit logging, encryption in transit and at rest,
+      and data retention set to your policy.
+    </p>
+  </Section>
+
+  {/* The assurance bundle, set apart so it does not read as a fourth tier. */}
+  <Section tone="surface" aria-labelledby="bundle" class="border-y border-hairline">
+    <div class="grid items-center gap-8 lg:grid-cols-12 lg:gap-12">
+      <div class="lg:col-span-7">
+        <p class="eyebrow">Pair it with assurance</p>
+        <h2
+          id="bundle"
+          class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
+        >
+          The assurance bundle
+        </h2>
+        <p class="mt-4 max-w-prose text-lg text-slate">
+          This is not a fourth tier. Pair a fixed-fee assurance retainer with a discounted Audit OS
+          subscription and budget for the whole thing as one predictable monthly number. Talk to us
+          about the right mix for your team.
+        </p>
+      </div>
+      <div class="lg:col-span-5">
+        <div class="rounded-card bg-paper p-7 ring-1 ring-gold/40">
+          <p class="text-sm text-slate">One monthly number for</p>
+          <ul class="mt-3 grid gap-2 text-navy">
+            <li class="flex items-center gap-2.5">
+              <span class="size-1.5 rounded-full bg-gold" />
+              A fixed-fee assurance retainer
+            </li>
+            <li class="flex items-center gap-2.5">
+              <span class="size-1.5 rounded-full bg-gold" />
+              A discounted Audit OS subscription
+            </li>
+          </ul>
+          <div class="mt-6">
+            <Button href="/contact" variant="secondary">Talk about a bundle</Button>
+          </div>
+        </div>
+      </div>
     </div>
   </Section>
 
-  {/* The service lines, scoped per engagement. */}
-  <Section tone="surface" aria-labelledby="engagement-pricing" class="border-y border-hairline">
+  {/* Service lines, written for someone thinking about budget. */}
+  <Section tone="paper" aria-labelledby="engagement-pricing">
     <div class="max-w-2xl">
-      <p class="eyebrow">Service lines</p>
+      <p class="eyebrow">Service work</p>
       <h2
         id="engagement-pricing"
         class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
       >
-        Scoped and quoted per engagement
+        How the service lines are quoted
       </h2>
       <p class="mt-4 text-lg text-slate">
-        Assurance, Labs, Advisory, Academy and Intelligence are priced against the scope of the work,
-        not a fixed shelf price. Tell us what you need and we will come back with a clear quote and a
-        plan.
+        {lineList} are quoted per engagement, so the figure matches the work in front of you rather
+        than a shelf price.
       </p>
     </div>
-    <ul class="mt-10 grid gap-x-12 gap-y-8 sm:grid-cols-2">
-      {
-        serviceLines.map((s) => (
-          <li class="border-t border-hairline pt-5">
-            <h3 class="text-lg text-navy">{s.fullName}</h3>
-            <p class="mt-2 text-slate">{s.summary}</p>
-          </li>
-        ))
-      }
-    </ul>
+    <div class="mt-10 grid gap-8 sm:grid-cols-2 lg:gap-12">
+      <div class="border-t border-hairline pt-5">
+        <h3 class="text-lg text-navy">What shapes a quote</h3>
+        <p class="mt-2 text-slate">
+          The scope of the work, the number of entities involved, and how much regulatory and board
+          scrutiny it carries. A single review is a different number to a multi-entity programme.
+        </p>
+      </div>
+      <div class="border-t border-hairline pt-5">
+        <h3 class="text-lg text-navy">What happens after you ask</h3>
+        <p class="mt-2 text-slate">
+          We scope it with you on a call, then come back with a clear number and a plan. Asking costs
+          nothing and there is no obligation to go ahead.
+        </p>
+      </div>
+    </div>
     <div class="mt-10">
       <Button href="/contact" variant="secondary">Book a call</Button>
     </div>
   </Section>
 
+  {/* Pricing FAQ, where objections matter most. */}
+  <Section tone="surface" aria-labelledby="pricing-faq" class="border-t border-hairline">
+    <p class="eyebrow">Questions</p>
+    <h2
+      id="pricing-faq"
+      class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
+    >
+      Questions about price
+    </h2>
+    <Faq items={faqs} class="mt-8 max-w-3xl" />
+  </Section>
+
   <CtaSection
-    eyebrow="Book a demo"
-    title="Get a clear number for your team"
-    body="Book a demo and we will validate the right Audit OS tier and scope any service work against your size, your regulator and your board."
+    eyebrow="No card needed"
+    title="One call turns the range into your number"
+    body="Tell us your size and setup and we will validate the right tier on a call. No card, no obligation, and you leave with a figure you can take to your board."
+    primaryLabel="Book a call"
     secondaryLabel="Contact us"
     secondaryHref="/contact"
   />
