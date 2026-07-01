@@ -3,12 +3,18 @@
  * Button, renders an <a> when `href` is set, otherwise a <button>.
  *
  * Variants:
- *  - primary  → the ONE gold action (Von Restorff). Navy text meets AA on gold.
- *  - secondary→ solid navy (never gold, to keep gold scarce).
- *  - ghost    → quiet, hairline-ringed action for low-emphasis choices.
+ *  - primary  → the ONE strong action: a deep navy fill with ivory text and a
+ *    scarce aged-brass hairline that warms on hover. On dark surfaces the
+ *    `.on-dark .btn-primary` rule in global.css inverts it to an ivory fill with
+ *    navy text, so the same variant reads on ivory and on navy.
+ *  - secondary→ quiet outline on a porcelain surface, ink text.
+ *  - ghost    → the quietest, transparent with a hairline.
+ *
+ * Brass is an accent only, never a large fill (see the brand palette). The
+ * stable btn-* class on each variant is the hook the dark-surface rule targets.
  *
  * Fitts's Law: min tap target 44×44px (min-h 2.75rem + generous padding).
- * Doherty Threshold: 150ms colour transition gives instant hover/active feedback.
+ * Doherty Threshold: 200ms transition gives instant hover/active feedback.
  */
 interface Props {
   variant?: 'primary' | 'secondary' | 'ghost';
@@ -36,12 +42,16 @@ const sizeClass: Record<string, string> = {
   lg: 'min-h-[3.25rem] px-6 py-3 text-[1rem]',
 };
 
-// The single gold action lifts and warms on hover; the others stay quiet.
+// The one strong action is a deep navy button with a scarce brass hairline that
+// warms on hover; the others stay quiet outlines. The btn-* class is a stable
+// hook for the dark-surface inversion in global.css.
 const variantClass: Record<string, string> = {
-  primary: 'bg-gold text-navy shadow-card hover:bg-gold-deep hover:shadow-lift active:bg-gold-deep',
-  secondary: 'bg-navy text-white hover:bg-navy-deep hover:shadow-lift active:bg-navy-deep',
+  primary:
+    'btn-primary bg-navy text-paper shadow-card ring-1 ring-inset ring-brass/30 hover:bg-obsidian hover:ring-brass/70 hover:shadow-lift active:bg-obsidian',
+  secondary:
+    'btn-secondary bg-surface text-navy ring-1 ring-inset ring-hairline hover:bg-stone hover:ring-slate/40',
   ghost:
-    'bg-transparent text-navy ring-1 ring-inset ring-hairline hover:bg-paper-shade hover:ring-slate/40',
+    'btn-ghost bg-transparent text-navy ring-1 ring-inset ring-hairline hover:bg-stone hover:ring-slate/40',
 };
 
 const cls = [base, sizeClass[size], variantClass[variant], className];

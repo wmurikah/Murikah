@@ -42,16 +42,16 @@
     <rect x="730" y="460" width="340" height="200" rx="20" fill="#FFFFFF" fill-opacity="0.04" stroke="#C9CFDB" stroke-opacity="0.16" stroke-width="2"/>
     <line x1="758" y1="524" x2="1000" y2="524" stroke="#C9CFDB" stroke-opacity="0.2" stroke-width="6"/>
     <line x1="758" y1="568" x2="930" y2="568" stroke="#C9CFDB" stroke-opacity="0.12" stroke-width="6"/>
-    <path d="M 290 1100 C 290 1025 410 1025 410 950 C 410 875 530 875 530 800 C 530 725 650 725 650 650 C 650 575 770 575 770 500" fill="none" stroke="#C9A227" stroke-width="4"/>
-    <circle cx="290" cy="1100" r="8" fill="#C9A227"/>
-    <circle cx="410" cy="950" r="8" fill="#C9A227"/>
-    <circle cx="530" cy="800" r="8" fill="#C9A227"/>
-    <circle cx="650" cy="650" r="8" fill="#C9A227"/>
-    <circle cx="770" cy="500" r="8" fill="#C9A227"/>
+    <path d="M 290 1100 C 290 1025 410 1025 410 950 C 410 875 530 875 530 800 C 530 725 650 725 650 650 C 650 575 770 575 770 500" fill="none" stroke="#A9822E" stroke-width="4"/>
+    <circle cx="290" cy="1100" r="8" fill="#A9822E"/>
+    <circle cx="410" cy="950" r="8" fill="#A9822E"/>
+    <circle cx="530" cy="800" r="8" fill="#A9822E"/>
+    <circle cx="650" cy="650" r="8" fill="#A9822E"/>
+    <circle cx="770" cy="500" r="8" fill="#A9822E"/>
   </g>
   <rect width="1200" height="1500" fill="url(#vignette)"/>
   <rect width="1200" height="1500" filter="url(#grain)" opacity="0.05"/>
   <rect width="1200" height="1500" fill="url(#scrim)"/>
   <rect x="8" y="8" width="1184" height="1484" rx="30" fill="none" stroke="#FFFFFF" stroke-opacity="0.06"/>
-  <line x1="96" y1="120" x2="164" y2="120" stroke="#C9A227" stroke-width="3" stroke-linecap="round"/>
+  <line x1="96" y1="120" x2="164" y2="120" stroke="#A9822E" stroke-width="3" stroke-linecap="round"/>
 </svg>

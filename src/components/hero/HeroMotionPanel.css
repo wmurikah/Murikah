@@ -1,7 +1,7 @@
 /**
  * HeroMotionPanel styles. A dark, precise cinematic window in the Murikah
  * system: rounded corners, a fine hairline, a soft navy-tinted lift, scarce
- * gold. Scenes cross-fade; the active still gets a slow, calm zoom. All motion
+ * brass. Scenes cross-fade; the active still gets a slow, calm zoom. All motion
  * is disabled when the panel is in reduced-motion mode (data-motion="off").
  */
 
@@ -12,7 +12,7 @@
   min-height: clamp(20rem, 62vw, 30rem);
   overflow: hidden;
   border-radius: 1.75rem;
-  background: var(--color-navy);
+  background: var(--color-obsidian);
   box-shadow: var(--shadow-lift);
   border: 1px solid color-mix(in srgb, var(--color-hairline) 55%, transparent);
 }
@@ -127,13 +127,13 @@
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-champagne);
+  color: var(--color-brass-soft);
 }
 .hero-motion__label::before {
   content: '';
   width: 1.5rem;
   height: 1px;
-  background: linear-gradient(90deg, var(--color-gold), transparent);
+  background: linear-gradient(90deg, var(--color-brass), transparent);
 }
 
 .hero-motion__title {
@@ -218,7 +218,7 @@
 }
 .hero-motion__dot[data-active='true']::before {
   width: 1.35rem;
-  background: var(--color-gold);
+  background: var(--color-brass);
 }
 
 /* Visually hidden, still read by assistive tech. */
