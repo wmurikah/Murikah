@@ -26,6 +26,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.0.0
         version: 5.2.8
+      '@fontsource/tangerine':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@libsql/client':
         specifier: ^0.17.4
         version: 0.17.4
@@ -654,6 +657,9 @@ packages:
 
   '@fontsource-variable/inter@5.2.8':
     resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
+
+  '@fontsource/tangerine@5.2.8':
+    resolution: {integrity: sha512-UUp5X98B7J1GfGu5JsGgs5Cbbl2nSp99J8HZVdxe7TBKnAESkwTpDIQJlud8tKufRrOFA7vGtzwaTW5t82s4mA==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -4280,6 +4286,8 @@ snapshots:
       levn: 0.4.1
 
   '@fontsource-variable/inter@5.2.8': {}
+
+  '@fontsource/tangerine@5.2.8': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

@@ -1,9 +1,15 @@
 ---
 /**
- * Logo, geometric mark (a gold assurance check inside a navy rounded square)
- * plus the Murikah wordmark. `tone="light"` is for dark/navy surfaces (footer).
- * Hex values are inlined because SVG presentation attributes don't resolve
- * CSS custom properties.
+ * Logo: a navy tile carrying the gold spark, plus the "Muri.kah" wordmark set in
+ * Tangerine (script, Bold). A gold spark (a filled circle, not a typed period)
+ * stands in for the dot between the two halves, sitting near the baseline.
+ *
+ * Tangerine is scoped to this wordmark only; every other piece of UI text stays
+ * on the neutral sans. The spoken and legal name remains "Murikah": the dot is
+ * aria-hidden, so assistive tech reads "Murikah".
+ *
+ * `tone="light"` is for dark/navy surfaces (the footer). Hex values are inlined
+ * in the SVG because presentation attributes do not resolve CSS variables.
  */
 interface Props {
   tone?: 'dark' | 'light';
@@ -12,8 +18,8 @@ interface Props {
 }
 const { tone = 'dark', withWordmark = true, class: className } = Astro.props;
 
-const squareFill = tone === 'light' ? 'rgba(255,255,255,0.12)' : '#0B1733';
-const wordmarkClass = tone === 'light' ? 'text-white' : 'text-navy';
+const tileFill = tone === 'light' ? 'rgba(255,255,255,0.12)' : '#0B1733';
+const wordmarkColor = tone === 'light' ? 'text-paper' : 'text-navy';
 ---
 
 <span class:list={['inline-flex items-center gap-2.5', className]}>
@@ -26,17 +32,41 @@ const wordmarkClass = tone === 'light' ? 'text-white' : 'text-navy';
     focusable="false"
     class="shrink-0"
   >
-    <rect width="32" height="32" rx="8" fill={squareFill}></rect>
-    <path
-      d="M9 16.4l4.4 4.4L23 11"
-      stroke="#C9A227"
-      stroke-width="2.6"
-      stroke-linecap="round"
-      stroke-linejoin="round"></path>
+    <rect width="32" height="32" rx="8" fill={tileFill}></rect>
+    <circle cx="16" cy="16" r="6.5" fill="#C9A227"></circle>
   </svg>
   {
     withWordmark && (
-      <span class:list={['text-xl font-semibold tracking-tight', wordmarkClass]}>Murikah</span>
+      <span class:list={['logo-wordmark leading-none', wordmarkColor]}>
+        Muri<span class="logo-dot" aria-hidden="true" />kah
+      </span>
     )
   }
 </span>
+
+<style>
+  /* The wordmark, and only the wordmark, uses Tangerine. */
+  .logo-wordmark {
+    font-family: 'Tangerine', 'Segoe Script', cursive;
+    font-weight: 700;
+    font-size: 1.875rem; /* ~30px on small screens */
+    white-space: nowrap;
+  }
+  @media (min-width: 640px) {
+    .logo-wordmark {
+      font-size: 2.25rem; /* ~36px at normal widths */
+    }
+  }
+
+  /* The gold spark standing in for the dot: a filled circle sized in em so it
+     scales with the wordmark, sitting low near the baseline like a period. */
+  .logo-dot {
+    display: inline-block;
+    width: 0.16em;
+    height: 0.16em;
+    margin: 0 0.06em;
+    border-radius: 9999px;
+    background: #c9a227;
+    vertical-align: 0.03em;
+  }
+</style>

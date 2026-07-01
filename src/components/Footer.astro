@@ -1,127 +1,87 @@
 ---
 /**
- * Footer, a recurring "end" moment (peak-end / serial-position). Rich navy
- * field with the light signature (a top gold beam and a soft aperture), a
- * grouped sitemap (Miller's Law), the pronunciation cue, the standards the work
- * follows (company-level trust, no individual), newsletter, social and legal.
- * `.on-dark` flips focus rings to gold for contrast.
+ * Footer, a recurring "end" moment. A compact navy field: one brand block (mark
+ * plus the Tangerine wordmark, nothing stacked beneath), a single flat row of
+ * navigation links with no column headers, a one-line newsletter capture, and a
+ * thin bottom bar. Standards badges live on the About page, not here, and the
+ * pronunciation cue sits on the home hero. `.on-dark` flips focus rings to gold.
  */
 import Container from '@/components/primitives/Container.astro';
 import Logo from '@/components/Logo.astro';
 import SubscribeForm from '@/components/SubscribeForm.astro';
-import { SITE, FOOTER_GROUPS, SOCIAL, STANDARDS } from '@/site.config';
+import { SITE, FOOTER_GROUPS, SOCIAL } from '@/site.config';
 
 // Build-time year for the copyright line.
 const year = new Date().getFullYear();
+
+// One flat row of links, no headers. Legal moves to the bottom bar.
+const navLinks = FOOTER_GROUPS.filter((g) => g.heading !== 'Legal').flatMap((g) => g.links);
+const legalLinks = FOOTER_GROUPS.find((g) => g.heading === 'Legal')?.links ?? [];
+
+const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:text-white';
 ---
 
 <footer class="navy-rich grain on-dark relative overflow-hidden text-paper">
-  {/* The light signature: a fine beam across the top, and one soft aperture. */}
+  {/* The light signature: a fine gold beam across the top. */}
   <hr class="beam border-0" />
-  <div
-    aria-hidden="true"
-    class="aperture top-0 left-1/2 h-[22rem] w-[40rem] -translate-x-1/2 -translate-y-2/3 opacity-70"
-  >
-  </div>
 
   <Container class="relative">
-    <div class="grid gap-10 py-14 md:grid-cols-12 lg:py-20">
-      <div class="md:col-span-4">
+    <div class="flex flex-col gap-6 py-10">
+      {/* Brand block plus the flat navigation row. */}
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <a href="/" class="inline-block no-underline" aria-label="Murikah, home">
           <Logo tone="light" />
         </a>
-        <p class="mt-4 max-w-xs text-paper/70">{SITE.tagline}</p>
-        <p class="mt-2 text-sm text-paper/55">Pronounced {SITE.pronunciation}.</p>
-
-        {/* Company-level trust: the standards the work follows. */}
-        <p class="mt-6 text-xs font-semibold tracking-[0.16em] text-paper/55 uppercase">
-          Standards our work follows
-        </p>
-        <ul class="mt-3 flex flex-wrap gap-2" aria-label="Standards our work follows">
-          {
-            STANDARDS.map((s) => (
-              <li class="rounded-full border border-white/12 bg-white/5 px-3 py-1 text-xs text-paper/85">
-                {s.short}
-              </li>
-            ))
-          }
-        </ul>
+        <nav aria-label="Footer" class="flex flex-wrap gap-x-5 gap-y-2 lg:justify-end">
+          {navLinks.map((l) => (
+            <a href={l.href} class={footLink}>
+              {l.label}
+            </a>
+          ))}
+        </nav>
       </div>
 
-      <nav aria-label="Footer" class="grid grid-cols-2 gap-8 sm:grid-cols-3 md:col-span-8 md:pl-8">
-        {
-          FOOTER_GROUPS.map((group) => (
-            <div>
-              <h2 class="text-xs font-semibold tracking-[0.16em] text-white/90 uppercase">
-                {group.heading}
-              </h2>
-              <ul class="mt-4 space-y-3">
-                {group.links.map((l) => (
-                  <li>
-                    <a
-                      href={l.href}
-                      class="text-sm text-paper/70 no-underline transition-colors hover:text-white"
-                    >
-                      {l.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        }
-      </nav>
-    </div>
-
-    {/* Newsletter, a quiet single-field capture posting to /api/subscribe. */}
-    <div class="border-t border-white/10 py-10">
-      <div class="grid gap-6 md:grid-cols-2 md:items-center">
-        <div>
-          <p class="font-serif text-2xl text-white">Notes worth reading</p>
-          <p class="mt-2 max-w-md text-sm text-paper/70">
-            Occasional notes on assurance, AI governance and audit software. No noise.
-          </p>
-        </div>
+      {/* Newsletter, a single compact row: short label, input, button. */}
+      <div
+        class="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p class="text-sm text-paper/70">
+          Occasional notes on assurance and governance. No noise.
+        </p>
         <SubscribeForm
           source="newsletter"
           tone="dark"
           buttonLabel="Subscribe"
           successMessage="Thank you. We will send the occasional note, nothing more."
-          class="md:w-full md:max-w-sm md:justify-self-end"
+          class="w-full sm:w-auto sm:max-w-sm"
         />
       </div>
-    </div>
 
-    <div
-      class="flex flex-col gap-4 border-t border-white/10 py-6 sm:flex-row sm:items-center sm:justify-between"
-    >
-      <p class="text-sm text-paper/55">
-        © {year}
-        {SITE.legalName}. All rights reserved.
-      </p>
-      <ul class="flex flex-wrap items-center gap-x-5 gap-y-2">
-        {
-          SOCIAL.map((s) => (
+      {/* Bottom bar: copyright, legal and social, one thin row. */}
+      <div
+        class="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p class="text-sm text-paper/55">© {year} {SITE.legalName}. All rights reserved.</p>
+        <ul class="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {legalLinks.map((l) => (
             <li>
-              <a
-                href={s.href}
-                class="text-sm text-paper/70 no-underline transition-colors hover:text-white"
-                rel="me noopener"
-                target="_blank"
-              >
+              <a href={l.href} class={footLink}>
+                {l.label}
+              </a>
+            </li>
+          ))}
+          {SOCIAL.map((s) => (
+            <li>
+              <a href={s.href} class={footLink} rel="me noopener" target="_blank">
                 {s.label}
               </a>
             </li>
-          ))
-        }
-        <li>
-          <a
-            href={`mailto:${SITE.email}`}
-            class="text-sm text-paper/70 no-underline transition-colors hover:text-white"
-            >{SITE.email}</a
-          >
-        </li>
-      </ul>
+          ))}
+          <li>
+            <a href={`mailto:${SITE.email}`} class={footLink}>{SITE.email}</a>
+          </li>
+        </ul>
+      </div>
     </div>
   </Container>
 </footer>
