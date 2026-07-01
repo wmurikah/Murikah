@@ -4,8 +4,8 @@ export const prerender = true;
 /**
  * Services hub. A short intro then a card per service line, drawing name and
  * one-line summary straight from site.config (single source of truth, copy not
- * rewritten here). Assurance OS keeps its own top-level page, so the five other
- * lines are the cards; a closing band points to Assurance OS and to Pricing.
+ * rewritten here). Assurance Platform keeps its own top-level page, so the five other
+ * lines are the cards; a closing band points to Assurance Platform and to Pricing.
  */
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
@@ -19,6 +19,7 @@ const auditOs = SERVICES.find((s) => s.slug === 'audit-os');
 
 const crumbs = [
   { label: 'Home', href: '/' },
+  { label: 'What we do', href: '/services' },
   { label: 'Services', href: '/services' },
 ];
 
@@ -40,7 +41,7 @@ const itemListSchema = {
 
 <BaseLayout
   titleFull="Services | Murikah"
-  description="Murikah works across connected lines: Assurance, Labs, Advisory, Academy and Intelligence, alongside the Assurance OS platform. Start where you need to and grow into the rest."
+  description="Murikah works across connected lines: Assurance, Labs, Advisory, Academy and Intelligence, alongside the Assurance Platform. Start where you need to and grow into the rest."
 >
   <script
     type="application/ld+json"
@@ -72,7 +73,7 @@ const itemListSchema = {
       </p>
       <div class="mt-9 flex flex-col gap-3 sm:flex-row">
         <Button href="/contact" variant="primary" size="lg">Book a demo</Button>
-        <Button href="/audit-os" variant="ghost" size="lg">Explore Assurance OS</Button>
+        <Button href="/audit-os" variant="ghost" size="lg">Explore Assurance Platform</Button>
       </div>
     </div>
   </Section>
@@ -112,7 +113,7 @@ const itemListSchema = {
     </div>
   </Section>
 
-  {/* Assurance OS and pricing, kept reachable from the hub. */}
+  {/* Assurance Platform and pricing, kept reachable from the hub. */}
   <Section tone="surface" aria-labelledby="platform-title" class="border-y border-hairline">
     <div class="max-w-2xl">
       <p class="eyebrow">The platform and the price</p>
@@ -120,25 +121,25 @@ const itemListSchema = {
         id="platform-title"
         class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
       >
-        Assurance OS and how we price
+        Assurance Platform and how we price
       </h2>
     </div>
     <div class="mt-10 grid gap-6 lg:grid-cols-2">
       <div class="flex flex-col rounded-card bg-paper p-7 ring-1 ring-hairline/70">
-        <h3 class="text-xl text-navy">Assurance OS</h3>
+        <h3 class="text-xl text-navy">Assurance Platform</h3>
         <p class="mt-3 max-w-prose text-slate">{auditOs?.summary}</p>
         <a
           href="/audit-os"
           class="mt-auto inline-flex items-center gap-2 pt-6 font-medium text-blue no-underline hover:text-blue-deep"
         >
-          Explore Assurance OS <span aria-hidden="true">&rarr;</span>
+          Explore Assurance Platform <span aria-hidden="true">&rarr;</span>
         </a>
       </div>
       <div class="flex flex-col rounded-card bg-paper p-7 ring-1 ring-hairline/70">
         <h3 class="text-xl text-navy">Pricing</h3>
         <p class="mt-3 max-w-prose text-slate">
-          Assurance OS has indicative monthly subscription tiers, validated on enquiry. The service
-          lines are scoped and quoted per engagement, so you pay for the work you need.
+          Assurance Platform has indicative monthly subscription tiers, validated on enquiry. The
+          service lines are scoped and quoted per engagement, so you pay for the work you need.
         </p>
         <a
           href="/pricing"
