@@ -203,9 +203,9 @@ happens to be interactive.
 
 ## 6. SaaS dashboard visual style
 
-Assurance OS is the operating layer for assurance work, so the product should
-feel like a calm instrument, not a busy console. The marketing restraint carries
-straight into the app.
+The Assurance Platform is the operating layer for assurance work, so the product
+should feel like a calm instrument, not a busy console. The marketing restraint
+carries straight into the app.
 
 - **Shell.** A light working canvas with a quiet left rail and a slim top bar.
   Navy is reserved for the rail or header chrome, not spread across the content.

@@ -1,15 +1,15 @@
 ---
 /**
  * Header, site chrome following familiar conventions (Jakob's Law): logo
- * top-left links home, primary nav top-right, the single gold CTA furthest
- * right. The nav is deliberately small (Hick's Law: Home, About, Services,
- * Assurance OS, Pricing + one action). Items are ordered by importance
- * (serial-position effect) and come straight from `NAV` in site.config.
+ * top-left links home, three primary nav groups, the single gold CTA furthest
+ * right. The nav is deliberately small (Hick's Law: Who we are, What we do,
+ * News & Insights + one action). All three groups come straight from `NAV` in
+ * site.config, so order and contents stay single-source.
  *
- * Desktop: the Services item is a link to the /services hub that also reveals a
- * disclosure menu of the five service lines on hover and keyboard focus
+ * Desktop: each group's trigger is a real link to its hub that also reveals a
+ * disclosure menu of the group's pages on hover and keyboard focus
  * (group-hover / group-focus-within, no JavaScript). Mobile: a keyboard-operable
- * menu with focus trapping and body-scroll lock, where Services is an
+ * menu with focus trapping and body-scroll lock, where each group is an
  * expandable <details> section. Progressive enhancement, every link works
  * without JS.
  */
@@ -17,17 +17,14 @@ import Container from '@/components/primitives/Container.astro';
 import Button from '@/components/primitives/Button.astro';
 import Logo from '@/components/Logo.astro';
 import { NAV, PRIMARY_CTA } from '@/site.config';
+import type { NavItem } from '@/site.config';
 
 const path = Astro.url.pathname;
 
-const isActive = (href: string) =>
-  path === href || (href !== '/' && path.startsWith(href + '/')) || path === href + '/';
-
-// The Services trigger is "active" on the hub and on any of its five child
-// lines (Assurance OS is a separate top-level item, so it is not counted here).
-const servicesItem = NAV.find((n) => n.children);
-const serviceGroupHrefs = ['/services', ...(servicesItem?.children?.map((c) => c.href) ?? [])];
-const servicesActive = serviceGroupHrefs.some((h) => path === h || path.startsWith(h + '/'));
+// A group is active on any of its owned route prefixes (its `match` list, or
+// its own href by default). Hash-only child links share the group's hub route.
+const groupActive = (item: NavItem) =>
+  (item.match ?? [item.href]).some((p) => path === p || path.startsWith(p + '/'));
 
 const navLink =
   'inline-flex min-h-[2.75rem] items-center gap-1 rounded-full px-4 text-sm font-medium text-ink/80 transition-colors duration-150 hover:bg-white hover:text-navy';
@@ -44,7 +41,7 @@ const activeLink = 'bg-white text-navy shadow-card';
         <Logo />
       </a>
 
-      {/* Desktop primary nav, mapped straight from NAV so order stays single-source. */}
+      {/* Desktop primary nav, three groups mapped straight from NAV. */}
       <nav
         aria-label="Primary"
         class="hidden items-center gap-1 rounded-full bg-paper/70 p-1 ring-1 ring-hairline/70 lg:flex"
@@ -58,8 +55,8 @@ const activeLink = 'bg-white text-navy shadow-card';
                     and focus-within with no JavaScript. */}
                 <a
                   href={item.href}
-                  class:list={[navLink, servicesActive && activeLink]}
-                  aria-current={servicesActive ? 'page' : undefined}
+                  class:list={[navLink, groupActive(item) && activeLink]}
+                  aria-current={groupActive(item) ? 'page' : undefined}
                 >
                   {item.label}
                   <svg
@@ -82,30 +79,21 @@ const activeLink = 'bg-white text-navy shadow-card';
 
                 {/* Disclosure menu. The pt-3 wrapper is a transparent hover
                     bridge so the pointer never crosses a dead gap. */}
-                <div class="invisible absolute top-full right-0 z-50 w-[24rem] pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+                <div class="invisible absolute top-full left-1/2 z-50 w-[26rem] -translate-x-1/2 pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
                   <div class="rounded-[1.4rem] bg-white/95 p-2 shadow-pop ring-1 ring-hairline backdrop-blur-xl">
-                    <div class="flex items-center justify-between gap-4 border-b border-hairline px-2 pb-2">
-                      <p class="text-xs font-medium tracking-[0.08em] text-slate uppercase">
-                        Choose a service
-                      </p>
-                      <a
-                        href={item.href}
-                        class="text-xs font-medium text-blue no-underline hover:underline"
-                      >
-                        View all
-                      </a>
-                    </div>
-                    <ul class="mt-2 grid grid-cols-2 gap-1">
+                    <ul class="grid gap-0.5">
                       {item.children.map((c) => (
                         <li>
                           <a
                             href={c.href}
-                            class="group/row flex items-center gap-3 rounded-xl px-3 py-2.5 no-underline transition-colors hover:bg-paper"
+                            class="group/row flex items-start gap-3 rounded-xl px-3 py-2.5 no-underline transition-colors hover:bg-paper"
                           >
-                            <span class="size-2 rounded-full bg-gold transition-transform group-hover/row:scale-125" />
+                            <span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-gold transition-transform group-hover/row:scale-125" />
                             <span>
                               <span class="block text-sm font-medium text-navy">{c.label}</span>
-                              <span class="mt-0.5 block text-xs text-slate">{c.description}</span>
+                              <span class="mt-0.5 block text-xs leading-snug text-slate">
+                                {c.description}
+                              </span>
                             </span>
                           </a>
                         </li>
@@ -117,8 +105,8 @@ const activeLink = 'bg-white text-navy shadow-card';
             ) : (
               <a
                 href={item.href}
-                class:list={[navLink, isActive(item.href) && activeLink]}
-                aria-current={isActive(item.href) ? 'page' : undefined}
+                class:list={[navLink, groupActive(item) && activeLink]}
+                aria-current={groupActive(item) ? 'page' : undefined}
               >
                 {item.label}
               </a>
@@ -185,12 +173,6 @@ const activeLink = 'bg-white text-navy shadow-card';
                   </svg>
                 </summary>
                 <div class="mt-1 mb-1 flex flex-col gap-0.5 border-l border-hairline pl-3">
-                  <a
-                    href={item.href}
-                    class="rounded-lg px-3 py-2.5 text-sm font-medium text-blue no-underline hover:bg-paper-shade"
-                  >
-                    Services overview
-                  </a>
                   {item.children.map((c) => (
                     <a
                       href={c.href}
@@ -206,9 +188,9 @@ const activeLink = 'bg-white text-navy shadow-card';
                 href={item.href}
                 class:list={[
                   'rounded-lg px-3 py-3 font-medium text-navy no-underline hover:bg-paper-shade',
-                  isActive(item.href) && 'bg-paper-shade',
+                  groupActive(item) && 'bg-paper-shade',
                 ]}
-                aria-current={isActive(item.href) ? 'page' : undefined}
+                aria-current={groupActive(item) ? 'page' : undefined}
               >
                 {item.label}
               </a>
@@ -226,9 +208,9 @@ const activeLink = 'bg-white text-navy shadow-card';
 </header>
 
 <script>
-  // Mobile menu only. The desktop Services disclosure is pure CSS
-  // (group-hover / group-focus-within), so there is no dropdown JavaScript to
-  // fail. Progressive enhancement: every link works without this script.
+  // Mobile menu only. The desktop disclosures are pure CSS (group-hover /
+  // group-focus-within), so there is no dropdown JavaScript to fail.
+  // Progressive enhancement: every link works without this script.
   function initNav() {
     const mToggle = document.querySelector<HTMLElement>('[data-mobile-toggle]');
     const mPanel = document.querySelector<HTMLElement>('[data-mobile-panel]');
@@ -249,8 +231,8 @@ const activeLink = 'bg-white text-navy shadow-card';
       mToggle.addEventListener('click', () => {
         setOpen(mToggle.getAttribute('aria-expanded') !== 'true');
       });
-      // Close when a destination link is tapped, but not when toggling the
-      // Services <summary> disclosure.
+      // Close when a destination link is tapped, but not when toggling a
+      // group's <summary> disclosure.
       mPanel.addEventListener('click', (e: MouseEvent) => {
         const el = e.target as HTMLElement;
         if (el.closest('a') && !el.closest('summary')) setOpen(false);

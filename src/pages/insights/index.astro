@@ -13,12 +13,32 @@ import { formatDate, isoDate } from '@/lib/format';
 
 const crumbs = [
   { label: 'Home', href: '/' },
-  { label: 'Insights', href: '/insights' },
+  { label: 'News & Insights', href: '/insights' },
+  { label: 'All insights', href: '/insights' },
 ];
 
 const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort(
   (a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime(),
 );
+
+// Category anchor slugs (ai-governance, internal-audit, ...) so the News &
+// Insights menu can deep-link to a topic. Each anchor is placed on the first
+// guide that carries that category; the grid itself stays dense and ordered by
+// date rather than fragmenting into near-empty topic sections.
+const categoryAnchor = (cat?: string) =>
+  cat
+    ? cat
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+    : undefined;
+
+const seen = new Set<string>();
+const anchoredGuides = guides.map((g) => {
+  const a = categoryAnchor(g.data.category);
+  const id = a && !seen.has(a) ? (seen.add(a), a) : undefined;
+  return { g, id };
+});
 ---
 
 <BaseLayout
@@ -33,7 +53,7 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
     <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
     <div class="relative max-w-3xl">
       <Breadcrumb items={crumbs} class="mb-7" />
-      <p class="eyebrow">Insights</p>
+      <p class="eyebrow">News &amp; Insights</p>
       <h1
         id="page-title"
         class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
@@ -54,8 +74,8 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
         <p class="text-slate">No guides published yet. Please check back soon.</p>
       ) : (
         <FeatureGrid cols={3}>
-          {guides.map((g) => (
-            <Card href={`/insights/${g.id}/`} class="flex flex-col">
+          {anchoredGuides.map(({ g, id }) => (
+            <Card id={id} href={`/insights/${g.id}/`} class="flex scroll-mt-28 flex-col">
               {g.data.category && <p class="eyebrow text-xs">{g.data.category}</p>}
               <h3 class="mt-3 text-xl text-navy">{g.data.title}</h3>
               <p class="mt-2 grow text-slate">{g.data.description}</p>
@@ -74,10 +94,10 @@ const guides = (await getCollection('insights', ({ data }) => !data.draft)).sort
   </Section>
 
   {
-    /* Lead magnet. The downloadable asset is a placeholder for now.
+    /* Lead magnet and subscribe anchor. The downloadable asset is a placeholder.
       {{ASSET: final ISO 42001 readiness checklist PDF to add (R2)}} */
   }
-  <Section tone="shade" aria-labelledby="lead-magnet">
+  <Section id="subscribe" tone="shade" aria-labelledby="lead-magnet" class="scroll-mt-24">
     <div
       class="grid gap-8 rounded-card bg-surface p-8 ring-1 ring-hairline/70 sm:p-10 md:grid-cols-2 md:items-center"
     >
