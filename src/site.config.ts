@@ -22,6 +22,9 @@ export interface NavItem {
   label: string;
   href: string;
   children?: NavChild[];
+  /** Route prefixes that light this group's active state. Defaults to [href].
+   *  Set explicitly so a page cross-linked from another group is owned once. */
+  match?: string[];
 }
 
 export interface ServiceLine {
@@ -95,8 +98,8 @@ export const SERVICES: ServiceLine[] = [
   },
   {
     slug: 'audit-os',
-    name: 'Assurance OS',
-    fullName: 'Assurance OS',
+    name: 'Assurance Platform',
+    fullName: 'Assurance Platform',
     href: '/audit-os',
     summary:
       'The subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting, and an AI assistant.',
@@ -138,35 +141,140 @@ export const SERVICES: ServiceLine[] = [
   },
 ];
 
-/** Short notes for the Services dropdown rows, keyed by service slug. */
-const SERVICE_NAV_NOTES: Record<string, string> = {
-  assurance: 'Co-sourced and outsourced internal audit',
-  labs: 'Automation, CRM and workflow builds',
-  advisory: 'AI strategy, governance and board papers',
-  academy: 'Training and certification',
-  intelligence: 'Benchmarking and research',
-};
-
 /**
- * Primary navigation: five text items in order (Hick's Law). Assurance OS is its
- * own top-level item; the Services item groups the five other lines and links
- * to the /services hub. The gold "Book a demo" action is rendered separately
- * (Von Restorff), and Insights lives in the footer, not the top bar.
+ * Primary navigation: three groups (Hick's Law) that carry the whole site, so
+ * the header reads as who we are, what we do and where to read our thinking.
+ * The logo links home and the gold "Book a demo" action is rendered separately
+ * (Von Restorff). Each group opens a disclosure menu of its pages. Descriptions
+ * are short, one line each. `match` lists the route prefixes that light a
+ * group's active state, so a page cross-linked from another group (Intelligence
+ * appears under both) is owned by exactly one group.
  */
 export const NAV: NavItem[] = [
-  { label: 'Home', href: '/' },
-  { label: 'About', href: '/about' },
   {
-    label: 'Services',
-    href: '/services',
-    children: SERVICES.filter((s) => s.slug !== 'audit-os').map((s) => ({
-      label: s.name,
-      href: s.href,
-      description: SERVICE_NAV_NOTES[s.slug],
-    })),
+    label: 'Who we are',
+    href: '/about',
+    match: ['/about'],
+    children: [
+      {
+        label: 'About Murikah',
+        href: '/about',
+        description: 'Clearer assurance, stronger systems and better decisions.',
+      },
+      {
+        label: 'Why Murikah',
+        href: '/about#why-now',
+        description: 'Why the bar for assurance, AI governance and board reporting is rising.',
+      },
+      {
+        label: 'How we work',
+        href: '/about#how-we-work',
+        description: 'Standards in, evidence out.',
+      },
+      {
+        label: 'Standards we follow',
+        href: '/about#standards',
+        description: 'IIA Standards, ISO 27001 and ISO 42001.',
+      },
+      {
+        label: 'What we stand for',
+        href: '/about#what-we-stand-for',
+        description: 'Independence, plain speaking and evidence over assertion.',
+      },
+    ],
   },
-  { label: 'Assurance OS', href: '/audit-os' },
-  { label: 'Pricing', href: '/pricing' },
+  {
+    label: 'What we do',
+    href: '/services',
+    match: ['/services', '/pricing', ...SERVICES.map((s) => s.href)],
+    children: [
+      {
+        label: 'Services overview',
+        href: '/services',
+        description: 'Connected lines of assurance, systems and intelligence.',
+      },
+      {
+        label: 'Assurance',
+        href: '/assurance',
+        description:
+          'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
+      },
+      {
+        label: 'Assurance Platform',
+        href: '/audit-os',
+        description:
+          'Work papers, approvals, findings, remediation, follow-ups and board reporting.',
+      },
+      { label: 'Labs', href: '/labs', description: 'Automation, CRM, CMS and workflow builds.' },
+      {
+        label: 'Advisory',
+        href: '/advisory',
+        description: 'AI strategy, governance roadmaps, analytics and board papers.',
+      },
+      {
+        label: 'Academy',
+        href: '/academy',
+        description: 'CISA, ISO 42001, lead-auditor readiness and masterclasses.',
+      },
+      {
+        label: 'Intelligence',
+        href: '/intelligence',
+        description: 'Benchmarking, research and cross-client intelligence.',
+      },
+      {
+        label: 'Pricing',
+        href: '/pricing',
+        description: 'Subscription tiers and scoped engagement pricing.',
+      },
+    ],
+  },
+  {
+    label: 'News & Insights',
+    href: '/insights',
+    match: ['/insights'],
+    children: [
+      {
+        label: 'All insights',
+        href: '/insights',
+        description: 'Guides for assurance, governance, AI and data protection.',
+      },
+      {
+        label: 'AI governance',
+        href: '/insights#ai-governance',
+        description: 'ISO 42001, AI governance and readiness guidance.',
+      },
+      {
+        label: 'Internal audit',
+        href: '/insights#internal-audit',
+        description: 'Practical guidance for audit leaders and committees.',
+      },
+      {
+        label: 'Data protection',
+        href: '/insights#data-protection',
+        description: 'ODPC, controller and processor obligations, and privacy reviews.',
+      },
+      {
+        label: 'Sector guides',
+        href: '/insights#sector-guides',
+        description: 'SACCOs, banks, NGOs, fintechs and regulated organisations.',
+      },
+      {
+        label: 'Audit software',
+        href: '/insights#audit-software',
+        description: 'Buyer guides, pricing explainers and platform guidance.',
+      },
+      {
+        label: 'Research & benchmarking',
+        href: '/intelligence',
+        description: 'Murikah Intelligence reports and market benchmarks.',
+      },
+      {
+        label: 'Newsletter and RSS',
+        href: '/insights#subscribe',
+        description: 'Occasional notes on assurance and governance. No noise.',
+      },
+    ],
+  },
 ];
 
 /** The one gold action across the site. */
@@ -182,27 +290,45 @@ export const SOCIAL: SocialLink[] = [
 ];
 
 /**
- * Footer navigation, grouped (Miller's Law). Mirrors the primary five-item nav
- * and keeps Insights and the individual service lines reachable.
+ * Footer navigation, grouped to mirror the primary three-part architecture
+ * (Miller's Law), with Legal kept in the thin bottom bar. Links stay in sync
+ * with the header groups.
  */
 export const FOOTER_GROUPS: { heading: string; links: { label: string; href: string }[] }[] = [
   {
-    heading: 'Explore',
+    heading: 'Who we are',
     links: [
-      { label: 'Home', href: '/' },
-      { label: 'About', href: '/about' },
-      { label: 'Services', href: '/services' },
-      { label: 'Assurance OS', href: '/audit-os' },
-      { label: 'Pricing', href: '/pricing' },
-      { label: 'Insights', href: '/insights' },
+      { label: 'About Murikah', href: '/about' },
+      { label: 'Why Murikah', href: '/about#why-now' },
+      { label: 'How we work', href: '/about#how-we-work' },
+      { label: 'Standards', href: '/about#standards' },
+      { label: 'Contact', href: '/contact' },
     ],
   },
   {
-    heading: 'Services',
-    links: SERVICES.filter((s) => s.slug !== 'audit-os').map((s) => ({
-      label: s.name,
-      href: s.href,
-    })),
+    heading: 'What we do',
+    links: [
+      { label: 'Services overview', href: '/services' },
+      { label: 'Assurance', href: '/assurance' },
+      { label: 'Assurance Platform', href: '/audit-os' },
+      { label: 'Labs', href: '/labs' },
+      { label: 'Advisory', href: '/advisory' },
+      { label: 'Academy', href: '/academy' },
+      { label: 'Intelligence', href: '/intelligence' },
+      { label: 'Pricing', href: '/pricing' },
+    ],
+  },
+  {
+    heading: 'News & Insights',
+    links: [
+      { label: 'All insights', href: '/insights' },
+      { label: 'AI governance', href: '/insights#ai-governance' },
+      { label: 'Internal audit', href: '/insights#internal-audit' },
+      { label: 'Data protection', href: '/insights#data-protection' },
+      { label: 'Sector guides', href: '/insights#sector-guides' },
+      { label: 'Research & benchmarking', href: '/intelligence' },
+      { label: 'RSS feed', href: '/rss.xml' },
+    ],
   },
   {
     heading: 'Legal',
@@ -258,7 +384,7 @@ export const KNOWS_ABOUT = [
 ] as const;
 
 /**
- * Assurance OS indicative pricing, positioning anchors only. Always label as
+ * Assurance Platform indicative pricing, positioning anchors only. Always label as
  * indicative and validated on enquiry. Never present as a fixed quote.
  */
 export const PRICING: PricingTier[] = [
