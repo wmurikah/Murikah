@@ -18,7 +18,8 @@ const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
   .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   .slice(0, 3);
 
-// Hero rotating panel: the assurance proof points plus what Labs builds.
+// Hero rotating panel: one thread through the audit, from the first risk on the
+// plan to the board pack. Each slide is a real Audit OS capability.
 const heroSlides = [
   {
     kicker: 'Audit universe',
@@ -36,31 +37,16 @@ const heroSlides = [
     body: 'From report to owner, deadline, follow-up and closed.',
   },
   {
-    kicker: 'Labs',
-    title: 'Workflow and process automation',
-    body: 'Approvals, reconciliations and reporting across finance and operations.',
-  },
-  {
-    kicker: 'Labs',
-    title: 'CRM and CMS builds',
-    body: 'Set up, customise and connect the systems that run your work.',
-  },
-  {
-    kicker: 'Labs',
-    title: 'Custom internal tools',
-    body: 'Internal tools built around how your team actually works.',
-  },
-  {
-    kicker: 'Labs',
-    title: 'Data pipelines and reporting',
-    body: 'Clean numbers flowing automatically into your dashboards.',
+    kicker: 'Board pack',
+    title: 'Reporting from live data',
+    body: 'Your quarterly pack is a click, not a week of copying.',
   },
 ];
 
 const why = [
   {
-    title: 'One mental model',
-    body: 'The service, system and board reporting share the same structure, reducing handovers and cognitive load.',
+    title: 'Nothing gets lost in the handover',
+    body: 'The service, the platform and your board reporting share one structure, so evidence carries straight from fieldwork to the board pack without being rebuilt at each step.',
   },
 ];
 
@@ -125,6 +111,7 @@ const faqs: FaqItem[] = [
                   Live assurance
                 </p>
                 <h2 class="mt-2 text-xl text-navy">What we run</h2>
+                <p class="mt-1 text-sm text-slate">One thread, from the first risk to the board pack.</p>
               </div>
               <div
                 class="rounded-full bg-paper-shade px-3 py-1 text-sm text-slate ring-1 ring-hairline"
@@ -172,8 +159,8 @@ const faqs: FaqItem[] = [
         Six connected services. One clear system.
       </h2>
       <p class="mt-5 text-lg text-slate">
-        We use progressive disclosure: start with the urgent need, then expand into the connected
-        capability when your team is ready.
+        Start with what is most urgent. The rest of the system is ready when your team is, not
+        before, so you are never paying for capability you have not grown into yet.
       </p>
     </div>
 
@@ -199,12 +186,12 @@ const faqs: FaqItem[] = [
   <Section tone="paper" aria-labelledby="experience-title">
     <div class="grid items-start gap-12 lg:grid-cols-12 lg:gap-16">
       <div class="reveal lg:sticky lg:top-28 lg:col-span-5">
-        <p class="eyebrow">Experience principles</p>
+        <p class="eyebrow">Why it works</p>
         <h2
           id="experience-title"
           class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
         >
-          Built to reduce friction, not add another system to babysit.
+          Built to fit your team, not to become another system to babysit.
         </h2>
       </div>
       <div class="lg:col-span-7">
