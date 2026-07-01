@@ -46,9 +46,13 @@ const faqs: FaqItem[] = [
 ---
 
 <BaseLayout titleFull="Internal audit and AI governance | Murikah" description={SITE.description}>
-  <section class="hero-luxe relative overflow-hidden" aria-labelledby="hero-title">
-    <div aria-hidden="true" class="orb orb-one"></div>
-    <div aria-hidden="true" class="orb orb-two"></div>
+  <section class="navy-rich grain on-dark relative overflow-hidden" aria-labelledby="hero-title">
+    {/* One restrained brass bloom behind the headline for cinematic depth. */}
+    <div
+      aria-hidden="true"
+      class="aperture top-[-8rem] left-[-6rem] h-[32rem] w-[38rem] opacity-70"
+    >
+    </div>
     <Container class="relative">
       {
         /* Split hero: copy left, cinematic motion panel right. The grid fills the
@@ -65,12 +69,12 @@ const faqs: FaqItem[] = [
           </p>
           <h1
             id="hero-title"
-            class="rise mt-6 max-w-[18ch] text-[length:var(--text-display)] leading-[1.07] font-semibold tracking-[-0.02em] text-balance text-navy"
+            class="rise mt-6 max-w-[18ch] text-[length:var(--text-display)] leading-[1.07] font-semibold tracking-[-0.02em] text-balance text-white"
             style="--rise-delay: 0.13s"
           >
             Make assurance feel inevitable.
           </h1>
-          <p class="rise mt-5 max-w-xl text-lg leading-7 text-slate" style="--rise-delay: 0.22s">
+          <p class="rise mt-5 max-w-xl text-lg leading-7 text-paper/80" style="--rise-delay: 0.22s">
             Murikah helps organisations govern risk, prove evidence, strengthen systems and turn
             assurance into a calm operating rhythm.
           </p>
@@ -78,7 +82,7 @@ const faqs: FaqItem[] = [
             <Button href={PRIMARY_CTA.href} variant="primary" size="lg">{PRIMARY_CTA.label}</Button>
             <Button href="/audit-os" variant="ghost" size="lg">Explore Assurance OS</Button>
           </div>
-          <p class="rise mt-7 max-w-md text-sm text-slate" style="--rise-delay: 0.37s">
+          <p class="rise mt-7 max-w-md text-sm text-paper/60" style="--rise-delay: 0.37s">
             Advisory, analytics and Assurance OS work as one operating layer.
           </p>
         </div>
