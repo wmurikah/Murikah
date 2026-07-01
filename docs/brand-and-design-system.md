@@ -56,51 +56,51 @@ real token; the extended members carry a narrow role.
 
 ### Core
 
-| Role | Name | Hex | Token | Use |
-| --- | --- | --- | --- | --- |
-| Primary | Ink Navy | `#0B1733` | `--color-navy` | Authority. Footer, one closing band per page, dark product chrome, the logo tile. |
-| Primary, deep | Navy Deep | `#081026` | `--color-navy-deep` | The far end of navy gradients only. |
-| Canvas | Paper | `#F7F4EE` | `--color-paper` | The dominant background. Warm, not clinical. |
-| Canvas, raised | Surface | `#FFFFFF` | `--color-surface` | Cards and raised panels. |
-| Canvas, sunk | Mist | `#EFEAE0` | `--color-paper-shade` | Quiet fills, quotes, inset rows. |
+| Role           | Name      | Hex       | Token                 | Use                                                                               |
+| -------------- | --------- | --------- | --------------------- | --------------------------------------------------------------------------------- |
+| Primary        | Ink Navy  | `#0B1733` | `--color-navy`        | Authority. Footer, one closing band per page, dark product chrome, the logo tile. |
+| Primary, deep  | Navy Deep | `#081026` | `--color-navy-deep`   | The far end of navy gradients only.                                               |
+| Canvas         | Paper     | `#F7F4EE` | `--color-paper`       | The dominant background. Warm, not clinical.                                      |
+| Canvas, raised | Surface   | `#FFFFFF` | `--color-surface`     | Cards and raised panels.                                                          |
+| Canvas, sunk   | Mist      | `#EFEAE0` | `--color-paper-shade` | Quiet fills, quotes, inset rows.                                                  |
 
 ### Structure neutrals (graphite and silver)
 
-| Role | Name | Hex | Token | Use |
-| --- | --- | --- | --- | --- |
-| Graphite, text | Ink | `#1B2230` | `--color-ink` | Body text. Never pure black. |
-| Graphite, secondary | Slate | `#5C6475` | `--color-slate` | Secondary text, captions, meta. |
-| Silver | Hairline | `#D7DBE5` | `--color-hairline` | The workhorse divider. Grouping is done with hairlines and space, not boxes. |
+| Role                | Name     | Hex       | Token              | Use                                                                          |
+| ------------------- | -------- | --------- | ------------------ | ---------------------------------------------------------------------------- |
+| Graphite, text      | Ink      | `#1B2230` | `--color-ink`      | Body text. Never pure black.                                                 |
+| Graphite, secondary | Slate    | `#5C6475` | `--color-slate`    | Secondary text, captions, meta.                                              |
+| Silver              | Hairline | `#D7DBE5` | `--color-hairline` | The workhorse divider. Grouping is done with hairlines and space, not boxes. |
 
 ### Accent and interactive
 
-| Role | Name | Hex | Token | Use |
-| --- | --- | --- | --- | --- |
-| Accent | Gold | `#C9A227` | `--color-gold` | The single distinctive highlight. One primary action, the signature light, fine rules. Kept scarce on purpose. |
-| Accent, deep | Gold Deep | `#AE8B1F` | `--color-gold-deep` | Gold hover and active only. |
-| Interactive | Blue | `#1E4FA3` | `--color-blue` | Links and quiet actions, where spending gold would be wasteful. |
-| Interactive, deep | Blue Deep | `#173C7C` | `--color-blue-deep` | Link hover. |
+| Role              | Name      | Hex       | Token               | Use                                                                                                            |
+| ----------------- | --------- | --------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Accent            | Gold      | `#C9A227` | `--color-gold`      | The single distinctive highlight. One primary action, the signature light, fine rules. Kept scarce on purpose. |
+| Accent, deep      | Gold Deep | `#AE8B1F` | `--color-gold-deep` | Gold hover and active only.                                                                                    |
+| Interactive       | Blue      | `#1E4FA3` | `--color-blue`      | Links and quiet actions, where spending gold would be wasteful.                                                |
+| Interactive, deep | Blue Deep | `#173C7C` | `--color-blue-deep` | Link hover.                                                                                                    |
 
 ### Extended, optional (reserved roles)
 
 These formalise the brief's palette without diluting the marketing look. They
 are product and material members, not new marketing colours.
 
-| Role | Name | Hex | Use |
-| --- | --- | --- | --- |
+| Role           | Name          | Hex       | Use                                                                                                                                           |
+| -------------- | ------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Verified state | Verified Teal | `#0E9C8E` | Product only. The "assured", "verified", "evidence complete" state in the SaaS. A calm, boardroom teal, never neon, never in marketing pages. |
-| Soft gold wash | Champagne | `#E7D9A8` | A low-opacity gold tint for large light washes and the aperture glow, where solid gold would be too loud. |
-| Cool silver | Silver Mist | `#C9CFDB` | Slightly deeper than Hairline, for product table rules and inactive controls. |
+| Soft gold wash | Champagne     | `#E7D9A8` | A low-opacity gold tint for large light washes and the aperture glow, where solid gold would be too loud.                                     |
+| Cool silver    | Silver Mist   | `#C9CFDB` | Slightly deeper than Hairline, for product table rules and inactive controls.                                                                 |
 
 ### Product status (RAG), product surfaces only
 
 Risk ratings live inside the product and never appear in marketing UI.
 
-| Level | Hex | Token |
-| --- | --- | --- |
-| Low | `#2E7D5B` | `--color-status-low` |
-| Medium | `#D9930A` | `--color-status-med` |
-| High | `#B42318` | `--color-status-high` |
+| Level  | Hex       | Token                 |
+| ------ | --------- | --------------------- |
+| Low    | `#2E7D5B` | `--color-status-low`  |
+| Medium | `#D9930A` | `--color-status-med`  |
+| High   | `#B42318` | `--color-status-high` |
 
 **Discipline.** White and paper carry roughly 85 to 90 per cent of every
 surface. Navy appears at most twice on a page (a closing band and the footer).
@@ -134,45 +134,45 @@ font payload.
 
 **Scale** (from `--text-*` tokens; fluid values use `clamp`).
 
-| Token | Size | Line height | Tracking | Role |
-| --- | --- | --- | --- | --- |
-| `display` | `clamp(1.875rem, 3.5vw, 2.5rem)` | 1.1 | `-0.02em` | Hero headline |
-| `title` | `clamp(1.375rem, 2vw, 1.75rem)` | 1.15 | `-0.01em` | Section H2 |
-| `2xl` / `xl` | 21px / 20px | 1.3 / 1.35 | `-0.01em` | H3 |
-| `lg` | 19px | 1.5 | 0 | Lead paragraph |
-| `base` | `clamp(0.9375rem, 0.5vw + 0.85rem, 1.0625rem)` | 1.6 | 0 | Body |
-| `sm` | 14px | 1.5 | 0 | Buttons, nav, small labels |
-| `xs` | 12px | 1.5 | `0.08em` (labels) | Fine print, eyebrows |
+| Token        | Size                                           | Line height | Tracking          | Role                       |
+| ------------ | ---------------------------------------------- | ----------- | ----------------- | -------------------------- |
+| `display`    | `clamp(1.875rem, 3.5vw, 2.5rem)`               | 1.1         | `-0.02em`         | Hero headline              |
+| `title`      | `clamp(1.375rem, 2vw, 1.75rem)`                | 1.15        | `-0.01em`         | Section H2                 |
+| `2xl` / `xl` | 21px / 20px                                    | 1.3 / 1.35  | `-0.01em`         | H3                         |
+| `lg`         | 19px                                           | 1.5         | 0                 | Lead paragraph             |
+| `base`       | `clamp(0.9375rem, 0.5vw + 0.85rem, 1.0625rem)` | 1.6         | 0                 | Body                       |
+| `sm`         | 14px                                           | 1.5         | 0                 | Buttons, nav, small labels |
+| `xs`         | 12px                                           | 1.5         | `0.08em` (labels) | Fine print, eyebrows       |
 
-**The one exception.** The wordmark, and only the wordmark, is set in Tangerine
-(see section 4). It never touches headings, body or UI text.
+**The wordmark.** The logotype is simply "Murikah", set in the same sans at a
+confident semibold with slightly tighter tracking (see section 4). No second
+typeface is introduced anywhere in the system.
 
 ---
 
 ## 4. Logo style direction
 
-The mark is a wordmark with a single piece of intelligence built into it, and
-nothing else. No shield, no lock, no magnifier, no scales.
+The mark is a clean wordmark with a single, discreet device beside it, and
+nothing else. No shield, no lock, no magnifier, no scales, no literal check.
 
-**Wordmark.** "Muri.kah", set in Tangerine Bold. The name reads and is spoken as
-"Murikah" (moo-REE-kah); the styling lives only in the logotype. Navy on light
-surfaces, warm paper on navy.
+**Wordmark.** Simply "Murikah", set in the brand sans at semibold with slightly
+tight tracking. Clean, modern and internationally legible. It reads as one
+confident word, navy on light surfaces and warm paper on navy. It is never
+styled as a script, never broken up, and never punctuated.
 
-**The evidence mark.** Between the two halves sits a small gold spark: a filled
-circle in Gold `#C9A227`, standing in for the dot. It is the discreet
-verification signal, a full stop that doubles as a mark of something checked and
-closed. It is never a typed period; it is a separate element sized in `em` so it
-scales with the wordmark, and it sits low, near the baseline, the way a real
-full stop sits.
+**The evidence mark.** A single gold aperture dot, a filled circle in Gold
+`#C9A227`, sits on a small navy tile to the left of the wordmark. It is the
+discreet verification and evidence device: a point of light that reads as
+something seen, checked and closed. It supports the wordmark and never interrupts
+the readability of "Murikah".
 
-**The companion mark.** A cursive script cannot survive at favicon size, so
-below about 32px the brand uses a simple companion: the same gold spark on a
-navy tile. This is the favicon and the app icon. The script is never rendered
-that small.
+**The companion mark.** Where the wordmark will not fit, at or below about 32px,
+the brand uses the tile and dot alone: the gold aperture on the navy tile. This
+is the favicon and the app icon, and it carries the brand without a single word.
 
-**Lockups.** Header and footer pair the navy tile (carrying the spark) with the
-wordmark. The social card carries the wordmark, the tagline in sans, and one
-line of context. That is the full set. There is no secondary emblem to manage.
+**Lockups.** Header and footer pair the tile with the wordmark. The social card
+carries the wordmark, the tagline in sans, and one line of context. That is the
+full set. There is no secondary emblem to manage.
 
 ---
 
@@ -203,9 +203,9 @@ happens to be interactive.
 
 ## 6. SaaS dashboard visual style
 
-Audit OS is the operating system for assurance, so the product should feel like
-a calm instrument, not a busy console. The marketing restraint carries straight
-into the app.
+Assurance OS is the operating layer for assurance work, so the product should
+feel like a calm instrument, not a busy console. The marketing restraint carries
+straight into the app.
 
 - **Shell.** A light working canvas with a quiet left rail and a slim top bar.
   Navy is reserved for the rail or header chrome, not spread across the content.
@@ -330,8 +330,8 @@ something.
   `.premium-card`, the `navy-rich` field) live in `src/styles/global.css`.
 - Section tones (paper, surface, shade, navy, navy-rich) are set through
   `Section.astro`; the one gold action is `Button` `variant="primary"`.
-- The wordmark and companion mark are `Logo.astro`; Tangerine is imported once
-  in `BaseLayout.astro` and scoped to the logo alone.
+- The wordmark and companion mark are `Logo.astro`; the wordmark uses the same
+  brand sans as the rest of the system, with no second typeface.
 
 Anything added to the system should be expressible as a token or a small
 composition of existing ones. If a new screen needs a value that is not in the

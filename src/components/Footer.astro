@@ -1,7 +1,7 @@
 ---
 /**
  * Footer, a recurring "end" moment. A compact navy field: one brand block (mark
- * plus the Tangerine wordmark, nothing stacked beneath), a single flat row of
+ * plus the wordmark, nothing stacked beneath), a single flat row of
  * navigation links with no column headers, a one-line newsletter capture, and a
  * thin bottom bar. Standards badges live on the About page, not here, and the
  * pronunciation cue sits on the home hero. `.on-dark` flips focus rings to gold.
@@ -33,11 +33,13 @@ const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:tex
           <Logo tone="light" />
         </a>
         <nav aria-label="Footer" class="flex flex-wrap gap-x-5 gap-y-2 lg:justify-end">
-          {navLinks.map((l) => (
-            <a href={l.href} class={footLink}>
-              {l.label}
-            </a>
-          ))}
+          {
+            navLinks.map((l) => (
+              <a href={l.href} class={footLink}>
+                {l.label}
+              </a>
+            ))
+          }
         </nav>
       </div>
 
@@ -45,9 +47,7 @@ const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:tex
       <div
         class="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between"
       >
-        <p class="text-sm text-paper/70">
-          Occasional notes on assurance and governance. No noise.
-        </p>
+        <p class="text-sm text-paper/70">Occasional notes on assurance and governance. No noise.</p>
         <SubscribeForm
           source="newsletter"
           tone="dark"
@@ -63,20 +63,24 @@ const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:tex
       >
         <p class="text-sm text-paper/55">© {year} {SITE.legalName}. All rights reserved.</p>
         <ul class="flex flex-wrap items-center gap-x-5 gap-y-2">
-          {legalLinks.map((l) => (
-            <li>
-              <a href={l.href} class={footLink}>
-                {l.label}
-              </a>
-            </li>
-          ))}
-          {SOCIAL.map((s) => (
-            <li>
-              <a href={s.href} class={footLink} rel="me noopener" target="_blank">
-                {s.label}
-              </a>
-            </li>
-          ))}
+          {
+            legalLinks.map((l) => (
+              <li>
+                <a href={l.href} class={footLink}>
+                  {l.label}
+                </a>
+              </li>
+            ))
+          }
+          {
+            SOCIAL.map((s) => (
+              <li>
+                <a href={s.href} class={footLink} rel="me noopener" target="_blank">
+                  {s.label}
+                </a>
+              </li>
+            ))
+          }
           <li>
             <a href={`mailto:${SITE.email}`} class={footLink}>{SITE.email}</a>
           </li>

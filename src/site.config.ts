@@ -95,8 +95,8 @@ export const SERVICES: ServiceLine[] = [
   },
   {
     slug: 'audit-os',
-    name: 'Audit OS',
-    fullName: 'Audit OS',
+    name: 'Assurance OS',
+    fullName: 'Assurance OS',
     href: '/audit-os',
     summary:
       'The subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting, and an AI assistant.',
@@ -148,7 +148,7 @@ const SERVICE_NAV_NOTES: Record<string, string> = {
 };
 
 /**
- * Primary navigation: five text items in order (Hick's Law). Audit OS is its
+ * Primary navigation: five text items in order (Hick's Law). Assurance OS is its
  * own top-level item; the Services item groups the five other lines and links
  * to the /services hub. The gold "Book a demo" action is rendered separately
  * (Von Restorff), and Insights lives in the footer, not the top bar.
@@ -165,7 +165,7 @@ export const NAV: NavItem[] = [
       description: SERVICE_NAV_NOTES[s.slug],
     })),
   },
-  { label: 'Audit OS', href: '/audit-os' },
+  { label: 'Assurance OS', href: '/audit-os' },
   { label: 'Pricing', href: '/pricing' },
 ];
 
@@ -192,7 +192,7 @@ export const FOOTER_GROUPS: { heading: string; links: { label: string; href: str
       { label: 'Home', href: '/' },
       { label: 'About', href: '/about' },
       { label: 'Services', href: '/services' },
-      { label: 'Audit OS', href: '/audit-os' },
+      { label: 'Assurance OS', href: '/audit-os' },
       { label: 'Pricing', href: '/pricing' },
       { label: 'Insights', href: '/insights' },
     ],
@@ -258,7 +258,7 @@ export const KNOWS_ABOUT = [
 ] as const;
 
 /**
- * Audit OS indicative pricing, positioning anchors only. Always label as
+ * Assurance OS indicative pricing, positioning anchors only. Always label as
  * indicative and validated on enquiry. Never present as a fixed quote.
  */
 export const PRICING: PricingTier[] = [
