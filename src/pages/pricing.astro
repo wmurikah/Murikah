@@ -1,0 +1,127 @@
+---
+export const prerender = true;
+
+/**
+ * Pricing. Holds the full indicative Audit OS subscription tiers (moved here
+ * from the Audit OS page, unchanged and still labelled indicative and validated
+ * on enquiry) plus an honest note that the five service lines are scoped and
+ * quoted per engagement. No new numbers are invented on this page.
+ */
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Button from '@/components/primitives/Button.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import { SERVICES, PRICING } from '@/site.config';
+
+const serviceLines = SERVICES.filter((s) => s.slug !== 'audit-os');
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Pricing', href: '/pricing' },
+];
+---
+
+<BaseLayout
+  titleFull="Pricing | Murikah"
+  description="Indicative Audit OS subscription tiers for African mid-market teams, validated on enquiry. The service lines are scoped and quoted per engagement."
+>
+  {/* Hero: a calm opening on a light canvas. */}
+  <Section
+    tone="surface"
+    aria-labelledby="page-title"
+    class="relative overflow-hidden border-b border-hairline"
+  >
+    <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
+    <div class="relative max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">Pricing</p>
+      <h1
+        id="page-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.015em] text-balance text-navy"
+      >
+        Pricing you can take to a budget.
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        Audit OS runs on a monthly subscription with indicative tiers, validated on enquiry against
+        your size and needs. The service lines are scoped and quoted per engagement, so you pay for
+        the work you need and nothing you do not.
+      </p>
+    </div>
+  </Section>
+
+  {/* Audit OS subscription tiers, moved here unchanged. */}
+  <Section tone="paper" aria-labelledby="audit-os-pricing">
+    <div class="max-w-2xl">
+      <p class="eyebrow">Audit OS</p>
+      <h2
+        id="audit-os-pricing"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
+      >
+        Audit OS subscription
+      </h2>
+      <p class="mt-4 text-lg text-slate">
+        Indicative monthly ranges, validated on enquiry against your size and needs. No long lock-in.
+      </p>
+    </div>
+    <div class="mt-12 grid gap-6 lg:grid-cols-3">
+      {
+        PRICING.map((tier) => (
+          <div class="flex flex-col rounded-card bg-surface p-7 ring-1 ring-hairline/70">
+            <h3 class="text-xl text-navy">{tier.name}</h3>
+            <p class="mt-1 text-sm text-slate">{tier.forWho}</p>
+            <p class="mt-5 text-2xl font-semibold text-navy">{tier.price}</p>
+            <p class="text-sm text-slate">{tier.period}</p>
+          </div>
+        ))
+      }
+    </div>
+    <div class="mt-6 rounded-card bg-surface p-7 ring-1 ring-hairline/70">
+      <h3 class="text-xl text-navy">The assurance bundle</h3>
+      <p class="mt-2 max-w-prose text-slate">
+        Pair a fixed-fee assurance retainer with a discounted Audit OS subscription, and budget for
+        the whole thing as one predictable monthly number. Talk to us about the right mix for your
+        team.
+      </p>
+    </div>
+  </Section>
+
+  {/* The service lines, scoped per engagement. */}
+  <Section tone="surface" aria-labelledby="engagement-pricing" class="border-y border-hairline">
+    <div class="max-w-2xl">
+      <p class="eyebrow">Service lines</p>
+      <h2
+        id="engagement-pricing"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
+      >
+        Scoped and quoted per engagement
+      </h2>
+      <p class="mt-4 text-lg text-slate">
+        Assurance, Labs, Advisory, Academy and Intelligence are priced against the scope of the work,
+        not a fixed shelf price. Tell us what you need and we will come back with a clear quote and a
+        plan.
+      </p>
+    </div>
+    <ul class="mt-10 grid gap-x-12 gap-y-8 sm:grid-cols-2">
+      {
+        serviceLines.map((s) => (
+          <li class="border-t border-hairline pt-5">
+            <h3 class="text-lg text-navy">{s.fullName}</h3>
+            <p class="mt-2 text-slate">{s.summary}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <div class="mt-10">
+      <Button href="/contact" variant="secondary">Book a call</Button>
+    </div>
+  </Section>
+
+  <CtaSection
+    eyebrow="Book a demo"
+    title="Get a clear number for your team"
+    body="Book a demo and we will validate the right Audit OS tier and scope any service work against your size, your regulator and your board."
+    secondaryLabel="Contact us"
+    secondaryHref="/contact"
+  />
+</BaseLayout>
