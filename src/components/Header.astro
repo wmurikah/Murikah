@@ -15,7 +15,6 @@
  */
 import Container from '@/components/primitives/Container.astro';
 import Button from '@/components/primitives/Button.astro';
-import Logo from '@/components/Logo.astro';
 import { NAV, PRIMARY_CTA } from '@/site.config';
 import type { NavItem } from '@/site.config';
 
@@ -36,14 +35,20 @@ const navLink =
   'hover:after:scale-x-100 focus-visible:after:scale-x-100 group-hover:after:scale-x-100 group-focus-within:after:scale-x-100 aria-[current=page]:after:scale-x-100';
 ---
 
-<header
-  class="on-dark sticky top-0 z-50 border-b border-white/10 bg-obsidian/85 shadow-[0_1px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl"
->
+<header class="on-dark sticky top-0 z-50 border-b border-white/10 bg-obsidian">
   <Container>
     <div class="flex h-16 items-center justify-between lg:h-[4.5rem]">
-      {/* Logo, top-left, links home (Jakob's Law). */}
-      <a href="/" class="rounded-md no-underline" aria-label="Murikah, home">
-        <Logo tone="light" />
+      {/* Logo, top-left, links home (Jakob's Law). The white dark-header lockup. */}
+      <a href="/" class="inline-flex rounded-md no-underline" aria-label="Murikah, home">
+        {/* The lockup art is white/brass on near-black; `mix-blend-lighten`
+            drops its baked-in background into the header so there is no seam. */}
+        <img
+          src="/images/murikah-logo-dark.png"
+          alt="Murikah"
+          width="176"
+          height="44"
+          class="h-10 w-auto mix-blend-lighten sm:h-11"
+        />
       </a>
 
       {
