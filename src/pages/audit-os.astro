@@ -184,26 +184,26 @@ const faqs: FaqItem[] = [
     <p class="mt-3 max-w-prose text-slate">
       Indicative monthly ranges, validated on enquiry against your size and needs. No long lock-in.
     </p>
-    <div class="mt-8 grid gap-5 sm:gap-6 lg:grid-cols-3">
+    <div class="mt-8 grid gap-5 sm:grid-cols-3 sm:gap-6">
       {
         PRICING.map((tier) => (
-          <div class="flex flex-col rounded-card bg-paper p-7 ring-1 ring-hairline/70">
-            <h3 class="text-xl text-navy">{tier.name}</h3>
+          <div class="rounded-card bg-paper p-6 ring-1 ring-hairline/70">
+            <h3 class="text-lg text-navy">{tier.name}</h3>
             <p class="mt-1 text-sm text-slate">{tier.forWho}</p>
-            <p class="mt-5 text-2xl font-semibold text-navy">{tier.price}</p>
+            <p class="mt-4 text-xl font-semibold text-navy">{tier.price}</p>
             <p class="text-sm text-slate">{tier.period}</p>
           </div>
         ))
       }
     </div>
-    <div class="mt-8 rounded-card bg-paper p-7 ring-1 ring-hairline/70">
-      <h3 class="text-xl text-navy">The assurance bundle</h3>
-      <p class="mt-2 max-w-prose text-slate">
-        Pair a fixed-fee assurance retainer with a discounted Audit OS subscription, and budget for
-        the whole thing as one predictable monthly number. Talk to us about the right mix for your
-        team.
-      </p>
-    </div>
+    <p class="mt-6">
+      <a
+        href="/pricing"
+        class="inline-flex items-center gap-2 font-medium text-blue no-underline hover:text-blue-deep hover:underline"
+      >
+        See full pricing, including the assurance bundle <span aria-hidden="true">&rarr;</span>
+      </a>
+    </p>
   </Section>
 
   <Section tone="paper" aria-labelledby="related">
