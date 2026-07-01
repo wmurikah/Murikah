@@ -203,7 +203,7 @@ happens to be interactive.
 
 ## 6. SaaS dashboard visual style
 
-The Assurance Platform is the operating layer for assurance work, so the product
+The Assurance OS is the operating layer for assurance work, so the product
 should feel like a calm instrument, not a busy console. The marketing restraint
 carries straight into the app.
 

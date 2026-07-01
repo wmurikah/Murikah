@@ -98,8 +98,8 @@ export const SERVICES: ServiceLine[] = [
   },
   {
     slug: 'audit-os',
-    name: 'Assurance Platform',
-    fullName: 'Assurance Platform',
+    name: 'Assurance OS',
+    fullName: 'Assurance OS',
     href: '/audit-os',
     summary:
       'The subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting, and an AI assistant.',
@@ -200,7 +200,7 @@ export const NAV: NavItem[] = [
           'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
       },
       {
-        label: 'Assurance Platform',
+        label: 'Assurance OS',
         href: '/audit-os',
         description:
           'Work papers, approvals, findings, remediation, follow-ups and board reporting.',
@@ -310,7 +310,7 @@ export const FOOTER_GROUPS: { heading: string; links: { label: string; href: str
     links: [
       { label: 'Services overview', href: '/services' },
       { label: 'Assurance', href: '/assurance' },
-      { label: 'Assurance Platform', href: '/audit-os' },
+      { label: 'Assurance OS', href: '/audit-os' },
       { label: 'Labs', href: '/labs' },
       { label: 'Advisory', href: '/advisory' },
       { label: 'Academy', href: '/academy' },
@@ -384,7 +384,7 @@ export const KNOWS_ABOUT = [
 ] as const;
 
 /**
- * Assurance Platform indicative pricing, positioning anchors only. Always label as
+ * Assurance OS indicative pricing, positioning anchors only. Always label as
  * indicative and validated on enquiry. Never present as a fixed quote.
  */
 export const PRICING: PricingTier[] = [

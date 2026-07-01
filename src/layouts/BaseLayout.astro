@@ -19,6 +19,7 @@ import Seo from '@/components/Seo.astro';
 import OrganizationSchema from '@/components/schema/Organization.astro';
 import Header from '@/components/Header.astro';
 import Footer from '@/components/Footer.astro';
+import AccessibilityAssistant from '@/components/a11y/AccessibilityAssistant';
 import { SITE } from '@/site.config';
 
 interface Props {
@@ -54,6 +55,26 @@ const { mainClass, ...seo } = Astro.props;
     <script is:inline>
       document.documentElement.classList.add('js');
     </script>
+    {
+      /* Apply saved accessibility settings before first paint, so there is no
+        flash of the default state. Kept in step with AccessibilityAssistant. */
+    }
+    <script is:inline>
+      (function () {
+        try {
+          const s = JSON.parse(localStorage.getItem('murikah-a11y') || '{}');
+          const root = document.documentElement;
+          const t = Math.min(4, Math.max(0, parseInt(s.text, 10) || 0));
+          if (t > 0) root.dataset.a11yText = String(t);
+          root.classList.toggle('a11y-high-contrast', !!s.contrast);
+          root.classList.toggle('a11y-reduce-motion', !!s.motion);
+          root.classList.toggle('a11y-highlight-links', !!s.links);
+          root.classList.toggle('a11y-strong-focus', !!s.focus);
+        } catch {
+          /* no stored settings */
+        }
+      })();
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="theme-color" content="#0B1733" />
     <meta name="generator" content={Astro.generator} />
@@ -78,6 +99,9 @@ const { mainClass, ...seo } = Astro.props;
     </main>
 
     <Footer />
+
+    {/* First-party reading and motion helper; applies to <html>, persists to localStorage. */}
+    <AccessibilityAssistant client:idle />
 
     {
       /* Scroll reveals: add `reveal` to any element to fade it up once on entry.
