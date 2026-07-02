@@ -32,6 +32,18 @@ declare namespace Cloudflare {
     TURSO_ENGR_AUTH_TOKEN?: string;
     ENGR_SESSION_SECRET?: string;
 
+    // Engineering Rhythm notification dispatcher. All optional: absent or a
+    // non-production ENGR_ENV keeps the dispatcher in dry-run and never contacts
+    // a provider. Secrets are set as Worker secrets or in .dev.vars.
+    ENGR_ENV?: string; // 'production' enables real sends; anything else is dry-run
+    AT_USERNAME?: string; // Africa's Talking
+    AT_API_KEY?: string;
+    AT_SENDER_ID?: string;
+    EMAIL_API_KEY?: string; // transactional email provider (Resend)
+    EMAIL_FROM?: string; // verified sender address
+    ENGR_CRON_SECRET?: string; // guards the internal cron endpoints
+    ENGR_WEBHOOK_SECRET?: string; // verifies provider delivery-receipt webhooks
+
     // Plain vars.
     PUBLIC_SITE_URL?: string;
   }
