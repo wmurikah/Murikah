@@ -1,0 +1,152 @@
+---
+export const prerender = false;
+
+/**
+ * Engineer mileage approvals: submitted claims with distance, reference station
+ * and amount. Gate: cost.approve.l1. Approve (optionally overriding distance or
+ * rate) or reject. The state machine of the work order is untouched; this only
+ * decides the cost.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listPendingClaims, type PendingClaimRow } from '@engr/repos/mileageClaims';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'cost.approve.l1');
+const errorCode = Astro.url.searchParams.get('error');
+const done = Astro.url.searchParams.get('done');
+
+let rows: PendingClaimRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listPendingClaims(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Mileage approvals">
+  <div class="engr-page-head">
+    <div>
+      <h1>Mileage approvals</h1>
+      <p class="engr-lead">Submitted mileage claims awaiting a decision.</p>
+    </div>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That decision could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    done && (
+      <p class="engr-notice" role="status">
+        {done === 'approve' ? 'The claim was approved.' : 'The claim was rejected.'}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to mileage approvals.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">No mileage claims awaiting approval.</p>
+    ) : (
+      <div style="display:grid;gap:1.25rem;max-width:44rem">
+        {rows.map((r) => (
+          <div class="engr-card">
+            <p class="engr-card__label">{r.lpoNo}</p>
+            <p class="engr-meta">
+              <span>
+                Contractor <strong>{r.contractorName}</strong>
+              </span>
+              <span>
+                Referenced to <strong>{r.referencedStationName ?? 'Not set'}</strong>
+              </span>
+            </p>
+            <dl class="engr-detail">
+              <dt>Distance</dt>
+              <dd>{r.distanceKm} km</dd>
+              <dt>Amount</dt>
+              <dd>{formatMoneyMinor(r.amountMinor, r.currency)}</dd>
+            </dl>
+
+            <form
+              method="post"
+              action={`/engr/api/lpos/${r.lpoId}/mileage/decision`}
+              class="engr-form"
+              style="margin-top:0.6rem"
+            >
+              <input type="hidden" name="decision" value="approve" />
+              <input type="hidden" name="claim_id" value={r.id} />
+              <div class="engr-lineitem-row">
+                <div class="engr-field">
+                  <label for={`dist-${r.id}`}>
+                    Distance override <span class="engr-field__hint">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    id={`dist-${r.id}`}
+                    class="engr-input"
+                    name="distance_override"
+                    min="0"
+                    step="0.1"
+                  />
+                </div>
+                <div class="engr-field">
+                  <label for={`rate-${r.id}`}>
+                    Rate per km, KES <span class="engr-field__hint">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    id={`rate-${r.id}`}
+                    class="engr-input"
+                    name="rate_override"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+              <div class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Approve
+                </button>
+              </div>
+            </form>
+
+            <form
+              method="post"
+              action={`/engr/api/lpos/${r.lpoId}/mileage/decision`}
+              class="engr-form"
+              style="margin-top:0.6rem"
+            >
+              <input type="hidden" name="decision" value="reject" />
+              <input type="hidden" name="claim_id" value={r.id} />
+              <div class="engr-field">
+                <label for={`reason-${r.id}`}>Reason</label>
+                <textarea
+                  id={`reason-${r.id}`}
+                  class="engr-textarea"
+                  name="reason"
+                  maxlength="500"
+                />
+              </div>
+              <div class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--danger">
+                  Reject
+                </button>
+              </div>
+            </form>
+          </div>
+        ))}
+      </div>
+    )
+  }
+</EngrLayout>
