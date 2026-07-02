@@ -6,11 +6,19 @@
   //   pnpm cf:deploy   (astro build && wrangler deploy -c dist/server/wrangler.json)
   //   pnpm cf:dev      (astro build && wrangler dev    -c dist/server/wrangler.json)
   "name": "murikah-web",
-  // Dev-time entrypoint provided by @astrojs/cloudflare; the build replaces this.
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  // Custom Worker entry: re-exports the Astro adapter fetch handler and adds a
+  // scheduled() handler for the Cron Triggers below (src/worker.ts).
+  "main": "./src/worker.ts",
   "compatibility_date": "2025-05-21",
   // Node built-ins used by libSQL/other deps inside the Worker.
   "compatibility_flags": ["nodejs_compat"],
+
+  // Cron Triggers, serviced by scheduled() in src/worker.ts:
+  //   - every five minutes: drain the notification queue,
+  //   - 03:00 UTC (06:00 EAT) daily: run the PM scan, then drain.
+  "triggers": {
+    "crons": ["*/5 * * * *", "0 3 * * *"],
+  },
 
   // Static assets: serves the prerendered marketing pages from dist/.
   "assets": {
