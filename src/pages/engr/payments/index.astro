@@ -1,0 +1,243 @@
+---
+export const prerender = false;
+
+/**
+ * Payments, for the financial controller. Bills that reached
+ * APPROVED_READY_FOR_PAYMENT are listed with their outstanding balance and a
+ * record-payment form; partial settlement is supported. Recent payments can be
+ * reversed, which reopens a bill that no longer covers its total. Recording and
+ * reversing gate on payment.record; viewing gates on payment.view. The
+ * approver-versus-payer switch is enforced server-side.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  listReadyBills,
+  listRecentPayments,
+  type ReadyBillRow,
+  type RecentPaymentRow,
+} from '@engr/repos/payments';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'payment.view') || can(Astro.locals, 'payment.record');
+const canRecord = can(Astro.locals, 'payment.record');
+const errorCode = Astro.url.searchParams.get('error');
+const recorded = Astro.url.searchParams.get('recorded');
+const reversed = Astro.url.searchParams.get('reversed');
+
+let ready: ReadyBillRow[] = [];
+let recent: RecentPaymentRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  ready = await listReadyBills(db, engr.orgId);
+  recent = await listRecentPayments(db, engr.orgId);
+}
+
+const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
+---
+
+<EngrLayout title="Payments">
+  <div class="engr-page-head">
+    <div>
+      <h1>Payments</h1>
+      <p class="engr-lead">Settle approved bills and reverse a payment when needed.</p>
+    </div>
+  </div>
+
+  {
+    errorCode === 'forbidden' && (
+      <p class="engr-error" role="alert">
+        You may not both approve and pay this bill.
+      </p>
+    )
+  }
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That bill is no longer ready, or the payment cannot change. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Enter an amount within the outstanding balance.
+      </p>
+    )
+  }
+  {
+    errorCode === 'validation' && (
+      <p class="engr-error" role="alert">
+        Enter a bill and a positive amount.
+      </p>
+    )
+  }
+  {
+    errorCode === 'not_found' && (
+      <p class="engr-error" role="alert">
+        That bill or payment was not found.
+      </p>
+    )
+  }
+  {
+    recorded && (
+      <p class="engr-notice" role="status">
+        Payment recorded.
+      </p>
+    )
+  }
+  {
+    reversed && (
+      <p class="engr-notice" role="status">
+        Payment reversed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to payments.
+      </p>
+    ) : (
+      <>
+        <section class="engr-panel" aria-labelledby="ready-bills">
+          <h2 id="ready-bills">Bills ready for payment</h2>
+          {ready.length === 0 ? (
+            <p class="engr-empty">No bills are awaiting payment.</p>
+          ) : (
+            <div class="engr-quotes">
+              {ready.map((b) => (
+                <div class="engr-quote">
+                  <div class="engr-quote__head">
+                    <div>
+                      <a href={`/engr/bills/${b.id}`}>{b.billNo}</a>, {b.contractorName}
+                    </div>
+                    <p class="engr-quote__total">{formatMoneyMinor(outstanding(b), b.currency)}</p>
+                  </div>
+                  <dl class="engr-detail">
+                    <dt>Total</dt>
+                    <dd>{formatMoneyMinor(b.totalMinor, b.currency)}</dd>
+                    <dt>Paid so far</dt>
+                    <dd>{formatMoneyMinor(b.paidMinor, b.currency)}</dd>
+                    <dt>Outstanding</dt>
+                    <dd>{formatMoneyMinor(outstanding(b), b.currency)}</dd>
+                  </dl>
+                  {canRecord && outstanding(b) > 0 && (
+                    <form method="post" action="/engr/api/payments" class="engr-form">
+                      <input type="hidden" name="bill_id" value={b.id} />
+                      <div class="engr-field">
+                        <label for={`amount-${b.id}`}>Amount (KES)</label>
+                        <input
+                          type="number"
+                          id={`amount-${b.id}`}
+                          class="engr-input"
+                          name="amount"
+                          min="0.01"
+                          step="0.01"
+                          required
+                        />
+                      </div>
+                      <div class="engr-field">
+                        <label for={`method-${b.id}`}>
+                          Method <span class="engr-field__hint">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          id={`method-${b.id}`}
+                          class="engr-input"
+                          name="method"
+                          maxlength="40"
+                          placeholder="e.g. EFT, M-Pesa"
+                        />
+                      </div>
+                      <div class="engr-field">
+                        <label for={`reference-${b.id}`}>
+                          Reference <span class="engr-field__hint">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          id={`reference-${b.id}`}
+                          class="engr-input"
+                          name="reference"
+                          maxlength="80"
+                        />
+                      </div>
+                      <div class="engr-field">
+                        <label for={`paid-at-${b.id}`}>
+                          Paid on <span class="engr-field__hint">(optional)</span>
+                        </label>
+                        <input
+                          type="date"
+                          id={`paid-at-${b.id}`}
+                          class="engr-input"
+                          name="paid_at"
+                        />
+                      </div>
+                      <div class="engr-actionbar">
+                        <button type="submit" class="engr-btn engr-btn--primary">
+                          Record payment
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section class="engr-panel" aria-labelledby="recent-payments">
+          <h2 id="recent-payments">Recent payments</h2>
+          {recent.length === 0 ? (
+            <p class="engr-empty">No payments recorded yet.</p>
+          ) : (
+            <div class="engr-tablewrap">
+              <table class="engr-table" aria-label="Recent payments">
+                <thead>
+                  <tr>
+                    <th scope="col">Bill</th>
+                    <th scope="col">Amount</th>
+                    <th scope="col">Method</th>
+                    <th scope="col">Status</th>
+                    {canRecord && <th scope="col">Action</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((p) => (
+                    <tr>
+                      <td>
+                        <a href={`/engr/bills/${p.billId}`}>{p.billNo}</a>
+                      </td>
+                      <td>{formatMoneyMinor(p.amountMinor, p.currency)}</td>
+                      <td>{p.method ?? 'Not set'}</td>
+                      <td>
+                        <span class="engr-status">{p.status}</span>
+                      </td>
+                      {canRecord && (
+                        <td>
+                          {p.status !== 'REVERSED' && (
+                            <form method="post" action={`/engr/api/payments/${p.id}/reverse`}>
+                              <button type="submit" class="engr-btn engr-btn--ghost">
+                                Reverse
+                              </button>
+                            </form>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </>
+    )
+  }
+</EngrLayout>

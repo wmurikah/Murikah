@@ -1,0 +1,257 @@
+---
+export const prerender = false;
+
+/**
+ * Bill detail with the approval trail and payments. Gate: bill.view. The
+ * contractor owner attaches approved costs and submits while the bill is a draft;
+ * an approver at the current level sees the decision form. SoD is enforced
+ * server-side; the trail below is the record. Payments are recorded on the
+ * payments screen.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getBillDetail, type BillDetail } from '@engr/repos/bills';
+import { listBillableCosts, type CostListRow } from '@engr/repos/workCosts';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'bill.view');
+const canL1 = can(Astro.locals, 'bill.approve.l1');
+const canL2 = can(Astro.locals, 'bill.approve.l2');
+const canL3 = can(Astro.locals, 'bill.approve.l3');
+const canPay = can(Astro.locals, 'payment.record') || can(Astro.locals, 'payment.view');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+const done =
+  Astro.url.searchParams.get('done') ||
+  Astro.url.searchParams.get('submitted') ||
+  Astro.url.searchParams.get('attached');
+
+let bill: BillDetail | null = null;
+let isOwner = false;
+let billable: CostListRow[] = [];
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  bill = await getBillDetail(db, engr.orgId, id);
+  if (bill) {
+    const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+    isOwner = contractorId != null && contractorId === bill.contractorId;
+    if (isOwner && bill.status === 'DRAFT')
+      billable = await listBillableCosts(db, engr.orgId, contractorId!);
+  }
+}
+const isApprover = canL1 || canL2 || canL3 || canPay;
+const canSee = bill != null && (isOwner || isApprover);
+if (allowed && (!bill || !canSee)) Astro.response.status = 404;
+
+const billId = bill?.id ?? '';
+const canAttach = bill != null && isOwner && bill.status === 'DRAFT';
+const canSubmit =
+  canAttach && bill != null && bill.costs.length > 0 && can(Astro.locals, 'bill.submit');
+const decideLevel =
+  bill?.status === 'PENDING_L1_ENG' && canL1
+    ? 1
+    : bill?.status === 'PENDING_L2_ENG_MGR' && canL2
+      ? 2
+      : bill?.status === 'PENDING_L3_FC' && canL3
+        ? 3
+        : 0;
+---
+
+<EngrLayout title="Bill">
+  <div class="engr-page-head">
+    <div>
+      <h1>{bill ? bill.billNo : 'Bill'}</h1>
+      <p class="engr-lead">Contractor bill and its approvals.</p>
+    </div>
+    <a href="/engr/bills/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    done && (
+      <p class="engr-notice" role="status">
+        Done.
+      </p>
+    )
+  }
+
+  {
+    !allowed || !bill || !canSee ? (
+      <p class="engr-error" role="alert">
+        That bill was not found or is not visible to you.
+      </p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Status</dt>
+          <dd>
+            <span class="engr-pill">{bill.status}</span>
+          </dd>
+          <dt>Contractor</dt>
+          <dd>{bill.contractorName}</dd>
+          <dt>Period</dt>
+          <dd>{bill.periodLabel ?? 'Not set'}</dd>
+          <dt>Subtotal</dt>
+          <dd>{formatMoneyMinor(bill.subtotalMinor, bill.currency)}</dd>
+          <dt>Tax</dt>
+          <dd>{formatMoneyMinor(bill.taxMinor, bill.currency)}</dd>
+          <dt>Total</dt>
+          <dd>{formatMoneyMinor(bill.totalMinor, bill.currency)}</dd>
+          <dt>Paid</dt>
+          <dd>{formatMoneyMinor(bill.paidMinor, bill.currency)}</dd>
+        </dl>
+
+        <section class="engr-panel" aria-labelledby="bill-costs">
+          <h2 id="bill-costs">Cost lines</h2>
+          {bill.costs.length === 0 ? (
+            <p class="engr-empty">No costs attached yet.</p>
+          ) : (
+            <div class="engr-tablewrap">
+              <table class="engr-table" aria-label="Costs on this bill">
+                <thead>
+                  <tr>
+                    <th scope="col">Work order</th>
+                    <th scope="col">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bill.costs.map((c) => (
+                    <tr>
+                      <td>
+                        <a href={`/engr/costs/${c.costId}`}>{c.workOrderNo}</a>
+                      </td>
+                      <td>{formatMoneyMinor(c.amountMinor, c.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {canAttach && billable.length > 0 && (
+            <form
+              method="post"
+              action={`/engr/api/bills/${billId}/costs`}
+              class="engr-form"
+              style="margin-top:0.75rem"
+            >
+              <div class="engr-field">
+                <label for="attach-cost">Attach an approved cost</label>
+                <select id="attach-cost" class="engr-select" name="cost_id" required>
+                  <option value="">Choose a cost</option>
+                  {billable.map((c) => (
+                    <option value={c.id}>
+                      {c.workOrderNo}, {formatMoneyMinor(c.totalMinor, c.currency)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--secondary">
+                  Attach
+                </button>
+              </div>
+            </form>
+          )}
+          {canSubmit && (
+            <form
+              method="post"
+              action={`/engr/api/bills/${billId}/submit`}
+              class="engr-actionbar"
+              style="margin-top:0.6rem"
+            >
+              <button type="submit" class="engr-btn engr-btn--primary">
+                Submit for approval
+              </button>
+            </form>
+          )}
+        </section>
+
+        {decideLevel > 0 && (
+          <section class="engr-panel" aria-labelledby="bill-decide">
+            <h2 id="bill-decide">Level {decideLevel} decision</h2>
+            <form method="post" action={`/engr/api/bills/${billId}/decision`} class="engr-form">
+              <input type="hidden" name="level" value={decideLevel} />
+              <div class="engr-field">
+                <label for="bill-comment">
+                  Comment{' '}
+                  <span class="engr-field__hint">(optional for approve, advised for reject)</span>
+                </label>
+                <textarea id="bill-comment" class="engr-textarea" name="comment" maxlength="500" />
+              </div>
+              <div class="engr-actionbar">
+                <button
+                  type="submit"
+                  name="decision"
+                  value="approve"
+                  class="engr-btn engr-btn--primary"
+                >
+                  Approve
+                </button>
+                <button
+                  type="submit"
+                  name="decision"
+                  value="reject"
+                  class="engr-btn engr-btn--danger"
+                >
+                  Reject
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        <section class="engr-panel" aria-labelledby="bill-trail">
+          <h2 id="bill-trail">Approval trail</h2>
+          {bill.approvals.length === 0 ? (
+            <p class="engr-empty">No decisions recorded yet.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {bill.approvals.map((a) => (
+                <li>
+                  <span>
+                    Level {a.level}, {a.approverName ?? 'Unknown'}
+                  </span>
+                  <span class="engr-card__muted">
+                    {a.decision}
+                    {a.comment ? `, ${a.comment}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {bill.payments.length > 0 && (
+          <section class="engr-panel" aria-labelledby="bill-payments">
+            <h2 id="bill-payments">Payments</h2>
+            <ul class="engr-card__list">
+              {bill.payments.map((p) => (
+                <li>
+                  <span>
+                    {formatMoneyMinor(p.amountMinor, p.currency)}
+                    {p.method ? `, ${p.method}` : ''}
+                  </span>
+                  <span class="engr-card__muted">{p.status}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </>
+    )
+  }
+</EngrLayout>
