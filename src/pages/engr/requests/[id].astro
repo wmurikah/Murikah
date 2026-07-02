@@ -24,6 +24,7 @@ const allowed = can(Astro.locals, 'requests.view');
 const canAccept = can(Astro.locals, 'requests.accept');
 const canReject = can(Astro.locals, 'requests.reject');
 const canAssign = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
+const canRfq = can(Astro.locals, 'rfq.create');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
 
@@ -185,6 +186,20 @@ const errorMessage = errorCode
                 </div>
               </form>
             )}
+          </div>
+        )}
+
+        {status === 'ACCEPTED' && canRfq && (
+          <div class="engr-panel">
+            <h2>Request quotations</h2>
+            <p class="engr-field__hint">
+              Invite pre-qualified contractors to quote, instead of assigning on predefined rates.
+            </p>
+            <div class="engr-actionbar">
+              <a href={`/engr/rfqs/new?request=${id}`} class="engr-btn engr-btn--secondary">
+                Raise an RFQ
+              </a>
+            </div>
           </div>
         )}
       </>
