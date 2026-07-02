@@ -1,0 +1,89 @@
+---
+export const prerender = false;
+
+/**
+ * LPO list. Gate: workorder.view. Engineers (workorder.create) see the org's
+ * LPOs and can create one; other viewers see only their own contractor's.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listLpos, listLposForContractor, type LpoListRow } from '@engr/repos/lpos';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'workorder.view');
+const canBuild = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
+
+let rows: LpoListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  if (can(Astro.locals, 'workorder.create')) {
+    rows = await listLpos(db, engr.orgId);
+  } else {
+    const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+    if (contractorId) rows = await listLposForContractor(db, engr.orgId, contractorId);
+  }
+}
+---
+
+<EngrLayout title="LPOs">
+  <div class="engr-page-head">
+    <div>
+      <h1>LPOs</h1>
+      <p class="engr-lead">Local purchase orders grouping work across stations.</p>
+    </div>
+    {
+      canBuild && (
+        <a href="/engr/lpos/new" class="engr-btn engr-btn--primary">
+          New LPO
+        </a>
+      )
+    }
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to LPOs.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">No LPOs yet.</p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="LPOs">
+          <thead>
+            <tr>
+              <th scope="col">LPO</th>
+              <th scope="col">Contractor</th>
+              <th scope="col">Base station</th>
+              <th scope="col">Work orders</th>
+              <th scope="col">Total</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  <a href={`/engr/lpos/${r.id}`}>{r.lpoNo}</a>
+                </td>
+                <td>{r.contractorName}</td>
+                <td>{r.baseStationName ?? 'Not set'}</td>
+                <td>{r.woCount}</td>
+                <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>
