@@ -7,7 +7,7 @@
  * headline and is what renders server-side and under reduced motion.
  *
  * Behaviour:
- *   - auto-advances every 7s, cross-fading the background and copy
+ *   - auto-advances every 3s, cross-fading the background and copy
  *   - pauses on hover, on keyboard focus within the hero, when scrolled out of
  *     view, and when the tab is hidden
  *   - respects reduced motion (OS setting and the in-page accessibility toggle):
@@ -20,10 +20,22 @@
  * so the copy carries all meaning and the images use empty alt text).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { HERO_SCENES } from './heroScenes';
+import { HERO_SCENES, HERO_ROTATION_INTERVAL } from './heroScenes';
 import './HeroStage.css';
 
-const ROTATE_MS = 7000;
+/**
+ * The translucent navy overlay for a scene. `alpha` is the left-edge strength;
+ * it fades across to the right so the photograph stays open, with a gentle
+ * vertical pass to seat the copy. Building shots pass a smaller alpha; people
+ * shots pass a touch more so the copy stays readable.
+ */
+function sceneOverlay(alpha: number): string {
+  const r = (x: number) => Math.round(x * 1000) / 1000;
+  return (
+    'linear-gradient(180deg, rgba(0,10,20,0.18) 0%, rgba(0,10,20,0.04) 42%, rgba(0,10,20,0.2) 100%),' +
+    `linear-gradient(90deg, rgba(0,10,20,${r(alpha)}) 0%, rgba(0,10,20,${r(alpha * 0.71)}) 34%, rgba(0,10,20,${r(alpha * 0.36)}) 66%, rgba(0,10,20,${r(alpha * 0.18)}) 100%)`
+  );
+}
 
 interface CTA {
   label: string;
@@ -87,7 +99,7 @@ export default function HeroStage({ primary, secondaryLabel, secondaryHref }: Pr
 
   useEffect(() => {
     if (!autoRotate) return;
-    const id = window.setInterval(() => setIndex((i) => (i + 1) % count), ROTATE_MS);
+    const id = window.setInterval(() => setIndex((i) => (i + 1) % count), HERO_ROTATION_INTERVAL);
     return () => window.clearInterval(id);
   }, [autoRotate, count]);
 
@@ -114,12 +126,16 @@ export default function HeroStage({ primary, secondaryLabel, secondaryHref }: Pr
             data-active={i === index}
             src={s.image}
             alt=""
+            style={{ objectPosition: s.position ?? '62% 50%' }}
             loading={i === 0 ? 'eager' : 'lazy'}
             decoding="async"
             draggable={false}
           />
         ))}
-        <div className="hero-stage__overlay" />
+        <div
+          className="hero-stage__overlay"
+          style={{ background: sceneOverlay(current.overlay ?? 0.56) }}
+        />
       </div>
 
       <div className="hero-stage__inner">
@@ -133,11 +149,11 @@ export default function HeroStage({ primary, secondaryLabel, secondaryHref }: Pr
         </div>
 
         <div className="hero-stage__actions">
-          <a className="hero-stage__cta" href={primary.href}>
-            {primary.label}
+          <a className="hero-stage__cta" href={current.ctaHref ?? primary.href}>
+            {current.ctaLabel ?? primary.label}
           </a>
-          <a className="hero-stage__link group" href={secondaryHref}>
-            <span className="hero-stage__linktext">{secondaryLabel}</span>
+          <a className="hero-stage__link group" href={current.secondaryHref ?? secondaryHref}>
+            <span className="hero-stage__linktext">{current.secondaryLabel ?? secondaryLabel}</span>
             <span aria-hidden="true" className="hero-stage__arrow">
               &rarr;
             </span>
