@@ -1,0 +1,277 @@
+---
+export const prerender = false;
+
+/**
+ * Work cost detail with the approval trail. Gate: cost.view. The contractor owner
+ * edits items and submits or recalls while the cost is a draft or pending level
+ * 1; a level 1 or level 2 approver sees the decision form for the current level.
+ * Segregation of duties is enforced server-side; the trail below is the record.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getCostDetail, type CostDetail } from '@engr/repos/workCosts';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'cost.view');
+const canL1 = can(Astro.locals, 'cost.approve.l1');
+const canL2 = can(Astro.locals, 'cost.approve.l2');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+const done =
+  Astro.url.searchParams.get('done') ||
+  Astro.url.searchParams.get('submitted') ||
+  Astro.url.searchParams.get('saved') ||
+  Astro.url.searchParams.get('recalled');
+
+let cost: CostDetail | null = null;
+let isOwner = false;
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  cost = await getCostDetail(db, engr.orgId, id);
+  if (cost) {
+    const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+    isOwner = contractorId != null && contractorId === cost.contractorId;
+  }
+}
+const isApprover = canL1 || canL2;
+const canSee = cost != null && (isOwner || isApprover);
+if (allowed && (!cost || !canSee)) Astro.response.status = 404;
+
+const editable = cost != null && isOwner && (cost.status === 'DRAFT' || cost.status === 'RECALLED');
+const canSubmit =
+  editable && cost != null && cost.items.length > 0 && can(Astro.locals, 'cost.submit');
+const canRecall =
+  cost != null &&
+  isOwner &&
+  (cost.status === 'SUBMITTED' || cost.status === 'PENDING_L1') &&
+  cost.recallable;
+const decideLevel =
+  cost?.status === 'PENDING_L1' && canL1 ? 1 : cost?.status === 'PENDING_L2' && canL2 ? 2 : 0;
+const costId = cost?.id ?? '';
+// Item rows to render for the editor: existing items plus spare blanks.
+const rows = cost
+  ? Array.from({ length: Math.max(cost.items.length + 3, 6) }, (_, i) => cost.items[i] ?? null)
+  : [];
+---
+
+<EngrLayout title="Work cost">
+  <div class="engr-page-head">
+    <div>
+      <h1>{cost ? `Cost for ${cost.workOrderNo}` : 'Work cost'}</h1>
+      <p class="engr-lead">Contractor cost and its approvals.</p>
+    </div>
+    <a href="/engr/costs/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    done && (
+      <p class="engr-notice" role="status">
+        Done.
+      </p>
+    )
+  }
+
+  {
+    !allowed || !cost || !canSee ? (
+      <p class="engr-error" role="alert">
+        That cost was not found or is not visible to you.
+      </p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Status</dt>
+          <dd>
+            <span class="engr-pill">{cost.status}</span>
+          </dd>
+          <dt>Contractor</dt>
+          <dd>{cost.contractorName}</dd>
+          <dt>Basis</dt>
+          <dd>{cost.costingBasis}</dd>
+          <dt>Subtotal</dt>
+          <dd>{formatMoneyMinor(cost.subtotalMinor, cost.currency)}</dd>
+          <dt>Mileage</dt>
+          <dd>{formatMoneyMinor(cost.mileageMinor, cost.currency)}</dd>
+          <dt>Total</dt>
+          <dd>{formatMoneyMinor(cost.totalMinor, cost.currency)}</dd>
+        </dl>
+
+        {editable ? (
+          <section class="engr-panel" aria-labelledby="cost-items">
+            <h2 id="cost-items">Line items</h2>
+            <form method="post" action={`/engr/api/costs/${costId}/items`} class="engr-form">
+              <fieldset class="engr-field">
+                <legend>Items</legend>
+                <p class="engr-field__hint">
+                  Enter unit rates in KES. Amounts are computed on the server. Any approved LPO
+                  mileage is folded in once.
+                </p>
+                {rows.map((it, i) => (
+                  <div class="engr-lineitem-row">
+                    <div class="engr-field">
+                      <label for={`item_${i + 1}_description`}>Item {i + 1} description</label>
+                      <input
+                        type="text"
+                        id={`item_${i + 1}_description`}
+                        class="engr-input"
+                        name={`item_${i + 1}_description`}
+                        maxlength="200"
+                        value={it?.description ?? ''}
+                      />
+                    </div>
+                    <div class="engr-field">
+                      <label for={`item_${i + 1}_qty`}>Qty</label>
+                      <input
+                        type="number"
+                        id={`item_${i + 1}_qty`}
+                        class="engr-input"
+                        name={`item_${i + 1}_qty`}
+                        min="0"
+                        step="0.01"
+                        value={it ? it.qty : 1}
+                      />
+                    </div>
+                    <div class="engr-field">
+                      <label for={`item_${i + 1}_rate`}>Unit rate (KES)</label>
+                      <input
+                        type="number"
+                        id={`item_${i + 1}_rate`}
+                        class="engr-input"
+                        name={`item_${i + 1}_rate`}
+                        min="0"
+                        step="0.01"
+                        value={it ? (it.unitRateMinor / 100).toFixed(2) : ''}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </fieldset>
+              <div class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Save items
+                </button>
+              </div>
+            </form>
+          </section>
+        ) : (
+          <section class="engr-panel" aria-labelledby="cost-items">
+            <h2 id="cost-items">Line items</h2>
+            {cost.items.length === 0 ? (
+              <p class="engr-empty">No items.</p>
+            ) : (
+              <div class="engr-tablewrap">
+                <table class="engr-table" aria-label="Cost line items">
+                  <thead>
+                    <tr>
+                      <th scope="col">Description</th>
+                      <th scope="col">Qty</th>
+                      <th scope="col">Unit rate</th>
+                      <th scope="col">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cost.items.map((it) => (
+                      <tr>
+                        <td>{it.description}</td>
+                        <td>{it.qty}</td>
+                        <td>{formatMoneyMinor(it.unitRateMinor, it.currency)}</td>
+                        <td>{formatMoneyMinor(it.amountMinor, it.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {(canSubmit || canRecall) && (
+          <div class="engr-actionbar">
+            {canSubmit && (
+              <form method="post" action={`/engr/api/costs/${costId}/submit`}>
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Submit for approval
+                </button>
+              </form>
+            )}
+            {canRecall && (
+              <form method="post" action={`/engr/api/costs/${costId}/recall`}>
+                <button type="submit" class="engr-btn engr-btn--ghost">
+                  Recall to edit
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {decideLevel > 0 && (
+          <section class="engr-panel" aria-labelledby="cost-decide">
+            <h2 id="cost-decide">Level {decideLevel} decision</h2>
+            <form method="post" action={`/engr/api/costs/${costId}/decision`} class="engr-form">
+              <input type="hidden" name="level" value={decideLevel} />
+              <div class="engr-field">
+                <label for="cost-comment">
+                  Comment{' '}
+                  <span class="engr-field__hint">(optional for approve, advised for reject)</span>
+                </label>
+                <textarea id="cost-comment" class="engr-textarea" name="comment" maxlength="500" />
+              </div>
+              <div class="engr-actionbar">
+                <button
+                  type="submit"
+                  name="decision"
+                  value="approve"
+                  class="engr-btn engr-btn--primary"
+                >
+                  Approve
+                </button>
+                <button
+                  type="submit"
+                  name="decision"
+                  value="reject"
+                  class="engr-btn engr-btn--danger"
+                >
+                  Reject
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        <section class="engr-panel" aria-labelledby="cost-trail">
+          <h2 id="cost-trail">Approval trail</h2>
+          {cost.approvals.length === 0 ? (
+            <p class="engr-empty">No decisions recorded yet.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {cost.approvals.map((a) => (
+                <li>
+                  <span>
+                    Level {a.level}, {a.approverName ?? 'Unknown'}
+                  </span>
+                  <span class="engr-card__muted">
+                    {a.decision}
+                    {a.comment ? `, ${a.comment}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </>
+    )
+  }
+</EngrLayout>
