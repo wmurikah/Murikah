@@ -1,0 +1,108 @@
+---
+export const prerender = false;
+
+/**
+ * Engineer queue. Lists the org's service requests, defaulting to those assigned
+ * to the current engineer, with a filter to show all open requests. Sorted by
+ * priority then age. Each row links to the request detail (a stub for now).
+ * Gate: requests.view.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listQueue, type QueueRow } from '@engr/repos/requests';
+import { can } from '@engr/auth/rbac';
+import { relativeAge } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'requests.view');
+const scope = Astro.url.searchParams.get('scope') === 'all' ? 'all' : 'mine';
+const createdNo = Astro.url.searchParams.get('created');
+
+let rows: QueueRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listQueue(db, engr.orgId, engr.userId, scope);
+}
+
+const badgeClass = (priority: string) => `engr-badge engr-badge--${priority.toLowerCase()}`;
+const now = new Date();
+---
+
+<EngrLayout title="Requests">
+  <div class="engr-page-head">
+    <div>
+      <h1>Engineer queue</h1>
+      <p class="engr-lead">Service requests awaiting triage and assignment.</p>
+    </div>
+    <a href="/engr/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
+  </div>
+
+  {
+    createdNo && (
+      <p class="engr-notice" role="status">
+        Request {createdNo} was created.
+      </p>
+    )
+  }
+
+  {
+    allowed && (
+      <div class="engr-toggle" role="group" aria-label="Filter requests">
+        <a href="/engr/requests?scope=mine" aria-current={scope === 'mine' ? 'page' : undefined}>
+          Assigned to me
+        </a>
+        <a href="/engr/requests?scope=all" aria-current={scope === 'all' ? 'page' : undefined}>
+          All open
+        </a>
+      </div>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to requests.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">
+        {scope === 'mine' ? 'No requests are assigned to you.' : 'No open requests.'}
+      </p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Open service requests, sorted by priority then age">
+          <thead>
+            <tr>
+              <th scope="col">Request</th>
+              <th scope="col">Station</th>
+              <th scope="col">Issue</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Status</th>
+              <th scope="col">Age</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  <a href={`/engr/requests/${r.id}`}>{r.requestNo}</a>
+                </td>
+                <td>{r.stationName}</td>
+                <td class="engr-wrap">{r.issue}</td>
+                <td>
+                  <span class={badgeClass(r.priority)}>{r.priority}</span>
+                </td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+                <td>{relativeAge(r.createdAt, now)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>
