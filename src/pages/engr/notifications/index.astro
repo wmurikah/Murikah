@@ -1,0 +1,68 @@
+---
+export const prerender = false;
+
+/**
+ * The current user's in-app notification centre, newest first. Any recipient may
+ * read their own; no extra permission is needed. Mark read sets the row to READ,
+ * which drops it from the unread count in the dashboard shell.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listInApp, type InAppRow } from '@engr/repos/notifications';
+import { relativeAge } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const errorCode = Astro.url.searchParams.get('error');
+
+const db = await getDb(getEngrEnv());
+const rows: InAppRow[] = await listInApp(db, engr.orgId, engr.userId);
+const isUnread = (r: InAppRow): boolean => r.status === 'QUEUED' || r.status === 'SENT';
+---
+
+<EngrLayout title="Notifications">
+  <div class="engr-page-head">
+    <div>
+      <h1>Notifications</h1>
+      <p class="engr-lead">Your in-app notifications, newest first.</p>
+    </div>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+
+  {
+    rows.length === 0 ? (
+      <p class="engr-empty">You have no notifications.</p>
+    ) : (
+      <ul class="engr-notilist">
+        {rows.map((r) => (
+          <li class={`engr-noti${isUnread(r) ? ' engr-noti--unread' : ''}`}>
+            <div class="engr-noti__body">
+              <p class="engr-noti__subject">{r.subject ?? 'Notification'}</p>
+              {r.body && <p class="engr-noti__text">{r.body}</p>}
+              <p class="engr-meta">
+                <span>{relativeAge(r.createdAt)} ago</span>
+                {!isUnread(r) && <span>Read</span>}
+              </p>
+            </div>
+            {isUnread(r) && (
+              <form method="post" action={`/engr/api/notifications/${r.id}/read`}>
+                <button type="submit" class="engr-btn engr-btn--ghost">
+                  Mark read
+                </button>
+              </form>
+            )}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</EngrLayout>

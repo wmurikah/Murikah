@@ -21,6 +21,7 @@
  */
 import type { Client } from '@libsql/client/web';
 import { enqueue } from '../notify';
+import { eatDateString, nextDueDate, type PmFrequency } from '../time';
 
 export const WO_STATUS = {
   CREATED: 'CREATED',
@@ -178,6 +179,7 @@ interface WoCore {
   technicianId: string | null;
   technicianPortalUserId: string | null;
   requestId: string | null;
+  pmOccurrenceId: string | null;
   createdBy: string;
 }
 
@@ -212,7 +214,7 @@ export function availableActions(
 async function loadCore(db: Client, orgId: string, id: string): Promise<WoCore | null> {
   const res = await db.execute({
     sql: `SELECT wo.id, wo.org_id, wo.wo_no, wo.status, wo.station_id, wo.contractor_id, wo.technician_id,
-                 wo.request_id, wo.created_by,
+                 wo.request_id, wo.pm_occurrence_id, wo.created_by,
                  s.station_manager_id AS station_manager_id,
                  t.portal_user_id AS technician_portal_user_id
             FROM work_orders wo
@@ -236,6 +238,7 @@ async function loadCore(db: Client, orgId: string, id: string): Promise<WoCore |
     technicianPortalUserId:
       row.technician_portal_user_id === null ? null : String(row.technician_portal_user_id),
     requestId: row.request_id === null ? null : String(row.request_id),
+    pmOccurrenceId: row.pm_occurrence_id === null ? null : String(row.pm_occurrence_id),
     createdBy: String(row.created_by),
   };
 }
@@ -521,6 +524,45 @@ async function runSideEffects(
           sql: `UPDATE service_requests SET status = 'CLOSED', closed_at = ?, updated_at = ? WHERE id = ? AND org_id = ?`,
           args: [now, now, core.requestId, orgId],
         });
+      }
+      // A PM work order carries a pm_occurrence_id. Closing it completes the
+      // occurrence, rolls the schedule forward by its frequency, and materialises
+      // the next occurrence. This is the only place PM closure is handled.
+      if (core.pmOccurrenceId) {
+        await tx.execute({
+          sql: `UPDATE pm_occurrences SET status = 'COMPLETED', updated_at = ? WHERE id = ? AND org_id = ?`,
+          args: [now, core.pmOccurrenceId, orgId],
+        });
+        const schedRes = await tx.execute({
+          sql: `SELECT s.id, s.frequency, s.interval_days, o.due_date
+                  FROM pm_occurrences o JOIN pm_schedules s ON s.id = o.pm_schedule_id
+                 WHERE o.id = ? AND o.org_id = ? LIMIT 1`,
+          args: [core.pmOccurrenceId, orgId],
+        });
+        const srow = schedRes.rows[0];
+        if (srow) {
+          const scheduleId = String(srow.id);
+          const dueDate = String(srow.due_date);
+          const frequency = String(srow.frequency) as PmFrequency;
+          const intervalDays = srow.interval_days == null ? null : Number(srow.interval_days);
+          const next = nextDueDate(dueDate, frequency, intervalDays);
+          await tx.execute({
+            sql: `UPDATE pm_schedules SET last_run_date = ?, next_due_date = ?, updated_at = ?
+                   WHERE id = ? AND org_id = ?`,
+            args: [eatDateString(new Date(now)), next, now, scheduleId, orgId],
+          });
+          const exists = await tx.execute({
+            sql: `SELECT id FROM pm_occurrences WHERE org_id = ? AND pm_schedule_id = ? AND due_date = ? LIMIT 1`,
+            args: [orgId, scheduleId, next],
+          });
+          if (!exists.rows[0]) {
+            await tx.execute({
+              sql: `INSERT INTO pm_occurrences (id, org_id, pm_schedule_id, due_date, status)
+                    VALUES (?, ?, ?, ?, 'SCHEDULED')`,
+              args: [newId(), orgId, scheduleId, next],
+            });
+          }
+        }
       }
       return { ok: true };
     }

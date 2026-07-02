@@ -96,7 +96,7 @@ export async function getUnreadCount(
 ): Promise<number> {
   const res = await db.execute({
     sql: `SELECT COUNT(*) AS n FROM notifications
-           WHERE org_id = ? AND channel = 'IN_APP' AND status = 'QUEUED'
+           WHERE org_id = ? AND channel = 'IN_APP' AND status IN ('QUEUED', 'SENT')
              AND (recipient_user_id = ?
                   OR recipient_contractor_id IN
                        (SELECT id FROM contractors WHERE org_id = ? AND portal_user_id = ?)
