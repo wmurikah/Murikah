@@ -1,0 +1,405 @@
+---
+/**
+ * Shared work-order detail: header, meta, status timeline, and the action panels
+ * that are valid for the current status and this viewer. The `actions` list comes
+ * from the state machine's availableActions(), so a panel only shows when the
+ * transition is genuinely allowed. Each panel posts to its endpoint and the
+ * screen re-renders with the new state.
+ */
+import WorkOrderTimeline from './WorkOrderTimeline.astro';
+import type { WorkOrderDetail } from '@engr/repos/workOrders';
+import type { WoAction } from '@engr/workflow/workOrderState';
+import type { TechnicianOption } from '@engr/repos/techniciansPick';
+import type { RateItemOption, JobCardRecord, SpareRow } from '@engr/repos/jobCards';
+import type { JsaRecord } from '@engr/repos/jsa';
+import type { ArrivalRecord } from '@engr/repos/arrivals';
+import { formatMoneyMinor } from '@engr/format';
+
+interface Props {
+  wo: WorkOrderDetail;
+  actions: WoAction[];
+  technicians?: TechnicianOption[];
+  rateItems?: RateItemOption[];
+  jsa?: JsaRecord | null;
+  arrival?: ArrivalRecord | null;
+  jobCard?: JobCardRecord | null;
+  spares?: SpareRow[];
+  errorCode?: string | null;
+}
+const {
+  wo,
+  actions,
+  technicians = [],
+  rateItems = [],
+  jsa = null,
+  arrival = null,
+  jobCard = null,
+  spares = [],
+  errorCode = null,
+} = Astro.props;
+
+const has = (action: WoAction) => actions.includes(action);
+const api = `/engr/api/workorders/${wo.id}`;
+const spareRows = [1, 2, 3, 4, 5, 6];
+const errorMessage = errorCode
+  ? errorCode === 'conflict'
+    ? 'The work order changed since this page loaded. It has been refreshed.'
+    : errorCode === 'forbidden'
+      ? 'You are not allowed to perform that action.'
+      : 'That action could not be completed. Check the details and try again.'
+  : null;
+---
+
+{
+  errorMessage && (
+    <p class="engr-error" role="alert">
+      {errorMessage}
+    </p>
+  )
+}
+
+<p class="engr-meta">
+  <span>Status <strong>{wo.status}</strong></span>
+  <span>Station <strong>{wo.stationName}</strong></span>
+  <span>Contractor <strong>{wo.contractorName ?? 'Unassigned'}</strong></span>
+  <span>Technician <strong>{wo.technicianName ?? 'Unassigned'}</strong></span>
+  {
+    wo.slaName && (
+      <span>
+        SLA <strong>{wo.slaName}</strong>
+      </span>
+    )
+  }
+  {
+    wo.requestNo && (
+      <span>
+        Request <strong>{wo.requestNo}</strong>
+      </span>
+    )
+  }
+</p>
+
+{
+  (jsa?.submittedAt || arrival) && (
+    <p class="engr-meta">
+      {jsa?.submittedAt && (
+        <span>
+          JSA <strong>Submitted</strong>
+        </span>
+      )}
+      {arrival && (
+        <span>
+          Arrival <strong>{arrival.confirmationStatus}</strong>
+        </span>
+      )}
+    </p>
+  )
+}
+
+<h2 class="engr-card__label" style="margin-top:1.5rem">Timeline</h2>
+<WorkOrderTimeline
+  createdAt={wo.createdAt}
+  contractorAcceptedAt={wo.contractorAcceptedAt}
+  techAssignedAt={wo.techAssignedAt}
+  techAcceptedAt={wo.techAcceptedAt}
+  onsiteAt={wo.onsiteAt}
+  closedAt={wo.closedAt}
+/>
+
+{
+  (has('contractor_accept') || has('contractor_reject')) && (
+    <div class="engr-panel">
+      <h2>Contractor decision</h2>
+      <div class="engr-actionbar">
+        <form method="post" action={`${api}/contractor-decision`}>
+          <input type="hidden" name="decision" value="accept" />
+          <button type="submit" class="engr-btn engr-btn--primary">
+            Accept work order
+          </button>
+        </form>
+      </div>
+      <form method="post" action={`${api}/contractor-decision`} class="engr-form">
+        <input type="hidden" name="decision" value="reject" />
+        <div class="engr-field">
+          <label for="cd-reason">Reason for rejection</label>
+          <textarea id="cd-reason" class="engr-textarea" name="reason" maxlength="500" />
+        </div>
+        <div class="engr-actionbar">
+          <button type="submit" class="engr-btn engr-btn--danger">
+            Reject work order
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+{
+  has('assign_technician') && (
+    <div class="engr-panel">
+      <h2>Assign a technician</h2>
+      {technicians.length === 0 ? (
+        <p class="engr-empty">No active technicians are on your team yet.</p>
+      ) : (
+        <form method="post" action={`${api}/assign-technician`} class="engr-form">
+          <div class="engr-field">
+            <label for="technician">Technician</label>
+            <select id="technician" class="engr-select" name="technician_id" required>
+              <option value="">Choose a technician</option>
+              {technicians.map((t) => (
+                <option value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div class="engr-actionbar">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              Assign technician
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
+{
+  (has('technician_accept') || has('technician_reject')) && (
+    <div class="engr-panel">
+      <h2>Your assignment</h2>
+      <div class="engr-actionbar">
+        <form method="post" action={`${api}/technician-decision`}>
+          <input type="hidden" name="decision" value="accept" />
+          <button type="submit" class="engr-btn engr-btn--primary">
+            Accept assignment
+          </button>
+        </form>
+      </div>
+      <form method="post" action={`${api}/technician-decision`} class="engr-form">
+        <input type="hidden" name="decision" value="reject" />
+        <div class="engr-field">
+          <label for="td-reason">Reason for declining</label>
+          <textarea id="td-reason" class="engr-textarea" name="reason" maxlength="500" />
+        </div>
+        <div class="engr-actionbar">
+          <button type="submit" class="engr-btn engr-btn--danger">
+            Decline assignment
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+{
+  has('submit_jsa_request_arrival') && (
+    <div class="engr-panel">
+      <h2>Safety analysis and arrival</h2>
+      {arrival && arrival.confirmationStatus === 'PENDING' ? (
+        <p class="engr-notice">Arrival confirmation is pending with the station manager.</p>
+      ) : (
+        <form method="post" action={`${api}/jsa`} class="engr-form">
+          <div class="engr-field">
+            <label for="jsa-summary">Task summary</label>
+            <input id="jsa-summary" class="engr-input" name="summary" maxlength="200" />
+          </div>
+          <div class="engr-field">
+            <label for="jsa-hazards">Hazards identified</label>
+            <textarea id="jsa-hazards" class="engr-textarea" name="hazards" maxlength="1000" />
+          </div>
+          <div class="engr-field">
+            <label for="jsa-controls">Controls in place</label>
+            <textarea id="jsa-controls" class="engr-textarea" name="controls" maxlength="1000" />
+          </div>
+          <div class="engr-actionbar">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              Submit JSA and request arrival
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
+{
+  (has('start_work') || has('submit_jobcard_request_closure')) && (
+    <div class="engr-panel">
+      <h2>On-site work</h2>
+      {has('start_work') && (
+        <form method="post" action={`${api}/jobcard`} class="engr-actionbar">
+          <input type="hidden" name="action" value="start" />
+          <button type="submit" class="engr-btn engr-btn--secondary">
+            Start work
+          </button>
+        </form>
+      )}
+      {has('submit_jobcard_request_closure') && (
+        <form method="post" action={`${api}/jobcard`} class="engr-form" style="max-width:44rem">
+          <div class="engr-field">
+            <label for="jc-diagnosis">Diagnosis</label>
+            <textarea
+              id="jc-diagnosis"
+              class="engr-textarea"
+              name="diagnosis"
+              maxlength="2000"
+              set:text={jobCard?.diagnosis ?? ''}
+            />
+          </div>
+          <div class="engr-field">
+            <label for="jc-root">Root cause</label>
+            <textarea
+              id="jc-root"
+              class="engr-textarea"
+              name="root_cause"
+              maxlength="2000"
+              set:text={jobCard?.rootCause ?? ''}
+            />
+          </div>
+          <div class="engr-field">
+            <label for="jc-repair">Repair done</label>
+            <textarea
+              id="jc-repair"
+              class="engr-textarea"
+              name="repair_done"
+              maxlength="2000"
+              set:text={jobCard?.repairDone ?? ''}
+            />
+          </div>
+
+          <fieldset class="engr-field" style="border:0;padding:0;margin:0">
+            <legend style="font-weight:600">Spares used (optional)</legend>
+            <p class="engr-field__hint">
+              Choose a rate item to price a line from the rate card, or describe it and leave the
+              rate blank.
+            </p>
+            <div class="engr-spares">
+              {spareRows.map((i) => (
+                <div class="engr-spare-row">
+                  <input
+                    class="engr-input"
+                    name={`spare_${i}_desc`}
+                    aria-label={`Spare ${i} description`}
+                    placeholder="Description"
+                    maxlength="300"
+                  />
+                  <select
+                    class="engr-select"
+                    name={`spare_${i}_rate_item`}
+                    aria-label={`Spare ${i} rate item`}
+                  >
+                    <option value="">No rate item</option>
+                    {rateItems.map((ri) => (
+                      <option value={ri.id}>
+                        {ri.description} ({formatMoneyMinor(ri.unitRateMinor, ri.currency)})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    class="engr-input"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value="1"
+                    name={`spare_${i}_qty`}
+                    aria-label={`Spare ${i} quantity`}
+                  />
+                </div>
+              ))}
+            </div>
+          </fieldset>
+
+          <div class="engr-actionbar">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              Complete and request closure
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
+{
+  has('confirm_arrival') && (
+    <div class="engr-panel">
+      <h2>Confirm arrival</h2>
+      <p class="engr-lead">The technician has requested arrival confirmation at this station.</p>
+      <form method="post" action={`${api}/confirm-arrival`} class="engr-actionbar">
+        <button type="submit" class="engr-btn engr-btn--primary">
+          Confirm arrival
+        </button>
+      </form>
+    </div>
+  )
+}
+
+{
+  (has('confirm_closure') || has('reopen')) && (
+    <div class="engr-panel">
+      <h2>Confirm closure</h2>
+      {jobCard && (
+        <dl class="engr-detail">
+          <dt>Diagnosis</dt>
+          <dd>{jobCard.diagnosis ?? 'Not recorded'}</dd>
+          <dt>Repair done</dt>
+          <dd>{jobCard.repairDone ?? 'Not recorded'}</dd>
+        </dl>
+      )}
+      {spares.length > 0 && (
+        <ul class="engr-card__list">
+          {spares.map((s) => (
+            <li>
+              <span>
+                {s.description} ({s.qty})
+              </span>
+              <span class="engr-card__muted">
+                {s.unitRateMinor == null
+                  ? 'Rate not set'
+                  : formatMoneyMinor(s.unitRateMinor, s.currency)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div class="engr-actionbar">
+        <form method="post" action={`${api}/confirm-closure`}>
+          <input type="hidden" name="decision" value="confirm" />
+          <button type="submit" class="engr-btn engr-btn--primary">
+            Confirm closure
+          </button>
+        </form>
+      </div>
+      <form method="post" action={`${api}/confirm-closure`} class="engr-form">
+        <input type="hidden" name="decision" value="reopen" />
+        <div class="engr-field">
+          <label for="reopen-reason">Reason to reopen</label>
+          <textarea id="reopen-reason" class="engr-textarea" name="reason" maxlength="500" />
+        </div>
+        <div class="engr-actionbar">
+          <button type="submit" class="engr-btn engr-btn--danger">
+            Reopen work order
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+{
+  has('cancel') && (
+    <div class="engr-panel">
+      <h2>Cancel work order</h2>
+      <form method="post" action={`${api}/cancel`} class="engr-form">
+        <div class="engr-field">
+          <label for="cancel-reason">Reason for cancellation</label>
+          <textarea id="cancel-reason" class="engr-textarea" name="reason" maxlength="500" />
+        </div>
+        <div class="engr-actionbar">
+          <button type="submit" class="engr-btn engr-btn--danger">
+            Cancel work order
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
