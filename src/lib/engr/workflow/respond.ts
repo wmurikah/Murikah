@@ -76,6 +76,19 @@ export function str(value: unknown): string {
 }
 
 /**
+ * Parse a user-entered amount in major units (KES) into integer minor units, or
+ * null when blank or not a non-negative number. Money is only ever stored and
+ * compared in minor units; this is the single conversion point at the boundary.
+ */
+export function toMinorUnits(value: unknown): number | null {
+  const text = str(value).trim();
+  if (text === '') return null;
+  const major = Number(text);
+  if (!Number.isFinite(major) || major < 0) return null;
+  return Math.round(major * 100);
+}
+
+/**
  * Finish a state-machine transition: JSON with the updated work order, or a
  * redirect back to the screen. Conflicts return 409, permission failures 403.
  */
