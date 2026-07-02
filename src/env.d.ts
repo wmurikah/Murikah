@@ -24,6 +24,14 @@ declare namespace Cloudflare {
     CONTACT_NOTIFY_EMAIL?: string;
     RESEND_FROM_EMAIL?: string;
 
+    // Engineering Rhythm (Murikah Labs) product, its own Turso database and
+    // session secret, namespaced so they never clash with the marketing site.
+    // Optional here so the marketing preview typechecks without them; the engr
+    // env accessor throws at runtime when any is missing.
+    TURSO_ENGR_DATABASE_URL?: string;
+    TURSO_ENGR_AUTH_TOKEN?: string;
+    ENGR_SESSION_SECRET?: string;
+
     // Plain vars.
     PUBLIC_SITE_URL?: string;
   }
@@ -35,5 +43,19 @@ interface Env extends Cloudflare.Env {}
 // Astro.locals, the v14 adapter exposes the execution context as `cfContext`.
 type Runtime = import('@astrojs/cloudflare').Runtime;
 declare namespace App {
-  interface Locals extends Runtime {}
+  interface Locals extends Runtime {
+    /**
+     * Engineering Rhythm request context, attached by src/middleware.ts for
+     * authenticated /engr requests. Absent on the marketing site. The org is
+     * resolved from the session, so every downstream query scopes by orgId.
+     */
+    engr?: {
+      userId: string;
+      orgId: string;
+      orgSlug: string;
+      roles: string[];
+      perms: string[];
+      can: (key: string) => boolean;
+    };
+  }
 }
