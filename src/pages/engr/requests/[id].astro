@@ -1,0 +1,71 @@
+---
+export const prerender = false;
+
+/**
+ * Request detail (stub). Shows the core fields of one org-scoped request. Full
+ * detail, history and actions arrive in a later prompt. Gate: requests.view.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getRequestById, type RequestDetail } from '@engr/repos/requests';
+import { can } from '@engr/auth/rbac';
+import { relativeAge } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'requests.view');
+const { id } = Astro.params;
+
+let detail: RequestDetail | null = null;
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  detail = await getRequestById(db, engr.orgId, id);
+}
+if (allowed && !detail) {
+  Astro.response.status = 404;
+}
+---
+
+<EngrLayout title="Request">
+  <div class="engr-page-head">
+    <div>
+      <h1>{detail ? detail.requestNo : 'Request'}</h1>
+      <p class="engr-lead">Request detail.</p>
+    </div>
+    <a href="/engr/requests" class="engr-btn engr-btn--secondary">Back to queue</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to requests.
+      </p>
+    ) : !detail ? (
+      <p class="engr-empty">That request was not found in your organisation.</p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Station</dt>
+          <dd>{detail.stationName}</dd>
+          <dt>Issue</dt>
+          <dd>{detail.issue}</dd>
+          <dt>Nature of breakdown</dt>
+          <dd>{detail.natureOfBreakdown ?? 'Not recorded'}</dd>
+          <dt>Priority</dt>
+          <dd>{detail.priority}</dd>
+          <dt>Status</dt>
+          <dd>{detail.status}</dd>
+          <dt>Repeat call</dt>
+          <dd>{detail.isRepeatCall ? 'Yes' : 'No'}</dd>
+          <dt>Age</dt>
+          <dd>{relativeAge(detail.createdAt)}</dd>
+        </dl>
+        <p class="engr-lead" style="margin-top:1.5rem">
+          Full request detail and actions arrive in a later prompt.
+        </p>
+      </>
+    )
+  }
+</EngrLayout>
