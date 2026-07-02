@@ -393,24 +393,26 @@
   }
 }
 
-/* On dark surfaces (the dark header, the cinematic hero, the CTA band) the one
-   strong action becomes deep brass with white text: the single warm accent that
-   pops against navy, earned rather than loud. On hover it brightens and the
-   label flips to obsidian to hold AA contrast. Ghost actions switch to a quiet
-   ivory outline. Left unlayered so these win over the button utilities. */
+/* On dark surfaces (the slate header, the cinematic hero, the CTA band) the one
+   strong action is deep brass with white text: the single warm accent that pops
+   against the dark, earned rather than loud. It keeps white text on hover and
+   deepens its shadow to lift; the brass is held dark enough (a darkened form of
+   #A9822E) that white stays above AA. Ghost actions switch to a quiet ivory
+   outline. Left unlayered so these win over the button utilities. */
 .on-dark .btn-primary {
   /* Deep brass with white text clears AA (~5.1:1). A translucent champagne edge
      and a soft drop shadow give the one action a premium lift. */
   background-color: #8a6824;
   color: #ffffff;
-  border: 1px solid rgba(214, 195, 138, 0.42);
+  border: 1px solid rgba(214, 195, 138, 0.45);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
 }
 .on-dark .btn-primary:hover {
-  /* Brighter brass on hover; the label switches to obsidian (~5.6:1) because
-     white would fall to ~3.6:1. Accessibility over appearance. */
-  background-color: #a9822e;
-  color: #000a14;
+  /* A touch brighter, still dark enough that white holds AA (~4.8:1); the
+     deepened shadow does most of the lift. White text kept, per the brief:
+     accessibility over appearance. */
+  background-color: #8f6d1e;
+  color: #ffffff;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
 .on-dark .btn-ghost {
