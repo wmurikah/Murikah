@@ -18,8 +18,9 @@
      ...) keep working while new code uses the names below. */
 
   /* Dark, high-trust surfaces */
-  --color-obsidian: #000a14; /* deepest premium surface: header, hero, CTA, footer */
-  --color-header-bg: #000a14; /* the dark header/menu bar */
+  --color-obsidian: #000a14; /* deepest premium surface: hero, CTA band, footer */
+  --color-header-bg: #1e2a30; /* premium slate-navy header/menu bar (lighter than obsidian) */
+  --color-header-veil: #18232a; /* slightly deeper slate for menus that sit over the header */
   --color-demo-button-bg: #010c18; /* the primary CTA fill on dark surfaces */
   --color-navy: #0b1733; /* authority: headings, dark UI, brand depth */
   --color-navy-deep: #081026; /* derived: navy hover/active */

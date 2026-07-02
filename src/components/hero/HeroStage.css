@@ -110,7 +110,9 @@
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--color-brass);
+  /* Ivory eyebrow, not brass: brass is reserved for the accent line beside it
+     and the calls to action, so the hero stays calm rather than loud. */
+  color: rgba(248, 244, 234, 0.88);
 }
 .hero-stage__label::before {
   content: '';
@@ -123,10 +125,9 @@
   margin-top: 1.1rem;
   max-width: 15ch;
   font-family: var(--font-display);
-  /* A larger, more present display scale. Tuned down a touch from the top of the
-     brief (7.4rem) so the longer rotating headlines still sit on two or three
-     balanced lines rather than overflowing. */
-  font-size: clamp(3.25rem, 5.5vw + 0.5rem, 6.5rem);
+  /* Large, editorial display scale per the brief. text-wrap: balance keeps the
+     longer rotating headlines on tidy lines rather than an awkward last word. */
+  font-size: clamp(3.5rem, 6.4vw, 7.4rem);
   font-weight: 600;
   line-height: 1.02;
   letter-spacing: -0.01em;
@@ -169,7 +170,7 @@
      and a soft drop shadow give the action a premium lift. */
   color: #ffffff;
   background: #8a6824;
-  border: 1px solid rgba(214, 195, 138, 0.42);
+  border: 1px solid rgba(214, 195, 138, 0.45);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
   text-decoration: none;
   transition:
@@ -178,10 +179,10 @@
     box-shadow 0.2s var(--ease-out-soft);
 }
 .hero-stage__cta:hover {
-  /* Brighter brass on hover. White would fall to ~3.6:1, so the label switches
-     to obsidian (~5.6:1). Accessibility over appearance. */
-  background: #a9822e;
-  color: #000a14;
+  /* A touch brighter, kept dark enough that white holds AA (~4.8:1); the
+     deepened shadow does most of the lift. White text kept, per the brief. */
+  background: #8f6d1e;
+  color: #ffffff;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
 
@@ -258,7 +259,7 @@
   width: 0.55rem;
   height: 0.25rem;
   border-radius: 9999px;
-  background: rgba(248, 244, 234, 0.35);
+  background: rgba(248, 244, 234, 0.42);
   transition:
     width 0.3s var(--ease-out-soft),
     background-color 0.3s var(--ease-out-soft);
