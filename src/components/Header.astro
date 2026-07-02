@@ -28,14 +28,22 @@ const groupActive = (item: NavItem) =>
 // Inline editorial links on a dark header: no pill, no boxed tabs. A fine brass
 // underline grows in on hover, on keyboard focus, while the group's menu is
 // open, and stays lit on the active group (aria-current="page"). Links sit in
-// ivory and brighten to white, so the header reads as open, dark and premium.
+// soft ivory and brighten to full ivory on hover; the active group turns brass,
+// so the header reads as open, dark and premium.
 const navLink =
-  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-paper/75 transition-colors duration-150 hover:text-white focus-visible:text-white aria-[current=page]:text-white ' +
+  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-paper/[0.78] transition-colors duration-150 hover:text-paper focus-visible:text-paper aria-[current=page]:text-brass ' +
   'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[0.7rem] after:h-px after:origin-left after:scale-x-0 after:bg-brass after:transition-transform after:duration-200 ' +
   'hover:after:scale-x-100 focus-visible:after:scale-x-100 group-hover:after:scale-x-100 group-focus-within:after:scale-x-100 aria-[current=page]:after:scale-x-100';
 ---
 
-<header class="on-dark sticky top-0 z-50 border-b border-white/10 bg-obsidian">
+{
+  /* Translucent, blurred glass over the hero: rgba(0,10,20,0.88) with an 18px
+    backdrop blur where supported, falling back to a solid #071422 where it is
+    not. A hairline of ivory at 8% seats it against the scene below. */
+}
+<header
+  class="on-dark sticky top-0 z-50 border-b border-paper/[0.08] bg-[#071422] backdrop-blur-[18px] supports-[backdrop-filter:blur(0px)]:bg-obsidian/[0.88]"
+>
   <Container>
     <div class="flex h-16 items-center justify-between lg:h-[4.5rem]">
       {/* Logo, top-left, links home (Jakob's Law). The white dark-header lockup. */}
