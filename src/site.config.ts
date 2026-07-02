@@ -290,17 +290,18 @@ export const SOCIAL: SocialLink[] = [
 ];
 
 /**
- * Footer navigation, grouped to mirror the primary three-part architecture
- * (Miller's Law), with Legal kept in the thin bottom bar. Links stay in sync
- * with the header groups.
+ * Footer navigation, deliberately curated rather than a full sitemap. Three
+ * compact columns mirror the primary architecture (Who we are, What we do,
+ * News & Insights) but each shows only a few strategic links; Legal stays in
+ * the thin bottom bar. Labels are short and premium ("About", "Services",
+ * "RSS"), and "Automation Lab" aligns with the hero CTA. The full page list
+ * lives in the header navigation, so the footer can stay short and scannable.
  */
 export const FOOTER_GROUPS: { heading: string; links: { label: string; href: string }[] }[] = [
   {
     heading: 'Who we are',
     links: [
-      { label: 'About Murikah', href: '/about' },
-      { label: 'Why Murikah', href: '/about#why-now' },
-      { label: 'How we work', href: '/about#how-we-work' },
+      { label: 'About', href: '/about' },
       { label: 'Standards', href: '/about#standards' },
       { label: 'Contact', href: '/contact' },
     ],
@@ -308,13 +309,9 @@ export const FOOTER_GROUPS: { heading: string; links: { label: string; href: str
   {
     heading: 'What we do',
     links: [
-      { label: 'Services overview', href: '/services' },
+      { label: 'Services', href: '/services' },
       { label: 'Assurance', href: '/assurance' },
-      { label: 'Assurance OS', href: '/audit-os' },
-      { label: 'Labs', href: '/labs' },
-      { label: 'Advisory', href: '/advisory' },
-      { label: 'Academy', href: '/academy' },
-      { label: 'Intelligence', href: '/intelligence' },
+      { label: 'Automation Lab', href: '/labs' },
       { label: 'Pricing', href: '/pricing' },
     ],
   },
@@ -324,10 +321,7 @@ export const FOOTER_GROUPS: { heading: string; links: { label: string; href: str
       { label: 'All insights', href: '/insights' },
       { label: 'AI governance', href: '/insights#ai-governance' },
       { label: 'Internal audit', href: '/insights#internal-audit' },
-      { label: 'Data protection', href: '/insights#data-protection' },
-      { label: 'Sector guides', href: '/insights#sector-guides' },
-      { label: 'Research & benchmarking', href: '/intelligence' },
-      { label: 'RSS feed', href: '/rss.xml' },
+      { label: 'RSS', href: '/rss.xml' },
     ],
   },
   {

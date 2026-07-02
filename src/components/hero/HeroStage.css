@@ -5,6 +5,14 @@
  */
 
 .hero-stage {
+  /* Hero pearl/milk-white text scale. All hero copy is pearl; brass is reserved
+     for the accent line, the primary button, the secondary CTA underline and
+     arrow, and the active carousel indicator. Never used as hero body text. */
+  --hero-pearl: #f8f4ea;
+  --hero-pearl-strong: #fffcf6;
+  --hero-pearl-muted: rgba(248, 244, 234, 0.84);
+  --hero-pearl-soft: rgba(248, 244, 234, 0.7);
+
   position: relative;
   isolation: isolate;
   display: flex;
@@ -110,7 +118,7 @@
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  /* Ivory eyebrow, not brass: brass is reserved for the accent line beside it
+  /* Pearl eyebrow, never brass: brass is reserved for the accent line beside it
      and the calls to action, so the hero stays calm rather than loud. */
   color: rgba(248, 244, 234, 0.88);
 }
@@ -131,7 +139,7 @@
   font-weight: 600;
   line-height: 1.02;
   letter-spacing: -0.01em;
-  color: var(--color-paper);
+  color: var(--hero-pearl-strong);
   text-wrap: balance;
 }
 
@@ -147,7 +155,7 @@
   max-width: 39rem;
   font-size: 1.1875rem;
   line-height: 1.55;
-  color: rgba(248, 244, 234, 0.84);
+  color: var(--hero-pearl-muted);
 }
 
 .hero-stage__actions {
@@ -186,31 +194,39 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
 
+/* Secondary CTA: pearl-white text with brass support (underline + arrow), not
+   brass text. Reads as milk white over the photography; brass carries the
+   affordance. Hover lifts the text to the strongest pearl and warms the brass
+   support to soft champagne (#D6C38A). */
 .hero-stage__link {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
   font-weight: 500;
-  color: var(--color-brass);
+  color: var(--hero-pearl);
   text-decoration: none;
   transition: color 0.2s var(--ease-out-soft);
 }
 .hero-stage__link:hover {
-  color: var(--color-brass-soft);
+  color: var(--hero-pearl-strong);
 }
 .hero-stage__linktext {
-  border-bottom: 1px solid rgba(169, 130, 46, 0.72);
+  border-bottom: 1px solid var(--color-brass);
   padding-bottom: 0.15rem;
   transition: border-color 0.2s var(--ease-out-soft);
 }
 .hero-stage__link:hover .hero-stage__linktext {
-  border-color: rgba(214, 195, 138, 0.72);
+  border-color: var(--color-brass-soft);
 }
 .hero-stage__arrow {
-  transition: transform 0.2s var(--ease-out-soft);
+  color: var(--color-brass);
+  transition:
+    transform 0.2s var(--ease-out-soft),
+    color 0.2s var(--ease-out-soft);
 }
 .hero-stage__link:hover .hero-stage__arrow {
   transform: translateX(0.25rem);
+  color: var(--color-brass-soft);
 }
 
 .hero-stage__controls {

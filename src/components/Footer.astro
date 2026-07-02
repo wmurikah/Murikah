@@ -1,10 +1,10 @@
 ---
 /**
- * Footer, a recurring "end" moment. A calm navy field grouped to mirror the
- * three-part architecture: a brand block, three link columns (Who we are,
- * What we do, News & Insights), a one-line newsletter capture, and a thin
- * bottom bar carrying copyright, legal and social. `.on-dark` flips focus rings
- * to gold for contrast.
+ * Footer, a calm institutional end moment. Deliberately short and curated
+ * rather than a sitemap: a brand zone (logo, one-line signature and a slim
+ * newsletter capture), three compact strategic columns, and a thin legal and
+ * contact row. Spacing is tight and intentional; the softer navy gradient keeps
+ * the footer no harsher than the header. `.on-dark` flips focus rings to brass.
  */
 import Container from '@/components/primitives/Container.astro';
 import Logo from '@/components/Logo.astro';
@@ -14,66 +14,73 @@ import { SITE, FOOTER_GROUPS, SOCIAL } from '@/site.config';
 // Build-time year for the copyright line.
 const year = new Date().getFullYear();
 
-// Three grouped columns mirror the header; Legal stays in the thin bottom bar.
+// Three curated columns; Legal stays in the thin bottom bar.
 const columns = FOOTER_GROUPS.filter((g) => g.heading !== 'Legal');
 const legalLinks = FOOTER_GROUPS.find((g) => g.heading === 'Legal')?.links ?? [];
 
-const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:text-white';
+const footLink =
+  'text-sm text-paper/[0.78] no-underline transition-colors hover:text-paper focus-visible:text-paper';
 ---
 
-<footer class="navy-rich grain on-dark relative overflow-hidden text-paper">
-  {/* The light signature: a fine gold beam across the top. */}
+<footer class="site-footer grain on-dark relative overflow-hidden text-paper/[0.78]">
+  {/* The light signature: a fine brass beam across the top. */}
   <hr class="beam border-0" />
 
   <Container class="relative">
-    {/* Brand block plus the three grouped columns. */}
-    <div class="grid gap-10 py-12 md:grid-cols-12 lg:py-14">
-      <div class="md:col-span-3">
+    {/* Brand zone: signature line on the left, slim newsletter on the right. */}
+    <div
+      class="grid gap-x-10 gap-y-8 pt-14 md:grid-cols-2 md:items-start lg:pt-[4.5rem]"
+    >
+      <div>
         <a href="/" class="inline-block no-underline" aria-label="Murikah, home">
           <Logo tone="light" />
         </a>
+        <p class="mt-3 text-sm text-paper/[0.62]">Assurance. Governance. Intelligence.</p>
       </div>
-      <nav aria-label="Footer" class="grid grid-cols-2 gap-8 sm:grid-cols-3 md:col-span-9">
-        {
-          columns.map((group) => (
-            <div>
-              <h2 class="text-xs font-semibold tracking-[0.14em] text-white/90 uppercase">
-                {group.heading}
-              </h2>
-              <ul class="mt-4 space-y-2.5">
-                {group.links.map((l) => (
-                  <li>
-                    <a href={l.href} class={footLink}>
-                      {l.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        }
-      </nav>
+      <div class="w-full md:max-w-sm md:justify-self-end">
+        <p class="text-sm text-paper/[0.78]">
+          Occasional notes on assurance and governance. No noise.
+        </p>
+        <SubscribeForm
+          source="newsletter"
+          tone="dark"
+          buttonLabel="Subscribe"
+          successMessage="Thank you. We will send the occasional note, nothing more."
+          class="mt-3"
+        />
+      </div>
     </div>
 
-    {/* Newsletter, a single compact row. */}
-    <div
-      class="flex flex-col gap-3 border-t border-white/10 py-6 sm:flex-row sm:items-center sm:justify-between"
+    {/* Three curated columns, compact vertically. */}
+    <nav
+      aria-label="Footer"
+      class="mt-12 grid grid-cols-2 gap-x-8 gap-y-9 border-t border-paper/10 pt-10 sm:grid-cols-3"
     >
-      <p class="text-sm text-paper/70">Occasional notes on assurance and governance. No noise.</p>
-      <SubscribeForm
-        source="newsletter"
-        tone="dark"
-        buttonLabel="Subscribe"
-        successMessage="Thank you. We will send the occasional note, nothing more."
-        class="w-full sm:w-auto sm:max-w-sm"
-      />
-    </div>
+      {
+        columns.map((group) => (
+          <div>
+            <h2 class="text-xs font-semibold tracking-[0.14em] text-paper uppercase">
+              {group.heading}
+            </h2>
+            <ul class="mt-5 space-y-3.5">
+              {group.links.map((l) => (
+                <li>
+                  <a href={l.href} class={footLink}>
+                    {l.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </nav>
 
-    {/* Bottom bar: copyright, legal and social, one thin row. */}
+    {/* Bottom bar: copyright, legal, social and contact, one thin row. */}
     <div
-      class="flex flex-col gap-3 border-t border-white/10 py-6 sm:flex-row sm:items-center sm:justify-between"
+      class="mt-10 flex flex-col gap-3 border-t border-paper/10 py-7 sm:flex-row sm:items-center sm:justify-between"
     >
-      <p class="text-sm text-paper/55">© {year} {SITE.legalName}. All rights reserved.</p>
+      <p class="text-sm text-paper/[0.62]">© {year} {SITE.legalName}. All rights reserved.</p>
       <ul class="flex flex-wrap items-center gap-x-5 gap-y-2">
         {
           legalLinks.map((l) => (
@@ -100,3 +107,12 @@ const footLink = 'text-sm text-paper/70 no-underline transition-colors hover:tex
     </div>
   </Container>
 </footer>
+
+<style>
+  /* A softer navy gradient than the obsidian hero/CTA band, so the footer reads
+     as a calm close and is no harsher than the header. */
+  .site-footer {
+    background-image: linear-gradient(180deg, #0b1733 0%, #071422 100%);
+    background-color: #0b1733;
+  }
+</style>
