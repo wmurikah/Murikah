@@ -1,0 +1,45 @@
+---
+/** A compact table of work orders, each linking to its detail under basePath. */
+import type { WorkOrderListRow } from '@engr/repos/workOrders';
+interface Props {
+  rows: WorkOrderListRow[];
+  basePath: string;
+  emptyText: string;
+}
+const { rows, basePath, emptyText } = Astro.props;
+---
+
+{
+  rows.length === 0 ? (
+    <p class="engr-empty">{emptyText}</p>
+  ) : (
+    <div class="engr-tablewrap">
+      <table class="engr-table" aria-label="Work orders">
+        <thead>
+          <tr>
+            <th scope="col">Work order</th>
+            <th scope="col">Station</th>
+            <th scope="col">Contractor</th>
+            <th scope="col">Technician</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td>
+                <a href={`${basePath}/${r.id}`}>{r.woNo}</a>
+              </td>
+              <td>{r.stationName}</td>
+              <td>{r.contractorName ?? 'Unassigned'}</td>
+              <td>{r.technicianName ?? 'Unassigned'}</td>
+              <td>
+                <span class="engr-status">{r.status}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
