@@ -1,0 +1,300 @@
+---
+export const prerender = false;
+
+/**
+ * Contractor RFQ detail and quote form. Gate: quotes.view to see, quotes.submit
+ * to quote. Opening the RFQ marks the invitation VIEWED. The form has line-item
+ * rows with a client-side subtotal for convenience; the server recomputes the
+ * authoritative total from the same rows on submit. A contractor sees only their
+ * own quote, never a competitor's.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import {
+  getRfqForContractor,
+  getQuoteForContractor,
+  markInvitationViewed,
+  type ContractorRfqView,
+  type ContractorQuote,
+} from '@engr/repos/quotes';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'quotes.view');
+const canSubmitPerm = can(Astro.locals, 'quotes.submit');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+const submitted = Astro.url.searchParams.get('submitted') === '1';
+
+let rfq: ContractorRfqView | null = null;
+let myQuote: ContractorQuote | null = null;
+let isContractor = false;
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+  isContractor = contractorId != null;
+  if (contractorId) {
+    rfq = await getRfqForContractor(db, engr.orgId, id, contractorId);
+    if (rfq) {
+      await markInvitationViewed(db, engr.orgId, contractorId, id);
+      myQuote = await getQuoteForContractor(db, engr.orgId, id, contractorId);
+    }
+  }
+}
+if (allowed && isContractor && !rfq) Astro.response.status = 404;
+
+const invitationOpen =
+  rfq != null && (rfq.invitationStatus === 'INVITED' || rfq.invitationStatus === 'VIEWED');
+const canQuote = canSubmitPerm && invitationOpen && rfq?.status === 'OPEN' && myQuote == null;
+const rows = [1, 2, 3, 4, 5, 6];
+---
+
+<EngrLayout title="RFQ">
+  <div class="engr-page-head">
+    <div>
+      <h1>{rfq ? rfq.rfqNo : 'RFQ'}</h1>
+      <p class="engr-lead">Invitation to quote.</p>
+    </div>
+    <a href="/engr/contractor/rfqs" class="engr-btn engr-btn--secondary">Back to invitations</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        Your quote could not be submitted. Check the details and try again.
+      </p>
+    )
+  }
+  {
+    submitted && (
+      <p class="engr-notice" role="status">
+        Your quote has been submitted.
+      </p>
+    )
+  }
+
+  {
+    !allowed || !isContractor ? (
+      <p class="engr-error" role="alert">
+        This page is for contractor accounts.
+      </p>
+    ) : !rfq ? (
+      <p class="engr-empty">That RFQ was not found among your invitations.</p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Status</dt>
+          <dd>
+            <span class="engr-pill">{rfq.status}</span>
+          </dd>
+          <dt>Station</dt>
+          <dd>{rfq.stationName}</dd>
+          <dt>Issue</dt>
+          <dd>{rfq.issue}</dd>
+          {rfq.natureOfBreakdown && (
+            <>
+              <dt>Nature of breakdown</dt>
+              <dd>{rfq.natureOfBreakdown}</dd>
+            </>
+          )}
+          <dt>Quotes due</dt>
+          <dd>{rfq.dueDate ? rfq.dueDate.slice(0, 10) : 'Not set'}</dd>
+        </dl>
+
+        {myQuote && (
+          <section class="engr-panel" aria-labelledby="your-quote">
+            <h2 id="your-quote">Your quote</h2>
+            <p class="engr-meta">
+              <span>{myQuote.quoteNo ?? 'Quote'}</span>
+              <span class="engr-status">{myQuote.status}</span>
+              <span>{formatMoneyMinor(myQuote.totalMinor, myQuote.currency)}</span>
+            </p>
+            {myQuote.items.length > 0 && (
+              <div class="engr-tablewrap">
+                <table class="engr-table" aria-label="Your line items">
+                  <thead>
+                    <tr>
+                      <th scope="col">Description</th>
+                      <th scope="col">Qty</th>
+                      <th scope="col">Unit rate</th>
+                      <th scope="col">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myQuote.items.map((it) => (
+                      <tr>
+                        <td>{it.description}</td>
+                        <td>{it.qty}</td>
+                        <td>{formatMoneyMinor(it.unitRateMinor, it.currency)}</td>
+                        <td>{formatMoneyMinor(it.amountMinor, it.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {rfq.invitationStatus === 'DECLINED' && (
+          <p class="engr-notice">You declined this invitation.</p>
+        )}
+
+        {!myQuote && !canQuote && rfq.invitationStatus !== 'DECLINED' && (
+          <p class="engr-notice">This RFQ is not open for a quote from you.</p>
+        )}
+
+        {canQuote && (
+          <>
+            <section class="engr-panel" aria-labelledby="quote-form-head">
+              <h2 id="quote-form-head">Submit a quote</h2>
+              <form
+                method="post"
+                action={`/engr/api/rfqs/${rfq.id}/quotes`}
+                class="engr-form"
+                data-quote-form
+              >
+                <div class="engr-field">
+                  <label for="diagnosis">Diagnosis</label>
+                  <textarea
+                    id="diagnosis"
+                    class="engr-textarea"
+                    name="diagnosis"
+                    maxlength="1000"
+                  />
+                </div>
+                <div class="engr-field">
+                  <label for="proposed_solution">Proposed solution</label>
+                  <textarea
+                    id="proposed_solution"
+                    class="engr-textarea"
+                    name="proposed_solution"
+                    maxlength="1000"
+                  />
+                </div>
+                <label class="engr-check">
+                  <input type="checkbox" name="site_visit_done" value="1" />
+                  <span>A site visit has been done</span>
+                </label>
+
+                <fieldset class="engr-field">
+                  <legend>Line items</legend>
+                  <p class="engr-field__hint">
+                    Enter unit rates in KES. The amount for each row is the quantity times the unit
+                    rate. Leave a row blank to skip it.
+                  </p>
+                  {rows.map((i) => (
+                    <div class="engr-lineitem-row">
+                      <div class="engr-field">
+                        <label for={`item_${i}_description`}>Item {i} description</label>
+                        <input
+                          type="text"
+                          id={`item_${i}_description`}
+                          class="engr-input"
+                          name={`item_${i}_description`}
+                          maxlength="200"
+                        />
+                      </div>
+                      <div class="engr-field">
+                        <label for={`item_${i}_qty`}>Qty</label>
+                        <input
+                          type="number"
+                          id={`item_${i}_qty`}
+                          class="engr-input"
+                          name={`item_${i}_qty`}
+                          min="0"
+                          step="0.01"
+                          value="1"
+                          data-qty
+                        />
+                      </div>
+                      <div class="engr-field">
+                        <label for={`item_${i}_rate`}>Unit rate (KES)</label>
+                        <input
+                          type="number"
+                          id={`item_${i}_rate`}
+                          class="engr-input"
+                          name={`item_${i}_rate`}
+                          min="0"
+                          step="0.01"
+                          data-rate
+                        />
+                      </div>
+                      <label class="engr-check">
+                        <input type="checkbox" name={`item_${i}_is_spare`} value="1" />
+                        <span>Spare</span>
+                      </label>
+                    </div>
+                  ))}
+                </fieldset>
+
+                <p class="engr-subtotal" aria-live="polite">
+                  Subtotal from the rows above: <span data-subtotal>KES 0.00</span>. The final total
+                  is confirmed by the server.
+                </p>
+
+                <div class="engr-actionbar">
+                  <button type="submit" class="engr-btn engr-btn--primary">
+                    Submit quote
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section class="engr-panel" aria-labelledby="decline-head">
+              <h2 id="decline-head">Decline</h2>
+              <form method="post" action={`/engr/api/rfqs/${rfq.id}/decline`} class="engr-form">
+                <div class="engr-field">
+                  <label for="decline-reason">
+                    Reason <span class="engr-field__hint">(optional)</span>
+                  </label>
+                  <textarea
+                    id="decline-reason"
+                    class="engr-textarea"
+                    name="reason"
+                    maxlength="500"
+                  />
+                </div>
+                <div class="engr-actionbar">
+                  <button type="submit" class="engr-btn engr-btn--danger">
+                    Decline invitation
+                  </button>
+                </div>
+              </form>
+            </section>
+          </>
+        )}
+      </>
+    )
+  }
+
+  <script is:inline>
+    (() => {
+      const form = document.querySelector('[data-quote-form]');
+      if (!form) return;
+      const out = form.querySelector('[data-subtotal]');
+      let fmt = null;
+      try {
+        fmt = new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' });
+      } catch {
+        fmt = null;
+      }
+      const value = (el) => (el && 'value' in el ? parseFloat(el.value) || 0 : 0);
+      const recompute = () => {
+        let total = 0;
+        form.querySelectorAll('.engr-lineitem-row').forEach((row) => {
+          total += value(row.querySelector('[data-qty]')) * value(row.querySelector('[data-rate]'));
+        });
+        if (out) out.textContent = fmt ? fmt.format(total) : 'KES ' + total.toFixed(2);
+      };
+      form.addEventListener('input', recompute);
+      recompute();
+    })();
+  </script>
+</EngrLayout>
