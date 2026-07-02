@@ -28,36 +28,35 @@ const groupActive = (item: NavItem) =>
 // Inline editorial links on a dark header: no pill, no boxed tabs. A fine brass
 // underline grows in on hover, on keyboard focus, while the group's menu is
 // open, and stays lit on the active group (aria-current="page"). Links sit in
-// soft ivory and brighten to full ivory on hover; the active group turns brass,
-// so the header reads as open, dark and premium.
+// soft ivory and brighten to full ivory on hover and on the active group, with
+// brass kept to the underline, so the header reads as open, calm and premium.
 const navLink =
-  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-paper/[0.78] transition-colors duration-150 hover:text-paper focus-visible:text-paper aria-[current=page]:text-brass ' +
+  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-paper/[0.82] transition-colors duration-150 hover:text-paper focus-visible:text-paper aria-[current=page]:text-paper ' +
   'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[0.7rem] after:h-px after:origin-left after:scale-x-0 after:bg-brass after:transition-transform after:duration-200 ' +
   'hover:after:scale-x-100 focus-visible:after:scale-x-100 group-hover:after:scale-x-100 group-focus-within:after:scale-x-100 aria-[current=page]:after:scale-x-100';
 ---
 
 {
-  /* Translucent, blurred glass over the hero: rgba(0,10,20,0.88) with an 18px
-    backdrop blur where supported, falling back to a solid #071422 where it is
-    not. A hairline of ivory at 8% seats it against the scene below. */
+  /* Premium slate-navy bar (--color-header-bg, #1E2A30): calmer and lighter than
+    the old near-black, on a fine ivory hairline at 8%. The transparent logo
+    sits directly on it, so the top reads as integrated rather than boxed-in. */
 }
-<header
-  class="on-dark sticky top-0 z-50 border-b border-paper/[0.08] bg-[#071422] backdrop-blur-[18px] supports-[backdrop-filter:blur(0px)]:bg-obsidian/[0.88]"
->
+<header class="on-dark sticky top-0 z-50 border-b border-paper/[0.08] bg-header-bg">
   <Container>
     <div class="flex h-16 items-center justify-between lg:h-[4.5rem]">
-      {/* Logo, top-left, links home (Jakob's Law). The white dark-header lockup. */}
+      {/* Logo, top-left, links home (Jakob's Law). The white-and-brass lockup. */}
       <a href="/" class="inline-flex rounded-md no-underline" aria-label="Murikah, home">
         {
-          /* The lockup art is white/brass on near-black; `mix-blend-lighten`
-            drops its baked-in background into the header so there is no seam. */
+          /* Transparent white-and-brass lockup (public/images/murikah-logo-transparent.png),
+            keyed from the brand artwork, so it sits directly on the slate header
+            with no background block and no blend trick. */
         }
         <img
-          src="/images/murikah-logo-dark.png"
+          src="/images/murikah-logo-transparent.png"
           alt="Murikah"
-          width="176"
-          height="44"
-          class="h-10 w-auto mix-blend-lighten sm:h-11"
+          width="875"
+          height="155"
+          class="h-9 w-auto sm:h-10"
         />
       </a>
 
@@ -100,7 +99,7 @@ const navLink =
                 {/* Disclosure menu. The pt-3 wrapper is a transparent hover
                     bridge so the pointer never crosses a dead gap. */}
                 <div class="invisible absolute top-full left-1/2 z-50 w-[26rem] -translate-x-1/2 pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
-                  <div class="rounded-[1.4rem] bg-obsidian/95 p-2 shadow-pop ring-1 ring-white/10 backdrop-blur-xl">
+                  <div class="rounded-[1.4rem] bg-header-veil p-2 shadow-pop ring-1 ring-white/10">
                     <ul class="grid gap-0.5">
                       {item.children.map((c) => (
                         <li>
@@ -165,7 +164,7 @@ const navLink =
     id="mobile-menu"
     data-mobile-panel
     hidden
-    class="on-dark border-t border-white/10 bg-obsidian lg:hidden"
+    class="on-dark border-t border-paper/[0.08] bg-header-bg lg:hidden"
   >
     <Container>
       <nav aria-label="Mobile" class="flex flex-col gap-1 py-4">
