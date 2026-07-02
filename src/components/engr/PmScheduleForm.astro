@@ -1,0 +1,186 @@
+---
+/**
+ * Create or edit a PM schedule. The automation flag can only be turned on when
+ * the org's plan entitles pm_automation; otherwise it is disabled with a short
+ * note. The day interval applies only to the custom frequency.
+ */
+import type { ScheduleDetail, Option } from '@engr/repos/pm';
+
+interface Props {
+  action: string;
+  schedule?: ScheduleDetail | null;
+  stations: Option[];
+  categories: Option[];
+  contractors: Option[];
+  templates: Option[];
+  slas: Option[];
+  automationEnabled: boolean;
+  submitLabel: string;
+}
+
+const {
+  action,
+  schedule,
+  stations,
+  categories,
+  contractors,
+  templates,
+  slas,
+  automationEnabled,
+  submitLabel,
+} = Astro.props;
+const s = schedule ?? null;
+const FREQUENCIES: Array<{ value: string; label: string }> = [
+  { value: 'WEEKLY', label: 'Weekly' },
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'BIANNUAL', label: 'Every six months' },
+  { value: 'ANNUAL', label: 'Annually' },
+  { value: 'CUSTOM_DAYS', label: 'Custom day interval' },
+];
+const currentFrequency = s?.frequency ?? 'MONTHLY';
+---
+
+<form method="post" action={action} class="engr-form" style="max-width:44rem">
+  <div class="engr-field">
+    <label for="pm-name">Name</label>
+    <input
+      type="text"
+      id="pm-name"
+      class="engr-input"
+      name="name"
+      maxlength="200"
+      value={s?.name ?? ''}
+      required
+    />
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-station">Station</label>
+    <select id="pm-station" class="engr-select" name="station_id">
+      <option value="">Not set</option>
+      {
+        stations.map((o) => (
+          <option value={o.id} selected={s?.stationId === o.id}>
+            {o.name}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-category">Asset category</label>
+    <select id="pm-category" class="engr-select" name="category_id">
+      <option value="">Not set</option>
+      {
+        categories.map((o) => (
+          <option value={o.id} selected={s?.categoryId === o.id}>
+            {o.name}
+          </option>
+        ))
+      }
+    </select>
+    <p class="engr-field__hint">Choose a station, a category, or both.</p>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-frequency">Frequency</label>
+    <select id="pm-frequency" class="engr-select" name="frequency">
+      {
+        FREQUENCIES.map((f) => (
+          <option value={f.value} selected={currentFrequency === f.value}>
+            {f.label}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-interval">Day interval</label>
+    <input
+      type="number"
+      id="pm-interval"
+      class="engr-input"
+      name="interval_days"
+      min="1"
+      value={s?.intervalDays ?? ''}
+      aria-describedby="pm-interval-hint"
+    />
+    <p class="engr-field__hint" id="pm-interval-hint">Used only for the custom day interval.</p>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-contractor">Assigned contractor</label>
+    <select id="pm-contractor" class="engr-select" name="assigned_contractor_id">
+      <option value="">Not set</option>
+      {
+        contractors.map((o) => (
+          <option value={o.id} selected={s?.assignedContractorId === o.id}>
+            {o.name}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-template">Checklist template</label>
+    <select id="pm-template" class="engr-select" name="checklist_template_id">
+      <option value="">Not set</option>
+      {
+        templates.map((o) => (
+          <option value={o.id} selected={s?.checklistTemplateId === o.id}>
+            {o.name}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-sla">SLA</label>
+    <select id="pm-sla" class="engr-select" name="sla_id">
+      <option value="">Not set</option>
+      {
+        slas.map((o) => (
+          <option value={o.id} selected={s?.slaId === o.id}>
+            {o.name}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-due">First due date</label>
+    <input
+      type="date"
+      id="pm-due"
+      class="engr-input"
+      name="first_due_date"
+      value={s?.nextDueDate ?? ''}
+    />
+  </div>
+
+  <label class="engr-check">
+    <input
+      type="checkbox"
+      name="is_automated"
+      value="1"
+      checked={s?.isAutomated ?? false}
+      disabled={!automationEnabled}
+    />
+    <span>Send automated reminders before the due date</span>
+  </label>
+  {
+    !automationEnabled && (
+      <p class="engr-field__hint">Automated reminders are available on your plan.</p>
+    )
+  }
+
+  <div class="engr-actionbar">
+    <button type="submit" class="engr-btn engr-btn--primary">{submitLabel}</button>
+  </div>
+</form>

@@ -1,0 +1,165 @@
+---
+export const prerender = false;
+
+/**
+ * PM occurrence detail: the schedule, the checklist template, the notification
+ * history, and an Allocate action that creates the work order. Gate: pm.allocate.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getOccurrence, type OccurrenceDetail } from '@engr/repos/pm';
+import { can } from '@engr/auth/rbac';
+import { relativeAge } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'pm.allocate');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+
+const ALLOCATABLE = ['SCHEDULED', 'NOTIFIED_1M', 'NOTIFIED_2W'];
+let occ: OccurrenceDetail | null = null;
+let workOrder: { id: string; woNo: string } | null = null;
+let history: Array<{ channel: string; subject: string; status: string; createdAt: string }> = [];
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  occ = await getOccurrence(db, engr.orgId, id);
+  if (occ) {
+    const woRes = await db.execute({
+      sql: `SELECT id, wo_no FROM work_orders
+             WHERE pm_occurrence_id = ? AND org_id = ? AND deleted_at IS NULL
+          ORDER BY created_at DESC LIMIT 1`,
+      args: [id, engr.orgId],
+    });
+    const woRow = woRes.rows[0];
+    if (woRow) workOrder = { id: String(woRow.id), woNo: String(woRow.wo_no) };
+
+    const notiRes = await db.execute({
+      sql: `SELECT channel, subject, status, created_at FROM notifications
+             WHERE org_id = ? AND entity_type = 'pm_occurrence' AND entity_id = ?
+          ORDER BY created_at DESC LIMIT 50`,
+      args: [engr.orgId, id],
+    });
+    history = notiRes.rows.map((r) => ({
+      channel: String(r.channel),
+      subject: r.subject == null ? 'Notification' : String(r.subject),
+      status: String(r.status),
+      createdAt: String(r.created_at),
+    }));
+  }
+}
+if (allowed && !occ) Astro.response.status = 404;
+const canAllocate = occ != null && ALLOCATABLE.includes(occ.status);
+---
+
+<EngrLayout title="PM occurrence">
+  <div class="engr-page-head">
+    <div>
+      <h1>{occ ? occ.scheduleName : 'Occurrence'}</h1>
+      <p class="engr-lead">Scheduled maintenance occurrence.</p>
+    </div>
+    <a href="/engr/pm/calendar" class="engr-btn engr-btn--secondary">Back to calendar</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to preventive maintenance.
+      </p>
+    ) : !occ ? (
+      <p class="engr-empty">That occurrence was not found in your organisation.</p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Due date</dt>
+          <dd>{occ.dueDate}</dd>
+          <dt>Status</dt>
+          <dd>
+            <span class="engr-pill">{occ.status}</span>
+          </dd>
+          <dt>Station</dt>
+          <dd>{occ.stationName ?? 'Any'}</dd>
+          <dt>Assigned contractor</dt>
+          <dd>{occ.contractorName ?? 'None'}</dd>
+        </dl>
+
+        {workOrder && (
+          <p class="engr-notice">
+            Work order <a href={`/engr/workorders/${workOrder.id}`}>{workOrder.woNo}</a> was created
+            from this occurrence.
+          </p>
+        )}
+
+        {canAllocate ? (
+          <div class="engr-panel">
+            <h2>Allocate</h2>
+            <p class="engr-field__hint">
+              Create a work order for the assigned contractor. It enters the standard flow at
+              contractor acceptance.
+            </p>
+            <form
+              method="post"
+              action={`/engr/api/pm/occurrences/${occ.id}/allocate`}
+              class="engr-actionbar"
+            >
+              <button type="submit" class="engr-btn engr-btn--primary">
+                Allocate and create work order
+              </button>
+            </form>
+          </div>
+        ) : occ.status === 'MISSED' ? (
+          <p class="engr-notice">This occurrence was missed and was not allocated in time.</p>
+        ) : null}
+
+        <section class="engr-panel" aria-labelledby="pm-checklist">
+          <h2 id="pm-checklist">Checklist</h2>
+          {occ.checklist.length === 0 ? (
+            <p class="engr-empty">No checklist template is attached to this schedule.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {occ.checklist.map((item) => (
+                <li>
+                  <span>{item.itemText}</span>
+                  {item.expectedResult && (
+                    <span class="engr-card__muted">{item.expectedResult}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section class="engr-panel" aria-labelledby="pm-history">
+          <h2 id="pm-history">Notification history</h2>
+          {history.length === 0 ? (
+            <p class="engr-empty">No reminders sent yet.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {history.map((h) => (
+                <li>
+                  <span>
+                    {h.channel} {h.subject}
+                  </span>
+                  <span class="engr-card__muted">
+                    {h.status} {relativeAge(h.createdAt)} ago
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </>
+    )
+  }
+</EngrLayout>
