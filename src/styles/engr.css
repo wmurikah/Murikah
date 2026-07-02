@@ -82,6 +82,7 @@
 }
 .engr-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   margin-inline-start: auto;
 }

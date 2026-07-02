@@ -1,0 +1,94 @@
+---
+export const prerender = false;
+
+/**
+ * Bill approvals: level 1 (bill.approve.l1, engineer), level 2
+ * (bill.approve.l2, engineering manager) and level 3 (bill.approve.l3,
+ * financial controller) queues. Each links to the bill detail where the
+ * decision is made.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listPendingBills, type BillListRow } from '@engr/repos/bills';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const canL1 = can(Astro.locals, 'bill.approve.l1');
+const canL2 = can(Astro.locals, 'bill.approve.l2');
+const canL3 = can(Astro.locals, 'bill.approve.l3');
+const allowed = canL1 || canL2 || canL3;
+
+let l1: BillListRow[] = [];
+let l2: BillListRow[] = [];
+let l3: BillListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  if (canL1) l1 = await listPendingBills(db, engr.orgId, 1);
+  if (canL2) l2 = await listPendingBills(db, engr.orgId, 2);
+  if (canL3) l3 = await listPendingBills(db, engr.orgId, 3);
+}
+
+const section = (title: string, rows: BillListRow[]) => ({ title, rows });
+const sections = [
+  canL1 ? section('Level 1, engineer', l1) : null,
+  canL2 ? section('Level 2, engineering manager', l2) : null,
+  canL3 ? section('Level 3, financial controller', l3) : null,
+].filter((s): s is { title: string; rows: BillListRow[] } => s !== null);
+---
+
+<EngrLayout title="Bill approvals">
+  <div class="engr-page-head">
+    <div>
+      <h1>Bill approvals</h1>
+      <p class="engr-lead">Contractor bills awaiting your decision.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to bill approvals.
+      </p>
+    ) : (
+      <div style="display:grid;gap:2rem">
+        {sections.map((s) => (
+          <section aria-label={s.title}>
+            <h2 class="engr-card__label">{s.title}</h2>
+            {s.rows.length === 0 ? (
+              <p class="engr-empty">Nothing awaiting {s.title.toLowerCase()}.</p>
+            ) : (
+              <div class="engr-tablewrap" style="margin-top:0.5rem">
+                <table class="engr-table" aria-label={`${s.title} bills`}>
+                  <thead>
+                    <tr>
+                      <th scope="col">Bill</th>
+                      <th scope="col">Contractor</th>
+                      <th scope="col">Period</th>
+                      <th scope="col">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.rows.map((r) => (
+                      <tr>
+                        <td>
+                          <a href={`/engr/bills/${r.id}`}>{r.billNo}</a>
+                        </td>
+                        <td>{r.contractorName}</td>
+                        <td>{r.periodLabel ?? 'Not set'}</td>
+                        <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+    )
+  }
+</EngrLayout>
