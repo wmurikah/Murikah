@@ -1,0 +1,120 @@
+---
+export const prerender = false;
+
+/** Contractor costs: raise a cost for a closed work order, and track statuses. Gate: cost.view; raise gates on cost.create. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  listCostsForContractor,
+  listCostableWorkOrders,
+  type CostListRow,
+} from '@engr/repos/workCosts';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'cost.view');
+const canCreate = can(Astro.locals, 'cost.create');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: CostListRow[] = [];
+let costable: Array<{ id: string; woNo: string; stationName: string }> = [];
+let isContractor = false;
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+  isContractor = contractorId != null;
+  if (contractorId) {
+    rows = await listCostsForContractor(db, engr.orgId, contractorId);
+    if (canCreate) costable = await listCostableWorkOrders(db, engr.orgId, contractorId);
+  }
+}
+---
+
+<EngrLayout title="My costs">
+  <div class="engr-page-head">
+    <div>
+      <h1>My costs</h1>
+      <p class="engr-lead">Costs for your closed work orders.</p>
+    </div>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That cost could not be raised. Refresh and try again.
+      </p>
+    )
+  }
+
+  {
+    !allowed || !isContractor ? (
+      <p class="engr-error" role="alert">
+        This page is for contractor accounts.
+      </p>
+    ) : (
+      <>
+        {canCreate && (
+          <section class="engr-panel" aria-labelledby="raise-cost">
+            <h2 id="raise-cost">Raise a cost</h2>
+            {costable.length === 0 ? (
+              <p class="engr-empty">No closed work orders are awaiting a cost.</p>
+            ) : (
+              <form method="post" action="/engr/api/costs" class="engr-form">
+                <div class="engr-field">
+                  <label for="cost-wo">Work order</label>
+                  <select id="cost-wo" class="engr-select" name="work_order_id" required>
+                    <option value="">Choose a work order</option>
+                    {costable.map((w) => (
+                      <option value={w.id}>
+                        {w.woNo}, {w.stationName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div class="engr-actionbar">
+                  <button type="submit" class="engr-btn engr-btn--primary">
+                    Raise cost
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        )}
+
+        {rows.length === 0 ? (
+          <p class="engr-empty">No costs yet.</p>
+        ) : (
+          <div class="engr-tablewrap">
+            <table class="engr-table" aria-label="My costs">
+              <thead>
+                <tr>
+                  <th scope="col">Work order</th>
+                  <th scope="col">Total</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td>
+                      <a href={`/engr/costs/${r.id}`}>{r.workOrderNo}</a>
+                    </td>
+                    <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>
+                    <td>
+                      <span class="engr-status">{r.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</EngrLayout>

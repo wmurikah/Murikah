@@ -1,0 +1,124 @@
+---
+export const prerender = false;
+
+/** Contractor bills: raise a bill for a period, then attach approved costs on the bill detail. Gate: bill.view; raise gates on bill.create. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listBillsForContractor, type BillListRow } from '@engr/repos/bills';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'bill.view');
+const canCreate = can(Astro.locals, 'bill.create');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: BillListRow[] = [];
+let isContractor = false;
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+  isContractor = contractorId != null;
+  if (contractorId) rows = await listBillsForContractor(db, engr.orgId, contractorId);
+}
+---
+
+<EngrLayout title="My bills">
+  <div class="engr-page-head">
+    <div>
+      <h1>My bills</h1>
+      <p class="engr-lead">Bills you have raised from approved costs.</p>
+    </div>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That bill could not be raised. Refresh and try again.
+      </p>
+    )
+  }
+
+  {
+    !allowed || !isContractor ? (
+      <p class="engr-error" role="alert">
+        This page is for contractor accounts.
+      </p>
+    ) : (
+      <>
+        {canCreate && (
+          <section class="engr-panel" aria-labelledby="raise-bill">
+            <h2 id="raise-bill">Raise a bill</h2>
+            <p class="engr-field__hint">
+              Start a bill for a period, then attach your approved costs on the bill.
+            </p>
+            <form method="post" action="/engr/api/bills" class="engr-form">
+              <div class="engr-field">
+                <label for="bill-period">Period label</label>
+                <input
+                  type="text"
+                  id="bill-period"
+                  class="engr-input"
+                  name="period_label"
+                  maxlength="80"
+                  placeholder="e.g. June 2026"
+                  required
+                />
+              </div>
+              <div class="engr-lineitem-row">
+                <div class="engr-field">
+                  <label for="bill-start">Period start</label>
+                  <input type="date" id="bill-start" class="engr-input" name="period_start" />
+                </div>
+                <div class="engr-field">
+                  <label for="bill-end">Period end</label>
+                  <input type="date" id="bill-end" class="engr-input" name="period_end" />
+                </div>
+              </div>
+              <div class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Raise bill
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {rows.length === 0 ? (
+          <p class="engr-empty">No bills yet.</p>
+        ) : (
+          <div class="engr-tablewrap">
+            <table class="engr-table" aria-label="My bills">
+              <thead>
+                <tr>
+                  <th scope="col">Bill</th>
+                  <th scope="col">Period</th>
+                  <th scope="col">Total</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td>
+                      <a href={`/engr/bills/${r.id}`}>{r.billNo}</a>
+                    </td>
+                    <td>{r.periodLabel ?? 'Not set'}</td>
+                    <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>
+                    <td>
+                      <span class="engr-status">{r.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</EngrLayout>
