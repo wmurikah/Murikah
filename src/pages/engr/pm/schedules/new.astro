@@ -1,0 +1,86 @@
+---
+export const prerender = false;
+
+/** Create a PM schedule. Gate: pm.allocate. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import PmScheduleForm from '@/components/engr/PmScheduleForm.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  listActiveContractors,
+  listChecklistTemplates,
+  pmAutomationEnabled,
+  type Option,
+} from '@engr/repos/pm';
+import { listStations, listAssetCategories } from '@engr/repos/requests';
+import { listSlas } from '@engr/repos/requestActions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'pm.allocate');
+const errorCode = Astro.url.searchParams.get('error');
+
+let stations: Option[] = [];
+let categories: Option[] = [];
+let contractors: Option[] = [];
+let templates: Option[] = [];
+let slas: Option[] = [];
+let automationEnabled = false;
+
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  const [st, cat, con, tpl, sl, auto] = await Promise.all([
+    listStations(db, engr.orgId),
+    listAssetCategories(db, engr.orgId),
+    listActiveContractors(db, engr.orgId),
+    listChecklistTemplates(db, engr.orgId),
+    listSlas(db, engr.orgId),
+    pmAutomationEnabled(db, engr.orgId),
+  ]);
+  stations = st.map((s) => ({ id: s.id, name: s.name }));
+  categories = cat.map((c) => ({ id: c.id, name: c.name }));
+  contractors = con;
+  templates = tpl;
+  slas = sl;
+  automationEnabled = auto;
+}
+---
+
+<EngrLayout title="New PM schedule">
+  <div class="engr-page-head">
+    <div>
+      <h1>New schedule</h1>
+      <p class="engr-lead">Plan recurring maintenance.</p>
+    </div>
+    <a href="/engr/pm" class="engr-btn engr-btn--secondary">Back</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        The schedule could not be saved. Check the details and try again.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to preventive maintenance.
+      </p>
+    ) : (
+      <PmScheduleForm
+        action="/engr/api/pm/schedules"
+        stations={stations}
+        categories={categories}
+        contractors={contractors}
+        templates={templates}
+        slas={slas}
+        automationEnabled={automationEnabled}
+        submitLabel="Create schedule"
+      />
+    )
+  }
+</EngrLayout>

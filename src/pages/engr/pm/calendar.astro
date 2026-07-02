@@ -1,0 +1,72 @@
+---
+export const prerender = false;
+
+/**
+ * PM calendar: upcoming occurrences by due date, with their status and the
+ * one-month and two-week reminder flags. Gate: pm.allocate.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listUpcomingOccurrences, type OccurrenceListRow } from '@engr/repos/pm';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'pm.allocate');
+let rows: OccurrenceListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listUpcomingOccurrences(db, engr.orgId);
+}
+---
+
+<EngrLayout title="PM calendar">
+  <div class="engr-page-head">
+    <div>
+      <h1>PM calendar</h1>
+      <p class="engr-lead">Upcoming maintenance and what has been notified.</p>
+    </div>
+    <a href="/engr/pm" class="engr-btn engr-btn--secondary">Schedules</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to preventive maintenance.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">No occurrences yet. They appear once the daily scan runs.</p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Upcoming maintenance">
+          <thead>
+            <tr>
+              <th scope="col">Due</th>
+              <th scope="col">Schedule</th>
+              <th scope="col">Status</th>
+              <th scope="col">One month</th>
+              <th scope="col">Two weeks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{r.dueDate}</td>
+                <td>
+                  <a href={`/engr/pm/occurrences/${r.id}`}>{r.scheduleName}</a>
+                </td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+                <td>{r.notified1m ? 'Notified' : 'Pending'}</td>
+                <td>{r.notified2w ? 'Notified' : 'Pending'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

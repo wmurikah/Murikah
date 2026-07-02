@@ -1,0 +1,119 @@
+---
+export const prerender = false;
+
+/** PM schedules admin: list, with pause, resume and archive. Gate: pm.allocate. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listSchedules, type ScheduleListRow } from '@engr/repos/pm';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'pm.allocate');
+let rows: ScheduleListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listSchedules(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Preventive maintenance">
+  <div class="engr-page-head">
+    <div>
+      <h1>Preventive maintenance</h1>
+      <p class="engr-lead">Schedules and their next due dates.</p>
+    </div>
+    <div class="engr-actionbar">
+      <a href="/engr/pm/calendar" class="engr-btn engr-btn--secondary">Calendar</a>
+      {
+        allowed && (
+          <a href="/engr/pm/schedules/new" class="engr-btn engr-btn--primary">
+            New schedule
+          </a>
+        )
+      }
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to preventive maintenance.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">No schedules yet. Create one to plan recurring maintenance.</p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="PM schedules">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Station</th>
+              <th scope="col">Frequency</th>
+              <th scope="col">Next due</th>
+              <th scope="col">Automated</th>
+              <th scope="col">Status</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  <a href={`/engr/pm/schedules/${r.id}`}>{r.name}</a>
+                </td>
+                <td>{r.stationName ?? 'Any'}</td>
+                <td>{r.frequency}</td>
+                <td>{r.nextDueDate ?? 'Not set'}</td>
+                <td>{r.isAutomated ? 'Yes' : 'No'}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+                <td>
+                  <form
+                    method="post"
+                    action={`/engr/api/pm/schedules/${r.id}`}
+                    class="engr-actionbar"
+                    style="gap:0.4rem"
+                  >
+                    {r.status === 'ACTIVE' ? (
+                      <button
+                        type="submit"
+                        name="action"
+                        value="pause"
+                        class="engr-btn engr-btn--ghost"
+                      >
+                        Pause
+                      </button>
+                    ) : r.status === 'PAUSED' ? (
+                      <button
+                        type="submit"
+                        name="action"
+                        value="resume"
+                        class="engr-btn engr-btn--ghost"
+                      >
+                        Resume
+                      </button>
+                    ) : null}
+                    {r.status !== 'ARCHIVED' && (
+                      <button
+                        type="submit"
+                        name="action"
+                        value="archive"
+                        class="engr-btn engr-btn--ghost"
+                      >
+                        Archive
+                      </button>
+                    )}
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>
