@@ -1,0 +1,160 @@
+---
+export const prerender = false;
+
+/**
+ * Request intake. A station manager raises a request: station, optional asset
+ * category, issue, nature of breakdown, priority and a repeat-call flag. The
+ * photo input is a placeholder; the attachments table and R2 are wired later.
+ * Gate: requests.create. Stations and categories are scoped to the org.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  listStations,
+  listAssetCategories,
+  PRIORITIES,
+  type StationOption,
+  type CategoryOption,
+} from '@engr/repos/requests';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'requests.create');
+
+const errorCode = Astro.url.searchParams.get('error');
+const errorMessage =
+  errorCode === 'validation'
+    ? 'Check the required fields, then submit again.'
+    : errorCode === 'station'
+      ? 'Choose a station that belongs to your organisation.'
+      : errorCode
+        ? 'The request could not be created. Please try again.'
+        : null;
+
+let stations: StationOption[] = [];
+let categories: CategoryOption[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  [stations, categories] = await Promise.all([
+    listStations(db, engr.orgId),
+    listAssetCategories(db, engr.orgId),
+  ]);
+}
+---
+
+<EngrLayout title="Raise a request">
+  <div class="engr-page-head">
+    <div>
+      <h1>Raise a request</h1>
+      <p class="engr-lead">Report a breakdown or a service need at a station.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to raise requests.
+      </p>
+    ) : stations.length === 0 ? (
+      <p class="engr-empty">No stations are set up yet. Add a station before raising a request.</p>
+    ) : (
+      <>
+        {errorMessage && (
+          <p class="engr-error" role="alert">
+            {errorMessage}
+          </p>
+        )}
+        <form
+          method="post"
+          action="/engr/api/requests"
+          class="engr-form"
+          enctype="multipart/form-data"
+        >
+          <div class="engr-field">
+            <label for="station">Station</label>
+            <select id="station" class="engr-select" name="station_id" required>
+              <option value="">Choose a station</option>
+              {stations.map((s) => (
+                <option value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="engr-field">
+            <label for="category">
+              Asset category <span class="engr-field__hint">(optional)</span>
+            </label>
+            <select id="category" class="engr-select" name="category_id">
+              <option value="">Not specified</option>
+              {categories.map((c) => (
+                <option value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div class="engr-field">
+            <label for="issue">Issue</label>
+            <input id="issue" class="engr-input" name="issue" required maxlength="200" />
+          </div>
+
+          <div class="engr-field">
+            <label for="nature">
+              Nature of breakdown <span class="engr-field__hint">(optional)</span>
+            </label>
+            <textarea
+              id="nature"
+              class="engr-textarea"
+              name="nature_of_breakdown"
+              maxlength="1000"
+            />
+          </div>
+
+          <div class="engr-field">
+            <label for="priority">Priority</label>
+            <select id="priority" class="engr-select" name="priority">
+              {PRIORITIES.map((p) => (
+                <option value={p} selected={p === 'MEDIUM'}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="engr-field engr-check">
+            <input id="repeat" type="checkbox" name="is_repeat_call" value="1" />
+            <label for="repeat">This is a repeat call for the same issue</label>
+          </div>
+
+          <div class="engr-field">
+            <label for="photo">
+              Photo <span class="engr-field__hint">(optional)</span>
+            </label>
+            <input
+              id="photo"
+              class="engr-input"
+              name="photo"
+              type="file"
+              accept="image/*"
+              disabled
+            />
+            <p class="engr-field__hint">Photo upload is wired in a later prompt.</p>
+          </div>
+
+          <div class="engr-actions">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              Submit request
+            </button>
+            <a href="/engr/requests" class="engr-btn engr-btn--secondary">
+              Cancel
+            </a>
+          </div>
+        </form>
+      </>
+    )
+  }
+</EngrLayout>
