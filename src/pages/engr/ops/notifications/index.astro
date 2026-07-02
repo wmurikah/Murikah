@@ -1,0 +1,124 @@
+---
+export const prerender = false;
+
+/**
+ * Notifications operations console. Counts for the day and a list of failed
+ * rows with their error and a retry. Gate: reports.view. This is deliberately
+ * plain and scannable; it is how the automation earns trust.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getStatsSince, listRecentFailed, type FailedRow } from '@engr/repos/notifications';
+import { eatStartOfDayIso } from '@engr/time';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'reports.view');
+const errorCode = Astro.url.searchParams.get('error');
+const retried = Astro.url.searchParams.get('retried') === '1';
+
+let stats = { queued: 0, sent: 0, failed: 0 };
+let failed: FailedRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  const since = eatStartOfDayIso(new Date());
+  stats = await getStatsSince(db, engr.orgId, since);
+  failed = await listRecentFailed(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Notifications operations">
+  <div class="engr-page-head">
+    <div>
+      <h1>Notifications</h1>
+      <p class="engr-lead">Delivery for your organisation today.</p>
+    </div>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    retried && (
+      <p class="engr-notice" role="status">
+        The notification was queued again for the next dispatch run.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to the notifications console.
+      </p>
+    ) : (
+      <>
+        <div class="engr-cards" style="margin-bottom:1.5rem">
+          <section class="engr-card" aria-labelledby="stat-queued">
+            <h2 class="engr-card__label" id="stat-queued">
+              Queued today
+            </h2>
+            <p class="engr-card__count">{stats.queued}</p>
+          </section>
+          <section class="engr-card" aria-labelledby="stat-sent">
+            <h2 class="engr-card__label" id="stat-sent">
+              Sent today
+            </h2>
+            <p class="engr-card__count">{stats.sent}</p>
+          </section>
+          <section class="engr-card" aria-labelledby="stat-failed">
+            <h2 class="engr-card__label" id="stat-failed">
+              Failed today
+            </h2>
+            <p class="engr-card__count">{stats.failed}</p>
+          </section>
+        </div>
+
+        <section aria-labelledby="failed-head">
+          <h2 id="failed-head" class="engr-card__label">
+            Recent failures
+          </h2>
+          {failed.length === 0 ? (
+            <p class="engr-empty">No failed notifications.</p>
+          ) : (
+            <div class="engr-tablewrap" style="margin-top:0.5rem">
+              <table class="engr-table" aria-label="Failed notifications">
+                <thead>
+                  <tr>
+                    <th scope="col">Channel</th>
+                    <th scope="col">Subject</th>
+                    <th scope="col">Error</th>
+                    <th scope="col">Retry</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {failed.map((f) => (
+                    <tr>
+                      <td>{f.channel}</td>
+                      <td>{f.subject ?? 'Notification'}</td>
+                      <td>{f.error ?? 'Unknown error'}</td>
+                      <td>
+                        <form method="post" action={`/engr/api/notifications/${f.id}/retry`}>
+                          <button type="submit" class="engr-btn engr-btn--secondary">
+                            Retry
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </>
+    )
+  }
+</EngrLayout>
