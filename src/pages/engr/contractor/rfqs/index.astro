@@ -1,0 +1,80 @@
+---
+export const prerender = false;
+
+/**
+ * Contractor RFQ inbox: the RFQs this contractor has been invited to, with the
+ * invitation status and whether a quote has been submitted. Gate: quotes.view.
+ * The seeded CONTRACTOR role does not hold rfq.view, so contractor-side RFQ
+ * screens gate on the quotes keys the role does hold; the invitation, scoped by
+ * org and contractor, is the real access boundary.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listRfqsForContractor, type ContractorRfqRow } from '@engr/repos/rfqs';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'quotes.view');
+let rows: ContractorRfqRow[] = [];
+let isContractor = false;
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+  isContractor = contractorId != null;
+  if (contractorId) rows = await listRfqsForContractor(db, engr.orgId, contractorId);
+}
+---
+
+<EngrLayout title="RFQ invitations">
+  <div class="engr-page-head">
+    <div>
+      <h1>RFQ invitations</h1>
+      <p class="engr-lead">Requests for quotation you have been invited to.</p>
+    </div>
+  </div>
+
+  {
+    !allowed || !isContractor ? (
+      <p class="engr-error" role="alert">
+        This inbox is for contractor accounts.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">No RFQ invitations yet.</p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="RFQ invitations">
+          <thead>
+            <tr>
+              <th scope="col">RFQ</th>
+              <th scope="col">Station</th>
+              <th scope="col">Invitation</th>
+              <th scope="col">Your quote</th>
+              <th scope="col">RFQ status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  <a href={`/engr/contractor/rfqs/${r.id}`}>{r.rfqNo}</a>
+                </td>
+                <td>{r.stationName}</td>
+                <td>
+                  <span class="engr-status">{r.invitationStatus}</span>
+                </td>
+                <td>{r.hasQuoted ? 'Submitted' : 'Not submitted'}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

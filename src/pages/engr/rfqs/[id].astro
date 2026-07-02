@@ -1,0 +1,230 @@
+---
+export const prerender = false;
+
+/**
+ * Engineer RFQ detail: invitations and their statuses, and a comparison of every
+ * submitted quote (cheapest first) with line items. While the RFQ is open the
+ * engineer may prefer a quote (quotes.select) or award it (rfq.award). An award
+ * at or below the threshold creates the work order; above it the RFQ goes to
+ * procurement. Once awarded, a link to the work order is shown.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getRfqDetail, getAwardedWorkOrder, type RfqDetail } from '@engr/repos/rfqs';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor, relativeAge } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'rfq.view');
+const canSelect = can(Astro.locals, 'quotes.select');
+const canAward = can(Astro.locals, 'rfq.award');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+const sentToProcurement = Astro.url.searchParams.get('sent') === 'procurement';
+
+let rfq: RfqDetail | null = null;
+let awardedWo: { id: string; woNo: string } | null = null;
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  rfq = await getRfqDetail(db, engr.orgId, id);
+  if (rfq && (rfq.status === 'AWARDED' || rfq.status === 'SENT_TO_PROCUREMENT')) {
+    awardedWo = await getAwardedWorkOrder(db, engr.orgId, id);
+  }
+}
+if (allowed && !rfq) Astro.response.status = 404;
+
+const isOpen = rfq?.status === 'OPEN';
+const dueDate = rfq?.dueDate ? rfq.dueDate.slice(0, 10) : null;
+const submittedQuotes = rfq ? rfq.quotes.filter((q) => q.status !== 'REJECTED') : [];
+// Stable id for use inside map closures, where the nullable `rfq` loses its narrowing.
+const rfqId = rfq?.id ?? '';
+---
+
+<EngrLayout title="RFQ">
+  <div class="engr-page-head">
+    <div>
+      <h1>{rfq ? rfq.rfqNo : 'RFQ'}</h1>
+      <p class="engr-lead">Request for quotation.</p>
+    </div>
+    <a href="/engr/rfqs" class="engr-btn engr-btn--secondary">Back to RFQs</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    sentToProcurement && (
+      <p class="engr-notice" role="status">
+        The selected quote is above the threshold. It has been sent to procurement for sign-off.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to RFQs.
+      </p>
+    ) : !rfq ? (
+      <p class="engr-empty">That RFQ was not found in your organisation.</p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Status</dt>
+          <dd>
+            <span class="engr-pill">{rfq.status}</span>
+          </dd>
+          <dt>Request</dt>
+          <dd>{rfq.requestNo}</dd>
+          <dt>Station</dt>
+          <dd>{rfq.stationName}</dd>
+          {rfq.categoryName && (
+            <>
+              <dt>Category</dt>
+              <dd>{rfq.categoryName}</dd>
+            </>
+          )}
+          <dt>Quotes due</dt>
+          <dd>{dueDate ?? 'Not set'}</dd>
+          <dt>Approval threshold</dt>
+          <dd>
+            {rfq.thresholdMinor == null
+              ? 'Any amount needs sign-off'
+              : formatMoneyMinor(rfq.thresholdMinor, rfq.currency)}
+          </dd>
+        </dl>
+
+        {awardedWo && (
+          <p class="engr-notice">
+            Work order <a href={`/engr/workorders/${awardedWo.id}`}>{awardedWo.woNo}</a> was created
+            from this RFQ.
+          </p>
+        )}
+        {rfq.status === 'SENT_TO_PROCUREMENT' && !awardedWo && (
+          <p class="engr-notice">
+            A selected quote is with procurement for sign-off. See{' '}
+            <a href="/engr/procurement/approvals">procurement approvals</a>.
+          </p>
+        )}
+
+        <section aria-labelledby="rfq-invites" class="engr-panel">
+          <h2 id="rfq-invites">Invitations</h2>
+          <ul class="engr-card__list">
+            {rfq.invitations.map((i) => (
+              <li>
+                <span>{i.contractorName}</span>
+                <span class="engr-status">{i.status}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby="rfq-quotes" class="engr-panel">
+          <h2 id="rfq-quotes">Quotes</h2>
+          {submittedQuotes.length === 0 ? (
+            <p class="engr-empty">No quotes submitted yet.</p>
+          ) : (
+            <div class="engr-quotes">
+              {submittedQuotes.map((q) => (
+                <article
+                  class={`engr-quote${q.status === 'SELECTED' ? ' engr-quote--selected' : ''}`}
+                >
+                  <div class="engr-quote__head">
+                    <div>
+                      <p class="engr-card__label">{q.contractorName}</p>
+                      <p class="engr-meta">
+                        <span>{q.quoteNo ?? 'Quote'}</span>
+                        {q.submittedAt && <span>Submitted {relativeAge(q.submittedAt)} ago</span>}
+                        <span>Site visit {q.siteVisitDone ? 'done' : 'not done'}</span>
+                        {q.status === 'SELECTED' && <span class="engr-pill">Preferred</span>}
+                      </p>
+                    </div>
+                    <p class="engr-quote__total">{formatMoneyMinor(q.totalMinor, q.currency)}</p>
+                  </div>
+
+                  {(q.diagnosis || q.proposedSolution) && (
+                    <dl class="engr-detail">
+                      {q.diagnosis && (
+                        <>
+                          <dt>Diagnosis</dt>
+                          <dd>{q.diagnosis}</dd>
+                        </>
+                      )}
+                      {q.proposedSolution && (
+                        <>
+                          <dt>Proposed solution</dt>
+                          <dd>{q.proposedSolution}</dd>
+                        </>
+                      )}
+                    </dl>
+                  )}
+
+                  {q.items.length > 0 && (
+                    <details>
+                      <summary>Line items ({q.items.length})</summary>
+                      <div class="engr-tablewrap">
+                        <table class="engr-table" aria-label={`Line items for ${q.contractorName}`}>
+                          <thead>
+                            <tr>
+                              <th scope="col">Description</th>
+                              <th scope="col">Qty</th>
+                              <th scope="col">Unit rate</th>
+                              <th scope="col">Amount</th>
+                              <th scope="col">Spare</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {q.items.map((it) => (
+                              <tr>
+                                <td>{it.description}</td>
+                                <td>{it.qty}</td>
+                                <td>{formatMoneyMinor(it.unitRateMinor, it.currency)}</td>
+                                <td>{formatMoneyMinor(it.amountMinor, it.currency)}</td>
+                                <td>{it.isSpare ? 'Yes' : 'No'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  )}
+
+                  {isOpen && (canSelect || canAward) && (
+                    <div class="engr-actionbar">
+                      {canSelect && (
+                        <form method="post" action={`/engr/api/rfqs/${rfqId}/award`}>
+                          <input type="hidden" name="intent" value="prefer" />
+                          <input type="hidden" name="quote_id" value={q.id} />
+                          <button type="submit" class="engr-btn engr-btn--secondary">
+                            Prefer
+                          </button>
+                        </form>
+                      )}
+                      {canAward && (
+                        <form method="post" action={`/engr/api/rfqs/${rfqId}/award`}>
+                          <input type="hidden" name="intent" value="award" />
+                          <input type="hidden" name="quote_id" value={q.id} />
+                          <button type="submit" class="engr-btn engr-btn--primary">
+                            Award
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </>
+    )
+  }
+</EngrLayout>
