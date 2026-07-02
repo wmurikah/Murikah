@@ -1,0 +1,40 @@
+---
+/**
+ * Work-order status timeline: the stamped milestones in order, each with its
+ * time or "Pending". Times are shown in UTC to avoid ambiguity.
+ */
+interface Props {
+  createdAt: string;
+  contractorAcceptedAt: string | null;
+  techAssignedAt: string | null;
+  techAcceptedAt: string | null;
+  onsiteAt: string | null;
+  closedAt: string | null;
+}
+const p = Astro.props;
+const steps: Array<{ label: string; at: string | null }> = [
+  { label: 'Created', at: p.createdAt },
+  { label: 'Contractor accepted', at: p.contractorAcceptedAt },
+  { label: 'Technician assigned', at: p.techAssignedAt },
+  { label: 'Technician accepted', at: p.techAcceptedAt },
+  { label: 'On site', at: p.onsiteAt },
+  { label: 'Closed', at: p.closedAt },
+];
+function fmt(iso: string | null): string {
+  if (!iso) return 'Pending';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'Pending';
+  return `${d.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+}
+---
+
+<ol class="engr-timeline" aria-label="Work order timeline">
+  {
+    steps.map((s) => (
+      <li class:list={['engr-timeline__step', s.at && 'engr-timeline__step--done']}>
+        <span class="engr-timeline__label">{s.label}</span>
+        <span class="engr-timeline__at">{fmt(s.at)}</span>
+      </li>
+    ))
+  }
+</ol>
