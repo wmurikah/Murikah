@@ -1,0 +1,83 @@
+---
+export const prerender = false;
+
+/** Cost approvals: level 1 (cost.approve.l1) and level 2 (cost.approve.l2) queues. Each links to the cost detail where the decision is made. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listPendingCosts, type CostListRow } from '@engr/repos/workCosts';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const canL1 = can(Astro.locals, 'cost.approve.l1');
+const canL2 = can(Astro.locals, 'cost.approve.l2');
+const allowed = canL1 || canL2;
+
+let l1: CostListRow[] = [];
+let l2: CostListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  if (canL1) l1 = await listPendingCosts(db, engr.orgId, 1);
+  if (canL2) l2 = await listPendingCosts(db, engr.orgId, 2);
+}
+
+const section = (title: string, rows: CostListRow[]) => ({ title, rows });
+const sections = [
+  canL1 ? section('Level 1', l1) : null,
+  canL2 ? section('Level 2', l2) : null,
+].filter((s): s is { title: string; rows: CostListRow[] } => s !== null);
+---
+
+<EngrLayout title="Cost approvals">
+  <div class="engr-page-head">
+    <div>
+      <h1>Cost approvals</h1>
+      <p class="engr-lead">Work costs awaiting your decision.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to cost approvals.
+      </p>
+    ) : (
+      <div style="display:grid;gap:2rem">
+        {sections.map((s) => (
+          <section aria-label={s.title}>
+            <h2 class="engr-card__label">{s.title}</h2>
+            {s.rows.length === 0 ? (
+              <p class="engr-empty">Nothing awaiting {s.title.toLowerCase()}.</p>
+            ) : (
+              <div class="engr-tablewrap" style="margin-top:0.5rem">
+                <table class="engr-table" aria-label={`${s.title} costs`}>
+                  <thead>
+                    <tr>
+                      <th scope="col">Work order</th>
+                      <th scope="col">Contractor</th>
+                      <th scope="col">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.rows.map((r) => (
+                      <tr>
+                        <td>
+                          <a href={`/engr/costs/${r.id}`}>{r.workOrderNo}</a>
+                        </td>
+                        <td>{r.contractorName}</td>
+                        <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+    )
+  }
+</EngrLayout>
