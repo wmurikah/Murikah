@@ -1,0 +1,260 @@
+---
+export const prerender = false;
+
+/**
+ * Engineer LPO detail and builder. Gate: workorder.view to see; attach, create
+ * and close gate on workorder.create and workorder.assign. The close is guarded
+ * server-side: it only closes once every work order is closed or cancelled.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  getLpoDetail,
+  listAttachableWorkOrders,
+  type LpoDetail,
+  type LpoWorkOrder,
+} from '@engr/repos/lpos';
+import {
+  listStations,
+  listAssetCategories,
+  type StationOption,
+  type CategoryOption,
+} from '@engr/repos/requests';
+import { listSlas, type SlaOption } from '@engr/repos/requestActions';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'workorder.view');
+const canBuild = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+const done = ['attached', 'created', 'closed'].find((k) => Astro.url.searchParams.get(k) === '1');
+
+let lpo: LpoDetail | null = null;
+let attachable: LpoWorkOrder[] = [];
+let stations: StationOption[] = [];
+let categories: CategoryOption[] = [];
+let slas: SlaOption[] = [];
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  lpo = await getLpoDetail(db, engr.orgId, id);
+  if (lpo && canBuild && (lpo.status === 'OPEN' || lpo.status === 'IN_PROGRESS')) {
+    [attachable, stations, categories, slas] = await Promise.all([
+      listAttachableWorkOrders(db, engr.orgId, id),
+      listStations(db, engr.orgId),
+      listAssetCategories(db, engr.orgId),
+      listSlas(db, engr.orgId),
+    ]);
+  }
+}
+if (allowed && !lpo) Astro.response.status = 404;
+
+const lpoId = lpo?.id ?? '';
+const closedSet = new Set(['CLOSED', 'CANCELLED']);
+const allDone = lpo != null && lpo.workOrders.every((w) => closedSet.has(w.status));
+const openForWork = lpo != null && (lpo.status === 'OPEN' || lpo.status === 'IN_PROGRESS');
+---
+
+<EngrLayout title="LPO">
+  <div class="engr-page-head">
+    <div>
+      <h1>{lpo ? lpo.lpoNo : 'LPO'}</h1>
+      <p class="engr-lead">Local purchase order.</p>
+    </div>
+    <a href="/engr/lpos" class="engr-btn engr-btn--secondary">Back to LPOs</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    done && (
+      <p class="engr-notice" role="status">
+        Done.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to LPOs.
+      </p>
+    ) : !lpo ? (
+      <p class="engr-empty">That LPO was not found in your organisation.</p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Status</dt>
+          <dd>
+            <span class="engr-pill">{lpo.status}</span>
+          </dd>
+          <dt>Contractor</dt>
+          <dd>{lpo.contractorName}</dd>
+          <dt>Base station</dt>
+          <dd>{lpo.baseStationName ?? 'Not set'}</dd>
+          <dt>Total</dt>
+          <dd>{formatMoneyMinor(lpo.totalMinor, lpo.currency)}</dd>
+        </dl>
+
+        <section class="engr-panel" aria-labelledby="lpo-wos">
+          <h2 id="lpo-wos">Work orders</h2>
+          {lpo.workOrders.length === 0 ? (
+            <p class="engr-empty">No work orders attached yet.</p>
+          ) : (
+            <div class="engr-tablewrap">
+              <table class="engr-table" aria-label="Work orders in this LPO">
+                <thead>
+                  <tr>
+                    <th scope="col">Work order</th>
+                    <th scope="col">Station</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lpo.workOrders.map((w) => (
+                    <tr>
+                      <td>
+                        <a href={`/engr/workorders/${w.id}`}>{w.woNo}</a>
+                      </td>
+                      <td>{w.stationName}</td>
+                      <td>
+                        <span class="engr-status">{w.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {canBuild && openForWork && (
+          <section class="engr-panel" aria-labelledby="lpo-attach">
+            <h2 id="lpo-attach">Add work orders</h2>
+            {attachable.length > 0 && (
+              <form method="post" action={`/engr/api/lpos/${lpoId}/attach`} class="engr-form">
+                <div class="engr-field">
+                  <label for="attach-wo">Attach an existing work order</label>
+                  <select id="attach-wo" class="engr-select" name="work_order_id" required>
+                    <option value="">Choose a work order</option>
+                    {attachable.map((w) => (
+                      <option value={w.id}>
+                        {w.woNo}, {w.stationName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div class="engr-actionbar">
+                  <button type="submit" class="engr-btn engr-btn--secondary">
+                    Attach
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <form method="post" action={`/engr/api/lpos/${lpoId}/attach`} class="engr-form">
+              <p class="engr-field__hint">
+                Or create a new work order at a station under this LPO.
+              </p>
+              <div class="engr-field">
+                <label for="new-station">Station</label>
+                <select id="new-station" class="engr-select" name="station_id" required>
+                  <option value="">Choose a station</option>
+                  {stations.map((s) => (
+                    <option value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="engr-field">
+                <label for="new-category">
+                  Category <span class="engr-field__hint">(optional)</span>
+                </label>
+                <select id="new-category" class="engr-select" name="category_id">
+                  <option value="">Not set</option>
+                  {categories.map((c) => (
+                    <option value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="engr-field">
+                <label for="new-sla">
+                  SLA <span class="engr-field__hint">(optional)</span>
+                </label>
+                <select id="new-sla" class="engr-select" name="sla_id">
+                  <option value="">Not set</option>
+                  {slas.map((s) => (
+                    <option value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="engr-field">
+                <label for="new-ref">
+                  Mileage reference station <span class="engr-field__hint">(optional)</span>
+                </label>
+                <select id="new-ref" class="engr-select" name="mileage_reference_station_id">
+                  <option value="">Not set</option>
+                  {stations.map((s) => (
+                    <option value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Create work order
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        <section class="engr-panel" aria-labelledby="lpo-mileage">
+          <h2 id="lpo-mileage">Mileage claim</h2>
+          {lpo.claim == null ? (
+            <p class="engr-empty">No mileage claim raised yet.</p>
+          ) : (
+            <dl class="engr-detail">
+              <dt>Status</dt>
+              <dd>
+                <span class="engr-pill">{lpo.claim.status}</span>
+              </dd>
+              <dt>Referenced to</dt>
+              <dd>{lpo.claim.referencedStationName ?? 'Not set'}</dd>
+              <dt>Distance</dt>
+              <dd>{lpo.claim.distanceKm} km</dd>
+              <dt>Amount</dt>
+              <dd>{formatMoneyMinor(lpo.claim.amountMinor, lpo.claim.currency)}</dd>
+            </dl>
+          )}
+        </section>
+
+        {canBuild && openForWork && (
+          <section class="engr-panel" aria-labelledby="lpo-close">
+            <h2 id="lpo-close">Close</h2>
+            {allDone ? (
+              <p class="engr-field__hint">Every work order is closed or cancelled.</p>
+            ) : (
+              <p class="engr-field__hint">
+                The LPO can only be closed once every work order is closed or cancelled.
+              </p>
+            )}
+            <form method="post" action={`/engr/api/lpos/${lpoId}/close`} class="engr-actionbar">
+              <button type="submit" class="engr-btn engr-btn--primary" disabled={!allDone}>
+                Close LPO
+              </button>
+            </form>
+          </section>
+        )}
+      </>
+    )
+  }
+</EngrLayout>

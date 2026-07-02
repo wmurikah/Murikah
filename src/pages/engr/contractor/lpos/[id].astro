@@ -1,0 +1,228 @@
+---
+export const prerender = false;
+
+/**
+ * Contractor LPO detail: the work orders across stations and the single mileage
+ * claim for the trip. Gate: workorder.view to see (own LPO only); the claim form
+ * gates on cost.create and cost.submit. The amount preview is client-side only;
+ * the server recomputes the authoritative amount from distance and the rate.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getLpoDetail, type LpoDetail } from '@engr/repos/lpos';
+import { mileageRateMinor } from '@engr/repos/mileageClaims';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { listStations, type StationOption } from '@engr/repos/requests';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'workorder.view');
+const canClaim = can(Astro.locals, 'cost.create') && can(Astro.locals, 'cost.submit');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+const submitted = Astro.url.searchParams.get('submitted') === '1';
+
+let lpo: LpoDetail | null = null;
+let isOwner = false;
+let rateMinor = 0;
+let stations: StationOption[] = [];
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+  lpo = await getLpoDetail(db, engr.orgId, id);
+  isOwner = lpo != null && contractorId != null && lpo.contractorId === contractorId;
+  if (lpo && isOwner) {
+    [rateMinor, stations] = await Promise.all([
+      mileageRateMinor(db, engr.orgId),
+      listStations(db, engr.orgId),
+    ]);
+  }
+}
+if (allowed && (!lpo || !isOwner)) Astro.response.status = 404;
+
+const lpoId = lpo?.id ?? '';
+const claim = lpo?.claim ?? null;
+const canShowForm =
+  lpo != null &&
+  isOwner &&
+  canClaim &&
+  lpo.status !== 'CANCELLED' &&
+  (claim == null || claim.status === 'REJECTED');
+const rateMajor = (rateMinor / 100).toFixed(2);
+---
+
+<EngrLayout title="LPO">
+  <div class="engr-page-head">
+    <div>
+      <h1>{lpo ? lpo.lpoNo : 'LPO'}</h1>
+      <p class="engr-lead">Your LPO and mileage claim.</p>
+    </div>
+    <a href="/engr/contractor/lpos" class="engr-btn engr-btn--secondary">Back</a>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        Your claim could not be submitted. Check the details and try again.
+      </p>
+    )
+  }
+  {
+    submitted && (
+      <p class="engr-notice" role="status">
+        Your mileage claim has been submitted for approval.
+      </p>
+    )
+  }
+
+  {
+    !allowed || !lpo || !isOwner ? (
+      <p class="engr-error" role="alert">
+        That LPO was not found among yours.
+      </p>
+    ) : (
+      <>
+        <dl class="engr-detail">
+          <dt>Status</dt>
+          <dd>
+            <span class="engr-pill">{lpo.status}</span>
+          </dd>
+          <dt>Base station</dt>
+          <dd>{lpo.baseStationName ?? 'Not set'}</dd>
+        </dl>
+
+        <section class="engr-panel" aria-labelledby="clpo-wos">
+          <h2 id="clpo-wos">Work orders</h2>
+          {lpo.workOrders.length === 0 ? (
+            <p class="engr-empty">No work orders yet.</p>
+          ) : (
+            <div class="engr-tablewrap">
+              <table class="engr-table" aria-label="Work orders in this LPO">
+                <thead>
+                  <tr>
+                    <th scope="col">Work order</th>
+                    <th scope="col">Station</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lpo.workOrders.map((w) => (
+                    <tr>
+                      <td>
+                        <a href={`/engr/contractor/workorders/${w.id}`}>{w.woNo}</a>
+                      </td>
+                      <td>{w.stationName}</td>
+                      <td>
+                        <span class="engr-status">{w.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {claim && (
+          <section class="engr-panel" aria-labelledby="clpo-claim">
+            <h2 id="clpo-claim">Your mileage claim</h2>
+            <dl class="engr-detail">
+              <dt>Status</dt>
+              <dd>
+                <span class="engr-pill">{claim.status}</span>
+              </dd>
+              <dt>Distance</dt>
+              <dd>{claim.distanceKm} km</dd>
+              <dt>Amount</dt>
+              <dd>{formatMoneyMinor(claim.amountMinor, claim.currency)}</dd>
+            </dl>
+            {claim.status === 'REJECTED' && (
+              <p class="engr-field__hint">
+                This claim was not approved. You can raise a corrected claim below.
+              </p>
+            )}
+          </section>
+        )}
+
+        {canShowForm && (
+          <section class="engr-panel" aria-labelledby="clpo-form">
+            <h2 id="clpo-form">Raise the mileage claim for this trip</h2>
+            <p class="engr-field__hint">
+              One claim covers the whole trip, not one per station. The rate is KES {rateMajor} per
+              kilometre; the approver confirms the final amount.
+            </p>
+            <form
+              method="post"
+              action={`/engr/api/lpos/${lpoId}/mileage`}
+              class="engr-form"
+              data-mileage-form
+              data-rate-minor={rateMinor}
+            >
+              <div class="engr-field">
+                <label for="claim-ref">Referenced to station</label>
+                <select id="claim-ref" class="engr-select" name="referenced_to_station_id">
+                  <option value="">Not set</option>
+                  {stations.map((s) => (
+                    <option value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <p class="engr-field__hint">Typically the furthest station visited on the trip.</p>
+              </div>
+              <div class="engr-field">
+                <label for="claim-distance">Round-trip distance (km)</label>
+                <input
+                  type="number"
+                  id="claim-distance"
+                  class="engr-input"
+                  name="distance_km"
+                  min="0"
+                  step="0.1"
+                  data-distance
+                  required
+                />
+              </div>
+              <p class="engr-subtotal" aria-live="polite">
+                Estimated amount: <span data-amount>KES 0.00</span>. The server confirms the final
+                amount.
+              </p>
+              <div class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Submit claim
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+      </>
+    )
+  }
+
+  <script is:inline>
+    (() => {
+      const form = document.querySelector('[data-mileage-form]');
+      if (!form) return;
+      const rate = parseFloat(form.getAttribute('data-rate-minor') || '0') || 0;
+      const distanceEl = form.querySelector('[data-distance]');
+      const out = form.querySelector('[data-amount]');
+      let fmt = null;
+      try {
+        fmt = new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' });
+      } catch {
+        fmt = null;
+      }
+      const recompute = () => {
+        const distance =
+          parseFloat(distanceEl && 'value' in distanceEl ? distanceEl.value : '') || 0;
+        const major = Math.round(distance * rate) / 100;
+        if (out) out.textContent = fmt ? fmt.format(major) : 'KES ' + major.toFixed(2);
+      };
+      form.addEventListener('input', recompute);
+      recompute();
+    })();
+  </script>
+</EngrLayout>
