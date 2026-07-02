@@ -65,6 +65,17 @@ if (allowed) {
       )
     }
     {can(Astro.locals, 'pm.allocate') && <a href="/engr/pm">Maintenance</a>}
+    {can(Astro.locals, 'workorder.create') && <a href="/engr/lpos">LPOs</a>}
+    {
+      can(Astro.locals, 'workorder.view') && !can(Astro.locals, 'workorder.create') && (
+        <a href="/engr/contractor/lpos">My LPOs</a>
+      )
+    }
+    {
+      can(Astro.locals, 'cost.approve.l1') && (
+        <a href="/engr/mileage/approvals">Mileage approvals</a>
+      )
+    }
     <a href="/engr/notifications">My notifications</a>
     {can(Astro.locals, 'reports.view') && <a href="/engr/ops/notifications">Notifications ops</a>}
   </nav>
