@@ -1,0 +1,140 @@
+---
+export const prerender = false;
+
+/**
+ * RFQ builder. From an accepted request the engineer picks pre-qualified
+ * contractors to invite, sets a due date and an approval threshold (prefilled
+ * from the org default), and sends. Gate: rfq.create. Only contractors covering
+ * the request's station or category are offered.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getRequestById, type RequestDetail } from '@engr/repos/requests';
+import { getRequestAssignmentInfo } from '@engr/repos/requestActions';
+import { listEligibleContractors, type ContractorOption } from '@engr/repos/contractorsPick';
+import { defaultThresholdMinor } from '@engr/repos/rfqs';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'rfq.create');
+const requestId = Astro.url.searchParams.get('request') ?? '';
+const errorCode = Astro.url.searchParams.get('error');
+
+let detail: RequestDetail | null = null;
+let status = '';
+let contractors: ContractorOption[] = [];
+let defaultMajor = '';
+
+if (allowed && requestId) {
+  const db = await getDb(getEngrEnv());
+  detail = await getRequestById(db, engr.orgId, requestId);
+  if (detail) {
+    const info = await getRequestAssignmentInfo(db, engr.orgId, requestId);
+    status = info?.status ?? detail.status;
+    if (info && info.status === 'ACCEPTED') {
+      contractors = await listEligibleContractors(db, engr.orgId, info.stationId, info.categoryId);
+      const threshold = await defaultThresholdMinor(db, engr.orgId);
+      if (threshold != null) defaultMajor = String(threshold / 100);
+    }
+  }
+}
+if (allowed && requestId && !detail) Astro.response.status = 404;
+---
+
+<EngrLayout title="Raise an RFQ">
+  <div class="engr-page-head">
+    <div>
+      <h1>Raise an RFQ</h1>
+      <p class="engr-lead">Invite pre-qualified contractors to quote.</p>
+    </div>
+    <a
+      href={requestId ? `/engr/requests/${requestId}` : '/engr/requests'}
+      class="engr-btn engr-btn--secondary">Back to request</a
+    >
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That RFQ could not be raised. Check the details and try again.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to raise an RFQ.
+      </p>
+    ) : !requestId || !detail ? (
+      <p class="engr-empty">Open an accepted request to raise an RFQ for it.</p>
+    ) : status !== 'ACCEPTED' ? (
+      <p class="engr-notice">
+        An RFQ can only be raised from an accepted request. This request is {status}.
+      </p>
+    ) : contractors.length === 0 ? (
+      <p class="engr-empty">
+        No pre-qualified contractor covers this station or category yet, so there is nobody to
+        invite.
+      </p>
+    ) : (
+      <form method="post" action="/engr/api/rfqs" class="engr-form" style="max-width:44rem">
+        <input type="hidden" name="request_id" value={requestId} />
+
+        <dl class="engr-detail">
+          <dt>Request</dt>
+          <dd>{detail.requestNo}</dd>
+          <dt>Station</dt>
+          <dd>{detail.stationName}</dd>
+          <dt>Issue</dt>
+          <dd>{detail.issue}</dd>
+        </dl>
+
+        <fieldset class="engr-field">
+          <legend>Invite contractors</legend>
+          <p class="engr-field__hint">Choose one or more pre-qualified contractors to quote.</p>
+          {contractors.map((c) => (
+            <label class="engr-check">
+              <input type="checkbox" name="contractor_ids" value={c.id} />
+              <span>{c.name}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        <div class="engr-field">
+          <label for="due_date">
+            Quotes due by <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input type="date" id="due_date" class="engr-input" name="due_date" />
+        </div>
+
+        <div class="engr-field">
+          <label for="threshold">Approval threshold (KES)</label>
+          <input
+            type="number"
+            id="threshold"
+            class="engr-input"
+            name="threshold"
+            min="0"
+            step="0.01"
+            value={defaultMajor}
+            aria-describedby="threshold-hint"
+          />
+          <p class="engr-field__hint" id="threshold-hint">
+            An award at or below this amount proceeds directly. Above it, a second approver must
+            sign off. Leave blank to require sign-off on any amount.
+          </p>
+        </div>
+
+        <div class="engr-actionbar">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            Send invitations
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

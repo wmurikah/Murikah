@@ -1,0 +1,72 @@
+---
+export const prerender = false;
+
+/** Engineer RFQ list: every RFQ in the org, with invite and quote counts. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listRfqsForEngineer, type RfqListRow } from '@engr/repos/rfqs';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'rfq.view');
+let rows: RfqListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listRfqsForEngineer(db, engr.orgId);
+}
+---
+
+<EngrLayout title="RFQs">
+  <div class="engr-page-head">
+    <div>
+      <h1>RFQs</h1>
+      <p class="engr-lead">Requests for quotation and their quotes.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to RFQs.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">
+        No RFQs yet. Raise one from an accepted request to invite contractors to quote.
+      </p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="RFQs">
+          <thead>
+            <tr>
+              <th scope="col">RFQ</th>
+              <th scope="col">Request</th>
+              <th scope="col">Station</th>
+              <th scope="col">Invited</th>
+              <th scope="col">Quoted</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  <a href={`/engr/rfqs/${r.id}`}>{r.rfqNo}</a>
+                </td>
+                <td>{r.requestNo}</td>
+                <td>{r.stationName}</td>
+                <td>{r.invited}</td>
+                <td>{r.quoted}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

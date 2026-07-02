@@ -1,0 +1,156 @@
+---
+export const prerender = false;
+
+/**
+ * Procurement approvals: RFQs whose selected quote is above the threshold and
+ * awaits sign-off. Gate: rfq.award. The endpoint enforces the full
+ * segregation-of-duties rule (an OWNER or ADMIN may always act, otherwise the
+ * approver must not be the raiser or the sender). Here the page hides the
+ * actions from the raiser, as a first, friendly guard.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listPendingProcurement, type PendingProcurementRow } from '@engr/repos/rfqs';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'rfq.award');
+const alwaysApprove = engr.roles.includes('OWNER') || engr.roles.includes('ADMIN');
+const errorCode = Astro.url.searchParams.get('error');
+const done = Astro.url.searchParams.get('done');
+
+let rows: PendingProcurementRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listPendingProcurement(db, engr.orgId);
+}
+const mayAct = (row: PendingProcurementRow): boolean =>
+  alwaysApprove || row.createdBy !== engr.userId;
+---
+
+<EngrLayout title="Procurement approvals">
+  <div class="engr-page-head">
+    <div>
+      <h1>Procurement approvals</h1>
+      <p class="engr-lead">Above-threshold awards awaiting a second approver.</p>
+    </div>
+  </div>
+
+  {
+    errorCode === 'forbidden' ? (
+      <p class="engr-error" role="alert">
+        A different approver must sign off that award.
+      </p>
+    ) : errorCode ? (
+      <p class="engr-error" role="alert">
+        That decision could not be completed. Refresh and try again.
+      </p>
+    ) : null
+  }
+  {
+    done && (
+      <p class="engr-notice" role="status">
+        {done === 'reopened'
+          ? 'The RFQ was returned to the engineer for a fresh award.'
+          : done === 'cancelled'
+            ? 'The RFQ was cancelled.'
+            : 'Decision recorded.'}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to procurement approvals.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">Nothing awaiting sign-off.</p>
+    ) : (
+      <div style="display:grid;gap:1.25rem;max-width:44rem">
+        {rows.map((r) => (
+          <div class="engr-card">
+            <p class="engr-card__label">{r.rfqNo}</p>
+            <p class="engr-meta">
+              <span>
+                Request <strong>{r.requestNo}</strong>
+              </span>
+              <span>
+                Station <strong>{r.stationName}</strong>
+              </span>
+            </p>
+            <dl class="engr-detail">
+              <dt>Selected contractor</dt>
+              <dd>{r.selectedContractorName ?? 'None'}</dd>
+              <dt>Quote total</dt>
+              <dd>
+                {r.selectedTotalMinor == null
+                  ? 'Not available'
+                  : formatMoneyMinor(r.selectedTotalMinor, r.currency)}
+              </dd>
+              <dt>Threshold</dt>
+              <dd>
+                {r.thresholdMinor == null
+                  ? 'Any amount needs sign-off'
+                  : formatMoneyMinor(r.thresholdMinor, r.currency)}
+              </dd>
+            </dl>
+            <p style="margin:0.4rem 0 0">
+              <a href={`/engr/rfqs/${r.id}`}>View the full RFQ</a>
+            </p>
+
+            {mayAct(r) ? (
+              <>
+                <form
+                  method="post"
+                  action={`/engr/api/rfqs/${r.id}/procurement-decision`}
+                  class="engr-actionbar"
+                  style="margin-top:0.75rem"
+                >
+                  <input type="hidden" name="decision" value="approve" />
+                  <button type="submit" class="engr-btn engr-btn--primary">
+                    Approve and create work order
+                  </button>
+                </form>
+                <form
+                  method="post"
+                  action={`/engr/api/rfqs/${r.id}/procurement-decision`}
+                  class="engr-form"
+                  style="margin-top:0.6rem"
+                >
+                  <input type="hidden" name="decision" value="reject" />
+                  <div class="engr-field">
+                    <label for={`reason-${r.id}`}>Reason</label>
+                    <textarea
+                      id={`reason-${r.id}`}
+                      class="engr-textarea"
+                      name="reason"
+                      maxlength="500"
+                    />
+                  </div>
+                  <label class="engr-check">
+                    <input type="checkbox" name="cancel" value="1" />
+                    <span>Cancel the RFQ entirely, rather than returning it for a fresh award</span>
+                  </label>
+                  <div class="engr-actionbar">
+                    <button type="submit" class="engr-btn engr-btn--danger">
+                      Reject
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <p class="engr-notice" style="margin-top:0.75rem">
+                You raised this RFQ, so a different approver must sign it off.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+</EngrLayout>
