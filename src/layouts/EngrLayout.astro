@@ -62,6 +62,17 @@ const isActive = (href: string) => path === href || path.startsWith(href + '/');
                   RFQs
                 </a>
               )}
+              {engr.perms.includes('pm.allocate') && (
+                <a href="/engr/pm" aria-current={isActive('/engr/pm') ? 'page' : undefined}>
+                  Maintenance
+                </a>
+              )}
+              <a
+                href="/engr/notifications"
+                aria-current={isActive('/engr/notifications') ? 'page' : undefined}
+              >
+                Notifications
+              </a>
             </nav>
           )
         }
