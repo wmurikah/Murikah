@@ -2,80 +2,78 @@
  * Hero scenes, the data behind the full-bleed rotating hero (HeroStage).
  *
  * Each scene is one facet of what Murikah does: a short label, a headline and
- * one supporting line, over a dark cinematic background. Scene one carries the
- * canonical headline and is what renders first (and under reduced motion).
+ * one supporting line, over a real photograph. Scene one (Assurance OS) carries
+ * the canonical headline and is what renders first (and under reduced motion).
  *
- * `image` is the background still. These ship as on-brand dark SVG scenes in
- * `public/media/hero/`. To use photography instead, drop wide, darkened,
- * commercial-safe images at `public/images/hero/<id>.webp` (or a single
- * `public/images/bg.png`) and point `image` at them. Keep them dark so the
- * ivory text stays readable under the overlay. Do not hotlink remote images.
+ * `image` is the background photo. These are locally saved, commercial-use JPGs
+ * cropped to 1920x1080 and compressed, served from `public/images/hero/`. To
+ * change a photo, replace the file (keep it wide, and not too bright on the
+ * left where the copy sits) and update the path here. Do not hotlink remote
+ * images. Backgrounds are decorative, so the copy carries all meaning.
  */
 
 export interface HeroScene {
   /** Stable id, used for keys and control labels. */
   id: string;
-  /** Short label, tracked uppercase (the scene name). */
+  /** Short label, tracked uppercase (the scene name / eyebrow). */
   label: string;
   /** The rotating headline for the scene. */
   title: string;
   /** One supporting line. Keep it to a single short sentence. */
   description: string;
-  /** Background still. Ships in the repo; swap for photography when available. */
+  /** Background photo, from public/images/hero/. */
   image: string;
-  /** Optional short muted clip, for a future upgrade. Not used yet. */
-  video?: string;
   /** Accessible description of the visual (the background is decorative). */
   alt: string;
 }
 
 export const HERO_SCENES: HeroScene[] = [
   {
-    id: 'board-confidence',
-    label: 'Board confidence',
-    title: 'Make assurance feel inevitable.',
-    description: 'Evidence-ready reporting for directors, executives and committees.',
-    image: '/media/hero/board-confidence.svg',
-    alt: 'A corporate tower at dusk.',
+    id: 'assurance-os',
+    label: 'Assurance OS',
+    title: 'Run assurance as an operating rhythm.',
+    description: 'Plans, approvals, evidence, remediation and reporting in one platform.',
+    image: '/images/hero/modern-glass-office-building.jpg',
+    alt: 'A modern glass office building.',
   },
   {
     id: 'governance-intelligence',
     label: 'Governance intelligence',
     title: 'See signals before they become surprises.',
     description: 'Risk, controls and performance in one operating view.',
-    image: '/media/hero/governance-intelligence.svg',
-    alt: 'Signals read across a single operating view.',
+    image: '/images/hero/governance-meeting.jpg',
+    alt: 'A governance meeting.',
+  },
+  {
+    id: 'board-confidence',
+    label: 'Board confidence',
+    title: 'Evidence-ready decisions.',
+    description: 'Clear reporting for directors, executives and committees.',
+    image: '/images/hero/boardroom-meeting.jpg',
+    alt: 'A boardroom meeting.',
+  },
+  {
+    id: 'african-enterprise',
+    label: 'African-built, global-ready',
+    title: 'Designed for complex markets.',
+    description: 'Assurance for growing organisations with real-world pressure.',
+    image: '/images/hero/african-business-meeting.jpg',
+    alt: 'An African business meeting.',
   },
   {
     id: 'systems-assurance',
     label: 'Systems assurance',
     title: 'Controls that follow the work.',
     description: 'Assurance across platforms, processes and data flows.',
-    image: '/media/hero/systems-assurance.svg',
-    alt: 'Connected systems carrying controls through the work.',
+    image: '/images/hero/african-business-meeting-1.jpg',
+    alt: 'A team reviewing work together.',
   },
   {
-    id: 'evidence-in-motion',
-    label: 'Evidence in motion',
-    title: 'From fieldwork to board pack.',
-    description: 'One thread for work papers, findings and follow-up.',
-    image: '/media/hero/evidence-in-motion.svg',
-    alt: 'A single thread from fieldwork to the board pack.',
-  },
-  {
-    id: 'ai-governance',
-    label: 'AI governance',
-    title: 'Intelligent systems, governed.',
-    description: 'Practical oversight for AI, automation and emerging risk.',
-    image: '/media/hero/ai-governance.svg',
-    alt: 'Automation held inside a clear field of oversight.',
-  },
-  {
-    id: 'assurance-os',
-    label: 'Assurance OS',
-    title: 'Run assurance as an operating rhythm.',
-    description: 'Plans, approvals, evidence, remediation and reporting in one platform.',
-    image: '/media/hero/african-enterprise.svg',
-    alt: 'A calm enterprise skyline.',
+    id: 'market-intelligence',
+    label: 'Market intelligence',
+    title: 'Clarity for regulated growth.',
+    description: 'Governance insight for institutions operating at scale.',
+    image: '/images/hero/financial-district-building.jpg',
+    alt: 'A financial district at scale.',
   },
 ];
