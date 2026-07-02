@@ -92,12 +92,19 @@ async function ensureUser(email: string, fullName: string, roleCode: string): Pr
 
 await ensureUser('engineer@demo.local', 'Demo Engineer', 'ENGINEER');
 const contractorUserId = await ensureUser('contractor@demo.local', 'Demo Contractor', 'CONTRACTOR');
+const contractor2UserId = await ensureUser(
+  'contractor2@demo.local',
+  'Demo Contractor Two',
+  'CONTRACTOR',
+);
 const technicianUserId = await ensureUser('technician@demo.local', 'Demo Technician', 'TECHNICIAN');
 const stationManagerId = await ensureUser(
   'station@demo.local',
   'Demo Station Manager',
   'STATION_MANAGER',
 );
+// Owner acts as the procurement approver, distinct from the engineer who awards.
+await ensureUser('owner@demo.local', 'Demo Owner', 'OWNER');
 
 // Station manager owns HQ.
 await client.execute({
@@ -155,11 +162,52 @@ if (existingTech) {
   });
 }
 
+// Second pre-qualified contractor covering HQ and GEN, so an RFQ can compare
+// more than one quote.
+const contractor2Name = 'Demo Contractor Two Ltd';
+let contractor2Id: string;
+const existingContractor2 = await one(
+  `SELECT id FROM contractors WHERE org_id = ? AND name = ? AND deleted_at IS NULL LIMIT 1`,
+  [orgId, contractor2Name],
+);
+if (existingContractor2) {
+  contractor2Id = String(existingContractor2.id);
+  await client.execute({
+    sql: `UPDATE contractors SET is_prequalified = 1, status = 'ACTIVE', portal_user_id = ? WHERE id = ? AND org_id = ?`,
+    args: [contractor2UserId, contractor2Id, orgId],
+  });
+} else {
+  contractor2Id = newId();
+  await client.execute({
+    sql: `INSERT INTO contractors (id, org_id, name, is_prequalified, portal_user_id, status)
+          VALUES (?, ?, ?, 1, ?, 'ACTIVE')`,
+    args: [contractor2Id, orgId, contractor2Name, contractor2UserId],
+  });
+}
+await client.execute({
+  sql: `INSERT OR IGNORE INTO contractor_stations (org_id, contractor_id, station_id) VALUES (?, ?, ?)`,
+  args: [orgId, contractor2Id, stationId],
+});
+if (categoryId) {
+  await client.execute({
+    sql: `INSERT OR IGNORE INTO contractor_categories (org_id, contractor_id, category_id) VALUES (?, ?, ?)`,
+    args: [orgId, contractor2Id, categoryId],
+  });
+}
+
 // Default SLA.
 await client.execute({
   sql: `INSERT OR IGNORE INTO slas (id, org_id, name, response_hours, resolution_hours, is_default)
         VALUES (?, ?, 'Standard', 4, 48, 1)`,
   args: [newId(), orgId],
+});
+
+// Procurement threshold: an award at or below KES 50,000 (5,000,000 minor)
+// proceeds directly; above it a second approver signs off.
+await client.execute({
+  sql: `INSERT OR IGNORE INTO org_settings (org_id, key, value_json)
+        VALUES (?, 'procurement_threshold_minor', '5000000')`,
+  args: [orgId],
 });
 
 // Org rate card with one GEN rate item, so spares can be priced.
@@ -196,7 +244,11 @@ console.log('✓ Engineering Rhythm demo actors ready in org:', orgSlug);
 console.log('  Sign in (all use ENGR_DEMO_PASSWORD):');
 console.log('    engineer@demo.local     (ENGINEER)');
 console.log('    contractor@demo.local   (CONTRACTOR, portal for Demo Contractor Ltd)');
+console.log('    contractor2@demo.local  (CONTRACTOR, portal for Demo Contractor Two Ltd)');
 console.log('    technician@demo.local   (TECHNICIAN)');
 console.log('    station@demo.local      (STATION_MANAGER, owns HQ)');
-console.log('  Raise a request at HQ, then take it through the flow with these logins.');
+console.log('    owner@demo.local        (OWNER, procurement approver)');
+console.log('  Predefined-rate flow: accept a request, then assign a contractor.');
+console.log('  RFQ flow: accept a request, raise an RFQ, invite both contractors,');
+console.log('    submit quotes, then award. Above KES 50,000 the owner signs off.');
 process.exit(0);

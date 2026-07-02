@@ -53,6 +53,17 @@ if (allowed) {
     <a href="/engr/contractor/workorders">Contractor inbox</a>
     <a href="/engr/technician/workorders">My work orders</a>
     <a href="/engr/station/confirmations">Confirmations</a>
+    {can(Astro.locals, 'rfq.view') && <a href="/engr/rfqs">RFQs</a>}
+    {
+      can(Astro.locals, 'quotes.view') && !can(Astro.locals, 'rfq.view') && (
+        <a href="/engr/contractor/rfqs">RFQ invitations</a>
+      )
+    }
+    {
+      can(Astro.locals, 'rfq.award') && (
+        <a href="/engr/procurement/approvals">Procurement approvals</a>
+      )
+    }
   </nav>
 
   {
