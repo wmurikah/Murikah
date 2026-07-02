@@ -1,0 +1,71 @@
+---
+export const prerender = false;
+
+/** Engineer work-order detail: read-only timeline plus Cancel where permitted. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import WorkOrderDetailView from '@/components/engr/WorkOrderDetail.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getWorkOrderDetail, type WorkOrderDetail } from '@engr/repos/workOrders';
+import { getJobCard, listSpares, type JobCardRecord, type SpareRow } from '@engr/repos/jobCards';
+import { availableActions, type WoAction, type WoStatus } from '@engr/workflow/workOrderState';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'workorder.view');
+const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
+
+let wo: WorkOrderDetail | null = null;
+let actions: WoAction[] = [];
+let jobCard: JobCardRecord | null = null;
+let spares: SpareRow[] = [];
+
+if (allowed && id) {
+  const db = await getDb(getEngrEnv());
+  wo = await getWorkOrderDetail(db, engr.orgId, id);
+  if (wo) {
+    actions = availableActions(
+      { orgId: engr.orgId, userId: engr.userId, perms: engr.perms },
+      {
+        status: wo.status as WoStatus,
+        stationManagerId: wo.stationManagerId,
+        technicianPortalUserId: wo.technicianPortalUserId,
+      },
+    );
+    jobCard = await getJobCard(db, engr.orgId, id);
+    if (jobCard) spares = await listSpares(db, engr.orgId, jobCard.id);
+  }
+}
+if (allowed && !wo) Astro.response.status = 404;
+---
+
+<EngrLayout title="Work order">
+  <div class="engr-page-head">
+    <div>
+      <h1>{wo ? wo.woNo : 'Work order'}</h1>
+      <p class="engr-lead">Work order detail.</p>
+    </div>
+    <a href="/engr/workorders" class="engr-btn engr-btn--secondary">Back</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to work orders.
+      </p>
+    ) : !wo ? (
+      <p class="engr-empty">That work order was not found in your organisation.</p>
+    ) : (
+      <WorkOrderDetailView
+        wo={wo}
+        actions={actions}
+        jobCard={jobCard}
+        spares={spares}
+        errorCode={errorCode}
+      />
+    )
+  }
+</EngrLayout>

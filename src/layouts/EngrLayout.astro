@@ -51,6 +51,12 @@ const isActive = (href: string) => path === href || path.startsWith(href + '/');
               >
                 Requests
               </a>
+              <a
+                href="/engr/workorders"
+                aria-current={isActive('/engr/workorders') ? 'page' : undefined}
+              >
+                Work orders
+              </a>
             </nav>
           )
         }

@@ -1,0 +1,151 @@
+---
+export const prerender = false;
+
+/**
+ * Station manager confirmations: arrivals to confirm and closures to confirm or
+ * reopen, scoped to the stations this user manages. Each action posts to its
+ * endpoint; the state machine enforces station-manager ownership.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listForStationManager, type WorkOrderListRow } from '@engr/repos/workOrders';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'workorder.view');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: WorkOrderListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listForStationManager(db, engr.orgId, engr.userId);
+}
+const arrivals = rows.filter((r) => r.status === 'TECH_ACCEPTED');
+const closures = rows.filter((r) => r.status === 'WORK_DONE_PENDING_CONFIRM');
+---
+
+<EngrLayout title="Confirmations">
+  <div class="engr-page-head">
+    <div>
+      <h1>Confirmations</h1>
+      <p class="engr-lead">Arrivals and closures awaiting confirmation at your stations.</p>
+    </div>
+  </div>
+
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to confirmations.
+      </p>
+    ) : (
+      <div style="display:grid;gap:2rem;max-width:44rem">
+        <section aria-labelledby="conf-arrivals">
+          <h2 class="engr-card__label" id="conf-arrivals">
+            Awaiting arrival
+          </h2>
+          {arrivals.length === 0 ? (
+            <p class="engr-empty">No arrivals to confirm.</p>
+          ) : (
+            <div style="display:grid;gap:1rem;margin-top:0.5rem">
+              {arrivals.map((r) => (
+                <div class="engr-card">
+                  <p class="engr-card__label">{r.woNo}</p>
+                  <p class="engr-meta">
+                    <span>
+                      Station <strong>{r.stationName}</strong>
+                    </span>
+                    <span>
+                      Technician <strong>{r.technicianName ?? 'Unassigned'}</strong>
+                    </span>
+                  </p>
+                  <form
+                    method="post"
+                    action={`/engr/api/workorders/${r.id}/confirm-arrival`}
+                    class="engr-actionbar"
+                    style="margin-top:0.75rem"
+                  >
+                    <button type="submit" class="engr-btn engr-btn--primary">
+                      Confirm arrival
+                    </button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section aria-labelledby="conf-closures">
+          <h2 class="engr-card__label" id="conf-closures">
+            Awaiting closure
+          </h2>
+          {closures.length === 0 ? (
+            <p class="engr-empty">No closures to confirm.</p>
+          ) : (
+            <div style="display:grid;gap:1rem;margin-top:0.5rem">
+              {closures.map((r) => (
+                <div class="engr-card">
+                  <p class="engr-card__label">{r.woNo}</p>
+                  <p class="engr-meta">
+                    <span>
+                      Station <strong>{r.stationName}</strong>
+                    </span>
+                    <span>
+                      Technician <strong>{r.technicianName ?? 'Unassigned'}</strong>
+                    </span>
+                  </p>
+                  <p style="margin:0.4rem 0 0">
+                    <a href={`/engr/workorders/${r.id}`}>View detail</a>
+                  </p>
+                  <form
+                    method="post"
+                    action={`/engr/api/workorders/${r.id}/confirm-closure`}
+                    class="engr-actionbar"
+                    style="margin-top:0.6rem"
+                  >
+                    <input type="hidden" name="decision" value="confirm" />
+                    <button type="submit" class="engr-btn engr-btn--primary">
+                      Confirm closure
+                    </button>
+                  </form>
+                  <form
+                    method="post"
+                    action={`/engr/api/workorders/${r.id}/confirm-closure`}
+                    class="engr-form"
+                    style="margin-top:0.6rem"
+                  >
+                    <input type="hidden" name="decision" value="reopen" />
+                    <div class="engr-field">
+                      <label for={`reopen-${r.id}`}>Reason to reopen</label>
+                      <textarea
+                        id={`reopen-${r.id}`}
+                        class="engr-textarea"
+                        name="reason"
+                        maxlength="500"
+                      />
+                    </div>
+                    <div class="engr-actionbar">
+                      <button type="submit" class="engr-btn engr-btn--danger">
+                        Reopen
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    )
+  }
+</EngrLayout>
