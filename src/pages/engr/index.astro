@@ -1,0 +1,129 @@
+---
+export const prerender = false;
+
+/**
+ * Dashboard shell. Four count cards read the seeded views, each filtered by the
+ * current org. This is a shell; deeper drill-downs come in later prompts.
+ *
+ * Gate: the seeded permissions table has no dashboard.view key, so this gates on
+ * reports.view ("View reports and dashboards"), the closest existing key, rather
+ * than inventing a permission.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getDashboard, type Dashboard } from '@engr/repos/dashboard';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'reports.view');
+
+let data: Dashboard | null = null;
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  data = await getDashboard(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Dashboard">
+  <div class="engr-page-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="engr-lead">A view of open work across your organisation.</p>
+    </div>
+    <a href="/engr/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
+  </div>
+
+  {
+    !allowed && (
+      <p class="engr-error" role="alert">
+        You do not have access to the dashboard.
+      </p>
+    )
+  }
+
+  {
+    allowed && data && (
+      <div class="engr-cards">
+        <section class="engr-card" aria-labelledby="card-wo">
+          <h2 class="engr-card__label" id="card-wo">
+            Open work orders
+          </h2>
+          <p class="engr-card__count">{data.openWorkOrders.count}</p>
+          {data.openWorkOrders.items.length === 0 ? (
+            <p class="engr-card__empty">None open.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {data.openWorkOrders.items.map((w) => (
+                <li>
+                  <span>{w.woNo}</span>
+                  <span class="engr-card__muted">{w.stationName ?? 'Unassigned'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section class="engr-card" aria-labelledby="card-cost">
+          <h2 class="engr-card__label" id="card-cost">
+            Pending cost approvals
+          </h2>
+          <p class="engr-card__count">{data.pendingCostApprovals.count}</p>
+          {data.pendingCostApprovals.items.length === 0 ? (
+            <p class="engr-card__empty">Nothing awaiting approval.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {data.pendingCostApprovals.items.map((c) => (
+                <li>
+                  <span>{formatMoneyMinor(c.totalMinor, c.currency)}</span>
+                  <span class="engr-card__muted">{c.status}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section class="engr-card" aria-labelledby="card-bill">
+          <h2 class="engr-card__label" id="card-bill">
+            Pending bill approvals
+          </h2>
+          <p class="engr-card__count">{data.pendingBillApprovals.count}</p>
+          {data.pendingBillApprovals.items.length === 0 ? (
+            <p class="engr-card__empty">Nothing awaiting approval.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {data.pendingBillApprovals.items.map((b) => (
+                <li>
+                  <span>{b.billNo}</span>
+                  <span class="engr-card__muted">{formatMoneyMinor(b.totalMinor, b.currency)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section class="engr-card" aria-labelledby="card-pm">
+          <h2 class="engr-card__label" id="card-pm">
+            Upcoming maintenance
+          </h2>
+          <p class="engr-card__count">{data.upcomingPm.count}</p>
+          {data.upcomingPm.items.length === 0 ? (
+            <p class="engr-card__empty">Nothing scheduled.</p>
+          ) : (
+            <ul class="engr-card__list">
+              {data.upcomingPm.items.map((p) => (
+                <li>
+                  <span>{p.scheduleName}</span>
+                  <span class="engr-card__muted">{p.dueDate ?? 'Not set'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    )
+  }
+</EngrLayout>

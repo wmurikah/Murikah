@@ -1,0 +1,73 @@
+---
+export const prerender = false;
+
+/**
+ * Login screen. Email is unique per organisation, so the form collects the
+ * organisation slug as well as the email and password, then posts to the login
+ * endpoint which resolves the tenant first. Native required validation gives
+ * inline hints; the endpoint is the authority and returns one generic error.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+
+const params = Astro.url.searchParams;
+const hasError = params.get('error') === '1';
+const slug = params.get('org') ?? '';
+---
+
+<EngrLayout title="Sign in">
+  <section class="engr-auth" aria-labelledby="engr-auth-title">
+    <h1 id="engr-auth-title">Sign in</h1>
+    <p class="engr-auth__sub">Engineering Rhythm, a Murikah Labs product.</p>
+
+    {
+      hasError && (
+        <p class="engr-error" role="alert">
+          Those details did not match. Check the organisation, email and password, then try again.
+        </p>
+      )
+    }
+
+    <form method="post" action="/engr/api/auth/login" class="engr-form">
+      <div class="engr-field">
+        <label for="org">Organisation slug</label>
+        <input
+          id="org"
+          class="engr-input"
+          name="org"
+          value={slug}
+          required
+          autocomplete="organization"
+          autocapitalize="none"
+          spellcheck="false"
+        />
+      </div>
+      <div class="engr-field">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          class="engr-input"
+          name="email"
+          type="email"
+          required
+          autocomplete="username"
+          autocapitalize="none"
+          spellcheck="false"
+        />
+      </div>
+      <div class="engr-field">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          class="engr-input"
+          name="password"
+          type="password"
+          required
+          autocomplete="current-password"
+        />
+      </div>
+      <div class="engr-actions">
+        <button type="submit" class="engr-btn engr-btn--primary">Sign in</button>
+      </div>
+    </form>
+  </section>
+</EngrLayout>
