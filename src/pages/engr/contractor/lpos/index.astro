@@ -1,0 +1,73 @@
+---
+export const prerender = false;
+
+/** Contractor LPO list: the LPOs issued to this contractor. Gate: workorder.view. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listLposForContractor, type LpoListRow } from '@engr/repos/lpos';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'workorder.view');
+let rows: LpoListRow[] = [];
+let isContractor = false;
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
+  isContractor = contractorId != null;
+  if (contractorId) rows = await listLposForContractor(db, engr.orgId, contractorId);
+}
+---
+
+<EngrLayout title="My LPOs">
+  <div class="engr-page-head">
+    <div>
+      <h1>My LPOs</h1>
+      <p class="engr-lead">Local purchase orders issued to you.</p>
+    </div>
+  </div>
+
+  {
+    !allowed || !isContractor ? (
+      <p class="engr-error" role="alert">
+        This page is for contractor accounts.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">No LPOs issued to you yet.</p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="My LPOs">
+          <thead>
+            <tr>
+              <th scope="col">LPO</th>
+              <th scope="col">Base station</th>
+              <th scope="col">Work orders</th>
+              <th scope="col">Total</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  <a href={`/engr/contractor/lpos/${r.id}`}>{r.lpoNo}</a>
+                </td>
+                <td>{r.baseStationName ?? 'Not set'}</td>
+                <td>{r.woCount}</td>
+                <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>
