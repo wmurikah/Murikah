@@ -76,6 +76,19 @@ if (allowed) {
         <a href="/engr/mileage/approvals">Mileage approvals</a>
       )
     }
+    {can(Astro.locals, 'cost.create') && <a href="/engr/contractor/costs">My costs</a>}
+    {
+      (can(Astro.locals, 'cost.approve.l1') || can(Astro.locals, 'cost.approve.l2')) && (
+        <a href="/engr/costs/approvals">Cost approvals</a>
+      )
+    }
+    {can(Astro.locals, 'bill.create') && <a href="/engr/contractor/bills">My bills</a>}
+    {
+      (can(Astro.locals, 'bill.approve.l1') ||
+        can(Astro.locals, 'bill.approve.l2') ||
+        can(Astro.locals, 'bill.approve.l3')) && <a href="/engr/bills/approvals">Bill approvals</a>
+    }
+    {can(Astro.locals, 'payment.record') && <a href="/engr/payments">Payments</a>}
     <a href="/engr/notifications">My notifications</a>
     {can(Astro.locals, 'reports.view') && <a href="/engr/ops/notifications">Notifications ops</a>}
   </nav>
