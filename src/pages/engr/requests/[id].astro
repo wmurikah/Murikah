@@ -2,13 +2,18 @@
 export const prerender = false;
 
 /**
- * Request detail (stub). Shows the core fields of one org-scoped request. Full
- * detail, history and actions arrive in a later prompt. Gate: requests.view.
+ * Engineer request detail. Accept or Reject an OPEN request; assign a
+ * pre-qualified contractor on predefined rates when ACCEPTED, which creates the
+ * work order. Once assigned, links to that work order. Gate: requests.view to
+ * see it; actions gate on requests.accept, requests.reject and workorder.create
+ * plus workorder.assign.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getRequestById, type RequestDetail } from '@engr/repos/requests';
+import { getRequestAssignmentInfo, listSlas, type SlaOption } from '@engr/repos/requestActions';
+import { listEligibleContractors, type ContractorOption } from '@engr/repos/contractorsPick';
 import { can } from '@engr/auth/rbac';
 import { relativeAge } from '@engr/format';
 
@@ -16,26 +21,62 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/engr/login');
 
 const allowed = can(Astro.locals, 'requests.view');
+const canAccept = can(Astro.locals, 'requests.accept');
+const canReject = can(Astro.locals, 'requests.reject');
+const canAssign = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
 const { id } = Astro.params;
+const errorCode = Astro.url.searchParams.get('error');
 
 let detail: RequestDetail | null = null;
+let status = '';
+let contractors: ContractorOption[] = [];
+let slas: SlaOption[] = [];
+let workOrder: { id: string; woNo: string } | null = null;
+
 if (allowed && id) {
   const db = await getDb(getEngrEnv());
   detail = await getRequestById(db, engr.orgId, id);
+  if (detail) {
+    const info = await getRequestAssignmentInfo(db, engr.orgId, id);
+    status = info?.status ?? detail.status;
+    if (info && info.status === 'ACCEPTED' && canAssign) {
+      [contractors, slas] = await Promise.all([
+        listEligibleContractors(db, engr.orgId, info.stationId, info.categoryId),
+        listSlas(db, engr.orgId),
+      ]);
+    }
+    const woRes = await db.execute({
+      sql: `SELECT id, wo_no FROM work_orders WHERE request_id = ? AND org_id = ? AND deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT 1`,
+      args: [id, engr.orgId],
+    });
+    const woRow = woRes.rows[0];
+    if (woRow) workOrder = { id: String(woRow.id), woNo: String(woRow.wo_no) };
+  }
 }
-if (allowed && !detail) {
-  Astro.response.status = 404;
-}
+if (allowed && !detail) Astro.response.status = 404;
+
+const errorMessage = errorCode
+  ? 'That action could not be completed. Refresh and try again.'
+  : null;
 ---
 
 <EngrLayout title="Request">
   <div class="engr-page-head">
     <div>
       <h1>{detail ? detail.requestNo : 'Request'}</h1>
-      <p class="engr-lead">Request detail.</p>
+      <p class="engr-lead">Service request detail.</p>
     </div>
     <a href="/engr/requests" class="engr-btn engr-btn--secondary">Back to queue</a>
   </div>
+
+  {
+    errorMessage && (
+      <p class="engr-error" role="alert">
+        {errorMessage}
+      </p>
+    )
+  }
 
   {
     !allowed ? (
@@ -56,15 +97,96 @@ if (allowed && !detail) {
           <dt>Priority</dt>
           <dd>{detail.priority}</dd>
           <dt>Status</dt>
-          <dd>{detail.status}</dd>
+          <dd>
+            <span class="engr-pill">{status}</span>
+          </dd>
           <dt>Repeat call</dt>
           <dd>{detail.isRepeatCall ? 'Yes' : 'No'}</dd>
           <dt>Age</dt>
           <dd>{relativeAge(detail.createdAt)}</dd>
         </dl>
-        <p class="engr-lead" style="margin-top:1.5rem">
-          Full request detail and actions arrive in a later prompt.
-        </p>
+
+        {workOrder && (
+          <p class="engr-notice">
+            Work order <a href={`/engr/workorders/${workOrder.id}`}>{workOrder.woNo}</a> has been
+            created for this request.
+          </p>
+        )}
+
+        {status === 'OPEN' && (canAccept || canReject) && (
+          <div class="engr-panel">
+            <h2>Triage</h2>
+            {canAccept && (
+              <form method="post" action={`/engr/api/requests/${id}/accept`} class="engr-actionbar">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Accept request
+                </button>
+              </form>
+            )}
+            {canReject && (
+              <form method="post" action={`/engr/api/requests/${id}/reject`} class="engr-form">
+                <div class="engr-field">
+                  <label for="reject-reason">Reason for rejection</label>
+                  <textarea
+                    id="reject-reason"
+                    class="engr-textarea"
+                    name="reason"
+                    maxlength="500"
+                  />
+                </div>
+                <div class="engr-actionbar">
+                  <button type="submit" class="engr-btn engr-btn--danger">
+                    Reject request
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {status === 'ACCEPTED' && canAssign && (
+          <div class="engr-panel">
+            <h2>Assign a contractor</h2>
+            {contractors.length === 0 ? (
+              <p class="engr-empty">
+                No pre-qualified contractor covers this station or category yet.
+              </p>
+            ) : (
+              <form
+                method="post"
+                action={`/engr/api/requests/${id}/assign-contractor`}
+                class="engr-form"
+              >
+                <div class="engr-field">
+                  <label for="contractor">Contractor</label>
+                  <select id="contractor" class="engr-select" name="contractor_id" required>
+                    <option value="">Choose a contractor</option>
+                    {contractors.map((c) => (
+                      <option value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div class="engr-field">
+                  <label for="sla">
+                    SLA <span class="engr-field__hint">(optional)</span>
+                  </label>
+                  <select id="sla" class="engr-select" name="sla_id">
+                    <option value="">Not set</option>
+                    {slas.map((s) => (
+                      <option value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <p class="engr-field__hint">Assignment basis: predefined rates.</p>
+                <div class="engr-actionbar">
+                  <button type="submit" class="engr-btn engr-btn--primary">
+                    Create work order
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
       </>
     )
   }
