@@ -15,6 +15,10 @@ import { readSession } from '@engr/auth/session';
 
 const PUBLIC_PATHS = new Set(['/engr/login', '/engr/api/auth/login']);
 
+// Machine endpoints that carry their own shared-secret auth and must not require
+// a user session: the Cron drain triggers and the provider delivery webhooks.
+const PUBLIC_PREFIXES = ['/engr/api/cron/', '/engr/api/webhooks/'];
+
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -30,8 +34,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return next();
   }
 
-  // Public entry points need no session.
-  if (PUBLIC_PATHS.has(pathname)) {
+  // Public entry points and self-secured machine endpoints need no session.
+  if (PUBLIC_PATHS.has(pathname) || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return next();
   }
 
