@@ -1,0 +1,44 @@
+---
+export const prerender = false;
+
+/** Technician list: the work orders assigned to this technician's account. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import WorkOrderList from '@/components/engr/WorkOrderList.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listForTechnician, type WorkOrderListRow } from '@engr/repos/workOrders';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/engr/login');
+
+const allowed = can(Astro.locals, 'workorder.view');
+let rows: WorkOrderListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listForTechnician(db, engr.orgId, engr.userId);
+}
+---
+
+<EngrLayout title="My work orders">
+  <div class="engr-page-head">
+    <div>
+      <h1>My work orders</h1>
+      <p class="engr-lead">Work orders assigned to you.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to work orders.
+      </p>
+    ) : (
+      <WorkOrderList
+        rows={rows}
+        basePath="/engr/technician/workorders"
+        emptyText="No work orders are assigned to you."
+      />
+    )
+  }
+</EngrLayout>

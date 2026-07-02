@@ -462,3 +462,103 @@
 .engr-detail dd {
   margin: 0;
 }
+
+/* ---- Work-order flow ------------------------------------------------------- */
+
+/* Status timeline. */
+.engr-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 34rem;
+}
+.engr-timeline__step {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--color-hairline);
+  color: var(--color-slate);
+}
+.engr-timeline__step:last-child {
+  border-bottom: 0;
+}
+.engr-timeline__step--done {
+  color: var(--color-ink);
+}
+.engr-timeline__label {
+  font-weight: 600;
+}
+.engr-timeline__at {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Meta line and status pill. */
+.engr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.5rem 0 0;
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+}
+.engr-meta strong {
+  color: var(--color-ink);
+}
+.engr-pill {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--color-stone);
+  color: var(--color-navy);
+}
+
+/* Action panels: a titled box holding one or more action forms. */
+.engr-panel {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: 1.1rem 1.15rem 1.25rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.75rem;
+  background: var(--color-porcelain);
+}
+.engr-panel h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.engr-actionbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+/* Spare rows on the job card. */
+.engr-spares {
+  display: grid;
+  gap: 0.6rem;
+}
+.engr-spare-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 40rem) {
+  .engr-spare-row {
+    grid-template-columns: 2fr 1.6fr 0.7fr;
+    align-items: end;
+  }
+}
+
+/* Danger button for reject/cancel actions. */
+.engr-btn--danger {
+  background: var(--color-porcelain);
+  color: #8a1c12;
+  border-color: #f3c0ba;
+}
+.engr-btn--danger:hover {
+  background: #fdecea;
+}

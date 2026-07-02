@@ -15,15 +15,18 @@ import { getDb } from '@engr/db';
 import { getDashboard, type Dashboard } from '@engr/repos/dashboard';
 import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
+import { getUnreadCount } from '@engr/notify';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/engr/login');
 
 const allowed = can(Astro.locals, 'reports.view');
 
+const db = await getDb(getEngrEnv());
+const unread = await getUnreadCount(db, engr.orgId, engr.userId);
+
 let data: Dashboard | null = null;
 if (allowed) {
-  const db = await getDb(getEngrEnv());
   data = await getDashboard(db, engr.orgId);
 }
 ---
@@ -36,6 +39,21 @@ if (allowed) {
     </div>
     <a href="/engr/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
   </div>
+
+  <p class="engr-lead" role="status" style="margin-top:-0.5rem">
+    {
+      unread > 0
+        ? `You have ${unread} unread notification${unread === 1 ? '' : 's'}.`
+        : 'No unread notifications.'
+    }
+  </p>
+
+  <nav class="engr-toggle" aria-label="Queues" style="margin:0.5rem 0 1.25rem;flex-wrap:wrap">
+    <a href="/engr/workorders">Work orders</a>
+    <a href="/engr/contractor/workorders">Contractor inbox</a>
+    <a href="/engr/technician/workorders">My work orders</a>
+    <a href="/engr/station/confirmations">Confirmations</a>
+  </nav>
 
   {
     !allowed && (
