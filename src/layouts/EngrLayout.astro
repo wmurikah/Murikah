@@ -1,0 +1,77 @@
+---
+/**
+ * Document shell for the Engineering Rhythm product (murikah.com/engr). Reuses
+ * the marketing design tokens (via global.css) and the self-hosted Inter, with
+ * product rules in engr.css. Semantic landmarks and a skip link throughout for
+ * assistive tech. The product is marked noindex; it is an authenticated app.
+ *
+ * The top bar shows the primary nav and the sign-out control only when a
+ * session is present (locals.engr), so the login screen stays clean.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@/styles/global.css';
+import '@/styles/engr.css';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+const pageTitle = `${title}, Engineering Rhythm`;
+const engr = Astro.locals.engr;
+const path = Astro.url.pathname;
+const isActive = (href: string) => path === href || path.startsWith(href + '/');
+---
+
+<!doctype html>
+<html lang="en-KE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+  </head>
+  <body class="engr">
+    <a href="#engr-main" class="engr-skip">Skip to content</a>
+    <header class="engr-topbar">
+      <div class="engr-topbar__inner">
+        <a href="/engr" class="engr-brand" aria-label="Engineering Rhythm, home">
+          <span class="engr-brand__mark" aria-hidden="true">ER</span>
+          <span class="engr-brand__name">Engineering Rhythm</span>
+        </a>
+
+        {
+          engr && (
+            <nav class="engr-nav" aria-label="Primary">
+              <a href="/engr" aria-current={path === '/engr' ? 'page' : undefined}>
+                Dashboard
+              </a>
+              <a
+                href="/engr/requests"
+                aria-current={isActive('/engr/requests') ? 'page' : undefined}
+              >
+                Requests
+              </a>
+            </nav>
+          )
+        }
+
+        {
+          engr && (
+            <form method="post" action="/engr/api/auth/logout" class="engr-account">
+              <span class="engr-account__org" title="Organisation">
+                {engr.orgSlug}
+              </span>
+              <button type="submit" class="engr-btn engr-btn--ghost">
+                Sign out
+              </button>
+            </form>
+          )
+        }
+      </div>
+    </header>
+
+    <main id="engr-main" class="engr-main">
+      <slot />
+    </main>
+  </body>
+</html>
