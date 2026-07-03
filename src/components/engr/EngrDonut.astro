@@ -1,11 +1,14 @@
 ---
 /**
  * An accessible donut chart, rendered server-side as inline SVG (no client
- * runtime). The ring is decorative and carries a role=img summary; the legend
- * beneath is the text equivalent, listing each segment's label, value and share.
- * When a datum carries an href the segment and its legend row become a
- * drill-through link, so a slice opens the filtered list behind it. An empty
- * dataset shows a small "no data yet" line rather than a broken ring.
+ * runtime). A thick ring (cutout about 58 percent) with the total in the centre
+ * hole, and external boxed leader-line callouts instead of a side legend: a short
+ * radial leader from each slice to a compact rounded box outside the ring,
+ * showing the category, value and share, laid out in two vertical columns and
+ * distributed so none overlap or clip. Each slice and its callout box link into
+ * the filtered list behind it (drill-through). Below the callout layout's minimum
+ * width a container query falls back to a compact donut with an inline legend.
+ * A visually-hidden table carries the same data for assistive tech.
  */
 import type { ChartDatum } from '@engr/repos/analytics';
 
@@ -25,32 +28,143 @@ const {
 } = Astro.props;
 
 const total = data.reduce((sum, d) => sum + d.value, 0);
-const hasData = data.length > 0 && total > 0;
+const present = data.filter((d) => d.value > 0);
+const hasData = present.length > 0 && total > 0;
 
-// Circumference is 100 (r chosen so 2πr = 100), so a segment length is its
-// percentage directly and the dash offset positions it clockwise from the top.
-const R = 15.915;
-let cumulative = 0;
-const segments = data.map((d, i) => {
-  const pct = total > 0 ? (d.value / total) * 100 : 0;
-  const seg = {
-    ...d,
-    pct,
-    dash: `${pct} ${100 - pct}`,
-    offset: (125 - cumulative) % 100,
+// Keep the chart clean: with many small categories, fold the smallest into one
+// "Other" callout (which is informational, not a drill link).
+let source: ChartDatum[] = present;
+if (present.length > 10) {
+  const sorted = [...present].sort((a, b) => b.value - a.value);
+  const other = sorted.slice(9).reduce((sum, d) => sum + d.value, 0);
+  source = [...sorted.slice(0, 9), { label: 'Other', value: other }];
+}
+
+interface Slice {
+  label: string;
+  value: number;
+  href?: string;
+  frac: number;
+  a0: number;
+  a1: number;
+  mid: number;
+  colour: string;
+  pctText: string;
+  valueText: string;
+}
+let cum = 0;
+const slices: Slice[] = source.map((d, i) => {
+  const frac = total > 0 ? d.value / total : 0;
+  const a0 = cum * 360;
+  const a1 = (cum + frac) * 360;
+  const mid = (cum + frac / 2) * 360;
+  cum += frac;
+  return {
+    label: d.label,
+    value: d.value,
+    href: d.href,
+    frac,
+    a0,
+    a1,
+    mid,
     colour: `var(--engr-chart-${(i % 6) + 1})`,
+    pctText: `${Math.round(frac * 100)}%`,
+    valueText: String(d.display ?? d.value),
   };
-  cumulative += pct;
-  return seg;
 });
-const pctText = (p: number) => `${Math.round(p)}%`;
-const ariaSummary = `${title}. ${segments
-  .filter((s) => s.value > 0)
-  .map((s) => `${s.label} ${s.value}, ${pctText(s.pct)}`)
-  .join('; ')}.`;
+
+// ---- geometry helpers -------------------------------------------------------
+const pointOn = (cx: number, cy: number, rho: number, deg: number): [number, number] => {
+  const rad = (deg * Math.PI) / 180;
+  return [cx + rho * Math.sin(rad), cy - rho * Math.cos(rad)];
+};
+const f = (n: number): string => n.toFixed(2);
+const sectorPath = (
+  cx: number,
+  cy: number,
+  ro: number,
+  ri: number,
+  a0: number,
+  a1: number,
+): string => {
+  const [ox0, oy0] = pointOn(cx, cy, ro, a0);
+  const [ox1, oy1] = pointOn(cx, cy, ro, a1);
+  const [ix1, iy1] = pointOn(cx, cy, ri, a1);
+  const [ix0, iy0] = pointOn(cx, cy, ri, a0);
+  const large = a1 - a0 > 180 ? 1 : 0;
+  return `M ${f(ox0)} ${f(oy0)} A ${ro} ${ro} 0 ${large} 1 ${f(ox1)} ${f(oy1)} L ${f(ix1)} ${f(iy1)} A ${ri} ${ri} 0 ${large} 0 ${f(ix0)} ${f(iy0)} Z`;
+};
+const short = (t: string): string => (t.length > 15 ? `${t.slice(0, 14)}…` : t);
+const unit = valueHeading.toLowerCase();
+const single = slices.length === 1;
+
+// ---- wide layout: two columns of callouts ----------------------------------
+const R = 62;
+const RIN = 36; // cutout = 36/62 ≈ 58%
+const boxW = 100;
+const boxH = 30;
+const rowSlot = 38;
+const padY = 12;
+const leaderOut = 12;
+const edge = 6;
+const gap = 22;
+const leftBoxX = edge;
+const leftConnectX = leftBoxX + boxW;
+const cxW = leftConnectX + gap + R;
+const rightBoxX = cxW + R + gap;
+const rightConnectX = rightBoxX;
+const W = rightBoxX + boxW + edge;
+
+const sideOf = (s: Slice): 'left' | 'right' => (s.mid < 180 ? 'right' : 'left');
+const rightCount = slices.filter((s) => sideOf(s) === 'right').length;
+const leftCount = slices.filter((s) => sideOf(s) === 'left').length;
+const maxSide = Math.max(rightCount, leftCount, 1);
+const H = Math.max(2 * R + 2 * padY + 4, maxSide * rowSlot + 2 * padY);
+const cyW = H / 2;
+
+interface Placed extends Slice {
+  arc: string;
+  leader: string;
+  boxX: number;
+  boxY: number;
+  boxCy: number;
+}
+const placeSide = (side: 'left' | 'right'): Placed[] => {
+  const items = slices
+    .filter((s) => sideOf(s) === side)
+    .map((s) => ({ s, exitY: pointOn(cxW, cyW, R, s.mid)[1] }))
+    .sort((a, b) => a.exitY - b.exitY);
+  const k = items.length;
+  const avail = H - 2 * padY;
+  const slot = k > 0 ? avail / k : avail;
+  const boxX = side === 'right' ? rightBoxX : leftBoxX;
+  const connectX = side === 'right' ? rightConnectX : leftConnectX;
+  return items.map((it, j) => {
+    const boxCy = padY + (j + 0.5) * slot;
+    const [p0x, p0y] = pointOn(cxW, cyW, R, it.s.mid);
+    const [p1x, p1y] = pointOn(cxW, cyW, R + leaderOut, it.s.mid);
+    return {
+      ...it.s,
+      arc: sectorPath(cxW, cyW, R, RIN, it.s.a0, it.s.a1),
+      leader: `M ${f(p0x)} ${f(p0y)} L ${f(p1x)} ${f(p1y)} L ${connectX} ${f(boxCy)}`,
+      boxX,
+      boxY: boxCy - boxH / 2,
+      boxCy,
+    };
+  });
+};
+const placed: Placed[] = hasData ? [...placeSide('left'), ...placeSide('right')] : [];
+
+// ---- mini layout: compact donut + inline legend ----------------------------
+const miniR = 52;
+const miniRIN = 30;
+const miniArcs = slices.map((s) => ({ ...s, arc: sectorPath(60, 60, miniR, miniRIN, s.a0, s.a1) }));
+const ariaSummary = `${title}. ${slices
+  .map((s) => `${s.label} ${s.value}, ${s.pctText}`)
+  .join('; ')}. Total ${total} ${unit}.`;
 ---
 
-<figure class="engr-chart">
+<figure class="engr-chart engr-chart--donut">
   <figcaption class="engr-chart__cap">
     <h3 class="engr-chart__title">{title}</h3>
     {description && <p class="engr-chart__desc">{description}</p>}
@@ -60,86 +174,167 @@ const ariaSummary = `${title}. ${segments
       <p class="engr-empty">{emptyText}</p>
     ) : (
       <div class="engr-donut">
-        <svg class="engr-donut__svg" viewBox="0 0 36 36" role="img" aria-label={ariaSummary}>
-          <circle
-            class="engr-donut__track"
-            cx="18"
-            cy="18"
-            r={R}
-            fill="none"
-            stroke="var(--engr-chart-track)"
-            stroke-width="4"
-          />
-          {segments
-            .filter((s) => s.value > 0)
-            .map((s) =>
-              s.href ? (
-                <a href={s.href} aria-label={`${s.label}: ${s.value}`}>
-                  <title>{`${s.label}: ${s.value} (${pctText(s.pct)})`}</title>
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r={R}
-                    fill="none"
-                    stroke={s.colour}
-                    stroke-width="4"
-                    stroke-dasharray={s.dash}
-                    stroke-dashoffset={s.offset}
-                  />
-                </a>
-              ) : (
-                <circle
-                  cx="18"
-                  cy="18"
-                  r={R}
-                  fill="none"
-                  stroke={s.colour}
-                  stroke-width="4"
-                  stroke-dasharray={s.dash}
-                  stroke-dashoffset={s.offset}
-                />
-              ),
-            )}
-          <text
-            class="engr-donut__total"
-            x="18"
-            y="18"
-            text-anchor="middle"
-            dominant-baseline="central"
+        {/* Wide: thick ring with two-column boxed callouts. */}
+        <div class="engr-donutwide">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            class="engr-donutwide__svg"
+            role="img"
+            aria-label={ariaSummary}
           >
-            {total}
-          </text>
-        </svg>
-        <ul class="engr-legend">
-          {segments.map((s) => {
-            const body = (
-              <>
-                <span
-                  class="engr-legend__swatch"
-                  style={`background:${s.colour}`}
-                  aria-hidden="true"
-                />
-                <span class="engr-legend__label">{s.label}</span>
-                <span class="engr-legend__value">
-                  {s.display ?? s.value}
-                  <span class="engr-legend__pct"> · {pctText(s.pct)}</span>
-                </span>
-              </>
-            );
-            return (
-              <li>
-                {s.href ? (
-                  <a class="engr-legend__row" href={s.href}>
-                    {body}
+            {/* leader lines, behind everything */}
+            {placed.map((p) => (
+              <path d={p.leader} fill="none" stroke={p.colour} stroke-width="1" opacity="0.7" />
+            ))}
+            {/* ring slices (clickable, not in the tab order; the box carries the name) */}
+            {single ? (
+              <circle
+                cx={cxW}
+                cy={cyW}
+                r={(R + RIN) / 2}
+                fill="none"
+                stroke={slices[0].colour}
+                stroke-width={R - RIN}
+              />
+            ) : (
+              placed.map((p) =>
+                p.href ? (
+                  <a href={p.href} tabindex={-1} aria-hidden="true">
+                    <path d={p.arc} fill={p.colour} class="engr-donut__slice" />
                   </a>
                 ) : (
-                  <span class="engr-legend__row">{body}</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        <span class="engr-vh">{valueHeading}</span>
+                  <path d={p.arc} fill={p.colour} class="engr-donut__slice" />
+                ),
+              )
+            )}
+            {/* centre total and unit caption */}
+            <text class="engr-donut__total" x={cxW} y={cyW - 2} text-anchor="middle">
+              {total}
+            </text>
+            <text class="engr-donut__unit" x={cxW} y={cyW + 12} text-anchor="middle">
+              {unit}
+            </text>
+            {/* callout boxes */}
+            {placed.map((p) => {
+              const inner = (
+                <>
+                  <rect
+                    x={p.boxX}
+                    y={p.boxY}
+                    width={boxW}
+                    height={boxH}
+                    rx="6"
+                    class="engr-callout__box"
+                  />
+                  <circle cx={p.boxX + 10} cy={p.boxCy} r="3" fill={p.colour} />
+                  <text x={p.boxX + 19} y={p.boxCy - 2} class="engr-callout__name">
+                    {short(p.label)}
+                  </text>
+                  <text x={p.boxX + 19} y={p.boxCy + 9} class="engr-callout__val">
+                    {`${p.valueText} · ${p.pctText}`}
+                  </text>
+                </>
+              );
+              return p.href ? (
+                <a
+                  href={p.href}
+                  class="engr-callout"
+                  aria-label={`${p.label}: ${p.valueText}, ${p.pctText}`}
+                >
+                  <title>{p.label}</title>
+                  {inner}
+                </a>
+              ) : (
+                <g
+                  class="engr-callout"
+                  role="group"
+                  aria-label={`${p.label}: ${p.valueText}, ${p.pctText}`}
+                >
+                  {inner}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Narrow fallback: compact donut and an inline legend. */}
+        <div class="engr-donutmini">
+          <svg
+            viewBox="0 0 120 120"
+            class="engr-donutmini__svg"
+            role="img"
+            aria-label={ariaSummary}
+          >
+            {single ? (
+              <circle
+                cx="60"
+                cy="60"
+                r={(miniR + miniRIN) / 2}
+                fill="none"
+                stroke={slices[0].colour}
+                stroke-width={miniR - miniRIN}
+              />
+            ) : (
+              miniArcs.map((s) => <path d={s.arc} fill={s.colour} class="engr-donut__slice" />)
+            )}
+            <text class="engr-donut__total" x="60" y="58" text-anchor="middle">
+              {total}
+            </text>
+            <text class="engr-donut__unit" x="60" y="72" text-anchor="middle">
+              {unit}
+            </text>
+          </svg>
+          <ul class="engr-legend engr-legend--wrap">
+            {slices.map((s) => {
+              const body = (
+                <>
+                  <span
+                    class="engr-legend__swatch"
+                    style={`background:${s.colour}`}
+                    aria-hidden="true"
+                  />
+                  <span class="engr-legend__label">{s.label}</span>
+                  <span class="engr-legend__value">
+                    {s.valueText}
+                    <span class="engr-legend__pct"> · {s.pctText}</span>
+                  </span>
+                </>
+              );
+              return (
+                <li>
+                  {s.href ? (
+                    <a class="engr-legend__row" href={s.href}>
+                      {body}
+                    </a>
+                  ) : (
+                    <span class="engr-legend__row">{body}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {/* Accessible data equivalent for the visual callouts. */}
+        <table class="engr-vh">
+          <caption>{title}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Category</th>
+              <th scope="col">{valueHeading}</th>
+              <th scope="col">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {slices.map((s) => (
+              <tr>
+                <th scope="row">{s.label}</th>
+                <td>{s.valueText}</td>
+                <td>{s.pctText}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     )
   }
