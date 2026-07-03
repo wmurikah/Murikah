@@ -11,7 +11,12 @@ export const prerender = false;
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { getRequestById, type RequestDetail } from '@engr/repos/requests';
+import {
+  getRequestById,
+  listRequestAttachments,
+  type RequestDetail,
+  type RequestAttachment,
+} from '@engr/repos/requests';
 import { getRequestAssignmentInfo, listSlas, type SlaOption } from '@engr/repos/requestActions';
 import { listEligibleContractors, type ContractorOption } from '@engr/repos/contractorsPick';
 import { can } from '@engr/auth/rbac';
@@ -32,12 +37,15 @@ let detail: RequestDetail | null = null;
 let status = '';
 let contractors: ContractorOption[] = [];
 let slas: SlaOption[] = [];
+let attachments: RequestAttachment[] = [];
 let workOrder: { id: string; woNo: string } | null = null;
+const canManageRouting = can(Astro.locals, 'settings.manage');
 
 if (allowed && id) {
   const db = await getDb(getEngrEnv());
   detail = await getRequestById(db, engr.orgId, id);
   if (detail) {
+    attachments = await listRequestAttachments(db, engr.orgId, id);
     const info = await getRequestAssignmentInfo(db, engr.orgId, id);
     status = info?.status ?? detail.status;
     if (info && info.status === 'ACCEPTED' && canAssign) {
@@ -91,6 +99,10 @@ const errorMessage = errorCode
         <dl class="engr-detail">
           <dt>Station</dt>
           <dd>{detail.stationName}</dd>
+          <dt>Asset or equipment</dt>
+          <dd>{detail.assetName ?? 'Not specified'}</dd>
+          <dt>Category</dt>
+          <dd>{detail.categoryName ?? 'Not specified'}</dd>
           <dt>Issue</dt>
           <dd>{detail.issue}</dd>
           <dt>Nature of breakdown</dt>
@@ -103,9 +115,46 @@ const errorMessage = errorCode
           </dd>
           <dt>Repeat call</dt>
           <dd>{detail.isRepeatCall ? 'Yes' : 'No'}</dd>
+          <dt>Engineer in charge</dt>
+          <dd>{detail.assignedEngineerName ?? 'Unassigned'}</dd>
           <dt>Age</dt>
           <dd>{relativeAge(detail.createdAt)}</dd>
         </dl>
+
+        {attachments.length > 0 && (
+          <div class="engr-panel">
+            <h2>Attachments</h2>
+            <ul class="engr-checklist">
+              {attachments.map((a) => (
+                <li>
+                  {a.fileUrl ? (
+                    <a href={a.fileUrl} target="_blank" rel="noopener noreferrer">
+                      {a.kind.toLowerCase()}: {a.fileName}
+                    </a>
+                  ) : (
+                    <span>
+                      {a.kind.toLowerCase()}: {a.fileName}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {status === 'OPEN' && !detail.assignedEngineerName && (
+          <p class="engr-notice" role="status">
+            No engineer is assigned to this station or category, so this request went to the
+            managers.
+            {canManageRouting && (
+              <>
+                {' '}
+                <a href="/admin/engineers">Assign an engineer in charge</a> so future requests route
+                automatically.
+              </>
+            )}
+          </p>
+        )}
 
         {workOrder && (
           <p class="engr-notice">
