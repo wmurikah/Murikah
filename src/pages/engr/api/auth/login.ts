@@ -41,7 +41,7 @@ async function readCredentials(request: Request): Promise<Credentials> {
 
 // One generic outcome for every failure path.
 function invalid(): Response {
-  return new Response(null, { status: 303, headers: { location: '/engr/login?error=1' } });
+  return new Response(null, { status: 303, headers: { location: '/login?error=1' } });
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -72,9 +72,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!ok) return invalid();
 
   const { roles, perms } = await loadUserAuth(db, organisation.id, userId);
+  // Secure in production (https); off for http development on engr.localhost.
+  const secure = new URL(request.url).protocol === 'https:';
   const cookie = await createSession(
     { sub: userId, org: organisation.id, orgSlug: organisation.slug, roles, perms },
     env.sessionSecret,
+    secure,
   );
 
   // Stamp last_login_at without blocking the redirect. waitUntil keeps the
@@ -91,6 +94,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   return new Response(null, {
     status: 303,
-    headers: { location: '/engr', 'set-cookie': cookie },
+    headers: { location: '/', 'set-cookie': cookie },
   });
 };
