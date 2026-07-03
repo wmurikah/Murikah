@@ -1,0 +1,91 @@
+---
+export const prerender = false;
+
+/** Regions list. Gate: stations.view; create/edit gates on stations.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listRegionsAdmin, type RegionRow } from '@engr/repos/adminRegions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'stations.view');
+const canManage = can(Astro.locals, 'stations.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: RegionRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listRegionsAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Regions">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Regions</h1>
+      <p class="engr-lead">Areas that group stations for setup.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/regions/new" class="engr-btn engr-btn--primary">
+          New region
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Region saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to regions.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No regions are set up yet."
+        canAct={canManage}
+        actionHref="/admin/regions/new"
+        actionLabel="Add a region"
+        hint="Ask an administrator to add a region."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Regions">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{canManage ? <a href={`/admin/regions/${r.id}`}>{r.name}</a> : r.name}</td>
+                <td>{r.code ?? 'Not set'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

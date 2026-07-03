@@ -1,0 +1,125 @@
+---
+export const prerender = false;
+
+/**
+ * Asset category create and edit. The path segment is "new" to create, otherwise
+ * a category id to edit. Gate: assets.manage. The form posts to the write
+ * endpoint, which redirects back to the list on success.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getCategory, type CategoryDetail } from '@engr/repos/adminCategories';
+import { listCategoryOptions, type Option } from '@engr/repos/adminOptions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'assets.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let category: CategoryDetail | null = null;
+let categories: Option[] = [];
+
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  categories = await listCategoryOptions(db, engr.orgId);
+  if (!isNew && id) category = await getCategory(db, engr.orgId, id);
+}
+const notFound = !isNew && category === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const c = category;
+// On edit, drop the category's own id so it cannot be picked as its own parent.
+const parentOptions = c ? categories.filter((o) => o.id !== c.id) : categories;
+---
+
+<EngrLayout title={isNew ? 'New category' : 'Edit category'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New category' : 'Edit category'}</h1>
+      <p class="engr-lead">A group that classifies the assets on each station.</p>
+    </div>
+    <a href="/admin/asset-categories" class="engr-btn engr-btn--secondary">Back to categories</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That code is already used by another category.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the code and name, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage asset categories.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That category was not found.
+      </p>
+    ) : (
+      <form
+        method="post"
+        action="/api/admin/asset-categories"
+        class="engr-formgrid engr-formgrid--two"
+      >
+        {!isNew && <input type="hidden" name="id" value={c!.id} />}
+        <div class="engr-field">
+          <label for="code">Code</label>
+          <input
+            type="text"
+            id="code"
+            class="engr-input"
+            name="code"
+            maxlength="30"
+            required
+            value={c?.code ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            class="engr-input"
+            name="name"
+            maxlength="120"
+            required
+            value={c?.name ?? ''}
+          />
+        </div>
+        <div class="engr-field engr-formgrid__full">
+          <label for="parent_id">
+            Parent category <span class="engr-field__hint">(optional)</span>
+          </label>
+          <select id="parent_id" class="engr-select" name="parent_id">
+            <option value="">Not set</option>
+            {parentOptions.map((o) => (
+              <option value={o.id} selected={c?.parentId === o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create category' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

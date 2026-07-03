@@ -1,0 +1,95 @@
+---
+export const prerender = false;
+
+/** SLAs list. Gate: slas.view; create/edit gates on slas.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listSlasAdmin, type SlaRow } from '@engr/repos/adminSlas';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'slas.view');
+const canManage = can(Astro.locals, 'slas.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: SlaRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listSlasAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="SLAs">
+  <div class="engr-adminbar">
+    <div>
+      <h1>SLAs</h1>
+      <p class="engr-lead">Response and resolution targets for work.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/slas/new" class="engr-btn engr-btn--primary">
+          New SLA
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        SLA saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to SLAs.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No SLAs are set up yet."
+        canAct={canManage}
+        actionHref="/admin/slas/new"
+        actionLabel="Add an SLA"
+        hint="Ask an administrator to add an SLA."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="SLAs">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Response (hrs)</th>
+              <th scope="col">Resolution (hrs)</th>
+              <th scope="col">Default</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{canManage ? <a href={`/admin/slas/${r.id}`}>{r.name}</a> : r.name}</td>
+                <td>{r.responseHours ?? 'Not set'}</td>
+                <td>{r.resolutionHours ?? 'Not set'}</td>
+                <td>{r.isDefault ? 'Yes' : 'No'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

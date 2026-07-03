@@ -1,0 +1,95 @@
+---
+export const prerender = false;
+
+/** Asset categories list. Gate: assets.view; create/edit gates on assets.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listCategoriesAdmin, type CategoryRow } from '@engr/repos/adminCategories';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'assets.view');
+const canManage = can(Astro.locals, 'assets.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: CategoryRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listCategoriesAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Asset categories">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Asset categories</h1>
+      <p class="engr-lead">Groups that classify the assets on each station.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/asset-categories/new" class="engr-btn engr-btn--primary">
+          New category
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Category saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to asset categories.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No asset categories yet."
+        canAct={canManage}
+        actionHref="/admin/asset-categories/new"
+        actionLabel="Add a category"
+        hint="Ask an administrator to add a category."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Asset categories">
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Name</th>
+              <th scope="col">Parent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  {canManage ? <a href={`/admin/asset-categories/${r.id}`}>{r.code}</a> : r.code}
+                </td>
+                <td>{r.name}</td>
+                <td>{r.parentName ?? 'Not set'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>
