@@ -4,7 +4,12 @@
  * A compact JWT (HS256) signed with ENGR_SESSION_SECRET is the session; there
  * is no sessions table. The permission keys are cached in the token so
  * per-request checks need no database round trip. The token is carried in an
- * HttpOnly cookie scoped to /engr, so it is never sent with marketing requests.
+ * HttpOnly cookie at Path=/ on the app's own host (engr.murikah.com). It is
+ * host-only, with no Domain attribute, so it stays confined to that subdomain
+ * and never reaches the marketing site or a sibling subdomain. Secure is gated
+ * on the caller (off for http development on engr.localhost). When per-tenant
+ * subdomains arrive, keep the cookie host-only per subdomain; do not widen it to
+ * a shared parent domain.
  */
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 
@@ -56,8 +61,11 @@ async function sign(payload: SessionPayload, secret: string): Promise<string> {
 
 // ---- cookie shape -----------------------------------------------------------
 
-function cookie(value: string, maxAge: number): string {
-  return `${SESSION_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/engr; Max-Age=${maxAge}`;
+function cookie(value: string, maxAge: number, secure: boolean): string {
+  // Host-only (no Domain), Path=/, so it is confined to this subdomain. Secure
+  // is off only for http development.
+  const secureAttr = secure ? '; Secure' : '';
+  return `${SESSION_COOKIE}=${value}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
 function readCookie(request: Request): string | null {
@@ -74,10 +82,17 @@ function readCookie(request: Request): string | null {
 
 // ---- public API -------------------------------------------------------------
 
-/** Sign a session and return the Set-Cookie value to attach to the response. */
-export async function createSession(payload: SessionPayload, secret: string): Promise<string> {
+/**
+ * Sign a session and return the Set-Cookie value to attach to the response. Pass
+ * secure=true in production (https); false only for http development.
+ */
+export async function createSession(
+  payload: SessionPayload,
+  secret: string,
+  secure: boolean,
+): Promise<string> {
   const token = await sign(payload, secret);
-  return cookie(token, MAX_AGE_SECONDS);
+  return cookie(token, MAX_AGE_SECONDS, secure);
 }
 
 /** Read and verify the session cookie, returning the payload or null. */
@@ -95,7 +110,11 @@ export async function readSession(
   }
 }
 
-/** Return the Set-Cookie value that clears the session. */
-export function clearSession(): string {
-  return cookie('', 0);
+/**
+ * Return the Set-Cookie value that clears the session. The attributes must match
+ * the set cookie (Path=/, host-only, Secure in production) for the browser to
+ * remove it.
+ */
+export function clearSession(secure: boolean): string {
+  return cookie('', 0, secure);
 }
