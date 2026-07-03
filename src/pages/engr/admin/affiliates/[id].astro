@@ -1,0 +1,164 @@
+---
+export const prerender = false;
+
+/**
+ * Create or edit an affiliate. The path segment is "new" to create, otherwise an
+ * affiliate id to edit. Only a group super-admin with org.manage. The slug is set
+ * once from the code on create and shown read-only when editing, since logins
+ * depend on it.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getAffiliate, type AffiliateDetail } from '@engr/repos/adminAffiliates';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = engr.isGroupAdmin && can(Astro.locals, 'org.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let affiliate: AffiliateDetail | null = null;
+if (canManage && !isNew && id) {
+  const db = await getDb(getEngrEnv());
+  affiliate = await getAffiliate(db, engr.homeOrgId, id);
+}
+const notFound = !isNew && affiliate === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const a = affiliate;
+---
+
+<EngrLayout title={isNew ? 'New affiliate' : 'Edit affiliate'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New affiliate' : 'Edit affiliate'}</h1>
+      <p class="engr-lead">A company under this group, with its own data and subscription.</p>
+    </div>
+    <a href="/admin/affiliates" class="engr-btn engr-btn--secondary">Back to affiliates</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That code is already used by another organisation.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the code, name, country and currency, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        Affiliates are managed by a group super-admin.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That affiliate was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/affiliates" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={a!.id} />}
+        {isNew ? (
+          <div class="engr-field">
+            <label for="code">Code</label>
+            <input
+              type="text"
+              id="code"
+              class="engr-input"
+              name="code"
+              maxlength="30"
+              required
+              placeholder="e.g. HPK"
+            />
+            <p class="engr-field__hint">
+              Stored lowercased as the login slug; it cannot be changed later.
+            </p>
+          </div>
+        ) : (
+          <div class="engr-field">
+            <label for="slug">Code</label>
+            <input
+              type="text"
+              id="slug"
+              class="engr-input"
+              value={a!.slug.toUpperCase()}
+              readonly
+              aria-describedby="slug-hint"
+            />
+            <p class="engr-field__hint" id="slug-hint">
+              The code is fixed once set, since logins depend on it.
+            </p>
+          </div>
+        )}
+        <div class="engr-field">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            class="engr-input"
+            name="name"
+            maxlength="160"
+            required
+            value={a?.name ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="country">Country</label>
+          <input
+            type="text"
+            id="country"
+            class="engr-input"
+            name="country"
+            maxlength="2"
+            required
+            value={a?.country ?? 'KE'}
+            placeholder="KE"
+          />
+          <p class="engr-field__hint">Two-letter code, for example KE, UG, TZ.</p>
+        </div>
+        <div class="engr-field">
+          <label for="base_currency">Base currency</label>
+          <input
+            type="text"
+            id="base_currency"
+            class="engr-input"
+            name="base_currency"
+            maxlength="3"
+            required
+            value={a?.baseCurrency ?? 'KES'}
+            placeholder="KES"
+          />
+          <p class="engr-field__hint">Three-letter code, for example KES, UGX, TZS.</p>
+        </div>
+        {!isNew && (
+          <div class="engr-field">
+            <label for="status">Status</label>
+            <select id="status" class="engr-select" name="status">
+              <option value="ACTIVE" selected={(a?.status ?? 'ACTIVE') === 'ACTIVE'}>
+                Active
+              </option>
+              <option value="SUSPENDED" selected={a?.status === 'SUSPENDED'}>
+                Suspended
+              </option>
+            </select>
+          </div>
+        )}
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create affiliate' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>
