@@ -1,0 +1,146 @@
+---
+/**
+ * An accessible donut chart, rendered server-side as inline SVG (no client
+ * runtime). The ring is decorative and carries a role=img summary; the legend
+ * beneath is the text equivalent, listing each segment's label, value and share.
+ * When a datum carries an href the segment and its legend row become a
+ * drill-through link, so a slice opens the filtered list behind it. An empty
+ * dataset shows a small "no data yet" line rather than a broken ring.
+ */
+import type { ChartDatum } from '@engr/repos/analytics';
+
+interface Props {
+  title: string;
+  description?: string;
+  data: ChartDatum[];
+  valueHeading?: string;
+  emptyText?: string;
+}
+const {
+  title,
+  description,
+  data,
+  valueHeading = 'Count',
+  emptyText = 'No data yet.',
+} = Astro.props;
+
+const total = data.reduce((sum, d) => sum + d.value, 0);
+const hasData = data.length > 0 && total > 0;
+
+// Circumference is 100 (r chosen so 2πr = 100), so a segment length is its
+// percentage directly and the dash offset positions it clockwise from the top.
+const R = 15.915;
+let cumulative = 0;
+const segments = data.map((d, i) => {
+  const pct = total > 0 ? (d.value / total) * 100 : 0;
+  const seg = {
+    ...d,
+    pct,
+    dash: `${pct} ${100 - pct}`,
+    offset: (125 - cumulative) % 100,
+    colour: `var(--engr-chart-${(i % 6) + 1})`,
+  };
+  cumulative += pct;
+  return seg;
+});
+const pctText = (p: number) => `${Math.round(p)}%`;
+const ariaSummary = `${title}. ${segments
+  .filter((s) => s.value > 0)
+  .map((s) => `${s.label} ${s.value}, ${pctText(s.pct)}`)
+  .join('; ')}.`;
+---
+
+<figure class="engr-chart">
+  <figcaption class="engr-chart__cap">
+    <h3 class="engr-chart__title">{title}</h3>
+    {description && <p class="engr-chart__desc">{description}</p>}
+  </figcaption>
+  {
+    !hasData ? (
+      <p class="engr-empty">{emptyText}</p>
+    ) : (
+      <div class="engr-donut">
+        <svg class="engr-donut__svg" viewBox="0 0 36 36" role="img" aria-label={ariaSummary}>
+          <circle
+            class="engr-donut__track"
+            cx="18"
+            cy="18"
+            r={R}
+            fill="none"
+            stroke="var(--engr-chart-track)"
+            stroke-width="4"
+          />
+          {segments
+            .filter((s) => s.value > 0)
+            .map((s) =>
+              s.href ? (
+                <a href={s.href} aria-label={`${s.label}: ${s.value}`}>
+                  <title>{`${s.label}: ${s.value} (${pctText(s.pct)})`}</title>
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r={R}
+                    fill="none"
+                    stroke={s.colour}
+                    stroke-width="4"
+                    stroke-dasharray={s.dash}
+                    stroke-dashoffset={s.offset}
+                  />
+                </a>
+              ) : (
+                <circle
+                  cx="18"
+                  cy="18"
+                  r={R}
+                  fill="none"
+                  stroke={s.colour}
+                  stroke-width="4"
+                  stroke-dasharray={s.dash}
+                  stroke-dashoffset={s.offset}
+                />
+              ),
+            )}
+          <text
+            class="engr-donut__total"
+            x="18"
+            y="18"
+            text-anchor="middle"
+            dominant-baseline="central"
+          >
+            {total}
+          </text>
+        </svg>
+        <ul class="engr-legend">
+          {segments.map((s) => {
+            const body = (
+              <>
+                <span
+                  class="engr-legend__swatch"
+                  style={`background:${s.colour}`}
+                  aria-hidden="true"
+                />
+                <span class="engr-legend__label">{s.label}</span>
+                <span class="engr-legend__value">
+                  {s.display ?? s.value}
+                  <span class="engr-legend__pct"> · {pctText(s.pct)}</span>
+                </span>
+              </>
+            );
+            return (
+              <li>
+                {s.href ? (
+                  <a class="engr-legend__row" href={s.href}>
+                    {body}
+                  </a>
+                ) : (
+                  <span class="engr-legend__row">{body}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <span class="engr-vh">{valueHeading}</span>
+      </div>
+    )
+  }
+</figure>
