@@ -1,0 +1,120 @@
+---
+export const prerender = false;
+
+/**
+ * Affiliates of the current group. Shown only to a group super-admin. The group
+ * sits at the top with its affiliates beneath, so the structure is legible.
+ * After creating an affiliate, switch into it (the sidebar switcher) and use the
+ * ordinary Setup screens to add its stations and the rest.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listAffiliates, type AffiliateRow } from '@engr/repos/adminAffiliates';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = engr.isGroupAdmin;
+const canManage = allowed && can(Astro.locals, 'org.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+const groupName = engr.switchable.find((o) => o.isGroup)?.name ?? engr.orgName ?? 'Group';
+
+let rows: AffiliateRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listAffiliates(db, engr.homeOrgId);
+}
+---
+
+<EngrLayout title="Affiliates">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Affiliates</h1>
+      <p class="engr-lead">The companies under {groupName}.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/affiliates/new" class="engr-btn engr-btn--primary">
+          New affiliate
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Affiliate saved. Switch into it from the sidebar to set it up.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        Affiliates are managed by a group super-admin.
+      </p>
+    ) : (
+      <div class="engr-tree">
+        <p class="engr-tree__group">
+          <span class="engr-orgid__badge">Group</span> {groupName}
+        </p>
+        {rows.length === 0 ? (
+          <EmptyState
+            message="No affiliates yet. Add a company under this group."
+            canAct={canManage}
+            actionHref="/admin/affiliates/new"
+            actionLabel="Add an affiliate"
+            hint="Ask a group administrator to add an affiliate."
+          />
+        ) : (
+          <div class="engr-tablewrap">
+            <table class="engr-table" aria-label="Affiliates">
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Country</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col">Stations</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td>
+                      {canManage ? (
+                        <a href={`/admin/affiliates/${r.id}`}>{r.slug.toUpperCase()}</a>
+                      ) : (
+                        r.slug.toUpperCase()
+                      )}
+                    </td>
+                    <td>{r.name}</td>
+                    <td>{r.country}</td>
+                    <td>{r.baseCurrency}</td>
+                    <td>{r.stationCount}</td>
+                    <td>
+                      <span class="engr-status">{r.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )
+  }
+</EngrLayout>
