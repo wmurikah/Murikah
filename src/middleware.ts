@@ -13,7 +13,10 @@
  */
 import { defineMiddleware } from 'astro:middleware';
 import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
 import { readSession } from '@engr/auth/session';
+import { readActingOrg } from '@engr/auth/actingOrg';
+import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
 import { toAppPath, isPublicAppPath, isEngrApiPath } from '@engr/routing';
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -38,9 +41,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   const isApi = isEngrApiPath(appPath);
 
-  let sessionSecret: string;
+  let env: ReturnType<typeof getEngrEnv>;
   try {
-    sessionSecret = getEngrEnv().sessionSecret;
+    env = getEngrEnv();
   } catch {
     // Misconfigured environment: fail closed rather than exposing anything.
     return isApi
@@ -48,19 +51,60 @@ export const onRequest = defineMiddleware(async (context, next) => {
       : new Response('Engineering Rhythm is not configured.', { status: 503 });
   }
 
-  const session = await readSession(context.request, sessionSecret);
+  const session = await readSession(context.request, env.sessionSecret);
   if (!session) {
     return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
   }
 
+  const homeOrgId = session.org;
+  const homeName = session.orgName ?? session.orgSlug;
+  const homeSlug = session.orgSlug;
+
+  // The acting organisation. It defaults to the home organisation and only ever
+  // differs for a group super-admin (resolved and validated from the database);
+  // an ordinary user acts inside their home organisation with no extra query.
+  let actingOrgId = homeOrgId;
+  let actingName: string = homeName;
+  let actingSlug = homeSlug;
+  let isGroupAdmin = false;
+  let switchable: SwitchOrg[] = [];
+  const isAdminRole = session.roles.includes('OWNER') || session.roles.includes('ADMIN');
+  if (isAdminRole) {
+    try {
+      const requested = await readActingOrg(context.request, env.sessionSecret);
+      const db = await getDb(env);
+      const ctx = await resolveActingContext(
+        db,
+        homeOrgId,
+        homeName,
+        homeSlug,
+        session.roles,
+        requested,
+      );
+      actingOrgId = ctx.actingOrgId;
+      actingName = ctx.actingName;
+      actingSlug = ctx.actingSlug;
+      isGroupAdmin = ctx.isGroupAdmin;
+      switchable = ctx.switchable;
+    } catch {
+      // On any resolution failure act inside the home organisation, never wider.
+      actingOrgId = homeOrgId;
+    }
+  }
+
+  // A group super-admin acting inside an affiliate keeps their full (OWNER)
+  // permission set for that affiliate; an ordinary user keeps their own rights.
   const perms = session.perms;
   context.locals.engr = {
     userId: session.sub,
-    orgId: session.org,
-    orgSlug: session.orgSlug,
-    orgName: session.orgName,
+    orgId: actingOrgId,
+    homeOrgId,
+    orgSlug: actingSlug,
+    orgName: actingName,
     userName: session.userName,
     userEmail: session.userEmail,
+    isGroupAdmin,
+    switchable,
     roles: session.roles,
     perms,
     can: (key: string) => perms.includes(key),
