@@ -292,3 +292,72 @@ export async function addRateItem(
     throw err;
   }
 }
+
+export async function updateRateItem(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  id: string,
+  input: RateItemInput,
+): Promise<AdminResult> {
+  const invalid = validateItem(input);
+  if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  const tx = await db.transaction('write');
+  try {
+    // Scoped to the org and the card, so an item can only be edited in place.
+    const upd = await tx.execute({
+      sql: `UPDATE rate_items SET category_id = ?, description = ?, unit = ?, unit_rate_minor = ?
+             WHERE id = ? AND org_id = ? AND rate_card_id = ?`,
+      args: [
+        input.categoryId,
+        input.description,
+        input.unit,
+        input.unitRateMinor,
+        id,
+        ctx.orgId,
+        input.rateCardId,
+      ],
+    });
+    if (upd.rowsAffected === 0) {
+      await tx.rollback();
+      return { ok: false, code: 'not_found', message: 'That rate item was not found.' };
+    }
+    await tx.execute({
+      sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+            VALUES (?, ?, 'rates.item.update', 'rate_item', ?, ?)`,
+      args: [ctx.orgId, ctx.userId, id, JSON.stringify({ description: input.description })],
+    });
+    await tx.commit();
+    return { ok: true, id };
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}
+
+export async function deleteRateItem(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  id: string,
+): Promise<AdminResult> {
+  const tx = await db.transaction('write');
+  try {
+    const del = await tx.execute({
+      sql: `DELETE FROM rate_items WHERE id = ? AND org_id = ?`,
+      args: [id, ctx.orgId],
+    });
+    if (del.rowsAffected === 0) {
+      await tx.rollback();
+      return { ok: false, code: 'not_found', message: 'That rate item was not found.' };
+    }
+    await tx.execute({
+      sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+            VALUES (?, ?, 'rates.item.remove', 'rate_item', ?, ?)`,
+      args: [ctx.orgId, ctx.userId, id, JSON.stringify({ removed: true })],
+    });
+    await tx.commit();
+    return { ok: true, id };
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}

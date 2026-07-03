@@ -1,0 +1,101 @@
+---
+export const prerender = false;
+
+/**
+ * Roles for the acting organisation: the shared system defaults plus any roles
+ * this organisation owns. Editing a shared default clones it for this
+ * organisation alone (copy-on-write), so other organisations are unaffected.
+ * Gate: roles.view to see, roles.manage to change.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listEffectiveRoles, type RoleRow } from '@engr/repos/adminRoles';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'roles.view') || can(Astro.locals, 'roles.manage');
+const canManage = can(Astro.locals, 'roles.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: RoleRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listEffectiveRoles(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Roles">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Roles</h1>
+      <p class="engr-lead">What each role may do in this organisation.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/roles/new" class="engr-btn engr-btn--primary">
+          New role
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Role saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to roles.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No roles yet."
+        canAct={canManage}
+        actionHref="/admin/roles/new"
+        actionLabel="Add a role"
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Roles">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Code</th>
+              <th scope="col">Source</th>
+              <th scope="col">Permissions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{canManage ? <a href={`/admin/roles/${r.id}`}>{r.name}</a> : r.name}</td>
+                <td>{r.code}</td>
+                <td>
+                  <span class="engr-pill">{r.shared ? 'Shared default' : 'This organisation'}</span>
+                </td>
+                <td>{r.permCount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

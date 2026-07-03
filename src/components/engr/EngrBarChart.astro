@@ -2,9 +2,11 @@
 /**
  * A horizontal bar chart that is also its own data table, so it is fully
  * accessible with no client JavaScript. Each row is a label (row header) and its
- * value; a decorative bar sits behind the value. Shows a small "no data" line
- * when the series is empty rather than a broken axis. Amounts are pre-formatted
- * by the caller (the display field); the chart never formats money itself.
+ * value; a decorative bar sits behind the value, and the label becomes a
+ * drill-through link when the datum carries an href. Shows a small "no data"
+ * line when the series is empty rather than a broken axis. Amounts are
+ * pre-formatted by the caller (the display field); the chart never formats
+ * money itself.
  */
 import type { ChartDatum } from '@engr/repos/analytics';
 
@@ -48,7 +50,7 @@ const pct = (v: number) => (max > 0 ? Math.round((v / max) * 100) : 0);
           {data.map((d) => (
             <tr>
               <th scope="row" class="engr-chart__label">
-                {d.label}
+                {d.href ? <a href={d.href}>{d.label}</a> : d.label}
               </th>
               <td class="engr-chart__cell">
                 <span class="engr-chart__bar" style={`width:${pct(d.value)}%`} aria-hidden="true" />
