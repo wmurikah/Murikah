@@ -2,9 +2,9 @@ export const prerender = false;
 
 /**
  * Affiliate write endpoint. Create when no id is posted, otherwise update. Only a
- * group super-admin with org.manage may write, and the group is always the user's
+ * platform owner with org.manage may write, and the parent is always the caller's
  * home organisation (never a client value), so affiliates are created and edited
- * only under the caller's own group.
+ * only under it.
  */
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
@@ -19,7 +19,7 @@ function seeOther(location: string): Response {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  if (!engr.isGroupAdmin || !engr.perms.includes('org.manage')) {
+  if (!engr.isPlatformOwner || !engr.perms.includes('org.manage')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : seeOther('/admin/affiliates?error=forbidden');

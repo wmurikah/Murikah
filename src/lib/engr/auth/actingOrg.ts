@@ -1,12 +1,12 @@
 /**
  * The acting-organisation cookie.
  *
- * A group super-admin can act inside the group or any of its affiliates. The
- * choice is held in a signed, HttpOnly cookie (HS256, the session secret). The
- * cookie is only ever a hint: the middleware re-validates the acting
- * organisation against the user's entitlement on every request, so a tampered or
- * stale value can never grant access outside the group. Confined to the
- * subdomain (Path=/, host-only), Secure gated on the caller.
+ * A platform owner can act inside any organisation. The choice is held in a
+ * signed, HttpOnly cookie (HS256, the session secret). The cookie is only ever a
+ * hint: the middleware re-validates the acting organisation against the user's
+ * entitlement on every request, and only for a platform owner, so a tampered or
+ * stale value can never grant access to a non-owner or outside the set. Confined
+ * to the subdomain (Path=/, host-only), Secure gated on the caller.
  */
 import { SignJWT, jwtVerify } from 'jose';
 

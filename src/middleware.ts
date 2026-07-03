@@ -60,31 +60,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const homeName = session.orgName ?? session.orgSlug;
   const homeSlug = session.orgSlug;
 
-  // The acting organisation. It defaults to the home organisation and only ever
-  // differs for a group super-admin (resolved and validated from the database);
-  // an ordinary user acts inside their home organisation with no extra query.
+  // The acting organisation defaults to the home organisation. Only a platform
+  // owner may act elsewhere (resolved and validated from the database); for every
+  // other user the acting organisation is always their home organisation, so a
+  // crafted or stale acting cookie is simply never read and cannot widen access.
   let actingOrgId = homeOrgId;
   let actingName: string = homeName;
   let actingSlug = homeSlug;
-  let isGroupAdmin = false;
   let switchable: SwitchOrg[] = [];
-  const isAdminRole = session.roles.includes('OWNER') || session.roles.includes('ADMIN');
-  if (isAdminRole) {
+  const isPlatformOwner = session.isPlatformOwner === true;
+  if (isPlatformOwner) {
     try {
       const requested = await readActingOrg(context.request, env.sessionSecret);
       const db = await getDb(env);
-      const ctx = await resolveActingContext(
-        db,
-        homeOrgId,
-        homeName,
-        homeSlug,
-        session.roles,
-        requested,
-      );
+      const ctx = await resolveActingContext(db, homeOrgId, homeName, homeSlug, true, requested);
       actingOrgId = ctx.actingOrgId;
       actingName = ctx.actingName;
       actingSlug = ctx.actingSlug;
-      isGroupAdmin = ctx.isGroupAdmin;
       switchable = ctx.switchable;
     } catch {
       // On any resolution failure act inside the home organisation, never wider.
@@ -92,8 +84,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // A group super-admin acting inside an affiliate keeps their full (OWNER)
-  // permission set for that affiliate; an ordinary user keeps their own rights.
+  // A platform owner acting inside a customer keeps their own permission set for
+  // that organisation; an ordinary user keeps their own rights in their home org.
   const perms = session.perms;
   context.locals.engr = {
     userId: session.sub,
@@ -103,7 +95,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     orgName: actingName,
     userName: session.userName,
     userEmail: session.userEmail,
-    isGroupAdmin,
+    isPlatformOwner,
     switchable,
     roles: session.roles,
     perms,
