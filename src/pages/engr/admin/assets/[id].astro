@@ -1,0 +1,199 @@
+---
+export const prerender = false;
+
+/**
+ * Asset create and edit. The path segment is "new" to create, otherwise an asset
+ * id to edit. Gate: assets.manage. The form posts to the write endpoint, which
+ * redirects back to the list on success.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getAsset, type AssetDetail } from '@engr/repos/adminAssets';
+import { listStationOptions, listCategoryOptions, type Option } from '@engr/repos/adminOptions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'assets.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let asset: AssetDetail | null = null;
+let stations: Option[] = [];
+let categories: Option[] = [];
+
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  [stations, categories] = await Promise.all([
+    listStationOptions(db, engr.orgId),
+    listCategoryOptions(db, engr.orgId),
+  ]);
+  if (!isNew && id) asset = await getAsset(db, engr.orgId, id);
+}
+const notFound = !isNew && asset === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const a = asset;
+---
+
+<EngrLayout title={isNew ? 'New asset' : 'Edit asset'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New asset' : 'Edit asset'}</h1>
+      <p class="engr-lead">A piece of equipment tracked against a station.</p>
+    </div>
+    <a href="/admin/assets" class="engr-btn engr-btn--secondary">Back to assets</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That tag is already used by another asset.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the tag, name, station and status, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage assets.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That asset was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/assets" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={a!.id} />}
+        <div class="engr-field">
+          <label for="tag">Tag</label>
+          <input
+            type="text"
+            id="tag"
+            class="engr-input"
+            name="tag"
+            maxlength="60"
+            required
+            value={a?.tag ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            class="engr-input"
+            name="name"
+            maxlength="120"
+            required
+            value={a?.name ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="station_id">Station</label>
+          <select id="station_id" class="engr-select" name="station_id" required>
+            <option value="">Choose a station</option>
+            {stations.map((o) => (
+              <option value={o.id} selected={a?.stationId === o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="engr-field">
+          <label for="category_id">
+            Category <span class="engr-field__hint">(optional)</span>
+          </label>
+          <select id="category_id" class="engr-select" name="category_id">
+            <option value="">Not set</option>
+            {categories.map((o) => (
+              <option value={o.id} selected={a?.categoryId === o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="engr-field">
+          <label for="manufacturer">
+            Manufacturer <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="manufacturer"
+            class="engr-input"
+            name="manufacturer"
+            maxlength="120"
+            value={a?.manufacturer ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="model">
+            Model <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="model"
+            class="engr-input"
+            name="model"
+            maxlength="120"
+            value={a?.model ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="serial_no">
+            Serial number <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="serial_no"
+            class="engr-input"
+            name="serial_no"
+            maxlength="120"
+            value={a?.serialNo ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="install_date">
+            Install date <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="date"
+            id="install_date"
+            class="engr-input"
+            name="install_date"
+            value={a?.installDate ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="status">Status</label>
+          <select id="status" class="engr-select" name="status">
+            <option value="IN_SERVICE" selected={(a?.status ?? 'IN_SERVICE') === 'IN_SERVICE'}>
+              In service
+            </option>
+            <option value="FAULTY" selected={a?.status === 'FAULTY'}>
+              Faulty
+            </option>
+            <option value="DECOMMISSIONED" selected={a?.status === 'DECOMMISSIONED'}>
+              Decommissioned
+            </option>
+          </select>
+        </div>
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create asset' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

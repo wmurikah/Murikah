@@ -1,0 +1,142 @@
+---
+export const prerender = false;
+
+/**
+ * Technician create and edit. The path segment is "new" to create, otherwise a
+ * technician id to edit. Gate: technicians.manage. The form posts to the write
+ * endpoint, which redirects back to the list on success.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getTechnician, type TechnicianDetail } from '@engr/repos/adminTechnicians';
+import { listContractorOptions, type Option } from '@engr/repos/adminOptions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'technicians.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let technician: TechnicianDetail | null = null;
+let contractors: Option[] = [];
+
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  contractors = await listContractorOptions(db, engr.orgId);
+  if (!isNew && id) technician = await getTechnician(db, engr.orgId, id);
+}
+const notFound = !isNew && technician === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const t = technician;
+---
+
+<EngrLayout title={isNew ? 'New technician' : 'Edit technician'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New technician' : 'Edit technician'}</h1>
+      <p class="engr-lead">A person who carries out work on behalf of a contractor.</p>
+    </div>
+    <a href="/admin/technicians" class="engr-btn engr-btn--secondary">Back to technicians</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That technician already exists.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the contractor, name and status, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage technicians.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That technician was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/technicians" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={t!.id} />}
+        <div class="engr-field">
+          <label for="contractor_id">Contractor</label>
+          <select id="contractor_id" class="engr-select" name="contractor_id" required>
+            <option value="">Select a contractor</option>
+            {contractors.map((co) => (
+              <option value={co.id} selected={t?.contractorId === co.id}>
+                {co.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="engr-field">
+          <label for="full_name">Name</label>
+          <input
+            type="text"
+            id="full_name"
+            class="engr-input"
+            name="full_name"
+            maxlength="120"
+            required
+            value={t?.fullName ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="phone">
+            Phone <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="phone"
+            class="engr-input"
+            name="phone"
+            maxlength="40"
+            value={t?.phone ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="email">
+            Email <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="email"
+            id="email"
+            class="engr-input"
+            name="email"
+            maxlength="200"
+            value={t?.email ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="status">Status</label>
+          <select id="status" class="engr-select" name="status">
+            <option value="ACTIVE" selected={(t?.status ?? 'ACTIVE') === 'ACTIVE'}>
+              Active
+            </option>
+            <option value="INACTIVE" selected={t?.status === 'INACTIVE'}>
+              Inactive
+            </option>
+          </select>
+        </div>
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create technician' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

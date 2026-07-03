@@ -1,0 +1,101 @@
+---
+export const prerender = false;
+
+/** Stations list. Gate: stations.view; create/edit gates on stations.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listStationsAdmin, type StationRow } from '@engr/repos/adminStations';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'stations.view');
+const canManage = can(Astro.locals, 'stations.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: StationRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listStationsAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Stations">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Stations</h1>
+      <p class="engr-lead">Sites where work is raised and carried out.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/stations/new" class="engr-btn engr-btn--primary">
+          New station
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Station saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to stations.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No stations are set up yet."
+        canAct={canManage}
+        actionHref="/admin/stations/new"
+        actionLabel="Add a station"
+        hint="Ask an administrator to add a station."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Stations">
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Name</th>
+              <th scope="col">Region</th>
+              <th scope="col">Manager</th>
+              <th scope="col">Base</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{canManage ? <a href={`/admin/stations/${r.id}`}>{r.code}</a> : r.code}</td>
+                <td>{r.name}</td>
+                <td>{r.regionName ?? 'Not set'}</td>
+                <td>{r.managerName ?? 'Not set'}</td>
+                <td>{r.isBase ? 'Yes' : 'No'}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>
