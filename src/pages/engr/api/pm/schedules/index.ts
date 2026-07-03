@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!engr.perms.includes('pm.allocate')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
-      : redirectResponse(request, '/engr/pm', 'error=forbidden');
+      : redirectResponse(request, '/pm', 'error=forbidden');
   }
   const input = parseSchedule(await readBody(request));
   const db = await getDb(getEngrEnv());
@@ -41,9 +41,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (result.ok) {
     return wantsJson(request)
       ? jsonResponse({ ok: true, id: result.id }, 201)
-      : redirectResponse(request, `/engr/pm/schedules/${result.id}`);
+      : redirectResponse(request, `/pm/schedules/${result.id}`);
   }
   return wantsJson(request)
     ? jsonResponse({ ok: false, error: result.code, message: result.message }, 422)
-    : redirectResponse(request, '/engr/pm/schedules/new', `error=${result.code}`);
+    : redirectResponse(request, '/pm/schedules/new', `error=${result.code}`);
 };

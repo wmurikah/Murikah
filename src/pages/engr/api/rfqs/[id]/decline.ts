@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = `/engr/contractor/rfqs/${id}`;
+  const back = `/contractor/rfqs/${id}`;
 
   if (!engr.perms.includes('quotes.submit')) {
     return wantsJson(request)
@@ -38,7 +38,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (result.ok) {
     return wantsJson(request)
       ? jsonResponse({ ok: true }, 200)
-      : redirectResponse(request, '/engr/contractor/rfqs', 'declined=1');
+      : redirectResponse(request, '/contractor/rfqs', 'declined=1');
   }
   const status =
     result.code === 'forbidden'

@@ -18,7 +18,7 @@ import { can } from '@engr/auth/rbac';
 import { relativeAge } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'requests.view');
 const canAccept = can(Astro.locals, 'requests.accept');
@@ -68,7 +68,7 @@ const errorMessage = errorCode
       <h1>{detail ? detail.requestNo : 'Request'}</h1>
       <p class="engr-lead">Service request detail.</p>
     </div>
-    <a href="/engr/requests" class="engr-btn engr-btn--secondary">Back to queue</a>
+    <a href="/requests" class="engr-btn engr-btn--secondary">Back to queue</a>
   </div>
 
   {
@@ -109,8 +109,8 @@ const errorMessage = errorCode
 
         {workOrder && (
           <p class="engr-notice">
-            Work order <a href={`/engr/workorders/${workOrder.id}`}>{workOrder.woNo}</a> has been
-            created for this request.
+            Work order <a href={`/workorders/${workOrder.id}`}>{workOrder.woNo}</a> has been created
+            for this request.
           </p>
         )}
 
@@ -118,14 +118,14 @@ const errorMessage = errorCode
           <div class="engr-panel">
             <h2>Triage</h2>
             {canAccept && (
-              <form method="post" action={`/engr/api/requests/${id}/accept`} class="engr-actionbar">
+              <form method="post" action={`/api/requests/${id}/accept`} class="engr-actionbar">
                 <button type="submit" class="engr-btn engr-btn--primary">
                   Accept request
                 </button>
               </form>
             )}
             {canReject && (
-              <form method="post" action={`/engr/api/requests/${id}/reject`} class="engr-form">
+              <form method="post" action={`/api/requests/${id}/reject`} class="engr-form">
                 <div class="engr-field">
                   <label for="reject-reason">Reason for rejection</label>
                   <textarea
@@ -155,7 +155,7 @@ const errorMessage = errorCode
             ) : (
               <form
                 method="post"
-                action={`/engr/api/requests/${id}/assign-contractor`}
+                action={`/api/requests/${id}/assign-contractor`}
                 class="engr-form"
               >
                 <div class="engr-field">
@@ -196,7 +196,7 @@ const errorMessage = errorCode
               Invite pre-qualified contractors to quote, instead of assigning on predefined rates.
             </p>
             <div class="engr-actionbar">
-              <a href={`/engr/rfqs/new?request=${id}`} class="engr-btn engr-btn--secondary">
+              <a href={`/rfqs/new?request=${id}`} class="engr-btn engr-btn--secondary">
                 Raise an RFQ
               </a>
             </div>

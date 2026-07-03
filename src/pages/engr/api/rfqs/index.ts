@@ -61,15 +61,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!engr.perms.includes('rfq.create')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
-      : redirectResponse(request, '/engr/rfqs', 'error=forbidden');
+      : redirectResponse(request, '/rfqs', 'error=forbidden');
   }
 
   const fields = await parseCreate(request);
-  const back = `/engr/rfqs/new?request=${encodeURIComponent(fields.requestId)}`;
+  const back = `/rfqs/new?request=${encodeURIComponent(fields.requestId)}`;
   if (!fields.requestId) {
     return wantsJson(request)
       ? jsonResponse({ error: 'validation', message: 'Missing request.' }, 422)
-      : redirectResponse(request, '/engr/requests', 'error=validation');
+      : redirectResponse(request, '/requests', 'error=validation');
   }
 
   const db = await getDb(getEngrEnv());
@@ -80,7 +80,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   );
 
   if (result.ok) {
-    const path = `/engr/rfqs/${result.rfqId}`;
+    const path = `/rfqs/${result.rfqId}`;
     return wantsJson(request)
       ? jsonResponse({ ok: true, rfqId: result.rfqId, rfqNo: result.rfqNo }, 201)
       : redirectResponse(request, path);

@@ -15,7 +15,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = '/engr/ops/notifications';
+  const back = '/ops/notifications';
 
   if (!engr.perms.includes('reports.view')) {
     return wantsJson(request)

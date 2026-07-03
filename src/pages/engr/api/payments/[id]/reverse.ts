@@ -12,7 +12,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = '/engr/payments';
+  const back = '/payments';
   if (!engr.perms.includes('payment.record')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)

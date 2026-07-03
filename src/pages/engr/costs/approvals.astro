@@ -10,7 +10,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const canL1 = can(Astro.locals, 'cost.approve.l1');
 const canL2 = can(Astro.locals, 'cost.approve.l2');
@@ -65,7 +65,7 @@ const sections = [
                     {s.rows.map((r) => (
                       <tr>
                         <td>
-                          <a href={`/engr/costs/${r.id}`}>{r.workOrderNo}</a>
+                          <a href={`/costs/${r.id}`}>{r.workOrderNo}</a>
                         </td>
                         <td>{r.contractorName}</td>
                         <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>

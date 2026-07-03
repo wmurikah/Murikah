@@ -1,6 +1,6 @@
 ---
 /**
- * Document shell for the Engineering Rhythm product (murikah.com/engr). Reuses
+ * Document shell for the Engineering Rhythm product (engr.murikah.com). Reuses
  * the marketing design tokens (via global.css) and the self-hosted Inter, with
  * product rules in engr.css. Semantic landmarks and a skip link throughout for
  * assistive tech. The product is marked noindex; it is an authenticated app.
@@ -18,7 +18,10 @@ interface Props {
 const { title } = Astro.props;
 const pageTitle = `${title}, Engineering Rhythm`;
 const engr = Astro.locals.engr;
-const path = Astro.url.pathname;
+// The visitor-facing root-relative path, set by the middleware before it
+// rewrites to the internal /engr route. Astro.url shows the rewritten path, so
+// the active-nav check must read this. Falls back to the URL off the subdomain.
+const path = Astro.locals.engrPath ?? Astro.url.pathname;
 const isActive = (href: string) => path === href || path.startsWith(href + '/');
 
 // Money-layer nav. Approvers land on the approvals queue; a contractor lands on
@@ -27,14 +30,14 @@ const has = (key: string) => engr?.perms.includes(key) ?? false;
 const canApproveCost = has('cost.approve.l1') || has('cost.approve.l2');
 const canApproveBill = has('bill.approve.l1') || has('bill.approve.l2') || has('bill.approve.l3');
 const costsHref = canApproveCost
-  ? '/engr/costs/approvals'
+  ? '/costs/approvals'
   : has('cost.create')
-    ? '/engr/contractor/costs'
+    ? '/contractor/costs'
     : null;
 const billsHref = canApproveBill
-  ? '/engr/bills/approvals'
+  ? '/bills/approvals'
   : has('bill.create')
-    ? '/engr/contractor/bills'
+    ? '/contractor/bills'
     : null;
 const showPayments = has('payment.record');
 ---
@@ -51,7 +54,7 @@ const showPayments = has('payment.record');
     <a href="#engr-main" class="engr-skip">Skip to content</a>
     <header class="engr-topbar">
       <div class="engr-topbar__inner">
-        <a href="/engr" class="engr-brand" aria-label="Engineering Rhythm, home">
+        <a href="/" class="engr-brand" aria-label="Engineering Rhythm, home">
           <span class="engr-brand__mark" aria-hidden="true">ER</span>
           <span class="engr-brand__name">Engineering Rhythm</span>
         </a>
@@ -59,33 +62,27 @@ const showPayments = has('payment.record');
         {
           engr && (
             <nav class="engr-nav" aria-label="Primary">
-              <a href="/engr" aria-current={path === '/engr' ? 'page' : undefined}>
+              <a href="/" aria-current={path === '/' ? 'page' : undefined}>
                 Dashboard
               </a>
-              <a
-                href="/engr/requests"
-                aria-current={isActive('/engr/requests') ? 'page' : undefined}
-              >
+              <a href="/requests" aria-current={isActive('/requests') ? 'page' : undefined}>
                 Requests
               </a>
-              <a
-                href="/engr/workorders"
-                aria-current={isActive('/engr/workorders') ? 'page' : undefined}
-              >
+              <a href="/workorders" aria-current={isActive('/workorders') ? 'page' : undefined}>
                 Work orders
               </a>
               {engr.perms.includes('rfq.view') && (
-                <a href="/engr/rfqs" aria-current={isActive('/engr/rfqs') ? 'page' : undefined}>
+                <a href="/rfqs" aria-current={isActive('/rfqs') ? 'page' : undefined}>
                   RFQs
                 </a>
               )}
               {engr.perms.includes('pm.allocate') && (
-                <a href="/engr/pm" aria-current={isActive('/engr/pm') ? 'page' : undefined}>
+                <a href="/pm" aria-current={isActive('/pm') ? 'page' : undefined}>
                   Maintenance
                 </a>
               )}
               {engr.perms.includes('workorder.create') && (
-                <a href="/engr/lpos" aria-current={isActive('/engr/lpos') ? 'page' : undefined}>
+                <a href="/lpos" aria-current={isActive('/lpos') ? 'page' : undefined}>
                   LPOs
                 </a>
               )}
@@ -93,9 +90,7 @@ const showPayments = has('payment.record');
                 <a
                   href={costsHref}
                   aria-current={
-                    isActive('/engr/costs') || isActive('/engr/contractor/costs')
-                      ? 'page'
-                      : undefined
+                    isActive('/costs') || isActive('/contractor/costs') ? 'page' : undefined
                   }
                 >
                   Costs
@@ -105,25 +100,20 @@ const showPayments = has('payment.record');
                 <a
                   href={billsHref}
                   aria-current={
-                    isActive('/engr/bills') || isActive('/engr/contractor/bills')
-                      ? 'page'
-                      : undefined
+                    isActive('/bills') || isActive('/contractor/bills') ? 'page' : undefined
                   }
                 >
                   Bills
                 </a>
               )}
               {showPayments && (
-                <a
-                  href="/engr/payments"
-                  aria-current={isActive('/engr/payments') ? 'page' : undefined}
-                >
+                <a href="/payments" aria-current={isActive('/payments') ? 'page' : undefined}>
                   Payments
                 </a>
               )}
               <a
-                href="/engr/notifications"
-                aria-current={isActive('/engr/notifications') ? 'page' : undefined}
+                href="/notifications"
+                aria-current={isActive('/notifications') ? 'page' : undefined}
               >
                 Notifications
               </a>
@@ -133,7 +123,7 @@ const showPayments = has('payment.record');
 
         {
           engr && (
-            <form method="post" action="/engr/api/auth/logout" class="engr-account">
+            <form method="post" action="/api/auth/logout" class="engr-account">
               <span class="engr-account__org" title="Organisation">
                 {engr.orgSlug}
               </span>

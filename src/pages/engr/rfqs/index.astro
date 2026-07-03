@@ -9,7 +9,7 @@ import { listRfqsForEngineer, type RfqListRow } from '@engr/repos/rfqs';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'rfq.view');
 let rows: RfqListRow[] = [];
@@ -53,7 +53,7 @@ if (allowed) {
             {rows.map((r) => (
               <tr>
                 <td>
-                  <a href={`/engr/rfqs/${r.id}`}>{r.rfqNo}</a>
+                  <a href={`/rfqs/${r.id}`}>{r.rfqNo}</a>
                 </td>
                 <td>{r.requestNo}</td>
                 <td>{r.stationName}</td>
