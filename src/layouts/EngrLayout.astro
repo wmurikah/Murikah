@@ -50,12 +50,11 @@ const orgName = engr ? orgDisplayName(engr.orgName, engr.orgSlug) : 'Engineering
 const accountName = engr?.userName ?? engr?.userEmail ?? 'Account';
 const accountEmail = engr?.userEmail ?? '';
 
-// The acting organisation and, for a group super-admin, the set to switch between.
-const isGroupAdmin = engr?.isGroupAdmin ?? false;
+// The acting organisation and, for a platform owner, the set to switch between.
+const isPlatformOwner = engr?.isPlatformOwner ?? false;
 const switchable = engr?.switchable ?? [];
 const actingId = engr?.orgId ?? '';
-const actingIsGroup = switchable.find((o) => o.id === actingId)?.isGroup ?? false;
-const showSwitcher = isGroupAdmin && switchable.length > 1;
+const showSwitcher = isPlatformOwner && switchable.length > 1;
 
 // Unread in-app notifications for the bell. One light COUNT per page; the bell
 // then refreshes itself from /api/notifications/count. Never fails the render.
@@ -160,8 +159,8 @@ const rawGroups: NavGroup[] = [
     label: 'Setup',
     icon: 'setup',
     items: [
-      // Affiliates are the group structure; shown only to a group super-admin.
-      isGroupAdmin && has('org.manage')
+      // Affiliates are the cross-organisation structure; shown only to a platform owner.
+      isPlatformOwner && has('org.manage')
         ? { href: '/admin/affiliates', label: 'Affiliates', icon: 'affiliates' }
         : null,
       has('stations.view')
@@ -248,14 +247,6 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                   </span>
                   <span class="engr-orgid__text">
                     <span class="engr-orgid__name">{orgName}</span>
-                    {isGroupAdmin && (
-                      <span
-                        class="engr-orgid__badge"
-                        data-group={actingIsGroup ? 'yes' : undefined}
-                      >
-                        {actingIsGroup ? 'Group' : 'Affiliate'}
-                      </span>
-                    )}
                   </span>
                 </a>
                 <a
@@ -281,7 +272,7 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                     <select id="engr-actingorg" name="org_id" class="engr-switcher__select">
                       {switchable.map((o) => (
                         <option value={o.id} selected={o.id === actingId}>
-                          {o.isGroup ? `${o.name} (Group)` : o.name}
+                          {o.name}
                         </option>
                       ))}
                     </select>

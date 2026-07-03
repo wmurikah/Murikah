@@ -3,7 +3,7 @@ export const prerender = false;
 
 /**
  * Create or edit an affiliate. The path segment is "new" to create, otherwise an
- * affiliate id to edit. Only a group super-admin with org.manage. The slug is set
+ * affiliate id to edit. Only a platform owner with org.manage. The slug is set
  * once from the code on create and shown read-only when editing, since logins
  * depend on it.
  */
@@ -16,7 +16,7 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const canManage = engr.isGroupAdmin && can(Astro.locals, 'org.manage');
+const canManage = engr.isPlatformOwner && can(Astro.locals, 'org.manage');
 const { id } = Astro.params;
 const isNew = id === 'new';
 const errorCode = Astro.url.searchParams.get('error');
@@ -59,7 +59,7 @@ const a = affiliate;
   {
     !canManage ? (
       <p class="engr-error" role="alert">
-        Affiliates are managed by a group super-admin.
+        Affiliates are managed by the platform owner.
       </p>
     ) : notFound ? (
       <p class="engr-error" role="alert">
