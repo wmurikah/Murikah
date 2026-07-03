@@ -26,6 +26,7 @@ import EngrIcon from '@/components/engr/EngrIcon.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getUnreadCount } from '@engr/notify';
+import { getOrgPlan, trialDaysLeft } from '@engr/repos/entitlements';
 import { orgDisplayName } from '@engr/format';
 
 interface Props {
@@ -70,13 +71,19 @@ const orphanAffiliates = switchable.filter(
 // Quick find only earns its place once the list is long (the platform owner's).
 const showFind = isPlatformOwner && switchable.length > 8;
 
-// Unread in-app notifications for the bell. One light COUNT per page; the bell
-// then refreshes itself from /api/notifications/count. Never fails the render.
+// Unread in-app notifications for the bell, and the trial indicator. One light
+// pair of reads per page; the bell then refreshes itself. Never fails the render.
 let unread = 0;
+let trialDays: number | null = null;
 if (engr) {
   try {
     const db = await getDb(getEngrEnv());
-    unread = await getUnreadCount(db, engr.orgId, engr.userId);
+    const [count, plan] = await Promise.all([
+      getUnreadCount(db, engr.orgId, engr.userId),
+      getOrgPlan(db, engr.orgId),
+    ]);
+    unread = count;
+    trialDays = trialDaysLeft(plan, new Date());
   } catch {
     unread = 0;
   }
@@ -261,7 +268,7 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                   </span>
                   <span class="engr-orgid__text">
                     <span class="engr-orgid__name">{orgName}</span>
-                    {isGroupAdmin && (
+                    {showSwitcher && (
                       <span
                         class="engr-orgid__badge"
                         data-group={actingIsGroup ? 'yes' : undefined}
@@ -384,6 +391,17 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
           </aside>
 
           <main id="engr-main" class="engr-main">
+            {trialDays !== null && (
+              <div class="engr-trialbar" role="status">
+                <span class="engr-trialbar__dot" aria-hidden="true" />
+                <span class="engr-trialbar__text">
+                  Trial, {trialDays} {trialDays === 1 ? 'day' : 'days'} left
+                </span>
+                <a href="/upgrade" class="engr-trialbar__cta">
+                  Upgrade
+                </a>
+              </div>
+            )}
             <slot />
           </main>
         </div>

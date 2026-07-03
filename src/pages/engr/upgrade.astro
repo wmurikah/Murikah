@@ -1,0 +1,109 @@
+---
+export const prerender = false;
+
+/**
+ * Upgrade. Presents the plans and a request-to-upgrade action. The billing
+ * integration is out of scope, so the call to action records the request and
+ * notifies the platform owner rather than taking payment. Gate: org.manage.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  getOrgPlan,
+  listPlans,
+  FEATURE_KEYS,
+  type PlanRow,
+  type OrgPlan,
+} from '@engr/repos/entitlements';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'org.manage');
+const requested = Astro.url.searchParams.get('requested') === '1';
+
+let plans: PlanRow[] = [];
+let current: OrgPlan | null = null;
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  [plans, current] = await Promise.all([listPlans(db), getOrgPlan(db, engr.orgId)]);
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  rfq: 'Request for quotation',
+  pm_automation: 'Automated maintenance',
+  mileage_lpo: 'Mileage and multi-site LPO',
+  multi_level_billing: 'Multi-level billing',
+  api_access: 'API access',
+  sso: 'Single sign-on',
+};
+const priceLabel = (p: PlanRow) =>
+  p.priceMonthlyMinor > 0
+    ? `${formatMoneyMinor(p.priceMonthlyMinor, p.currency)} / month`
+    : p.code === 'TRIAL'
+      ? 'Free trial'
+      : 'On application';
+---
+
+<EngrLayout title="Upgrade">
+  <div class="engr-page-head">
+    <div>
+      <h1>Upgrade your plan</h1>
+      <p class="engr-lead">
+        You are on the {current?.planName ?? 'current'} plan. Choose the plan that fits, and we will be
+        in touch to set it up.
+      </p>
+    </div>
+  </div>
+
+  {
+    requested && (
+      <p class="engr-notice" role="status">
+        Thank you. Your upgrade request has reached our team, who will be in touch.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        Ask an administrator of your organisation to manage the plan.
+      </p>
+    ) : (
+      <div class="engr-plans">
+        {plans.map((p) => (
+          <section
+            class="engr-plan"
+            data-current={current?.planCode === p.code ? 'yes' : undefined}
+          >
+            <div class="engr-plan__head">
+              <h2 class="engr-plan__name">{p.name}</h2>
+              {current?.planCode === p.code && <span class="engr-pill">Current</span>}
+            </div>
+            <p class="engr-plan__price">{priceLabel(p)}</p>
+            {p.description && <p class="engr-plan__desc">{p.description}</p>}
+            <ul class="engr-plan__features">
+              {FEATURE_KEYS.map((k) => (
+                <li class="engr-plan__feature" data-on={p.features[k] ? 'yes' : undefined}>
+                  <span aria-hidden="true">{p.features[k] ? '✓' : '·'}</span>
+                  <span>{FEATURE_LABELS[k]}</span>
+                </li>
+              ))}
+            </ul>
+            {current?.planCode !== p.code && (
+              <form method="post" action="/api/upgrade/request">
+                <input type="hidden" name="plan" value={p.code} />
+                <button type="submit" class="engr-btn engr-btn--primary engr-plan__cta">
+                  Request {p.name}
+                </button>
+              </form>
+            )}
+          </section>
+        ))}
+      </div>
+    )
+  }
+</EngrLayout>

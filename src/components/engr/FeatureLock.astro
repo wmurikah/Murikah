@@ -1,0 +1,36 @@
+---
+/**
+ * A tasteful locked state shown in place of a premium capability that is not in
+ * the organisation's plan, with an upgrade call to action, so the screen is
+ * never broken or empty. The gate itself is decided server-side by the caller
+ * (entitlements.hasFeature); this only renders the message.
+ */
+interface Props {
+  feature: string;
+  detail?: string;
+}
+const { feature, detail } = Astro.props;
+---
+
+<div class="engr-lock">
+  <svg
+    class="engr-lock__icon"
+    width="30"
+    height="30"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="4" y="11" width="16" height="10" rx="2"></rect>
+    <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+  </svg>
+  <h2 class="engr-lock__title">{feature} is not in your plan</h2>
+  <p class="engr-lock__msg">
+    {detail ?? `Upgrade to unlock ${feature.toLowerCase()} for your organisation.`}
+  </p>
+  <a href="/upgrade" class="engr-btn engr-btn--primary">See plans and upgrade</a>
+</div>
