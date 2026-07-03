@@ -32,5 +32,5 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     WO_ACTION.submit_jsa_request_arrival,
     { jsaContent },
   );
-  return finishTransition(request, result, db, engr.orgId, id, `/engr/technician/workorders/${id}`);
+  return finishTransition(request, result, db, engr.orgId, id, `/technician/workorders/${id}`);
 };

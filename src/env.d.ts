@@ -69,5 +69,14 @@ declare namespace App {
       perms: string[];
       can: (key: string) => boolean;
     };
+
+    /**
+     * The visitor-facing host and root-relative path on the Engineering Rhythm
+     * subdomain, captured by the middleware before it rewrites the request to the
+     * internal /engr route. Anything building a canonical link or highlighting
+     * the active nav reads these, since Astro.url reflects the rewritten path.
+     */
+    engrHost?: string;
+    engrPath?: string;
   }
 }

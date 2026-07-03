@@ -22,7 +22,7 @@ import {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  const back = '/engr/payments';
+  const back = '/payments';
   if (!engr.perms.includes('payment.record')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)

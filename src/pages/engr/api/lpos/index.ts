@@ -24,7 +24,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!canBuild(engr.perms)) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
-      : redirectResponse(request, '/engr/lpos', 'error=forbidden');
+      : redirectResponse(request, '/lpos', 'error=forbidden');
   }
   const body = await readBody(request);
   const contractorId = str(body.contractor_id).trim();
@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!contractorId) {
     return wantsJson(request)
       ? jsonResponse({ error: 'validation', message: 'Choose a contractor.' }, 422)
-      : redirectResponse(request, '/engr/lpos/new', 'error=validation');
+      : redirectResponse(request, '/lpos/new', 'error=validation');
   }
   const db = await getDb(getEngrEnv());
   const result = await createLpo(
@@ -43,12 +43,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (result.ok) {
     return wantsJson(request)
       ? jsonResponse({ ok: true, lpoId: result.lpoId, lpoNo: result.lpoNo }, 201)
-      : redirectResponse(request, `/engr/lpos/${result.lpoId}`);
+      : redirectResponse(request, `/lpos/${result.lpoId}`);
   }
   const status = result.code === 'conflict' ? 409 : result.code === 'not_found' ? 404 : 422;
   return wantsJson(request)
     ? jsonResponse({ ok: false, error: result.code, message: result.message }, status)
-    : redirectResponse(request, '/engr/lpos/new', `error=${result.code}`);
+    : redirectResponse(request, '/lpos/new', `error=${result.code}`);
 };
 
 export const GET: APIRoute = async ({ locals }) => {

@@ -10,7 +10,7 @@ import { listForContractor, type WorkOrderListRow } from '@engr/repos/workOrders
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
 let rows: WorkOrderListRow[] = [];
@@ -36,7 +36,7 @@ if (allowed) {
     ) : (
       <WorkOrderList
         rows={rows}
-        basePath="/engr/contractor/workorders"
+        basePath="/contractor/workorders"
         emptyText="No work orders are assigned to you."
       />
     )
