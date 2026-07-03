@@ -19,7 +19,7 @@ import {
   type RecentPaymentRow,
 } from '@engr/repos/payments';
 import { can } from '@engr/auth/rbac';
-import { formatMoneyMinor } from '@engr/format';
+import { formatMoneyMinor, shortDate } from '@engr/format';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -202,8 +202,15 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                 <thead>
                   <tr>
                     <th scope="col">Bill</th>
-                    <th scope="col">Amount</th>
-                    <th scope="col">Method</th>
+                    <th scope="col" class="engr-num">
+                      Amount
+                    </th>
+                    <th scope="col" class="engr-col-mid">
+                      Method
+                    </th>
+                    <th scope="col" class="engr-col-lo engr-num">
+                      Paid on
+                    </th>
                     <th scope="col">Status</th>
                     {canRecord && <th scope="col">Action</th>}
                   </tr>
@@ -214,8 +221,9 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                       <td>
                         <a href={`/bills/${p.billId}`}>{p.billNo}</a>
                       </td>
-                      <td>{formatMoneyMinor(p.amountMinor, p.currency)}</td>
-                      <td>{p.method ?? 'Not set'}</td>
+                      <td class="engr-num">{formatMoneyMinor(p.amountMinor, p.currency)}</td>
+                      <td class="engr-col-mid">{p.method ?? 'Not set'}</td>
+                      <td class="engr-col-lo engr-num">{shortDate(p.paidAt) || 'Not set'}</td>
                       <td>
                         <span class="engr-status">{p.status}</span>
                       </td>

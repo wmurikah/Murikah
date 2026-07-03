@@ -39,6 +39,20 @@ export function orgDisplayName(name: string | null | undefined, slug: string): s
   return trimmed.length > 0 ? trimmed : titleCase(slug);
 }
 
+// A short, human date like "5 Mar 2026" from an ISO date or timestamp. Returns an
+// empty string for a missing or unparseable value, so a table cell stays blank
+// rather than showing "Invalid Date".
+export function shortDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return '';
+  return new Intl.DateTimeFormat('en-KE', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(when);
+}
+
 // A short, human age like 3d, 5h, 12m, from an ISO timestamp.
 export function relativeAge(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
