@@ -1,6 +1,7 @@
 ---
 /** A compact table of work orders, each linking to its detail under basePath. */
 import type { WorkOrderListRow } from '@engr/repos/workOrders';
+import { shortDate } from '@engr/format';
 interface Props {
   rows: WorkOrderListRow[];
   basePath: string;
@@ -19,8 +20,15 @@ const { rows, basePath, emptyText } = Astro.props;
           <tr>
             <th scope="col">Work order</th>
             <th scope="col">Station</th>
-            <th scope="col">Contractor</th>
-            <th scope="col">Technician</th>
+            <th scope="col" class="engr-col-mid">
+              Contractor
+            </th>
+            <th scope="col" class="engr-col-mid">
+              Technician
+            </th>
+            <th scope="col" class="engr-col-lo engr-num">
+              Raised
+            </th>
             <th scope="col">Status</th>
           </tr>
         </thead>
@@ -31,8 +39,9 @@ const { rows, basePath, emptyText } = Astro.props;
                 <a href={`${basePath}/${r.id}`}>{r.woNo}</a>
               </td>
               <td>{r.stationName}</td>
-              <td>{r.contractorName ?? 'Unassigned'}</td>
-              <td>{r.technicianName ?? 'Unassigned'}</td>
+              <td class="engr-col-mid">{r.contractorName ?? 'Unassigned'}</td>
+              <td class="engr-col-mid">{r.technicianName ?? 'Unassigned'}</td>
+              <td class="engr-col-lo engr-num">{shortDate(r.createdAt)}</td>
               <td>
                 <span class="engr-status">{r.status}</span>
               </td>
