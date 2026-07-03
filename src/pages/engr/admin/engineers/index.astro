@@ -1,0 +1,177 @@
+---
+export const prerender = false;
+
+/**
+ * Engineers in charge: which engineer owns each station or category of work.
+ * When a request is raised it routes to the matching engineer (a station match
+ * wins over a category match); with no match it goes to the managers. Gate:
+ * settings.manage. Everything is scoped to the acting organisation.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  listAssignments,
+  listEngineerCandidates,
+  type AssignmentRow,
+  type EngineerOption,
+} from '@engr/repos/engineerAssignments';
+import {
+  listStations,
+  listAssetCategories,
+  type StationOption,
+  type CategoryOption,
+} from '@engr/repos/requests';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'settings.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let assignments: AssignmentRow[] = [];
+let engineers: EngineerOption[] = [];
+let stations: StationOption[] = [];
+let categories: CategoryOption[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  [assignments, engineers, stations, categories] = await Promise.all([
+    listAssignments(db, engr.orgId),
+    listEngineerCandidates(db, engr.orgId),
+    listStations(db, engr.orgId),
+    listAssetCategories(db, engr.orgId),
+  ]);
+}
+---
+
+<EngrLayout title="Engineers in charge">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Engineers in charge</h1>
+      <p class="engr-lead">
+        Route raised requests to the engineer who owns the station or category.
+      </p>
+    </div>
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        This is managed by a super-admin with the settings permission.
+      </p>
+    ) : (
+      <>
+        {assignments.length === 0 ? (
+          <EmptyState
+            message="No engineers are assigned yet. Requests will go to the managers until you assign one."
+            canAct={false}
+            hint="Add an assignment below."
+          />
+        ) : (
+          <div class="engr-tablewrap">
+            <table class="engr-table" aria-label="Engineer assignments">
+              <thead>
+                <tr>
+                  <th scope="col">Engineer</th>
+                  <th scope="col">Owns</th>
+                  <th scope="col">Scope</th>
+                  <th scope="col">
+                    <span class="engr-vh">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignments.map((a) => (
+                  <tr>
+                    <td>{a.engineerName}</td>
+                    <td>{a.scopeType === 'STATION' ? 'Station' : 'Category'}</td>
+                    <td>{a.scopeName}</td>
+                    <td>
+                      <form method="post" action="/api/admin/engineers">
+                        <input type="hidden" name="delete_id" value={a.id} />
+                        <button type="submit" class="engr-btn engr-btn--danger">
+                          Remove
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <section class="engr-panel" style="margin-top:1.5rem">
+          <h2>Assign an engineer</h2>
+          <form
+            method="post"
+            action="/api/admin/engineers"
+            class="engr-formgrid engr-formgrid--two"
+          >
+            <div class="engr-field">
+              <label for="engineer">Engineer</label>
+              <select id="engineer" class="engr-select" name="engineer_user_id" required>
+                <option value="">Choose a person</option>
+                {engineers.map((e) => (
+                  <option value={e.id}>{e.name}</option>
+                ))}
+              </select>
+            </div>
+            <div class="engr-field">
+              <label for="scope_type">Owns</label>
+              <select id="scope_type" class="engr-select" name="scope_type">
+                <option value="STATION">A station</option>
+                <option value="CATEGORY">A category</option>
+              </select>
+            </div>
+            <div class="engr-field">
+              <label for="station">Station</label>
+              <select id="station" class="engr-select" name="station_id">
+                <option value="">Choose a station</option>
+                {stations.map((s) => (
+                  <option value={s.id}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </select>
+              <p class="engr-field__hint">Used when the engineer owns a station.</p>
+            </div>
+            <div class="engr-field">
+              <label for="category">Category</label>
+              <select id="category" class="engr-select" name="category_id">
+                <option value="">Choose a category</option>
+                {categories.map((c) => (
+                  <option value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <p class="engr-field__hint">Used when the engineer owns a category.</p>
+            </div>
+            <div class="engr-actionbar engr-formgrid__full">
+              <button type="submit" class="engr-btn engr-btn--primary">
+                Add assignment
+              </button>
+            </div>
+          </form>
+        </section>
+      </>
+    )
+  }
+</EngrLayout>

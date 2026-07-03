@@ -34,12 +34,27 @@ export interface RequestDetail {
   id: string;
   requestNo: string;
   stationName: string;
+  assetName: string | null;
+  categoryName: string | null;
+  assignedEngineerName: string | null;
   issue: string;
   natureOfBreakdown: string | null;
   priority: string;
   status: string;
   isRepeatCall: boolean;
   createdAt: string;
+}
+
+export interface AssetOption {
+  id: string;
+  label: string;
+}
+
+export interface RequestAttachment {
+  id: string;
+  kind: string;
+  fileName: string;
+  fileUrl: string | null;
 }
 
 export interface CreateRequestInput {
@@ -52,6 +67,8 @@ export interface CreateRequestInput {
   natureOfBreakdown: string | null;
   priority: Priority;
   isRepeatCall: boolean;
+  /** The engineer in charge, routed at intake, or null to leave the request open. */
+  assignedEngineerId?: string | null;
 }
 
 export interface CreatedRequest {
@@ -139,6 +156,42 @@ export async function listAssetCategories(db: Client, orgId: string): Promise<Ca
   }));
 }
 
+// Assets an intake can point at, labelled with tag, name and station.
+export async function listAssetOptions(db: Client, orgId: string): Promise<AssetOption[]> {
+  const res = await db.execute({
+    sql: `SELECT a.id AS id, a.tag AS tag, a.name AS name, s.name AS station_name
+            FROM assets a
+            JOIN stations s ON s.id = a.station_id
+           WHERE a.org_id = ? AND a.deleted_at IS NULL
+        ORDER BY s.name, a.name`,
+    args: [orgId],
+  });
+  return res.rows.map((r) => ({
+    id: String(r.id),
+    label: `${String(r.tag)} - ${String(r.name)} (${String(r.station_name)})`,
+  }));
+}
+
+// Attachments recorded against a request (photos or videos of the fault).
+export async function listRequestAttachments(
+  db: Client,
+  orgId: string,
+  requestId: string,
+): Promise<RequestAttachment[]> {
+  const res = await db.execute({
+    sql: `SELECT id, kind, file_name, file_url FROM attachments
+           WHERE org_id = ? AND entity_type = 'service_request' AND entity_id = ?
+        ORDER BY created_at`,
+    args: [orgId, requestId],
+  });
+  return res.rows.map((r) => ({
+    id: String(r.id),
+    kind: String(r.kind),
+    fileName: String(r.file_name),
+    fileUrl: r.file_url == null ? null : String(r.file_url),
+  }));
+}
+
 export async function getRequestById(
   db: Client,
   orgId: string,
@@ -148,19 +201,33 @@ export async function getRequestById(
     sql: `SELECT sr.id AS id, sr.request_no AS request_no, sr.issue AS issue,
                  sr.nature_of_breakdown AS nature_of_breakdown, sr.priority AS priority,
                  sr.status AS status, sr.is_repeat_call AS is_repeat_call,
-                 sr.created_at AS created_at, s.name AS station_name
+                 sr.created_at AS created_at, s.name AS station_name,
+                 a.tag AS asset_tag, a.name AS asset_name,
+                 c.name AS category_name, e.full_name AS engineer_name
             FROM service_requests sr
             JOIN stations s ON s.id = sr.station_id
+            LEFT JOIN assets a ON a.id = sr.asset_id
+            LEFT JOIN asset_categories c ON c.id = sr.category_id
+            LEFT JOIN users e ON e.id = sr.assigned_engineer_id
            WHERE sr.org_id = ? AND sr.id = ? AND sr.deleted_at IS NULL
            LIMIT 1`,
     args: [orgId, id],
   });
   const row = res.rows[0];
   if (!row) return null;
+  const assetName =
+    row.asset_name == null
+      ? null
+      : row.asset_tag == null
+        ? String(row.asset_name)
+        : `${String(row.asset_tag)} - ${String(row.asset_name)}`;
   return {
     id: String(row.id),
     requestNo: String(row.request_no),
     stationName: String(row.station_name),
+    assetName,
+    categoryName: row.category_name == null ? null : String(row.category_name),
+    assignedEngineerName: row.engineer_name == null ? null : String(row.engineer_name),
     issue: String(row.issue),
     natureOfBreakdown: row.nature_of_breakdown === null ? null : String(row.nature_of_breakdown),
     priority: String(row.priority),
@@ -208,8 +275,8 @@ export async function createRequest(
           {
             sql: `INSERT INTO service_requests
                     (id, org_id, request_no, station_id, asset_id, category_id, raised_by,
-                     issue, nature_of_breakdown, is_repeat_call, priority, status)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')`,
+                     issue, nature_of_breakdown, is_repeat_call, priority, assigned_engineer_id, status)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')`,
             args: [
               id,
               input.orgId,
@@ -222,6 +289,7 @@ export async function createRequest(
               input.natureOfBreakdown,
               input.isRepeatCall ? 1 : 0,
               input.priority,
+              input.assignedEngineerId ?? null,
             ],
           },
           {
