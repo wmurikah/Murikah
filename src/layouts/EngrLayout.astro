@@ -6,15 +6,27 @@
  * assistive tech. The product is marked noindex; it is an authenticated app.
  *
  * When signed in, a persistent left sidebar groups the destinations (Overview,
- * Operations, Finance, Setup), shows the organisation name, and anchors the
- * account area with Sign out at the foot. Only items the user holds a permission
- * for are rendered, so a contractor or technician sees a much shorter menu than
- * an owner. On narrow screens the sidebar collapses to a drawer behind a menu
- * button; without JavaScript the nav stays visible and usable.
+ * Operations, Finance, Setup) into collapsible sections, each with a category
+ * icon, and shows the organisation name and a notification bell at the top. Only
+ * items the user holds a permission for are rendered, so a contractor sees a
+ * much shorter menu than an owner. Group expand/collapse persists across
+ * navigations; the active item and its group are marked. On narrow screens the
+ * sidebar is a drawer; without JavaScript the nav stays open and usable.
+ *
+ * Navigation uses Astro view transitions with a top progress bar, so a click
+ * gives feedback within a frame and never freezes. A single-signal guard
+ * disables any mutating control on first submit, so repeated clicks send one
+ * request (the server also guards every transition with optimistic concurrency).
  */
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
 import '@/styles/engr.css';
+import { ClientRouter } from 'astro:transitions';
+import EngrIcon from '@/components/engr/EngrIcon.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getUnreadCount } from '@engr/notify';
+import { orgDisplayName } from '@engr/format';
 
 interface Props {
   title: string;
@@ -34,8 +46,7 @@ const roles = engr?.roles ?? [];
 const isContractor = roles.includes('CONTRACTOR');
 const isTechnician = roles.includes('TECHNICIAN');
 
-const orgName = engr?.orgName ?? engr?.orgSlug ?? 'Engineering Rhythm';
-const orgSlug = engr?.orgSlug ?? '';
+const orgName = engr ? orgDisplayName(engr.orgName, engr.orgSlug) : 'Engineering Rhythm';
 const accountName = engr?.userName ?? engr?.userEmail ?? 'Account';
 const accountEmail = engr?.userEmail ?? '';
 
@@ -45,6 +56,19 @@ const switchable = engr?.switchable ?? [];
 const actingId = engr?.orgId ?? '';
 const actingIsGroup = switchable.find((o) => o.id === actingId)?.isGroup ?? false;
 const showSwitcher = isGroupAdmin && switchable.length > 1;
+
+// Unread in-app notifications for the bell. One light COUNT per page; the bell
+// then refreshes itself from /api/notifications/count. Never fails the render.
+let unread = 0;
+if (engr) {
+  try {
+    const db = await getDb(getEngrEnv());
+    unread = await getUnreadCount(db, engr.orgId, engr.userId);
+  } catch {
+    unread = 0;
+  }
+}
+const unreadLabel = unread > 99 ? '99+' : String(unread);
 
 // Role-aware destinations: staff land on the shared queues, a contractor or
 // technician on their own portal.
@@ -79,66 +103,95 @@ const billsHref =
 interface NavItem {
   href: string;
   label: string;
+  icon: string;
   match?: string[];
 }
 interface NavGroup {
   label: string;
+  icon: string;
   items: NavItem[];
 }
 
 const rawGroups: NavGroup[] = [
   {
     label: 'Overview',
+    icon: 'overview',
     items: [
-      { href: '/', label: 'Dashboard', match: ['/'] },
-      { href: '/notifications', label: 'Notifications' },
+      { href: '/', label: 'Dashboard', icon: 'dashboard', match: ['/'] },
+      { href: '/notifications', label: 'Notifications', icon: 'bell' },
     ],
   },
   {
     label: 'Operations',
+    icon: 'operations',
     items: [
-      has('requests.view') ? { href: '/requests', label: 'Requests' } : null,
+      has('requests.view') ? { href: '/requests', label: 'Requests', icon: 'requests' } : null,
       workOrdersHref
-        ? { href: workOrdersHref, label: 'Work orders', match: ['/workorders', workOrdersHref] }
+        ? {
+            href: workOrdersHref,
+            label: 'Work orders',
+            icon: 'workorders',
+            match: ['/workorders', workOrdersHref],
+          }
         : null,
-      rfqHref ? { href: rfqHref, label: 'RFQs', match: ['/rfqs', '/contractor/rfqs'] } : null,
-      has('pm.view') ? { href: '/pm', label: 'Maintenance' } : null,
-      lpoHref ? { href: lpoHref, label: 'LPOs', match: ['/lpos', '/contractor/lpos'] } : null,
+      rfqHref
+        ? { href: rfqHref, label: 'RFQs', icon: 'rfqs', match: ['/rfqs', '/contractor/rfqs'] }
+        : null,
+      has('pm.view') ? { href: '/pm', label: 'Maintenance', icon: 'maintenance' } : null,
+      lpoHref
+        ? { href: lpoHref, label: 'LPOs', icon: 'lpos', match: ['/lpos', '/contractor/lpos'] }
+        : null,
     ].filter((i): i is NavItem => i !== null),
   },
   {
     label: 'Finance',
+    icon: 'finance',
     items: [
       costsHref
-        ? { href: costsHref, label: 'Costs', match: ['/costs', '/contractor/costs'] }
+        ? { href: costsHref, label: 'Costs', icon: 'costs', match: ['/costs', '/contractor/costs'] }
         : null,
       billsHref
-        ? { href: billsHref, label: 'Bills', match: ['/bills', '/contractor/bills'] }
+        ? { href: billsHref, label: 'Bills', icon: 'bills', match: ['/bills', '/contractor/bills'] }
         : null,
-      has('payment.record') ? { href: '/payments', label: 'Payments' } : null,
+      has('payment.record') ? { href: '/payments', label: 'Payments', icon: 'payments' } : null,
     ].filter((i): i is NavItem => i !== null),
   },
   {
     label: 'Setup',
+    icon: 'setup',
     items: [
       // Affiliates are the group structure; shown only to a group super-admin.
-      isGroupAdmin && has('org.manage') ? { href: '/admin/affiliates', label: 'Affiliates' } : null,
-      has('stations.view') ? { href: '/admin/stations', label: 'Stations' } : null,
+      isGroupAdmin && has('org.manage')
+        ? { href: '/admin/affiliates', label: 'Affiliates', icon: 'affiliates' }
+        : null,
+      has('stations.view')
+        ? { href: '/admin/stations', label: 'Stations', icon: 'stations' }
+        : null,
       // Regions have no dedicated permission key in the seed; they are part of
       // station setup, so they follow the stations gate.
-      has('stations.view') ? { href: '/admin/regions', label: 'Regions' } : null,
-      has('assets.view') ? { href: '/admin/assets', label: 'Assets' } : null,
-      has('contractors.view') ? { href: '/admin/contractors', label: 'Contractors' } : null,
-      has('technicians.view') ? { href: '/admin/technicians', label: 'Technicians' } : null,
-      has('slas.view') ? { href: '/admin/slas', label: 'SLAs' } : null,
-      has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards' } : null,
-      has('users.view') ? { href: '/admin/users', label: 'Users' } : null,
+      has('stations.view') ? { href: '/admin/regions', label: 'Regions', icon: 'regions' } : null,
+      has('assets.view') ? { href: '/admin/assets', label: 'Assets', icon: 'assets' } : null,
+      has('contractors.view')
+        ? { href: '/admin/contractors', label: 'Contractors', icon: 'contractors' }
+        : null,
+      has('technicians.view')
+        ? { href: '/admin/technicians', label: 'Technicians', icon: 'technicians' }
+        : null,
+      // Engineer-in-charge routing config; an org settings concern.
+      has('settings.manage')
+        ? { href: '/admin/engineers', label: 'Engineers in charge', icon: 'engineers' }
+        : null,
+      has('slas.view') ? { href: '/admin/slas', label: 'SLAs', icon: 'slas' } : null,
+      has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' } : null,
+      has('users.view') ? { href: '/admin/users', label: 'Users', icon: 'users' } : null,
+      has('roles.manage') ? { href: '/admin/roles', label: 'Roles', icon: 'roles' } : null,
     ].filter((i): i is NavItem => i !== null),
   },
 ];
 const groups = rawGroups.filter((g) => g.items.length > 0);
 const activeItem = (item: NavItem) =>
   (item.match ?? [item.href]).some((m) => (m === '/' ? path === '/' : isActive(m)));
+const groupActive = (group: NavGroup) => group.items.some(activeItem);
 ---
 
 <!doctype html>
@@ -148,8 +201,10 @@ const activeItem = (item: NavItem) =>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <title>{pageTitle}</title>
+    <ClientRouter />
   </head>
   <body class="engr">
+    <div class="engr-toploader" data-toploader aria-hidden="true"></div>
     <a href="#engr-main" class="engr-skip">Skip to content</a>
     {
       engr ? (
@@ -168,27 +223,54 @@ const activeItem = (item: NavItem) =>
             <a href="/" class="engr-appbar__org">
               {orgName}
             </a>
+            <a
+              href="/notifications"
+              class="engr-bell"
+              data-bell
+              data-unread={unread}
+              aria-label={unread > 0 ? `Notifications, ${unreadLabel} unread` : 'Notifications'}
+            >
+              <EngrIcon name="bell" />
+              <span class="engr-bell__badge" data-bell-badge hidden={unread === 0}>
+                {unreadLabel}
+              </span>
+            </a>
           </div>
 
           <div class="engr-navscrim" data-navscrim hidden />
 
           <aside id="engr-sidebar" class="engr-sidebar" aria-label="Primary">
             <div class="engr-orghead">
-              <a href="/" class="engr-orgid">
-                <span class="engr-orgid__mark" aria-hidden="true">
-                  ER
-                </span>
-                <span class="engr-orgid__text">
-                  <span class="engr-orgid__name">{orgName}</span>
-                  {isGroupAdmin ? (
-                    <span class="engr-orgid__badge" data-group={actingIsGroup ? 'yes' : undefined}>
-                      {actingIsGroup ? 'Group' : 'Affiliate'}
-                    </span>
-                  ) : (
-                    orgSlug && <span class="engr-orgid__slug">{orgSlug}</span>
-                  )}
-                </span>
-              </a>
+              <div class="engr-orghead__row">
+                <a href="/" class="engr-orgid">
+                  <span class="engr-orgid__mark" aria-hidden="true">
+                    ER
+                  </span>
+                  <span class="engr-orgid__text">
+                    <span class="engr-orgid__name">{orgName}</span>
+                    {isGroupAdmin && (
+                      <span
+                        class="engr-orgid__badge"
+                        data-group={actingIsGroup ? 'yes' : undefined}
+                      >
+                        {actingIsGroup ? 'Group' : 'Affiliate'}
+                      </span>
+                    )}
+                  </span>
+                </a>
+                <a
+                  href="/notifications"
+                  class="engr-bell engr-bell--sidebar"
+                  data-bell
+                  data-unread={unread}
+                  aria-label={unread > 0 ? `Notifications, ${unreadLabel} unread` : 'Notifications'}
+                >
+                  <EngrIcon name="bell" />
+                  <span class="engr-bell__badge" data-bell-badge hidden={unread === 0}>
+                    {unreadLabel}
+                  </span>
+                </a>
+              </div>
 
               {showSwitcher && (
                 <form method="post" action="/api/org/switch" class="engr-switcher">
@@ -213,8 +295,17 @@ const activeItem = (item: NavItem) =>
 
             <nav class="engr-sidenav" aria-label="Sections">
               {groups.map((group) => (
-                <div class="engr-navgroup">
-                  <h2 class="engr-navgroup__label">{group.label}</h2>
+                <details
+                  class="engr-navgroup"
+                  data-navgroup={group.label}
+                  data-active={groupActive(group) ? 'yes' : undefined}
+                  open
+                >
+                  <summary class="engr-navgroup__summary">
+                    <EngrIcon name={group.icon} class="engr-navgroup__icon" size={16} />
+                    <span class="engr-navgroup__label">{group.label}</span>
+                    <span class="engr-navgroup__chevron" aria-hidden="true" />
+                  </summary>
                   <ul class="engr-navgroup__list">
                     {group.items.map((item) => (
                       <li>
@@ -223,12 +314,13 @@ const activeItem = (item: NavItem) =>
                           class="engr-navlink"
                           aria-current={activeItem(item) ? 'page' : undefined}
                         >
-                          {item.label}
+                          <EngrIcon name={item.icon} class="engr-navlink__icon" size={16} />
+                          <span>{item.label}</span>
                         </a>
                       </li>
                     ))}
                   </ul>
-                </div>
+                </details>
               ))}
             </nav>
 
@@ -257,11 +349,98 @@ const activeItem = (item: NavItem) =>
     }
 
     <script>
-      // Progressive enhancement: collapse the sidebar into a drawer on narrow
-      // screens. Without this script the nav stays visible and usable.
-      const shell = document.querySelector('.engr-shell');
-      if (shell) {
+      // The chevron glyph is decorative; the group icon carries meaning. Rotate
+      // it with CSS via the [open] state (see engr.css). The group icon reuses
+      // the icon set, so no extra markup is needed here.
+
+      // ---- Top progress bar for view-transition navigations -------------------
+      const loader = () => document.querySelector<HTMLElement>('[data-toploader]');
+      document.addEventListener('astro:before-preparation', () => {
+        const el = loader();
+        if (el) {
+          el.classList.remove('is-done');
+          el.classList.add('is-active');
+        }
+      });
+      document.addEventListener('astro:after-preparation', () => {
+        const el = loader();
+        if (el) el.classList.add('is-loaded');
+      });
+      const finishLoader = () => {
+        const el = loader();
+        if (el) {
+          el.classList.remove('is-active', 'is-loaded');
+          el.classList.add('is-done');
+        }
+      };
+      document.addEventListener('astro:page-load', finishLoader);
+
+      // Escape closes the mobile drawer (attached once, acts on the live shell).
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const shell = document.querySelector('.engr-shell');
+        if (shell?.classList.contains('is-open')) {
+          shell.classList.remove('is-open');
+          shell.querySelector('[data-navtoggle]')?.setAttribute('aria-expanded', 'false');
+          shell.querySelector('[data-navscrim]')?.setAttribute('hidden', '');
+        }
+      });
+
+      // ---- Single-signal guard: one request per mutating control --------------
+      // On the first submit of a form, mark its submit button busy and block
+      // further submits until navigation replaces the page. The button keeps its
+      // value in the request (we mark it after the submit has been dispatched).
+      const submitting = new WeakSet<HTMLFormElement>();
+      document.addEventListener(
+        'submit',
+        (e) => {
+          const form = e.target as HTMLFormElement;
+          if (!(form instanceof HTMLFormElement)) return;
+          if (submitting.has(form)) {
+            e.preventDefault();
+            return;
+          }
+          submitting.add(form);
+          const submitter = (e as SubmitEvent).submitter as HTMLElement | null;
+          const btn =
+            submitter && submitter.tagName === 'BUTTON'
+              ? (submitter as HTMLButtonElement)
+              : form.querySelector<HTMLButtonElement>('button[type="submit"], button:not([type])');
+          if (btn) {
+            // Defer so the submitter's name/value is still serialised.
+            setTimeout(() => {
+              btn.setAttribute('aria-busy', 'true');
+              btn.setAttribute('disabled', '');
+            }, 0);
+          }
+        },
+        true,
+      );
+
+      // ---- Sidebar drawer + collapsible group persistence + bell polling ------
+      const STORE_KEY = 'engr:navgroups';
+      function readCollapsed(): Set<string> {
+        try {
+          return new Set(JSON.parse(localStorage.getItem(STORE_KEY) || '[]'));
+        } catch {
+          return new Set();
+        }
+      }
+      function writeCollapsed(set: Set<string>) {
+        try {
+          localStorage.setItem(STORE_KEY, JSON.stringify([...set]));
+        } catch {
+          /* storage may be unavailable; collapse then resets per navigation */
+        }
+      }
+
+      let bellTimer: number | undefined;
+      function enhance() {
+        const shell = document.querySelector('.engr-shell');
+        if (!shell) return;
         shell.classList.add('is-enhanced');
+
+        // Drawer (narrow screens).
         const btn = shell.querySelector<HTMLButtonElement>('[data-navtoggle]');
         const scrim = shell.querySelector<HTMLElement>('[data-navscrim]');
         const close = () => {
@@ -278,11 +457,60 @@ const activeItem = (item: NavItem) =>
           shell.classList.contains('is-open') ? close() : open(),
         );
         scrim?.addEventListener('click', close);
-        document.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape') close();
-        });
         shell.querySelectorAll('.engr-navlink').forEach((a) => a.addEventListener('click', close));
+
+        // Restore collapsed groups (the active group is always left open), and
+        // persist changes as the user toggles them.
+        const collapsed = readCollapsed();
+        shell.querySelectorAll<HTMLDetailsElement>('.engr-navgroup').forEach((group) => {
+          const name = group.getAttribute('data-navgroup') || '';
+          const isActive = group.hasAttribute('data-active');
+          if (collapsed.has(name) && !isActive) group.open = false;
+          group.addEventListener('toggle', () => {
+            const set = readCollapsed();
+            if (group.open) set.delete(name);
+            else set.add(name);
+            writeCollapsed(set);
+          });
+        });
       }
+
+      async function refreshBell() {
+        try {
+          const res = await fetch('/api/notifications/count', {
+            headers: { accept: 'application/json' },
+          });
+          if (!res.ok) return;
+          const data = (await res.json()) as { count?: number };
+          const n = Number(data.count ?? 0);
+          document.querySelectorAll<HTMLElement>('[data-bell]').forEach((bell) => {
+            bell.setAttribute('data-unread', String(n));
+            bell.setAttribute(
+              'aria-label',
+              n > 0 ? `Notifications, ${n > 99 ? '99+' : n} unread` : 'Notifications',
+            );
+            const badge = bell.querySelector<HTMLElement>('[data-bell-badge]');
+            if (badge) {
+              badge.textContent = n > 99 ? '99+' : String(n);
+              badge.toggleAttribute('hidden', n === 0);
+            }
+          });
+        } catch {
+          /* offline or transient; leave the last known count */
+        }
+      }
+
+      function startBellPolling() {
+        if (bellTimer) window.clearInterval(bellTimer);
+        // A light interval; refreshed on navigation too.
+        bellTimer = window.setInterval(refreshBell, 60000);
+      }
+
+      document.addEventListener('astro:page-load', () => {
+        enhance();
+        refreshBell();
+        startBellPolling();
+      });
     </script>
   </body>
 </html>
