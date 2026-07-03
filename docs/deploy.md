@@ -1,14 +1,43 @@
 # Deploy
 
-One worker, `murikah-web`, serves both sites. Routing is by hostname (see
-`src/middleware.ts` and `src/lib/engr/routing.ts`):
+One worker, `murikah-web`, serves both sites. The host branch is decided in the
+worker entry, `src/worker.ts`, using the helpers in `src/lib/engr/routing.ts`
+(one source of truth). The `src/middleware.ts` session guard runs afterwards on
+the engr routes.
 
 - `murikah.com` serves the marketing site.
 - `engr.murikah.com` serves Engineering Rhythm at its root; the request is
   rewritten internally to the files under `src/pages/engr/**`.
+- `www.murikah.com` redirects (301) to `murikah.com`.
+- Any other host is a neutral 404, so no corporate content leaks onto a stray
+  host.
 
 An old `murikah.com/engr/...` link is redirected once (301) to the matching
 `engr.murikah.com/...` URL.
+
+## Why run_worker_first
+
+`wrangler.jsonc` sets `assets.run_worker_first: true`. Without it the Cloudflare
+Assets layer answers a request before the worker runs: `engr.murikah.com/`
+returns the marketing `index.html` and an unmatched path returns the marketing
+404, both without the worker ever seeing the host. `run_worker_first` makes the
+platform invoke the worker first for every request, so the host branch runs
+before any static file is served. The host branch cannot live in Astro
+middleware, because the Cloudflare adapter answers static assets and the
+prerendered 404 before middleware runs; the worker entry is the earliest point.
+
+## Debug headers
+
+Every response carries two headers so the branch is observable on the edge with a
+plain `curl -I`:
+
+- `x-mrk-host`: the host as classified from the `Host` header.
+- `x-mrk-branch`: one of `marketing`, `app`, `redirect-www`, `redirect-engr-path`,
+  `not-found-host`.
+
+They carry no secrets. They are kept for this change so routing can be confirmed
+on the Cloudflare preview and in production; they can be removed in a later
+tidy-up.
 
 ## One-time setup
 
@@ -77,12 +106,32 @@ Set on the worker, not in GitHub:
 - marketing: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `RESEND_API_KEY`,
   `CONTACT_NOTIFY_EMAIL`, `RESEND_FROM_EMAIL`
 
-## Local development
+## Verifying the routing
 
-Hostname routing works locally through the `.localhost` names, which resolve to
-127.0.0.1 with no hosts-file entry:
+Because the branch is read from the `Host` header, it can be exercised without
+the real DNS. Build, run the worker, and set the host on each request:
 
-- `http://engr.localhost:4321/login` serves the Engineering Rhythm login.
-- `http://localhost:4321/` serves the marketing site.
+```
+pnpm build
+pnpm exec wrangler dev --config dist/server/wrangler.json
 
-The session cookie is set without `Secure` over http, so a local sign-in sticks.
+curl -sI -H 'Host: engr.murikah.com' http://127.0.0.1:8787/login
+#   x-mrk-branch: app        (the Engineering Rhythm sign-in page)
+curl -sI -H 'Host: engr.murikah.com' http://127.0.0.1:8787/who-we-are
+#   404, x-mrk-branch: app   (the engr not-found page, not the corporate one)
+curl -sI -H 'Host: murikah.com' http://127.0.0.1:8787/engr/login
+#   301 -> https://engr.murikah.com/login, x-mrk-branch: redirect-engr-path
+curl -sI -H 'Host: murikah.com' http://127.0.0.1:8787/
+#   x-mrk-branch: marketing
+curl -sI -H 'Host: www.murikah.com' http://127.0.0.1:8787/
+#   301 -> https://murikah.com/, x-mrk-branch: redirect-www
+```
+
+On the Cloudflare preview, the same `curl -I` with the `Host` header set confirms
+each branch by its `x-mrk-branch`. The preview's own `workers.dev` host is an
+unknown host (a neutral 404 by design), so drive the checks with the `Host`
+header.
+
+`astro dev` also honours the `Host` header, so `http://engr.localhost:4321/login`
+serves the app during development. The session cookie is set without `Secure`
+over http, so a local sign-in sticks.
