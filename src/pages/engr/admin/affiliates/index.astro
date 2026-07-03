@@ -2,10 +2,10 @@
 export const prerender = false;
 
 /**
- * Affiliates of the current group. Shown only to a group super-admin. The group
- * sits at the top with its affiliates beneath, so the structure is legible.
- * After creating an affiliate, switch into it (the sidebar switcher) and use the
- * ordinary Setup screens to add its stations and the rest.
+ * Affiliates of the caller's home organisation. Shown only to a platform owner.
+ * The organisation sits at the top with its affiliates beneath, so the structure
+ * is legible. After creating an affiliate, switch into it (the sidebar switcher)
+ * and use the ordinary Setup screens to add its stations and the rest.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
@@ -17,11 +17,11 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = engr.isGroupAdmin;
+const allowed = engr.isPlatformOwner;
 const canManage = allowed && can(Astro.locals, 'org.manage');
 const saved = Astro.url.searchParams.get('saved');
 const errorCode = Astro.url.searchParams.get('error');
-const groupName = engr.switchable.find((o) => o.isGroup)?.name ?? engr.orgName ?? 'Group';
+const groupName = engr.orgName ?? 'Organisation';
 
 let rows: AffiliateRow[] = [];
 if (allowed) {
@@ -63,7 +63,7 @@ if (allowed) {
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        Affiliates are managed by a group super-admin.
+        Affiliates are managed by the platform owner.
       </p>
     ) : (
       <div class="engr-tree">

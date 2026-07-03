@@ -28,6 +28,10 @@ export interface SessionPayload {
   orgName?: string;
   userName?: string;
   userEmail?: string;
+  // True for a platform owner (users.is_platform_owner). Only a platform owner
+  // may switch the acting organisation; every other user is scoped to their home
+  // organisation. Optional and defaults to false on an older token.
+  isPlatformOwner?: boolean;
 }
 
 // The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
@@ -57,6 +61,7 @@ function toPayload(claims: JWTPayload): SessionPayload | null {
     orgName: optional(claims.orgName),
     userName: optional(claims.userName),
     userEmail: optional(claims.userEmail),
+    isPlatformOwner: claims.isPlatformOwner === true,
   };
 }
 
@@ -71,6 +76,8 @@ async function sign(payload: SessionPayload, secret: string): Promise<string> {
     orgName: payload.orgName,
     userName: payload.userName,
     userEmail: payload.userEmail,
+    // Only carried when true, so an ordinary token stays compact.
+    isPlatformOwner: payload.isPlatformOwner ? true : undefined,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)

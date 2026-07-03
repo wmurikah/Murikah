@@ -1,12 +1,12 @@
 export const prerender = false;
 
 /**
- * Switch the acting organisation. Only a group super-admin may switch, and only
- * to the group itself or one of its affiliates. The target is re-checked against
- * the entitlement the middleware resolved for this request (locals.engr.
- * switchable), so a forged form value cannot reach an organisation outside the
- * group. The switch is audited under the group, then the acting-org cookie is
- * set and the browser is sent to the dashboard of the now-acting organisation.
+ * Switch the acting organisation. Only a platform owner may switch, and only to
+ * an organisation in the set the middleware resolved for this request
+ * (locals.engr.switchable, every live organisation), so a forged form value
+ * cannot reach anything outside it. The switch is audited under the owner's home
+ * organisation, then the acting-org cookie is set and the browser is sent to the
+ * dashboard of the now-acting organisation.
  */
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
@@ -23,7 +23,7 @@ function seeOther(location: string, cookie?: string): Response {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  if (!engr.isGroupAdmin) {
+  if (!engr.isPlatformOwner) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : seeOther('/?error=switch');
