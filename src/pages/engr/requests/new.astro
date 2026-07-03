@@ -8,6 +8,7 @@ export const prerender = false;
  * Gate: requests.create. Stations and categories are scoped to the org.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import {
@@ -59,7 +60,13 @@ if (allowed) {
         You do not have permission to raise requests.
       </p>
     ) : stations.length === 0 ? (
-      <p class="engr-empty">No stations are set up yet. Add a station before raising a request.</p>
+      <EmptyState
+        message="No stations are set up yet. A request is raised against a station."
+        canAct={can(Astro.locals, 'stations.manage')}
+        actionHref="/admin/stations/new"
+        actionLabel="Add a station"
+        hint="Ask an administrator to add a station before raising a request."
+      />
     ) : (
       <>
         {errorMessage && (

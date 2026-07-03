@@ -1,0 +1,104 @@
+---
+export const prerender = false;
+
+/**
+ * Region create and edit. The path segment is "new" to create, otherwise a
+ * region id to edit. Gate: stations.manage. The form posts to the write
+ * endpoint, which redirects back to the list on success.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getRegion, type RegionDetail } from '@engr/repos/adminRegions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'stations.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let region: RegionDetail | null = null;
+
+if (canManage && !isNew && id) {
+  const db = await getDb(getEngrEnv());
+  region = await getRegion(db, engr.orgId, id);
+}
+const notFound = !isNew && region === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const s = region;
+---
+
+<EngrLayout title={isNew ? 'New region' : 'Edit region'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New region' : 'Edit region'}</h1>
+      <p class="engr-lead">An area that groups stations for setup.</p>
+    </div>
+    <a href="/admin/regions" class="engr-btn engr-btn--secondary">Back to regions</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That code is already used by another region.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the name, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage regions.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That region was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/regions" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={s!.id} />}
+        <div class="engr-field">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            class="engr-input"
+            name="name"
+            maxlength="120"
+            required
+            value={s?.name ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="code">
+            Code <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="code"
+            class="engr-input"
+            name="code"
+            maxlength="30"
+            value={s?.code ?? ''}
+          />
+        </div>
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create region' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

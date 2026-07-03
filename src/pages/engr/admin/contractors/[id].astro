@@ -1,0 +1,216 @@
+---
+export const prerender = false;
+
+/**
+ * Contractor create and edit. The path segment is "new" to create, otherwise a
+ * contractor id to edit. Gate: contractors.manage. The form posts to the write
+ * endpoint, which redirects back to the list on success. Station and category
+ * coverage are edited as checkbox lists, pre-checked from the current links.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getContractor, type ContractorDetail } from '@engr/repos/adminContractors';
+import { listStationOptions, listCategoryOptions, type Option } from '@engr/repos/adminOptions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'contractors.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let contractor: ContractorDetail | null = null;
+let stations: Option[] = [];
+let categories: Option[] = [];
+
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  [stations, categories] = await Promise.all([
+    listStationOptions(db, engr.orgId),
+    listCategoryOptions(db, engr.orgId),
+  ]);
+  if (!isNew && id) contractor = await getContractor(db, engr.orgId, id);
+}
+const notFound = !isNew && contractor === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const c = contractor;
+const selectedStations = new Set(c?.stationIds ?? []);
+const selectedCategories = new Set(c?.categoryIds ?? []);
+---
+
+<EngrLayout title={isNew ? 'New contractor' : 'Edit contractor'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New contractor' : 'Edit contractor'}</h1>
+      <p class="engr-lead">
+        A firm that carries out work, with the stations and categories it covers.
+      </p>
+    </div>
+    <a href="/admin/contractors" class="engr-btn engr-btn--secondary">Back to contractors</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That contractor already exists.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the name and status, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage contractors.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That contractor was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/contractors" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={c!.id} />}
+        <div class="engr-field">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            class="engr-input"
+            name="name"
+            maxlength="120"
+            required
+            value={c?.name ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="contact_person">
+            Contact person <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="contact_person"
+            class="engr-input"
+            name="contact_person"
+            maxlength="120"
+            value={c?.contactPerson ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="email">
+            Email <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="email"
+            id="email"
+            class="engr-input"
+            name="email"
+            maxlength="200"
+            value={c?.email ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="phone">
+            Phone <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="phone"
+            class="engr-input"
+            name="phone"
+            maxlength="40"
+            value={c?.phone ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="base_station_id">
+            Base station <span class="engr-field__hint">(optional)</span>
+          </label>
+          <select id="base_station_id" class="engr-select" name="base_station_id">
+            <option value="">Not set</option>
+            {stations.map((s) => (
+              <option value={s.id} selected={c?.baseStationId === s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="engr-field">
+          <label for="status">Status</label>
+          <select id="status" class="engr-select" name="status">
+            <option value="ACTIVE" selected={(c?.status ?? 'ACTIVE') === 'ACTIVE'}>
+              Active
+            </option>
+            <option value="SUSPENDED" selected={c?.status === 'SUSPENDED'}>
+              Suspended
+            </option>
+            <option value="BLACKLISTED" selected={c?.status === 'BLACKLISTED'}>
+              Blacklisted
+            </option>
+          </select>
+        </div>
+        <div class="engr-field engr-formgrid__full">
+          <label>
+            Stations covered <span class="engr-field__hint">(optional)</span>
+          </label>
+          <ul class="engr-checklist">
+            {stations.map((s) => (
+              <li>
+                <input
+                  type="checkbox"
+                  id={`station_${s.id}`}
+                  name="station_ids"
+                  value={s.id}
+                  checked={selectedStations.has(s.id)}
+                />
+                <label for={`station_${s.id}`}>{s.label}</label>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div class="engr-field engr-formgrid__full">
+          <label>
+            Categories covered <span class="engr-field__hint">(optional)</span>
+          </label>
+          <ul class="engr-checklist">
+            {categories.map((cat) => (
+              <li>
+                <input
+                  type="checkbox"
+                  id={`category_${cat.id}`}
+                  name="category_ids"
+                  value={cat.id}
+                  checked={selectedCategories.has(cat.id)}
+                />
+                <label for={`category_${cat.id}`}>{cat.label}</label>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div class="engr-check engr-formgrid__full">
+          <input
+            type="checkbox"
+            id="is_prequalified"
+            name="is_prequalified"
+            checked={c?.isPrequalified ?? false}
+          />
+          <label for="is_prequalified">Prequalified</label>
+        </div>
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create contractor' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

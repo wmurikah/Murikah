@@ -22,6 +22,12 @@ export interface SessionPayload {
   orgSlug: string;
   roles: string[]; // role codes
   perms: string[]; // permission keys
+  // Display identity, optional so a token minted before these were added still
+  // verifies (the holder keeps their session and picks the fields up on next
+  // sign-in). The view falls back to the slug when orgName is absent.
+  orgName?: string;
+  userName?: string;
+  userEmail?: string;
 }
 
 // The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
@@ -41,7 +47,17 @@ function toPayload(claims: JWTPayload): SessionPayload | null {
   if (typeof sub !== 'string' || typeof org !== 'string' || typeof orgSlug !== 'string')
     return null;
   if (!Array.isArray(roles) || !Array.isArray(perms)) return null;
-  return { sub, org, orgSlug, roles: roles.map(String), perms: perms.map(String) };
+  const optional = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+  return {
+    sub,
+    org,
+    orgSlug,
+    roles: roles.map(String),
+    perms: perms.map(String),
+    orgName: optional(claims.orgName),
+    userName: optional(claims.userName),
+    userEmail: optional(claims.userEmail),
+  };
 }
 
 // Sign the payload and return the token string.
@@ -51,6 +67,10 @@ async function sign(payload: SessionPayload, secret: string): Promise<string> {
     orgSlug: payload.orgSlug,
     roles: payload.roles,
     perms: payload.perms,
+    // Undefined claims are dropped when the token is serialised.
+    orgName: payload.orgName,
+    userName: payload.userName,
+    userEmail: payload.userEmail,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)
