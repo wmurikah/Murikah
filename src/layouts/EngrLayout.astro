@@ -39,6 +39,13 @@ const orgSlug = engr?.orgSlug ?? '';
 const accountName = engr?.userName ?? engr?.userEmail ?? 'Account';
 const accountEmail = engr?.userEmail ?? '';
 
+// The acting organisation and, for a group super-admin, the set to switch between.
+const isGroupAdmin = engr?.isGroupAdmin ?? false;
+const switchable = engr?.switchable ?? [];
+const actingId = engr?.orgId ?? '';
+const actingIsGroup = switchable.find((o) => o.id === actingId)?.isGroup ?? false;
+const showSwitcher = isGroupAdmin && switchable.length > 1;
+
 // Role-aware destinations: staff land on the shared queues, a contractor or
 // technician on their own portal.
 const workOrdersHref = has('workorder.create')
@@ -114,6 +121,8 @@ const rawGroups: NavGroup[] = [
   {
     label: 'Setup',
     items: [
+      // Affiliates are the group structure; shown only to a group super-admin.
+      isGroupAdmin && has('org.manage') ? { href: '/admin/affiliates', label: 'Affiliates' } : null,
       has('stations.view') ? { href: '/admin/stations', label: 'Stations' } : null,
       // Regions have no dedicated permission key in the seed; they are part of
       // station setup, so they follow the stations gate.
@@ -164,15 +173,43 @@ const activeItem = (item: NavItem) =>
           <div class="engr-navscrim" data-navscrim hidden />
 
           <aside id="engr-sidebar" class="engr-sidebar" aria-label="Primary">
-            <a href="/" class="engr-orgid">
-              <span class="engr-orgid__mark" aria-hidden="true">
-                ER
-              </span>
-              <span class="engr-orgid__text">
-                <span class="engr-orgid__name">{orgName}</span>
-                {orgSlug && <span class="engr-orgid__slug">{orgSlug}</span>}
-              </span>
-            </a>
+            <div class="engr-orghead">
+              <a href="/" class="engr-orgid">
+                <span class="engr-orgid__mark" aria-hidden="true">
+                  ER
+                </span>
+                <span class="engr-orgid__text">
+                  <span class="engr-orgid__name">{orgName}</span>
+                  {isGroupAdmin ? (
+                    <span class="engr-orgid__badge" data-group={actingIsGroup ? 'yes' : undefined}>
+                      {actingIsGroup ? 'Group' : 'Affiliate'}
+                    </span>
+                  ) : (
+                    orgSlug && <span class="engr-orgid__slug">{orgSlug}</span>
+                  )}
+                </span>
+              </a>
+
+              {showSwitcher && (
+                <form method="post" action="/api/org/switch" class="engr-switcher">
+                  <label for="engr-actingorg" class="engr-switcher__label">
+                    Acting organisation
+                  </label>
+                  <div class="engr-switcher__row">
+                    <select id="engr-actingorg" name="org_id" class="engr-switcher__select">
+                      {switchable.map((o) => (
+                        <option value={o.id} selected={o.id === actingId}>
+                          {o.isGroup ? `${o.name} (Group)` : o.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="submit" class="engr-btn engr-btn--secondary engr-switcher__go">
+                      Switch
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
 
             <nav class="engr-sidenav" aria-label="Sections">
               {groups.map((group) => (
