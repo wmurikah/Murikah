@@ -1,23 +1,27 @@
 /**
- * Worker entry with a scheduled() handler for the Cron Triggers.
+ * Worker entry. Two responsibilities: route by hostname, and run the scheduled
+ * cron drains.
  *
- * The fetch handler is the Astro SSR handler from the Cloudflare adapter,
- * re-exported unchanged. scheduled() adds the two crons declared in
- * wrangler.jsonc:
+ * Host routing lives here, not in Astro middleware, because the Cloudflare
+ * adapter answers static assets and the prerendered 404 (matchStaticAsset and
+ * fallbackToAssets in the adapter's handler) before any middleware runs. So the
+ * branch is decided at the very top of the worker, before the Astro handler sees
+ * the request. `run_worker_first` in wrangler.jsonc makes the platform invoke
+ * this worker before the assets layer, so it runs for every request.
+ *
+ * On the engr host the request is rewritten internally to its /engr route so the
+ * file under src/pages/engr/** serves at the subdomain root while the browser URL
+ * stays clean. The session guard then runs in src/middleware.ts against that
+ * /engr route. Every response carries x-mrk-host and x-mrk-branch so the branch
+ * is observable with a plain curl on the Cloudflare preview and in production;
+ * they can be removed in a later tidy-up.
+ *
+ * The scheduled() handler runs the two crons declared in wrangler.jsonc:
  *   - every five minutes: drain the notification queue (runDispatch),
  *   - 03:00 UTC (06:00 EAT) daily: run the PM scan, then drain.
- *
- * The cron and the per-request nudge are safe to overlap because the dispatcher
- * claims each row atomically. Env for the database and providers is read from
- * the cloudflare:workers module inside getEngrEnv and getDeliveryEnv, so the
- * scheduled context needs no wiring beyond calling them.
- *
- * To wire this handler, wrangler.jsonc sets `main` to this file. If an
- * environment cannot build a custom entry, the same drains are reachable through
- * the secured /engr/api/cron/* endpoints, which the Cron Trigger or an external
- * scheduler can call.
  */
 import astro from '@astrojs/cloudflare/entrypoints/server';
+import { requestHost, routeDecision, type Branch } from './lib/engr/routing';
 import { getEngrEnv } from './lib/engr/env';
 import { getDeliveryEnv } from './lib/engr/notify/env';
 import { getDb } from './lib/engr/db';
@@ -27,8 +31,96 @@ import { systemClock } from './lib/engr/time';
 
 const DAILY_PM_CRON = '0 3 * * *';
 
+// Attach the debug headers, cloning so a response with immutable headers (an
+// asset from the ASSETS binding) can still be stamped.
+function stamp(response: Response, host: string, branch: Branch): Response {
+  const out = new Response(response.body, response);
+  out.headers.set('x-mrk-host', host);
+  out.headers.set('x-mrk-branch', branch);
+  return out;
+}
+
+function redirect(location: string): Response {
+  return new Response(null, { status: 301, headers: { location } });
+}
+
+// A neutral, self-contained not-found page for the engr host, so no corporate
+// content renders here. Inline styles only: the hashed engr stylesheet cannot be
+// referenced from the worker.
+const ENGR_NOT_FOUND_HTML = `<!doctype html>
+<html lang="en-KE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Page not found, Engineering Rhythm</title><style>body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f6f4ee;color:#1b1b1b;display:grid;min-height:100vh;place-items:center;padding:1.5rem}main{max-width:32rem;text-align:center}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0 0 1.25rem;color:#565656}a{display:inline-block;min-height:2.75rem;line-height:2.75rem;padding:0 1.1rem;border-radius:.5rem;background:#12233b;color:#f6f4ee;text-decoration:none;font-weight:600}</style></head><body><main><h1>Page not found</h1><p>That page does not exist on Engineering Rhythm. Check the address, or return to the sign-in page.</p><a href="/login">Go to sign in</a></main></body></html>`;
+
+// On the engr host a 404 means the /engr route did not exist. Astro falls back
+// to the single root 404 page, which is the corporate one, so replace it. The
+// app's own not-found screens render the engr layout (body class "engr"); keep
+// those so their specific message survives.
+async function engrNotFound(response: Response, host: string): Promise<Response> {
+  const body = await response.text();
+  if (body.includes('class="engr"')) {
+    return stamp(new Response(body, response), host, 'app');
+  }
+  return stamp(
+    new Response(ENGR_NOT_FOUND_HTML, {
+      status: 404,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    }),
+    host,
+    'app',
+  );
+}
+
 export default {
-  fetch: astro.fetch,
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+
+    // The adapter's build-time prerender server posts to its internal endpoints
+    // (/__astro_static_paths, /__astro_prerender, /__astro_static_images) with a
+    // build host that is none of ours. Let those through untouched so the build
+    // can prerender; in production they are not real routes and simply 404.
+    if (url.pathname.startsWith('/__astro')) {
+      return astro.fetch(request, env, ctx);
+    }
+
+    const host = requestHost(request);
+    const decision = routeDecision(host, url.pathname, url.search);
+
+    switch (decision.branch) {
+      case 'redirect-www':
+      case 'redirect-engr-path':
+        return stamp(redirect(decision.location), host, decision.branch);
+
+      case 'not-found-host':
+        // A stray host never sees corporate content: a neutral 404, not a
+        // redirect that would surface the marketing site.
+        return stamp(
+          new Response('Not found', {
+            status: 404,
+            headers: { 'content-type': 'text/plain; charset=utf-8' },
+          }),
+          host,
+          'not-found-host',
+        );
+
+      case 'marketing':
+        return stamp(await astro.fetch(request, env, ctx), host, 'marketing');
+
+      case 'app': {
+        // Rewrite to the /engr route unless the path is already there or is a
+        // static asset. The browser URL is unchanged; this is an internal fetch.
+        let response: Response;
+        if (decision.enginePath === url.pathname) {
+          response = await astro.fetch(request, env, ctx);
+        } else {
+          const rewritten = new URL(url);
+          rewritten.pathname = decision.enginePath;
+          response = await astro.fetch(new Request(rewritten, request), env, ctx);
+        }
+        if (response.status === 404) return engrNotFound(response, host);
+        return stamp(response, host, 'app');
+      }
+    }
+  },
+
   async scheduled(
     controller: ScheduledController,
     _env: Env,

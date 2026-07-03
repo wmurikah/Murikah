@@ -1,52 +1,69 @@
 /**
- * Hostname routing for Engineering Rhythm.
+ * Hostname routing for Engineering Rhythm. One source of truth.
  *
  * The app files live under src/pages/engr/** but the app is served at the root of
  * engr.murikah.com, while the marketing site stays on murikah.com. Both are one
- * worker; routing is by hostname. All of the host logic lives here and in
- * src/middleware.ts so the pages and endpoints never need to know which host
- * serves them.
+ * worker; the branch is decided by host in src/worker.ts, before the Astro
+ * adapter resolves a route or serves a static asset (the adapter answers static
+ * assets and the prerendered 404 before any middleware runs, which is why the
+ * earlier middleware-only attempt could not gate the host on the edge).
  *
- * Pure string helpers, no imports, so the routing decisions can be unit tested
- * directly with node --test.
+ * Pure string helpers, no imports, so the decisions can be unit tested directly.
  */
 
 const ENGR_APEX = 'engr.murikah.com';
 const ENGR_LOCAL = 'engr.localhost';
+const MARKETING_APEX = 'murikah.com';
+const MARKETING_WWW = 'www.murikah.com';
 const ENGR_PREFIX = '/engr';
 
 /**
- * True for engr.murikah.com, any sub-label of it (a future per-tenant subdomain
- * such as acme.engr.murikah.com), and the local development equivalents
- * engr.localhost and *.engr.localhost.
+ * The request host, taken from the Host header (the reliable source in a
+ * Cloudflare Worker) and falling back to the URL only if the header is absent.
+ * The port is stripped and the value is lower-cased so comparisons are exact.
  */
-export function isEngrHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
+export function requestHost(request: Request): string {
+  const raw = request.headers.get('host') ?? new URL(request.url).hostname;
+  return raw.split(':')[0].trim().toLowerCase();
+}
+
+/** The corporate marketing site, and only this host. www is handled separately. */
+export function isMarketingHost(host: string): boolean {
+  return host === MARKETING_APEX;
+}
+
+/** The single non-canonical corporate host, redirected to the apex. */
+export function isWwwHost(host: string): boolean {
+  return host === MARKETING_WWW;
+}
+
+/**
+ * The Engineering Rhythm app: engr.murikah.com, any sub-label of it (a future
+ * per-tenant subdomain such as acme.engr.murikah.com), and the local development
+ * equivalents engr.localhost and *.engr.localhost.
+ */
+export function isEngrHost(host: string): boolean {
   return (
-    h === ENGR_APEX ||
-    h.endsWith('.' + ENGR_APEX) ||
-    h === ENGR_LOCAL ||
-    h.endsWith('.' + ENGR_LOCAL)
+    host === ENGR_APEX ||
+    host.endsWith('.' + ENGR_APEX) ||
+    host === ENGR_LOCAL ||
+    host.endsWith('.' + ENGR_LOCAL)
   );
 }
 
 /**
  * Per-tenant subdomain hook. Parses the single tenant label from
  * {tenant}.engr.murikah.com (or .engr.localhost), returning null for the bare
- * host or a deeper name.
- *
- * NOT USED YET: login still resolves the tenant by the organisation slug on the
- * form, as built in Prompt 1. The seam is here, clearly marked, so that
- * subdomain-based tenant resolution has an obvious home when it arrives. When it
- * does, keep the session cookie host-only per subdomain (see auth/session.ts);
- * do not widen it to a shared parent domain.
+ * host or a deeper name. NOT USED YET: login still resolves the tenant by the
+ * organisation slug on the form. The seam is here so subdomain-based tenant
+ * resolution has an obvious home; when it arrives, keep the session cookie
+ * host-only per subdomain.
  */
-export function tenantLabel(hostname: string): string | null {
-  const h = hostname.toLowerCase();
+export function tenantLabel(host: string): string | null {
   for (const base of [ENGR_APEX, ENGR_LOCAL]) {
     const suffix = '.' + base;
-    if (h.endsWith(suffix)) {
-      const label = h.slice(0, -suffix.length);
+    if (host.endsWith(suffix)) {
+      const label = host.slice(0, -suffix.length);
       if (label && !label.includes('.')) return label;
     }
   }
@@ -60,10 +77,7 @@ export function toEnginePath(pathname: string): string {
   return ENGR_PREFIX + pathname;
 }
 
-/**
- * The root-relative path a visitor sees, with any /engr prefix removed. This is
- * what the app treats as canonical on engr.murikah.com. Idempotent.
- */
+/** The root-relative path a visitor sees, with any /engr prefix removed. Idempotent. */
 export function toAppPath(pathname: string): string {
   if (pathname === ENGR_PREFIX) return '/';
   if (pathname.startsWith(ENGR_PREFIX + '/')) {
@@ -74,10 +88,10 @@ export function toAppPath(pathname: string): string {
 }
 
 /**
- * A static asset or Astro infra route passes straight through on the engr host:
- * no /engr rewrite and no session. App routes never begin with /_ and never
- * carry a file extension (ids are hex, slugs are alphanumeric with hyphens), so
- * a dot in the final segment marks an asset.
+ * A static asset or Astro infra route is served as it is on the engr host: no
+ * /engr rewrite. App routes never begin with /_ and never carry a file
+ * extension (ids are hex, slugs are alphanumeric with hyphens), so a dot in the
+ * final segment marks an asset.
  */
 export function isPassthroughAsset(pathname: string): boolean {
   return pathname.startsWith('/_') || /\.[a-z0-9]+$/i.test(pathname);
@@ -98,13 +112,38 @@ export function isEngrApiPath(appPath: string): boolean {
   return appPath === '/api' || appPath.startsWith('/api/');
 }
 
+/** The branch the worker took, surfaced on every response as x-mrk-branch. */
+export type Branch = 'marketing' | 'app' | 'redirect-www' | 'redirect-engr-path' | 'not-found-host';
+
+export type RouteDecision =
+  | { branch: 'app'; enginePath: string }
+  | { branch: 'marketing' }
+  | { branch: 'redirect-www'; location: string }
+  | { branch: 'redirect-engr-path'; location: string }
+  | { branch: 'not-found-host' };
+
 /**
- * On the marketing host, the old /engr/* path has moved permanently to the
- * subdomain. Returns the absolute redirect target with the query string
- * preserved, or null when the path is not under /engr so the marketing site is
- * left untouched.
+ * The single host branch. engr.murikah.com serves the app (rewriting to the
+ * /engr route); www redirects to the apex; murikah.com serves marketing but
+ * sends any /engr path to the subdomain; every other host is a neutral 404 so no
+ * corporate content leaks onto a stray host.
  */
-export function marketingEngrRedirect(pathname: string, search: string): string | null {
-  if (pathname !== ENGR_PREFIX && !pathname.startsWith(ENGR_PREFIX + '/')) return null;
-  return 'https://' + ENGR_APEX + toAppPath(pathname) + search;
+export function routeDecision(host: string, pathname: string, search: string): RouteDecision {
+  if (isEngrHost(host)) {
+    const enginePath = isPassthroughAsset(pathname) ? pathname : toEnginePath(pathname);
+    return { branch: 'app', enginePath };
+  }
+  if (isWwwHost(host)) {
+    return { branch: 'redirect-www', location: 'https://' + MARKETING_APEX + pathname + search };
+  }
+  if (isMarketingHost(host)) {
+    if (pathname === ENGR_PREFIX || pathname.startsWith(ENGR_PREFIX + '/')) {
+      return {
+        branch: 'redirect-engr-path',
+        location: 'https://' + ENGR_APEX + toAppPath(pathname) + search,
+      };
+    }
+    return { branch: 'marketing' };
+  }
+  return { branch: 'not-found-host' };
 }
