@@ -1,13 +1,13 @@
 ---
 /**
  * The Engineering Rhythm front door. A full-viewport two-pane split: a navy
- * brand panel beside a paper form pane. Below 1024px it stacks, the brand
- * condensing to a slim navy header band above the form, and simplifies further
- * on a phone so it never clips or overflows. The panel carries the product mark,
- * a confident value headline and a small trust line; the pane centres the form
- * passed in the default slot. A single-signal guard disables the submit control
- * on first click so repeated clicks send one request. No client framework, no
- * imagery: navy, gold and paper only.
+ * brand panel beside a paper form pane. Below 1024px it stacks, the brand above
+ * the form, and it never clips or overflows. The panel carries the product mark
+ * and name, a confident value headline, a supporting paragraph and two footer
+ * lines, all shown on both layouts; the pane centres the form passed in the
+ * default slot. A single-signal guard disables the submit control on first click
+ * so repeated clicks send one request. No client framework, no imagery: navy,
+ * gold and paper only.
  */
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
@@ -21,7 +21,7 @@ interface Props {
 const {
   title,
   brandHeadline = 'Run maintenance like clockwork',
-  brandSub = 'Built for petroleum retail engineering teams',
+  brandSub = 'Requests, work orders, RFQs and billing, kept in one disciplined rhythm across every station.',
 } = Astro.props;
 const pageTitle = `${title}, Engineering Rhythm`;
 ---
@@ -43,10 +43,15 @@ const pageTitle = `${title}, Engineering Rhythm`;
             <span class="engr-authbrand__markbadge" aria-hidden="true">ER</span>
             <span class="engr-authbrand__markname">Engineering Rhythm</span>
           </a>
-          <p class="engr-authbrand__bandvalue" aria-hidden="true">{brandHeadline}</p>
           <div class="engr-authbrand__lead">
             <h2 class="engr-authbrand__headline">{brandHeadline}</h2>
             <p class="engr-authbrand__sub">{brandSub}</p>
+          </div>
+          <div class="engr-authbrand__foot">
+            <p class="engr-authbrand__product">A Murikah Labs product</p>
+            <p class="engr-authbrand__trust">
+              Built for petroleum retail engineering teams across East Africa.
+            </p>
           </div>
         </div>
       </aside>
