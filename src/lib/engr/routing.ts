@@ -98,9 +98,16 @@ export function isPassthroughAsset(pathname: string): boolean {
 }
 
 // Public, unauthenticated app paths on the engr host, in root-relative form:
-// the login screen, the login endpoint, and the self-secured machine endpoints
-// (the cron drains and the provider delivery webhooks carry their own secret).
-const PUBLIC_APP_PATHS = new Set(['/login', '/api/auth/login']);
+// the sign-in, start-a-trial and forgot-password screens and their endpoints,
+// and the self-secured machine endpoints (the cron drains and the provider
+// delivery webhooks carry their own secret).
+const PUBLIC_APP_PATHS = new Set([
+  '/login',
+  '/api/auth/login',
+  '/signup',
+  '/api/auth/signup',
+  '/forgot',
+]);
 const PUBLIC_APP_PREFIXES = ['/api/cron/', '/api/webhooks/'];
 
 export function isPublicAppPath(appPath: string): boolean {

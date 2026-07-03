@@ -2,72 +2,73 @@
 export const prerender = false;
 
 /**
- * Login screen. Email is unique per organisation, so the form collects the
- * organisation slug as well as the email and password, then posts to the login
- * endpoint which resolves the tenant first. Native required validation gives
- * inline hints; the endpoint is the authority and returns one generic error.
+ * Sign in. Email and password only: email identifies the user and their instance
+ * across the whole system, so there is no organisation field. The endpoint is
+ * the authority and returns one generic error, which is tied to the fields for
+ * assistive tech. Premium two-pane styling via the auth layout.
  */
-import EngrLayout from '@/layouts/EngrLayout.astro';
+import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
 
 const params = Astro.url.searchParams;
 const hasError = params.get('error') === '1';
-const slug = params.get('org') ?? '';
+const registered = params.get('registered') === '1';
+const describedBy = hasError ? 'engr-auth-error' : undefined;
 ---
 
-<EngrLayout title="Sign in">
-  <section class="engr-auth" aria-labelledby="engr-auth-title">
-    <h1 id="engr-auth-title">Sign in</h1>
-    <p class="engr-auth__sub">Engineering Rhythm, a Murikah Labs product.</p>
+<EngrAuthLayout title="Sign in">
+  <h1 class="engr-authcard__title">Sign in</h1>
+  <p class="engr-authcard__sub">Welcome back. Enter your details to continue.</p>
 
-    {
-      hasError && (
-        <p class="engr-error" role="alert">
-          Those details did not match. Check the organisation, email and password, then try again.
-        </p>
-      )
-    }
+  {
+    registered && (
+      <p class="engr-notice" role="status">
+        Your organisation is ready. Sign in to get started.
+      </p>
+    )
+  }
+  {
+    hasError && (
+      <p class="engr-error" id="engr-auth-error" role="alert">
+        Invalid email or password. Please try again.
+      </p>
+    )
+  }
 
-    <form method="post" action="/api/auth/login" class="engr-form">
-      <div class="engr-field">
-        <label for="org">Organisation slug</label>
-        <input
-          id="org"
-          class="engr-input"
-          name="org"
-          value={slug}
-          required
-          autocomplete="organization"
-          autocapitalize="none"
-          spellcheck="false"
-        />
-      </div>
-      <div class="engr-field">
-        <label for="email">Email</label>
-        <input
-          id="email"
-          class="engr-input"
-          name="email"
-          type="email"
-          required
-          autocomplete="username"
-          autocapitalize="none"
-          spellcheck="false"
-        />
-      </div>
-      <div class="engr-field">
+  <form method="post" action="/api/auth/login" class="engr-authform" novalidate>
+    <div class="engr-field">
+      <label for="email">Email</label>
+      <input
+        id="email"
+        class="engr-input"
+        name="email"
+        type="email"
+        required
+        autocomplete="username"
+        autocapitalize="none"
+        spellcheck="false"
+        autofocus
+        aria-describedby={describedBy}
+      />
+    </div>
+    <div class="engr-field">
+      <div class="engr-authform__labelrow">
         <label for="password">Password</label>
-        <input
-          id="password"
-          class="engr-input"
-          name="password"
-          type="password"
-          required
-          autocomplete="current-password"
-        />
+        <a href="/forgot" class="engr-authform__aside">Forgot password?</a>
       </div>
-      <div class="engr-actions">
-        <button type="submit" class="engr-btn engr-btn--primary">Sign in</button>
-      </div>
-    </form>
-  </section>
-</EngrLayout>
+      <input
+        id="password"
+        class="engr-input"
+        name="password"
+        type="password"
+        required
+        autocomplete="current-password"
+        aria-describedby={describedBy}
+      />
+    </div>
+    <button type="submit" class="engr-btn engr-btn--primary engr-authform__submit">Sign in</button>
+  </form>
+
+  <p class="engr-authcard__foot">
+    New to Engineering Rhythm? <a href="/signup">Start a free trial</a>
+  </p>
+</EngrAuthLayout>

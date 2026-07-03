@@ -345,6 +345,21 @@
   text-transform: uppercase;
   color: rgba(248, 244, 234, 0.5);
 }
+.engr-switcher__find {
+  width: 100%;
+  min-height: 2.25rem;
+  margin-bottom: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid rgba(242, 244, 250, 0.28);
+  border-radius: var(--engr-radius-sm);
+  background: rgba(242, 244, 250, 0.08);
+  color: var(--engr-on-navy);
+  font: inherit;
+  font-size: var(--engr-fs-small);
+}
+.engr-switcher__find::placeholder {
+  color: var(--engr-on-navy-dim);
+}
 .engr-switcher__row {
   display: flex;
   gap: 0.4rem;
@@ -952,6 +967,203 @@ a.engr-card:focus-visible {
   margin: 0 0 1.25rem;
   color: var(--color-slate);
   font-size: 0.9375rem;
+}
+
+/* ---- Premium two-pane auth (sign in, trial, forgot) ------------------------ */
+
+.engr-authbody {
+  min-height: 100vh;
+}
+.engr-authsplit {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 64rem) {
+  .engr-authsplit {
+    grid-template-columns: 55fr 45fr;
+  }
+}
+
+/* Brand panel: a deep navy field with a faint gold grid motif. */
+.engr-authbrand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  color: var(--engr-on-navy);
+  background: linear-gradient(150deg, var(--engr-navy) 0%, var(--engr-navy-2) 100%);
+  padding: var(--engr-s6) var(--engr-s5);
+}
+@media (max-width: 63.99rem) {
+  .engr-authbrand {
+    padding: var(--engr-s4);
+  }
+}
+.engr-authbrand__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201, 162, 39, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 162, 39, 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(120% 80% at 18% 22%, #000 28%, transparent 72%);
+  -webkit-mask-image: radial-gradient(120% 80% at 18% 22%, #000 28%, transparent 72%);
+  pointer-events: none;
+}
+.engr-authbrand__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--engr-s5);
+  width: 100%;
+  max-width: 30rem;
+  margin: auto;
+}
+@media (min-width: 64rem) {
+  .engr-authbrand__inner {
+    margin: 0;
+  }
+}
+.engr-authbrand__top {
+  display: flex;
+  align-items: center;
+  gap: var(--engr-s2);
+  font-weight: 600;
+}
+.engr-authbrand__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: var(--engr-radius-sm);
+  background: var(--engr-gold);
+  color: var(--engr-navy);
+  font-weight: 700;
+  font-size: var(--engr-fs-small);
+}
+.engr-authbrand__body {
+  margin-top: auto;
+}
+.engr-authbrand__headline {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+.engr-authbrand__sub {
+  margin: var(--engr-s3) 0 0;
+  max-width: 26rem;
+  color: var(--engr-on-navy-dim);
+  font-size: var(--engr-fs-body);
+}
+.engr-authbrand__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: var(--engr-fs-caption);
+  color: var(--engr-on-navy-dim);
+}
+.engr-authbrand__labs {
+  color: var(--engr-gold);
+  font-weight: 600;
+}
+/* On mobile the brand is a slim header band: keep the mark and headline only. */
+@media (max-width: 63.99rem) {
+  .engr-authbrand__body {
+    margin-top: 0;
+  }
+  .engr-authbrand__sub,
+  .engr-authbrand__foot {
+    display: none;
+  }
+  .engr-authbrand__headline {
+    font-size: 1.25rem;
+  }
+}
+
+/* Auth pane and card. */
+.engr-authpane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--engr-s6) var(--engr-s4);
+  background: var(--engr-surface);
+}
+.engr-authcard {
+  width: 100%;
+  max-width: 24rem;
+  animation: engr-authin 0.5s var(--ease-out-soft, ease) both;
+}
+@keyframes engr-authin {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .engr-authcard {
+    animation: none;
+  }
+}
+.engr-authcard__title {
+  margin: 0;
+  font-size: var(--engr-fs-h1);
+  font-weight: 650;
+}
+.engr-authcard__sub {
+  margin: var(--engr-s1) 0 var(--engr-s5);
+  color: var(--engr-muted);
+  font-size: var(--engr-fs-small);
+}
+.engr-authform {
+  display: grid;
+  gap: var(--engr-s4);
+}
+.engr-authform__labelrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--engr-s2);
+}
+.engr-authform__aside {
+  font-size: var(--engr-fs-caption);
+  color: var(--color-blue);
+  text-decoration: none;
+}
+.engr-authform__aside:hover {
+  text-decoration: underline;
+}
+.engr-authform__submit {
+  width: 100%;
+  margin-top: var(--engr-s1);
+}
+.engr-authcard__foot {
+  margin: var(--engr-s5) 0 0;
+  font-size: var(--engr-fs-small);
+  color: var(--engr-muted);
+}
+.engr-authcard__foot a,
+.engr-authcard__hint a {
+  color: var(--color-blue);
+  font-weight: 600;
+  text-decoration: none;
+}
+.engr-authcard__foot a:hover,
+.engr-authcard__hint a:hover {
+  text-decoration: underline;
+}
+/* A refined gold focus ring on the near-white pane; the deep gold clears the
+   3:1 non-text contrast that a pale gold would not. */
+.engr-authcard .engr-input:focus-visible {
+  outline: 2px solid var(--engr-gold-deep);
+  outline-offset: 1px;
+  border-color: var(--engr-gold-deep);
 }
 
 /* ---- Notices --------------------------------------------------------------- */
