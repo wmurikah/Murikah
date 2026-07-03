@@ -3,19 +3,24 @@ export const prerender = false;
 
 /** Engineer RFQ list: every RFQ in the org, with invite and quote counts. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import FeatureLock from '@/components/engr/FeatureLock.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listRfqsForEngineer, type RfqListRow } from '@engr/repos/rfqs';
+import { hasFeature } from '@engr/repos/entitlements';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'rfq.view');
+// RFQ is a premium capability, gated on the organisation's plan.
+let rfqEnabled = false;
 let rows: RfqListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  rows = await listRfqsForEngineer(db, engr.orgId);
+  rfqEnabled = await hasFeature(db, engr.orgId, 'rfq');
+  if (rfqEnabled) rows = await listRfqsForEngineer(db, engr.orgId);
 }
 ---
 
@@ -32,6 +37,11 @@ if (allowed) {
       <p class="engr-error" role="alert">
         You do not have access to RFQs.
       </p>
+    ) : !rfqEnabled ? (
+      <FeatureLock
+        feature="Request for quotation"
+        detail="Competitive quoting is available on the Growth plan and above. Upgrade to invite contractors to quote."
+      />
     ) : rows.length === 0 ? (
       <p class="engr-empty">
         No RFQs yet. Raise one from an accepted request to invite contractors to quote.

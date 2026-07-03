@@ -1,0 +1,91 @@
+---
+/**
+ * The front door for Engineering Rhythm: a confident, two-pane auth shell used by
+ * sign in, start a trial and forgot password. On desktop a full-viewport split
+ * places an immersive navy brand panel beside a near-white auth card; on tablet
+ * and mobile it stacks, the card first, the brand condensed to a slim header
+ * band. Self-contained (it does not use the signed-in sidebar shell) and marked
+ * noindex. A small script enforces the single-signal rule on the primary button.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@/styles/global.css';
+import '@/styles/engr.css';
+
+interface Props {
+  title: string;
+  heading?: string;
+  sub?: string;
+}
+const { title, heading, sub } = Astro.props;
+const pageTitle = `${title}, Engineering Rhythm`;
+const brandHeading = heading ?? 'Run maintenance like clockwork.';
+const brandSub =
+  sub ??
+  'One place for requests, work orders, approvals and payments, across every station and contractor.';
+---
+
+<!doctype html>
+<html lang="en-KE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+  </head>
+  <body class="engr engr-authbody">
+    <a href="#engr-auth-main" class="engr-skip">Skip to content</a>
+    <div class="engr-authsplit">
+      <section class="engr-authbrand" aria-hidden="true">
+        <div class="engr-authbrand__grid"></div>
+        <div class="engr-authbrand__inner">
+          <div class="engr-authbrand__top">
+            <span class="engr-authbrand__mark">ER</span>
+            <span class="engr-authbrand__word">Engineering Rhythm</span>
+          </div>
+          <div class="engr-authbrand__body">
+            <h2 class="engr-authbrand__headline">{brandHeading}</h2>
+            <p class="engr-authbrand__sub">{brandSub}</p>
+          </div>
+          <div class="engr-authbrand__foot">
+            <span class="engr-authbrand__trust">Built for multi-site maintenance operations.</span>
+            <span class="engr-authbrand__labs">A Murikah Labs product</span>
+          </div>
+        </div>
+      </section>
+
+      <main id="engr-auth-main" class="engr-authpane">
+        <div class="engr-authcard">
+          <slot />
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Single-signal guard for the auth forms: on first submit, mark the primary
+      // button busy and block repeats so multiple clicks send one request.
+      const submitting = new WeakSet<HTMLFormElement>();
+      document.addEventListener(
+        'submit',
+        (e) => {
+          const form = e.target as HTMLFormElement;
+          if (!(form instanceof HTMLFormElement)) return;
+          if (submitting.has(form)) {
+            e.preventDefault();
+            return;
+          }
+          submitting.add(form);
+          const btn = form.querySelector(
+            'button[type="submit"], button:not([type])',
+          ) as HTMLButtonElement | null;
+          if (btn) {
+            setTimeout(() => {
+              btn.setAttribute('aria-busy', 'true');
+              btn.setAttribute('disabled', '');
+            }, 0);
+          }
+        },
+        true,
+      );
+    </script>
+  </body>
+</html>

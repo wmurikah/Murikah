@@ -72,10 +72,18 @@ declare namespace App {
       orgName?: string;
       userName?: string;
       userEmail?: string;
-      /** True when the user is OWNER or ADMIN of a group (an org with no parent). */
+      /** True when the user may switch the acting organisation (group super-admin or platform owner). */
       isGroupAdmin: boolean;
-      /** The organisations the user may switch between (the group plus its affiliates); empty for an ordinary user. */
-      switchable: { id: string; name: string; slug: string; isGroup: boolean }[];
+      /** True only for the platform owner (users.is_platform_owner = 1), who may act as any organisation. */
+      isPlatformOwner: boolean;
+      /** The organisations the user may switch between; every org for a platform owner, the group and its descendants for a group super-admin, empty for an ordinary user. */
+      switchable: {
+        id: string;
+        name: string;
+        slug: string;
+        isGroup: boolean;
+        parentId: string | null;
+      }[];
       roles: string[];
       perms: string[];
       can: (key: string) => boolean;

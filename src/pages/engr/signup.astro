@@ -1,0 +1,103 @@
+---
+export const prerender = false;
+
+/**
+ * Start a free trial. A visitor creates their company's instance with a name,
+ * work email, password and company name; the endpoint creates the tenant on the
+ * TRIAL plan and signs them in. A signup on a domain already in use is blocked
+ * with an invite message. Premium two-pane styling via the auth layout.
+ */
+import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
+
+const params = Astro.url.searchParams;
+const error = params.get('error');
+const domain = params.get('domain');
+const errorMessage =
+  error === 'domain' && domain
+    ? `An account for ${domain} already exists. Ask your administrator to invite you.`
+    : error === 'invalid'
+      ? 'Check your name, a valid work email, a password of at least 8 characters, and your company name.'
+      : error
+        ? 'We could not create your trial. Please try again.'
+        : null;
+const describedBy = errorMessage ? 'engr-signup-error' : undefined;
+---
+
+<EngrAuthLayout
+  title="Start a free trial"
+  heading="Start running maintenance in minutes."
+  sub="Create your company's instance, invite your team, and see the whole flow on a free trial."
+>
+  <h1 class="engr-authcard__title">Start a free trial</h1>
+  <p class="engr-authcard__sub">Fourteen days on the Trial plan. No card required.</p>
+
+  {
+    errorMessage && (
+      <p class="engr-error" id="engr-signup-error" role="alert">
+        {errorMessage}
+      </p>
+    )
+  }
+
+  <form method="post" action="/api/auth/signup" class="engr-authform" novalidate>
+    <div class="engr-field">
+      <label for="full_name">Full name</label>
+      <input
+        id="full_name"
+        class="engr-input"
+        name="full_name"
+        maxlength="120"
+        required
+        autocomplete="name"
+        autofocus
+        aria-describedby={describedBy}
+      />
+    </div>
+    <div class="engr-field">
+      <label for="email">Work email</label>
+      <input
+        id="email"
+        class="engr-input"
+        name="email"
+        type="email"
+        maxlength="200"
+        required
+        autocomplete="email"
+        autocapitalize="none"
+        spellcheck="false"
+        aria-describedby={describedBy}
+      />
+    </div>
+    <div class="engr-field">
+      <label for="company_name">Company name</label>
+      <input
+        id="company_name"
+        class="engr-input"
+        name="company_name"
+        maxlength="160"
+        required
+        autocomplete="organization"
+        aria-describedby={describedBy}
+      />
+    </div>
+    <div class="engr-field">
+      <label for="password">Password</label>
+      <input
+        id="password"
+        class="engr-input"
+        name="password"
+        type="password"
+        minlength="8"
+        required
+        autocomplete="new-password"
+        aria-describedby={describedBy}
+      />
+      <p class="engr-field__hint">At least 8 characters.</p>
+    </div>
+    <button type="submit" class="engr-btn engr-btn--primary engr-authform__submit">
+      Create my instance
+    </button>
+  </form>
+
+  <p class="engr-authcard__foot">Already have an account? <a href="/login">Sign in</a></p>
+</EngrAuthLayout>

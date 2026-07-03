@@ -1,0 +1,28 @@
+---
+export const prerender = false;
+
+/**
+ * Forgot password. A self-serve email reset is not wired yet (it needs the
+ * transactional email provider), so this points the user at the person who can
+ * reset their password today: their organisation administrator, who can set a
+ * new password from the Users screen. Premium two-pane styling.
+ */
+import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
+---
+
+<EngrAuthLayout title="Forgot password" heading="We will get you back in.">
+  <h1 class="engr-authcard__title">Reset your password</h1>
+  <p class="engr-authcard__sub">Here is how to get a new password today.</p>
+
+  <div class="engr-authcard__hint">
+    <p>
+      Ask your organisation administrator to set a new password for you from the Users screen. They
+      can do this in a moment.
+    </p>
+    <p>Once they have, sign in with your email and the new password.</p>
+  </div>
+
+  <a href="/login" class="engr-btn engr-btn--primary engr-authform__submit" style="margin-top:1rem">
+    Back to sign in
+  </a>
+</EngrAuthLayout>
