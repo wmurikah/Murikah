@@ -2,23 +2,27 @@
 export const prerender = false;
 
 /**
- * Dashboard. Count cards and analytics charts, each org-scoped. Primary
- * navigation lives in the sidebar; this page keeps only the niche queues that
- * the sidebar does not carry.
+ * Dashboard. Count cards and analytics charts, each org-scoped and each a launch
+ * surface: every card and every chart segment links into the filtered list
+ * behind it, as a real, shareable URL. Primary navigation lives in the sidebar;
+ * this page keeps only the niche queues the sidebar does not carry.
  *
  * Gate: the seeded permissions table has no dashboard.view key, so this gates on
  * reports.view ("View reports and dashboards"), the closest existing key, rather
- * than inventing a permission.
+ * than inventing a permission. The target list pages enforce their own access,
+ * so a drill link never exposes anything the viewer could not already reach.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EngrBarChart from '@/components/engr/EngrBarChart.astro';
+import EngrDonut from '@/components/engr/EngrDonut.astro';
+import EngrPipeline from '@/components/engr/EngrPipeline.astro';
+import EngrLine from '@/components/engr/EngrLine.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getDashboard, type Dashboard } from '@engr/repos/dashboard';
-import { getDashboardCharts, type DashboardCharts } from '@engr/repos/analytics';
+import { getDashboardCharts, type DashboardCharts, type ChartDatum } from '@engr/repos/analytics';
 import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
-import { getUnreadCount } from '@engr/notify';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -26,7 +30,6 @@ if (!engr) return Astro.redirect('/login');
 const allowed = can(Astro.locals, 'reports.view');
 
 const db = await getDb(getEngrEnv());
-const unread = await getUnreadCount(db, engr.orgId, engr.userId);
 
 let data: Dashboard | null = null;
 let charts: DashboardCharts | null = null;
@@ -37,13 +40,32 @@ if (allowed) {
   ]);
 }
 
-// Money charts are formatted at the view from minor units.
-const spendByContractor =
-  charts?.spendByContractorMinor.map((d) => ({
-    label: d.label,
-    value: d.value,
-    display: formatMoneyMinor(d.value, 'KES'),
-  })) ?? [];
+// Attach a drill-through target to each datum, from its raw key.
+const withHref = (rows: ChartDatum[], href: (d: ChartDatum) => string): ChartDatum[] =>
+  rows.map((d) => ({ ...d, href: href(d) }));
+
+const woByStatus = charts
+  ? withHref(charts.workOrdersByStatus, (d) => `/workorders?status=${d.key}`)
+  : [];
+const reqByPriority = charts
+  ? withHref(charts.requestsByPriority, (d) => `/requests?scope=all&priority=${d.key}`)
+  : [];
+const costPipeline = charts ? withHref(charts.costPipeline, () => '/costs/approvals') : [];
+const billPipeline = charts
+  ? withHref(charts.billPipeline, (d) =>
+      d.key === 'PAID' || d.key === 'APPROVED_READY_FOR_PAYMENT' ? '/payments' : '/bills/approvals',
+    )
+  : [];
+const openByStation = charts
+  ? withHref(charts.openWorkByStation, (d) => `/workorders?station=${d.key}`)
+  : [];
+const spendByContractor = charts
+  ? charts.spendByContractorMinor.map((d) => ({
+      ...d,
+      display: formatMoneyMinor(d.value, 'KES'),
+      href: `/admin/contractors/${d.key}`,
+    }))
+  : [];
 ---
 
 <EngrLayout title="Dashboard">
@@ -61,20 +83,12 @@ const spendByContractor =
     }
   </div>
 
-  <p class="engr-lead" role="status" style="margin-top:-0.5rem">
-    {
-      unread > 0
-        ? `You have ${unread} unread notification${unread === 1 ? '' : 's'}.`
-        : 'No unread notifications.'
-    }
-  </p>
-
   {
     (can(Astro.locals, 'arrival.confirm') ||
       can(Astro.locals, 'rfq.award') ||
       can(Astro.locals, 'cost.approve.l1') ||
       can(Astro.locals, 'reports.view')) && (
-      <nav class="engr-toggle" aria-label="Queues" style="margin:0.5rem 0 1.25rem;flex-wrap:wrap">
+      <nav class="engr-toggle" aria-label="Queues" style="margin:0 0 1.25rem;flex-wrap:wrap">
         {can(Astro.locals, 'arrival.confirm') && <a href="/station/confirmations">Confirmations</a>}
         {can(Astro.locals, 'rfq.award') && (
           <a href="/procurement/approvals">Procurement approvals</a>
@@ -94,7 +108,7 @@ const spendByContractor =
       data && (
         <>
           <div class="engr-cards">
-            <section class="engr-card" aria-labelledby="card-wo">
+            <a class="engr-card" href="/workorders" aria-labelledby="card-wo">
               <h2 class="engr-card__label" id="card-wo">
                 Open work orders
               </h2>
@@ -111,9 +125,10 @@ const spendByContractor =
                   ))}
                 </ul>
               )}
-            </section>
+              <p class="engr-card__cue">View all work orders &rarr;</p>
+            </a>
 
-            <section class="engr-card" aria-labelledby="card-cost">
+            <a class="engr-card" href="/costs/approvals" aria-labelledby="card-cost">
               <h2 class="engr-card__label" id="card-cost">
                 Pending cost approvals
               </h2>
@@ -130,9 +145,10 @@ const spendByContractor =
                   ))}
                 </ul>
               )}
-            </section>
+              <p class="engr-card__cue">Go to cost approvals &rarr;</p>
+            </a>
 
-            <section class="engr-card" aria-labelledby="card-bill">
+            <a class="engr-card" href="/bills/approvals" aria-labelledby="card-bill">
               <h2 class="engr-card__label" id="card-bill">
                 Pending bill approvals
               </h2>
@@ -151,9 +167,10 @@ const spendByContractor =
                   ))}
                 </ul>
               )}
-            </section>
+              <p class="engr-card__cue">Go to bill approvals &rarr;</p>
+            </a>
 
-            <section class="engr-card" aria-labelledby="card-pm">
+            <a class="engr-card" href="/pm/calendar" aria-labelledby="card-pm">
               <h2 class="engr-card__label" id="card-pm">
                 Upcoming maintenance
               </h2>
@@ -170,41 +187,48 @@ const spendByContractor =
                   ))}
                 </ul>
               )}
-            </section>
+              <p class="engr-card__cue">Open the maintenance calendar &rarr;</p>
+            </a>
           </div>
 
           {charts && (
             <section aria-labelledby="charts-heading" style="margin-top:1.75rem">
               <h2 id="charts-heading">Analytics</h2>
               <div class="engr-charts">
-                <EngrBarChart
+                <EngrDonut
                   title="Work orders by status"
-                  description="Every work order, grouped by its current status."
+                  description="Every work order by status. Select a slice to open that list."
                   valueHeading="Work orders"
-                  data={charts.workOrdersByStatus}
+                  data={woByStatus}
                 />
-                <EngrBarChart
+                <EngrDonut
+                  title="Requests by priority"
+                  description="Every request by priority. Select a slice to open that list."
+                  valueHeading="Requests"
+                  data={reqByPriority}
+                />
+                <EngrPipeline
+                  title="Cost approval pipeline"
+                  description="Work costs waiting at each approval stage."
+                  data={costPipeline}
+                />
+                <EngrPipeline
+                  title="Bill approval pipeline"
+                  description="Bills through the three levels to paid."
+                  data={billPipeline}
+                />
+                <EngrLine
                   title="Requests over time"
                   description="Service requests raised per week, last 11 weeks."
                   valueHeading="Requests"
+                  href="/requests?scope=all"
                   data={charts.requestsByWeek}
                 />
-                <EngrBarChart
-                  title="Cost approval pipeline"
-                  description="Work costs waiting at each approval stage."
-                  valueHeading="Work costs"
-                  data={charts.costPipeline}
-                />
-                <EngrBarChart
-                  title="Bill approval pipeline"
-                  description="Bills through the three levels to paid."
-                  valueHeading="Bills"
-                  data={charts.billPipeline}
-                />
-                <EngrBarChart
+                <EngrLine
                   title="Upcoming maintenance"
                   description="Occurrences due per week for the next eight weeks."
                   valueHeading="Due"
+                  href="/pm/calendar"
                   data={charts.pmByWeek}
                 />
                 <EngrBarChart
@@ -214,16 +238,10 @@ const spendByContractor =
                   data={spendByContractor}
                 />
                 <EngrBarChart
-                  title="Requests by priority"
-                  description="Every request, grouped by priority."
-                  valueHeading="Requests"
-                  data={charts.requestsByPriority}
-                />
-                <EngrBarChart
                   title="Open work by station"
-                  description="Open work orders at each station, top ten."
+                  description="Open work orders at each station, top ten. Select a station to open its list."
                   valueHeading="Open work orders"
-                  data={charts.openWorkByStation}
+                  data={openByStation}
                 />
               </div>
             </section>

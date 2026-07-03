@@ -13,6 +13,32 @@ export function formatMoneyMinor(minor: number, currency: string): string {
   }
 }
 
+/**
+ * Title-case a slug or code for display: split on hyphens, underscores and
+ * spaces, then capitalise each word. So "hass" becomes "Hass" and
+ * "hass-petroleum" becomes "Hass Petroleum". Already-cased input is preserved
+ * (only the first letter of each word is forced up), so an acronym passed in as
+ * "HPK" stays "HPK".
+ */
+export function titleCase(text: string): string {
+  return text
+    .replace(/[-_]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
+ * The human-facing label for an organisation. Prefer the stored name; fall back
+ * to a title-cased slug only when no name is available, so a raw slug is never
+ * shown as-is.
+ */
+export function orgDisplayName(name: string | null | undefined, slug: string): string {
+  const trimmed = (name ?? '').trim();
+  return trimmed.length > 0 ? trimmed : titleCase(slug);
+}
+
 // A short, human age like 3d, 5h, 12m, from an ISO timestamp.
 export function relativeAge(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();

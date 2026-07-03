@@ -1,0 +1,183 @@
+---
+export const prerender = false;
+
+/**
+ * Create a custom role, or edit a role's permission matrix. The path segment is
+ * "new" to create, otherwise a role id to edit. The matrix groups the
+ * permissions by module with a checkbox each. Saving a shared default's matrix
+ * clones it for this organisation first (copy-on-write), so the shared role is
+ * never changed for anyone else. Gate: roles.manage.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  getRoleEdit,
+  listPermissions,
+  type RoleEdit,
+  type PermissionRow,
+} from '@engr/repos/adminRoles';
+import { can } from '@engr/auth/rbac';
+import { titleCase } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'roles.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let role: RoleEdit | null = null;
+let permissions: PermissionRow[] = [];
+if (canManage && !isNew && id) {
+  const db = await getDb(getEngrEnv());
+  [role, permissions] = await Promise.all([getRoleEdit(db, engr.orgId, id), listPermissions(db)]);
+}
+const notFound = !isNew && role === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+// Group the permissions by module for the matrix.
+const modules = new Map<string, PermissionRow[]>();
+for (const p of permissions) {
+  const list = modules.get(p.module) ?? [];
+  list.push(p);
+  modules.set(p.module, list);
+}
+const moduleEntries = [...modules.entries()];
+const held = new Set(role?.permKeys ?? []);
+const MODULE_LABELS: Record<string, string> = {
+  org: 'Organisation',
+  rfq: 'RFQs',
+  jsa: 'Job safety analysis',
+  jobcard: 'Job cards',
+  sla: 'SLAs',
+  slas: 'SLAs',
+  pm: 'Maintenance',
+  workorder: 'Work orders',
+};
+const moduleLabel = (m: string) => MODULE_LABELS[m] ?? titleCase(m);
+---
+
+<EngrLayout title={isNew ? 'New role' : 'Edit role'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New role' : `Edit ${role?.name ?? 'role'}`}</h1>
+      <p class="engr-lead">
+        {
+          isNew
+            ? 'A custom role for this organisation.'
+            : 'Choose what this role may do, grouped by module.'
+        }
+      </p>
+    </div>
+    <a href="/admin/roles" class="engr-btn engr-btn--secondary">Back to roles</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        A role with that code already exists.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the code and name, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        Roles are managed by a super-admin with the roles permission.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That role was not found.
+      </p>
+    ) : isNew ? (
+      <form method="post" action="/api/admin/roles" class="engr-form">
+        <input type="hidden" name="action" value="create" />
+        <div class="engr-field">
+          <label for="code">Code</label>
+          <input
+            type="text"
+            id="code"
+            class="engr-input"
+            name="code"
+            maxlength="40"
+            required
+            placeholder="e.g. AREA_MANAGER"
+          />
+          <p class="engr-field__hint">
+            Capitals, digits and underscores. It cannot be changed later.
+          </p>
+        </div>
+        <div class="engr-field">
+          <label for="name">Name</label>
+          <input type="text" id="name" class="engr-input" name="name" maxlength="120" required />
+        </div>
+        <div class="engr-field">
+          <label for="description">Description</label>
+          <input
+            type="text"
+            id="description"
+            class="engr-input"
+            name="description"
+            maxlength="200"
+          />
+        </div>
+        <div class="engr-actions">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            Create role
+          </button>
+        </div>
+      </form>
+    ) : (
+      <form method="post" action="/api/admin/roles">
+        <input type="hidden" name="role_id" value={role!.id} />
+        {role!.shared && (
+          <p class="engr-notice" role="status">
+            This is a shared default. Saving creates a copy for this organisation and applies your
+            changes to it; other organisations keep the default unchanged.
+          </p>
+        )}
+        <div class="engr-matrix">
+          {moduleEntries.map(([module, perms]) => (
+            <fieldset class="engr-matrix__group">
+              <legend class="engr-matrix__legend">{moduleLabel(module)}</legend>
+              <ul class="engr-matrix__list">
+                {perms.map((p) => (
+                  <li class="engr-check">
+                    <input
+                      type="checkbox"
+                      id={`perm-${p.key}`}
+                      name="perm"
+                      value={p.key}
+                      checked={held.has(p.key)}
+                    />
+                    <label for={`perm-${p.key}`}>
+                      {p.description ?? p.key}
+                      <span class="engr-matrix__key">{p.key}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+          ))}
+        </div>
+        <div class="engr-actionbar" style="margin-top:1rem">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            Save permissions
+          </button>
+          <a href="/admin/roles" class="engr-btn engr-btn--secondary">
+            Cancel
+          </a>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>
