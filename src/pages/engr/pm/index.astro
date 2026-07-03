@@ -6,6 +6,7 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listSchedules, type ScheduleListRow } from '@engr/repos/pm';
+import { shortDate } from '@engr/format';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -51,9 +52,18 @@ if (allowed) {
             <tr>
               <th scope="col">Name</th>
               <th scope="col">Station</th>
-              <th scope="col">Frequency</th>
-              <th scope="col">Next due</th>
-              <th scope="col">Automated</th>
+              <th scope="col" class="engr-col-lo">
+                Contractor
+              </th>
+              <th scope="col" class="engr-col-mid">
+                Frequency
+              </th>
+              <th scope="col" class="engr-num">
+                Next due
+              </th>
+              <th scope="col" class="engr-col-lo">
+                Automated
+              </th>
               <th scope="col">Status</th>
               <th scope="col">Actions</th>
             </tr>
@@ -65,9 +75,10 @@ if (allowed) {
                   <a href={`/pm/schedules/${r.id}`}>{r.name}</a>
                 </td>
                 <td>{r.stationName ?? 'Any'}</td>
-                <td>{r.frequency}</td>
-                <td>{r.nextDueDate ?? 'Not set'}</td>
-                <td>{r.isAutomated ? 'Yes' : 'No'}</td>
+                <td class="engr-col-lo">{r.contractorName ?? 'Any'}</td>
+                <td class="engr-col-mid">{r.frequency}</td>
+                <td class="engr-num">{shortDate(r.nextDueDate) || 'Not set'}</td>
+                <td class="engr-col-lo">{r.isAutomated ? 'Yes' : 'No'}</td>
                 <td>
                   <span class="engr-status">{r.status}</span>
                 </td>

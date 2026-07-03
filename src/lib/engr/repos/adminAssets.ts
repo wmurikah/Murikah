@@ -23,6 +23,10 @@ export interface AssetRow {
   name: string;
   stationName: string;
   categoryName: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  serialNo: string | null;
+  installDate: string | null;
   status: string;
 }
 
@@ -54,6 +58,7 @@ export interface AssetInput {
 export async function listAssetsAdmin(db: Client, orgId: string): Promise<AssetRow[]> {
   const res = await db.execute({
     sql: `SELECT a.id, a.tag, a.name, a.status,
+                 a.manufacturer, a.model, a.serial_no, a.install_date,
                  s.name AS station_name, c.name AS category_name
             FROM assets a
             JOIN stations s ON s.id = a.station_id
@@ -68,6 +73,10 @@ export async function listAssetsAdmin(db: Client, orgId: string): Promise<AssetR
     name: String(r.name),
     stationName: r.station_name === null ? '' : String(r.station_name),
     categoryName: r.category_name === null ? null : String(r.category_name),
+    manufacturer: r.manufacturer === null ? null : String(r.manufacturer),
+    model: r.model === null ? null : String(r.model),
+    serialNo: r.serial_no === null ? null : String(r.serial_no),
+    installDate: r.install_date === null ? null : String(r.install_date),
     status: String(r.status),
   }));
 }
