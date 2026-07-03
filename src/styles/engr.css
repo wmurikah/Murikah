@@ -1313,6 +1313,20 @@ a.engr-card:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* Inline edit disclosure, e.g. editing a rate item in place. */
+.engr-inline-edit > summary {
+  list-style: none;
+  display: inline-flex;
+  cursor: pointer;
+}
+.engr-inline-edit > summary::-webkit-details-marker {
+  display: none;
+}
+.engr-inline-edit__form {
+  margin-top: var(--engr-s2);
+  min-width: 14rem;
+}
+
 /* ---- Dashboard charts ------------------------------------------------------ */
 
 .engr-charts {

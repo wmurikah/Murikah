@@ -194,6 +194,9 @@ const c = card;
                       <th scope="col">Category</th>
                       <th scope="col">Unit</th>
                       <th scope="col">Unit rate</th>
+                      <th scope="col">
+                        <span class="engr-vh">Actions</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -203,6 +206,67 @@ const c = card;
                         <td>{it.categoryName ?? 'Any'}</td>
                         <td>{it.unit ?? 'Not set'}</td>
                         <td>{formatMoneyMinor(it.unitRateMinor, it.currency)}</td>
+                        <td>
+                          <div class="engr-toolbar">
+                            <details class="engr-inline-edit">
+                              <summary class="engr-btn engr-btn--secondary">Edit</summary>
+                              <form
+                                method="post"
+                                action="/api/admin/rate-items"
+                                class="engr-form engr-inline-edit__form"
+                              >
+                                <input type="hidden" name="rate_card_id" value={c.id} />
+                                <input type="hidden" name="id" value={it.id} />
+                                <div class="engr-field">
+                                  <label for={`d-${it.id}`}>Description</label>
+                                  <input
+                                    type="text"
+                                    id={`d-${it.id}`}
+                                    class="engr-input"
+                                    name="description"
+                                    maxlength="200"
+                                    required
+                                    value={it.description}
+                                  />
+                                </div>
+                                <div class="engr-field">
+                                  <label for={`u-${it.id}`}>Unit</label>
+                                  <input
+                                    type="text"
+                                    id={`u-${it.id}`}
+                                    class="engr-input"
+                                    name="unit"
+                                    maxlength="30"
+                                    value={it.unit ?? ''}
+                                  />
+                                </div>
+                                <div class="engr-field">
+                                  <label for={`r-${it.id}`}>Unit rate (KES)</label>
+                                  <input
+                                    type="number"
+                                    id={`r-${it.id}`}
+                                    class="engr-input"
+                                    name="unit_rate"
+                                    min="0"
+                                    step="0.01"
+                                    value={(it.unitRateMinor / 100).toFixed(2)}
+                                  />
+                                </div>
+                                <div class="engr-actionbar">
+                                  <button type="submit" class="engr-btn engr-btn--primary">
+                                    Save item
+                                  </button>
+                                </div>
+                              </form>
+                            </details>
+                            <form method="post" action="/api/admin/rate-items">
+                              <input type="hidden" name="delete_id" value={it.id} />
+                              <button type="submit" class="engr-btn engr-btn--danger">
+                                Remove
+                              </button>
+                            </form>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
