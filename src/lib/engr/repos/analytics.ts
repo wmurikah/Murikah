@@ -11,6 +11,10 @@ export interface ChartDatum {
   value: number;
   /** Optional pre-formatted value (money), else the view shows the number. */
   display?: string;
+  /** Raw key (status, priority or record id) the view turns into a drill link. */
+  key?: string;
+  /** Drill-through target the view attaches, so a segment or row is a real link. */
+  href?: string;
 }
 
 export interface DashboardCharts {
@@ -44,7 +48,7 @@ function ordered(
   order: { status: string; label: string }[],
 ): ChartDatum[] {
   const byStatus = new Map(rows.map((r) => [r.status, r.n]));
-  return order.map((o) => ({ label: o.label, value: byStatus.get(o.status) ?? 0 }));
+  return order.map((o) => ({ label: o.label, value: byStatus.get(o.status) ?? 0, key: o.status }));
 }
 
 export async function getDashboardCharts(db: Client, orgId: string): Promise<DashboardCharts> {
@@ -79,7 +83,7 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
         args: [orgId],
       },
       {
-        sql: `SELECT c.name AS name, SUM(wc.total_minor) AS total FROM work_costs wc
+        sql: `SELECT wc.contractor_id AS id, c.name AS name, SUM(wc.total_minor) AS total FROM work_costs wc
                 JOIN contractors c ON c.id = wc.contractor_id
                WHERE wc.org_id = ? AND wc.status = 'APPROVED'
             GROUP BY wc.contractor_id ORDER BY total DESC LIMIT 10`,
@@ -91,7 +95,7 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
         args: [orgId],
       },
       {
-        sql: `SELECT s.name AS name, COUNT(*) AS n FROM work_orders wo
+        sql: `SELECT wo.station_id AS id, s.name AS name, COUNT(*) AS n FROM work_orders wo
                 JOIN stations s ON s.id = wo.station_id
                WHERE wo.org_id = ? AND wo.deleted_at IS NULL
                  AND wo.status NOT IN ('CLOSED', 'CANCELLED')
@@ -109,6 +113,7 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
     workOrdersByStatus: results[0].rows.map((r) => ({
       label: humanise(String(r.status)),
       value: num(r.n),
+      key: String(r.status),
     })),
     requestsByWeek: results[1].rows.map((r) => ({ label: String(r.wk), value: num(r.n) })),
     costPipeline: ordered(costRows, [
@@ -132,6 +137,7 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
     spendByContractorMinor: results[5].rows.map((r) => ({
       label: String(r.name),
       value: num(r.total),
+      key: String(r.id),
     })),
     requestsByPriority: ordered(
       results[6].rows.map((r) => ({ status: String(r.priority), n: num(r.n) })),
@@ -142,6 +148,10 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
         { status: 'LOW', label: 'Low' },
       ],
     ),
-    openWorkByStation: results[7].rows.map((r) => ({ label: String(r.name), value: num(r.n) })),
+    openWorkByStation: results[7].rows.map((r) => ({
+      label: String(r.name),
+      value: num(r.n),
+      key: String(r.id),
+    })),
   };
 }

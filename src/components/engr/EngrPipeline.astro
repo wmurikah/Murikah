@@ -1,0 +1,95 @@
+---
+/**
+ * A stacked progress bar for an approval pipeline, so where value is waiting
+ * reads at a glance. Each stage is a proportional segment of one horizontal bar,
+ * with a legend beneath giving the exact counts; a stage with an href becomes a
+ * drill-through link. The bar carries a role=img summary and the legend is the
+ * text equivalent, so it is fully accessible with no client runtime. An empty
+ * pipeline shows a small "no data yet" line.
+ */
+import type { ChartDatum } from '@engr/repos/analytics';
+
+interface Props {
+  title: string;
+  description?: string;
+  data: ChartDatum[];
+  emptyText?: string;
+}
+const { title, description, data, emptyText = 'No data yet.' } = Astro.props;
+
+const total = data.reduce((sum, d) => sum + d.value, 0);
+const hasData = total > 0;
+const segments = data.map((d, i) => ({
+  ...d,
+  colour: `var(--engr-chart-${(i % 6) + 1})`,
+  pct: total > 0 ? Math.round((d.value / total) * 100) : 0,
+}));
+const ariaSummary = `${title}. ${segments
+  .map((s) => `${s.label} ${s.value}`)
+  .join('; ')}. Total ${total}.`;
+---
+
+<figure class="engr-chart">
+  <figcaption class="engr-chart__cap">
+    <h3 class="engr-chart__title">{title}</h3>
+    {description && <p class="engr-chart__desc">{description}</p>}
+  </figcaption>
+  {
+    !hasData ? (
+      <p class="engr-empty">{emptyText}</p>
+    ) : (
+      <div>
+        <div class="engr-pipe" role="img" aria-label={ariaSummary}>
+          {segments
+            .filter((s) => s.value > 0)
+            .map((s) =>
+              s.href ? (
+                <a
+                  class="engr-pipe__seg"
+                  href={s.href}
+                  style={`flex-grow:${s.value};background:${s.colour}`}
+                  title={`${s.label}: ${s.value}`}
+                >
+                  <span class="engr-pipe__n">{s.value}</span>
+                </a>
+              ) : (
+                <span
+                  class="engr-pipe__seg"
+                  style={`flex-grow:${s.value};background:${s.colour}`}
+                  title={`${s.label}: ${s.value}`}
+                >
+                  <span class="engr-pipe__n">{s.value}</span>
+                </span>
+              ),
+            )}
+        </div>
+        <ul class="engr-legend engr-legend--wrap">
+          {segments.map((s) => {
+            const body = (
+              <>
+                <span
+                  class="engr-legend__swatch"
+                  style={`background:${s.colour}`}
+                  aria-hidden="true"
+                />
+                <span class="engr-legend__label">{s.label}</span>
+                <span class="engr-legend__value">{s.value}</span>
+              </>
+            );
+            return (
+              <li>
+                {s.href ? (
+                  <a class="engr-legend__row" href={s.href}>
+                    {body}
+                  </a>
+                ) : (
+                  <span class="engr-legend__row">{body}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    )
+  }
+</figure>
