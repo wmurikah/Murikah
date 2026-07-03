@@ -1,0 +1,46 @@
+---
+/**
+ * Empty state that leads somewhere. A mark, a one-line explanation, and either a
+ * primary action to the relevant create screen (when the viewer may create the
+ * thing) or a plain line telling them to ask an administrator. Used everywhere a
+ * screen can be empty so nobody hits a dead end.
+ */
+interface Props {
+  message: string;
+  actionHref?: string;
+  actionLabel?: string;
+  /** Show the action only when the viewer holds the create permission. */
+  canAct?: boolean;
+  /** Shown in place of the action when the viewer cannot create the thing. */
+  hint?: string;
+}
+const { message, actionHref, actionLabel, canAct = false, hint } = Astro.props;
+const showAction = canAct && actionHref && actionLabel;
+---
+
+<div class="engr-emptystate">
+  <svg
+    class="engr-emptystate__mark"
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M3 7.5 12 3l9 4.5-9 4.5-9-4.5Z"></path>
+    <path d="M3 12l9 4.5 9-4.5"></path>
+    <path d="M3 16.5 12 21l9-4.5"></path>
+  </svg>
+  <p class="engr-emptystate__msg">{message}</p>
+  {
+    showAction ? (
+      <a href={actionHref} class="engr-btn engr-btn--primary">
+        {actionLabel}
+      </a>
+    ) : (
+      hint && <p class="engr-emptystate__hint">{hint}</p>
+    )
+  }
+</div>

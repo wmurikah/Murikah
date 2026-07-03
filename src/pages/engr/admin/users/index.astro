@@ -1,0 +1,99 @@
+---
+export const prerender = false;
+
+/** Users list. Gate: users.view; create/edit gates on users.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listUsersAdmin, type UserRow } from '@engr/repos/adminUsers';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'users.view');
+const canManage = can(Astro.locals, 'users.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: UserRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listUsersAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Users">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Users</h1>
+      <p class="engr-lead">People who can sign in and take part in the work.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/users/new" class="engr-btn engr-btn--primary">
+          New user
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        User saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to users.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No users yet."
+        canAct={canManage}
+        actionHref="/admin/users/new"
+        actionLabel="Add a user"
+        hint="Ask an administrator to add a user."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Users">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Roles</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  {canManage ? <a href={`/admin/users/${r.id}`}>{r.fullName}</a> : r.fullName}
+                </td>
+                <td>{r.email}</td>
+                <td>{r.roleNames || 'None'}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

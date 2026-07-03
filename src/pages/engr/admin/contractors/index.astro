@@ -1,0 +1,97 @@
+---
+export const prerender = false;
+
+/** Contractors list. Gate: contractors.view; create/edit gates on contractors.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listContractorsAdmin, type ContractorRow } from '@engr/repos/adminContractors';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'contractors.view');
+const canManage = can(Astro.locals, 'contractors.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: ContractorRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listContractorsAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Contractors">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Contractors</h1>
+      <p class="engr-lead">Firms that carry out work and the stations and categories they cover.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/contractors/new" class="engr-btn engr-btn--primary">
+          New contractor
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Contractor saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to contractors.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No contractors are set up yet."
+        canAct={canManage}
+        actionHref="/admin/contractors/new"
+        actionLabel="Add a contractor"
+        hint="Ask an administrator to add a contractor."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Contractors">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Base station</th>
+              <th scope="col">Prequalified</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{canManage ? <a href={`/admin/contractors/${r.id}`}>{r.name}</a> : r.name}</td>
+                <td>{r.baseStationName ?? 'Not set'}</td>
+                <td>{r.isPrequalified ? 'Yes' : 'No'}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

@@ -1,0 +1,99 @@
+---
+export const prerender = false;
+
+/** Technicians list. Gate: technicians.view; create/edit gates on technicians.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listTechniciansAdmin, type TechnicianRow } from '@engr/repos/adminTechnicians';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'technicians.view');
+const canManage = can(Astro.locals, 'technicians.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: TechnicianRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listTechniciansAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Technicians">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Technicians</h1>
+      <p class="engr-lead">People who carry out work on behalf of a contractor.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/technicians/new" class="engr-btn engr-btn--primary">
+          New technician
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Technician saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to technicians.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No technicians are set up yet."
+        canAct={canManage}
+        actionHref="/admin/technicians/new"
+        actionLabel="Add a technician"
+        hint="Ask an administrator to add a technician."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Technicians">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Contractor</th>
+              <th scope="col">Phone</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>
+                  {canManage ? <a href={`/admin/technicians/${r.id}`}>{r.fullName}</a> : r.fullName}
+                </td>
+                <td>{r.contractorName}</td>
+                <td>{r.phone ?? 'Not set'}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

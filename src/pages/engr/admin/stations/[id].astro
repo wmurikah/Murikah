@@ -1,0 +1,160 @@
+---
+export const prerender = false;
+
+/**
+ * Station create and edit. The path segment is "new" to create, otherwise a
+ * station id to edit. Gate: stations.manage. The form posts to the write
+ * endpoint, which redirects back to the list on success.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getStation, type StationDetail } from '@engr/repos/adminStations';
+import { listRegionOptions, listUserOptions, type Option } from '@engr/repos/adminOptions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'stations.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let station: StationDetail | null = null;
+let regions: Option[] = [];
+let users: Option[] = [];
+
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  [regions, users] = await Promise.all([
+    listRegionOptions(db, engr.orgId),
+    listUserOptions(db, engr.orgId),
+  ]);
+  if (!isNew && id) station = await getStation(db, engr.orgId, id);
+}
+const notFound = !isNew && station === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const s = station;
+---
+
+<EngrLayout title={isNew ? 'New station' : 'Edit station'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New station' : 'Edit station'}</h1>
+      <p class="engr-lead">A site where work is raised and carried out.</p>
+    </div>
+    <a href="/admin/stations" class="engr-btn engr-btn--secondary">Back to stations</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That code is already used by another station.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the code, name and status, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage stations.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That station was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/stations" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={s!.id} />}
+        <div class="engr-field">
+          <label for="code">Code</label>
+          <input
+            type="text"
+            id="code"
+            class="engr-input"
+            name="code"
+            maxlength="30"
+            required
+            value={s?.code ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            class="engr-input"
+            name="name"
+            maxlength="120"
+            required
+            value={s?.name ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="region_id">Region</label>
+          <select id="region_id" class="engr-select" name="region_id">
+            <option value="">Not set</option>
+            {regions.map((r) => (
+              <option value={r.id} selected={s?.regionId === r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="engr-field">
+          <label for="station_manager_id">Station manager</label>
+          <select id="station_manager_id" class="engr-select" name="station_manager_id">
+            <option value="">Not set</option>
+            {users.map((u) => (
+              <option value={u.id} selected={s?.stationManagerId === u.id}>
+                {u.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="engr-field engr-formgrid__full">
+          <label for="address">
+            Address <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="address"
+            class="engr-input"
+            name="address"
+            maxlength="200"
+            value={s?.address ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="status">Status</label>
+          <select id="status" class="engr-select" name="status">
+            <option value="ACTIVE" selected={(s?.status ?? 'ACTIVE') === 'ACTIVE'}>
+              Active
+            </option>
+            <option value="INACTIVE" selected={s?.status === 'INACTIVE'}>
+              Inactive
+            </option>
+          </select>
+        </div>
+        <div class="engr-check engr-formgrid__full">
+          <input type="checkbox" id="is_base" name="is_base" checked={s?.isBase ?? false} />
+          <label for="is_base">Base station (origin for mileage)</label>
+        </div>
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create station' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>
