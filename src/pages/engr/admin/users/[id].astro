@@ -12,7 +12,7 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getUser, type UserDetail } from '@engr/repos/adminUsers';
-import { listRoleOptions, type RoleOption } from '@engr/repos/adminOptions';
+import { listAssignableRoles } from '@engr/repos/adminRoles';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -25,11 +25,11 @@ const isNew = id === 'new';
 const errorCode = Astro.url.searchParams.get('error');
 
 let user: UserDetail | null = null;
-let roles: RoleOption[] = [];
+let roles: { id: string; name: string; code: string }[] = [];
 
 if (canManage) {
   const db = await getDb(getEngrEnv());
-  if (canAssignRoles) roles = await listRoleOptions(db, engr.orgId);
+  if (canAssignRoles) roles = await listAssignableRoles(db, engr.orgId);
   if (!isNew && id) user = await getUser(db, engr.orgId, id);
 }
 const notFound = !isNew && user === null;
