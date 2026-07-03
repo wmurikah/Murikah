@@ -12,15 +12,15 @@
 
 .engr {
   /* ---- Type scale (rem, root 16px). Smaller and deliberate. ---------------- */
-  --engr-fs-micro: 0.6875rem; /* 11px uppercase micro-labels */
+  --engr-fs-micro: 0.6875rem; /* 11px uppercase micro-labels and table headers */
   --engr-fs-caption: 0.75rem; /* 12px captions, quiet meta */
-  --engr-fs-small: 0.8125rem; /* 13px secondary text */
-  --engr-fs-body: 0.875rem; /* 14px body */
-  --engr-fs-title: 1rem; /* card and section titles */
-  --engr-fs-h2: 1.125rem; /* 18px sub-heads */
-  --engr-fs-h1: 1.4375rem; /* 23px page title, never larger than 1.5rem */
-  --engr-fs-metric: 1.875rem; /* 30px metric figures, not oversized */
-  --engr-lh: 1.5;
+  --engr-fs-small: 0.8125rem; /* 13px secondary text and field labels */
+  --engr-fs-body: 0.8125rem; /* 13px body and table cells */
+  --engr-fs-title: 0.9375rem; /* 15px card and section titles */
+  --engr-fs-h2: 1rem; /* 16px sub-heads */
+  --engr-fs-h1: 1.25rem; /* 20px page title, deliberately not large */
+  --engr-fs-metric: 1.75rem; /* 28px metric figures, not oversized */
+  --engr-lh: 1.45;
   --engr-tracking: 0.04em; /* micro-label letter-spacing */
 
   /* ---- Spacing, an 8px rhythm --------------------------------------------- */
@@ -566,11 +566,17 @@
 /* ---- Main and headings ----------------------------------------------------- */
 
 .engr-main {
-  max-width: 72rem;
-  margin-inline: auto;
-  padding: var(--engr-s5) var(--engr-s4) var(--engr-s6);
+  box-sizing: border-box; /* keep the side padding inside the width, no overflow */
+  width: 100%; /* fill the column, so even a sparse table spans the full width */
+  max-width: 90rem; /* 1440px: use the width to the right of the sidebar */
+  margin-inline: auto; /* centre only once the column exceeds the maximum */
+  padding: var(--engr-s5) var(--engr-s6) var(--engr-s6); /* 24 top, 32 sides and bottom */
 }
-.engr-page-head {
+/* One page header everywhere: title and one-line subtitle on the left, primary
+   actions aligned right on the same row. .engr-adminbar is an alias so Setup
+   pages match the rest without a rename. */
+.engr-page-head,
+.engr-adminbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -603,7 +609,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--engr-s2);
-  min-height: 2.5rem;
+  min-height: 2.25rem;
   padding: 0 var(--engr-s4);
   border-radius: var(--engr-radius-sm);
   border: 1px solid transparent;
@@ -772,9 +778,10 @@ a.engr-card:focus-visible {
 .engr-table th,
 .engr-table td {
   text-align: left;
-  padding: var(--engr-s3) var(--engr-s3);
+  padding: var(--engr-s2) var(--engr-s3); /* 8px vertical, 12px horizontal: dense, not cramped */
   border-bottom: 1px solid var(--engr-line);
   white-space: nowrap;
+  line-height: 1.35;
 }
 .engr-table th {
   font-size: var(--engr-fs-micro);
@@ -788,16 +795,48 @@ a.engr-card:focus-visible {
   white-space: normal;
   min-width: 16rem;
 }
+/* Right-align and tabular-align numbers and dates. */
+.engr-table th.engr-num,
+.engr-table td.engr-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Truncate an over-long cell with an ellipsis; the row links to the full record. */
+.engr-table td.engr-trunc {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.engr-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+.engr-table tbody tr:hover {
+  background: color-mix(in srgb, var(--engr-navy) 4%, transparent);
+}
 .engr-table tbody tr:last-child td {
   border-bottom: 0;
 }
 .engr-table a {
-  color: var(--color-blue);
+  color: var(--engr-navy-2);
   font-weight: 600;
   text-decoration: none;
 }
 .engr-table a:hover {
   text-decoration: underline;
+}
+/* Progressive column priority: lower-priority columns drop as the viewport
+   narrows, so the table stays readable without a data-hiding horizontal scroll.
+   The identifier, name and status always remain, and the row links to the detail
+   where every field is available. */
+@media (max-width: 78rem) {
+  .engr-table .engr-col-lo {
+    display: none;
+  }
+}
+@media (max-width: 60rem) {
+  .engr-table .engr-col-mid {
+    display: none;
+  }
 }
 
 /* ---- Badges ---------------------------------------------------------------- */
@@ -900,7 +939,7 @@ a.engr-card:focus-visible {
 .engr-select,
 .engr-textarea {
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.25rem; /* 36px: compact control, consistent across every form */
   padding: var(--engr-s2) var(--engr-s3);
   border: 1px solid var(--engr-line);
   border-radius: var(--engr-radius-sm);
@@ -912,7 +951,14 @@ a.engr-card:focus-visible {
 .engr-input:focus,
 .engr-select:focus,
 .engr-textarea:focus {
-  border-color: var(--engr-navy-2);
+  border-color: var(--engr-gold);
+}
+.engr-input:focus-visible,
+.engr-select:focus-visible,
+.engr-textarea:focus-visible {
+  outline: 2px solid var(--engr-gold);
+  outline-offset: 1px;
+  border-color: var(--engr-gold);
 }
 .engr-textarea {
   min-height: 6rem;
@@ -1399,33 +1445,33 @@ a.engr-card:focus-visible {
 
 /* ---- Admin (Setup) --------------------------------------------------------- */
 
-.engr-adminbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
+/* .engr-adminbar shares the .engr-page-head rule above, so Setup headers match. */
 .engr-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
-/* A form laid out as a responsive grid of fields. */
+/* A form laid out as a responsive grid of fields. It fills a comfortable width,
+   two columns on medium and three on wide, rather than a narrow band stranded on
+   the left. */
 .engr-formgrid {
   display: grid;
-  gap: 1rem;
+  gap: var(--engr-s4) var(--engr-s5);
   grid-template-columns: 1fr;
-  max-width: 44rem;
+  max-width: 76rem;
 }
-@media (min-width: 40rem) {
+@media (min-width: 48rem) {
   .engr-formgrid--two {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
   .engr-formgrid__full {
     grid-column: 1 / -1;
+  }
+}
+@media (min-width: 76rem) {
+  .engr-formgrid--two {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 .engr-checklist {

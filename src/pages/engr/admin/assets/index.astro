@@ -7,6 +7,7 @@ import EmptyState from '@/components/engr/EmptyState.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listAssetsAdmin, type AssetRow } from '@engr/repos/adminAssets';
+import { shortDate } from '@engr/format';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -73,12 +74,32 @@ if (allowed) {
     ) : (
       <div class="engr-tablewrap">
         <table class="engr-table" aria-label="Assets">
+          <caption class="engr-vh">
+            Assets. Manufacturer, model, serial number and install date are hidden on smaller
+            screens; open a row for the full record.
+          </caption>
           <thead>
             <tr>
               <th scope="col">Tag</th>
               <th scope="col">Name</th>
-              <th scope="col">Station</th>
-              <th scope="col">Category</th>
+              <th scope="col" class="engr-col-mid">
+                Station
+              </th>
+              <th scope="col" class="engr-col-mid">
+                Category
+              </th>
+              <th scope="col" class="engr-col-lo">
+                Manufacturer
+              </th>
+              <th scope="col" class="engr-col-lo">
+                Model
+              </th>
+              <th scope="col" class="engr-col-lo">
+                Serial
+              </th>
+              <th scope="col" class="engr-col-lo engr-num">
+                Install date
+              </th>
               <th scope="col">Status</th>
             </tr>
           </thead>
@@ -86,9 +107,13 @@ if (allowed) {
             {rows.map((r) => (
               <tr>
                 <td>{canManage ? <a href={`/admin/assets/${r.id}`}>{r.tag}</a> : r.tag}</td>
-                <td>{r.name}</td>
-                <td>{r.stationName}</td>
-                <td>{r.categoryName ?? 'Not set'}</td>
+                <td class="engr-trunc">{r.name}</td>
+                <td class="engr-col-mid">{r.stationName}</td>
+                <td class="engr-col-mid">{r.categoryName ?? 'Not set'}</td>
+                <td class="engr-col-lo">{r.manufacturer ?? '-'}</td>
+                <td class="engr-col-lo">{r.model ?? '-'}</td>
+                <td class="engr-col-lo">{r.serialNo ?? '-'}</td>
+                <td class="engr-col-lo engr-num">{shortDate(r.installDate)}</td>
                 <td>
                   <span class="engr-status">{r.status}</span>
                 </td>
