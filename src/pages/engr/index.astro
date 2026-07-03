@@ -2,17 +2,20 @@
 export const prerender = false;
 
 /**
- * Dashboard shell. Four count cards read the seeded views, each filtered by the
- * current org. This is a shell; deeper drill-downs come in later prompts.
+ * Dashboard. Count cards and analytics charts, each org-scoped. Primary
+ * navigation lives in the sidebar; this page keeps only the niche queues that
+ * the sidebar does not carry.
  *
  * Gate: the seeded permissions table has no dashboard.view key, so this gates on
  * reports.view ("View reports and dashboards"), the closest existing key, rather
  * than inventing a permission.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import EngrBarChart from '@/components/engr/EngrBarChart.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getDashboard, type Dashboard } from '@engr/repos/dashboard';
+import { getDashboardCharts, type DashboardCharts } from '@engr/repos/analytics';
 import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 import { getUnreadCount } from '@engr/notify';
@@ -26,9 +29,21 @@ const db = await getDb(getEngrEnv());
 const unread = await getUnreadCount(db, engr.orgId, engr.userId);
 
 let data: Dashboard | null = null;
+let charts: DashboardCharts | null = null;
 if (allowed) {
-  data = await getDashboard(db, engr.orgId);
+  [data, charts] = await Promise.all([
+    getDashboard(db, engr.orgId),
+    getDashboardCharts(db, engr.orgId),
+  ]);
 }
+
+// Money charts are formatted at the view from minor units.
+const spendByContractor =
+  charts?.spendByContractorMinor.map((d) => ({
+    label: d.label,
+    value: d.value,
+    display: formatMoneyMinor(d.value, 'KES'),
+  })) ?? [];
 ---
 
 <EngrLayout title="Dashboard">
@@ -37,7 +52,13 @@ if (allowed) {
       <h1>Dashboard</h1>
       <p class="engr-lead">A view of open work across your organisation.</p>
     </div>
-    <a href="/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
+    {
+      can(Astro.locals, 'requests.create') && (
+        <a href="/requests/new" class="engr-btn engr-btn--primary">
+          Raise a request
+        </a>
+      )
+    }
   </div>
 
   <p class="engr-lead" role="status" style="margin-top:-0.5rem">
@@ -48,130 +69,167 @@ if (allowed) {
     }
   </p>
 
-  <nav class="engr-toggle" aria-label="Queues" style="margin:0.5rem 0 1.25rem;flex-wrap:wrap">
-    <a href="/workorders">Work orders</a>
-    <a href="/contractor/workorders">Contractor inbox</a>
-    <a href="/technician/workorders">My work orders</a>
-    <a href="/station/confirmations">Confirmations</a>
-    {can(Astro.locals, 'rfq.view') && <a href="/rfqs">RFQs</a>}
-    {
-      can(Astro.locals, 'quotes.view') && !can(Astro.locals, 'rfq.view') && (
-        <a href="/contractor/rfqs">RFQ invitations</a>
-      )
-    }
-    {can(Astro.locals, 'rfq.award') && <a href="/procurement/approvals">Procurement approvals</a>}
-    {can(Astro.locals, 'pm.allocate') && <a href="/pm">Maintenance</a>}
-    {can(Astro.locals, 'workorder.create') && <a href="/lpos">LPOs</a>}
-    {
-      can(Astro.locals, 'workorder.view') && !can(Astro.locals, 'workorder.create') && (
-        <a href="/contractor/lpos">My LPOs</a>
-      )
-    }
-    {can(Astro.locals, 'cost.approve.l1') && <a href="/mileage/approvals">Mileage approvals</a>}
-    {can(Astro.locals, 'cost.create') && <a href="/contractor/costs">My costs</a>}
-    {
-      (can(Astro.locals, 'cost.approve.l1') || can(Astro.locals, 'cost.approve.l2')) && (
-        <a href="/costs/approvals">Cost approvals</a>
-      )
-    }
-    {can(Astro.locals, 'bill.create') && <a href="/contractor/bills">My bills</a>}
-    {
-      (can(Astro.locals, 'bill.approve.l1') ||
-        can(Astro.locals, 'bill.approve.l2') ||
-        can(Astro.locals, 'bill.approve.l3')) && <a href="/bills/approvals">Bill approvals</a>
-    }
-    {can(Astro.locals, 'payment.record') && <a href="/payments">Payments</a>}
-    <a href="/notifications">My notifications</a>
-    {can(Astro.locals, 'reports.view') && <a href="/ops/notifications">Notifications ops</a>}
-  </nav>
-
   {
-    !allowed && (
-      <p class="engr-error" role="alert">
-        You do not have access to the dashboard.
-      </p>
+    (can(Astro.locals, 'arrival.confirm') ||
+      can(Astro.locals, 'rfq.award') ||
+      can(Astro.locals, 'cost.approve.l1') ||
+      can(Astro.locals, 'reports.view')) && (
+      <nav class="engr-toggle" aria-label="Queues" style="margin:0.5rem 0 1.25rem;flex-wrap:wrap">
+        {can(Astro.locals, 'arrival.confirm') && <a href="/station/confirmations">Confirmations</a>}
+        {can(Astro.locals, 'rfq.award') && (
+          <a href="/procurement/approvals">Procurement approvals</a>
+        )}
+        {can(Astro.locals, 'cost.approve.l1') && <a href="/mileage/approvals">Mileage approvals</a>}
+        {can(Astro.locals, 'reports.view') && <a href="/ops/notifications">Notifications ops</a>}
+      </nav>
     )
   }
 
   {
-    allowed && data && (
-      <div class="engr-cards">
-        <section class="engr-card" aria-labelledby="card-wo">
-          <h2 class="engr-card__label" id="card-wo">
-            Open work orders
-          </h2>
-          <p class="engr-card__count">{data.openWorkOrders.count}</p>
-          {data.openWorkOrders.items.length === 0 ? (
-            <p class="engr-card__empty">None open.</p>
-          ) : (
-            <ul class="engr-card__list">
-              {data.openWorkOrders.items.map((w) => (
-                <li>
-                  <span>{w.woNo}</span>
-                  <span class="engr-card__muted">{w.stationName ?? 'Unassigned'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to the dashboard.
+      </p>
+    ) : (
+      data && (
+        <>
+          <div class="engr-cards">
+            <section class="engr-card" aria-labelledby="card-wo">
+              <h2 class="engr-card__label" id="card-wo">
+                Open work orders
+              </h2>
+              <p class="engr-card__count">{data.openWorkOrders.count}</p>
+              {data.openWorkOrders.items.length === 0 ? (
+                <p class="engr-card__empty">None open.</p>
+              ) : (
+                <ul class="engr-card__list">
+                  {data.openWorkOrders.items.map((w) => (
+                    <li>
+                      <span>{w.woNo}</span>
+                      <span class="engr-card__muted">{w.stationName ?? 'Unassigned'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-        <section class="engr-card" aria-labelledby="card-cost">
-          <h2 class="engr-card__label" id="card-cost">
-            Pending cost approvals
-          </h2>
-          <p class="engr-card__count">{data.pendingCostApprovals.count}</p>
-          {data.pendingCostApprovals.items.length === 0 ? (
-            <p class="engr-card__empty">Nothing awaiting approval.</p>
-          ) : (
-            <ul class="engr-card__list">
-              {data.pendingCostApprovals.items.map((c) => (
-                <li>
-                  <span>{formatMoneyMinor(c.totalMinor, c.currency)}</span>
-                  <span class="engr-card__muted">{c.status}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <section class="engr-card" aria-labelledby="card-cost">
+              <h2 class="engr-card__label" id="card-cost">
+                Pending cost approvals
+              </h2>
+              <p class="engr-card__count">{data.pendingCostApprovals.count}</p>
+              {data.pendingCostApprovals.items.length === 0 ? (
+                <p class="engr-card__empty">Nothing awaiting approval.</p>
+              ) : (
+                <ul class="engr-card__list">
+                  {data.pendingCostApprovals.items.map((c) => (
+                    <li>
+                      <span>{formatMoneyMinor(c.totalMinor, c.currency)}</span>
+                      <span class="engr-card__muted">{c.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-        <section class="engr-card" aria-labelledby="card-bill">
-          <h2 class="engr-card__label" id="card-bill">
-            Pending bill approvals
-          </h2>
-          <p class="engr-card__count">{data.pendingBillApprovals.count}</p>
-          {data.pendingBillApprovals.items.length === 0 ? (
-            <p class="engr-card__empty">Nothing awaiting approval.</p>
-          ) : (
-            <ul class="engr-card__list">
-              {data.pendingBillApprovals.items.map((b) => (
-                <li>
-                  <span>{b.billNo}</span>
-                  <span class="engr-card__muted">{formatMoneyMinor(b.totalMinor, b.currency)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <section class="engr-card" aria-labelledby="card-bill">
+              <h2 class="engr-card__label" id="card-bill">
+                Pending bill approvals
+              </h2>
+              <p class="engr-card__count">{data.pendingBillApprovals.count}</p>
+              {data.pendingBillApprovals.items.length === 0 ? (
+                <p class="engr-card__empty">Nothing awaiting approval.</p>
+              ) : (
+                <ul class="engr-card__list">
+                  {data.pendingBillApprovals.items.map((b) => (
+                    <li>
+                      <span>{b.billNo}</span>
+                      <span class="engr-card__muted">
+                        {formatMoneyMinor(b.totalMinor, b.currency)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-        <section class="engr-card" aria-labelledby="card-pm">
-          <h2 class="engr-card__label" id="card-pm">
-            Upcoming maintenance
-          </h2>
-          <p class="engr-card__count">{data.upcomingPm.count}</p>
-          {data.upcomingPm.items.length === 0 ? (
-            <p class="engr-card__empty">Nothing scheduled.</p>
-          ) : (
-            <ul class="engr-card__list">
-              {data.upcomingPm.items.map((p) => (
-                <li>
-                  <span>{p.scheduleName}</span>
-                  <span class="engr-card__muted">{p.dueDate ?? 'Not set'}</span>
-                </li>
-              ))}
-            </ul>
+            <section class="engr-card" aria-labelledby="card-pm">
+              <h2 class="engr-card__label" id="card-pm">
+                Upcoming maintenance
+              </h2>
+              <p class="engr-card__count">{data.upcomingPm.count}</p>
+              {data.upcomingPm.items.length === 0 ? (
+                <p class="engr-card__empty">Nothing scheduled.</p>
+              ) : (
+                <ul class="engr-card__list">
+                  {data.upcomingPm.items.map((p) => (
+                    <li>
+                      <span>{p.scheduleName}</span>
+                      <span class="engr-card__muted">{p.dueDate ?? 'Not set'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+
+          {charts && (
+            <section aria-labelledby="charts-heading" style="margin-top:1.75rem">
+              <h2 id="charts-heading">Analytics</h2>
+              <div class="engr-charts">
+                <EngrBarChart
+                  title="Work orders by status"
+                  description="Every work order, grouped by its current status."
+                  valueHeading="Work orders"
+                  data={charts.workOrdersByStatus}
+                />
+                <EngrBarChart
+                  title="Requests over time"
+                  description="Service requests raised per week, last 11 weeks."
+                  valueHeading="Requests"
+                  data={charts.requestsByWeek}
+                />
+                <EngrBarChart
+                  title="Cost approval pipeline"
+                  description="Work costs waiting at each approval stage."
+                  valueHeading="Work costs"
+                  data={charts.costPipeline}
+                />
+                <EngrBarChart
+                  title="Bill approval pipeline"
+                  description="Bills through the three levels to paid."
+                  valueHeading="Bills"
+                  data={charts.billPipeline}
+                />
+                <EngrBarChart
+                  title="Upcoming maintenance"
+                  description="Occurrences due per week for the next eight weeks."
+                  valueHeading="Due"
+                  data={charts.pmByWeek}
+                />
+                <EngrBarChart
+                  title="Approved cost by contractor"
+                  description="Top ten contractors by approved cost value."
+                  valueHeading="Approved cost"
+                  data={spendByContractor}
+                />
+                <EngrBarChart
+                  title="Requests by priority"
+                  description="Every request, grouped by priority."
+                  valueHeading="Requests"
+                  data={charts.requestsByPriority}
+                />
+                <EngrBarChart
+                  title="Open work by station"
+                  description="Open work orders at each station, top ten."
+                  valueHeading="Open work orders"
+                  data={charts.openWorkByStation}
+                />
+              </div>
+            </section>
           )}
-        </section>
-      </div>
+        </>
+      )
     )
   }
 </EngrLayout>
