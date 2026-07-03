@@ -11,7 +11,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
 let rows: LpoListRow[] = [];
@@ -55,7 +55,7 @@ if (allowed) {
             {rows.map((r) => (
               <tr>
                 <td>
-                  <a href={`/engr/contractor/lpos/${r.id}`}>{r.lpoNo}</a>
+                  <a href={`/contractor/lpos/${r.id}`}>{r.lpoNo}</a>
                 </td>
                 <td>{r.baseStationName ?? 'Not set'}</td>
                 <td>{r.woCount}</td>

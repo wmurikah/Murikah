@@ -22,5 +22,5 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     WO_ACTION.cancel,
     { reason: str(body.reason).trim().slice(0, 500) },
   );
-  return finishTransition(request, result, db, engr.orgId, id, `/engr/workorders/${id}`);
+  return finishTransition(request, result, db, engr.orgId, id, `/workorders/${id}`);
 };

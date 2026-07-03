@@ -18,7 +18,7 @@ import { formatMoneyMinor } from '@engr/format';
 import { getUnreadCount } from '@engr/notify';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'reports.view');
 
@@ -37,7 +37,7 @@ if (allowed) {
       <h1>Dashboard</h1>
       <p class="engr-lead">A view of open work across your organisation.</p>
     </div>
-    <a href="/engr/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
+    <a href="/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
   </div>
 
   <p class="engr-lead" role="status" style="margin-top:-0.5rem">
@@ -49,48 +49,40 @@ if (allowed) {
   </p>
 
   <nav class="engr-toggle" aria-label="Queues" style="margin:0.5rem 0 1.25rem;flex-wrap:wrap">
-    <a href="/engr/workorders">Work orders</a>
-    <a href="/engr/contractor/workorders">Contractor inbox</a>
-    <a href="/engr/technician/workorders">My work orders</a>
-    <a href="/engr/station/confirmations">Confirmations</a>
-    {can(Astro.locals, 'rfq.view') && <a href="/engr/rfqs">RFQs</a>}
+    <a href="/workorders">Work orders</a>
+    <a href="/contractor/workorders">Contractor inbox</a>
+    <a href="/technician/workorders">My work orders</a>
+    <a href="/station/confirmations">Confirmations</a>
+    {can(Astro.locals, 'rfq.view') && <a href="/rfqs">RFQs</a>}
     {
       can(Astro.locals, 'quotes.view') && !can(Astro.locals, 'rfq.view') && (
-        <a href="/engr/contractor/rfqs">RFQ invitations</a>
+        <a href="/contractor/rfqs">RFQ invitations</a>
       )
     }
-    {
-      can(Astro.locals, 'rfq.award') && (
-        <a href="/engr/procurement/approvals">Procurement approvals</a>
-      )
-    }
-    {can(Astro.locals, 'pm.allocate') && <a href="/engr/pm">Maintenance</a>}
-    {can(Astro.locals, 'workorder.create') && <a href="/engr/lpos">LPOs</a>}
+    {can(Astro.locals, 'rfq.award') && <a href="/procurement/approvals">Procurement approvals</a>}
+    {can(Astro.locals, 'pm.allocate') && <a href="/pm">Maintenance</a>}
+    {can(Astro.locals, 'workorder.create') && <a href="/lpos">LPOs</a>}
     {
       can(Astro.locals, 'workorder.view') && !can(Astro.locals, 'workorder.create') && (
-        <a href="/engr/contractor/lpos">My LPOs</a>
+        <a href="/contractor/lpos">My LPOs</a>
       )
     }
-    {
-      can(Astro.locals, 'cost.approve.l1') && (
-        <a href="/engr/mileage/approvals">Mileage approvals</a>
-      )
-    }
-    {can(Astro.locals, 'cost.create') && <a href="/engr/contractor/costs">My costs</a>}
+    {can(Astro.locals, 'cost.approve.l1') && <a href="/mileage/approvals">Mileage approvals</a>}
+    {can(Astro.locals, 'cost.create') && <a href="/contractor/costs">My costs</a>}
     {
       (can(Astro.locals, 'cost.approve.l1') || can(Astro.locals, 'cost.approve.l2')) && (
-        <a href="/engr/costs/approvals">Cost approvals</a>
+        <a href="/costs/approvals">Cost approvals</a>
       )
     }
-    {can(Astro.locals, 'bill.create') && <a href="/engr/contractor/bills">My bills</a>}
+    {can(Astro.locals, 'bill.create') && <a href="/contractor/bills">My bills</a>}
     {
       (can(Astro.locals, 'bill.approve.l1') ||
         can(Astro.locals, 'bill.approve.l2') ||
-        can(Astro.locals, 'bill.approve.l3')) && <a href="/engr/bills/approvals">Bill approvals</a>
+        can(Astro.locals, 'bill.approve.l3')) && <a href="/bills/approvals">Bill approvals</a>
     }
-    {can(Astro.locals, 'payment.record') && <a href="/engr/payments">Payments</a>}
-    <a href="/engr/notifications">My notifications</a>
-    {can(Astro.locals, 'reports.view') && <a href="/engr/ops/notifications">Notifications ops</a>}
+    {can(Astro.locals, 'payment.record') && <a href="/payments">Payments</a>}
+    <a href="/notifications">My notifications</a>
+    {can(Astro.locals, 'reports.view') && <a href="/ops/notifications">Notifications ops</a>}
   </nav>
 
   {

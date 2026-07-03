@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = '/engr/notifications';
+  const back = '/notifications';
 
   const db = await getDb(getEngrEnv());
   const ok = await markRead(db, engr.orgId, engr.userId, id);

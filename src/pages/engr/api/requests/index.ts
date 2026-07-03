@@ -87,7 +87,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (!input.stationId || !input.issue) {
       return json
         ? jsonResponse({ error: 'validation' }, 422)
-        : redirect(request, '/engr/requests/new?error=validation');
+        : redirect(request, '/requests/new?error=validation');
     }
 
     const db = await getDb(getEngrEnv());
@@ -100,7 +100,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (station.rows.length === 0) {
       return json
         ? jsonResponse({ error: 'station' }, 422)
-        : redirect(request, '/engr/requests/new?error=station');
+        : redirect(request, '/requests/new?error=station');
     }
 
     // If a category was chosen it must belong to this org too, otherwise drop it.
@@ -127,13 +127,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     return json
       ? jsonResponse({ ok: true, id: created.id, request_no: created.requestNo }, 201)
-      : redirect(request, `/engr/requests?created=${encodeURIComponent(created.requestNo)}`);
+      : redirect(request, `/requests?created=${encodeURIComponent(created.requestNo)}`);
   } catch (err) {
     if (err instanceof Response) return err; // requirePermission threw a 403
     console.error('engr requests POST failed', err);
     return json
       ? jsonResponse({ error: 'server' }, 500)
-      : redirect(request, '/engr/requests/new?error=server');
+      : redirect(request, '/requests/new?error=server');
   }
 };
 

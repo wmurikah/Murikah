@@ -39,7 +39,7 @@ const {
 } = Astro.props;
 
 const has = (action: WoAction) => actions.includes(action);
-const api = `/engr/api/workorders/${wo.id}`;
+const api = `/api/workorders/${wo.id}`;
 const spareRows = [1, 2, 3, 4, 5, 6];
 const errorMessage = errorCode
   ? errorCode === 'conflict'

@@ -17,7 +17,7 @@ import { defaultThresholdMinor } from '@engr/repos/rfqs';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'rfq.create');
 const requestId = Astro.url.searchParams.get('request') ?? '';
@@ -51,7 +51,7 @@ if (allowed && requestId && !detail) Astro.response.status = 404;
       <p class="engr-lead">Invite pre-qualified contractors to quote.</p>
     </div>
     <a
-      href={requestId ? `/engr/requests/${requestId}` : '/engr/requests'}
+      href={requestId ? `/requests/${requestId}` : '/requests'}
       class="engr-btn engr-btn--secondary">Back to request</a
     >
   </div>
@@ -81,7 +81,7 @@ if (allowed && requestId && !detail) Astro.response.status = 404;
         invite.
       </p>
     ) : (
-      <form method="post" action="/engr/api/rfqs" class="engr-form" style="max-width:44rem">
+      <form method="post" action="/api/rfqs" class="engr-form" style="max-width:44rem">
         <input type="hidden" name="request_id" value={requestId} />
 
         <dl class="engr-detail">

@@ -19,7 +19,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!engr.perms.includes('bill.create')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
-      : redirectResponse(request, '/engr/contractor/bills', 'error=forbidden');
+      : redirectResponse(request, '/contractor/bills', 'error=forbidden');
   }
   const body = await readBody(request);
   const db = await getDb(getEngrEnv());
@@ -35,12 +35,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (result.ok) {
     return wantsJson(request)
       ? jsonResponse({ ok: true, billId: result.billId, billNo: result.billNo }, 201)
-      : redirectResponse(request, `/engr/bills/${result.billId}`);
+      : redirectResponse(request, `/bills/${result.billId}`);
   }
   const status = result.code === 'forbidden' ? 403 : result.code === 'conflict' ? 409 : 422;
   return wantsJson(request)
     ? jsonResponse({ ok: false, error: result.code, message: result.message }, status)
-    : redirectResponse(request, '/engr/contractor/bills', `error=${result.code}`);
+    : redirectResponse(request, '/contractor/bills', `error=${result.code}`);
 };
 
 export const GET: APIRoute = async ({ locals }) => {

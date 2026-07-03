@@ -74,7 +74,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = `/engr/contractor/rfqs/${id}`;
+  const back = `/contractor/rfqs/${id}`;
 
   if (!engr.perms.includes('quotes.submit')) {
     return wantsJson(request)

@@ -12,7 +12,7 @@ import { listUpcomingOccurrences, type OccurrenceListRow } from '@engr/repos/pm'
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'pm.allocate');
 let rows: OccurrenceListRow[] = [];
@@ -28,7 +28,7 @@ if (allowed) {
       <h1>PM calendar</h1>
       <p class="engr-lead">Upcoming maintenance and what has been notified.</p>
     </div>
-    <a href="/engr/pm" class="engr-btn engr-btn--secondary">Schedules</a>
+    <a href="/pm" class="engr-btn engr-btn--secondary">Schedules</a>
   </div>
 
   {
@@ -55,7 +55,7 @@ if (allowed) {
               <tr>
                 <td>{r.dueDate}</td>
                 <td>
-                  <a href={`/engr/pm/occurrences/${r.id}`}>{r.scheduleName}</a>
+                  <a href={`/pm/occurrences/${r.id}`}>{r.scheduleName}</a>
                 </td>
                 <td>
                   <span class="engr-status">{r.status}</span>

@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = `/engr/pm/schedules/${id}`;
+  const back = `/pm/schedules/${id}`;
 
   if (!engr.perms.includes('pm.allocate')) {
     return wantsJson(request)
@@ -40,7 +40,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     if (result.ok) {
       return wantsJson(request)
         ? jsonResponse({ ok: true }, 200)
-        : redirectResponse(request, '/engr/pm');
+        : redirectResponse(request, '/pm');
     }
     return wantsJson(request)
       ? jsonResponse(

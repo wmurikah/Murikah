@@ -22,7 +22,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = '/engr/procurement/approvals';
+  const back = '/procurement/approvals';
 
   if (!engr.perms.includes('rfq.award')) {
     return wantsJson(request)
@@ -46,7 +46,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
 
   if (result.ok) {
     if (result.outcome === 'awarded') {
-      const woPath = `/engr/workorders/${result.workOrderId}`;
+      const woPath = `/workorders/${result.workOrderId}`;
       return wantsJson(request)
         ? jsonResponse(
             { ok: true, outcome: 'awarded', workOrderId: result.workOrderId, woNo: result.woNo },
