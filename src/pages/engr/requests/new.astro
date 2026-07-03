@@ -20,7 +20,7 @@ import {
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'requests.create');
 
@@ -67,12 +67,7 @@ if (allowed) {
             {errorMessage}
           </p>
         )}
-        <form
-          method="post"
-          action="/engr/api/requests"
-          class="engr-form"
-          enctype="multipart/form-data"
-        >
+        <form method="post" action="/api/requests" class="engr-form" enctype="multipart/form-data">
           <div class="engr-field">
             <label for="station">Station</label>
             <select id="station" class="engr-select" name="station_id" required>
@@ -149,7 +144,7 @@ if (allowed) {
             <button type="submit" class="engr-btn engr-btn--primary">
               Submit request
             </button>
-            <a href="/engr/requests" class="engr-btn engr-btn--secondary">
+            <a href="/requests" class="engr-btn engr-btn--secondary">
               Cancel
             </a>
           </div>

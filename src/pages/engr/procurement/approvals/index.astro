@@ -16,7 +16,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'rfq.award');
 const alwaysApprove = engr.roles.includes('OWNER') || engr.roles.includes('ADMIN');
@@ -100,14 +100,14 @@ const mayAct = (row: PendingProcurementRow): boolean =>
               </dd>
             </dl>
             <p style="margin:0.4rem 0 0">
-              <a href={`/engr/rfqs/${r.id}`}>View the full RFQ</a>
+              <a href={`/rfqs/${r.id}`}>View the full RFQ</a>
             </p>
 
             {mayAct(r) ? (
               <>
                 <form
                   method="post"
-                  action={`/engr/api/rfqs/${r.id}/procurement-decision`}
+                  action={`/api/rfqs/${r.id}/procurement-decision`}
                   class="engr-actionbar"
                   style="margin-top:0.75rem"
                 >
@@ -118,7 +118,7 @@ const mayAct = (row: PendingProcurementRow): boolean =>
                 </form>
                 <form
                   method="post"
-                  action={`/engr/api/rfqs/${r.id}/procurement-decision`}
+                  action={`/api/rfqs/${r.id}/procurement-decision`}
                   class="engr-form"
                   style="margin-top:0.6rem"
                 >

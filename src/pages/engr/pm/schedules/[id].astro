@@ -19,7 +19,7 @@ import { listSlas } from '@engr/repos/requestActions';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'pm.allocate');
 const { id } = Astro.params;
@@ -63,7 +63,7 @@ if (allowed && !schedule) Astro.response.status = 404;
       <h1>{schedule ? schedule.name : 'Schedule'}</h1>
       <p class="engr-lead">Edit the maintenance schedule.</p>
     </div>
-    <a href="/engr/pm" class="engr-btn engr-btn--secondary">Back</a>
+    <a href="/pm" class="engr-btn engr-btn--secondary">Back</a>
   </div>
 
   {
@@ -90,7 +90,7 @@ if (allowed && !schedule) Astro.response.status = 404;
       <p class="engr-empty">That schedule was not found in your organisation.</p>
     ) : (
       <PmScheduleForm
-        action={`/engr/api/pm/schedules/${schedule.id}`}
+        action={`/api/pm/schedules/${schedule.id}`}
         schedule={schedule}
         stations={stations}
         categories={categories}

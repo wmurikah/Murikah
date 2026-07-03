@@ -15,7 +15,7 @@ import { can } from '@engr/auth/rbac';
 import { relativeAge } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'requests.view');
 const scope = Astro.url.searchParams.get('scope') === 'all' ? 'all' : 'mine';
@@ -37,7 +37,7 @@ const now = new Date();
       <h1>Engineer queue</h1>
       <p class="engr-lead">Service requests awaiting triage and assignment.</p>
     </div>
-    <a href="/engr/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
+    <a href="/requests/new" class="engr-btn engr-btn--primary">Raise a request</a>
   </div>
 
   {
@@ -51,10 +51,10 @@ const now = new Date();
   {
     allowed && (
       <div class="engr-toggle" role="group" aria-label="Filter requests">
-        <a href="/engr/requests?scope=mine" aria-current={scope === 'mine' ? 'page' : undefined}>
+        <a href="/requests?scope=mine" aria-current={scope === 'mine' ? 'page' : undefined}>
           Assigned to me
         </a>
-        <a href="/engr/requests?scope=all" aria-current={scope === 'all' ? 'page' : undefined}>
+        <a href="/requests?scope=all" aria-current={scope === 'all' ? 'page' : undefined}>
           All open
         </a>
       </div>
@@ -87,7 +87,7 @@ const now = new Date();
             {rows.map((r) => (
               <tr>
                 <td>
-                  <a href={`/engr/requests/${r.id}`}>{r.requestNo}</a>
+                  <a href={`/requests/${r.id}`}>{r.requestNo}</a>
                 </td>
                 <td>{r.stationName}</td>
                 <td class="engr-wrap">{r.issue}</td>

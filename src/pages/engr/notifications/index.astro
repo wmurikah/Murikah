@@ -13,7 +13,7 @@ import { listInApp, type InAppRow } from '@engr/repos/notifications';
 import { relativeAge } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const errorCode = Astro.url.searchParams.get('error');
 
@@ -54,7 +54,7 @@ const isUnread = (r: InAppRow): boolean => r.status === 'QUEUED' || r.status ===
               </p>
             </div>
             {isUnread(r) && (
-              <form method="post" action={`/engr/api/notifications/${r.id}/read`}>
+              <form method="post" action={`/api/notifications/${r.id}/read`}>
                 <button type="submit" class="engr-btn engr-btn--ghost">
                   Mark read
                 </button>

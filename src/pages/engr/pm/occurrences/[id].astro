@@ -13,7 +13,7 @@ import { can } from '@engr/auth/rbac';
 import { relativeAge } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'pm.allocate');
 const { id } = Astro.params;
@@ -61,7 +61,7 @@ const canAllocate = occ != null && ALLOCATABLE.includes(occ.status);
       <h1>{occ ? occ.scheduleName : 'Occurrence'}</h1>
       <p class="engr-lead">Scheduled maintenance occurrence.</p>
     </div>
-    <a href="/engr/pm/calendar" class="engr-btn engr-btn--secondary">Back to calendar</a>
+    <a href="/pm/calendar" class="engr-btn engr-btn--secondary">Back to calendar</a>
   </div>
 
   {
@@ -96,8 +96,8 @@ const canAllocate = occ != null && ALLOCATABLE.includes(occ.status);
 
         {workOrder && (
           <p class="engr-notice">
-            Work order <a href={`/engr/workorders/${workOrder.id}`}>{workOrder.woNo}</a> was created
-            from this occurrence.
+            Work order <a href={`/workorders/${workOrder.id}`}>{workOrder.woNo}</a> was created from
+            this occurrence.
           </p>
         )}
 
@@ -110,7 +110,7 @@ const canAllocate = occ != null && ALLOCATABLE.includes(occ.status);
             </p>
             <form
               method="post"
-              action={`/engr/api/pm/occurrences/${occ.id}/allocate`}
+              action={`/api/pm/occurrences/${occ.id}/allocate`}
               class="engr-actionbar"
             >
               <button type="submit" class="engr-btn engr-btn--primary">

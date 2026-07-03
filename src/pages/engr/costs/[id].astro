@@ -16,7 +16,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'cost.view');
 const canL1 = can(Astro.locals, 'cost.approve.l1');
@@ -67,7 +67,7 @@ const rows = cost
       <h1>{cost ? `Cost for ${cost.workOrderNo}` : 'Work cost'}</h1>
       <p class="engr-lead">Contractor cost and its approvals.</p>
     </div>
-    <a href="/engr/costs/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
+    <a href="/costs/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
   </div>
 
   {
@@ -112,7 +112,7 @@ const rows = cost
         {editable ? (
           <section class="engr-panel" aria-labelledby="cost-items">
             <h2 id="cost-items">Line items</h2>
-            <form method="post" action={`/engr/api/costs/${costId}/items`} class="engr-form">
+            <form method="post" action={`/api/costs/${costId}/items`} class="engr-form">
               <fieldset class="engr-field">
                 <legend>Items</legend>
                 <p class="engr-field__hint">
@@ -201,14 +201,14 @@ const rows = cost
         {(canSubmit || canRecall) && (
           <div class="engr-actionbar">
             {canSubmit && (
-              <form method="post" action={`/engr/api/costs/${costId}/submit`}>
+              <form method="post" action={`/api/costs/${costId}/submit`}>
                 <button type="submit" class="engr-btn engr-btn--primary">
                   Submit for approval
                 </button>
               </form>
             )}
             {canRecall && (
-              <form method="post" action={`/engr/api/costs/${costId}/recall`}>
+              <form method="post" action={`/api/costs/${costId}/recall`}>
                 <button type="submit" class="engr-btn engr-btn--ghost">
                   Recall to edit
                 </button>
@@ -220,7 +220,7 @@ const rows = cost
         {decideLevel > 0 && (
           <section class="engr-panel" aria-labelledby="cost-decide">
             <h2 id="cost-decide">Level {decideLevel} decision</h2>
-            <form method="post" action={`/engr/api/costs/${costId}/decision`} class="engr-form">
+            <form method="post" action={`/api/costs/${costId}/decision`} class="engr-form">
               <input type="hidden" name="level" value={decideLevel} />
               <div class="engr-field">
                 <label for="cost-comment">

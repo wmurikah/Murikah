@@ -14,7 +14,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
 const canBuild = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
@@ -39,7 +39,7 @@ if (allowed) {
     </div>
     {
       canBuild && (
-        <a href="/engr/lpos/new" class="engr-btn engr-btn--primary">
+        <a href="/lpos/new" class="engr-btn engr-btn--primary">
           New LPO
         </a>
       )
@@ -70,7 +70,7 @@ if (allowed) {
             {rows.map((r) => (
               <tr>
                 <td>
-                  <a href={`/engr/lpos/${r.id}`}>{r.lpoNo}</a>
+                  <a href={`/lpos/${r.id}`}>{r.lpoNo}</a>
                 </td>
                 <td>{r.contractorName}</td>
                 <td>{r.baseStationName ?? 'Not set'}</td>
