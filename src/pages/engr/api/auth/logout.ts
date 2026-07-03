@@ -7,9 +7,11 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { clearSession } from '@engr/auth/session';
 
-export const POST: APIRoute = async () => {
+export const POST: APIRoute = async ({ request }) => {
+  // Match the set cookie: Secure in production (https), off for http development.
+  const secure = new URL(request.url).protocol === 'https:';
   return new Response(null, {
     status: 303,
-    headers: { location: '/engr/login', 'set-cookie': clearSession() },
+    headers: { location: '/login', 'set-cookie': clearSession(secure) },
   });
 };
