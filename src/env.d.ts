@@ -63,12 +63,19 @@ declare namespace App {
      */
     engr?: {
       userId: string;
+      /** The acting organisation: the home org, or an affiliate a group super-admin switched into. Every query scopes by this. */
       orgId: string;
+      /** The user's home organisation. Equals orgId unless a super-admin is acting inside an affiliate. */
+      homeOrgId: string;
       orgSlug: string;
       /** Display fields; absent on a session minted before they were added. */
       orgName?: string;
       userName?: string;
       userEmail?: string;
+      /** True when the user is OWNER or ADMIN of a group (an org with no parent). */
+      isGroupAdmin: boolean;
+      /** The organisations the user may switch between (the group plus its affiliates); empty for an ordinary user. */
+      switchable: { id: string; name: string; slug: string; isGroup: boolean }[];
       roles: string[];
       perms: string[];
       can: (key: string) => boolean;
