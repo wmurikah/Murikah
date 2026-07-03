@@ -1433,28 +1433,95 @@ a.engr-card:focus-visible {
   margin-bottom: var(--engr-s2);
 }
 
-/* Donut. */
+/* Donut with a thick ring and external boxed leader-line callouts. The chart is
+   a query container, so the two-column callout layout falls back to a compact
+   donut with an inline legend when the card is too narrow (a phone). */
+.engr-chart--donut {
+  container: engr-donut / inline-size;
+}
 .engr-donut {
+  margin-top: var(--engr-s2);
+}
+.engr-donutwide {
+  display: none;
+}
+.engr-donutmini {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--engr-s4);
 }
-.engr-donut__svg {
-  flex: 0 0 auto;
-  width: 8.5rem;
-  height: 8.5rem;
+@container engr-donut (min-width: 22rem) {
+  .engr-donutwide {
+    display: block;
+  }
+  .engr-donutmini {
+    display: none;
+  }
 }
-.engr-donut__svg circle {
+.engr-donutwide__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.engr-donutmini__svg {
+  flex: 0 0 auto;
+  width: 7.5rem;
+  height: 7.5rem;
+}
+
+/* Ring slices: a subtle hover only (opacity), so nothing shifts or jitters. */
+.engr-donut__slice {
   transition: opacity 0.15s ease;
 }
-.engr-donut__svg a:hover circle {
-  opacity: 0.82;
+.engr-donutwide a:hover .engr-donut__slice,
+.engr-donutmini a:hover .engr-donut__slice {
+  opacity: 0.85;
 }
 .engr-donut__total {
-  font-size: 0.42rem;
+  font-size: 16px;
   font-weight: 700;
   fill: var(--engr-navy);
+}
+.engr-donutmini__svg .engr-donut__total {
+  font-size: 20px;
+}
+.engr-donut__unit {
+  font-size: 7px;
+  fill: var(--engr-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.engr-donutmini__svg .engr-donut__unit {
+  font-size: 8px;
+}
+
+/* Boxed leader-line callouts. */
+.engr-callout__box {
+  fill: var(--engr-surface);
+  stroke: var(--engr-line);
+  stroke-width: 1;
+  transition: stroke 0.15s ease;
+}
+.engr-callout__name {
+  font-size: 7.5px;
+  font-weight: 600;
+  fill: var(--engr-ink);
+}
+.engr-callout__val {
+  font-size: 7px;
+  fill: var(--engr-muted);
+  font-variant-numeric: tabular-nums;
+}
+.engr-callout:hover .engr-callout__box {
+  stroke: var(--engr-navy-2);
+}
+.engr-donutwide a:focus-visible {
+  outline: none;
+}
+.engr-donutwide a:focus-visible .engr-callout__box {
+  stroke: var(--color-focus);
+  stroke-width: 2;
 }
 
 /* Shared legend (donut and pipeline). */
