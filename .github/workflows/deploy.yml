@@ -1,0 +1,44 @@
+name: Deploy to Cloudflare
+
+# Manual only, so it never double-deploys alongside the Cloudflare git
+# integration. The operator runs it from the Actions tab. It builds the whole
+# worker (marketing plus engr) and deploys it with wrangler from GitHub's
+# runners, independent of Cloudflare Workers Builds. See docs/deploy.md.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    name: Build and deploy the worker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      # The Astro adapter emits the deployable config at dist/server/wrangler.json
+      # (real main and assets.directory) from wrangler.jsonc during the build.
+      # Runtime secrets already on the worker (TURSO_ENGR_*, ENGR_SESSION_SECRET,
+      # notification provider keys) are not touched by a deploy.
+      - name: Deploy with Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config dist/server/wrangler.json
