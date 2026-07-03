@@ -23,7 +23,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = `/engr/contractor/workorders/${id}`;
+  const back = `/contractor/workorders/${id}`;
 
   const body = await readBody(request);
   const technicianId = str(body.technician_id).trim();

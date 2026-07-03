@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = '/engr/mileage/approvals';
+  const back = '/mileage/approvals';
 
   if (!engr.perms.includes('cost.approve.l1')) {
     return wantsJson(request)

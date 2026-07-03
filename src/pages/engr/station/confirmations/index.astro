@@ -13,7 +13,7 @@ import { listForStationManager, type WorkOrderListRow } from '@engr/repos/workOr
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
 const errorCode = Astro.url.searchParams.get('error');
@@ -71,7 +71,7 @@ const closures = rows.filter((r) => r.status === 'WORK_DONE_PENDING_CONFIRM');
                   </p>
                   <form
                     method="post"
-                    action={`/engr/api/workorders/${r.id}/confirm-arrival`}
+                    action={`/api/workorders/${r.id}/confirm-arrival`}
                     class="engr-actionbar"
                     style="margin-top:0.75rem"
                   >
@@ -105,11 +105,11 @@ const closures = rows.filter((r) => r.status === 'WORK_DONE_PENDING_CONFIRM');
                     </span>
                   </p>
                   <p style="margin:0.4rem 0 0">
-                    <a href={`/engr/workorders/${r.id}`}>View detail</a>
+                    <a href={`/workorders/${r.id}`}>View detail</a>
                   </p>
                   <form
                     method="post"
-                    action={`/engr/api/workorders/${r.id}/confirm-closure`}
+                    action={`/api/workorders/${r.id}/confirm-closure`}
                     class="engr-actionbar"
                     style="margin-top:0.6rem"
                   >
@@ -120,7 +120,7 @@ const closures = rows.filter((r) => r.status === 'WORK_DONE_PENDING_CONFIRM');
                   </form>
                   <form
                     method="post"
-                    action={`/engr/api/workorders/${r.id}/confirm-closure`}
+                    action={`/api/workorders/${r.id}/confirm-closure`}
                     class="engr-form"
                     style="margin-top:0.6rem"
                   >

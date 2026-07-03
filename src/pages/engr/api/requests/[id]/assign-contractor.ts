@@ -15,7 +15,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = `/engr/requests/${id}`;
+  const back = `/requests/${id}`;
 
   if (!(engr.perms.includes('workorder.create') && engr.perms.includes('workorder.assign'))) {
     return wantsJson(request)
@@ -40,7 +40,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   );
 
   if (result.ok) {
-    const woPath = `/engr/workorders/${result.workOrderId}`;
+    const woPath = `/workorders/${result.workOrderId}`;
     return wantsJson(request)
       ? jsonResponse({ ok: true, workOrderId: result.workOrderId, woNo: result.woNo }, 201)
       : redirectResponse(request, woPath);

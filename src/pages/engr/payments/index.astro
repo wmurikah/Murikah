@@ -22,7 +22,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'payment.view') || can(Astro.locals, 'payment.record');
 const canRecord = can(Astro.locals, 'payment.record');
@@ -116,7 +116,7 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                 <div class="engr-quote">
                   <div class="engr-quote__head">
                     <div>
-                      <a href={`/engr/bills/${b.id}`}>{b.billNo}</a>, {b.contractorName}
+                      <a href={`/bills/${b.id}`}>{b.billNo}</a>, {b.contractorName}
                     </div>
                     <p class="engr-quote__total">{formatMoneyMinor(outstanding(b), b.currency)}</p>
                   </div>
@@ -129,7 +129,7 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                     <dd>{formatMoneyMinor(outstanding(b), b.currency)}</dd>
                   </dl>
                   {canRecord && outstanding(b) > 0 && (
-                    <form method="post" action="/engr/api/payments" class="engr-form">
+                    <form method="post" action="/api/payments" class="engr-form">
                       <input type="hidden" name="bill_id" value={b.id} />
                       <div class="engr-field">
                         <label for={`amount-${b.id}`}>Amount (KES)</label>
@@ -212,7 +212,7 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                   {recent.map((p) => (
                     <tr>
                       <td>
-                        <a href={`/engr/bills/${p.billId}`}>{p.billNo}</a>
+                        <a href={`/bills/${p.billId}`}>{p.billNo}</a>
                       </td>
                       <td>{formatMoneyMinor(p.amountMinor, p.currency)}</td>
                       <td>{p.method ?? 'Not set'}</td>
@@ -222,7 +222,7 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                       {canRecord && (
                         <td>
                           {p.status !== 'REVERSED' && (
-                            <form method="post" action={`/engr/api/payments/${p.id}/reverse`}>
+                            <form method="post" action={`/api/payments/${p.id}/reverse`}>
                               <button type="submit" class="engr-btn engr-btn--ghost">
                                 Reverse
                               </button>

@@ -16,7 +16,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor, relativeAge } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'rfq.view');
 const canSelect = can(Astro.locals, 'quotes.select');
@@ -50,7 +50,7 @@ const rfqId = rfq?.id ?? '';
       <h1>{rfq ? rfq.rfqNo : 'RFQ'}</h1>
       <p class="engr-lead">Request for quotation.</p>
     </div>
-    <a href="/engr/rfqs" class="engr-btn engr-btn--secondary">Back to RFQs</a>
+    <a href="/rfqs" class="engr-btn engr-btn--secondary">Back to RFQs</a>
   </div>
 
   {
@@ -104,14 +104,14 @@ const rfqId = rfq?.id ?? '';
 
         {awardedWo && (
           <p class="engr-notice">
-            Work order <a href={`/engr/workorders/${awardedWo.id}`}>{awardedWo.woNo}</a> was created
-            from this RFQ.
+            Work order <a href={`/workorders/${awardedWo.id}`}>{awardedWo.woNo}</a> was created from
+            this RFQ.
           </p>
         )}
         {rfq.status === 'SENT_TO_PROCUREMENT' && !awardedWo && (
           <p class="engr-notice">
             A selected quote is with procurement for sign-off. See{' '}
-            <a href="/engr/procurement/approvals">procurement approvals</a>.
+            <a href="/procurement/approvals">procurement approvals</a>.
           </p>
         )}
 
@@ -200,7 +200,7 @@ const rfqId = rfq?.id ?? '';
                   {isOpen && (canSelect || canAward) && (
                     <div class="engr-actionbar">
                       {canSelect && (
-                        <form method="post" action={`/engr/api/rfqs/${rfqId}/award`}>
+                        <form method="post" action={`/api/rfqs/${rfqId}/award`}>
                           <input type="hidden" name="intent" value="prefer" />
                           <input type="hidden" name="quote_id" value={q.id} />
                           <button type="submit" class="engr-btn engr-btn--secondary">
@@ -209,7 +209,7 @@ const rfqId = rfq?.id ?? '';
                         </form>
                       )}
                       {canAward && (
-                        <form method="post" action={`/engr/api/rfqs/${rfqId}/award`}>
+                        <form method="post" action={`/api/rfqs/${rfqId}/award`}>
                           <input type="hidden" name="intent" value="award" />
                           <input type="hidden" name="quote_id" value={q.id} />
                           <button type="submit" class="engr-btn engr-btn--primary">

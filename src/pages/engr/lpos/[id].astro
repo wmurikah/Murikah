@@ -26,7 +26,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
 const canBuild = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
@@ -66,7 +66,7 @@ const openForWork = lpo != null && (lpo.status === 'OPEN' || lpo.status === 'IN_
       <h1>{lpo ? lpo.lpoNo : 'LPO'}</h1>
       <p class="engr-lead">Local purchase order.</p>
     </div>
-    <a href="/engr/lpos" class="engr-btn engr-btn--secondary">Back to LPOs</a>
+    <a href="/lpos" class="engr-btn engr-btn--secondary">Back to LPOs</a>
   </div>
 
   {
@@ -124,7 +124,7 @@ const openForWork = lpo != null && (lpo.status === 'OPEN' || lpo.status === 'IN_
                   {lpo.workOrders.map((w) => (
                     <tr>
                       <td>
-                        <a href={`/engr/workorders/${w.id}`}>{w.woNo}</a>
+                        <a href={`/workorders/${w.id}`}>{w.woNo}</a>
                       </td>
                       <td>{w.stationName}</td>
                       <td>
@@ -142,7 +142,7 @@ const openForWork = lpo != null && (lpo.status === 'OPEN' || lpo.status === 'IN_
           <section class="engr-panel" aria-labelledby="lpo-attach">
             <h2 id="lpo-attach">Add work orders</h2>
             {attachable.length > 0 && (
-              <form method="post" action={`/engr/api/lpos/${lpoId}/attach`} class="engr-form">
+              <form method="post" action={`/api/lpos/${lpoId}/attach`} class="engr-form">
                 <div class="engr-field">
                   <label for="attach-wo">Attach an existing work order</label>
                   <select id="attach-wo" class="engr-select" name="work_order_id" required>
@@ -162,7 +162,7 @@ const openForWork = lpo != null && (lpo.status === 'OPEN' || lpo.status === 'IN_
               </form>
             )}
 
-            <form method="post" action={`/engr/api/lpos/${lpoId}/attach`} class="engr-form">
+            <form method="post" action={`/api/lpos/${lpoId}/attach`} class="engr-form">
               <p class="engr-field__hint">
                 Or create a new work order at a station under this LPO.
               </p>
@@ -247,7 +247,7 @@ const openForWork = lpo != null && (lpo.status === 'OPEN' || lpo.status === 'IN_
                 The LPO can only be closed once every work order is closed or cancelled.
               </p>
             )}
-            <form method="post" action={`/engr/api/lpos/${lpoId}/close`} class="engr-actionbar">
+            <form method="post" action={`/api/lpos/${lpoId}/close`} class="engr-actionbar">
               <button type="submit" class="engr-btn engr-btn--primary" disabled={!allDone}>
                 Close LPO
               </button>

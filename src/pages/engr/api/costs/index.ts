@@ -19,21 +19,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!engr.perms.includes('cost.create')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
-      : redirectResponse(request, '/engr/contractor/costs', 'error=forbidden');
+      : redirectResponse(request, '/contractor/costs', 'error=forbidden');
   }
   const body = await readBody(request);
   const workOrderId = str(body.work_order_id).trim();
   if (!workOrderId) {
     return wantsJson(request)
       ? jsonResponse({ error: 'validation', message: 'Choose a work order.' }, 422)
-      : redirectResponse(request, '/engr/contractor/costs', 'error=validation');
+      : redirectResponse(request, '/contractor/costs', 'error=validation');
   }
   const db = await getDb(getEngrEnv());
   const result = await createCost(db, { orgId: engr.orgId, userId: engr.userId }, workOrderId);
   if (result.ok) {
     return wantsJson(request)
       ? jsonResponse({ ok: true, costId: result.costId }, 201)
-      : redirectResponse(request, `/engr/costs/${result.costId}`);
+      : redirectResponse(request, `/costs/${result.costId}`);
   }
   const status =
     result.code === 'forbidden'
@@ -45,7 +45,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           : 422;
   return wantsJson(request)
     ? jsonResponse({ ok: false, error: result.code, message: result.message }, status)
-    : redirectResponse(request, '/engr/contractor/costs', `error=${result.code}`);
+    : redirectResponse(request, '/contractor/costs', `error=${result.code}`);
 };
 
 export const GET: APIRoute = async ({ locals }) => {

@@ -10,7 +10,7 @@ import { listForEngineer, type WorkOrderListRow } from '@engr/repos/workOrders';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
 const status = Astro.url.searchParams.get('status') ?? undefined;
@@ -36,7 +36,7 @@ if (allowed) {
         You do not have access to work orders.
       </p>
     ) : (
-      <WorkOrderList rows={rows} basePath="/engr/workorders" emptyText="No work orders yet." />
+      <WorkOrderList rows={rows} basePath="/workorders" emptyText="No work orders yet." />
     )
   }
 </EngrLayout>

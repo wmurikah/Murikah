@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = `/engr/pm/occurrences/${id}`;
+  const back = `/pm/occurrences/${id}`;
 
   if (!engr.perms.includes('pm.allocate')) {
     return wantsJson(request)
@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (result.ok) {
     return wantsJson(request)
       ? jsonResponse({ ok: true, workOrderId: result.workOrderId, woNo: result.woNo }, 201)
-      : redirectResponse(request, `/engr/workorders/${result.workOrderId}`);
+      : redirectResponse(request, `/workorders/${result.workOrderId}`);
   }
   const status = result.code === 'conflict' ? 409 : result.code === 'not_found' ? 404 : 422;
   return wantsJson(request)

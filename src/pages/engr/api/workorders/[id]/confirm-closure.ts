@@ -29,5 +29,5 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     action,
     { reason: str(body.reason).trim().slice(0, 500) },
   );
-  return finishTransition(request, result, db, engr.orgId, id, '/engr/station/confirmations');
+  return finishTransition(request, result, db, engr.orgId, id, '/station/confirmations');
 };
