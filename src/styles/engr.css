@@ -1265,6 +1265,54 @@ a.engr-card:focus-visible {
   gap: 0.6rem;
 }
 
+/* Permission matrix: modules as fieldsets, a checkbox per permission. */
+.engr-matrix {
+  display: grid;
+  gap: var(--engr-s4);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 44rem) {
+  .engr-matrix {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.engr-matrix__group {
+  margin: 0;
+  padding: var(--engr-s3) var(--engr-s4) var(--engr-s4);
+  border: 1px solid var(--engr-line);
+  border-radius: var(--engr-radius);
+  background: var(--engr-surface);
+}
+.engr-matrix__legend {
+  padding: 0 var(--engr-s2);
+  font-size: var(--engr-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--engr-tracking);
+  text-transform: uppercase;
+  color: var(--engr-muted);
+}
+.engr-matrix__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--engr-s2);
+}
+.engr-matrix__list .engr-check {
+  align-items: flex-start;
+}
+.engr-matrix__list label {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--engr-fs-small);
+  line-height: 1.35;
+}
+.engr-matrix__key {
+  font-size: var(--engr-fs-caption);
+  color: var(--engr-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- Dashboard charts ------------------------------------------------------ */
 
 .engr-charts {

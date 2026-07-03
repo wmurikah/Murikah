@@ -7,6 +7,7 @@
  */
 import type { Client } from '@libsql/client/web';
 import { hashPassword } from '@engr/auth/password';
+import { effectiveRoleIds } from '@engr/repos/adminRoles';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -101,15 +102,12 @@ function validate(input: UserInput): string | null {
   return null;
 }
 
-// Keep only the role ids that belong to this org (system roles, org_id IS NULL,
-// or this org's own roles). Guards against assigning another org's roles.
+// Keep only the effective role ids for this org (its own roles, plus the shared
+// defaults it has not cloned). Guards against assigning another org's roles and
+// against assigning a shared default that this org has replaced with its own copy.
 async function filterRoleIds(db: Client, orgId: string, roleIds: string[]): Promise<string[]> {
   if (roleIds.length === 0) return [];
-  const res = await db.execute({
-    sql: `SELECT id FROM roles WHERE org_id IS NULL OR org_id = ?`,
-    args: [orgId],
-  });
-  const allowed = new Set(res.rows.map((r) => String(r.id)));
+  const allowed = await effectiveRoleIds(db, orgId);
   return roleIds.filter((rid) => allowed.has(rid));
 }
 
