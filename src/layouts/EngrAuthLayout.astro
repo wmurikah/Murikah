@@ -1,0 +1,95 @@
+---
+/**
+ * The Engineering Rhythm front door. A full-viewport two-pane split: a navy
+ * brand panel beside a paper form pane. Below 1024px it stacks, the brand
+ * condensing to a slim navy header band above the form, and simplifies further
+ * on a phone so it never clips or overflows. The panel carries the product mark,
+ * a confident value headline and a small trust line; the pane centres the form
+ * passed in the default slot. A single-signal guard disables the submit control
+ * on first click so repeated clicks send one request. No client framework, no
+ * imagery: navy, gold and paper only.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@/styles/global.css';
+import '@/styles/engr.css';
+
+interface Props {
+  title: string;
+  brandHeadline?: string;
+  brandSub?: string;
+}
+const {
+  title,
+  brandHeadline = 'Run maintenance like clockwork',
+  brandSub = 'Requests, work orders, RFQs and billing, kept in one disciplined rhythm across every station.',
+} = Astro.props;
+const pageTitle = `${title}, Engineering Rhythm`;
+---
+
+<!doctype html>
+<html lang="en-KE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+  </head>
+  <body class="engr engr-authbody">
+    <a href="#engr-auth-main" class="engr-skip">Skip to content</a>
+    <div class="engr-authsplit">
+      <aside class="engr-authbrand">
+        <div class="engr-authbrand__inner">
+          <a href="/" class="engr-authbrand__mark">
+            <span class="engr-authbrand__markbadge" aria-hidden="true">ER</span>
+            <span class="engr-authbrand__markname">Engineering Rhythm</span>
+          </a>
+          <p class="engr-authbrand__bandvalue" aria-hidden="true">{brandHeadline}</p>
+          <div class="engr-authbrand__lead">
+            <h2 class="engr-authbrand__headline">{brandHeadline}</h2>
+            <p class="engr-authbrand__sub">{brandSub}</p>
+          </div>
+          <div class="engr-authbrand__foot">
+            <p class="engr-authbrand__product">A Murikah Labs product</p>
+            <p class="engr-authbrand__trust">
+              Built for petroleum retail engineering teams across East Africa.
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      <main id="engr-auth-main" class="engr-authpane">
+        <div class="engr-authcard">
+          <slot />
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Single-signal guard: on the first real submit, disable the submit button
+      // and show its spinner, so repeated clicks send one request. Deferred so
+      // the button's name and value are still serialised. Native required
+      // validation blocks empty submits before this runs, so the button never
+      // sticks when the form was not actually sent.
+      document.addEventListener(
+        'submit',
+        (e) => {
+          const form = e.target;
+          if (!(form instanceof HTMLFormElement)) return;
+          if (form.dataset.engrSubmitted === '1') {
+            e.preventDefault();
+            return;
+          }
+          form.dataset.engrSubmitted = '1';
+          const btn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+          if (btn) {
+            setTimeout(() => {
+              btn.setAttribute('aria-busy', 'true');
+              btn.setAttribute('disabled', '');
+            }, 0);
+          }
+        },
+        true,
+      );
+    </script>
+  </body>
+</html>
