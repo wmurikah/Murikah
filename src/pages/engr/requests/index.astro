@@ -20,11 +20,13 @@ if (!engr) return Astro.redirect('/login');
 const allowed = can(Astro.locals, 'requests.view');
 const scope = Astro.url.searchParams.get('scope') === 'all' ? 'all' : 'mine';
 const createdNo = Astro.url.searchParams.get('created');
+const priority = Astro.url.searchParams.get('priority')?.toUpperCase() || undefined;
+const priorityLabel = priority ? priority.charAt(0) + priority.slice(1).toLowerCase() : null;
 
 let rows: QueueRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  rows = await listQueue(db, engr.orgId, engr.userId, scope);
+  rows = await listQueue(db, engr.orgId, engr.userId, scope, 100, { priority });
 }
 
 const badgeClass = (priority: string) => `engr-badge engr-badge--${priority.toLowerCase()}`;
@@ -62,13 +64,26 @@ const now = new Date();
   }
 
   {
+    priorityLabel && (
+      <p class="engr-filterbar">
+        <span>Filtered to {priorityLabel} priority</span>
+        <a href={`/requests?scope=${scope}`}>Clear filter</a>
+      </p>
+    )
+  }
+
+  {
     !allowed ? (
       <p class="engr-error" role="alert">
         You do not have access to requests.
       </p>
     ) : rows.length === 0 ? (
       <p class="engr-empty">
-        {scope === 'mine' ? 'No requests are assigned to you.' : 'No open requests.'}
+        {priorityLabel
+          ? 'No open requests match this filter.'
+          : scope === 'mine'
+            ? 'No requests are assigned to you.'
+            : 'No open requests.'}
       </p>
     ) : (
       <div class="engr-tablewrap">

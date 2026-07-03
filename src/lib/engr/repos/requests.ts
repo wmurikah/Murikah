@@ -68,24 +68,39 @@ export async function listQueue(
   engineerId: string,
   scope: 'mine' | 'all',
   limit = 100,
+  filters: { priority?: string; station?: string } = {},
 ): Promise<QueueRow[]> {
   const mine = scope === 'mine';
+  const args: (string | number)[] = [orgId];
+  let where = `sr.org_id = ?
+             AND sr.deleted_at IS NULL
+             AND sr.status NOT IN ('CLOSED','CANCELLED')`;
+  if (mine) {
+    where += ' AND sr.assigned_engineer_id = ?';
+    args.push(engineerId);
+  }
+  if (filters.priority) {
+    where += ' AND sr.priority = ?';
+    args.push(filters.priority);
+  }
+  if (filters.station) {
+    where += ' AND sr.station_id = ?';
+    args.push(filters.station);
+  }
+  args.push(limit);
   const res = await db.execute({
     sql: `SELECT sr.id AS id, sr.request_no AS request_no, sr.issue AS issue,
                  sr.priority AS priority, sr.status AS status, sr.created_at AS created_at,
                  s.name AS station_name
             FROM service_requests sr
             JOIN stations s ON s.id = sr.station_id
-           WHERE sr.org_id = ?
-             AND sr.deleted_at IS NULL
-             AND sr.status NOT IN ('CLOSED','CANCELLED')
-             ${mine ? 'AND sr.assigned_engineer_id = ?' : ''}
+           WHERE ${where}
         ORDER BY CASE sr.priority
                    WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
                    WHEN 'MEDIUM' THEN 2 ELSE 3 END,
                  sr.created_at ASC
            LIMIT ?`,
-    args: mine ? [orgId, engineerId, limit] : [orgId, limit],
+    args,
   });
   return res.rows.map((row) => ({
     id: String(row.id),
