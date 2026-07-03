@@ -14,7 +14,7 @@ import { eatStartOfDayIso } from '@engr/time';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'reports.view');
 const errorCode = Astro.url.searchParams.get('error');
@@ -105,7 +105,7 @@ if (allowed) {
                       <td>{f.subject ?? 'Notification'}</td>
                       <td>{f.error ?? 'Unknown error'}</td>
                       <td>
-                        <form method="post" action={`/engr/api/notifications/${f.id}/retry`}>
+                        <form method="post" action={`/api/notifications/${f.id}/retry`}>
                           <button type="submit" class="engr-btn engr-btn--secondary">
                             Retry
                           </button>

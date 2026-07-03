@@ -18,7 +18,7 @@ import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'bill.view');
 const canL1 = can(Astro.locals, 'bill.approve.l1');
@@ -70,7 +70,7 @@ const decideLevel =
       <h1>{bill ? bill.billNo : 'Bill'}</h1>
       <p class="engr-lead">Contractor bill and its approvals.</p>
     </div>
-    <a href="/engr/bills/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
+    <a href="/bills/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
   </div>
 
   {
@@ -131,7 +131,7 @@ const decideLevel =
                   {bill.costs.map((c) => (
                     <tr>
                       <td>
-                        <a href={`/engr/costs/${c.costId}`}>{c.workOrderNo}</a>
+                        <a href={`/costs/${c.costId}`}>{c.workOrderNo}</a>
                       </td>
                       <td>{formatMoneyMinor(c.amountMinor, c.currency)}</td>
                     </tr>
@@ -144,7 +144,7 @@ const decideLevel =
           {canAttach && billable.length > 0 && (
             <form
               method="post"
-              action={`/engr/api/bills/${billId}/costs`}
+              action={`/api/bills/${billId}/costs`}
               class="engr-form"
               style="margin-top:0.75rem"
             >
@@ -169,7 +169,7 @@ const decideLevel =
           {canSubmit && (
             <form
               method="post"
-              action={`/engr/api/bills/${billId}/submit`}
+              action={`/api/bills/${billId}/submit`}
               class="engr-actionbar"
               style="margin-top:0.6rem"
             >
@@ -183,7 +183,7 @@ const decideLevel =
         {decideLevel > 0 && (
           <section class="engr-panel" aria-labelledby="bill-decide">
             <h2 id="bill-decide">Level {decideLevel} decision</h2>
-            <form method="post" action={`/engr/api/bills/${billId}/decision`} class="engr-form">
+            <form method="post" action={`/api/bills/${billId}/decision`} class="engr-form">
               <input type="hidden" name="level" value={decideLevel} />
               <div class="engr-field">
                 <label for="bill-comment">

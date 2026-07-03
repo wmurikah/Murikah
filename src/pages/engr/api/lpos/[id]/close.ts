@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = `/engr/lpos/${id}`;
+  const back = `/lpos/${id}`;
 
   if (!(engr.perms.includes('workorder.create') && engr.perms.includes('workorder.assign'))) {
     return wantsJson(request)

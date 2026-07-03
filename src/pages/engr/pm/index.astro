@@ -9,7 +9,7 @@ import { listSchedules, type ScheduleListRow } from '@engr/repos/pm';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'pm.allocate');
 let rows: ScheduleListRow[] = [];
@@ -26,10 +26,10 @@ if (allowed) {
       <p class="engr-lead">Schedules and their next due dates.</p>
     </div>
     <div class="engr-actionbar">
-      <a href="/engr/pm/calendar" class="engr-btn engr-btn--secondary">Calendar</a>
+      <a href="/pm/calendar" class="engr-btn engr-btn--secondary">Calendar</a>
       {
         allowed && (
-          <a href="/engr/pm/schedules/new" class="engr-btn engr-btn--primary">
+          <a href="/pm/schedules/new" class="engr-btn engr-btn--primary">
             New schedule
           </a>
         )
@@ -62,7 +62,7 @@ if (allowed) {
             {rows.map((r) => (
               <tr>
                 <td>
-                  <a href={`/engr/pm/schedules/${r.id}`}>{r.name}</a>
+                  <a href={`/pm/schedules/${r.id}`}>{r.name}</a>
                 </td>
                 <td>{r.stationName ?? 'Any'}</td>
                 <td>{r.frequency}</td>
@@ -74,7 +74,7 @@ if (allowed) {
                 <td>
                   <form
                     method="post"
-                    action={`/engr/api/pm/schedules/${r.id}`}
+                    action={`/api/pm/schedules/${r.id}`}
                     class="engr-actionbar"
                     style="gap:0.4rem"
                   >

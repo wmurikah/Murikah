@@ -16,7 +16,7 @@ import { contractorForUser } from '@engr/repos/techniciansPick';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
-if (!engr) return Astro.redirect('/engr/login');
+if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'quotes.view');
 let rows: ContractorRfqRow[] = [];
@@ -60,7 +60,7 @@ if (allowed) {
             {rows.map((r) => (
               <tr>
                 <td>
-                  <a href={`/engr/contractor/rfqs/${r.id}`}>{r.rfqNo}</a>
+                  <a href={`/contractor/rfqs/${r.id}`}>{r.rfqNo}</a>
                 </td>
                 <td>{r.stationName}</td>
                 <td>

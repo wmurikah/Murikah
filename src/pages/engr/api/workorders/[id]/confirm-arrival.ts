@@ -25,5 +25,5 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     WO_ACTION.confirm_arrival,
     {},
   );
-  return finishTransition(request, result, db, engr.orgId, id, '/engr/station/confirmations');
+  return finishTransition(request, result, db, engr.orgId, id, '/station/confirmations');
 };
