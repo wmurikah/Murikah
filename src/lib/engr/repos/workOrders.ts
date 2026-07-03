@@ -234,9 +234,20 @@ export async function listForEngineer(
   db: Client,
   orgId: string,
   status?: string,
+  station?: string,
 ): Promise<WorkOrderListRow[]> {
-  const sql = `${LIST_SELECT} ${status ? 'AND wo.status = ?' : ''} ORDER BY wo.created_at DESC LIMIT 200`;
-  const res = await db.execute({ sql, args: status ? [orgId, status] : [orgId] });
+  const args: string[] = [orgId];
+  let sql = LIST_SELECT;
+  if (status) {
+    sql += ' AND wo.status = ?';
+    args.push(status);
+  }
+  if (station) {
+    sql += ' AND wo.station_id = ?';
+    args.push(station);
+  }
+  sql += ' ORDER BY wo.created_at DESC LIMIT 200';
+  const res = await db.execute({ sql, args });
   return res.rows.map((r) => mapListRow(r as Record<string, unknown>));
 }
 
