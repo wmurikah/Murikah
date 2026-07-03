@@ -2,72 +2,73 @@
 export const prerender = false;
 
 /**
- * Login screen. Email is unique per organisation, so the form collects the
- * organisation slug as well as the email and password, then posts to the login
- * endpoint which resolves the tenant first. Native required validation gives
- * inline hints; the endpoint is the authority and returns one generic error.
+ * Sign in. Email and password only: email is globally unique, so the login
+ * endpoint resolves the user across the whole system and places them in their
+ * home organisation. Native required validation gives inline hints; the endpoint
+ * is the authority and returns one generic error, tied to both fields via aria so
+ * assistive tech announces it without revealing which field was wrong. The
+ * two-pane premium shell comes from EngrAuthLayout.
+ *
+ * Start free trial links to the signup page and Forgot password to recovery.
+ * Those routes are delivered separately (the signup and trial flow); the links
+ * are wired here so the front door is complete.
  */
-import EngrLayout from '@/layouts/EngrLayout.astro';
+import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
 
 const params = Astro.url.searchParams;
 const hasError = params.get('error') === '1';
-const slug = params.get('org') ?? '';
+const errId = 'engr-login-error';
 ---
 
-<EngrLayout title="Sign in">
-  <section class="engr-auth" aria-labelledby="engr-auth-title">
-    <h1 id="engr-auth-title">Sign in</h1>
-    <p class="engr-auth__sub">Engineering Rhythm, a Murikah Labs product.</p>
+<EngrAuthLayout title="Sign in">
+  <div class="engr-authcard__head">
+    <h1 class="engr-authcard__title">Sign in</h1>
+    <p class="engr-authcard__sub">Welcome back. Enter your details to continue.</p>
+  </div>
 
-    {
-      hasError && (
-        <p class="engr-error" role="alert">
-          Those details did not match. Check the organisation, email and password, then try again.
-        </p>
-      )
-    }
+  {
+    hasError && (
+      <p id={errId} class="engr-error" role="alert">
+        Invalid email or password. Check your details and try again.
+      </p>
+    )
+  }
 
-    <form method="post" action="/api/auth/login" class="engr-form">
-      <div class="engr-field">
-        <label for="org">Organisation slug</label>
-        <input
-          id="org"
-          class="engr-input"
-          name="org"
-          value={slug}
-          required
-          autocomplete="organization"
-          autocapitalize="none"
-          spellcheck="false"
-        />
-      </div>
-      <div class="engr-field">
-        <label for="email">Email</label>
-        <input
-          id="email"
-          class="engr-input"
-          name="email"
-          type="email"
-          required
-          autocomplete="username"
-          autocapitalize="none"
-          spellcheck="false"
-        />
-      </div>
-      <div class="engr-field">
-        <label for="password">Password</label>
-        <input
-          id="password"
-          class="engr-input"
-          name="password"
-          type="password"
-          required
-          autocomplete="current-password"
-        />
-      </div>
-      <div class="engr-actions">
-        <button type="submit" class="engr-btn engr-btn--primary">Sign in</button>
-      </div>
-    </form>
-  </section>
-</EngrLayout>
+  <form method="post" action="/api/auth/login" class="engr-authform">
+    <div class="engr-field">
+      <label for="email">Email</label>
+      <input
+        id="email"
+        class="engr-input"
+        name="email"
+        type="email"
+        required
+        autocomplete="username"
+        autocapitalize="none"
+        spellcheck="false"
+        autofocus
+        aria-invalid={hasError ? 'true' : undefined}
+        aria-describedby={hasError ? errId : undefined}
+      />
+    </div>
+    <div class="engr-field">
+      <label for="password">Password</label>
+      <input
+        id="password"
+        class="engr-input"
+        name="password"
+        type="password"
+        required
+        autocomplete="current-password"
+        aria-invalid={hasError ? 'true' : undefined}
+        aria-describedby={hasError ? errId : undefined}
+      />
+    </div>
+    <button type="submit" class="engr-btn engr-btn--primary engr-authform__submit">Sign in</button>
+  </form>
+
+  <div class="engr-authmeta">
+    <a href="/signup" class="engr-authmeta__link">Start free trial</a>
+    <a href="/forgot" class="engr-authmeta__link engr-authmeta__link--muted">Forgot password</a>
+  </div>
+</EngrAuthLayout>

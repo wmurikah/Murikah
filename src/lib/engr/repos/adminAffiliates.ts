@@ -1,8 +1,8 @@
 /**
  * Affiliate management for a group. An affiliate is its own organisation whose
- * parent_org_id is the group. Only a group super-admin reaches these, and every
- * read and write is scoped to the group (children by parent_org_id), so one
- * group can never see or touch another group's affiliates. Creating an affiliate
+ * parent_org_id is the parent. Only a platform owner reaches these, and every
+ * read and write is scoped to that parent (children by parent_org_id), so one
+ * parent's affiliates can never be seen or touched under another. Creating an affiliate
  * also opens a TRIALING subscription on the TRIAL plan. The slug is set once from
  * the code and never changed here (logins depend on it).
  */

@@ -331,7 +331,7 @@
   background: var(--color-brass);
 }
 
-/* Org switcher for a group super-admin. */
+/* Org switcher, shown only to a platform owner. */
 .engr-switcher {
   margin-top: 0.6rem;
   padding: 0 0.45rem;
@@ -934,24 +934,221 @@ a.engr-card:focus-visible {
   align-items: center;
 }
 
-/* ---- Auth screen ----------------------------------------------------------- */
+/* ---- Auth: the sign-in front door ------------------------------------------
+   A full-viewport two-pane split on desktop, a navy brand panel beside a paper
+   form pane. Below 1024px it stacks, the brand condensing to a slim header band
+   above the form, and simplifies further on a phone. One gold device on the
+   brand panel: a soft radial glow. */
 
-.engr-auth {
-  max-width: 26rem;
-  margin: 2rem auto 0;
-  padding: 1.75rem;
-  background: var(--color-porcelain);
-  border: 1px solid var(--color-hairline);
-  border-radius: 0.9rem;
+.engr-authbody {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
-.engr-auth h1 {
-  margin: 0 0 0.25rem;
+.engr-authsplit {
+  display: grid;
+  grid-template-columns: 1fr;
+  /* Stacked: a slim brand band, then the form fills the remaining height. */
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+@media (min-width: 64rem) {
+  .engr-authsplit {
+    /* Side by side: one full-height row, brand wider than the form pane. */
+    grid-template-columns: 55fr 45fr;
+    grid-template-rows: 1fr;
+  }
+}
+
+/* Brand panel. */
+.engr-authbrand {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  padding: var(--engr-s5) var(--engr-s6);
+  color: var(--engr-on-navy);
+  background:
+    radial-gradient(115% 115% at 88% 12%, var(--engr-gold-wash) 0%, transparent 46%),
+    linear-gradient(135deg, var(--engr-navy) 0%, var(--engr-navy-2) 100%);
+}
+.engr-authbrand__inner {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--engr-s5);
+  width: 100%;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+.engr-authbrand__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--engr-on-navy);
+  font-weight: 700;
+  text-decoration: none;
+}
+.engr-authbrand__markbadge {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--engr-radius-sm);
+  background: var(--engr-gold);
+  color: var(--engr-navy);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.engr-authbrand__bandvalue {
+  display: none;
+  margin: 0;
+  font-weight: 600;
+  color: var(--engr-on-navy-dim);
+}
+.engr-authbrand__headline {
+  margin: 0;
+  max-width: 12ch;
+  /* Explicit, so the base heading colour never darkens it against the navy. */
+  color: var(--engr-on-navy);
+  font-size: clamp(1.9rem, 1.2rem + 2.4vw, 2.9rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.engr-authbrand__sub {
+  margin: var(--engr-s3) 0 0;
+  max-width: 34ch;
+  color: var(--engr-on-navy-dim);
+  font-size: var(--engr-fs-body);
+  line-height: 1.5;
+}
+.engr-authbrand__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.engr-authbrand__product {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--engr-fs-small);
+}
+.engr-authbrand__trust {
+  margin: 0;
+  color: var(--engr-on-navy-dim);
+  font-size: var(--engr-fs-small);
+}
+
+/* Form pane. */
+.engr-authpane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 1rem + 4vw, 4rem);
+  background: var(--engr-paper);
+}
+.engr-authcard {
+  width: 100%;
+  max-width: 24rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .engr-authcard {
+    animation: engr-authrise 0.4s ease both;
+  }
+}
+@keyframes engr-authrise {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.engr-authcard__head {
+  margin-bottom: var(--engr-s5);
+}
+.engr-authcard__title {
+  margin: 0 0 0.35rem;
   font-size: 1.5rem;
+  letter-spacing: -0.01em;
 }
-.engr-auth__sub {
-  margin: 0 0 1.25rem;
-  color: var(--color-slate);
-  font-size: 0.9375rem;
+.engr-authcard__sub {
+  margin: 0;
+  color: var(--engr-muted);
+  font-size: var(--engr-fs-body);
+}
+.engr-authform {
+  display: grid;
+  gap: var(--engr-s4);
+}
+.engr-authcard .engr-field > label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.engr-authcard .engr-input {
+  min-height: 2.875rem; /* 46px, comfortable touch target */
+}
+.engr-authcard .engr-input:focus {
+  border-color: var(--engr-gold);
+}
+.engr-authcard .engr-input:focus-visible {
+  outline: 2px solid var(--engr-gold);
+  outline-offset: 1px;
+  border-color: var(--engr-gold);
+}
+.engr-authform__submit {
+  width: 100%;
+  min-height: 2.875rem;
+  margin-top: var(--engr-s2);
+}
+.engr-authmeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--engr-s3);
+  margin-top: var(--engr-s5);
+  font-size: var(--engr-fs-small);
+}
+.engr-authmeta__link {
+  color: var(--engr-navy-2);
+  font-weight: 600;
+  text-decoration: none;
+}
+.engr-authmeta__link:hover {
+  text-decoration: underline;
+}
+.engr-authmeta__link--muted {
+  color: var(--engr-muted);
+  font-weight: 500;
+}
+
+/* Stack below desktop: the brand becomes a slim header band above the form. */
+@media (max-width: 63.99rem) {
+  .engr-authbrand {
+    padding: var(--engr-s3) var(--engr-s5);
+  }
+  .engr-authbrand__inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--engr-s4);
+    max-width: 40rem;
+  }
+  .engr-authbrand__bandvalue {
+    display: block;
+    text-align: right;
+  }
+  .engr-authbrand__lead,
+  .engr-authbrand__foot {
+    display: none;
+  }
+}
+@media (max-width: 35rem) {
+  .engr-authbrand__bandvalue {
+    display: none;
+  }
 }
 
 /* ---- Notices --------------------------------------------------------------- */
