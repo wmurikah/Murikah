@@ -1,0 +1,181 @@
+---
+export const prerender = false;
+
+/**
+ * User create and edit. The path segment is "new" to create, otherwise a user id
+ * to edit. Gate: users.manage. The roles checklist is only shown, and only
+ * applied, when the viewer also holds roles.manage. A password is optional: leave
+ * it blank to keep the current one, or invite a new user to set their own. The
+ * stored password hash is never rendered.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getUser, type UserDetail } from '@engr/repos/adminUsers';
+import { listRoleOptions, type RoleOption } from '@engr/repos/adminOptions';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'users.manage');
+const canAssignRoles = can(Astro.locals, 'roles.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let user: UserDetail | null = null;
+let roles: RoleOption[] = [];
+
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  if (canAssignRoles) roles = await listRoleOptions(db, engr.orgId);
+  if (!isNew && id) user = await getUser(db, engr.orgId, id);
+}
+const notFound = !isNew && user === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const u = user;
+const selectedRoleIds = new Set(u?.roleIds ?? []);
+---
+
+<EngrLayout title={isNew ? 'New user' : 'Edit user'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New user' : 'Edit user'}</h1>
+      <p class="engr-lead">A person who can sign in and take part in the work.</p>
+    </div>
+    <a href="/admin/users" class="engr-btn engr-btn--secondary">Back to users</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That email is already used by another user.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the name, email and status, then try again.
+      </p>
+    )
+  }
+  {
+    errorCode === 'not_found' && (
+      <p class="engr-error" role="alert">
+        That user was not found.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage users.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That user was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/users" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={u!.id} />}
+        <div class="engr-field">
+          <label for="full_name">Full name</label>
+          <input
+            type="text"
+            id="full_name"
+            class="engr-input"
+            name="full_name"
+            maxlength="120"
+            required
+            value={u?.fullName ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            class="engr-input"
+            name="email"
+            maxlength="200"
+            required
+            value={u?.email ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="phone">
+            Phone <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="phone"
+            class="engr-input"
+            name="phone"
+            maxlength="40"
+            value={u?.phone ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="status">Status</label>
+          <select id="status" class="engr-select" name="status">
+            <option value="INVITED" selected={(u?.status ?? 'INVITED') === 'INVITED'}>
+              Invited
+            </option>
+            <option value="ACTIVE" selected={u?.status === 'ACTIVE'}>
+              Active
+            </option>
+            <option value="SUSPENDED" selected={u?.status === 'SUSPENDED'}>
+              Suspended
+            </option>
+            <option value="DEACTIVATED" selected={u?.status === 'DEACTIVATED'}>
+              Deactivated
+            </option>
+          </select>
+        </div>
+        <div class="engr-field engr-formgrid__full">
+          <label for="password">Set a password (optional)</label>
+          <input
+            type="password"
+            id="password"
+            class="engr-input"
+            name="password"
+            maxlength="200"
+            autocomplete="new-password"
+          />
+          <span class="engr-field__hint">
+            Leave blank to keep the current password. A new user with no password is invited to set
+            one.
+          </span>
+        </div>
+        {canAssignRoles && (
+          <fieldset class="engr-field engr-formgrid__full">
+            <legend>Roles</legend>
+            <ul class="engr-checklist">
+              {roles.map((role) => (
+                <li>
+                  <input
+                    type="checkbox"
+                    id={`role_${role.id}`}
+                    name="role_ids"
+                    value={role.id}
+                    checked={selectedRoleIds.has(role.id)}
+                  />
+                  <label for={`role_${role.id}`}>{role.name}</label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+        )}
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create user' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

@@ -8,6 +8,7 @@ export const prerender = false;
  * the request's station or category are offered.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getRequestById, type RequestDetail } from '@engr/repos/requests';
@@ -76,10 +77,13 @@ if (allowed && requestId && !detail) Astro.response.status = 404;
         An RFQ can only be raised from an accepted request. This request is {status}.
       </p>
     ) : contractors.length === 0 ? (
-      <p class="engr-empty">
-        No pre-qualified contractor covers this station or category yet, so there is nobody to
-        invite.
-      </p>
+      <EmptyState
+        message="No pre-qualified contractor covers this station or category yet, so there is nobody to invite."
+        canAct={can(Astro.locals, 'contractors.manage')}
+        actionHref="/admin/contractors/new"
+        actionLabel="Add a contractor"
+        hint="Ask an administrator to set up and pre-qualify a contractor for this station."
+      />
     ) : (
       <form method="post" action="/api/rfqs" class="engr-form" style="max-width:44rem">
         <input type="hidden" name="request_id" value={requestId} />

@@ -1,0 +1,97 @@
+---
+export const prerender = false;
+
+/** Rate cards list. Gate: rates.view; create/edit gates on rates.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listRateCardsAdmin, type RateCardRow } from '@engr/repos/adminRateCards';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'rates.view');
+const canManage = can(Astro.locals, 'rates.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: RateCardRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listRateCardsAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Rate cards">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Rate cards</h1>
+      <p class="engr-lead">Agreed rates used when pricing work.</p>
+    </div>
+    {
+      canManage && (
+        <a href="/admin/rate-cards/new" class="engr-btn engr-btn--primary">
+          New rate card
+        </a>
+      )
+    }
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Rate card saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to rate cards.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No rate cards yet."
+        canAct={canManage}
+        actionHref="/admin/rate-cards/new"
+        actionLabel="Add a rate card"
+        hint="Ask an administrator to add a rate card."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Rate cards">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Contractor</th>
+              <th scope="col">Items</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{canManage ? <a href={`/admin/rate-cards/${r.id}`}>{r.name}</a> : r.name}</td>
+                <td>{r.contractorName ?? 'Org-wide'}</td>
+                <td>{r.itemCount}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

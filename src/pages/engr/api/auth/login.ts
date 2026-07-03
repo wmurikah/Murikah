@@ -57,7 +57,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!organisation || organisation.status !== 'ACTIVE') return invalid();
 
   const res = await db.execute({
-    sql: `SELECT id, password_hash, status FROM users
+    sql: `SELECT id, full_name, password_hash, status FROM users
            WHERE org_id = ? AND email = ? AND deleted_at IS NULL LIMIT 1`,
     args: [organisation.id, emailNorm],
   });
@@ -65,6 +65,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!row) return invalid();
 
   const userId = String(row.id);
+  const userName = row.full_name === null ? undefined : String(row.full_name);
   const storedHash = row.password_hash === null ? '' : String(row.password_hash);
   if (String(row.status) !== 'ACTIVE' || !storedHash) return invalid();
 
@@ -75,7 +76,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // Secure in production (https); off for http development on engr.localhost.
   const secure = new URL(request.url).protocol === 'https:';
   const cookie = await createSession(
-    { sub: userId, org: organisation.id, orgSlug: organisation.slug, roles, perms },
+    {
+      sub: userId,
+      org: organisation.id,
+      orgSlug: organisation.slug,
+      orgName: organisation.name,
+      userName,
+      userEmail: emailNorm,
+      roles,
+      perms,
+    },
     env.sessionSecret,
     secure,
   );

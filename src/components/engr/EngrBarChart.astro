@@ -1,0 +1,63 @@
+---
+/**
+ * A horizontal bar chart that is also its own data table, so it is fully
+ * accessible with no client JavaScript. Each row is a label (row header) and its
+ * value; a decorative bar sits behind the value. Shows a small "no data" line
+ * when the series is empty rather than a broken axis. Amounts are pre-formatted
+ * by the caller (the display field); the chart never formats money itself.
+ */
+import type { ChartDatum } from '@engr/repos/analytics';
+
+interface Props {
+  title: string;
+  description?: string;
+  data: ChartDatum[];
+  valueHeading?: string;
+  emptyText?: string;
+}
+const {
+  title,
+  description,
+  data,
+  valueHeading = 'Count',
+  emptyText = 'No data yet.',
+} = Astro.props;
+
+const max = data.reduce((m, d) => Math.max(m, d.value), 0);
+const hasData = data.length > 0 && max > 0;
+const pct = (v: number) => (max > 0 ? Math.round((v / max) * 100) : 0);
+---
+
+<figure class="engr-chart">
+  <figcaption class="engr-chart__cap">
+    <h3 class="engr-chart__title">{title}</h3>
+    {description && <p class="engr-chart__desc">{description}</p>}
+  </figcaption>
+  {
+    !hasData ? (
+      <p class="engr-empty">{emptyText}</p>
+    ) : (
+      <table class="engr-chart__table">
+        <thead>
+          <tr>
+            <th scope="col">Item</th>
+            <th scope="col">{valueHeading}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d) => (
+            <tr>
+              <th scope="row" class="engr-chart__label">
+                {d.label}
+              </th>
+              <td class="engr-chart__cell">
+                <span class="engr-chart__bar" style={`width:${pct(d.value)}%`} aria-hidden="true" />
+                <span class="engr-chart__value">{d.display ?? d.value}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+</figure>

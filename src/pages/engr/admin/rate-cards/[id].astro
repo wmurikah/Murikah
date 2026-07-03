@@ -1,0 +1,270 @@
+---
+export const prerender = false;
+
+/**
+ * Rate card create and edit. The path segment is "new" to create, otherwise a
+ * rate card id to edit. Gate: rates.manage. When editing, the card's rate items
+ * are listed below and a form adds a new item (posting to a separate endpoint).
+ * A new card is created first; items are added once it exists.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import {
+  getRateCard,
+  listRateItems,
+  type RateCardDetail,
+  type RateItemRow,
+} from '@engr/repos/adminRateCards';
+import { listContractorOptions, listCategoryOptions, type Option } from '@engr/repos/adminOptions';
+import { can } from '@engr/auth/rbac';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'rates.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let card: RateCardDetail | null = null;
+let items: RateItemRow[] = [];
+let contractors: Option[] = [];
+let categories: Option[] = [];
+
+if (canManage) {
+  const db = await getDb(getEngrEnv());
+  [contractors, categories] = await Promise.all([
+    listContractorOptions(db, engr.orgId),
+    listCategoryOptions(db, engr.orgId),
+  ]);
+  if (!isNew && id) {
+    card = await getRateCard(db, engr.orgId, id);
+    if (card) items = await listRateItems(db, engr.orgId, id);
+  }
+}
+const notFound = !isNew && card === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const c = card;
+---
+
+<EngrLayout title={isNew ? 'New rate card' : 'Edit rate card'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New rate card' : 'Edit rate card'}</h1>
+      <p class="engr-lead">Agreed rates used when pricing work.</p>
+    </div>
+    <a href="/admin/rate-cards" class="engr-btn engr-btn--secondary">Back to rate cards</a>
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Saved.
+      </p>
+    )
+  }
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That rate card could not be saved.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the name and status, then try again.
+      </p>
+    )
+  }
+  {
+    errorCode === 'not_found' && (
+      <p class="engr-error" role="alert">
+        That rate card was not found.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage rate cards.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That rate card was not found.
+      </p>
+    ) : (
+      <>
+        <form method="post" action="/api/admin/rate-cards" class="engr-formgrid engr-formgrid--two">
+          {!isNew && <input type="hidden" name="id" value={c!.id} />}
+          <div class="engr-field">
+            <label for="name">Name</label>
+            <input
+              type="text"
+              id="name"
+              class="engr-input"
+              name="name"
+              maxlength="120"
+              required
+              value={c?.name ?? ''}
+            />
+          </div>
+          <div class="engr-field">
+            <label for="contractor_id">
+              Contractor <span class="engr-field__hint">(optional; leave blank for org-wide)</span>
+            </label>
+            <select id="contractor_id" class="engr-select" name="contractor_id">
+              <option value="">Org-wide</option>
+              {contractors.map((ct) => (
+                <option value={ct.id} selected={c?.contractorId === ct.id}>
+                  {ct.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="engr-field">
+            <label for="currency">Currency</label>
+            <input
+              type="text"
+              id="currency"
+              class="engr-input"
+              name="currency"
+              maxlength="3"
+              value={c?.currency ?? 'KES'}
+            />
+          </div>
+          <div class="engr-field">
+            <label for="status">Status</label>
+            <select id="status" class="engr-select" name="status">
+              <option value="ACTIVE" selected={(c?.status ?? 'ACTIVE') === 'ACTIVE'}>
+                Active
+              </option>
+              <option value="ARCHIVED" selected={c?.status === 'ARCHIVED'}>
+                Archived
+              </option>
+            </select>
+          </div>
+          <div class="engr-field">
+            <label for="effective_from">
+              Effective from <span class="engr-field__hint">(optional)</span>
+            </label>
+            <input
+              type="date"
+              id="effective_from"
+              class="engr-input"
+              name="effective_from"
+              value={c?.effectiveFrom ?? ''}
+            />
+          </div>
+          <div class="engr-field">
+            <label for="effective_to">
+              Effective to <span class="engr-field__hint">(optional)</span>
+            </label>
+            <input
+              type="date"
+              id="effective_to"
+              class="engr-input"
+              name="effective_to"
+              value={c?.effectiveTo ?? ''}
+            />
+          </div>
+          <div class="engr-actionbar engr-formgrid__full">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              {isNew ? 'Create rate card' : 'Save changes'}
+            </button>
+          </div>
+        </form>
+
+        {!isNew && c && (
+          <section class="engr-panel" aria-labelledby="rate-items">
+            <h2 id="rate-items">Rate items</h2>
+            {items.length === 0 ? (
+              <p class="engr-empty">No rate items yet.</p>
+            ) : (
+              <div class="engr-tablewrap">
+                <table class="engr-table" aria-label="Rate items">
+                  <thead>
+                    <tr>
+                      <th scope="col">Description</th>
+                      <th scope="col">Category</th>
+                      <th scope="col">Unit</th>
+                      <th scope="col">Unit rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it) => (
+                      <tr>
+                        <td>{it.description}</td>
+                        <td>{it.categoryName ?? 'Any'}</td>
+                        <td>{it.unit ?? 'Not set'}</td>
+                        <td>{formatMoneyMinor(it.unitRateMinor, it.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <form
+              method="post"
+              action="/api/admin/rate-items"
+              class="engr-formgrid engr-formgrid--two"
+            >
+              <input type="hidden" name="rate_card_id" value={c.id} />
+              <div class="engr-field engr-formgrid__full">
+                <label for="description">Description</label>
+                <input
+                  type="text"
+                  id="description"
+                  class="engr-input"
+                  name="description"
+                  maxlength="200"
+                  required
+                />
+              </div>
+              <div class="engr-field">
+                <label for="category_id">
+                  Category <span class="engr-field__hint">(optional)</span>
+                </label>
+                <select id="category_id" class="engr-select" name="category_id">
+                  <option value="">Any</option>
+                  {categories.map((cat) => (
+                    <option value={cat.id}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="engr-field">
+                <label for="unit">
+                  Unit <span class="engr-field__hint">(optional, e.g. each, hour, km)</span>
+                </label>
+                <input type="text" id="unit" class="engr-input" name="unit" maxlength="30" />
+              </div>
+              <div class="engr-field">
+                <label for="unit_rate">Unit rate (KES)</label>
+                <input
+                  type="number"
+                  id="unit_rate"
+                  class="engr-input"
+                  name="unit_rate"
+                  min="0"
+                  step="0.01"
+                  value=""
+                />
+              </div>
+              <div class="engr-actionbar engr-formgrid__full">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Add rate item
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+      </>
+    )
+  }
+</EngrLayout>

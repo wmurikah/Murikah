@@ -1,0 +1,128 @@
+---
+export const prerender = false;
+
+/**
+ * SLA create and edit. The path segment is "new" to create, otherwise an SLA
+ * id to edit. Gate: slas.manage. The form posts to the write endpoint, which
+ * redirects back to the list on success.
+ */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getSla, type SlaDetail } from '@engr/repos/adminSlas';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const canManage = can(Astro.locals, 'slas.manage');
+const { id } = Astro.params;
+const isNew = id === 'new';
+const errorCode = Astro.url.searchParams.get('error');
+
+let sla: SlaDetail | null = null;
+
+if (canManage && !isNew && id) {
+  const db = await getDb(getEngrEnv());
+  sla = await getSla(db, engr.orgId, id);
+}
+const notFound = !isNew && sla === null;
+if (canManage && notFound) Astro.response.status = 404;
+
+const s = sla;
+---
+
+<EngrLayout title={isNew ? 'New SLA' : 'Edit SLA'}>
+  <div class="engr-page-head">
+    <div>
+      <h1>{isNew ? 'New SLA' : 'Edit SLA'}</h1>
+      <p class="engr-lead">A response and resolution target for work.</p>
+    </div>
+    <a href="/admin/slas" class="engr-btn engr-btn--secondary">Back to SLAs</a>
+  </div>
+
+  {
+    errorCode === 'conflict' && (
+      <p class="engr-error" role="alert">
+        That name is already used by another SLA.
+      </p>
+    )
+  }
+  {
+    errorCode === 'invalid' && (
+      <p class="engr-error" role="alert">
+        Check the name and hours, then try again.
+      </p>
+    )
+  }
+
+  {
+    !canManage ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage SLAs.
+      </p>
+    ) : notFound ? (
+      <p class="engr-error" role="alert">
+        That SLA was not found.
+      </p>
+    ) : (
+      <form method="post" action="/api/admin/slas" class="engr-formgrid engr-formgrid--two">
+        {!isNew && <input type="hidden" name="id" value={s!.id} />}
+        <div class="engr-field engr-formgrid__full">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            class="engr-input"
+            name="name"
+            maxlength="120"
+            required
+            value={s?.name ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="response_hours">
+            Response (hrs) <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="number"
+            id="response_hours"
+            class="engr-input"
+            name="response_hours"
+            min="0"
+            step="1"
+            value={s?.responseHours ?? ''}
+          />
+        </div>
+        <div class="engr-field">
+          <label for="resolution_hours">
+            Resolution (hrs) <span class="engr-field__hint">(optional)</span>
+          </label>
+          <input
+            type="number"
+            id="resolution_hours"
+            class="engr-input"
+            name="resolution_hours"
+            min="0"
+            step="1"
+            value={s?.resolutionHours ?? ''}
+          />
+        </div>
+        <div class="engr-check engr-formgrid__full">
+          <input
+            type="checkbox"
+            id="is_default"
+            name="is_default"
+            checked={s?.isDefault ?? false}
+          />
+          <label for="is_default">Default SLA for new work</label>
+        </div>
+        <div class="engr-actionbar engr-formgrid__full">
+          <button type="submit" class="engr-btn engr-btn--primary">
+            {isNew ? 'Create SLA' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+</EngrLayout>

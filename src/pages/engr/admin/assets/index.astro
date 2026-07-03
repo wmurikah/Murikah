@@ -1,0 +1,102 @@
+---
+export const prerender = false;
+
+/** Assets list. Gate: assets.view; create/edit gates on assets.manage. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import EmptyState from '@/components/engr/EmptyState.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listAssetsAdmin, type AssetRow } from '@engr/repos/adminAssets';
+import { can } from '@engr/auth/rbac';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'assets.view');
+const canManage = can(Astro.locals, 'assets.manage');
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+
+let rows: AssetRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv());
+  rows = await listAssetsAdmin(db, engr.orgId);
+}
+---
+
+<EngrLayout title="Assets">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Assets</h1>
+      <p class="engr-lead">Equipment tracked against each station.</p>
+    </div>
+    <div class="engr-actionbar">
+      <a href="/admin/asset-categories" class="engr-btn engr-btn--secondary">Categories</a>
+      {
+        canManage && (
+          <a href="/admin/assets/new" class="engr-btn engr-btn--primary">
+            New asset
+          </a>
+        )
+      }
+    </div>
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Asset saved.
+      </p>
+    )
+  }
+  {
+    errorCode && (
+      <p class="engr-error" role="alert">
+        That action could not be completed.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to assets.
+      </p>
+    ) : rows.length === 0 ? (
+      <EmptyState
+        message="No assets are set up yet."
+        canAct={canManage}
+        actionHref="/admin/assets/new"
+        actionLabel="Add an asset"
+        hint="Ask an administrator to add an asset."
+      />
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Assets">
+          <thead>
+            <tr>
+              <th scope="col">Tag</th>
+              <th scope="col">Name</th>
+              <th scope="col">Station</th>
+              <th scope="col">Category</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{canManage ? <a href={`/admin/assets/${r.id}`}>{r.tag}</a> : r.tag}</td>
+                <td>{r.name}</td>
+                <td>{r.stationName}</td>
+                <td>{r.categoryName ?? 'Not set'}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>
