@@ -21,9 +21,15 @@
   },
 
   // Static assets: serves the prerendered marketing pages from dist/.
+  // run_worker_first makes the Worker run before the assets layer for every
+  // request, so the hostname routing in src/worker.ts decides the branch before
+  // a static file (the marketing index or 404) can be served. Without it,
+  // Cloudflare answers asset paths directly and the worker never sees them, so
+  // host routing cannot happen (the bug this fixes).
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
+    "run_worker_first": true,
   },
 
   "observability": {
