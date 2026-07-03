@@ -2,10 +2,11 @@
 export const prerender = false;
 
 /**
- * Request intake. A station manager raises a request: station, optional asset
- * category, issue, nature of breakdown, priority and a repeat-call flag. The
- * photo input is a placeholder; the attachments table and R2 are wired later.
- * Gate: requests.create. Stations and categories are scoped to the org.
+ * Request intake. A station manager raises a request with the inputs the
+ * workflow lists: station, asset or equipment, issue, nature of breakdown, a
+ * repeat-call flag, priority, and a photo or video attachment (linked by URL,
+ * since object storage is bound in a later prompt). Gate: requests.create.
+ * Stations, categories and assets are all scoped to the organisation.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
@@ -14,9 +15,11 @@ import { getDb } from '@engr/db';
 import {
   listStations,
   listAssetCategories,
+  listAssetOptions,
   PRIORITIES,
   type StationOption,
   type CategoryOption,
+  type AssetOption,
 } from '@engr/repos/requests';
 import { can } from '@engr/auth/rbac';
 
@@ -37,11 +40,13 @@ const errorMessage =
 
 let stations: StationOption[] = [];
 let categories: CategoryOption[] = [];
+let assets: AssetOption[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  [stations, categories] = await Promise.all([
+  [stations, categories, assets] = await Promise.all([
     listStations(db, engr.orgId),
     listAssetCategories(db, engr.orgId),
+    listAssetOptions(db, engr.orgId),
   ]);
 }
 ---
@@ -100,6 +105,19 @@ if (allowed) {
           </div>
 
           <div class="engr-field">
+            <label for="asset">
+              Asset or equipment <span class="engr-field__hint">(optional)</span>
+            </label>
+            <select id="asset" class="engr-select" name="asset_id">
+              <option value="">Not specified</option>
+              {assets.map((a) => (
+                <option value={a.id}>{a.label}</option>
+              ))}
+            </select>
+            <p class="engr-field__hint">Choose the specific asset at the station, if known.</p>
+          </div>
+
+          <div class="engr-field">
             <label for="issue">Issue</label>
             <input id="issue" class="engr-input" name="issue" required maxlength="200" />
           </div>
@@ -133,18 +151,30 @@ if (allowed) {
           </div>
 
           <div class="engr-field">
-            <label for="photo">
-              Photo <span class="engr-field__hint">(optional)</span>
+            <label for="attachment_url">
+              Photo or video link <span class="engr-field__hint">(optional)</span>
             </label>
             <input
-              id="photo"
+              id="attachment_url"
               class="engr-input"
-              name="photo"
-              type="file"
-              accept="image/*"
-              disabled
+              name="attachment_url"
+              type="url"
+              maxlength="500"
+              placeholder="https://"
             />
-            <p class="engr-field__hint">Photo upload is wired in a later prompt.</p>
+            <p class="engr-field__hint">
+              Paste a link to a photo or video of the fault. Direct file upload arrives with object
+              storage.
+            </p>
+          </div>
+
+          <div class="engr-field">
+            <label for="attachment_kind">Attachment type</label>
+            <select id="attachment_kind" class="engr-select" name="attachment_kind">
+              <option value="PHOTO">Photo</option>
+              <option value="VIDEO">Video</option>
+              <option value="DOCUMENT">Document</option>
+            </select>
           </div>
 
           <div class="engr-actions">

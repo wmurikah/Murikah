@@ -1,0 +1,101 @@
+---
+/**
+ * A line and area chart for a value over time, rendered server-side as inline
+ * SVG. The plot carries a role=img summary; a disclosure beneath holds the full
+ * data as a table, so the trend is available as text too. Points are spread
+ * evenly along the width and scaled to the largest value, and an empty series
+ * shows a small "no data yet" line rather than a broken axis. This chart is a
+ * trend, so its whole surface links to the underlying list when a href is given.
+ */
+import type { ChartDatum } from '@engr/repos/analytics';
+
+interface Props {
+  title: string;
+  description?: string;
+  data: ChartDatum[];
+  valueHeading?: string;
+  href?: string;
+  emptyText?: string;
+}
+const {
+  title,
+  description,
+  data,
+  valueHeading = 'Count',
+  href,
+  emptyText = 'No data yet.',
+} = Astro.props;
+
+const max = data.reduce((m, d) => Math.max(m, d.value), 0);
+const hasData = data.length > 0 && max > 0;
+
+const W = 320;
+const H = 120;
+const PAD = 10;
+const n = data.length;
+const x = (i: number) => (n <= 1 ? W / 2 : PAD + (i * (W - 2 * PAD)) / (n - 1));
+const y = (v: number) => H - PAD - (max > 0 ? (v / max) * (H - 2 * PAD) : 0);
+const points = data.map((d, i) => `${x(i).toFixed(1)},${y(d.value).toFixed(1)}`);
+const linePath = points.length ? `M${points.join(' L')}` : '';
+const areaPath = points.length
+  ? `M${x(0).toFixed(1)},${(H - PAD).toFixed(1)} L${points.join(' L')} L${x(n - 1).toFixed(1)},${(H - PAD).toFixed(1)} Z`
+  : '';
+const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join('; ')}.`;
+---
+
+<figure class="engr-chart">
+  <figcaption class="engr-chart__cap">
+    <h3 class="engr-chart__title">{title}</h3>
+    {description && <p class="engr-chart__desc">{description}</p>}
+  </figcaption>
+  {
+    !hasData ? (
+      <p class="engr-empty">{emptyText}</p>
+    ) : (
+      <div>
+        <a
+          class="engr-line"
+          href={href ?? '#'}
+          aria-label={ariaSummary}
+          tabindex={href ? undefined : -1}
+        >
+          <svg viewBox={`0 0 ${W} ${H}`} class="engr-line__svg" role="img" aria-hidden="true">
+            <path d={areaPath} fill="var(--engr-chart-1)" fill-opacity="0.12" stroke="none" />
+            <path
+              d={linePath}
+              fill="none"
+              stroke="var(--engr-chart-1)"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            {data.map((d, i) => (
+              <circle cx={x(i)} cy={y(d.value)} r="2.4" fill="var(--engr-chart-1)" />
+            ))}
+          </svg>
+        </a>
+        <details class="engr-chart__data">
+          <summary>Show data</summary>
+          <table class="engr-chart__table">
+            <thead>
+              <tr>
+                <th scope="col">Period</th>
+                <th scope="col">{valueHeading}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((d) => (
+                <tr>
+                  <th scope="row" class="engr-chart__label">
+                    {d.label}
+                  </th>
+                  <td>{d.display ?? d.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      </div>
+    )
+  }
+</figure>
