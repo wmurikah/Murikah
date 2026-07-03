@@ -5,8 +5,12 @@
  * product rules in engr.css. Semantic landmarks and a skip link throughout for
  * assistive tech. The product is marked noindex; it is an authenticated app.
  *
- * The top bar shows the primary nav and the sign-out control only when a
- * session is present (locals.engr), so the login screen stays clean.
+ * When signed in, a persistent left sidebar groups the destinations (Overview,
+ * Operations, Finance, Setup), shows the organisation name, and anchors the
+ * account area with Sign out at the foot. Only items the user holds a permission
+ * for are rendered, so a contractor or technician sees a much shorter menu than
+ * an owner. On narrow screens the sidebar collapses to a drawer behind a menu
+ * button; without JavaScript the nav stays visible and usable.
  */
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
@@ -18,28 +22,114 @@ interface Props {
 const { title } = Astro.props;
 const pageTitle = `${title}, Engineering Rhythm`;
 const engr = Astro.locals.engr;
-// The visitor-facing root-relative path, set by the middleware before it
-// rewrites to the internal /engr route. Astro.url shows the rewritten path, so
-// the active-nav check must read this. Falls back to the URL off the subdomain.
+
+// The visitor-facing root-relative path, set by the worker before it rewrites to
+// the internal /engr route. Astro.url shows the rewritten path, so the active-nav
+// check must read this. Falls back to the URL off the subdomain.
 const path = Astro.locals.engrPath ?? Astro.url.pathname;
 const isActive = (href: string) => path === href || path.startsWith(href + '/');
 
-// Money-layer nav. Approvers land on the approvals queue; a contractor lands on
-// their own list. Payments is the financial controller's.
 const has = (key: string) => engr?.perms.includes(key) ?? false;
-const canApproveCost = has('cost.approve.l1') || has('cost.approve.l2');
-const canApproveBill = has('bill.approve.l1') || has('bill.approve.l2') || has('bill.approve.l3');
-const costsHref = canApproveCost
-  ? '/costs/approvals'
-  : has('cost.create')
-    ? '/contractor/costs'
+const roles = engr?.roles ?? [];
+const isContractor = roles.includes('CONTRACTOR');
+const isTechnician = roles.includes('TECHNICIAN');
+
+const orgName = engr?.orgName ?? engr?.orgSlug ?? 'Engineering Rhythm';
+const orgSlug = engr?.orgSlug ?? '';
+const accountName = engr?.userName ?? engr?.userEmail ?? 'Account';
+const accountEmail = engr?.userEmail ?? '';
+
+// Role-aware destinations: staff land on the shared queues, a contractor or
+// technician on their own portal.
+const workOrdersHref = has('workorder.create')
+  ? '/workorders'
+  : isTechnician
+    ? '/technician/workorders'
+    : isContractor
+      ? '/contractor/workorders'
+      : has('workorder.view')
+        ? '/workorders'
+        : null;
+const rfqHref = has('rfq.view') ? '/rfqs' : has('quotes.view') ? '/contractor/rfqs' : null;
+const lpoHref = has('workorder.create')
+  ? '/lpos'
+  : isContractor && has('workorder.view')
+    ? '/contractor/lpos'
     : null;
-const billsHref = canApproveBill
-  ? '/bills/approvals'
-  : has('bill.create')
-    ? '/contractor/bills'
-    : null;
-const showPayments = has('payment.record');
+const costsHref =
+  has('cost.approve.l1') || has('cost.approve.l2')
+    ? '/costs/approvals'
+    : has('cost.create')
+      ? '/contractor/costs'
+      : null;
+const billsHref =
+  has('bill.approve.l1') || has('bill.approve.l2') || has('bill.approve.l3')
+    ? '/bills/approvals'
+    : has('bill.create')
+      ? '/contractor/bills'
+      : null;
+
+interface NavItem {
+  href: string;
+  label: string;
+  match?: string[];
+}
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const rawGroups: NavGroup[] = [
+  {
+    label: 'Overview',
+    items: [
+      { href: '/', label: 'Dashboard', match: ['/'] },
+      { href: '/notifications', label: 'Notifications' },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      has('requests.view') ? { href: '/requests', label: 'Requests' } : null,
+      workOrdersHref
+        ? { href: workOrdersHref, label: 'Work orders', match: ['/workorders', workOrdersHref] }
+        : null,
+      rfqHref ? { href: rfqHref, label: 'RFQs', match: ['/rfqs', '/contractor/rfqs'] } : null,
+      has('pm.view') ? { href: '/pm', label: 'Maintenance' } : null,
+      lpoHref ? { href: lpoHref, label: 'LPOs', match: ['/lpos', '/contractor/lpos'] } : null,
+    ].filter((i): i is NavItem => i !== null),
+  },
+  {
+    label: 'Finance',
+    items: [
+      costsHref
+        ? { href: costsHref, label: 'Costs', match: ['/costs', '/contractor/costs'] }
+        : null,
+      billsHref
+        ? { href: billsHref, label: 'Bills', match: ['/bills', '/contractor/bills'] }
+        : null,
+      has('payment.record') ? { href: '/payments', label: 'Payments' } : null,
+    ].filter((i): i is NavItem => i !== null),
+  },
+  {
+    label: 'Setup',
+    items: [
+      has('stations.view') ? { href: '/admin/stations', label: 'Stations' } : null,
+      // Regions have no dedicated permission key in the seed; they are part of
+      // station setup, so they follow the stations gate.
+      has('stations.view') ? { href: '/admin/regions', label: 'Regions' } : null,
+      has('assets.view') ? { href: '/admin/assets', label: 'Assets' } : null,
+      has('contractors.view') ? { href: '/admin/contractors', label: 'Contractors' } : null,
+      has('technicians.view') ? { href: '/admin/technicians', label: 'Technicians' } : null,
+      has('slas.view') ? { href: '/admin/slas', label: 'SLAs' } : null,
+      has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards' } : null,
+      has('users.view') ? { href: '/admin/users', label: 'Users' } : null,
+    ].filter((i): i is NavItem => i !== null),
+  },
+];
+const groups = rawGroups.filter((g) => g.items.length > 0);
+const activeItem = (item: NavItem) =>
+  (item.match ?? [item.href]).some((m) => (m === '/' ? path === '/' : isActive(m)));
 ---
 
 <!doctype html>
@@ -52,92 +142,110 @@ const showPayments = has('payment.record');
   </head>
   <body class="engr">
     <a href="#engr-main" class="engr-skip">Skip to content</a>
-    <header class="engr-topbar">
-      <div class="engr-topbar__inner">
-        <a href="/" class="engr-brand" aria-label="Engineering Rhythm, home">
-          <span class="engr-brand__mark" aria-hidden="true">ER</span>
-          <span class="engr-brand__name">Engineering Rhythm</span>
-        </a>
+    {
+      engr ? (
+        <div class="engr-shell">
+          <div class="engr-appbar">
+            <button
+              type="button"
+              class="engr-appbar__menu"
+              data-navtoggle
+              aria-controls="engr-sidebar"
+              aria-expanded="false"
+            >
+              <span class="engr-appbar__bars" aria-hidden="true" />
+              Menu
+            </button>
+            <a href="/" class="engr-appbar__org">
+              {orgName}
+            </a>
+          </div>
 
-        {
-          engr && (
-            <nav class="engr-nav" aria-label="Primary">
-              <a href="/" aria-current={path === '/' ? 'page' : undefined}>
-                Dashboard
-              </a>
-              <a href="/requests" aria-current={isActive('/requests') ? 'page' : undefined}>
-                Requests
-              </a>
-              <a href="/workorders" aria-current={isActive('/workorders') ? 'page' : undefined}>
-                Work orders
-              </a>
-              {engr.perms.includes('rfq.view') && (
-                <a href="/rfqs" aria-current={isActive('/rfqs') ? 'page' : undefined}>
-                  RFQs
-                </a>
-              )}
-              {engr.perms.includes('pm.allocate') && (
-                <a href="/pm" aria-current={isActive('/pm') ? 'page' : undefined}>
-                  Maintenance
-                </a>
-              )}
-              {engr.perms.includes('workorder.create') && (
-                <a href="/lpos" aria-current={isActive('/lpos') ? 'page' : undefined}>
-                  LPOs
-                </a>
-              )}
-              {costsHref && (
-                <a
-                  href={costsHref}
-                  aria-current={
-                    isActive('/costs') || isActive('/contractor/costs') ? 'page' : undefined
-                  }
-                >
-                  Costs
-                </a>
-              )}
-              {billsHref && (
-                <a
-                  href={billsHref}
-                  aria-current={
-                    isActive('/bills') || isActive('/contractor/bills') ? 'page' : undefined
-                  }
-                >
-                  Bills
-                </a>
-              )}
-              {showPayments && (
-                <a href="/payments" aria-current={isActive('/payments') ? 'page' : undefined}>
-                  Payments
-                </a>
-              )}
-              <a
-                href="/notifications"
-                aria-current={isActive('/notifications') ? 'page' : undefined}
-              >
-                Notifications
-              </a>
-            </nav>
-          )
-        }
+          <div class="engr-navscrim" data-navscrim hidden />
 
-        {
-          engr && (
-            <form method="post" action="/api/auth/logout" class="engr-account">
-              <span class="engr-account__org" title="Organisation">
-                {engr.orgSlug}
+          <aside id="engr-sidebar" class="engr-sidebar" aria-label="Primary">
+            <a href="/" class="engr-orgid">
+              <span class="engr-orgid__mark" aria-hidden="true">
+                ER
               </span>
-              <button type="submit" class="engr-btn engr-btn--ghost">
-                Sign out
-              </button>
-            </form>
-          )
-        }
-      </div>
-    </header>
+              <span class="engr-orgid__text">
+                <span class="engr-orgid__name">{orgName}</span>
+                {orgSlug && <span class="engr-orgid__slug">{orgSlug}</span>}
+              </span>
+            </a>
 
-    <main id="engr-main" class="engr-main">
-      <slot />
-    </main>
+            <nav class="engr-sidenav" aria-label="Sections">
+              {groups.map((group) => (
+                <div class="engr-navgroup">
+                  <h2 class="engr-navgroup__label">{group.label}</h2>
+                  <ul class="engr-navgroup__list">
+                    {group.items.map((item) => (
+                      <li>
+                        <a
+                          href={item.href}
+                          class="engr-navlink"
+                          aria-current={activeItem(item) ? 'page' : undefined}
+                        >
+                          {item.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+
+            <div class="engr-account">
+              <div class="engr-account__id">
+                <span class="engr-account__name">{accountName}</span>
+                {accountEmail && <span class="engr-account__email">{accountEmail}</span>}
+              </div>
+              <form method="post" action="/api/auth/logout">
+                <button type="submit" class="engr-btn engr-btn--ghost engr-account__signout">
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </aside>
+
+          <main id="engr-main" class="engr-main">
+            <slot />
+          </main>
+        </div>
+      ) : (
+        <main id="engr-main" class="engr-main engr-main--plain">
+          <slot />
+        </main>
+      )
+    }
+
+    <script>
+      // Progressive enhancement: collapse the sidebar into a drawer on narrow
+      // screens. Without this script the nav stays visible and usable.
+      const shell = document.querySelector('.engr-shell');
+      if (shell) {
+        shell.classList.add('is-enhanced');
+        const btn = shell.querySelector<HTMLButtonElement>('[data-navtoggle]');
+        const scrim = shell.querySelector<HTMLElement>('[data-navscrim]');
+        const close = () => {
+          shell.classList.remove('is-open');
+          btn?.setAttribute('aria-expanded', 'false');
+          scrim?.setAttribute('hidden', '');
+        };
+        const open = () => {
+          shell.classList.add('is-open');
+          btn?.setAttribute('aria-expanded', 'true');
+          scrim?.removeAttribute('hidden');
+        };
+        btn?.addEventListener('click', () =>
+          shell.classList.contains('is-open') ? close() : open(),
+        );
+        scrim?.addEventListener('click', close);
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') close();
+        });
+        shell.querySelectorAll('.engr-navlink').forEach((a) => a.addEventListener('click', close));
+      }
+    </script>
   </body>
 </html>
