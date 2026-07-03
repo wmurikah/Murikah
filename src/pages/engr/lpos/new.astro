@@ -7,6 +7,7 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listActiveContractors, type Option } from '@engr/repos/pm';
 import { listStations, type StationOption } from '@engr/repos/requests';
+import { listRegionsAdmin, type RegionRow } from '@engr/repos/adminRegions';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -17,11 +18,13 @@ const errorCode = Astro.url.searchParams.get('error');
 
 let contractors: Option[] = [];
 let stations: StationOption[] = [];
+let regions: RegionRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  [contractors, stations] = await Promise.all([
+  [contractors, stations, regions] = await Promise.all([
     listActiveContractors(db, engr.orgId),
     listStations(db, engr.orgId),
+    listRegionsAdmin(db, engr.orgId),
   ]);
 }
 ---
@@ -73,12 +76,36 @@ if (allowed) {
             The depot the trip starts from, used as the mileage origin.
           </p>
         </div>
+        <div class="engr-field">
+          <label for="lpo-region">
+            Region or affiliate <span class="engr-field__hint">(optional)</span>
+          </label>
+          <select id="lpo-region" class="engr-select" name="region_id">
+            <option value="">Default from the base station</option>
+            {regions.map((r) => (
+              <option value={r.id}>{r.name}</option>
+            ))}
+          </select>
+          <p class="engr-field__hint">
+            Where the document belongs. Left blank, it takes the base station's region.
+          </p>
+        </div>
+        <div class="engr-field">
+          <label for="lpo-notes">
+            Notes <span class="engr-field__hint">(optional)</span>
+          </label>
+          <textarea id="lpo-notes" class="engr-textarea" name="notes" maxlength="600" rows="3" />
+        </div>
         <div class="engr-actionbar">
           <button type="submit" class="engr-btn engr-btn--primary">
-            Create LPO
+            Create draft LPO
           </button>
         </div>
       </form>
+      <p class="engr-field__hint" style="max-width:44rem;margin-top:0.75rem">
+        You will add the work-order lines and see the running subtotal, mileage and total on the LPO
+        itself, then approve and issue it.
+      </p>
     )
   }
 </EngrLayout>
