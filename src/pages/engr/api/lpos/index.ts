@@ -29,6 +29,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const body = await readBody(request);
   const contractorId = str(body.contractor_id).trim();
   const baseStationId = str(body.base_station_id).trim() || null;
+  const regionId = str(body.region_id).trim() || null;
+  const notes = str(body.notes).trim() || null;
   if (!contractorId) {
     return wantsJson(request)
       ? jsonResponse({ error: 'validation', message: 'Choose a contractor.' }, 422)
@@ -38,7 +40,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const result = await createLpo(
     db,
     { orgId: engr.orgId, userId: engr.userId },
-    { contractorId, baseStationId },
+    { contractorId, baseStationId, regionId, notes },
   );
   if (result.ok) {
     return wantsJson(request)
