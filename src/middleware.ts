@@ -67,7 +67,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
   let actingName: string = homeName;
   let actingSlug = homeSlug;
   let isGroupAdmin = false;
+  let isPlatformOwner = false;
   let switchable: SwitchOrg[] = [];
+  // The platform owner is an OWNER of their home group, so this admin branch also
+  // covers them; the resolver reads users.is_platform_owner to widen their scope.
   const isAdminRole = session.roles.includes('OWNER') || session.roles.includes('ADMIN');
   if (isAdminRole) {
     try {
@@ -80,11 +83,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
         homeSlug,
         session.roles,
         requested,
+        session.sub,
       );
       actingOrgId = ctx.actingOrgId;
       actingName = ctx.actingName;
       actingSlug = ctx.actingSlug;
       isGroupAdmin = ctx.isGroupAdmin;
+      isPlatformOwner = ctx.isPlatformOwner;
       switchable = ctx.switchable;
     } catch {
       // On any resolution failure act inside the home organisation, never wider.
@@ -104,6 +109,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     userName: session.userName,
     userEmail: session.userEmail,
     isGroupAdmin,
+    isPlatformOwner,
     switchable,
     roles: session.roles,
     perms,

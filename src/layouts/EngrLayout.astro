@@ -50,12 +50,25 @@ const orgName = engr ? orgDisplayName(engr.orgName, engr.orgSlug) : 'Engineering
 const accountName = engr?.userName ?? engr?.userEmail ?? 'Account';
 const accountEmail = engr?.userEmail ?? '';
 
-// The acting organisation and, for a group super-admin, the set to switch between.
+// The acting organisation and, for a super-admin, the set to switch between.
 const isGroupAdmin = engr?.isGroupAdmin ?? false;
+const isPlatformOwner = engr?.isPlatformOwner ?? false;
 const switchable = engr?.switchable ?? [];
 const actingId = engr?.orgId ?? '';
 const actingIsGroup = switchable.find((o) => o.id === actingId)?.isGroup ?? false;
 const showSwitcher = isGroupAdmin && switchable.length > 1;
+
+// Group the switchable organisations by their parent, so a platform owner's long
+// list reads as groups with their affiliates beneath. Each root has no parent.
+const switchGroups = switchable
+  .filter((o) => o.isGroup)
+  .map((root) => ({ root, children: switchable.filter((o) => o.parentId === root.id) }));
+// An affiliate whose parent is not itself in the set (defensive; should not occur).
+const orphanAffiliates = switchable.filter(
+  (o) => o.parentId != null && !switchable.some((p) => p.id === o.parentId),
+);
+// Quick find only earns its place once the list is long (the platform owner's).
+const showFind = isPlatformOwner && switchable.length > 8;
 
 // Unread in-app notifications for the bell. One light COUNT per page; the bell
 // then refreshes itself from /api/notifications/count. Never fails the render.
@@ -277,11 +290,44 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                   <label for="engr-actingorg" class="engr-switcher__label">
                     Acting organisation
                   </label>
+                  {showFind && (
+                    <input
+                      type="search"
+                      class="engr-switcher__find"
+                      placeholder="Find an organisation"
+                      aria-label="Filter organisations"
+                      data-switchfind
+                      autocomplete="off"
+                    />
+                  )}
                   <div class="engr-switcher__row">
-                    <select id="engr-actingorg" name="org_id" class="engr-switcher__select">
-                      {switchable.map((o) => (
+                    <select
+                      id="engr-actingorg"
+                      name="org_id"
+                      class="engr-switcher__select"
+                      data-switchselect
+                    >
+                      {switchGroups.map(({ root, children }) =>
+                        children.length === 0 ? (
+                          <option value={root.id} selected={root.id === actingId}>
+                            {root.name}
+                          </option>
+                        ) : (
+                          <optgroup label={root.name}>
+                            <option value={root.id} selected={root.id === actingId}>
+                              {root.name} (Group)
+                            </option>
+                            {children.map((c) => (
+                              <option value={c.id} selected={c.id === actingId}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ),
+                      )}
+                      {orphanAffiliates.map((o) => (
                         <option value={o.id} selected={o.id === actingId}>
-                          {o.isGroup ? `${o.name} (Group)` : o.name}
+                          {o.name}
                         </option>
                       ))}
                     </select>
@@ -473,6 +519,31 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
             writeCollapsed(set);
           });
         });
+
+        // Quick find for the platform owner's long organisation list: hide the
+        // options and groups that do not match, keeping it keyboard usable.
+        const find = shell.querySelector('[data-switchfind]') as HTMLInputElement | null;
+        const sel = shell.querySelector('[data-switchselect]') as HTMLSelectElement | null;
+        if (find && sel) {
+          const select = sel;
+          find.addEventListener('input', () => {
+            const q = find.value.trim().toLowerCase();
+            select.querySelectorAll('optgroup').forEach((og) => {
+              let anyVisible = false;
+              og.querySelectorAll('option').forEach((opt) => {
+                const match = (opt.textContent || '').toLowerCase().includes(q);
+                opt.hidden = !match;
+                if (match) anyVisible = true;
+              });
+              og.hidden = !anyVisible;
+            });
+            select.querySelectorAll('option').forEach((opt) => {
+              if (!opt.closest('optgroup')) {
+                opt.hidden = !(opt.textContent || '').toLowerCase().includes(q);
+              }
+            });
+          });
+        }
       }
 
       async function refreshBell() {
