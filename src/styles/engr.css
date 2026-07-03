@@ -974,11 +974,14 @@ a.engr-card:focus-visible {
 .engr-authbrand__inner {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   gap: var(--engr-s5);
   width: 100%;
   max-width: 30rem;
   margin: 0 auto;
+}
+/* Mark pinned to the top, the value block centred in the space beneath it. */
+.engr-authbrand__lead {
+  margin-block: auto;
 }
 .engr-authbrand__mark {
   display: inline-flex;
@@ -1022,21 +1025,6 @@ a.engr-card:focus-visible {
   color: var(--engr-on-navy-dim);
   font-size: var(--engr-fs-body);
   line-height: 1.5;
-}
-.engr-authbrand__foot {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-.engr-authbrand__product {
-  margin: 0;
-  font-weight: 600;
-  font-size: var(--engr-fs-small);
-}
-.engr-authbrand__trust {
-  margin: 0;
-  color: var(--engr-on-navy-dim);
-  font-size: var(--engr-fs-small);
 }
 
 /* Form pane. */
@@ -1140,8 +1128,7 @@ a.engr-card:focus-visible {
     display: block;
     text-align: right;
   }
-  .engr-authbrand__lead,
-  .engr-authbrand__foot {
+  .engr-authbrand__lead {
     display: none;
   }
 }
