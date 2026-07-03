@@ -974,14 +974,11 @@ a.engr-card:focus-visible {
 .engr-authbrand__inner {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: var(--engr-s5);
   width: 100%;
   max-width: 30rem;
   margin: 0 auto;
-}
-/* Mark pinned to the top, the value block centred in the space beneath it. */
-.engr-authbrand__lead {
-  margin-block: auto;
 }
 .engr-authbrand__mark {
   display: inline-flex;
@@ -1003,12 +1000,6 @@ a.engr-card:focus-visible {
   font-weight: 800;
   letter-spacing: 0.02em;
 }
-.engr-authbrand__bandvalue {
-  display: none;
-  margin: 0;
-  font-weight: 600;
-  color: var(--engr-on-navy-dim);
-}
 .engr-authbrand__headline {
   margin: 0;
   max-width: 12ch;
@@ -1025,6 +1016,21 @@ a.engr-card:focus-visible {
   color: var(--engr-on-navy-dim);
   font-size: var(--engr-fs-body);
   line-height: 1.5;
+}
+.engr-authbrand__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.engr-authbrand__product {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--engr-fs-small);
+}
+.engr-authbrand__trust {
+  margin: 0;
+  color: var(--engr-on-navy-dim);
+  font-size: var(--engr-fs-small);
 }
 
 /* Form pane. */
@@ -1112,29 +1118,15 @@ a.engr-card:focus-visible {
   font-weight: 500;
 }
 
-/* Stack below desktop: the brand becomes a slim header band above the form. */
+/* Stack below desktop: the brand sits above the form, still carrying its full
+   copy; the form then fills the rest of the height. */
 @media (max-width: 63.99rem) {
   .engr-authbrand {
-    padding: var(--engr-s3) var(--engr-s5);
+    padding: var(--engr-s5);
   }
   .engr-authbrand__inner {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
     gap: var(--engr-s4);
     max-width: 40rem;
-  }
-  .engr-authbrand__bandvalue {
-    display: block;
-    text-align: right;
-  }
-  .engr-authbrand__lead {
-    display: none;
-  }
-}
-@media (max-width: 35rem) {
-  .engr-authbrand__bandvalue {
-    display: none;
   }
 }
 
