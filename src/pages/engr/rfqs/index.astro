@@ -6,6 +6,7 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listRfqsForEngineer, type RfqListRow } from '@engr/repos/rfqs';
+import { shortDate } from '@engr/format';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -42,10 +43,19 @@ if (allowed) {
           <thead>
             <tr>
               <th scope="col">RFQ</th>
-              <th scope="col">Request</th>
+              <th scope="col" class="engr-col-mid">
+                Request
+              </th>
               <th scope="col">Station</th>
-              <th scope="col">Invited</th>
-              <th scope="col">Quoted</th>
+              <th scope="col" class="engr-col-lo engr-num">
+                Due
+              </th>
+              <th scope="col" class="engr-num">
+                Invited
+              </th>
+              <th scope="col" class="engr-num">
+                Quoted
+              </th>
               <th scope="col">Status</th>
             </tr>
           </thead>
@@ -55,10 +65,11 @@ if (allowed) {
                 <td>
                   <a href={`/rfqs/${r.id}`}>{r.rfqNo}</a>
                 </td>
-                <td>{r.requestNo}</td>
+                <td class="engr-col-mid">{r.requestNo}</td>
                 <td>{r.stationName}</td>
-                <td>{r.invited}</td>
-                <td>{r.quoted}</td>
+                <td class="engr-col-lo engr-num">{shortDate(r.dueDate) || 'Not set'}</td>
+                <td class="engr-num">{r.invited}</td>
+                <td class="engr-num">{r.quoted}</td>
                 <td>
                   <span class="engr-status">{r.status}</span>
                 </td>
