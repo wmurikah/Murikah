@@ -65,6 +65,10 @@ declare namespace App {
       userId: string;
       orgId: string;
       orgSlug: string;
+      /** Display fields; absent on a session minted before they were added. */
+      orgName?: string;
+      userName?: string;
+      userEmail?: string;
       roles: string[];
       perms: string[];
       can: (key: string) => boolean;
