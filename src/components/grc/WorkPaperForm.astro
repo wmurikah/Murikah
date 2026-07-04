@@ -1,0 +1,314 @@
+---
+/**
+ * The work-paper create/edit form (Workpaperform). Captures the section 1 fields
+ * grouped as audit context, control, risk, observation and management response,
+ * with the assigned auditor. Selecting a sub-area auto-populates the control
+ * objectives, risk description, test objective and testing steps from the
+ * sub_areas template (editable thereafter), done client-side from an embedded
+ * template map so it needs no round trip. The caller passes the lookups, the
+ * existing values (or null for a new draft) and the POST action.
+ */
+import type { Option, SubAreaTemplate } from '@grc/repos/workPaperLookups';
+
+interface Props {
+  action: string;
+  submitLabel: string;
+  areas: Option[];
+  affiliates: Option[];
+  auditors: Option[];
+  subAreas: SubAreaTemplate[];
+  values: Record<string, unknown> | null;
+}
+const { action, submitLabel, areas, affiliates, auditors, subAreas, values } = Astro.props;
+
+const v = (key: string): string => {
+  const raw = values?.[key];
+  return raw == null ? '' : String(raw);
+};
+const RISK = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+// The sub-area templates for the client-side auto-populate.
+const templateJson = JSON.stringify(
+  Object.fromEntries(
+    subAreas.map((sa) => [
+      sa.id,
+      {
+        controlObjectives: sa.controlObjectives ?? '',
+        riskDescription: sa.riskDescription ?? '',
+        testObjective: sa.testObjective ?? '',
+        testingSteps: sa.testingSteps ?? '',
+      },
+    ]),
+  ),
+);
+---
+
+<form method="post" action={action} class="grc-form">
+  <fieldset class="grc-fieldset">
+    <legend>Audit context</legend>
+    <div class="grc-formgrid">
+      <div class="grc-field">
+        <label for="year">Year</label>
+        <input type="number" id="year" name="year" class="grc-input" value={v('year')} />
+      </div>
+      <div class="grc-field">
+        <label for="affiliate_code">Affiliate</label>
+        <select id="affiliate_code" name="affiliate_code" class="grc-select">
+          <option value="">Not set</option>
+          {
+            affiliates.map((a) => (
+              <option value={a.id} selected={v('affiliate_code') === a.id}>
+                {a.label}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+      <div class="grc-field">
+        <label for="audit_area_id">Audit area</label>
+        <select id="audit_area_id" name="audit_area_id" class="grc-select">
+          <option value="">Not set</option>
+          {
+            areas.map((a) => (
+              <option value={a.id} selected={v('audit_area_id') === a.id}>
+                {a.label}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+      <div class="grc-field">
+        <label for="sub_area_id">Sub-area</label>
+        <select
+          id="sub_area_id"
+          name="sub_area_id"
+          class="grc-select"
+          data-templates={templateJson}
+        >
+          <option value="">Not set</option>
+          {
+            subAreas.map((sa) => (
+              <option
+                value={sa.id}
+                data-area={sa.auditAreaId}
+                selected={v('sub_area_id') === sa.id}
+              >
+                {sa.label}
+              </option>
+            ))
+          }
+        </select>
+        <p class="grc-field__hint">
+          Choosing a sub-area fills the control and risk fields; edit them after.
+        </p>
+      </div>
+      <div class="grc-field">
+        <label for="work_paper_date">Work paper date</label>
+        <input
+          type="date"
+          id="work_paper_date"
+          name="work_paper_date"
+          class="grc-input"
+          value={v('work_paper_date').slice(0, 10)}
+        />
+      </div>
+      <div class="grc-field">
+        <label for="audit_period_from">Audit period from</label>
+        <input
+          type="date"
+          id="audit_period_from"
+          name="audit_period_from"
+          class="grc-input"
+          value={v('audit_period_from').slice(0, 10)}
+        />
+      </div>
+      <div class="grc-field">
+        <label for="audit_period_to">Audit period to</label>
+        <input
+          type="date"
+          id="audit_period_to"
+          name="audit_period_to"
+          class="grc-input"
+          value={v('audit_period_to').slice(0, 10)}
+        />
+      </div>
+      <div class="grc-field">
+        <label for="assigned_auditor">Assigned auditor</label>
+        <select id="assigned_auditor" name="assigned_auditor" class="grc-select">
+          <option value="">Unassigned</option>
+          {
+            auditors.map((a) => (
+              <option value={a.id} selected={v('assigned_auditor') === a.id}>
+                {a.label}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="grc-fieldset">
+    <legend>Control</legend>
+    <div class="grc-field">
+      <label for="control_objectives">Control objectives</label>
+      <textarea id="control_objectives" name="control_objectives" class="grc-textarea"
+        >{v('control_objectives')}</textarea
+      >
+    </div>
+    <div class="grc-formgrid">
+      <div class="grc-field">
+        <label for="classification">Classification</label>
+        <input
+          type="text"
+          id="classification"
+          name="classification"
+          class="grc-input"
+          value={v('classification')}
+        />
+      </div>
+      <div class="grc-field">
+        <label for="control_type">Type</label>
+        <input
+          type="text"
+          id="control_type"
+          name="control_type"
+          class="grc-input"
+          value={v('control_type')}
+        />
+      </div>
+      <div class="grc-field">
+        <label for="control_frequency">Frequency</label>
+        <input
+          type="text"
+          id="control_frequency"
+          name="control_frequency"
+          class="grc-input"
+          value={v('control_frequency')}
+        />
+      </div>
+      <div class="grc-field">
+        <label for="standards">Standards</label>
+        <input
+          type="text"
+          id="standards"
+          name="standards"
+          class="grc-input"
+          value={v('standards')}
+        />
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="grc-fieldset">
+    <legend>Risk and testing</legend>
+    <div class="grc-field">
+      <label for="risk_description">Risk description</label>
+      <textarea id="risk_description" name="risk_description" class="grc-textarea"
+        >{v('risk_description')}</textarea
+      >
+    </div>
+    <div class="grc-field">
+      <label for="test_objective">Test objective</label>
+      <textarea id="test_objective" name="test_objective" class="grc-textarea"
+        >{v('test_objective')}</textarea
+      >
+    </div>
+    <div class="grc-field">
+      <label for="testing_steps">Testing steps</label>
+      <textarea id="testing_steps" name="testing_steps" class="grc-textarea"
+        >{v('testing_steps')}</textarea
+      >
+    </div>
+  </fieldset>
+
+  <fieldset class="grc-fieldset">
+    <legend>Observation</legend>
+    <div class="grc-field">
+      <label for="observation_title">Observation title</label>
+      <input
+        type="text"
+        id="observation_title"
+        name="observation_title"
+        class="grc-input"
+        required
+        maxlength="300"
+        value={v('observation_title')}
+      />
+    </div>
+    <div class="grc-field">
+      <label for="observation_description">Observation description</label>
+      <textarea id="observation_description" name="observation_description" class="grc-textarea"
+        >{v('observation_description')}</textarea
+      >
+    </div>
+    <div class="grc-formgrid">
+      <div class="grc-field">
+        <label for="risk_rating">Risk rating</label>
+        <select id="risk_rating" name="risk_rating" class="grc-select">
+          <option value="">Not rated</option>
+          {
+            RISK.map((r) => (
+              <option value={r} selected={v('risk_rating') === r}>
+                {r.charAt(0) + r.slice(1).toLowerCase()}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+    </div>
+    <div class="grc-field">
+      <label for="risk_summary">Risk summary</label>
+      <textarea id="risk_summary" name="risk_summary" class="grc-textarea"
+        >{v('risk_summary')}</textarea
+      >
+    </div>
+    <div class="grc-field">
+      <label for="recommendation">Recommendation</label>
+      <textarea id="recommendation" name="recommendation" class="grc-textarea"
+        >{v('recommendation')}</textarea
+      >
+    </div>
+  </fieldset>
+
+  <fieldset class="grc-fieldset">
+    <legend>Management response</legend>
+    <div class="grc-field">
+      <label for="management_response">Management response</label>
+      <textarea id="management_response" name="management_response" class="grc-textarea"
+        >{v('management_response')}</textarea
+      >
+    </div>
+  </fieldset>
+
+  <div class="grc-actionbar">
+    <button type="submit" class="grc-btn grc-btn--primary">{submitLabel}</button>
+  </div>
+</form>
+
+<script>
+  // Auto-populate the control and risk fields from the chosen sub-area template.
+  const select = document.getElementById('sub_area_id') as HTMLSelectElement | null;
+  if (select) {
+    const templates = JSON.parse(select.dataset.templates ?? '{}') as Record<
+      string,
+      {
+        controlObjectives: string;
+        riskDescription: string;
+        testObjective: string;
+        testingSteps: string;
+      }
+    >;
+    const setValue = (id: string, value: string) => {
+      const el = document.getElementById(id) as HTMLTextAreaElement | null;
+      if (el) el.value = value;
+    };
+    select.addEventListener('change', () => {
+      const t = templates[select.value];
+      if (!t) return;
+      setValue('control_objectives', t.controlObjectives);
+      setValue('risk_description', t.riskDescription);
+      setValue('test_objective', t.testObjective);
+      setValue('testing_steps', t.testingSteps);
+    });
+  }
+</script>
