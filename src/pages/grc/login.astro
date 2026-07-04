@@ -1,0 +1,57 @@
+---
+export const prerender = false;
+
+/**
+ * GRC sign-in. Email and password only (no organisation slug): the user is
+ * resolved by email across the platform and placed in their home organisation.
+ * Any failure returns one generic message, so it never reveals whether the email
+ * or the password was wrong. The premium two-pane layout carries the Murikah
+ * brand; the form posts to the sign-in endpoint.
+ */
+import GrcAuthLayout from '@/layouts/GrcAuthLayout.astro';
+
+const failed = Astro.url.searchParams.get('error') === '1';
+---
+
+<GrcAuthLayout title="Sign in">
+  <h1>Sign in</h1>
+  <p class="grc-authcard__lead">Access your organisation's audit workspace.</p>
+
+  {
+    failed && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        That email and password did not match. Please try again.
+      </p>
+    )
+  }
+
+  <form method="post" action="/api/auth/login">
+    <div class="grc-field">
+      <label for="email">Email</label>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        class="grc-input"
+        autocomplete="username"
+        required
+        aria-invalid={failed ? 'true' : undefined}
+      />
+    </div>
+    <div class="grc-field">
+      <label for="password">Password</label>
+      <input
+        type="password"
+        id="password"
+        name="password"
+        class="grc-input"
+        autocomplete="current-password"
+        required
+        aria-invalid={failed ? 'true' : undefined}
+      />
+    </div>
+    <button type="submit" class="grc-btn grc-btn--primary">Sign in</button>
+  </form>
+
+  <p class="grc-authmeta">Trouble signing in? Contact your organisation's audit administrator.</p>
+</GrcAuthLayout>

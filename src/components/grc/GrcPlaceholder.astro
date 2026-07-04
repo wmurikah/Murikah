@@ -1,0 +1,28 @@
+---
+/**
+ * A quiet placeholder for a sidebar destination whose module has not landed yet.
+ * The shell, navigation and access are live; the page renders a page head and a
+ * calm empty state, so the destination is reachable and consistent while the
+ * module is ported in its own prompt.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+
+interface Props {
+  title: string;
+  lead: string;
+  note: string;
+}
+const { title, lead, note } = Astro.props;
+---
+
+<GrcLayout title={title}>
+  <div class="grc-page-head">
+    <div>
+      <h1>{title}</h1>
+      <p class="grc-lead">{lead}</p>
+    </div>
+  </div>
+  <div class="grc-empty">
+    <p><strong>This module is on its way.</strong> {note}</p>
+  </div>
+</GrcLayout>

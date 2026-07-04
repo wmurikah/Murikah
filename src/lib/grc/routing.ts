@@ -1,0 +1,79 @@
+/**
+ * Hostname routing for the GRC platform. The mirror of engr's routing, kept as a
+ * separate self-contained module (no imports) so it can be unit tested directly
+ * and so the two products never entangle. The app files live under
+ * src/pages/grc/** but the app is served at the root of grc.murikah.com; the
+ * worker (src/worker.ts) decides the branch by host and rewrites internally to
+ * the /grc route, leaving the browser URL clean. engr.murikah.com and the
+ * marketing apex are unaffected.
+ */
+
+const GRC_APEX = 'grc.murikah.com';
+const GRC_LOCAL = 'grc.localhost';
+const GRC_PREFIX = '/grc';
+
+/**
+ * The GRC app: grc.murikah.com, any sub-label of it (a future per-tenant
+ * subdomain), and the local development equivalents grc.localhost and
+ * *.grc.localhost.
+ */
+export function isGrcHost(host: string): boolean {
+  return (
+    host === GRC_APEX ||
+    host.endsWith('.' + GRC_APEX) ||
+    host === GRC_LOCAL ||
+    host.endsWith('.' + GRC_LOCAL)
+  );
+}
+
+/** The internal route path under /grc for an incoming app path. Idempotent. */
+export function toGrcPath(pathname: string): string {
+  if (pathname === GRC_PREFIX || pathname.startsWith(GRC_PREFIX + '/')) return pathname;
+  if (pathname === '/') return GRC_PREFIX;
+  return GRC_PREFIX + pathname;
+}
+
+/** The root-relative path a visitor sees, with any /grc prefix removed. Idempotent. */
+export function toGrcAppPath(pathname: string): string {
+  if (pathname === GRC_PREFIX) return '/';
+  if (pathname.startsWith(GRC_PREFIX + '/')) {
+    const rest = pathname.slice(GRC_PREFIX.length);
+    return rest === '' ? '/' : rest;
+  }
+  return pathname;
+}
+
+/**
+ * A static asset or Astro infra route is served as it is on the grc host: no
+ * /grc rewrite. App routes never begin with /_ and never carry a file extension.
+ */
+export function isGrcPassthroughAsset(pathname: string): boolean {
+  return pathname.startsWith('/_') || /\.[a-z0-9]+$/i.test(pathname);
+}
+
+// Public, unauthenticated app paths on the grc host, in root-relative form: the
+// sign-in screen and the sign-in endpoint only.
+const PUBLIC_GRC_PATHS = new Set(['/login', '/api/auth/login']);
+
+export function isGrcPublicPath(appPath: string): boolean {
+  return PUBLIC_GRC_PATHS.has(appPath);
+}
+
+/** Whether a root-relative app path is an API route (401 JSON on no session). */
+export function isGrcApiPath(appPath: string): boolean {
+  return appPath === '/api' || appPath.startsWith('/api/');
+}
+
+/**
+ * On the marketing apex, a /grc path is sent to the subdomain, mirroring how
+ * /engr is redirected. Returns the absolute location, or null when the path is
+ * not a grc path (so the marketing site renders normally).
+ */
+export function grcMarketingRedirect(pathname: string, search: string): string | null {
+  if (pathname === GRC_PREFIX || pathname.startsWith(GRC_PREFIX + '/')) {
+    return 'https://' + GRC_APEX + toGrcAppPath(pathname) + search;
+  }
+  return null;
+}
+
+export const GRC_HOST = GRC_APEX;
