@@ -14,12 +14,16 @@ export interface LoginUser {
   organizationId: string;
   organizationStatus: string;
   userName?: string;
+  /** The user's single role code, for the role-based default landing. */
+  roleCode: string;
+  isPlatformOwner: boolean;
 }
 
 export async function resolveUserByEmail(db: Client, email: string): Promise<LoginUser | null> {
   const res = await db.execute({
     sql: `SELECT u.user_id AS user_id, u.password_hash AS password_hash, u.status AS user_status,
-                 u.full_name AS full_name,
+                 u.full_name AS full_name, u.role_code AS role_code,
+                 u.is_platform_owner AS is_platform_owner,
                  o.organization_id AS organization_id, o.status AS org_status
             FROM users u
             JOIN organizations o ON o.organization_id = u.organization_id
@@ -36,5 +40,7 @@ export async function resolveUserByEmail(db: Client, email: string): Promise<Log
     organizationId: String(row.organization_id),
     organizationStatus: String(row.org_status ?? ''),
     userName: row.full_name == null ? undefined : String(row.full_name),
+    roleCode: String(row.role_code ?? ''),
+    isPlatformOwner: Number(row.is_platform_owner ?? 0) === 1,
   };
 }
