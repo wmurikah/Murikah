@@ -849,3 +849,236 @@
   color: var(--grc-muted);
   font-size: var(--grc-fs-caption);
 }
+
+/* --- Action plans: stats bar, view toggle, badges, Kanban ---------------- */
+
+/* Summary stats bar above the list. */
+.grc-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--grc-s3);
+  margin-bottom: var(--grc-s4);
+}
+.grc-stat {
+  flex: 1 1 8rem;
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-surface);
+  padding: var(--grc-s3) var(--grc-s4);
+  box-shadow: var(--grc-shadow);
+}
+.grc-stat__n {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--grc-ink);
+}
+.grc-stat__l {
+  display: block;
+  margin-top: var(--grc-s1);
+  font-size: var(--grc-fs-caption);
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-muted);
+}
+.grc-stat--overdue {
+  border-color: #e0a9a0;
+  background: #fbe9e7;
+}
+.grc-stat--overdue .grc-stat__n {
+  color: #7a271a;
+}
+.grc-stat--done {
+  border-color: #a9ccb2;
+  background: #eaf3ec;
+}
+.grc-stat--done .grc-stat__n {
+  color: #1e4d2b;
+}
+
+/* Checkbox filter (overdue only). */
+.grc-field--check {
+  justify-content: flex-end;
+}
+.grc-checkline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--grc-s2);
+  font-size: var(--grc-fs-small);
+  min-height: 2rem;
+  cursor: pointer;
+}
+.grc-checkline input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--grc-navy);
+}
+
+/* Table / Kanban view toggle. */
+.grc-viewbar {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s2);
+  margin-bottom: var(--grc-s4);
+}
+.grc-viewbar__label {
+  font-size: var(--grc-fs-caption);
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-muted);
+}
+.grc-viewtab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.9rem;
+  padding: 0 var(--grc-s3);
+  border: 1px solid var(--grc-line);
+  border-radius: 999px;
+  background: var(--grc-surface);
+  color: var(--grc-ink);
+  font-size: var(--grc-fs-small);
+  font-weight: 600;
+  text-decoration: none;
+}
+.grc-viewtab:hover {
+  border-color: var(--grc-gold-deep);
+}
+.grc-viewtab.is-active {
+  background: var(--grc-navy);
+  border-color: var(--grc-navy);
+  color: var(--grc-on-navy);
+}
+.grc-viewbar__hint {
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+}
+
+/* Status badges (colour plus label, never colour alone). */
+.grc-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--grc-radius-sm);
+  font-size: var(--grc-fs-caption);
+  font-weight: 600;
+  border: 1px solid var(--grc-line);
+  background: var(--grc-stone);
+  color: var(--grc-ink);
+  white-space: nowrap;
+}
+.grc-badge--pending {
+  background: var(--grc-stone);
+  border-color: var(--grc-line);
+  color: var(--grc-ink);
+}
+.grc-badge--progress {
+  background: #fdf3e2;
+  border-color: #e6c893;
+  color: #7a4f16;
+}
+.grc-badge--overdue {
+  background: #fbe9e7;
+  border-color: #e0a9a0;
+  color: #7a271a;
+}
+.grc-badge--review {
+  background: #e7effb;
+  border-color: #a7bfe4;
+  color: #1c3a6b;
+}
+.grc-badge--done {
+  background: #eaf3ec;
+  border-color: #a9ccb2;
+  color: #1e4d2b;
+}
+.grc-badge--rejected {
+  background: #f1eee9;
+  border-color: #cfc7ba;
+  color: #5b5347;
+}
+.grc-badgerow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--grc-s2);
+  align-items: center;
+}
+
+/* Overdue and due-soon accents on dates. */
+.grc-overdue {
+  color: #7a271a;
+  font-weight: 700;
+}
+.grc-duesoon {
+  color: #7a4f16;
+  font-weight: 700;
+}
+
+/* Kanban board: one column per active status, cards drill through. */
+.grc-kanban {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(15rem, 1fr);
+  gap: var(--grc-s3);
+  overflow-x: auto;
+  padding-bottom: var(--grc-s3);
+}
+.grc-kancol {
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-paper);
+  display: flex;
+  flex-direction: column;
+  min-height: 6rem;
+}
+.grc-kancol__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--grc-s2) var(--grc-s3);
+  border-bottom: 1px solid var(--grc-line);
+}
+.grc-kancol__count {
+  font-size: var(--grc-fs-caption);
+  font-weight: 700;
+  color: var(--grc-muted);
+}
+.grc-kancol__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--grc-s2);
+  padding: var(--grc-s3);
+}
+.grc-kancard {
+  display: block;
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-surface);
+  padding: var(--grc-s3);
+  text-decoration: none;
+  color: var(--grc-ink);
+  box-shadow: var(--grc-shadow);
+}
+.grc-kancard:hover {
+  border-color: var(--grc-gold-deep);
+  box-shadow: var(--grc-shadow-pop);
+}
+.grc-kancard__id {
+  display: block;
+  font-size: var(--grc-fs-caption);
+  font-weight: 700;
+  color: var(--grc-navy-2);
+}
+.grc-kancard__desc {
+  display: block;
+  margin: var(--grc-s1) 0 var(--grc-s2);
+  font-size: var(--grc-fs-small);
+  line-height: 1.35;
+}
+.grc-kancard__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--grc-s2);
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+}

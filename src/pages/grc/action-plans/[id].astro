@@ -1,0 +1,494 @@
+---
+export const prerender = false;
+
+/**
+ * Action plan detail (Actionplanview). Shows the full plan: status and risk, the
+ * overdue and auditee-proposed flags, the action and its owners, the finding it
+ * remediates, any delegation, the implementation and the auditor and Head-of-Audit
+ * reviews, the evidence and the full timeline. Prominently, it offers only the
+ * workflow actions valid for the current status and the signed-in role (resolved
+ * through the engine), plus delegation for an owner. Gate: ACTION_PLANS.view.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { getActionPlan, type ActionPlanDetail } from '@grc/repos/actionPlans';
+import { listHistory, type HistoryRow } from '@grc/repos/actionPlanHistory';
+import { isOwner, resolveOwners } from '@grc/repos/actionPlanOwners';
+import { listAttachments, type Attachment } from '@grc/repos/evidence';
+import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
+import {
+  isEditableByAuditor,
+  isDeletable,
+  isTerminal,
+  isOverdue,
+} from '@grc/workflow/actionPlanActions';
+import { offeredActions, type OfferedAction } from '@grc/workflow/actionPlanWorkflow';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const { id } = Astro.params;
+
+const allowed = can(Astro.locals, 'ACTION_PLANS.view');
+const errorCode = Astro.url.searchParams.get('error');
+const done = Astro.url.searchParams.get('done');
+
+let plan: ActionPlanDetail | null = null;
+let history: HistoryRow[] = [];
+let evidence: Attachment[] = [];
+let users: Option[] = [];
+let labels = new Map<string, string>();
+let actions: OfferedAction[] = [];
+let names = new Map<string, string>();
+
+if (allowed && id) {
+  const db = await getDb(getGrcEnv());
+  plan = await getActionPlan(db, grc.organizationId, id);
+  if (plan) {
+    [history, evidence, users, labels] = await Promise.all([
+      listHistory(db, grc.organizationId, id),
+      listAttachments(db, grc.organizationId, 'action_plan', id),
+      listAuditors(db, grc.organizationId),
+      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+    ]);
+    const actor = {
+      userId: grc.userId,
+      userName: grc.userName ?? grc.userEmail ?? grc.userId,
+      roleCode: grc.roleCode,
+      isPlatformOwner: grc.isPlatformOwner,
+      perms: grc.perms,
+    };
+    actions = await offeredActions(db, { status: plan.status, ownerIds: plan.ownerIds }, actor);
+    // Readable names for the creator and the reviewers (best-effort display).
+    const ids = [plan.created_by, plan.auditor_review_by, plan.hoa_review_by]
+      .filter((v): v is string => v != null && String(v) !== '')
+      .map((v) => String(v));
+    if (ids.length > 0) {
+      const refs = await resolveOwners(db, grc.organizationId, ids);
+      names = new Map(refs.map((r) => [r.userId, r.name]));
+    }
+  }
+}
+if (allowed && !plan) Astro.response.status = 404;
+
+const p = plan;
+const val = (key: string): string => {
+  const raw = p?.[key];
+  return raw == null || String(raw) === '' ? '-' : String(raw);
+};
+const has = (key: string): boolean => {
+  const raw = p?.[key];
+  return raw != null && String(raw) !== '';
+};
+const fmtDate = (d: unknown): string => (d == null ? '-' : String(d).slice(0, 10));
+const nameOf = (uid: unknown): string => {
+  if (uid == null || String(uid) === '') return '-';
+  return names.get(String(uid)) ?? String(uid);
+};
+
+const riskClass = (r: string): string => {
+  const v = r.toUpperCase();
+  if (v === 'CRITICAL' || v === 'HIGH') return 'grc-pill grc-pill--risk-high';
+  if (v === 'MEDIUM') return 'grc-pill grc-pill--risk-medium';
+  if (v === 'LOW') return 'grc-pill grc-pill--risk-low';
+  return 'grc-pill';
+};
+const statusClass = (st: string): string => {
+  if (st === 'OVERDUE') return 'grc-badge grc-badge--overdue';
+  if (st === 'IN_PROGRESS') return 'grc-badge grc-badge--progress';
+  if (st === 'IMPLEMENTED' || st === 'PENDING_VERIFICATION') return 'grc-badge grc-badge--review';
+  if (st === 'VERIFIED' || st === 'CLOSED') return 'grc-badge grc-badge--done';
+  if (st === 'REJECTED') return 'grc-badge grc-badge--rejected';
+  return 'grc-badge grc-badge--pending';
+};
+
+const daysOverdue = p ? Number(p.days_overdue ?? 0) : 0;
+const overdue = p ? isOverdue(p.status, daysOverdue) : false;
+const auditeeProposed = p ? Number(p.auditee_proposed ?? 0) === 1 : false;
+const ownerViewer = p ? grc.isPlatformOwner || isOwner(p.ownerIds, grc.userId) : false;
+const nonTerminal = p ? !isTerminal(p.status) : false;
+const canEdit = p ? can(Astro.locals, 'ACTION_PLANS.edit') && isEditableByAuditor(p.status) : false;
+const canDelete = p ? can(Astro.locals, 'ACTION_PLANS.edit') && isDeletable(p.status) : false;
+const canDelegate = ownerViewer && nonTerminal;
+const delegationPending = has('delegated_date') && !has('delegation_accepted_date');
+const canDecideDelegation =
+  delegationPending && ownerViewer && String(p?.delegated_by_id ?? '') !== grc.userId;
+const commentLabel = (effect: string): string =>
+  effect === 'auditor_review' || effect === 'hoa_review' ? 'Review comments' : 'Comment';
+---
+
+<GrcLayout title={p ? String(p.actionNumber) : 'Action plan'}>
+  <div class="grc-page-head">
+    <div>
+      <h1>{p ? p.actionNumber : 'Action plan'}</h1>
+      <p class="grc-lead">
+        {p ? String(p.action_description || 'Untitled action').slice(0, 120) : ''}
+      </p>
+    </div>
+    <div class="grc-actionbar" style="margin:0">
+      {
+        canEdit && (
+          <a href={`/action-plans/${id}/edit`} class="grc-btn grc-btn--secondary">
+            Edit
+          </a>
+        )
+      }
+      {
+        canDelete && (
+          <form method="post" action={`/api/action-plans/${id}/delete`} style="display:inline">
+            <button type="submit" class="grc-btn grc-btn--secondary">
+              Delete
+            </button>
+          </form>
+        )
+      }
+      <a href="/action-plans" class="grc-btn grc-btn--secondary">Back to list</a>
+    </div>
+  </div>
+
+  {
+    errorCode && (
+      <p class="grc-error" role="alert">
+        {decodeURIComponent(errorCode)}
+      </p>
+    )
+  }
+  {
+    done && (
+      <p class="grc-notice" role="status">
+        {decodeURIComponent(done)}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have access to action plans.
+      </p>
+    ) : !p ? (
+      <p class="grc-empty">That action plan was not found in your organisation.</p>
+    ) : (
+      <>
+        <p class="grc-badgerow" style="margin:0 0 1rem">
+          <span class={statusClass(p.status)}>{statusLabel(labels, p.status)}</span>
+          {has('risk_rating') && (
+            <span class={riskClass(String(p.risk_rating))}>{String(p.risk_rating)} risk</span>
+          )}
+          {overdue && <span class="grc-badge grc-badge--overdue">{daysOverdue} days overdue</span>}
+          {auditeeProposed && <span class="grc-badge grc-badge--pending">Proposed by auditee</span>}
+        </p>
+
+        {actions.length > 0 && (
+          <div class="grc-panel">
+            <h2>Actions</h2>
+            <div style="display:grid;gap:0.75rem">
+              {actions.map((a) => (
+                <form
+                  method="post"
+                  action={`/api/action-plans/${id}/transition`}
+                  class="grc-actionbar"
+                  style="margin:0;align-items:end;flex-wrap:wrap"
+                >
+                  <input type="hidden" name="to_status" value={a.toStatus} />
+                  {a.effect === 'implement' && (
+                    <div class="grc-field" style="margin:0;flex:1 1 22rem">
+                      <label for={`n-${a.toStatus}`}>Implementation notes</label>
+                      <textarea
+                        id={`n-${a.toStatus}`}
+                        name="implementation_notes"
+                        class="grc-textarea"
+                        rows="2"
+                      />
+                    </div>
+                  )}
+                  {(a.requiresComment ||
+                    a.effect === 'auditor_review' ||
+                    a.effect === 'hoa_review') && (
+                    <div class="grc-field" style="margin:0;flex:1 1 22rem">
+                      <label for={`c-${a.toStatus}`}>
+                        {commentLabel(a.effect)}
+                        {a.requiresComment ? ' (required)' : ''}
+                      </label>
+                      <textarea
+                        id={`c-${a.toStatus}`}
+                        name="comment"
+                        class="grc-textarea"
+                        rows="2"
+                        required={a.requiresComment}
+                      />
+                    </div>
+                  )}
+                  <button type="submit" class="grc-btn grc-btn--primary">
+                    {a.label}
+                  </button>
+                </form>
+              ))}
+            </div>
+            {actions.some((a) => a.effect === 'implement') && evidence.length === 0 && (
+              <p class="grc-field__hint" style="margin-top:0.5rem">
+                Marking a plan as implemented requires at least one piece of evidence.
+              </p>
+            )}
+          </div>
+        )}
+
+        {canDecideDelegation && (
+          <div class="grc-panel">
+            <h2>Delegation to you</h2>
+            <p class="grc-lead" style="margin:0 0 0.5rem">
+              {val('delegated_by_name')} delegated this plan to you
+              {has('delegated_date') ? ` on ${fmtDate(p.delegated_date)}` : ''}.
+              {has('delegation_notes') && ` "${String(p.delegation_notes)}"`}
+            </p>
+            <form
+              method="post"
+              action={`/api/action-plans/${id}/delegation`}
+              class="grc-actionbar"
+              style="margin:0;align-items:end;flex-wrap:wrap"
+            >
+              <div class="grc-field" style="margin:0;flex:1 1 22rem">
+                <label for="deleg-reason">Reason (for a rejection)</label>
+                <input
+                  type="text"
+                  id="deleg-reason"
+                  name="reason"
+                  class="grc-input"
+                  maxlength="300"
+                />
+              </div>
+              <button type="submit" name="decision" value="accept" class="grc-btn grc-btn--primary">
+                Accept
+              </button>
+              <button
+                type="submit"
+                name="decision"
+                value="reject"
+                class="grc-btn grc-btn--secondary"
+              >
+                Reject
+              </button>
+            </form>
+          </div>
+        )}
+
+        <div class="grc-panel">
+          <h2>Action</h2>
+          <dl class="grc-detail">
+            <>
+              <dt>Number</dt>
+              <dd>{p.actionNumber}</dd>
+            </>
+            <>
+              <dt>Description</dt>
+              <dd>{val('action_description')}</dd>
+            </>
+            <>
+              <dt>Owners</dt>
+              <dd>{val('owner_names')}</dd>
+            </>
+            <>
+              <dt>Due date</dt>
+              <dd>
+                {fmtDate(p.due_date)}
+                {overdue ? ` (${daysOverdue} days overdue)` : ''}
+              </dd>
+            </>
+            <>
+              <dt>Created by</dt>
+              <dd>
+                {nameOf(p.created_by)} on {fmtDate(p.created_at)}
+              </dd>
+            </>
+          </dl>
+        </div>
+
+        <div class="grc-panel">
+          <h2>Finding</h2>
+          <dl class="grc-detail">
+            <>
+              <dt>Work paper</dt>
+              <dd>{val('wp_reference')}</dd>
+            </>
+            <>
+              <dt>Affiliate</dt>
+              <dd>{val('affiliate_code')}</dd>
+            </>
+            <>
+              <dt>Observation</dt>
+              <dd>{val('observation_title')}</dd>
+            </>
+            <>
+              <dt>Detail</dt>
+              <dd>{val('observation_description')}</dd>
+            </>
+          </dl>
+        </div>
+
+        {(has('delegated_date') || has('original_owner_ids')) && (
+          <div class="grc-panel">
+            <h2>Delegation</h2>
+            <dl class="grc-detail">
+              <>
+                <dt>Delegated by</dt>
+                <dd>{val('delegated_by_name')}</dd>
+              </>
+              <>
+                <dt>Delegated on</dt>
+                <dd>{fmtDate(p.delegated_date)}</dd>
+              </>
+              <>
+                <dt>Notes</dt>
+                <dd>{val('delegation_notes')}</dd>
+              </>
+              <>
+                <dt>Original owners</dt>
+                <dd>{val('original_owner_ids')}</dd>
+              </>
+              <>
+                <dt>Status</dt>
+                <dd>{has('delegation_accepted_date') ? 'Accepted' : 'Awaiting decision'}</dd>
+              </>
+            </dl>
+          </div>
+        )}
+
+        {(has('implementation_notes') || has('implemented_date')) && (
+          <div class="grc-panel">
+            <h2>Implementation</h2>
+            <dl class="grc-detail">
+              <>
+                <dt>Notes</dt>
+                <dd>{val('implementation_notes')}</dd>
+              </>
+              <>
+                <dt>Implemented on</dt>
+                <dd>{fmtDate(p.implemented_date)}</dd>
+              </>
+            </dl>
+          </div>
+        )}
+
+        {has('auditor_review_date') && (
+          <div class="grc-panel">
+            <h2>Auditor review</h2>
+            <dl class="grc-detail">
+              <>
+                <dt>Comments</dt>
+                <dd>{val('auditor_review_comments')}</dd>
+              </>
+              <>
+                <dt>Reviewed by</dt>
+                <dd>
+                  {nameOf(p.auditor_review_by)} on {fmtDate(p.auditor_review_date)}
+                </dd>
+              </>
+            </dl>
+          </div>
+        )}
+
+        {has('hoa_review_date') && (
+          <div class="grc-panel">
+            <h2>Head of Audit review</h2>
+            <dl class="grc-detail">
+              <>
+                <dt>Comments</dt>
+                <dd>{val('hoa_review_comments')}</dd>
+              </>
+              <>
+                <dt>Reviewed by</dt>
+                <dd>
+                  {nameOf(p.hoa_review_by)} on {fmtDate(p.hoa_review_date)}
+                </dd>
+              </>
+            </dl>
+          </div>
+        )}
+
+        <div class="grc-panel">
+          <h2>Evidence</h2>
+          {evidence.length === 0 ? (
+            <p class="grc-lead" style="margin:0">
+              No evidence attached.
+            </p>
+          ) : (
+            <ul class="grc-tags" style="flex-direction:column;align-items:stretch">
+              {evidence.map((e) => (
+                <li class="grc-tag" style="justify-content:space-between">
+                  <span>{e.fileName}</span>
+                  <span class="grc-lead">{e.backend ?? 'stored'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p class="grc-field__hint" style="margin-top:0.5rem">
+            Uploading evidence is pending the storage-backend decision (Google Drive or Cloudflare
+            R2); see the evidence-storage note. Metadata is recorded through files and
+            file_attachments.
+          </p>
+        </div>
+
+        {canDelegate && (
+          <div class="grc-panel">
+            <h2>Delegate</h2>
+            <form
+              method="post"
+              action={`/api/action-plans/${id}/delegate`}
+              class="grc-actionbar"
+              style="margin:0;align-items:end;flex-wrap:wrap"
+            >
+              <div class="grc-field" style="margin:0">
+                <label for="deleg-owner">Delegate to</label>
+                <select id="deleg-owner" name="new_owner_id" class="grc-select" required>
+                  {users.map((u) => (
+                    <option value={u.id}>{u.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="grc-field" style="margin:0;flex:1 1 20rem">
+                <label for="deleg-notes">Notes</label>
+                <input
+                  type="text"
+                  id="deleg-notes"
+                  name="notes"
+                  class="grc-input"
+                  maxlength="300"
+                />
+              </div>
+              <button type="submit" class="grc-btn grc-btn--secondary">
+                Delegate
+              </button>
+            </form>
+          </div>
+        )}
+
+        <div class="grc-panel">
+          <h2>Timeline</h2>
+          {history.length === 0 ? (
+            <p class="grc-lead" style="margin:0">
+              No history yet.
+            </p>
+          ) : (
+            <ol class="grc-revisions">
+              {history.map((h) => (
+                <li>
+                  <strong>
+                    {statusLabel(labels, h.previousStatus ?? '')} to{' '}
+                    {statusLabel(labels, h.newStatus ?? '')}
+                  </strong>{' '}
+                  by {h.userName ?? h.userId ?? 'system'}
+                  {h.comments && <div>{h.comments}</div>}
+                  <div>
+                    <time>{h.createdAt ?? ''}</time>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </>
+    )
+  }
+</GrcLayout>
