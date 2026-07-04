@@ -1,0 +1,117 @@
+---
+export const prerender = false;
+
+/**
+ * Create an action plan (Actionplanform, new). Gate: ACTION_PLANS.create, or
+ * AUDITEE.respond for an auditee proposing a plan (recorded as auditee_proposed).
+ * Captures the finding it remediates, the action, its owners and the due date.
+ * On submit the endpoint creates the plan, seeds its owners and redirects to the
+ * detail.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
+import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const canCreate = can(Astro.locals, 'ACTION_PLANS.create');
+const canPropose = can(Astro.locals, 'AUDITEE.respond');
+const allowed = canCreate || canPropose;
+const failed = Astro.url.searchParams.get('error');
+const presetWorkPaper = Astro.url.searchParams.get('work_paper') ?? '';
+
+let workPapers: WorkPaperOption[] = [];
+let users: Option[] = [];
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  [workPapers, users] = await Promise.all([
+    listWorkPaperOptions(db, grc.organizationId),
+    listAuditors(db, grc.organizationId),
+  ]);
+}
+---
+
+<GrcLayout title="New action plan">
+  <div class="grc-page-head">
+    <div>
+      <h1>New action plan</h1>
+      <p class="grc-lead">
+        {
+          canCreate
+            ? 'Raise a remediation action against a finding.'
+            : 'Propose a remediation action for review.'
+        }
+      </p>
+    </div>
+    <a href="/action-plans" class="grc-btn grc-btn--secondary">Back to list</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have permission to create an action plan.
+      </p>
+    ) : (
+      <>
+        {failed && (
+          <p class="grc-error" role="alert" style="margin-bottom:1rem">
+            The action plan could not be saved. Check the fields and try again.
+          </p>
+        )}
+        <form method="post" action="/api/action-plans" class="grc-form">
+          <div class="grc-field">
+            <label for="work-paper">Work paper (finding)</label>
+            <select id="work-paper" name="work_paper_id" class="grc-select">
+              <option value="">Not linked to a finding</option>
+              {workPapers.map((w) => (
+                <option value={w.id} selected={presetWorkPaper === w.id}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="grc-field">
+            <label for="desc">Action description</label>
+            <textarea
+              id="desc"
+              name="action_description"
+              class="grc-textarea"
+              required
+              rows="4"
+              maxlength="2000"
+            />
+          </div>
+
+          <div class="grc-field">
+            <label for="due">Due date</label>
+            <input type="date" id="due" name="due_date" class="grc-input" />
+          </div>
+
+          <div class="grc-field">
+            <label for="owners">Owners</label>
+            <select id="owners" name="owner_ids" class="grc-select" multiple size="6">
+              {users.map((u) => (
+                <option value={u.id}>{u.label}</option>
+              ))}
+            </select>
+            <p class="grc-field__hint">Hold Ctrl or Cmd to select more than one owner.</p>
+          </div>
+
+          <div class="grc-actionbar">
+            <button type="submit" class="grc-btn grc-btn--primary">
+              {canCreate ? 'Create action plan' : 'Propose action plan'}
+            </button>
+            <a href="/action-plans" class="grc-btn grc-btn--secondary">
+              Cancel
+            </a>
+          </div>
+        </form>
+      </>
+    )
+  }
+</GrcLayout>
