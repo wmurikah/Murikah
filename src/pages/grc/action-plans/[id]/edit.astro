@@ -1,0 +1,136 @@
+---
+export const prerender = false;
+
+/**
+ * Edit an action plan (Actionplanform, edit). Gate: ACTION_PLANS.edit, and only
+ * while the plan is not yet verified or closed (a completed plan is part of the
+ * record). Prefills the action, owners and due date; on submit the endpoint
+ * updates the fields and re-syncs the owners.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { getActionPlan, listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
+import { parseOwnerIds } from '@grc/repos/actionPlanOwners';
+import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+import { isEditableByAuditor } from '@grc/workflow/actionPlanActions';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const { id } = Astro.params;
+
+const allowed = can(Astro.locals, 'ACTION_PLANS.edit');
+const failed = Astro.url.searchParams.get('error');
+
+let plan: Awaited<ReturnType<typeof getActionPlan>> = null;
+let workPapers: WorkPaperOption[] = [];
+let users: Option[] = [];
+let ownerIds: string[] = [];
+if (allowed && id) {
+  const db = await getDb(getGrcEnv());
+  plan = await getActionPlan(db, grc.organizationId, id);
+  if (plan) {
+    [workPapers, users] = await Promise.all([
+      listWorkPaperOptions(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+    ]);
+    ownerIds = parseOwnerIds(plan.ownerIds);
+  }
+}
+const editable = plan ? isEditableByAuditor(plan.status) : false;
+const val = (key: string): string => {
+  const raw = plan?.[key];
+  return raw == null ? '' : String(raw);
+};
+---
+
+<GrcLayout title="Edit action plan">
+  <div class="grc-page-head">
+    <div>
+      <h1>Edit action plan</h1>
+      <p class="grc-lead">{plan ? String(plan.actionNumber) : ''}</p>
+    </div>
+    <a href={`/action-plans/${id}`} class="grc-btn grc-btn--secondary">Back to plan</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have permission to edit an action plan.
+      </p>
+    ) : !plan ? (
+      <p class="grc-empty">That action plan was not found in your organisation.</p>
+    ) : !editable ? (
+      <p class="grc-error" role="alert">
+        A verified or closed plan cannot be edited.
+      </p>
+    ) : (
+      <>
+        {failed && (
+          <p class="grc-error" role="alert" style="margin-bottom:1rem">
+            The action plan could not be saved. Check the fields and try again.
+          </p>
+        )}
+        <form method="post" action={`/api/action-plans/${id}`} class="grc-form">
+          <div class="grc-field">
+            <label for="work-paper">Work paper (finding)</label>
+            <select id="work-paper" name="work_paper_id" class="grc-select">
+              <option value="">Not linked to a finding</option>
+              {workPapers.map((w) => (
+                <option value={w.id} selected={val('work_paper_id') === w.id}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="grc-field">
+            <label for="desc">Action description</label>
+            <textarea
+              id="desc"
+              name="action_description"
+              class="grc-textarea"
+              required
+              rows="4"
+              maxlength="2000"
+              set:text={val('action_description')}
+            />
+          </div>
+
+          <div class="grc-field">
+            <label for="due">Due date</label>
+            <input
+              type="date"
+              id="due"
+              name="due_date"
+              class="grc-input"
+              value={val('due_date').slice(0, 10)}
+            />
+          </div>
+
+          <div class="grc-field">
+            <label for="owners">Owners</label>
+            <select id="owners" name="owner_ids" class="grc-select" multiple size="6">
+              {users.map((u) => (
+                <option value={u.id} selected={ownerIds.includes(u.id)}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+            <p class="grc-field__hint">Hold Ctrl or Cmd to select more than one owner.</p>
+          </div>
+
+          <div class="grc-actionbar">
+            <button type="submit" class="grc-btn grc-btn--primary">
+              Save changes
+            </button>
+            <a href={`/action-plans/${id}`} class="grc-btn grc-btn--secondary">
+              Cancel
+            </a>
+          </div>
+        </form>
+      </>
+    )
+  }
+</GrcLayout>

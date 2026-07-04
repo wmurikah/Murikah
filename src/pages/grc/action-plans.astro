@@ -1,10 +1,303 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+
+/**
+ * Action plans list (Actionplanslist): remediation and follow-up of findings,
+ * scoped to the acting organisation and to the source's role-based visibility.
+ * Two views of the same data, toggled by ?view: a dense table and a Kanban
+ * board grouped by status. Filterable by status, owner and overdue-only, with a
+ * search over the action and its implementation notes. A stats bar summarises
+ * the visible plans. Gate: ACTION_PLANS.view; each row and card drills through
+ * to the detail with the shared affordance cues.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import {
+  listActionPlans,
+  computeStats,
+  type ActionPlanListRow,
+  type ActionPlanFilters,
+  type ActionPlanStats,
+  type Viewer,
+} from '@grc/repos/actionPlans';
+import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
+import { loadEnumValues } from '@grc/workflow/transitions';
+import { ACTION_PLAN_ENUM_TYPE, AP_STATUS } from '@grc/workflow/actionPlanActions';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'ACTION_PLANS.view');
+const canCreate = can(Astro.locals, 'ACTION_PLANS.create') || can(Astro.locals, 'AUDITEE.respond');
+const p = Astro.url.searchParams;
+const view = p.get('view') === 'kanban' ? 'kanban' : 'table';
+const filters: ActionPlanFilters = {
+  status: p.get('status') || undefined,
+  ownerId: p.get('owner') || undefined,
+  overdueOnly: p.get('overdue') === '1',
+  q: p.get('q') || undefined,
+};
+
+const viewer: Viewer = {
+  userId: grc.userId,
+  roleCode: grc.roleCode,
+  perms: grc.perms,
+  isPlatformOwner: grc.isPlatformOwner,
+};
+
+let rows: ActionPlanListRow[] = [];
+let stats: ActionPlanStats = { total: 0, pending: 0, overdue: 0, implemented: 0, verified: 0 };
+let owners: Option[] = [];
+let statuses: string[] = [];
+let labels = new Map<string, string>();
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  [rows, owners, statuses, labels] = await Promise.all([
+    listActionPlans(db, grc.organizationId, viewer, filters),
+    listAuditors(db, grc.organizationId),
+    loadEnumValues(db, ACTION_PLAN_ENUM_TYPE),
+    loadEnumLabels(db, ACTION_PLAN_ENUM_TYPE),
+  ]);
+  stats = computeStats(rows);
+}
+
+// The badge colour for a status (colour plus label, never colour alone).
+const statusClass = (st: string): string => {
+  if (st === AP_STATUS.OVERDUE) return 'grc-badge grc-badge--overdue';
+  if (st === AP_STATUS.IN_PROGRESS) return 'grc-badge grc-badge--progress';
+  if (st === AP_STATUS.IMPLEMENTED || st === AP_STATUS.PENDING_VERIFICATION)
+    return 'grc-badge grc-badge--review';
+  if (st === AP_STATUS.VERIFIED || st === AP_STATUS.CLOSED) return 'grc-badge grc-badge--done';
+  if (st === AP_STATUS.REJECTED) return 'grc-badge grc-badge--rejected';
+  return 'grc-badge grc-badge--pending';
+};
+const truncate = (v: string, n: number): string => (v.length > n ? `${v.slice(0, n - 1)}…` : v);
+const firstOwner = (names: string | null): string => {
+  if (!names) return 'Unassigned';
+  const first = names.split(',')[0]?.trim();
+  return first || 'Unassigned';
+};
+const dueLabel = (d: string | null): string => (d ? d.slice(0, 10) : 'No date');
+// The due indicator for a card: overdue in red, due within a week in amber, else plain.
+const dueBadge = (r: ActionPlanListRow): { cls: string; text: string } => {
+  if (r.daysOverdue > 0) return { cls: 'grc-overdue', text: `${r.daysOverdue}d over` };
+  if (r.daysUntilDue != null && r.daysUntilDue <= 7)
+    return { cls: 'grc-duesoon', text: dueLabel(r.dueDate) };
+  return { cls: '', text: dueLabel(r.dueDate) };
+};
+
+// Kanban columns follow the enum order, but only the columns that hold plans, so
+// an empty board is not a wall of empty columns.
+const columns = (statuses.length > 0 ? statuses : Object.values(AP_STATUS)).filter((st) =>
+  rows.some((r) => r.status === st),
+);
+const rowsByStatus = (st: string): ActionPlanListRow[] => rows.filter((r) => r.status === st);
+
+// Preserve the active filters when switching between the table and the board.
+const otherView = view === 'kanban' ? 'table' : 'kanban';
+const viewHref = (v: string): string => {
+  const q = new URLSearchParams();
+  if (filters.status) q.set('status', filters.status);
+  if (filters.ownerId) q.set('owner', filters.ownerId);
+  if (filters.overdueOnly) q.set('overdue', '1');
+  if (filters.q) q.set('q', filters.q);
+  if (v === 'kanban') q.set('view', 'kanban');
+  const s = q.toString();
+  return s ? `/action-plans?${s}` : '/action-plans';
+};
+
+const done = p.get('done');
 ---
 
-<GrcPlaceholder
-  title="Action plans"
-  lead="Remediation actions, their owners and due dates."
-  note="Action plans and owners arrive with their module."
-/>
+<GrcLayout title="Action plans">
+  <div class="grc-page-head">
+    <div>
+      <h1>Action plans</h1>
+      <p class="grc-lead">Remediation and follow-up for {grc.organizationName}.</p>
+    </div>
+    {
+      canCreate && (
+        <a href="/action-plans/new" class="grc-btn grc-btn--primary">
+          New action plan
+        </a>
+      )
+    }
+  </div>
+
+  {
+    done && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        {decodeURIComponent(done)}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have access to action plans.
+      </p>
+    ) : (
+      <>
+        <div class="grc-stats" role="group" aria-label="Action plan summary">
+          <div class="grc-stat">
+            <span class="grc-stat__n">{stats.total}</span>
+            <span class="grc-stat__l">Total</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{stats.pending}</span>
+            <span class="grc-stat__l">Pending</span>
+          </div>
+          <div class="grc-stat grc-stat--overdue">
+            <span class="grc-stat__n">{stats.overdue}</span>
+            <span class="grc-stat__l">Overdue</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{stats.implemented}</span>
+            <span class="grc-stat__l">Implemented</span>
+          </div>
+          <div class="grc-stat grc-stat--done">
+            <span class="grc-stat__n">{stats.verified}</span>
+            <span class="grc-stat__l">Verified</span>
+          </div>
+        </div>
+
+        <form method="get" class="grc-filters" role="search" aria-label="Filter action plans">
+          {view === 'kanban' && <input type="hidden" name="view" value="kanban" />}
+          <div class="grc-field" style="min-width:14rem">
+            <label for="f-q">Search</label>
+            <input
+              type="search"
+              id="f-q"
+              name="q"
+              class="grc-input"
+              value={filters.q ?? ''}
+              placeholder="Action or implementation notes"
+            />
+          </div>
+          <div class="grc-field">
+            <label for="f-status">Status</label>
+            <select id="f-status" name="status" class="grc-select">
+              <option value="">All</option>
+              {statuses.map((sv) => (
+                <option value={sv} selected={filters.status === sv}>
+                  {statusLabel(labels, sv)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field">
+            <label for="f-owner">Owner</label>
+            <select id="f-owner" name="owner" class="grc-select">
+              <option value="">Anyone</option>
+              {owners.map((o) => (
+                <option value={o.id} selected={filters.ownerId === o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field grc-field--check">
+            <label class="grc-checkline">
+              <input type="checkbox" name="overdue" value="1" checked={filters.overdueOnly} />
+              <span>Overdue only</span>
+            </label>
+          </div>
+          <button type="submit" class="grc-btn grc-btn--secondary">
+            Apply
+          </button>
+        </form>
+
+        <div class="grc-viewbar">
+          <span class="grc-viewbar__label">View</span>
+          <a
+            href={viewHref('table')}
+            class={`grc-viewtab${view === 'table' ? ' is-active' : ''}`}
+            aria-current={view === 'table' ? 'true' : undefined}
+          >
+            Table
+          </a>
+          <a
+            href={viewHref('kanban')}
+            class={`grc-viewtab${view === 'kanban' ? ' is-active' : ''}`}
+            aria-current={view === 'kanban' ? 'true' : undefined}
+          >
+            Kanban
+          </a>
+          <span class="grc-viewbar__hint">Switch to the {otherView} view</span>
+        </div>
+
+        {rows.length === 0 ? (
+          <div class="grc-empty">
+            <p>
+              <strong>No action plans match.</strong> Adjust the filters, or raise a plan from a
+              work paper.
+            </p>
+          </div>
+        ) : view === 'table' ? (
+          <div class="grc-tablewrap">
+            <table class="grc-table" aria-label="Action plans">
+              <thead>
+                <tr>
+                  <th>Number</th>
+                  <th>Action</th>
+                  <th>Work paper</th>
+                  <th>Owner</th>
+                  <th>Due</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td>
+                      <a href={`/action-plans/${r.id}`}>{r.actionNumber}</a>
+                    </td>
+                    <td>{truncate(r.description || 'Untitled action', 80)}</td>
+                    <td>{r.workPaperReference ?? '-'}</td>
+                    <td>{firstOwner(r.ownerNames)}</td>
+                    <td class="grc-num">
+                      {dueLabel(r.dueDate)}
+                      {r.daysOverdue > 0 && <span class="grc-overdue"> {r.daysOverdue}d over</span>}
+                    </td>
+                    <td>
+                      <span class={statusClass(r.status)}>{statusLabel(labels, r.status)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div class="grc-kanban" aria-label="Action plans by status">
+            {columns.map((st) => (
+              <section class="grc-kancol" aria-label={statusLabel(labels, st)}>
+                <header class="grc-kancol__head">
+                  <span class={statusClass(st)}>{statusLabel(labels, st)}</span>
+                  <span class="grc-kancol__count">{rowsByStatus(st).length}</span>
+                </header>
+                <div class="grc-kancol__body">
+                  {rowsByStatus(st).map((r) => (
+                    <a href={`/action-plans/${r.id}`} class="grc-kancard">
+                      <span class="grc-kancard__id">{r.actionNumber}</span>
+                      <span class="grc-kancard__desc">
+                        {truncate(r.description || 'Untitled action', 96)}
+                      </span>
+                      <span class="grc-kancard__meta">
+                        <span>{firstOwner(r.ownerNames)}</span>
+                        <span class={dueBadge(r).cls}>{dueBadge(r).text}</span>
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  }
+</GrcLayout>

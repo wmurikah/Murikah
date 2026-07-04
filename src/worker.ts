@@ -18,7 +18,12 @@
  *
  * The scheduled() handler runs the two crons declared in wrangler.jsonc:
  *   - every five minutes: drain the notification queue (runDispatch),
- *   - 03:00 UTC (06:00 EAT) daily: run the PM scan, then drain.
+ *   - 03:00 UTC (06:00 EAT) daily: run the PM scan, then drain, and refresh the
+ *     GRC action-plan overdue statuses.
+ *
+ * The GRC overdue refresh runs against the GRC database and is wrapped so a
+ * missing GRC binding or a schema difference never fails the engr crons; it is a
+ * system maintenance job across every organisation, not a tenant request.
  */
 import astro from '@astrojs/cloudflare/entrypoints/server';
 import { requestHost, routeDecision } from './lib/engr/routing';
@@ -34,6 +39,9 @@ import { getDb } from './lib/engr/db';
 import { runDispatch } from './lib/engr/notify/dispatch';
 import { runPmScan } from './lib/engr/workflow/pmScan';
 import { systemClock } from './lib/engr/time';
+import { getGrcEnv } from './lib/grc/env';
+import { getDb as getGrcDb } from './lib/grc/db';
+import { updateOverdueStatuses } from './lib/grc/repos/overdue';
 
 const DAILY_PM_CRON = '0 3 * * *';
 
@@ -186,6 +194,13 @@ export default {
         const delivery = getDeliveryEnv();
         if (controller.cron === DAILY_PM_CRON) {
           await runPmScan(db, delivery, systemClock, { orgLimit: 50, scheduleLimit: 200 });
+          try {
+            const grcDb = await getGrcDb(getGrcEnv());
+            await updateOverdueStatuses(grcDb);
+          } catch {
+            // The GRC overdue refresh is best-effort: a missing GRC binding or a
+            // schema difference must not fail the engr crons.
+          }
         }
         await runDispatch(db, delivery, systemClock, { limit: 200 });
       })(),
