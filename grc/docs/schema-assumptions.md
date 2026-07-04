@@ -173,3 +173,46 @@ Assumptions (reconcile in the listed module if the live schema differs):
   from the due date, matching the source (`reports/reportModel.ts`).
 - The Word export is generated with a dependency-free OOXML writer that runs on
   the Worker; see `grc/docs/reporting.md`.
+
+## Dashboard, sidebar counts and navigation (Build Prompt 08)
+
+The dashboard and the sidebar counts add no tables: they aggregate `work_papers`,
+`action_plans` and `work_paper_responsibles` for the acting organisation, scoped
+by role. Gate: `DASHBOARD.view`; the team-performance charts show only for
+`HEAD_OF_AUDIT` and `SENIOR_AUDITOR`. The dashboard is read-only, so it writes no
+audit rows; drill-through inherits the target module's gating.
+
+Role sets (from the source, in `dashboard/roleNav.ts`):
+
+- Auditee roles: `JUNIOR_STAFF`, `UNIT_MANAGER`, `SENIOR_MGMT`. Their sidebar and
+  stat cards are scoped to their own items (GAP-510), and their default landing is
+  their overdue action plans, or their findings when they have none.
+- Team-performance roles: `HEAD_OF_AUDIT`, `SENIOR_AUDITOR`.
+- Board roles (board reports, on top of the REPORTS permission): `BOARD_MEMBER`,
+  `SUPER_ADMIN`. The clean `role_code = 'BOARD_MEMBER'` is used, not the source's
+  BOARD/BOARD_MEMBER mismatch.
+
+Assumptions and mappings:
+
+- The four stat cards, the pending-reviews lists and the sidebar counts key off
+  the work-paper statuses `SUBMITTED` (pending review), `SENT_TO_AUDITEE` (my
+  observations, with a responsible), `APPROVED` (approved queue, with a
+  responsible) and `RESPONSE_RECEIVED`, and the action-plan status
+  `PENDING_VERIFICATION` (to verify).
+- "Auditee response status Submitted" maps to the work-paper status
+  `RESPONSE_RECEIVED` (a response has been received and awaits review); the round
+  is `work_papers.revision_count`. A per-response submitter needs the auditee
+  responses table, which this build does not add, so it is omitted.
+- Overdue reuses the settled-status set from the reporting model
+  (`NOT_OVERDUE_STATUSES`), so the dashboard, the sidebar and the reports agree.
+- Action plans have no affiliate or audit area of their own (GAP-507): the
+  affiliate-comparison chart joins through `work_paper_id` to
+  `work_papers.affiliate_code`, never a field on the action plan.
+- The clean columns are used directly (`status`, `created_at`, `updated_at`,
+  `affiliate_code`, `role_code`, `is_platform_owner`); none of the source's
+  data-quality workarounds (string booleans, empty timestamps, the role mismatch,
+  the misnamed affiliate field) are reintroduced.
+- The default landing is computed at sign-in (`repos/login.ts` now reads
+  `role_code` and `is_platform_owner`); the sidebar counts refresh on every
+  navigation (server-rendered) and on a light client poll of
+  `/api/sidebar-counts`.
