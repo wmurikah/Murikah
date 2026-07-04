@@ -1,0 +1,79 @@
+---
+/**
+ * A grouped bar chart for open versus closed per affiliate, rendered as an
+ * accessible data table with two decorative bars per row (open and closed) and
+ * their counts. No client JavaScript. The bars share one scale so rows compare
+ * directly; colour is paired with the always-present count and the column header,
+ * so meaning never rests on colour alone.
+ */
+import type { AffiliateBar } from '@grc/repos/dashboard';
+
+interface Props {
+  title: string;
+  description?: string;
+  data: AffiliateBar[];
+  emptyText?: string;
+}
+const { title, description, data, emptyText = 'No data yet.' } = Astro.props;
+
+const max = data.reduce((m, d) => Math.max(m, d.open, d.closed), 0);
+const hasData = data.length > 0 && max > 0;
+const pct = (v: number): number => (max > 0 ? Math.round((v / max) * 100) : 0);
+---
+
+<figure class="grc-chart">
+  <figcaption class="grc-chart__cap">
+    <h3 class="grc-chart__title">{title}</h3>
+    {description && <p class="grc-chart__desc">{description}</p>}
+    {
+      hasData && (
+        <p class="grc-chart__legend" aria-hidden="true">
+          <span class="grc-chart__key grc-chart__key--open">Open</span>
+          <span class="grc-chart__key grc-chart__key--closed">Closed</span>
+        </p>
+      )
+    }
+  </figcaption>
+  {
+    !hasData ? (
+      <p class="grc-chart__empty">{emptyText}</p>
+    ) : (
+      <table class="grc-chart__table">
+        <thead>
+          <tr>
+            <th scope="col">Affiliate</th>
+            <th scope="col">Open</th>
+            <th scope="col">Closed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d) => (
+            <tr>
+              <th scope="row" class="grc-chart__label">
+                {d.label}
+              </th>
+              <td class="grc-chart__barcell">
+                <span class="grc-chart__track" aria-hidden="true">
+                  <span
+                    class="grc-chart__bar grc-chart__bar--open"
+                    style={`width:${pct(d.open)}%`}
+                  />
+                </span>
+                <span class="grc-chart__num">{d.open}</span>
+              </td>
+              <td class="grc-chart__barcell">
+                <span class="grc-chart__track" aria-hidden="true">
+                  <span
+                    class="grc-chart__bar grc-chart__bar--closed"
+                    style={`width:${pct(d.closed)}%`}
+                  />
+                </span>
+                <span class="grc-chart__num">{d.closed}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+</figure>

@@ -17,6 +17,8 @@ import { verifyPassword } from '@grc/auth/password';
 import { resolveUserByEmail } from '@grc/repos/login';
 import { createSession } from '@grc/repos/session';
 import { createSessionCookie } from '@grc/auth/session';
+import { defaultLandingPath, isAuditeeRole } from '@grc/dashboard/roleNav';
+import { hasMyOverdue } from '@grc/repos/dashboard';
 
 interface Credentials {
   email: string;
@@ -62,8 +64,16 @@ export const POST: APIRoute = async ({ request }) => {
   const secure = new URL(request.url).protocol === 'https:';
   const cookie = await createSessionCookie(sessionId, env.sessionSecret, secure);
 
+  // Role-based default landing: an auditee lands on their overdue action plans
+  // (or their findings), everyone else on the dashboard.
+  let hasOverdue = false;
+  if (!user.isPlatformOwner && isAuditeeRole(user.roleCode)) {
+    hasOverdue = await hasMyOverdue(db, user.organizationId, user.userId);
+  }
+  const location = defaultLandingPath(user.roleCode, user.isPlatformOwner, hasOverdue);
+
   return new Response(null, {
     status: 303,
-    headers: { location: '/', 'set-cookie': cookie },
+    headers: { location, 'set-cookie': cookie },
   });
 };
