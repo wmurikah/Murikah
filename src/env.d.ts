@@ -40,6 +40,18 @@ declare namespace Cloudflare {
     TURSO_GRC_AUTH_TOKEN?: string;
     GRC_SESSION_SECRET?: string;
 
+    // GRC notification delivery via Microsoft Graph (Outlook). All optional: the
+    // dispatcher's production gate keeps sends off unless GRC_ENV is 'production'
+    // and these are present, so a preview or local run drains as a dry-run and a
+    // queued row is left PENDING. Set as Worker secrets or in .dev.vars; never
+    // committed.
+    GRC_ENV?: string; // 'production' enables real sends; anything else is dry-run
+    OUTLOOK_CLIENT_ID?: string;
+    OUTLOOK_CLIENT_SECRET?: string;
+    OUTLOOK_REFRESH_TOKEN?: string;
+    OUTLOOK_SENDER_EMAIL?: string;
+    OUTLOOK_TENANT?: string; // optional AAD tenant; defaults to 'common'
+
     // Engineering Rhythm notification dispatcher. All optional: absent or a
     // non-production ENGR_ENV keeps the dispatcher in dry-run and never contacts
     // a provider. Secrets are set as Worker secrets or in .dev.vars.
