@@ -1,11 +1,13 @@
 ---
 /**
- * A line and area chart for a value over time, rendered server-side as inline
- * SVG. The plot carries a role=img summary; a disclosure beneath holds the full
- * data as a table, so the trend is available as text too. Points are spread
- * evenly along the width and scaled to the largest value, and an empty series
- * shows a small "no data yet" line rather than a broken axis. This chart is a
- * trend, so its whole surface links to the underlying list when a href is given.
+ * A readable area-and-line chart for a value over time, rendered server-side as
+ * inline SVG. It carries a zeroed, labelled y-axis with a few gridlines, an x-axis
+ * of period labels, a soft navy gradient fill, a crisp navy line, visible points
+ * with a native hover tooltip (period and value), and a label on the latest point
+ * so a glance yields a number. When every value is equal it draws a clean baseline
+ * with a "no variation yet" note rather than a flat mystery; an empty series shows
+ * a quiet empty line. A role=img summary and a "Show data" table keep it
+ * accessible, and the whole plot links to the underlying list when a href is given.
  */
 import type { ChartDatum } from '@engr/repos/analytics';
 
@@ -26,24 +28,57 @@ const {
   emptyText = 'No data yet.',
 } = Astro.props;
 
-const max = data.reduce((m, d) => Math.max(m, d.value), 0);
+const values = data.map((d) => d.value);
+const max = values.reduce((m, v) => Math.max(m, v), 0);
 const hasData = data.length > 0 && max > 0;
+const allEqual = new Set(values).size <= 1;
 
-const W = 320;
-const H = 120;
-const PAD = 10;
+// A "nice" axis: round the step up to 1, 2, 5 x 10^n so gridlines land on tidy
+// integers, then take the top as a whole number of steps above the max.
+const niceCeil = (v: number): number => {
+  if (v <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / pow;
+  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return nice * pow;
+};
+const step = niceCeil(max / 4);
+const top = Math.max(step, Math.ceil(max / step) * step);
+const ticks: number[] = [];
+for (let t = 0; t <= top + 0.0001; t += step) ticks.push(t);
+
+// Geometry: left gutter for y labels, bottom gutter for x labels.
+const W = 400;
+const H = 200;
+const L = 34; // left gutter
+const R = 12; // right pad
+const T = 12; // top pad
+const B = 26; // bottom gutter
+const plotW = W - L - R;
+const plotH = H - T - B;
 const n = data.length;
-const x = (i: number) => (n <= 1 ? W / 2 : PAD + (i * (W - 2 * PAD)) / (n - 1));
-const y = (v: number) => H - PAD - (max > 0 ? (v / max) * (H - 2 * PAD) : 0);
-const points = data.map((d, i) => `${x(i).toFixed(1)},${y(d.value).toFixed(1)}`);
-const linePath = points.length ? `M${points.join(' L')}` : '';
-const areaPath = points.length
-  ? `M${x(0).toFixed(1)},${(H - PAD).toFixed(1)} L${points.join(' L')} L${x(n - 1).toFixed(1)},${(H - PAD).toFixed(1)} Z`
+const px = (i: number): number => (n <= 1 ? L + plotW / 2 : L + (i * plotW) / (n - 1));
+const py = (v: number): number => T + plotH - (top > 0 ? (v / top) * plotH : 0);
+
+const pts = data.map((d, i) => ({ x: px(i), y: py(d.value), d }));
+const linePath = pts.length
+  ? `M${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L')}`
   : '';
-const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join('; ')}.`;
+const areaPath = pts.length
+  ? `M${pts[0].x.toFixed(1)},${(T + plotH).toFixed(1)} L${pts
+      .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      .join(' L')} L${pts[n - 1].x.toFixed(1)},${(T + plotH).toFixed(1)} Z`
+  : '';
+
+// Thin the x labels when the series is long, so they never overlap.
+const labelEvery = n > 8 ? Math.ceil(n / 6) : 1;
+const last = pts[n - 1];
+const latest = data[n - 1];
+const gradId = `engr-linegrad-${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join('; ')}. Latest ${latest?.value ?? 0}.`;
 ---
 
-<figure class="engr-chart">
+<figure class="engr-chart engr-chart--line">
   <figcaption class="engr-chart__cap">
     <h3 class="engr-chart__title">{title}</h3>
     {description && <p class="engr-chart__desc">{description}</p>}
@@ -60,20 +95,83 @@ const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join(
           tabindex={href ? undefined : -1}
         >
           <svg viewBox={`0 0 ${W} ${H}`} class="engr-line__svg" role="img" aria-hidden="true">
-            <path d={areaPath} fill="var(--engr-chart-1)" fill-opacity="0.12" stroke="none" />
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--engr-navy-2)" stop-opacity="0.28" />
+                <stop offset="100%" stop-color="var(--engr-navy-2)" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+
+            {/* gridlines and y-axis labels */}
+            {ticks.map((t) => (
+              <g>
+                <line
+                  x1={L}
+                  y1={py(t)}
+                  x2={W - R}
+                  y2={py(t)}
+                  stroke="var(--engr-line)"
+                  stroke-width="1"
+                  opacity={t === 0 ? 0.9 : 0.5}
+                />
+                <text x={L - 6} y={py(t) + 3} text-anchor="end" class="engr-line__axis">
+                  {t}
+                </text>
+              </g>
+            ))}
+
+            {/* area, line, points */}
+            <path d={areaPath} fill={`url(#${gradId})`} stroke="none" />
             <path
               d={linePath}
               fill="none"
-              stroke="var(--engr-chart-1)"
+              stroke="var(--engr-navy)"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
             />
-            {data.map((d, i) => (
-              <circle cx={x(i)} cy={y(d.value)} r="2.4" fill="var(--engr-chart-1)" />
+            {pts.map((p) => (
+              <g>
+                <circle cx={p.x} cy={p.y} r="2.6" fill="var(--engr-navy)" />
+                <rect
+                  x={p.x - Math.max(6, plotW / (2 * Math.max(1, n - 1)))}
+                  y={T}
+                  width={Math.max(12, plotW / Math.max(1, n - 1))}
+                  height={plotH}
+                  fill="transparent"
+                >
+                  <title>{`${p.d.label}: ${p.d.display ?? p.d.value}`}</title>
+                </rect>
+              </g>
             ))}
+
+            {/* latest value label */}
+            {last && (
+              <text
+                x={Math.min(last.x, W - R - 2)}
+                y={Math.max(T + 8, last.y - 7)}
+                text-anchor="end"
+                class="engr-line__latest"
+              >
+                {latest?.display ?? latest?.value}
+              </text>
+            )}
+
+            {/* x-axis period labels */}
+            {data.map((d, i) =>
+              i % labelEvery === 0 || i === n - 1 ? (
+                <text x={px(i)} y={H - 8} text-anchor="middle" class="engr-line__axis">
+                  {d.label}
+                </text>
+              ) : null,
+            )}
           </svg>
         </a>
+
+        {allEqual && (
+          <p class="engr-chart__note">No variation yet: every period is {latest?.value ?? 0}.</p>
+        )}
+
         <details class="engr-chart__data">
           <summary>Show data</summary>
           <table class="engr-chart__table">
