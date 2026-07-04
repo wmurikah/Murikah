@@ -1082,3 +1082,268 @@
   font-size: var(--grc-fs-caption);
   color: var(--grc-muted);
 }
+
+/* --- Board and BARC reporting ------------------------------------------- */
+
+/* Filters panel. */
+.grc-report-filters {
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-surface);
+  padding: var(--grc-s4);
+  margin-bottom: var(--grc-s4);
+}
+.grc-report-filters__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--grc-s3);
+  margin-bottom: var(--grc-s3);
+}
+.grc-report-filters__set {
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  padding: var(--grc-s2) var(--grc-s3) var(--grc-s3);
+  margin: 0 0 var(--grc-s3);
+}
+.grc-report-filters__set legend {
+  font-size: var(--grc-fs-caption);
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-muted);
+  padding: 0 var(--grc-s2);
+}
+.grc-checkrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--grc-s2);
+}
+.grc-checkchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--grc-s2);
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--grc-line);
+  border-radius: 999px;
+  background: var(--grc-surface);
+  font-size: var(--grc-fs-small);
+  cursor: pointer;
+}
+.grc-checkchip input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: var(--grc-navy);
+}
+/* Risk-toned chips carry a coloured dot so risk reads without colour alone (the label stays). */
+.grc-checkchip.grc-tone--risk-extreme {
+  border-color: #e0a9a0;
+}
+.grc-checkchip.grc-tone--risk-high {
+  border-color: #e6c893;
+}
+.grc-checkchip.grc-tone--risk-medium {
+  border-color: #e6c893;
+}
+.grc-checkchip.grc-tone--risk-low {
+  border-color: #a9ccb2;
+}
+
+/* Preview pane and its toolbar. */
+.grc-report-pane {
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-surface);
+  overflow: hidden;
+}
+.grc-report-pane__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--grc-s2) var(--grc-s4);
+  border-bottom: 1px solid var(--grc-line);
+  background: var(--grc-paper);
+}
+.grc-report-pane__title {
+  font-size: var(--grc-fs-caption);
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-muted);
+}
+
+/* The report document, in the house style (navy and gold). */
+.grc-report {
+  padding: var(--grc-s5) 2rem;
+  color: var(--grc-ink);
+  background: #fff;
+}
+.grc-report__head {
+  border-bottom: 3px solid var(--grc-gold);
+  padding-bottom: var(--grc-s3);
+  margin-bottom: var(--grc-s4);
+}
+.grc-report__org {
+  margin: 0;
+  font-size: var(--grc-fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-gold-deep);
+}
+.grc-report__title {
+  margin: 0.15rem 0;
+  font-size: 1.4rem;
+  color: var(--grc-navy);
+}
+.grc-report__label {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: var(--grc-navy-2);
+}
+.grc-report__meta {
+  margin: 0;
+  font-size: var(--grc-fs-small);
+  color: var(--grc-muted);
+}
+.grc-report__notice {
+  margin: 0.35rem 0 0;
+  font-size: var(--grc-fs-small);
+  font-style: italic;
+  color: var(--grc-muted);
+}
+.grc-report__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--grc-s3);
+  margin-bottom: var(--grc-s4);
+}
+.grc-report__kpi {
+  border: 1px solid var(--grc-line);
+  border-top: 3px solid var(--grc-navy);
+  border-radius: var(--grc-radius-sm);
+  padding: var(--grc-s3);
+  background: var(--grc-surface);
+}
+.grc-report__kpi-value {
+  display: block;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--grc-navy);
+}
+.grc-report__kpi-label {
+  display: block;
+  margin-top: var(--grc-s1);
+  font-size: var(--grc-fs-caption);
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-muted);
+}
+.grc-report__section,
+.grc-report__group {
+  margin-bottom: var(--grc-s4);
+}
+.grc-report__h {
+  font-size: 1rem;
+  color: var(--grc-navy);
+  margin-bottom: var(--grc-s2);
+}
+.grc-report__sub {
+  margin: 0 0 var(--grc-s2);
+  font-size: var(--grc-fs-small);
+  color: var(--grc-muted);
+}
+.grc-report__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--grc-s2);
+  margin: 0 0 var(--grc-s2);
+}
+.grc-report__note {
+  color: var(--grc-muted);
+}
+.grc-report__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--grc-fs-small);
+}
+.grc-report__table th {
+  text-align: left;
+  background: var(--grc-navy);
+  color: var(--grc-on-navy);
+  font-weight: 600;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--grc-navy);
+}
+.grc-report__table td {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--grc-line);
+  vertical-align: top;
+}
+.grc-report__table td.is-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Tones: colour plus the always-present text, so meaning never rests on colour alone. */
+.grc-tone--good {
+  color: #1e7a34;
+  font-weight: 600;
+}
+.grc-tone--warn {
+  color: #8a5a00;
+  font-weight: 600;
+}
+.grc-tone--bad {
+  color: #b02a1a;
+  font-weight: 600;
+}
+.grc-tone--muted {
+  color: var(--grc-muted);
+}
+.grc-tone--risk-extreme {
+  color: #7a271a;
+  font-weight: 600;
+}
+.grc-tone--risk-high {
+  color: #b45309;
+  font-weight: 600;
+}
+.grc-tone--risk-medium {
+  color: #7a4f16;
+  font-weight: 600;
+}
+.grc-tone--risk-low {
+  color: #1e4d2b;
+  font-weight: 600;
+}
+
+/* Print: only the report, edge to edge, colours preserved. */
+@media print {
+  .grc-sidebar,
+  .grc-report-filters,
+  .grc-report-pane__bar,
+  .grc-page-head,
+  .grc-notice,
+  .grc-skip {
+    display: none !important;
+  }
+  .grc-shell {
+    display: block !important;
+  }
+  .grc-main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .grc-report-pane {
+    border: none;
+  }
+  .grc-report {
+    padding: 0;
+  }
+  .grc-report__table th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body {
+    background: #fff;
+  }
+}
