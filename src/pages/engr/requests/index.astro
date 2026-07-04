@@ -23,10 +23,21 @@ const createdNo = Astro.url.searchParams.get('created');
 const priority = Astro.url.searchParams.get('priority')?.toUpperCase() || undefined;
 const priorityLabel = priority ? priority.charAt(0) + priority.slice(1).toLowerCase() : null;
 
+// A month window, drilled from the "Requests over time" chart: from inclusive,
+// to exclusive, both YYYY-MM-DD. A dated view shows every request raised in the
+// month, open or closed.
+const isDate = (v: string | null): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const fromRaw = Astro.url.searchParams.get('from');
+const toRaw = Astro.url.searchParams.get('to');
+const from = isDate(fromRaw) ? fromRaw : undefined;
+const to = isDate(toRaw) ? toRaw : undefined;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const periodLabel = from ? `${MONTHS[Number(from.slice(5, 7)) - 1]} ${from.slice(0, 4)}` : null;
+
 let rows: QueueRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  rows = await listQueue(db, engr.orgId, engr.userId, scope, 100, { priority });
+  rows = await listQueue(db, engr.orgId, engr.userId, scope, 100, { priority, from, to });
 }
 
 const badgeClass = (priority: string) => `engr-badge engr-badge--${priority.toLowerCase()}`;
@@ -73,17 +84,28 @@ const now = new Date();
   }
 
   {
+    periodLabel && (
+      <p class="engr-filterbar">
+        <span>Requests raised in {periodLabel}</span>
+        <a href={`/requests?scope=${scope}`}>Clear period</a>
+      </p>
+    )
+  }
+
+  {
     !allowed ? (
       <p class="engr-error" role="alert">
         You do not have access to requests.
       </p>
     ) : rows.length === 0 ? (
       <p class="engr-empty">
-        {priorityLabel
-          ? 'No open requests match this filter.'
-          : scope === 'mine'
-            ? 'No requests are assigned to you.'
-            : 'No open requests.'}
+        {periodLabel
+          ? `No requests were raised in ${periodLabel}.`
+          : priorityLabel
+            ? 'No open requests match this filter.'
+            : scope === 'mine'
+              ? 'No requests are assigned to you.'
+              : 'No open requests.'}
       </p>
     ) : (
       <div class="engr-tablewrap">
