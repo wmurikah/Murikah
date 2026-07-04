@@ -85,13 +85,16 @@ export async function listQueue(
   engineerId: string,
   scope: 'mine' | 'all',
   limit = 100,
-  filters: { priority?: string; station?: string } = {},
+  filters: { priority?: string; station?: string; from?: string; to?: string } = {},
 ): Promise<QueueRow[]> {
   const mine = scope === 'mine';
+  const dated = Boolean(filters.from || filters.to);
   const args: (string | number)[] = [orgId];
+  // A dated window is a historical view (a drill from the trend chart), so it
+  // shows every request raised in that period; the undated view is the live
+  // queue and shows only open requests.
   let where = `sr.org_id = ?
-             AND sr.deleted_at IS NULL
-             AND sr.status NOT IN ('CLOSED','CANCELLED')`;
+             AND sr.deleted_at IS NULL${dated ? '' : `\n             AND sr.status NOT IN ('CLOSED','CANCELLED')`}`;
   if (mine) {
     where += ' AND sr.assigned_engineer_id = ?';
     args.push(engineerId);
@@ -103,6 +106,14 @@ export async function listQueue(
   if (filters.station) {
     where += ' AND sr.station_id = ?';
     args.push(filters.station);
+  }
+  if (filters.from) {
+    where += ' AND sr.created_at >= ?';
+    args.push(filters.from);
+  }
+  if (filters.to) {
+    where += ' AND sr.created_at < ?';
+    args.push(filters.to);
   }
   args.push(limit);
   const res = await db.execute({

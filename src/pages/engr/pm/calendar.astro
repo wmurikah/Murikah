@@ -15,10 +15,23 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'pm.allocate');
+
+// An optional week window, drilled from the "Upcoming maintenance" chart: from
+// inclusive, to exclusive, both YYYY-MM-DD against the due date.
+const isDate = (v: string | null): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const fromRaw = Astro.url.searchParams.get('from');
+const toRaw = Astro.url.searchParams.get('to');
+const from = isDate(fromRaw) ? fromRaw : undefined;
+const to = isDate(toRaw) ? toRaw : undefined;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const periodLabel = from
+  ? `${Number(from.slice(8, 10))} ${MONTHS[Number(from.slice(5, 7)) - 1]}`
+  : null;
+
 let rows: OccurrenceListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  rows = await listUpcomingOccurrences(db, engr.orgId);
+  rows = await listUpcomingOccurrences(db, engr.orgId, { from, to });
 }
 ---
 
@@ -32,12 +45,25 @@ if (allowed) {
   </div>
 
   {
+    periodLabel && (
+      <p class="engr-filterbar">
+        <span>Occurrences due in the week of {periodLabel}</span>
+        <a href="/pm/calendar">Clear period</a>
+      </p>
+    )
+  }
+
+  {
     !allowed ? (
       <p class="engr-error" role="alert">
         You do not have access to preventive maintenance.
       </p>
     ) : rows.length === 0 ? (
-      <p class="engr-empty">No occurrences yet. They appear once the daily scan runs.</p>
+      <p class="engr-empty">
+        {periodLabel
+          ? `Nothing due in the week of ${periodLabel}.`
+          : 'No occurrences yet. They appear once the daily scan runs.'}
+      </p>
     ) : (
       <div class="engr-tablewrap">
         <table class="engr-table" aria-label="Upcoming maintenance">
