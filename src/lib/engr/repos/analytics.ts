@@ -19,7 +19,7 @@ export interface ChartDatum {
 
 export interface DashboardCharts {
   workOrdersByStatus: ChartDatum[];
-  requestsByWeek: ChartDatum[];
+  requestsByMonth: ChartDatum[];
   costPipeline: ChartDatum[];
   billPipeline: ChartDatum[];
   pmByWeek: ChartDatum[];
@@ -31,6 +31,59 @@ export interface DashboardCharts {
 // Monday-of-week for an ISO or date column, so rows bucket by week.
 const weekBucket = (col: string) =>
   `date(${col}, '-' || ((strftime('%w', ${col}) + 6) % 7) || ' days')`;
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+interface Bucket {
+  key: string; // stable key: month 'YYYY-MM' or week-start 'YYYY-MM-DD'
+  label: string; // human axis label: 'Jul' or '7 Jul'
+  start: string; // inclusive 'YYYY-MM-DD'
+  end: string; // exclusive 'YYYY-MM-DD'
+}
+
+// The last n calendar months, ending at (and including) the current month, each
+// with its inclusive start and exclusive end, so the trend always reaches the
+// present and empty months still appear as a zero point.
+function recentMonths(n: number): Bucket[] {
+  const now = new Date();
+  const out: Bucket[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+    out.push({
+      key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+      label: MONTHS[d.getUTCMonth()],
+      start: d.toISOString().slice(0, 10),
+      end: next.toISOString().slice(0, 10),
+    });
+  }
+  return out;
+}
+
+// The n weeks from the current week forward, each Monday-anchored, so the
+// forward-looking maintenance view has a fixed, zero-filled set of columns.
+function comingWeeks(n: number): Bucket[] {
+  const now = new Date();
+  const dow = (now.getUTCDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow),
+  );
+  const out: Bucket[] = [];
+  for (let i = 0; i < n; i++) {
+    const s = new Date(
+      Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 7 * i),
+    );
+    const e = new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate() + 7));
+    const start = s.toISOString().slice(0, 10);
+    out.push({
+      key: start,
+      label: `${s.getUTCDate()} ${MONTHS[s.getUTCMonth()]}`,
+      start,
+      end: e.toISOString().slice(0, 10),
+    });
+  }
+  return out;
+}
 
 function humanise(value: string): string {
   const spaced = value.replace(/_/g, ' ').toLowerCase();
@@ -52,6 +105,8 @@ function ordered(
 }
 
 export async function getDashboardCharts(db: Client, orgId: string): Promise<DashboardCharts> {
+  const months = recentMonths(6);
+  const weeks = comingWeeks(8);
   const results = await db.batch(
     [
       {
@@ -60,11 +115,10 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
         args: [orgId],
       },
       {
-        sql: `SELECT ${weekBucket('created_at')} AS wk, COUNT(*) AS n FROM service_requests
-                WHERE org_id = ? AND deleted_at IS NULL
-                  AND created_at >= strftime('%Y-%m-%dT00:00:00Z', 'now', '-77 days')
-             GROUP BY wk ORDER BY wk`,
-        args: [orgId],
+        sql: `SELECT strftime('%Y-%m', created_at) AS ym, COUNT(*) AS n FROM service_requests
+                WHERE org_id = ? AND deleted_at IS NULL AND created_at >= ?
+             GROUP BY ym`,
+        args: [orgId, `${months[0].start}T00:00:00Z`],
       },
       {
         sql: `SELECT status, COUNT(*) AS n FROM work_costs WHERE org_id = ? GROUP BY status`,
@@ -78,9 +132,9 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
         sql: `SELECT ${weekBucket('due_date')} AS wk, COUNT(*) AS n,
                      SUM(CASE WHEN notified_1m_at IS NOT NULL OR notified_2w_at IS NOT NULL THEN 1 ELSE 0 END) AS notified
                 FROM pm_occurrences
-               WHERE org_id = ? AND due_date >= date('now') AND due_date < date('now', '+56 days')
-            GROUP BY wk ORDER BY wk`,
-        args: [orgId],
+               WHERE org_id = ? AND due_date >= ? AND due_date < ?
+            GROUP BY wk`,
+        args: [orgId, weeks[0].start, weeks[weeks.length - 1].end],
       },
       {
         sql: `SELECT wc.contractor_id AS id, c.name AS name, SUM(wc.total_minor) AS total FROM work_costs wc
@@ -115,7 +169,15 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
       value: num(r.n),
       key: String(r.status),
     })),
-    requestsByWeek: results[1].rows.map((r) => ({ label: String(r.wk), value: num(r.n) })),
+    requestsByMonth: (() => {
+      const byMonth = new Map(results[1].rows.map((r) => [String(r.ym), num(r.n)]));
+      return months.map((m) => ({
+        label: m.label,
+        value: byMonth.get(m.key) ?? 0,
+        key: m.key,
+        href: `/requests?scope=all&from=${m.start}&to=${m.end}`,
+      }));
+    })(),
     costPipeline: ordered(costRows, [
       { status: 'SUBMITTED', label: 'Submitted' },
       { status: 'PENDING_L1', label: 'Pending level 1' },
@@ -129,11 +191,22 @@ export async function getDashboardCharts(db: Client, orgId: string): Promise<Das
       { status: 'APPROVED_READY_FOR_PAYMENT', label: 'Ready for payment' },
       { status: 'PAID', label: 'Paid' },
     ]),
-    pmByWeek: results[4].rows.map((r) => {
-      const total = num(r.n);
-      const notified = num(r.notified);
-      return { label: String(r.wk), value: total, display: `${total} (${notified} notified)` };
-    }),
+    pmByWeek: (() => {
+      const byWeek = new Map(
+        results[4].rows.map((r) => [String(r.wk), { n: num(r.n), notified: num(r.notified) }]),
+      );
+      return weeks.map((w) => {
+        const hit = byWeek.get(w.key);
+        const total = hit?.n ?? 0;
+        return {
+          label: w.label,
+          value: total,
+          display: total > 0 ? `${total} (${hit?.notified ?? 0} notified)` : '0',
+          key: w.key,
+          href: `/pm/calendar?from=${w.start}&to=${w.end}`,
+        };
+      });
+    })(),
     spendByContractorMinor: results[5].rows.map((r) => ({
       label: String(r.name),
       value: num(r.total),
