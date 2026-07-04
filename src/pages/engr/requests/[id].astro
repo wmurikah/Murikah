@@ -128,7 +128,12 @@ const errorMessage = errorCode
               {attachments.map((a) => (
                 <li>
                   {a.fileUrl ? (
-                    <a href={a.fileUrl} target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={a.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="engr-link engr-link--ext"
+                    >
                       {a.kind.toLowerCase()}: {a.fileName}
                     </a>
                   ) : (

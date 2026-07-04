@@ -63,6 +63,10 @@
   --engr-chart-6: #9aa6cc; /* faint navy */
   --engr-chart-track: #e7e3d8; /* unfilled track for progress bars */
 
+  /* A pencil silhouette for the "editable record" cue, painted via mask so it
+     takes the link's own colour. */
+  --engr-icon-pencil: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12.1 1.9a1.3 1.3 0 0 1 1.9 0 1.3 1.3 0 0 1 0 1.9l-7.6 7.6-2.6 0.7 0.7-2.6z'/%3E%3C/svg%3E");
+
   margin: 0;
   min-height: 100vh;
   background: var(--engr-paper);
@@ -90,9 +94,11 @@
   top: 0.75rem;
 }
 
-/* Visible focus for keyboard users, on every focusable control. */
+/* Visible focus for keyboard users, on every focusable control: one consistent
+   gold ring across the whole app, the same signal for the keyboard as the
+   pointer cues give the mouse. Gold-deep holds 3:1 non-text contrast on paper. */
 .engr :focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: 2px solid var(--engr-gold-deep);
   outline-offset: 2px;
   border-radius: 0.25rem;
 }
@@ -708,12 +714,20 @@ a.engr-card {
     border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
+a.engr-card {
+  cursor: pointer;
+}
 a.engr-card:hover {
   border-color: var(--engr-navy-2);
   box-shadow: var(--engr-shadow-pop);
+  background: color-mix(in srgb, var(--engr-navy) 3%, var(--engr-surface));
+}
+/* The drill cue reads as a link on hover, reinforcing that the card opens. */
+a.engr-card:hover .engr-card__cue {
+  text-decoration: underline;
 }
 a.engr-card:focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: 2px solid var(--engr-gold-deep);
   outline-offset: 2px;
 }
 .engr-card__label {
@@ -816,8 +830,17 @@ a.engr-card:focus-visible {
 .engr-table tbody tr {
   transition: background-color 0.12s ease;
 }
-.engr-table tbody tr:hover {
+/* A row that drills (its first cell is a link) reads as interactive: a hover
+   tint and a persistent trailing chevron on the identifier, visible without
+   hover and on touch. A static row (no first-cell link) gets neither, so the
+   interactive and the static are always visibly different. */
+.engr-table tbody tr:has(td:first-child a):hover {
   background: color-mix(in srgb, var(--engr-navy) 4%, transparent);
+}
+.engr-table tbody td:first-child a::after {
+  content: ' \203a'; /* a light single-angle drill chevron: "this opens" */
+  color: var(--engr-muted);
+  font-weight: 400;
 }
 .engr-table tbody tr:last-child td {
   border-bottom: 0;
@@ -829,6 +852,20 @@ a.engr-card:focus-visible {
 }
 .engr-table a:hover {
   text-decoration: underline;
+}
+/* An editable list (the Setup CRUD): the identifier opens the record's editor,
+   so its cue is a pencil rather than a plain drill chevron, marking the record
+   as changeable here. The mask paints the pencil in the link's own colour. */
+.engr-table--edit tbody td:first-child a::after {
+  content: '';
+  display: inline-block;
+  width: 0.78em;
+  height: 0.78em;
+  margin-left: 0.4em;
+  vertical-align: -0.06em;
+  background: currentColor;
+  -webkit-mask: var(--engr-icon-pencil) center / contain no-repeat;
+  mask: var(--engr-icon-pencil) center / contain no-repeat;
 }
 /* Progressive column priority: lower-priority columns drop as the viewport
    narrows, so the table stays readable without a data-hiding horizontal scroll.
@@ -978,6 +1015,81 @@ a.engr-card:focus-visible {
 .engr-check input {
   width: 1.15rem;
   height: 1.15rem;
+}
+
+/* ---- Affordance vocabulary: one learnable set of interactive cues ----------
+   Applied identically across the app so a person learns it once. Every cue is
+   icon plus colour plus cursor, never colour alone, and persistent (visible
+   without hover, so it works on touch); hover and focus enhance it. */
+
+/* Boolean setting (on or off, including permissions): a real switch, not static
+   text or a bare tick. It plainly reads as operable and shows its two states by
+   position and colour. Reused wherever a checkbox means a setting. */
+/* The selector carries the element (input.engr-switch) so it outweighs the
+   generic .engr-check input sizing and the track keeps its pill shape. */
+input.engr-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 2.2rem;
+  height: 1.25rem;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--engr-stone);
+  border: 1px solid var(--engr-line);
+  position: relative;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+input.engr-switch::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--engr-surface);
+  box-shadow: 0 1px 2px rgba(11, 23, 51, 0.35);
+  transform: translateY(-50%);
+  transition: left 0.15s ease;
+}
+input.engr-switch:checked {
+  background: var(--engr-navy);
+  border-color: var(--engr-navy);
+}
+input.engr-switch:checked::before {
+  left: calc(100% - 1.05rem);
+}
+input.engr-switch:hover {
+  border-color: var(--engr-navy-2);
+}
+
+/* Links: accent colour, underline on hover, pointer. A navigation link carries a
+   trailing arrow; an external link a small outward arrow, both persistent. */
+.engr-link {
+  color: var(--engr-navy-2);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.engr-link:hover {
+  text-decoration: underline;
+}
+.engr-link--nav::after {
+  content: ' \2192'; /* rightwards arrow */
+}
+.engr-link--ext::after {
+  content: ' \2197'; /* north-east arrow */
+  font-size: 0.85em;
+}
+
+/* Disclosure: the whole summary is the target, so it takes a pointer. The
+   rotating caret lives with each disclosure (sidebar groups, chart data). */
+.engr details > summary {
+  cursor: pointer;
 }
 .engr-actions {
   display: flex;
@@ -1666,6 +1778,28 @@ a.engr-card:focus-visible {
   font-size: var(--engr-fs-caption);
   font-weight: 600;
   color: var(--engr-navy-2);
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.engr-chart__data > summary::-webkit-details-marker {
+  display: none;
+}
+/* The same rotating caret as the sidebar groups, so every disclosure reads the
+   same way: pointing right when closed, down when open. */
+.engr-chart__data > summary::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.engr-chart__data[open] > summary::before {
+  transform: rotate(45deg);
 }
 .engr-chart__data[open] > summary {
   margin-bottom: var(--engr-s2);
@@ -1758,7 +1892,7 @@ a.engr-card:focus-visible {
   outline: none;
 }
 .engr-donutwide a:focus-visible .engr-callout__box {
-  stroke: var(--color-focus);
+  stroke: var(--engr-gold-deep);
   stroke-width: 2;
 }
 
