@@ -1347,3 +1347,230 @@
     background: #fff;
   }
 }
+
+/* --- Dashboard and sidebar counts -------------------------------------- */
+
+.grc-cards--stats {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  margin-bottom: var(--grc-s4);
+}
+/* A stat card that drills through: it reads as interactive and lifts on hover. */
+.grc-card--link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
+}
+.grc-card--link:hover {
+  border-color: var(--grc-gold-deep);
+  box-shadow: var(--grc-shadow-pop);
+  transform: translateY(-1px);
+}
+.grc-card--link:focus-visible {
+  outline: 2px solid var(--grc-gold-deep);
+  outline-offset: 2px;
+}
+.grc-card--alert {
+  border-color: #e0a9a0;
+  background: #fbe9e7;
+}
+.grc-card--alert .grc-card__count {
+  color: #7a271a;
+}
+
+.grc-attention {
+  border: 1px solid #e6c893;
+  background: #fdf3e2;
+  border-left: 3px solid var(--grc-gold-deep);
+  border-radius: var(--grc-radius);
+  padding: var(--grc-s3) var(--grc-s4);
+  margin-bottom: var(--grc-s4);
+}
+.grc-attention__title {
+  font-size: var(--grc-fs-h2);
+  margin: 0 0 var(--grc-s2);
+  color: #7a4f16;
+}
+.grc-attention__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: var(--grc-s1);
+  font-size: var(--grc-fs-small);
+}
+
+.grc-dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: var(--grc-s4);
+  margin-bottom: var(--grc-s4);
+}
+.grc-dash-lists {
+  display: grid;
+  gap: var(--grc-s3);
+}
+.grc-dash-lists__head {
+  margin: 0 0 var(--grc-s1);
+  font-size: var(--grc-fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-muted);
+}
+.grc-dash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--grc-s1);
+}
+.grc-dash-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s2);
+  flex-wrap: wrap;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--grc-line);
+  font-size: var(--grc-fs-small);
+}
+.grc-dash-list li:last-child {
+  border-bottom: none;
+}
+.grc-dash-list__title {
+  color: var(--grc-ink);
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grc-dash-list__meta {
+  color: var(--grc-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Accessible table-charts (the same approach as Engineering Rhythm). */
+.grc-chart {
+  margin: 0;
+}
+.grc-chart__cap {
+  margin-bottom: var(--grc-s2);
+}
+.grc-chart__title {
+  font-size: var(--grc-fs-h2);
+  margin: 0;
+}
+.grc-chart__desc {
+  margin: var(--grc-s1) 0 0;
+  font-size: var(--grc-fs-small);
+  color: var(--grc-muted);
+}
+.grc-chart__legend {
+  display: flex;
+  gap: var(--grc-s3);
+  margin: var(--grc-s2) 0 0;
+  font-size: var(--grc-fs-caption);
+}
+.grc-chart__key::before {
+  content: '';
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+.grc-chart__key--open::before {
+  background: var(--grc-gold);
+}
+.grc-chart__key--closed::before {
+  background: #1e7a34;
+}
+.grc-chart__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--grc-fs-small);
+}
+.grc-chart__table th[scope='col'] {
+  text-align: left;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+  font-weight: 600;
+  padding: 0 0.4rem 0.3rem;
+  border-bottom: 1px solid var(--grc-line);
+}
+.grc-chart__label {
+  text-align: left;
+  font-weight: 500;
+  padding: 0.3rem 0.4rem;
+  white-space: nowrap;
+}
+.grc-chart__barcell {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s2);
+  padding: 0.3rem 0.4rem;
+  width: 60%;
+}
+.grc-chart__track {
+  flex: 1;
+  height: 0.7rem;
+  background: var(--grc-stone);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.grc-chart__bar {
+  display: block;
+  height: 100%;
+  background: var(--grc-navy);
+  border-radius: 999px;
+  min-width: 2px;
+}
+.grc-chart__bar--open {
+  background: var(--grc-gold);
+}
+.grc-chart__bar--closed {
+  background: #1e7a34;
+}
+.grc-chart__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 2rem;
+  padding: 0.3rem 0.4rem;
+}
+.grc-chart__empty {
+  color: var(--grc-muted);
+  font-size: var(--grc-fs-small);
+  padding: var(--grc-s3) 0;
+}
+
+/* Sidebar badge counts on the nav links. */
+.grc-navlink {
+  position: relative;
+}
+.grc-navcount {
+  margin-left: auto;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--grc-gold);
+  color: var(--grc-navy);
+  font-size: var(--grc-fs-micro);
+  font-weight: 700;
+  line-height: 1.15rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.grc-navcount[hidden] {
+  display: none;
+}
+.grc-navcount--alert {
+  background: #c0392b;
+  color: #fff;
+}
