@@ -95,3 +95,49 @@ Notes:
   assumptions (`finding_submitted`, `response_received`); enqueue is best-effort.
 - Evidence bytes are not stored yet; only metadata is recorded. See
   `grc/docs/evidence-storage.md`.
+
+## Action Plans module (Build Prompt 05)
+
+The action-plan status enum type is assumed to be `ACTION_PLAN_STATUS`, with the
+values `NOT_DUE`, `PENDING`, `IN_PROGRESS`, `OVERDUE`, `IMPLEMENTED`,
+`PENDING_VERIFICATION`, `VERIFIED`, `CLOSED` and `REJECTED`
+(`src/lib/grc/workflow/actionPlanActions.ts`). As with work papers, the allowed
+moves and each transition's `required_role`/`requires_comment` are read from
+`status_transitions`, so only these string values and the enum type name are
+assumptions; validity is data-driven. The action catalogue is keyed by the
+transition pair (`from>to`) because In Progress is reached two ways
+(auditor return-for-rework and Head-of-Audit reject), which differ in permission
+and effect.
+
+Permissions used: `ACTION_PLANS.view`, `ACTION_PLANS.create`, `ACTION_PLANS.edit`,
+`ACTION_PLANS.verify`, `ACTION_PLANS.close`, `AUDITEE.respond` and the optional
+`ACTION_PLANS.evidence_override`.
+
+| Table                 | Columns used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Where                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `action_plans`        | `action_plan_id`, `organization_id`, `action_number`, `work_paper_id`, `action_description`, `due_date`, `status`, `days_overdue`, `owner_ids`, `owner_names`, `auditee_proposed`, `implementation_notes`, `implemented_date`, `delegated_by_id`, `delegated_by_name`, `delegated_date`, `delegation_notes`, `delegation_accepted_date`, `original_owner_ids`, `auditor_review_comments`, `auditor_review_by`, `auditor_review_date`, `hoa_review_comments`, `hoa_review_by`, `hoa_review_date`, `created_by`, `created_at`, `updated_at` | `repos/actionPlans.ts`, `workflow/actionPlanWorkflow.ts`, `repos/overdue.ts` |
+| `action_plan_owners`  | `owner_row_id`, `organization_id`, `action_plan_id`, `user_id`, `owner_type` (`ORIGINAL`/`CURRENT`), `is_active`, `added_at`, `removed_at`                                                                                                                                                                                                                                                                                                                                                                                                | `repos/actionPlanOwners.ts`                                                  |
+| `action_plan_history` | `history_id`, `organization_id`, `action_plan_id`, `previous_status`, `new_status`, `comments`, `user_id`, `user_name`, `created_at`                                                                                                                                                                                                                                                                                                                                                                                                      | `repos/actionPlanHistory.ts`                                                 |
+
+Notes:
+
+- Owners are denormalised on `action_plans` as comma-delimited `owner_ids` and
+  `owner_names`, kept in sync with the `action_plan_owners` junction through
+  `setOwners`; the owner filter and the non-auditor visibility match against the
+  delimited `owner_ids` (`',' || owner_ids || ','` LIKE), never an exact string.
+- `action_number` is generated as `AP-<year>-<random>` when the schema does not
+  assign one; if the database generates its own, drop the generated value in
+  `repos/actionPlans.ts`.
+- `delegation_accepted_date` marks a delegation as decided: it is set on accept
+  and cleared (with the other delegation fields) on reject, so the accept/reject
+  prompt shows only while a delegation is awaiting a decision.
+- Overdue maintenance is a daily system job (`repos/overdue.ts`, wired into the
+  worker's `scheduled()` daily cron): past-due active plans move to `OVERDUE` and
+  `days_overdue` is refreshed. It runs across every organisation and is wrapped so
+  a missing GRC binding or a schema difference never fails the engr crons.
+- Notification template codes (`action_assigned`, `action_delegated`,
+  `action_implemented`, `action_verified`, `action_returned`, `action_rejected`,
+  `action_closed`) are assumptions; enqueue is best-effort.
+- Evidence reuses the work-paper `files`/`file_attachments` seam with
+  `entity_type = 'action_plan'`; bytes are still not stored (see
+  `grc/docs/evidence-storage.md`).
