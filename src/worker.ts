@@ -42,6 +42,9 @@ import { systemClock } from './lib/engr/time';
 import { getGrcEnv } from './lib/grc/env';
 import { getDb as getGrcDb } from './lib/grc/db';
 import { updateOverdueStatuses } from './lib/grc/repos/overdue';
+import { getGrcDeliveryEnv } from './lib/grc/notify/env';
+import { runGrcDispatch } from './lib/grc/notify/dispatch';
+import { runStaleReminders, runOverdueReminders } from './lib/grc/notify/reminders';
 
 const DAILY_PM_CRON = '0 3 * * *';
 
@@ -194,15 +197,27 @@ export default {
         const delivery = getDeliveryEnv();
         if (controller.cron === DAILY_PM_CRON) {
           await runPmScan(db, delivery, systemClock, { orgLimit: 50, scheduleLimit: 200 });
-          try {
-            const grcDb = await getGrcDb(getGrcEnv());
-            await updateOverdueStatuses(grcDb);
-          } catch {
-            // The GRC overdue refresh is best-effort: a missing GRC binding or a
-            // schema difference must not fail the engr crons.
-          }
         }
         await runDispatch(db, delivery, systemClock, { limit: 200 });
+
+        // GRC maintenance and notification delivery. Wrapped so a missing GRC
+        // binding or a schema difference never fails the engr crons. The queue is
+        // drained every run (urgent promptly, normal batched into digests); the
+        // daily cron also refreshes overdue statuses and sends the stale reminders,
+        // and the weekly overdue reminders on Mondays.
+        try {
+          const grcDb = await getGrcDb(getGrcEnv());
+          await runGrcDispatch(grcDb, getGrcDeliveryEnv(), systemClock, { limit: 200 });
+          if (controller.cron === DAILY_PM_CRON) {
+            await updateOverdueStatuses(grcDb);
+            await runStaleReminders(grcDb, systemClock);
+            if (systemClock.now().getUTCDay() === 1) {
+              await runOverdueReminders(grcDb, systemClock);
+            }
+          }
+        } catch {
+          // best-effort GRC maintenance
+        }
       })(),
     );
   },
