@@ -27,7 +27,7 @@
     "cf:deploy": "astro build && wrangler deploy --config dist/server/wrangler.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --experimental-strip-types --test engr/test/*.test.ts",
+    "test": "node --experimental-strip-types --test engr/test/*.test.ts grc/test/*.test.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:apply": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/apply.ts",
