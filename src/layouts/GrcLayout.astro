@@ -12,6 +12,10 @@ import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
 import '@/styles/grc.css';
 import GrcIcon from '@/components/grc/GrcIcon.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { getSidebarCounts, type SidebarCounts } from '@grc/repos/dashboard';
+import { buildNav, type CountKey, type NavGroupDef, type NavItemDef } from '@grc/dashboard/roleNav';
 
 interface Props {
   title: string;
@@ -22,52 +26,29 @@ const pageTitle = `${title}, Murikah GRC`;
 const grc = Astro.locals.grc;
 const path = Astro.locals.grcPath ?? '/';
 
-interface NavItem {
-  label: string;
-  href: string;
-  icon: string;
-}
-interface NavGroup {
-  label: string;
-  icon: string;
-  items: NavItem[];
-}
+// The navigation is filtered to the signed-in role and permissions.
+const groups = buildNav({
+  roleCode: grc?.roleCode ?? '',
+  perms: grc?.perms ?? [],
+  isPlatformOwner: grc?.isPlatformOwner ?? false,
+});
 
-const groups: NavGroup[] = [
-  {
-    label: 'Overview',
-    icon: 'overview',
-    items: [
-      { label: 'Dashboard', href: '/', icon: 'dashboard' },
-      { label: 'Notifications', href: '/notifications', icon: 'bell' },
-    ],
-  },
-  {
-    label: 'Audit',
-    icon: 'audit',
-    items: [
-      { label: 'Work papers', href: '/work-papers', icon: 'workpapers' },
-      { label: 'Action plans', href: '/action-plans', icon: 'actionplans' },
-      { label: 'Auditee responses', href: '/auditee-responses', icon: 'responses' },
-      { label: 'Reports', href: '/reports', icon: 'reports' },
-    ],
-  },
-  {
-    label: 'Setup',
-    icon: 'setup',
-    items: [
-      { label: 'Affiliates', href: '/affiliates', icon: 'affiliates' },
-      { label: 'Audit universe', href: '/audit-universe', icon: 'universe' },
-      { label: 'Users', href: '/users', icon: 'users' },
-      { label: 'Roles', href: '/roles', icon: 'roles' },
-      { label: 'Settings', href: '/settings', icon: 'settings' },
-    ],
-  },
-];
+// Sidebar badge counts, server-rendered on every navigation and refreshed by a
+// light client poll. Best-effort: a count failure never breaks the app shell.
+let counts: SidebarCounts | null = null;
+if (grc) {
+  try {
+    const db = await getDb(getGrcEnv());
+    counts = await getSidebarCounts(db, grc.organizationId, grc.userId);
+  } catch {
+    counts = null;
+  }
+}
+const countFor = (key: CountKey | undefined): number => (key && counts ? counts[key] : 0);
 
 const isActive = (href: string): boolean =>
   href === '/' ? path === '/' : path === href || path.startsWith(href + '/');
-const groupActive = (g: NavGroup): boolean => g.items.some((i) => isActive(i.href));
+const groupActive = (g: NavGroupDef): boolean => g.items.some((i: NavItemDef) => isActive(i.href));
 
 const orgName = grc?.organizationName ?? 'Organisation';
 const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
@@ -142,6 +123,16 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
                       >
                         <GrcIcon name={item.icon} size={16} class="grc-navlink__icon" />
                         <span>{item.label}</span>
+                        {item.countKey && (
+                          <span
+                            class:list={['grc-navcount', { 'grc-navcount--alert': item.alert }]}
+                            data-count-key={item.countKey}
+                            aria-label={`${item.label} count`}
+                            hidden={countFor(item.countKey) === 0}
+                          >
+                            {countFor(item.countKey)}
+                          </span>
+                        )}
                       </a>
                     </li>
                   ))}
@@ -175,5 +166,33 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
         <slot />
       </main>
     </div>
+
+    <script>
+      // Refresh the sidebar badge counts on a light interval and when the tab
+      // regains focus, so the queues stay current between navigations. The
+      // server-renders the counts on every navigation; this only tops them up.
+      const applyCounts = (counts: Record<string, number>): void => {
+        document.querySelectorAll<HTMLElement>('[data-count-key]').forEach((el) => {
+          const key = el.getAttribute('data-count-key');
+          const n = key && typeof counts[key] === 'number' ? counts[key] : 0;
+          el.textContent = String(n);
+          el.hidden = n === 0;
+        });
+      };
+      const refresh = async (): Promise<void> => {
+        try {
+          const res = await fetch('/api/sidebar-counts', {
+            headers: { accept: 'application/json' },
+          });
+          if (res.ok) applyCounts(await res.json());
+        } catch {
+          // best-effort; the server-rendered counts stand
+        }
+      };
+      setInterval(refresh, 60000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void refresh();
+      });
+    </script>
   </body>
 </html>
