@@ -15,6 +15,7 @@ import GrcIcon from '@/components/grc/GrcIcon.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { getSidebarCounts, type SidebarCounts } from '@grc/repos/dashboard';
+import { unreadCount, listInApp, type InAppItem } from '@grc/repos/inApp';
 import { buildNav, type CountKey, type NavGroupDef, type NavItemDef } from '@grc/dashboard/roleNav';
 
 interface Props {
@@ -36,10 +37,16 @@ const groups = buildNav({
 // Sidebar badge counts, server-rendered on every navigation and refreshed by a
 // light client poll. Best-effort: a count failure never breaks the app shell.
 let counts: SidebarCounts | null = null;
+let unread = 0;
+let bellItems: InAppItem[] = [];
 if (grc) {
   try {
     const db = await getDb(getGrcEnv());
-    counts = await getSidebarCounts(db, grc.organizationId, grc.userId);
+    [counts, unread, bellItems] = await Promise.all([
+      getSidebarCounts(db, grc.organizationId, grc.userId),
+      unreadCount(db, grc.organizationId, grc.userId),
+      listInApp(db, grc.organizationId, grc.userId, 6),
+    ]);
   } catch {
     counts = null;
   }
@@ -81,6 +88,42 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
           <p class="grc-orgline__label">Organisation</p>
           <p class="grc-orgline__name">{orgName}</p>
         </div>
+
+        {
+          grc && (
+            <details class="grc-bell">
+              <summary class="grc-bell__summary">
+                <GrcIcon name="bell" size={16} />
+                <span>Notifications</span>
+                {unread > 0 && <span class="grc-navcount grc-navcount--alert">{unread}</span>}
+              </summary>
+              <div class="grc-bell__panel">
+                {bellItems.length === 0 ? (
+                  <p class="grc-bell__empty">No notifications.</p>
+                ) : (
+                  <ul class="grc-bell__list">
+                    {bellItems.map((it) => (
+                      <li class:list={['grc-bell__item', { 'is-unread': !it.read }]}>
+                        <a href={it.link ?? '/notifications'}>{it.title}</a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div class="grc-bell__foot">
+                  {unread > 0 && (
+                    <form method="post" action="/api/notifications" style="margin:0">
+                      <input type="hidden" name="all" value="1" />
+                      <button type="submit" class="grc-bell__mark">
+                        Mark all read
+                      </button>
+                    </form>
+                  )}
+                  <a href="/notifications">See all</a>
+                </div>
+              </div>
+            </details>
+          )
+        }
 
         {
           showSwitcher && (

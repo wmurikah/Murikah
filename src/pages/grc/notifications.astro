@@ -1,10 +1,89 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+
+/**
+ * The in-app notification centre: the signed-in user's notifications, newest
+ * first, with deep links and mark-as-read. Scoped to the acting organisation and
+ * the user. The queue that feeds these is drained by the scheduled Worker.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { listInApp, unreadCount, type InAppItem } from '@grc/repos/inApp';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const db = await getDb(getGrcEnv());
+const [items, unread] = await Promise.all([
+  listInApp(db, grc.organizationId, grc.userId, 60),
+  unreadCount(db, grc.organizationId, grc.userId),
+]);
+
+const sevClass = (s: string): string => {
+  if (s === 'urgent') return 'grc-dot grc-dot--urgent';
+  if (s === 'warning') return 'grc-dot grc-dot--warning';
+  return 'grc-dot';
+};
+const fmt = (d: string | null): string => (d ? d.slice(0, 16).replace('T', ' ') : '');
+const groups: InAppItem[] = items;
 ---
 
-<GrcPlaceholder
-  title="Notifications"
-  lead="Alerts and the send queue for your organisation."
-  note="Notifications and the send queue arrive with the notifications module."
-/>
+<GrcLayout title="Notifications">
+  <div class="grc-page-head">
+    <div>
+      <h1>Notifications</h1>
+      <p class="grc-lead">
+        {unread > 0 ? `${unread} unread` : 'All caught up'} for {grc.organizationName}.
+      </p>
+    </div>
+    {
+      unread > 0 && (
+        <form method="post" action="/api/notifications" style="margin:0">
+          <input type="hidden" name="all" value="1" />
+          <button type="submit" class="grc-btn grc-btn--secondary">
+            Mark all read
+          </button>
+        </form>
+      )
+    }
+  </div>
+
+  {
+    groups.length === 0 ? (
+      <div class="grc-empty">
+        <p>
+          <strong>No notifications yet.</strong> Assignments, reviews, delegations and reminders
+          appear here.
+        </p>
+      </div>
+    ) : (
+      <ul class="grc-notiflist">
+        {groups.map((it) => (
+          <li class:list={['grc-notifrow', { 'is-unread': !it.read }]}>
+            <span class={sevClass(it.severity)} aria-hidden="true" />
+            <span class="grc-notifrow__main">
+              {it.link ? (
+                <a href={it.link} class="grc-notifrow__title">
+                  {it.title}
+                </a>
+              ) : (
+                <span class="grc-notifrow__title">{it.title}</span>
+              )}
+              {it.body && <span class="grc-notifrow__body">{it.body}</span>}
+            </span>
+            <time class="grc-notifrow__time">{fmt(it.createdAt)}</time>
+            {!it.read && (
+              <form method="post" action="/api/notifications" style="margin:0">
+                <input type="hidden" name="id" value={it.id} />
+                <button type="submit" class="grc-btn grc-btn--secondary grc-btn--tiny">
+                  Mark read
+                </button>
+              </form>
+            )}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</GrcLayout>
