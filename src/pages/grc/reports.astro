@@ -1,10 +1,313 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+
+/**
+ * Board and BARC reporting (BoardReports). A filters panel drives four report
+ * types, each previewed in the Murikah house style and downloadable as a Word
+ * document. The heavy filters and the role scope are enforced server-side (a
+ * UNIT_MANAGER is limited to their own affiliate and their assigned items). Gate:
+ * REPORTS.view to see the page, REPORTS.board to generate a report.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import ReportPreview from '@/components/grc/ReportPreview.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { listAffiliates, listAuditAreas, type Option } from '@grc/repos/workPaperLookups';
+import { loadEnumLabels } from '@grc/repos/enums';
+import { writeAuditLog } from '@grc/repos/audit';
+import {
+  parseReportFilters,
+  filterSummary,
+  reportTypeLabel,
+  isUnitManagerScope,
+  buildReport,
+  ymd,
+  REPORT_TYPES,
+  RISK_BUCKETS,
+  RISK_LABELS,
+  STATUS_OPTIONS,
+  UNIT_MANAGER_HIDDEN_STATUSES,
+} from '@grc/reports/reportModel';
+import { getComprehensiveReportData, resolveUserAffiliate } from '@grc/repos/reportData';
+import type { ReportDocument } from '@grc/reports/reportTypes';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'REPORTS.view');
+const canBoard = can(Astro.locals, 'REPORTS.board');
+const now = new Date();
+const params = Astro.url.searchParams;
+const unitScope = isUnitManagerScope(grc.roleCode, grc.isPlatformOwner);
+
+let affiliates: Option[] = [];
+let auditAreas: Option[] = [];
+let forcedAffiliate: string | null = null;
+let doc: ReportDocument | null = null;
+let filtersState: ReturnType<typeof parseReportFilters> | null = null;
+
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  forcedAffiliate = unitScope
+    ? await resolveUserAffiliate(db, grc.organizationId, grc.userId)
+    : null;
+  const filters = parseReportFilters(
+    params,
+    {
+      roleCode: grc.roleCode,
+      isPlatformOwner: grc.isPlatformOwner,
+      forcedAffiliateCode: forcedAffiliate,
+    },
+    now,
+  );
+  filtersState = filters;
+  [affiliates, auditAreas] = await Promise.all([
+    listAffiliates(db, grc.organizationId),
+    listAuditAreas(db, grc.organizationId),
+  ]);
+
+  if (canBoard) {
+    const [dataset, wpLabels, apLabels] = await Promise.all([
+      getComprehensiveReportData(
+        db,
+        grc.organizationId,
+        { userId: grc.userId, roleCode: grc.roleCode, isPlatformOwner: grc.isPlatformOwner },
+        filters,
+        forcedAffiliate,
+      ),
+      loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+    ]);
+    const statusLabels: Record<string, string> = {};
+    for (const [k, v] of wpLabels) statusLabels[k] = v;
+    for (const [k, v] of apLabels) statusLabels[k] = v;
+
+    const affiliateName = filters.affiliateCode
+      ? (affiliates.find((a) => a.id === filters.affiliateCode)?.label ?? filters.affiliateCode)
+      : null;
+    const auditAreaName = filters.auditAreaId
+      ? (auditAreas.find((a) => a.id === filters.auditAreaId)?.label ?? filters.auditAreaId)
+      : null;
+
+    doc = buildReport(dataset, filters, {
+      header: {
+        organisation: grc.organizationName,
+        documentTitle: 'Internal Audit Report',
+        reportLabel: reportTypeLabel(filters.reportType),
+        generatedAt: ymd(now),
+        filterSummary: filterSummary(filters, { affiliateName, auditAreaName }),
+        scopeNotice: unitScope
+          ? 'Scoped to your affiliate and the observations and action plans assigned to you.'
+          : undefined,
+      },
+      now,
+      statusLabels,
+    });
+
+    if (params.get('applied') === '1') {
+      try {
+        await writeAuditLog(db, {
+          organizationId: grc.organizationId,
+          userId: grc.userId,
+          action: 'REPORT.generate',
+          details: `${filters.reportType}: ${filterSummary(filters, { affiliateName, auditAreaName })}`,
+        });
+      } catch {
+        // best-effort audit
+      }
+    }
+  }
+}
+
+const years: number[] = [];
+for (let y = now.getUTCFullYear(); y >= now.getUTCFullYear() - 6; y--) years.push(y);
+const f = filtersState;
+const forcedAffiliateName = forcedAffiliate
+  ? (affiliates.find((a) => a.id === forcedAffiliate)?.label ?? forcedAffiliate)
+  : null;
+const visibleStatuses = STATUS_OPTIONS.filter(
+  (o) => !(unitScope && UNIT_MANAGER_HIDDEN_STATUSES.includes(o.value)),
+);
 ---
 
-<GrcPlaceholder
-  title="Reports"
-  lead="Board and BARC reporting for your organisation."
-  note="Reporting arrives with the reporting module."
-/>
+<GrcLayout title="Reports">
+  <div class="grc-page-head">
+    <div>
+      <h1>Reports</h1>
+      <p class="grc-lead">Board and BARC reporting for {grc.organizationName}.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have access to reports.
+      </p>
+    ) : (
+      <>
+        {unitScope && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            You are scoped to
+            {forcedAffiliateName ? ` ${forcedAffiliateName}` : ' your'} observations and action
+            plans assigned to you. Draft and submitted work papers are not shown.
+          </p>
+        )}
+
+        <form method="get" action="/reports" class="grc-report-filters" aria-label="Report filters">
+          <input type="hidden" name="applied" value="1" />
+
+          <div class="grc-report-filters__grid">
+            <div class="grc-field">
+              <label for="type">Report type</label>
+              <select id="type" name="type" class="grc-select">
+                {REPORT_TYPES.map((t) => (
+                  <option value={t.value} selected={f?.reportType === t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div class="grc-field">
+              <label for="year">Year</label>
+              <select id="year" name="year" class="grc-select">
+                <option value="">All years</option>
+                {years.map((y) => (
+                  <option value={String(y)} selected={f?.year === y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div class="grc-field">
+              <label for="date_from">From</label>
+              <input
+                type="date"
+                id="date_from"
+                name="date_from"
+                class="grc-input"
+                value={f?.dateFrom}
+              />
+            </div>
+            <div class="grc-field">
+              <label for="date_to">To</label>
+              <input type="date" id="date_to" name="date_to" class="grc-input" value={f?.dateTo} />
+            </div>
+
+            <div class="grc-field">
+              <label for="affiliate">Affiliate</label>
+              {unitScope ? (
+                <>
+                  <input
+                    type="text"
+                    class="grc-input"
+                    value={forcedAffiliateName ?? 'Your affiliate'}
+                    readonly
+                    aria-readonly="true"
+                  />
+                  {forcedAffiliate && (
+                    <input type="hidden" name="affiliate" value={forcedAffiliate} />
+                  )}
+                </>
+              ) : (
+                <select id="affiliate" name="affiliate" class="grc-select">
+                  <option value="">All affiliates</option>
+                  {affiliates.map((a) => (
+                    <option value={a.id} selected={f?.affiliateCode === a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div class="grc-field">
+              <label for="audit_area">Audit area</label>
+              <select id="audit_area" name="audit_area" class="grc-select">
+                <option value="">All areas</option>
+                {auditAreas.map((a) => (
+                  <option value={a.id} selected={f?.auditAreaId === a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <fieldset class="grc-report-filters__set">
+            <legend>Risk rating</legend>
+            <div class="grc-checkrow">
+              {RISK_BUCKETS.map((b) => (
+                <label class={`grc-checkchip grc-tone--risk-${b.toLowerCase()}`}>
+                  <input type="checkbox" name="risk" value={b} checked={f?.risks.includes(b)} />
+                  <span>{RISK_LABELS[b]}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset class="grc-report-filters__set">
+            <legend>Work paper status</legend>
+            <div class="grc-checkrow">
+              {visibleStatuses.map((o) => (
+                <label class="grc-checkchip">
+                  <input
+                    type="checkbox"
+                    name="status"
+                    value={o.value}
+                    checked={f?.statuses.includes(o.value)}
+                  />
+                  <span>{o.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <label class="grc-checkline">
+            <input type="checkbox" name="overdue_only" value="1" checked={f?.overdueOnly} />
+            <span>Overdue items only</span>
+          </label>
+
+          <div class="grc-actionbar" style="margin-top:0.75rem">
+            <button type="submit" class="grc-btn grc-btn--primary">
+              Preview
+            </button>
+            {canBoard && (
+              <button
+                type="submit"
+                class="grc-btn grc-btn--secondary"
+                formmethod="post"
+                formaction="/api/reports/export"
+              >
+                Download as Word
+              </button>
+            )}
+          </div>
+        </form>
+
+        {!canBoard ? (
+          <p class="grc-empty">
+            <strong>Board report generation needs the board reports permission.</strong> You can set
+            the filters, but generating and downloading a report requires REPORTS.board.
+          </p>
+        ) : doc ? (
+          <section class="grc-report-pane" aria-label="Report preview">
+            <div class="grc-report-pane__bar">
+              <span class="grc-report-pane__title">Preview</span>
+              <button type="button" id="report-print" class="grc-btn grc-btn--secondary">
+                Print
+              </button>
+            </div>
+            <ReportPreview doc={doc} />
+          </section>
+        ) : null}
+      </>
+    )
+  }
+</GrcLayout>
+
+<script>
+  document.getElementById('report-print')?.addEventListener('click', () => window.print());
+</script>

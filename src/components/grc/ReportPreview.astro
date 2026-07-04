@@ -1,0 +1,110 @@
+---
+/**
+ * Render a generic ReportDocument in the Murikah house style. This is the single
+ * renderer behind the preview pane; the Word export renders the same document to
+ * OOXML, so the two match. The report's own palette (navy #1a365d, gold #C9A83E)
+ * maps to the brand tokens. Print styles live in grc.css.
+ */
+import type { ReportDocument, Tone, Cell } from '@grc/reports/reportTypes';
+
+interface Props {
+  doc: ReportDocument;
+}
+const { doc } = Astro.props;
+
+const toneClass = (tone: Tone | undefined): string =>
+  tone && tone !== 'default' ? `grc-tone--${tone}` : '';
+const cellClass = (c: Cell): string =>
+  [toneClass(c.tone), c.align === 'right' ? 'is-num' : ''].filter(Boolean).join(' ');
+---
+
+<article class="grc-report" id="report-doc">
+  <header class="grc-report__head">
+    <p class="grc-report__org">{doc.header.organisation}</p>
+    <h2 class="grc-report__title">{doc.header.documentTitle}</h2>
+    <p class="grc-report__label">{doc.header.reportLabel}</p>
+    <p class="grc-report__meta">Generated {doc.header.generatedAt}</p>
+    <p class="grc-report__meta">{doc.header.filterSummary}</p>
+    {doc.header.scopeNotice && <p class="grc-report__notice">{doc.header.scopeNotice}</p>}
+  </header>
+
+  {
+    doc.blocks.map((block) => {
+      if (block.kind === 'kpis') {
+        return (
+          <div class="grc-report__kpis">
+            {block.items.map((k) => (
+              <div class="grc-report__kpi">
+                <span class:list={['grc-report__kpi-value', toneClass(k.tone)]}>{k.value}</span>
+                <span class="grc-report__kpi-label">{k.label}</span>
+              </div>
+            ))}
+          </div>
+        );
+      }
+      if (block.kind === 'note') {
+        return <p class="grc-lead grc-report__note">{block.text}</p>;
+      }
+      if (block.kind === 'group') {
+        return (
+          <section class="grc-report__group">
+            <h3 class="grc-report__h">{block.title}</h3>
+            {block.subtitle && <p class="grc-report__sub">{block.subtitle}</p>}
+            {block.badges && block.badges.length > 0 && (
+              <p class="grc-report__badges">
+                {block.badges.map((b) => (
+                  <span class:list={['grc-badge', toneClass(b.tone)]}>{b.text}</span>
+                ))}
+              </p>
+            )}
+            <div class="grc-tablewrap">
+              <table class="grc-report__table">
+                <thead>
+                  <tr>
+                    {block.columns.map((c) => (
+                      <th>{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row) => (
+                    <tr>
+                      {row.map((cell) => (
+                        <td class={cellClass(cell)}>{cell.text}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      }
+      return (
+        <section class="grc-report__section">
+          {block.title && <h3 class="grc-report__h">{block.title}</h3>}
+          <div class="grc-tablewrap">
+            <table class="grc-report__table">
+              <thead>
+                <tr>
+                  {block.columns.map((c) => (
+                    <th>{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {block.rows.map((row) => (
+                  <tr>
+                    {row.map((cell) => (
+                      <td class={cellClass(cell)}>{cell.text}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      );
+    })
+  }
+</article>
