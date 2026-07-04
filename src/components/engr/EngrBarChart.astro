@@ -30,7 +30,7 @@ const hasData = data.length > 0 && max > 0;
 const pct = (v: number) => (max > 0 ? Math.round((v / max) * 100) : 0);
 ---
 
-<figure class="engr-chart">
+<figure class="engr-chart engr-chart--ranked">
   <figcaption class="engr-chart__cap">
     <h3 class="engr-chart__title">{title}</h3>
     {description && <p class="engr-chart__desc">{description}</p>}
@@ -39,10 +39,13 @@ const pct = (v: number) => (max > 0 ? Math.round((v / max) * 100) : 0);
     !hasData ? (
       <p class="engr-empty">{emptyText}</p>
     ) : (
-      <table class="engr-chart__table">
+      <table class="engr-chart__table engr-chart__table--ranked">
         <thead>
           <tr>
             <th scope="col">Item</th>
+            <th scope="col" class="engr-vh">
+              Bar
+            </th>
             <th scope="col">{valueHeading}</th>
           </tr>
         </thead>
@@ -52,10 +55,15 @@ const pct = (v: number) => (max > 0 ? Math.round((v / max) * 100) : 0);
               <th scope="row" class="engr-chart__label">
                 {d.href ? <a href={d.href}>{d.label}</a> : d.label}
               </th>
-              <td class="engr-chart__cell">
-                <span class="engr-chart__bar" style={`width:${pct(d.value)}%`} aria-hidden="true" />
-                <span class="engr-chart__value">{d.display ?? d.value}</span>
+              <td class="engr-chart__barcell">
+                <span class="engr-chart__track" aria-hidden="true">
+                  <span
+                    class:list={['engr-chart__bar', { 'engr-chart__bar--lead': d.value === max }]}
+                    style={`width:${pct(d.value)}%`}
+                  />
+                </span>
               </td>
+              <td class="engr-chart__num">{d.display ?? d.value}</td>
             </tr>
           ))}
         </tbody>
