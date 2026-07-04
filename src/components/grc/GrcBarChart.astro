@@ -1,0 +1,68 @@
+---
+/**
+ * A horizontal bar chart that is also its own data table, so it is fully
+ * accessible with no client JavaScript (the same approach Engineering Rhythm
+ * uses). Each row is a label (row header) and its value, with a decorative bar
+ * behind the value; the label drills through when the datum carries an href.
+ * Shows a "no data" line rather than a broken axis when the series is empty.
+ */
+import type { ChartDatum } from '@grc/repos/dashboard';
+
+interface Props {
+  title: string;
+  description?: string;
+  data: ChartDatum[];
+  valueHeading?: string;
+  emptyText?: string;
+}
+const {
+  title,
+  description,
+  data,
+  valueHeading = 'Count',
+  emptyText = 'No data yet.',
+} = Astro.props;
+
+const max = data.reduce((m, d) => Math.max(m, d.value), 0);
+const hasData = data.length > 0 && max > 0;
+const pct = (v: number): number => (max > 0 ? Math.round((v / max) * 100) : 0);
+---
+
+<figure class="grc-chart">
+  <figcaption class="grc-chart__cap">
+    <h3 class="grc-chart__title">{title}</h3>
+    {description && <p class="grc-chart__desc">{description}</p>}
+  </figcaption>
+  {
+    !hasData ? (
+      <p class="grc-chart__empty">{emptyText}</p>
+    ) : (
+      <table class="grc-chart__table">
+        <thead>
+          <tr>
+            <th scope="col">Item</th>
+            <th scope="col" class="grc-vh">
+              Bar
+            </th>
+            <th scope="col">{valueHeading}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d) => (
+            <tr>
+              <th scope="row" class="grc-chart__label">
+                {d.href ? <a href={d.href}>{d.label}</a> : d.label}
+              </th>
+              <td class="grc-chart__barcell">
+                <span class="grc-chart__track" aria-hidden="true">
+                  <span class="grc-chart__bar" style={`width:${pct(d.value)}%`} />
+                </span>
+              </td>
+              <td class="grc-chart__num">{d.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+</figure>

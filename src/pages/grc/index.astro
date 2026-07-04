@@ -2,15 +2,84 @@
 export const prerender = false;
 
 /**
- * GRC dashboard placeholder. The shell is live and scoped to the acting
- * organisation; the modules (work papers, action plans, reporting, analytics)
- * arrive in later prompts. This confirms the sign-in, tenancy and RBAC
- * foundation by showing the acting organisation and the signed-in role.
+ * The GRC dashboard (Dashboard.html), ported from 06_DashboardService.gs. Shows
+ * the four role-scoped stat cards, the pending-reviews, due-this-week and
+ * needs-attention panels, recent activity, and (for Head of Audit and Senior
+ * Auditor) the team-performance charts. Everything is scoped to the acting
+ * organisation and, for the auditee roles, to the signed-in user. Read-only;
+ * every card and row drills through to the module, which enforces its own gating.
+ * Gate: DASHBOARD.view.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcBarChart from '@/components/grc/GrcBarChart.astro';
+import GrcGroupedBar from '@/components/grc/GrcGroupedBar.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
+import { canSeeTeamPerformance } from '@grc/dashboard/roleNav';
+import {
+  getDashboardStats,
+  getPendingReviews,
+  getDueThisWeek,
+  getRecentActivity,
+  getTeamPerformance,
+  type DashboardStats,
+  type PendingReviews,
+  type DueItem,
+  type ActivityItem,
+  type TeamPerformance,
+  type DashboardScope,
+} from '@grc/repos/dashboard';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'DASHBOARD.view');
+const scope: DashboardScope = {
+  userId: grc.userId,
+  roleCode: grc.roleCode,
+  isPlatformOwner: grc.isPlatformOwner,
+  perms: grc.perms,
+};
+const canTeam = canSeeTeamPerformance(grc.roleCode);
+
+let stats: DashboardStats | null = null;
+let reviews: PendingReviews = { toReview: [], toVerify: [], responsesToReview: [] };
+let dueThisWeek: DueItem[] = [];
+let recent: ActivityItem[] = [];
+let team: TeamPerformance | null = null;
+let labels = new Map<string, string>();
+
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  const [statsR, reviewsR, dueR, recentR, wpLabels, apLabels] = await Promise.all([
+    getDashboardStats(db, grc.organizationId, scope),
+    getPendingReviews(db, grc.organizationId, scope),
+    getDueThisWeek(db, grc.organizationId, scope),
+    getRecentActivity(db, grc.organizationId, scope),
+    loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+    loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+  ]);
+  stats = statsR;
+  reviews = reviewsR;
+  dueThisWeek = dueR;
+  recent = recentR;
+  labels = new Map([...wpLabels, ...apLabels]);
+  if (canTeam) team = await getTeamPerformance(db, grc.organizationId);
+}
+
+const reviewCount =
+  reviews.toReview.length + reviews.toVerify.length + reviews.responsesToReview.length;
+const needsAttention = (stats?.overdue.count ?? 0) > 0 || reviewCount > 0 || dueThisWeek.length > 0;
+const fmtDate = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+const riskClass = (r: string | null): string => {
+  const v = (r ?? '').toUpperCase();
+  if (v === 'CRITICAL' || v === 'EXTREME' || v === 'HIGH') return 'grc-pill grc-pill--risk-high';
+  if (v === 'MEDIUM') return 'grc-pill grc-pill--risk-medium';
+  if (v === 'LOW') return 'grc-pill grc-pill--risk-low';
+  return 'grc-pill';
+};
 ---
 
 <GrcLayout title="Dashboard">
@@ -21,36 +90,198 @@ if (!grc) return Astro.redirect('/login');
     </div>
   </div>
 
-  <div class="grc-cards" style="margin-bottom:1.5rem">
-    <div class="grc-card">
-      <p class="grc-card__label">Organisation</p>
-      <p class="grc-card__count" style="font-size:1.2rem">{grc.organizationName}</p>
-      <p class="grc-card__note">
-        {grc.isPlatformOwner ? 'Acting as platform owner' : 'Your organisation'}
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have access to the dashboard.
       </p>
-    </div>
-    <div class="grc-card">
-      <p class="grc-card__label">Your role</p>
-      <p class="grc-card__count" style="font-size:1.2rem">{grc.roleCode}</p>
-      <p class="grc-card__note">{grc.perms.length} permissions</p>
-    </div>
-    <div class="grc-card">
-      <p class="grc-card__label">Open work papers</p>
-      <p class="grc-card__count">-</p>
-      <p class="grc-card__note">Arrives with the work papers module</p>
-    </div>
-    <div class="grc-card">
-      <p class="grc-card__label">Open action plans</p>
-      <p class="grc-card__count">-</p>
-      <p class="grc-card__note">Arrives with the action plans module</p>
-    </div>
-  </div>
+    ) : (
+      <>
+        <div class="grc-cards grc-cards--stats">
+          <a class="grc-card grc-card--link" href={stats!.workPapers.href}>
+            <p class="grc-card__label">Work papers</p>
+            <p class="grc-card__count">{stats!.workPapers.count}</p>
+            <p class="grc-card__note">View all</p>
+          </a>
+          <a class="grc-card grc-card--link" href={stats!.pendingReview.href}>
+            <p class="grc-card__label">Pending review</p>
+            <p class="grc-card__count">{stats!.pendingReview.count}</p>
+            <p class="grc-card__note">Submitted for review</p>
+          </a>
+          <a class="grc-card grc-card--link" href={stats!.actionPlans.href}>
+            <p class="grc-card__label">Action plans</p>
+            <p class="grc-card__count">{stats!.actionPlans.count}</p>
+            <p class="grc-card__note">View all</p>
+          </a>
+          <a
+            class:list={[
+              'grc-card',
+              'grc-card--link',
+              { 'grc-card--alert': stats!.overdue.count > 0 },
+            ]}
+            href={stats!.overdue.href}
+          >
+            <p class="grc-card__label">Overdue</p>
+            <p class="grc-card__count">{stats!.overdue.count}</p>
+            <p class="grc-card__note">Past due, not settled</p>
+          </a>
+        </div>
 
-  <div class="grc-empty">
-    <p>
-      <strong>The audit modules are on their way.</strong>
-      Work papers, action plans, auditee responses, board reporting, analytics and notifications each
-      arrive in their own prompt, ported from the audit system with their workflow preserved.
-    </p>
-  </div>
+        {needsAttention && (
+          <div class="grc-attention" role="status">
+            <h2 class="grc-attention__title">Needs your attention</h2>
+            <ul class="grc-attention__list">
+              {stats!.overdue.count > 0 && (
+                <li>
+                  <a href={stats!.overdue.href}>{stats!.overdue.count} overdue action plans</a>
+                </li>
+              )}
+              {reviews.toReview.length > 0 && (
+                <li>
+                  <a href="/work-papers?status=SUBMITTED">
+                    {reviews.toReview.length} work papers to review
+                  </a>
+                </li>
+              )}
+              {reviews.toVerify.length > 0 && (
+                <li>
+                  <a href="/action-plans?status=PENDING_VERIFICATION">
+                    {reviews.toVerify.length} action plans to verify
+                  </a>
+                </li>
+              )}
+              {reviews.responsesToReview.length > 0 && (
+                <li>
+                  <a href="/work-papers?status=RESPONSE_RECEIVED">
+                    {reviews.responsesToReview.length} responses to review
+                  </a>
+                </li>
+              )}
+              {dueThisWeek.length > 0 && <li>{dueThisWeek.length} action plans due this week</li>}
+            </ul>
+          </div>
+        )}
+
+        <div class="grc-dash-grid">
+          <section class="grc-panel">
+            <h2>Pending reviews</h2>
+            {reviewCount === 0 ? (
+              <p class="grc-lead" style="margin:0">
+                Nothing waiting on you.
+              </p>
+            ) : (
+              <div class="grc-dash-lists">
+                {reviews.toReview.length > 0 && (
+                  <div>
+                    <p class="grc-dash-lists__head">Work papers to review</p>
+                    <ul class="grc-dash-list">
+                      {reviews.toReview.map((w) => (
+                        <li>
+                          <a href={w.href}>{w.reference}</a>
+                          <span class="grc-dash-list__title">{w.title}</span>
+                          {w.risk && <span class={riskClass(w.risk)}>{w.risk}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {reviews.toVerify.length > 0 && (
+                  <div>
+                    <p class="grc-dash-lists__head">Action plans to verify</p>
+                    <ul class="grc-dash-list">
+                      {reviews.toVerify.map((a) => (
+                        <li>
+                          <a href={a.href}>{a.reference}</a>
+                          <span class="grc-dash-list__title">{a.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {reviews.responsesToReview.length > 0 && (
+                  <div>
+                    <p class="grc-dash-lists__head">Auditee responses to review</p>
+                    <ul class="grc-dash-list">
+                      {reviews.responsesToReview.map((w) => (
+                        <li>
+                          <a href={w.href}>{w.reference}</a>
+                          <span class="grc-dash-list__title">{w.title}</span>
+                          {w.round != null && <span class="grc-pill">Round {w.round}</span>}
+                          {w.risk && <span class={riskClass(w.risk)}>{w.risk}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section class="grc-panel">
+            <h2>Due this week</h2>
+            {dueThisWeek.length === 0 ? (
+              <p class="grc-lead" style="margin:0">
+                No action plans due in the next seven days.
+              </p>
+            ) : (
+              <ul class="grc-dash-list">
+                {dueThisWeek.map((d) => (
+                  <li>
+                    <a href={d.href}>{d.reference}</a>
+                    <span class="grc-dash-list__title">{d.title}</span>
+                    <span class="grc-dash-list__meta">
+                      {fmtDate(d.dueDate)}
+                      {d.owners ? ` · ${d.owners.split(',')[0]}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <section class="grc-panel">
+          <h2>Recent activity</h2>
+          {recent.length === 0 ? (
+            <p class="grc-lead" style="margin:0">
+              No recent activity.
+            </p>
+          ) : (
+            <ul class="grc-dash-list grc-dash-list--activity">
+              {recent.map((r) => (
+                <li>
+                  <span class="grc-tag">
+                    {r.type === 'work_paper' ? 'Work paper' : 'Action plan'}
+                  </span>
+                  <a href={r.href}>{r.reference}</a>
+                  <span class="grc-dash-list__title">{r.title}</span>
+                  <span class="grc-pill">{statusLabel(labels, r.status)}</span>
+                  <span class="grc-dash-list__meta">{fmtDate(r.updatedAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {canTeam && team && (
+          <section class="grc-panel">
+            <h2>Team performance</h2>
+            <div class="grc-dash-grid">
+              <GrcBarChart
+                title="Auditor productivity"
+                description="Work papers per auditor."
+                data={team.auditorProductivity}
+                valueHeading="Work papers"
+              />
+              <GrcGroupedBar
+                title="Affiliate comparison"
+                description="Open versus closed action plans per affiliate."
+                data={team.affiliateComparison}
+              />
+            </div>
+          </section>
+        )}
+      </>
+    )
+  }
 </GrcLayout>
