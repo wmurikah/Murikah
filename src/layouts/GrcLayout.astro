@@ -1,0 +1,179 @@
+---
+/**
+ * The authenticated GRC shell: a persistent left sidebar of grouped destinations
+ * beside the content, in the Murikah house style. The sidebar carries the brand,
+ * the acting organisation label, a platform-owner switcher (only for a platform
+ * owner with somewhere to switch), the grouped navigation with icons and
+ * collapsible groups, and the account and sign-out at the foot. The active item
+ * and its group are marked from the visitor-facing path the middleware captured.
+ * The Murikah mark is on the tab. Modules render their pages into the slot.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@/styles/global.css';
+import '@/styles/grc.css';
+import GrcIcon from '@/components/grc/GrcIcon.astro';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+const pageTitle = `${title}, Murikah GRC`;
+
+const grc = Astro.locals.grc;
+const path = Astro.locals.grcPath ?? '/';
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: string;
+}
+interface NavGroup {
+  label: string;
+  icon: string;
+  items: NavItem[];
+}
+
+const groups: NavGroup[] = [
+  {
+    label: 'Overview',
+    icon: 'overview',
+    items: [
+      { label: 'Dashboard', href: '/', icon: 'dashboard' },
+      { label: 'Notifications', href: '/notifications', icon: 'bell' },
+    ],
+  },
+  {
+    label: 'Audit',
+    icon: 'audit',
+    items: [
+      { label: 'Work papers', href: '/work-papers', icon: 'workpapers' },
+      { label: 'Action plans', href: '/action-plans', icon: 'actionplans' },
+      { label: 'Auditee responses', href: '/auditee-responses', icon: 'responses' },
+      { label: 'Reports', href: '/reports', icon: 'reports' },
+    ],
+  },
+  {
+    label: 'Setup',
+    icon: 'setup',
+    items: [
+      { label: 'Affiliates', href: '/affiliates', icon: 'affiliates' },
+      { label: 'Audit universe', href: '/audit-universe', icon: 'universe' },
+      { label: 'Users', href: '/users', icon: 'users' },
+      { label: 'Roles', href: '/roles', icon: 'roles' },
+      { label: 'Settings', href: '/settings', icon: 'settings' },
+    ],
+  },
+];
+
+const isActive = (href: string): boolean =>
+  href === '/' ? path === '/' : path === href || path.startsWith(href + '/');
+const groupActive = (g: NavGroup): boolean => g.items.some((i) => isActive(i.href));
+
+const orgName = grc?.organizationName ?? 'Organisation';
+const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
+const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ?? 0) > 0;
+---
+
+<!doctype html>
+<html lang="en-KE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body class="grc">
+    <a href="#grc-main" class="grc-skip">Skip to content</a>
+    <div class="grc-shell">
+      <nav class="grc-sidebar" aria-label="Primary">
+        <a href="/" class="grc-brand">
+          <span class="grc-brand__badge" aria-hidden="true">M</span>
+          <span>
+            <span class="grc-brand__name">Murikah GRC</span>
+            <span class="grc-brand__sub">Internal audit</span>
+          </span>
+        </a>
+
+        <div class="grc-orgline">
+          <p class="grc-orgline__label">Organisation</p>
+          <p class="grc-orgline__name">{orgName}</p>
+        </div>
+
+        {
+          showSwitcher && (
+            <form method="post" action="/api/org/switch" class="grc-switcher">
+              <label class="grc-vh" for="grc-switch">
+                Switch organisation
+              </label>
+              <div class="grc-switcher__row">
+                <select id="grc-switch" name="organization_id" class="grc-switcher__select">
+                  {grc!.switchable.map((o) => (
+                    <option value={o.id} selected={o.id === grc!.organizationId}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" class="grc-switcher__go">
+                  Go
+                </button>
+              </div>
+            </form>
+          )
+        }
+
+        <div class="grc-nav">
+          {
+            groups.map((group) => (
+              <details class="grc-navgroup" open={groupActive(group) || undefined}>
+                <summary class="grc-navgroup__summary">
+                  <GrcIcon name={group.icon} size={15} />
+                  <span class="grc-navgroup__label">{group.label}</span>
+                  <span class="grc-navgroup__chevron" aria-hidden="true" />
+                </summary>
+                <ul class="grc-navgroup__list">
+                  {group.items.map((item) => (
+                    <li>
+                      <a
+                        class="grc-navlink"
+                        href={item.href}
+                        aria-current={isActive(item.href) ? 'page' : undefined}
+                      >
+                        <GrcIcon name={item.icon} size={16} class="grc-navlink__icon" />
+                        <span>{item.label}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ))
+          }
+        </div>
+
+        <div class="grc-account">
+          <div class="grc-account__id">
+            <GrcIcon name="account" size={18} />
+            <span style="min-width:0">
+              <span class="grc-account__name">{userName}</span>
+              <span class="grc-account__meta">
+                {grc?.roleCode ?? ''}
+                {grc?.isPlatformOwner ? ' - platform owner' : ''}
+              </span>
+            </span>
+          </div>
+          <form method="post" action="/api/auth/logout">
+            <button type="submit" class="grc-signout">
+              <GrcIcon name="signout" size={16} />
+              <span>Sign out</span>
+            </button>
+          </form>
+        </div>
+      </nav>
+
+      <main id="grc-main" class="grc-main">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

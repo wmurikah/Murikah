@@ -1,23 +1,38 @@
 /**
- * Global middleware: the Engineering Rhythm session guard.
+ * Global middleware: the session guards for both products.
  *
  * Host routing and the internal rewrite happen earlier, in src/worker.ts, so by
- * the time a request reaches here an engr-host request is already on its /engr
- * route. This middleware only guards those routes: the public entry points and
- * the self-secured machine endpoints pass through, then the session cookie is
- * read and verified. On failure, /engr/api/** returns 401 JSON and page requests
- * redirect to /login (root-relative, so the browser stays on the subdomain). On
- * success, locals.engr is attached with a bound can() helper. The organisation
- * id comes only from the verified session, never from a request parameter. Every
- * other request (the marketing site) passes straight through.
+ * the time a request reaches here an engr-host request is on its /engr route and
+ * a grc-host request is on its /grc route. This middleware guards each: the
+ * public entry points pass through, then the session is read and verified. On
+ * failure, an API path returns 401 JSON and a page redirects to /login
+ * (root-relative, so the browser stays on the subdomain). On success the request
+ * context is attached to locals, and every downstream query scopes by the
+ * organisation resolved from the verified session, never from a request
+ * parameter. Every other request (the marketing site) passes straight through.
+ *
+ * The two products are independent: engr uses a stateless JWT and org_id; grc
+ * uses a DB-backed session and organization_id, with a single role_code.
  */
 import { defineMiddleware } from 'astro:middleware';
 import { getEngrEnv } from '@engr/env';
-import { getDb } from '@engr/db';
+import { getDb as getEngrDb } from '@engr/db';
 import { readSession } from '@engr/auth/session';
 import { readActingOrg } from '@engr/auth/actingOrg';
 import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
 import { toAppPath, isPublicAppPath, isEngrApiPath } from '@engr/routing';
+import { getGrcEnv } from '@grc/env';
+import { getDb as getGrcDb } from '@grc/db';
+import { readSessionId } from '@grc/auth/session';
+import { readActingOrg as readGrcActingOrg } from '@grc/auth/actingOrg';
+import { resolveSession } from '@grc/repos/session';
+import {
+  resolveActingContext as resolveGrcActingContext,
+  type SwitchOrg as GrcSwitchOrg,
+} from '@grc/repos/orgContext';
+import { loadPermissions } from '@grc/auth/rbac';
+import { loadSubscription } from '@grc/repos/features';
+import { toGrcAppPath, isGrcPublicPath, isGrcApiPath } from '@grc/routing';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -29,23 +44,96 @@ function jsonResponse(body: unknown, status: number): Response {
 export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname } = context.url;
 
-  // Only the product routes are guarded; the marketing site passes through.
+  // ---- GRC platform guard (/grc routes) ------------------------------------
+  if (pathname === '/grc' || pathname.startsWith('/grc/')) {
+    const appPath = toGrcAppPath(pathname);
+    context.locals.grcPath = appPath;
+
+    if (isGrcPublicPath(appPath)) return next();
+    const isApi = isGrcApiPath(appPath);
+
+    let env: ReturnType<typeof getGrcEnv>;
+    try {
+      env = getGrcEnv();
+    } catch {
+      return isApi
+        ? jsonResponse({ error: 'unavailable' }, 503)
+        : new Response('The GRC platform is not configured.', { status: 503 });
+    }
+
+    const sessionId = await readSessionId(context.request, env.sessionSecret);
+    if (!sessionId) {
+      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+    }
+
+    const db = await getGrcDb(env);
+    const identity = await resolveSession(db, sessionId);
+    if (!identity) {
+      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+    }
+
+    // The acting organisation defaults to home. Only a platform owner may act
+    // elsewhere, resolved and validated from the database; every other user is
+    // fixed to their home organisation, so a crafted acting cookie is never read.
+    let organizationId = identity.homeOrganizationId;
+    let organizationName = identity.homeOrganizationName;
+    let switchable: GrcSwitchOrg[] = [];
+    if (identity.isPlatformOwner) {
+      try {
+        const requested = await readGrcActingOrg(context.request, env.sessionSecret);
+        const acting = await resolveGrcActingContext(
+          db,
+          identity.homeOrganizationId,
+          identity.homeOrganizationName,
+          true,
+          requested,
+        );
+        organizationId = acting.actingOrganizationId;
+        organizationName = acting.actingName;
+        switchable = acting.switchable;
+      } catch {
+        organizationId = identity.homeOrganizationId;
+      }
+    }
+
+    const perms = await loadPermissions(db, identity.roleCode);
+    const subscription = await loadSubscription(db, organizationId);
+    const features = subscription.features;
+
+    context.locals.grc = {
+      userId: identity.userId,
+      organizationId,
+      homeOrganizationId: identity.homeOrganizationId,
+      organizationName,
+      roleCode: identity.roleCode,
+      userName: identity.userName,
+      userEmail: identity.userEmail,
+      isPlatformOwner: identity.isPlatformOwner,
+      switchable,
+      perms,
+      features,
+      can: (code: string) => perms.includes(code),
+      // A platform owner is entitled to every feature regardless of the acting
+      // organisation's plan; an ordinary user is gated by their plan flags.
+      hasFeature: (flag: string) => identity.isPlatformOwner || features[flag] === true,
+    };
+
+    return next();
+  }
+
+  // ---- Engineering Rhythm guard (/engr routes) -----------------------------
   if (pathname !== '/engr' && !pathname.startsWith('/engr/')) return next();
 
-  // The visitor-facing path (root-relative), for the active-nav check and links.
   const appPath = toAppPath(pathname);
   context.locals.engrPath = appPath;
 
-  // Public entry points and self-secured machine endpoints need no session.
   if (isPublicAppPath(appPath)) return next();
-
   const isApi = isEngrApiPath(appPath);
 
   let env: ReturnType<typeof getEngrEnv>;
   try {
     env = getEngrEnv();
   } catch {
-    // Misconfigured environment: fail closed rather than exposing anything.
     return isApi
       ? jsonResponse({ error: 'unavailable' }, 503)
       : new Response('Engineering Rhythm is not configured.', { status: 503 });
@@ -60,10 +148,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const homeName = session.orgName ?? session.orgSlug;
   const homeSlug = session.orgSlug;
 
-  // The acting organisation defaults to the home organisation. Only a platform
-  // owner may act elsewhere (resolved and validated from the database); for every
-  // other user the acting organisation is always their home organisation, so a
-  // crafted or stale acting cookie is simply never read and cannot widen access.
   let actingOrgId = homeOrgId;
   let actingName: string = homeName;
   let actingSlug = homeSlug;
@@ -72,20 +156,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (isPlatformOwner) {
     try {
       const requested = await readActingOrg(context.request, env.sessionSecret);
-      const db = await getDb(env);
+      const db = await getEngrDb(env);
       const ctx = await resolveActingContext(db, homeOrgId, homeName, homeSlug, true, requested);
       actingOrgId = ctx.actingOrgId;
       actingName = ctx.actingName;
       actingSlug = ctx.actingSlug;
       switchable = ctx.switchable;
     } catch {
-      // On any resolution failure act inside the home organisation, never wider.
       actingOrgId = homeOrgId;
     }
   }
 
-  // A platform owner acting inside a customer keeps their own permission set for
-  // that organisation; an ordinary user keeps their own rights in their home org.
   const perms = session.perms;
   context.locals.engr = {
     userId: session.sub,

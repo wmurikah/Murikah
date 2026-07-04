@@ -32,6 +32,14 @@ declare namespace Cloudflare {
     TURSO_ENGR_AUTH_TOKEN?: string;
     ENGR_SESSION_SECRET?: string;
 
+    // GRC platform product, its own Turso database (hassaudit) and session
+    // secret, namespaced so they never clash with engr or the marketing site.
+    // Optional here so the marketing preview typechecks without them; the grc
+    // env accessor throws at runtime when any is missing.
+    TURSO_GRC_DATABASE_URL?: string;
+    TURSO_GRC_AUTH_TOKEN?: string;
+    GRC_SESSION_SECRET?: string;
+
     // Engineering Rhythm notification dispatcher. All optional: absent or a
     // non-production ENGR_ENV keeps the dispatcher in dry-run and never contacts
     // a provider. Secrets are set as Worker secrets or in .dev.vars.
@@ -89,5 +97,40 @@ declare namespace App {
      */
     engrHost?: string;
     engrPath?: string;
+
+    /**
+     * GRC platform request context, attached by src/middleware.ts for
+     * authenticated /grc requests. Absent on engr and the marketing site. The
+     * organisation is resolved and server-verified from the DB-backed session,
+     * so every downstream query scopes by organizationId. This database uses the
+     * audit system's own conventions: organization_id and a single role_code.
+     */
+    grc?: {
+      userId: string;
+      /** The acting organisation (organization_id). A platform owner may switch; every query scopes by this. */
+      organizationId: string;
+      /** The user's home organisation. Equals organizationId unless a platform owner is acting elsewhere. */
+      homeOrganizationId: string;
+      organizationName: string;
+      /** The user's single role code, e.g. SENIOR_AUDITOR. */
+      roleCode: string;
+      userName?: string;
+      userEmail?: string;
+      /** True for a platform owner (users.is_platform_owner); only they may switch the acting organisation. */
+      isPlatformOwner: boolean;
+      /** The organisations a platform owner may switch between; empty for every other user. */
+      switchable: { id: string; name: string }[];
+      /** Permission codes resolved from role_code, e.g. WORK_PAPERS.review. */
+      perms: string[];
+      /** Plan feature flags from the subscription's plan features_json. */
+      features: Record<string, boolean>;
+      /** True when the session carries the permission code. */
+      can: (code: string) => boolean;
+      /** True when the plan enables the named feature (a platform owner is always true). */
+      hasFeature: (flag: string) => boolean;
+    };
+
+    /** The visitor-facing root-relative path on grc.murikah.com, before the /grc rewrite. */
+    grcPath?: string;
   }
 }
