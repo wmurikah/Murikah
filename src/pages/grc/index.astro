@@ -1,0 +1,56 @@
+---
+export const prerender = false;
+
+/**
+ * GRC dashboard placeholder. The shell is live and scoped to the acting
+ * organisation; the modules (work papers, action plans, reporting, analytics)
+ * arrive in later prompts. This confirms the sign-in, tenancy and RBAC
+ * foundation by showing the acting organisation and the signed-in role.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+---
+
+<GrcLayout title="Dashboard">
+  <div class="grc-page-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="grc-lead">Your internal audit workspace for {grc.organizationName}.</p>
+    </div>
+  </div>
+
+  <div class="grc-cards" style="margin-bottom:1.5rem">
+    <div class="grc-card">
+      <p class="grc-card__label">Organisation</p>
+      <p class="grc-card__count" style="font-size:1.2rem">{grc.organizationName}</p>
+      <p class="grc-card__note">
+        {grc.isPlatformOwner ? 'Acting as platform owner' : 'Your organisation'}
+      </p>
+    </div>
+    <div class="grc-card">
+      <p class="grc-card__label">Your role</p>
+      <p class="grc-card__count" style="font-size:1.2rem">{grc.roleCode}</p>
+      <p class="grc-card__note">{grc.perms.length} permissions</p>
+    </div>
+    <div class="grc-card">
+      <p class="grc-card__label">Open work papers</p>
+      <p class="grc-card__count">-</p>
+      <p class="grc-card__note">Arrives with the work papers module</p>
+    </div>
+    <div class="grc-card">
+      <p class="grc-card__label">Open action plans</p>
+      <p class="grc-card__count">-</p>
+      <p class="grc-card__note">Arrives with the action plans module</p>
+    </div>
+  </div>
+
+  <div class="grc-empty">
+    <p>
+      <strong>The audit modules are on their way.</strong>
+      Work papers, action plans, auditee responses, board reporting, analytics and notifications each
+      arrive in their own prompt, ported from the audit system with their workflow preserved.
+    </p>
+  </div>
+</GrcLayout>
