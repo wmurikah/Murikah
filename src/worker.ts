@@ -21,7 +21,13 @@
  *   - 03:00 UTC (06:00 EAT) daily: run the PM scan, then drain.
  */
 import astro from '@astrojs/cloudflare/entrypoints/server';
-import { requestHost, routeDecision, type Branch } from './lib/engr/routing';
+import { requestHost, routeDecision } from './lib/engr/routing';
+import {
+  isGrcHost,
+  toGrcPath,
+  isGrcPassthroughAsset,
+  grcMarketingRedirect,
+} from './lib/grc/routing';
 import { getEngrEnv } from './lib/engr/env';
 import { getDeliveryEnv } from './lib/engr/notify/env';
 import { getDb } from './lib/engr/db';
@@ -32,8 +38,9 @@ import { systemClock } from './lib/engr/time';
 const DAILY_PM_CRON = '0 3 * * *';
 
 // Attach the debug headers, cloning so a response with immutable headers (an
-// asset from the ASSETS binding) can still be stamped.
-function stamp(response: Response, host: string, branch: Branch): Response {
+// asset from the ASSETS binding) can still be stamped. The branch label is a
+// free string (engr and grc branches), surfaced only for observability.
+function stamp(response: Response, host: string, branch: string): Response {
   const out = new Response(response.body, response);
   out.headers.set('x-mrk-host', host);
   out.headers.set('x-mrk-branch', branch);
@@ -69,6 +76,27 @@ async function engrNotFound(response: Response, host: string): Promise<Response>
   );
 }
 
+// The grc equivalent: a neutral not-found for the grc host, so no corporate
+// content renders there. The app's own not-found screens use the grc layout
+// (body class "grc"); keep those so their specific message survives.
+const GRC_NOT_FOUND_HTML = `<!doctype html>
+<html lang="en-KE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Page not found, Murikah GRC</title><style>body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f6f4ee;color:#1b1b1b;display:grid;min-height:100vh;place-items:center;padding:1.5rem}main{max-width:32rem;text-align:center}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0 0 1.25rem;color:#565656}a{display:inline-block;min-height:2.75rem;line-height:2.75rem;padding:0 1.1rem;border-radius:.5rem;background:#12233b;color:#f6f4ee;text-decoration:none;font-weight:600}</style></head><body><main><h1>Page not found</h1><p>That page does not exist on Murikah GRC. Check the address, or return to the sign-in page.</p><a href="/login">Go to sign in</a></main></body></html>`;
+
+async function grcNotFound(response: Response, host: string): Promise<Response> {
+  const body = await response.text();
+  if (body.includes('class="grc"')) {
+    return stamp(new Response(body, response), host, 'grc-app');
+  }
+  return stamp(
+    new Response(GRC_NOT_FOUND_HTML, {
+      status: 404,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    }),
+    host,
+    'grc-app',
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -82,7 +110,33 @@ export default {
     }
 
     const host = requestHost(request);
+
+    // The GRC platform host: serve the grc app, rewriting to the internal /grc
+    // route unless the path is already there or is a static asset. The browser
+    // URL is unchanged. The session guard then runs in src/middleware.ts against
+    // that /grc route.
+    if (isGrcHost(host)) {
+      const grcPath = isGrcPassthroughAsset(url.pathname) ? url.pathname : toGrcPath(url.pathname);
+      let response: Response;
+      if (grcPath === url.pathname) {
+        response = await astro.fetch(request, env, ctx);
+      } else {
+        const rewritten = new URL(url);
+        rewritten.pathname = grcPath;
+        response = await astro.fetch(new Request(rewritten, request), env, ctx);
+      }
+      if (response.status === 404) return grcNotFound(response, host);
+      return stamp(response, host, 'grc-app');
+    }
+
     const decision = routeDecision(host, url.pathname, url.search);
+
+    // On the marketing apex a /grc path is sent to the subdomain, exactly as a
+    // /engr path is, so a stray in-app link never renders on the corporate site.
+    if (decision.branch === 'marketing') {
+      const grcLocation = grcMarketingRedirect(url.pathname, url.search);
+      if (grcLocation) return stamp(redirect(grcLocation), host, 'redirect-grc-path');
+    }
 
     switch (decision.branch) {
       case 'redirect-www':

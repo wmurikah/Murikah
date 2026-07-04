@@ -15,5 +15,13 @@ CONTACT_NOTIFY_EMAIL="hello@murikah.com"
 # Verified sender (must be a verified domain in Resend for production).
 RESEND_FROM_EMAIL="Murikah <noreply@murikah.com>"
 
+# --- GRC platform (grc.murikah.com), its own Turso database (hassaudit) ---
+# Runtime secrets only, never committed. In production set them as Cloudflare
+# secrets (wrangler secret put ...). GRC_SESSION_SECRET is 32+ random bytes,
+# base64 encoded, and signs the session cookie; it is distinct from engr's.
+TURSO_GRC_DATABASE_URL="libsql://hassaudit-your-org.turso.io"
+TURSO_GRC_AUTH_TOKEN="your-hassaudit-auth-token"
+GRC_SESSION_SECRET="base64-encoded-32-byte-secret"
+
 # --- Public site URL (canonical/OG fallback for non-production environments) ---
 PUBLIC_SITE_URL="http://localhost:4321"

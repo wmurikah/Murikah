@@ -1,0 +1,96 @@
+/**
+ * GRC session cookie.
+ *
+ * Unlike Engineering Rhythm's stateless JWT, GRC keeps sessions in the database
+ * (the `sessions` table), so a session can be revoked server-side. The cookie
+ * carries only an opaque session id, HMAC-signed with GRC_SESSION_SECRET so a
+ * forged or guessed id is rejected before any database lookup. The cookie is
+ * HttpOnly, host-only (no Domain) and Path=/ on grc.murikah.com, separate from
+ * engr's `engr_session`, so the two products never share a session. Secure is
+ * gated on the caller (off only for http development on grc.localhost).
+ */
+
+export const GRC_SESSION_COOKIE = 'grc_session';
+export const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60; // 12 hours
+
+// The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
+function keyBytes(secret: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(secret);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function base64url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function hmac(sessionId: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyBytes(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(sessionId));
+  return base64url(new Uint8Array(sig));
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** A fresh opaque session id (128 bits of randomness, hex). */
+export function newSessionId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function cookie(value: string, maxAge: number, secure: boolean): string {
+  const secureAttr = secure ? '; Secure' : '';
+  return `${GRC_SESSION_COOKIE}=${value}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+}
+
+function readRawCookie(request: Request): string | null {
+  const header = request.headers.get('cookie');
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === GRC_SESSION_COOKIE) return part.slice(eq + 1).trim();
+  }
+  return null;
+}
+
+/** The Set-Cookie value carrying a signed session id. */
+export async function createSessionCookie(
+  sessionId: string,
+  secret: string,
+  secure: boolean,
+): Promise<string> {
+  const sig = await hmac(sessionId, secret);
+  return cookie(`${sessionId}.${sig}`, SESSION_MAX_AGE_SECONDS, secure);
+}
+
+/** Read the cookie and return the session id only when its signature verifies. */
+export async function readSessionId(request: Request, secret: string): Promise<string | null> {
+  const raw = readRawCookie(request);
+  if (!raw) return null;
+  const dot = raw.lastIndexOf('.');
+  if (dot <= 0) return null;
+  const sessionId = raw.slice(0, dot);
+  const sig = raw.slice(dot + 1);
+  const expected = await hmac(sessionId, secret);
+  return timingSafeEqual(sig, expected) ? sessionId : null;
+}
+
+/** The Set-Cookie value that clears the session; attributes match the set cookie. */
+export function clearSession(secure: boolean): string {
+  return cookie('', 0, secure);
+}
