@@ -100,7 +100,9 @@ const mayAct = (row: PendingProcurementRow): boolean =>
               </dd>
             </dl>
             <p style="margin:0.4rem 0 0">
-              <a href={`/rfqs/${r.id}`}>View the full RFQ</a>
+              <a href={`/rfqs/${r.id}`} class="engr-link engr-link--nav">
+                View the full RFQ
+              </a>
             </p>
 
             {mayAct(r) ? (
