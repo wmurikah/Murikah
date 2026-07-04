@@ -105,7 +105,9 @@ const closures = rows.filter((r) => r.status === 'WORK_DONE_PENDING_CONFIRM');
                     </span>
                   </p>
                   <p style="margin:0.4rem 0 0">
-                    <a href={`/workorders/${r.id}`}>View detail</a>
+                    <a href={`/workorders/${r.id}`} class="engr-link engr-link--nav">
+                      View detail
+                    </a>
                   </p>
                   <form
                     method="post"
