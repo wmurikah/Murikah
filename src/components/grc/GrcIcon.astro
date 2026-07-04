@@ -1,0 +1,61 @@
+---
+/**
+ * A small, consistent line-icon set for the GRC chrome (sidebar groups and
+ * items). Each icon is a 24x24 stroke glyph in currentColor, so it takes the
+ * colour of its context and stays crisp at any size. Icons are decorative: they
+ * sit beside a text label and are hidden from assistive tech unless a title is
+ * given. Mirrors the engr icon component so both products share one visual idiom.
+ */
+interface Props {
+  name: string;
+  size?: number;
+  title?: string;
+  class?: string;
+}
+const { name, size = 18, title, class: className } = Astro.props;
+
+const ICONS: Record<string, string> = {
+  // Group icons
+  overview: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+  audit:
+    '<path d="M9 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-3M9 3v3h6V3M8.5 13l2 2 4-4"/>',
+  setup: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  // Item icons
+  dashboard: '<path d="M4 13a8 8 0 0 1 16 0M12 13l4-4M4 17h16"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
+  workpapers:
+    '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/>',
+  actionplans:
+    '<rect x="6" y="4" width="12" height="18" rx="2"/><path d="M9 4V2h6v2M8.5 12l1.5 1.5 3-3M8.5 17h5"/>',
+  responses:
+    '<path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12zM8.5 12h.01M12 12h.01M15.5 12h.01"/>',
+  reports: '<path d="M4 20V4M4 20h16M8 20v-6M12 20V9M16 20v-9"/>',
+  affiliates: '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h1M9 14h1M14 10h1M14 14h1"/>',
+  universe: '<path d="M12 2 2 7l10 5 10-5zM2 12l10 5 10-5M2 17l10 5 10-5"/>',
+  users:
+    '<circle cx="9" cy="8" r="3.5"/><path d="M2 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1M17 4a3.5 3.5 0 0 1 0 7M22 21v-1a5 5 0 0 0-3-4.6"/>',
+  roles: '<path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5zM9.5 12l1.8 1.8L15 10"/>',
+  settings:
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+  account: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/>',
+  signout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+};
+
+const inner = ICONS[name] ?? '<circle cx="12" cy="12" r="3"/>';
+---
+
+<svg
+  class={className}
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.7"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  role={title ? 'img' : undefined}
+  aria-hidden={title ? undefined : 'true'}
+  aria-label={title}
+  set:html={(title ? `<title>${title}</title>` : '') + inner}
+/>
