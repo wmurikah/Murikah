@@ -1854,7 +1854,16 @@ a.engr-pipe__seg:hover {
 .engr-line__latest {
   font-size: 11px;
   font-weight: 700;
-  fill: var(--engr-navy);
+  fill: var(--engr-on-navy);
+}
+/* Each plotted period is a drill link for the mouse; the point grows a touch on
+   hover so the target reads as interactive. Keyboard and assistive tech use the
+   "Show data" table links instead. */
+.engr-line a {
+  cursor: pointer;
+}
+.engr-line a:hover circle {
+  r: 4;
 }
 .engr-chart__note {
   margin: var(--engr-s2) 0 0;
