@@ -116,6 +116,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
         { label: 'Audit universe', href: '/audit-universe', icon: 'universe' },
         { label: 'Users', href: '/users', icon: 'users' },
         { label: 'Roles', href: '/roles', icon: 'roles' },
+        { label: 'Send queue', href: '/send-queue', icon: 'bell' },
         { label: 'Settings', href: '/settings', icon: 'settings' },
       ]
     : [];
