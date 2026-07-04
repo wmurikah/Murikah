@@ -1,13 +1,15 @@
 ---
 /**
  * A readable area-and-line chart for a value over time, rendered server-side as
- * inline SVG. It carries a zeroed, labelled y-axis with a few gridlines, an x-axis
- * of period labels, a soft navy gradient fill, a crisp navy line, visible points
- * with a native hover tooltip (period and value), and a label on the latest point
- * so a glance yields a number. When every value is equal it draws a clean baseline
- * with a "no variation yet" note rather than a flat mystery; an empty series shows
- * a quiet empty line. A role=img summary and a "Show data" table keep it
- * accessible, and the whole plot links to the underlying list when a href is given.
+ * inline SVG. It carries a zeroed, labelled y-axis with a few gridlines, an
+ * x-axis of period labels, a soft navy gradient fill, a crisp navy line, visible
+ * points with a native hover tooltip (period and value), and a navy chip on the
+ * latest point so a glance yields a number. When a datum carries an href each
+ * period becomes a drill link: the plotted column for the mouse, and the "Show
+ * data" table row for the keyboard and assistive tech. When every value is equal
+ * it draws a clean baseline with a "no variation yet" note rather than a flat
+ * mystery; an empty series shows a quiet empty line. The SVG is a labelled
+ * role=img and the data table is its accessible equivalent.
  */
 import type { ChartDatum } from '@engr/repos/analytics';
 
@@ -16,7 +18,6 @@ interface Props {
   description?: string;
   data: ChartDatum[];
   valueHeading?: string;
-  href?: string;
   emptyText?: string;
 }
 const {
@@ -24,7 +25,6 @@ const {
   description,
   data,
   valueHeading = 'Count',
-  href,
   emptyText = 'No data yet.',
 } = Astro.props;
 
@@ -51,8 +51,8 @@ for (let t = 0; t <= top + 0.0001; t += step) ticks.push(t);
 const W = 400;
 const H = 200;
 const L = 34; // left gutter
-const R = 12; // right pad
-const T = 12; // top pad
+const R = 14; // right pad
+const T = 14; // top pad
 const B = 26; // bottom gutter
 const plotW = W - L - R;
 const plotH = H - T - B;
@@ -74,6 +74,16 @@ const areaPath = pts.length
 const labelEvery = n > 8 ? Math.ceil(n / 6) : 1;
 const last = pts[n - 1];
 const latest = data[n - 1];
+
+// The latest-value chip, sized to its text and clamped fully inside the plot so
+// it can never overlap the axis or spill past the card edge. It flips below the
+// point when placing it above would clip the top.
+const chipText = String(latest?.value ?? 0);
+const chipW = chipText.length * 7 + 12;
+const chipH = 16;
+const chipCx = last ? Math.max(L + chipW / 2, Math.min(last.x, W - R - chipW / 2)) : 0;
+const chipCy = last ? (last.y - 14 - chipH / 2 < T ? last.y + 16 : last.y - 14) : 0;
+
 const gradId = `engr-linegrad-${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
 const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join('; ')}. Latest ${latest?.value ?? 0}.`;
 ---
@@ -88,13 +98,8 @@ const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join(
       <p class="engr-empty">{emptyText}</p>
     ) : (
       <div>
-        <a
-          class="engr-line"
-          href={href ?? '#'}
-          aria-label={ariaSummary}
-          tabindex={href ? undefined : -1}
-        >
-          <svg viewBox={`0 0 ${W} ${H}`} class="engr-line__svg" role="img" aria-hidden="true">
+        <div class="engr-line">
+          <svg viewBox={`0 0 ${W} ${H}`} class="engr-line__svg" role="img" aria-label={ariaSummary}>
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="var(--engr-navy-2)" stop-opacity="0.28" />
@@ -120,7 +125,7 @@ const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join(
               </g>
             ))}
 
-            {/* area, line, points */}
+            {/* area and line */}
             <path d={areaPath} fill={`url(#${gradId})`} stroke="none" />
             <path
               d={linePath}
@@ -130,43 +135,66 @@ const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join(
               stroke-linecap="round"
               stroke-linejoin="round"
             />
-            {pts.map((p) => (
-              <g>
-                <circle cx={p.x} cy={p.y} r="2.6" fill="var(--engr-navy)" />
-                <rect
-                  x={p.x - Math.max(6, plotW / (2 * Math.max(1, n - 1)))}
-                  y={T}
-                  width={Math.max(12, plotW / Math.max(1, n - 1))}
-                  height={plotH}
-                  fill="transparent"
-                >
-                  <title>{`${p.d.label}: ${p.d.display ?? p.d.value}`}</title>
-                </rect>
-              </g>
-            ))}
 
-            {/* latest value label */}
+            {/* points, each a per-period drill target for the mouse (the data
+                table carries the keyboard and assistive-tech equivalent) */}
+            {pts.map((p) => {
+              const hit = (
+                <>
+                  <rect
+                    x={p.x - Math.max(6, plotW / (2 * Math.max(1, n - 1)))}
+                    y={T}
+                    width={Math.max(12, plotW / Math.max(1, n - 1))}
+                    height={plotH}
+                    fill="transparent"
+                  >
+                    <title>{`${p.d.label}: ${p.d.display ?? p.d.value}`}</title>
+                  </rect>
+                  <circle cx={p.x} cy={p.y} r="2.6" fill="var(--engr-navy)" />
+                </>
+              );
+              return p.d.href ? (
+                <a href={p.d.href} tabindex="-1" aria-hidden="true">
+                  {hit}
+                </a>
+              ) : (
+                <g>{hit}</g>
+              );
+            })}
+
+            {/* latest value chip */}
             {last && (
-              <text
-                x={Math.min(last.x, W - R - 2)}
-                y={Math.max(T + 8, last.y - 7)}
-                text-anchor="end"
-                class="engr-line__latest"
-              >
-                {latest?.display ?? latest?.value}
-              </text>
+              <g>
+                <rect
+                  x={chipCx - chipW / 2}
+                  y={chipCy - chipH / 2}
+                  width={chipW}
+                  height={chipH}
+                  rx="4"
+                  fill="var(--engr-navy)"
+                />
+                <text x={chipCx} y={chipCy + 3.5} text-anchor="middle" class="engr-line__latest">
+                  {chipText}
+                </text>
+              </g>
             )}
 
-            {/* x-axis period labels */}
+            {/* x-axis period labels: the first and last anchor inward so a wide
+                label at the edge never clips the plot. */}
             {data.map((d, i) =>
               i % labelEvery === 0 || i === n - 1 ? (
-                <text x={px(i)} y={H - 8} text-anchor="middle" class="engr-line__axis">
+                <text
+                  x={i === 0 ? L : i === n - 1 ? W - R : px(i)}
+                  y={H - 8}
+                  text-anchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}
+                  class="engr-line__axis"
+                >
                   {d.label}
                 </text>
               ) : null,
             )}
           </svg>
-        </a>
+        </div>
 
         {allEqual && (
           <p class="engr-chart__note">No variation yet: every period is {latest?.value ?? 0}.</p>
@@ -185,7 +213,7 @@ const ariaSummary = `${title}. ${data.map((d) => `${d.label}: ${d.value}`).join(
               {data.map((d) => (
                 <tr>
                   <th scope="row" class="engr-chart__label">
-                    {d.label}
+                    {d.href ? <a href={d.href}>{d.label}</a> : d.label}
                   </th>
                   <td>{d.display ?? d.value}</td>
                 </tr>
