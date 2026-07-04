@@ -728,8 +728,14 @@ a.engr-card:focus-visible {
   font-size: var(--engr-fs-metric);
   font-weight: 700;
   line-height: 1.1;
-  margin: var(--engr-s1) 0 var(--engr-s2);
+  margin: var(--engr-s1) 0 0;
   color: var(--engr-navy);
+  font-variant-numeric: tabular-nums;
+}
+.engr-card__trend {
+  margin: 0.1rem 0 var(--engr-s2);
+  font-size: var(--engr-fs-caption);
+  color: var(--engr-muted);
   font-variant-numeric: tabular-nums;
 }
 .engr-card__list {
@@ -1617,25 +1623,35 @@ a.engr-card:focus-visible {
 .engr-chart__label a:hover {
   text-decoration: underline;
 }
-.engr-chart__cell {
-  position: relative;
-  padding: 0.3rem 0;
+/* Ranked panel: a label, a track holding a navy fill bar (gold for the leading
+   item), and the value right-aligned in its own column so it never sits over the
+   bar and stays aligned across rows. */
+.engr-chart__barcell {
+  width: 100%;
+  padding: 0.3rem 0.6rem;
   vertical-align: middle;
 }
-.engr-chart__bar {
-  position: absolute;
-  left: 0;
-  top: 0.35rem;
-  bottom: 0.35rem;
-  min-width: 2px;
-  border-radius: 0.25rem;
-  background: var(--engr-navy-2);
-  opacity: 0.16;
-}
-.engr-chart__value {
-  position: relative;
+.engr-chart__track {
   display: block;
-  padding: 0 0.4rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--engr-chart-track);
+  overflow: hidden;
+}
+.engr-chart__bar {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 999px;
+  background: var(--engr-navy-2);
+}
+.engr-chart__bar--lead {
+  background: var(--engr-gold);
+}
+.engr-chart__num {
+  padding: 0.3rem 0 0.3rem 0.5rem;
+  text-align: right;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--engr-ink);
@@ -1830,6 +1846,20 @@ a.engr-pipe__seg:hover {
   display: block;
   width: 100%;
   height: auto;
+}
+.engr-line__axis {
+  font-size: 9px;
+  fill: var(--engr-muted);
+}
+.engr-line__latest {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--engr-navy);
+}
+.engr-chart__note {
+  margin: var(--engr-s2) 0 0;
+  font-size: var(--engr-fs-caption);
+  color: var(--engr-muted);
 }
 
 /* Visually hidden, still read by assistive tech. */

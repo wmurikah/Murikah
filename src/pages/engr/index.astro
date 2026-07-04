@@ -113,6 +113,7 @@ const spendByContractor = charts
                 Open work orders
               </h2>
               <p class="engr-card__count">{data.openWorkOrders.count}</p>
+              <p class="engr-card__trend">{data.openWorkOrders.recent} new this week</p>
               {data.openWorkOrders.items.length === 0 ? (
                 <p class="engr-card__empty">None open.</p>
               ) : (
@@ -133,6 +134,7 @@ const spendByContractor = charts
                 Pending cost approvals
               </h2>
               <p class="engr-card__count">{data.pendingCostApprovals.count}</p>
+              <p class="engr-card__trend">{data.pendingCostApprovals.recent} new this week</p>
               {data.pendingCostApprovals.items.length === 0 ? (
                 <p class="engr-card__empty">Nothing awaiting approval.</p>
               ) : (
@@ -153,6 +155,7 @@ const spendByContractor = charts
                 Pending bill approvals
               </h2>
               <p class="engr-card__count">{data.pendingBillApprovals.count}</p>
+              <p class="engr-card__trend">{data.pendingBillApprovals.recent} new this week</p>
               {data.pendingBillApprovals.items.length === 0 ? (
                 <p class="engr-card__empty">Nothing awaiting approval.</p>
               ) : (
@@ -175,6 +178,7 @@ const spendByContractor = charts
                 Upcoming maintenance
               </h2>
               <p class="engr-card__count">{data.upcomingPm.count}</p>
+              <p class="engr-card__trend">{data.upcomingPm.recent} due this week</p>
               {data.upcomingPm.items.length === 0 ? (
                 <p class="engr-card__empty">Nothing scheduled.</p>
               ) : (
