@@ -1574,3 +1574,163 @@
   background: #c0392b;
   color: #fff;
 }
+
+/* --- Notifications: bell, centre, send queue ---------------------------- */
+
+/* The sidebar bell dropdown (in the navy sidebar). */
+.grc-bell {
+  margin: var(--grc-s2) 0;
+}
+.grc-bell__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s2);
+  padding: var(--grc-s2);
+  border-radius: var(--grc-radius-sm);
+  color: var(--grc-on-navy);
+  font-size: var(--grc-fs-small);
+  cursor: pointer;
+  list-style: none;
+}
+.grc-bell__summary::-webkit-details-marker {
+  display: none;
+}
+.grc-bell__summary:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.grc-bell__summary .grc-navcount {
+  margin-left: auto;
+}
+.grc-bell__panel {
+  margin-top: var(--grc-s1);
+  background: var(--grc-surface);
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  padding: var(--grc-s2);
+  color: var(--grc-ink);
+}
+.grc-bell__empty {
+  margin: 0;
+  padding: var(--grc-s2);
+  font-size: var(--grc-fs-small);
+  color: var(--grc-muted);
+}
+.grc-bell__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+.grc-bell__item a {
+  display: block;
+  padding: var(--grc-s2);
+  font-size: var(--grc-fs-small);
+  color: var(--grc-ink);
+  text-decoration: none;
+  border-radius: var(--grc-radius-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grc-bell__item a:hover {
+  background: var(--grc-paper);
+}
+.grc-bell__item.is-unread a {
+  font-weight: 600;
+}
+.grc-bell__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--grc-s2);
+  margin-top: var(--grc-s1);
+  padding-top: var(--grc-s2);
+  border-top: 1px solid var(--grc-line);
+  font-size: var(--grc-fs-caption);
+}
+.grc-bell__foot a {
+  color: var(--grc-navy-2);
+}
+.grc-bell__mark {
+  background: none;
+  border: none;
+  color: var(--grc-navy-2);
+  font-size: var(--grc-fs-caption);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* The notification centre list. */
+.grc-notiflist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-surface);
+  overflow: hidden;
+}
+.grc-notifrow {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s3);
+  padding: var(--grc-s3) var(--grc-s4);
+  border-bottom: 1px solid var(--grc-line);
+}
+.grc-notifrow:last-child {
+  border-bottom: none;
+}
+.grc-notifrow.is-unread {
+  background: #fbfaf6;
+}
+.grc-notifrow__main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.grc-notifrow__title {
+  font-size: var(--grc-fs-small);
+  font-weight: 600;
+  color: var(--grc-ink);
+  text-decoration: none;
+}
+a.grc-notifrow__title:hover {
+  text-decoration: underline;
+}
+.grc-notifrow__body {
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grc-notifrow__time {
+  color: var(--grc-muted);
+  font-size: var(--grc-fs-caption);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Severity dot (paired with the text, never colour alone). */
+.grc-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--grc-navy-2);
+  flex: none;
+}
+.grc-dot--urgent {
+  background: #c0392b;
+}
+.grc-dot--warning {
+  background: var(--grc-gold-deep);
+}
+
+.grc-btn--tiny {
+  min-height: 1.7rem;
+  padding: 0 0.55rem;
+  font-size: var(--grc-fs-caption);
+}
