@@ -1,0 +1,202 @@
+---
+export const prerender = false;
+
+/**
+ * The send-queue admin (Sendqueue.html), SUPER_ADMIN only. Monitors the
+ * notification queue with counts, lists rows with their status and attempts,
+ * retries a failed or dead-lettered row, and inspects the dead-letter. Scoped to
+ * the acting organisation; gated strictly on SUPER_ADMIN (or a platform owner).
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import {
+  getQueueCounts,
+  listQueue,
+  listDeadLetter,
+  type QueueCounts,
+  type QueueRow,
+  type DeadLetterRow,
+} from '@grc/repos/sendQueue';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+
+const status = Astro.url.searchParams.get('status') || undefined;
+const done = Astro.url.searchParams.get('done');
+
+let counts: QueueCounts = { pending: 0, failed: 0, sent: 0, deadLetter: 0 };
+let rows: QueueRow[] = [];
+let dead: DeadLetterRow[] = [];
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  [counts, rows, dead] = await Promise.all([
+    getQueueCounts(db, grc.organizationId),
+    listQueue(db, grc.organizationId, { status, limit: 100 }),
+    listDeadLetter(db, grc.organizationId, 40),
+  ]);
+}
+
+const statusClass = (s: string): string => {
+  if (s === 'SENT') return 'grc-badge grc-badge--done';
+  if (s === 'DEAD_LETTER') return 'grc-badge grc-badge--overdue';
+  if (s === 'PENDING') return 'grc-badge grc-badge--pending';
+  return 'grc-badge';
+};
+const fmt = (d: string | null): string => (d ? d.slice(0, 16).replace('T', ' ') : '-');
+const filters: { value: string; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'SENT', label: 'Sent' },
+  { value: 'DEAD_LETTER', label: 'Dead-letter' },
+];
+---
+
+<GrcLayout title="Send queue">
+  <div class="grc-page-head">
+    <div>
+      <h1>Send queue</h1>
+      <p class="grc-lead">Notification delivery for {grc.organizationName}.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        The send queue is restricted to administrators.
+      </p>
+    ) : (
+      <>
+        {done && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            {decodeURIComponent(done)}
+          </p>
+        )}
+
+        <div class="grc-stats" role="group" aria-label="Queue summary">
+          <div class="grc-stat">
+            <span class="grc-stat__n">{counts.pending}</span>
+            <span class="grc-stat__l">Pending</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{counts.failed}</span>
+            <span class="grc-stat__l">Retrying</span>
+          </div>
+          <div class="grc-stat grc-stat--done">
+            <span class="grc-stat__n">{counts.sent}</span>
+            <span class="grc-stat__l">Sent</span>
+          </div>
+          <div class="grc-stat grc-stat--overdue">
+            <span class="grc-stat__n">{counts.deadLetter}</span>
+            <span class="grc-stat__l">Dead-letter</span>
+          </div>
+        </div>
+
+        <div class="grc-viewbar">
+          <span class="grc-viewbar__label">Status</span>
+          {filters.map((f) => (
+            <a
+              href={f.value ? `/send-queue?status=${f.value}` : '/send-queue'}
+              class:list={['grc-viewtab', { 'is-active': (status ?? '') === f.value }]}
+            >
+              {f.label}
+            </a>
+          ))}
+        </div>
+
+        <div class="grc-panel">
+          <h2>Queue</h2>
+          {rows.length === 0 ? (
+            <p class="grc-lead" style="margin:0">
+              No rows for this filter.
+            </p>
+          ) : (
+            <div class="grc-tablewrap">
+              <table class="grc-table" aria-label="Notification queue">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Recipient</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th class="grc-num">Attempts</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr>
+                      <td>
+                        {r.batchType}
+                        {r.isCc && <span class="grc-pill">CC</span>}
+                      </td>
+                      <td>{r.recipientEmail}</td>
+                      <td>{r.priority}</td>
+                      <td>
+                        <span class={statusClass(r.status)}>{r.status}</span>
+                        {r.error && (
+                          <span class="grc-dash-list__meta"> {r.error.slice(0, 60)}</span>
+                        )}
+                      </td>
+                      <td class="grc-num">
+                        {r.attempts}/{r.maxAttempts}
+                      </td>
+                      <td>{fmt(r.createdAt)}</td>
+                      <td>
+                        {(r.status === 'DEAD_LETTER' ||
+                          (r.status === 'PENDING' && r.attempts > 0)) && (
+                          <form method="post" action="/api/send-queue/retry" style="margin:0">
+                            <input type="hidden" name="id" value={r.id} />
+                            <button type="submit" class="grc-btn grc-btn--secondary grc-btn--tiny">
+                              Retry
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div class="grc-panel">
+          <h2>Dead-letter</h2>
+          {dead.length === 0 ? (
+            <p class="grc-lead" style="margin:0">
+              Nothing dead-lettered.
+            </p>
+          ) : (
+            <div class="grc-tablewrap">
+              <table class="grc-table" aria-label="Dead-letter">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Recipient</th>
+                    <th>Subject</th>
+                    <th>Error</th>
+                    <th>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dead.map((d) => (
+                    <tr>
+                      <td>{d.batchType}</td>
+                      <td>{d.recipientEmail}</td>
+                      <td>{d.subject ?? '-'}</td>
+                      <td>{d.error ?? '-'}</td>
+                      <td>{fmt(d.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </>
+    )
+  }
+</GrcLayout>

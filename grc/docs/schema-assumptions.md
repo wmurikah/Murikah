@@ -216,3 +216,43 @@ Assumptions and mappings:
   `role_code` and `is_platform_owner`); the sidebar counts refresh on every
   navigation (server-rendered) and on a light client poll of
   `/api/sidebar-counts`.
+
+## Notifications and the send queue (Build Prompt 09)
+
+The notification service (05_NotificationService.gs) and the send queue
+(Sendqueue.html) run against the operator's aligned `notification_queue` and
+`email_templates`. No schema change is made in the repo. The eighteen source
+NOTIFICATION_TYPES and their per-type priority, in-app severity and HOA copy live
+in `notify/types.ts`.
+
+| Table                      | Columns used                                                                                                                                                                                                                                                                                                                           | Where                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `notification_queue`       | `notification_id`, `organization_id`, `batch_type`, `priority`, `channel`, `recipient_user_id`, `recipient_email`, `recipient_name`, `payload`, `related_entity_type`, `related_entity_id`, `rendered_subject`, `rendered_body`, `status`, `attempts`, `max_attempts`, `is_cc`, `error_message`, `sent_at`, `created_at`, `updated_at` | `notify/queue.ts`, `notify/dispatch.ts`, `repos/sendQueue.ts` |
+| `in_app_notifications`     | `notification_id`, `organization_id`, `user_id`, `title`, `body`, `severity`, `link`, `read_at`, `created_at`                                                                                                                                                                                                                          | `notify/queue.ts`, `repos/inApp.ts`                           |
+| `notification_dead_letter` | `notification_id`, `organization_id`, `batch_type`, `recipient_email`, `rendered_subject`, `error_message`, `attempts`, `created_at`                                                                                                                                                                                                   | `notify/dispatch.ts`, `repos/sendQueue.ts`                    |
+| `email_templates`          | `template_type` (the NOTIFICATION type), `subject_template`, `body_template`, `is_active`                                                                                                                                                                                                                                              | `notify/queue.ts`                                             |
+
+Notes:
+
+- Every module still calls the same `enqueueNotification(templateCode, entity, actor)`;
+  the adapter (`repos/notify.ts`) maps the code to a type, resolves the interested
+  recipients (an action plan's owners, a work paper's assigned auditor and
+  responsibles), builds the payload from the entity, queues one notification each,
+  and copies the Head of Audit (all active SUPER_ADMIN, except the actor) on the
+  key events. Enqueue is best-effort, so a schema difference never fails a
+  transition.
+- Rendering prefers an active `email_templates` row (`{{variable}}` interpolation
+  from the payload) over the inline branded layout; both use navy `#1F2D5C` and the
+  Hass Petroleum Group footer with replies to `audit@hasspetroleum.com`.
+- Delivery is Microsoft Graph (Outlook) via the OAuth2 refresh-token flow, read
+  from Worker secrets `OUTLOOK_CLIENT_ID`, `OUTLOOK_CLIENT_SECRET`,
+  `OUTLOOK_REFRESH_TOKEN`, `OUTLOOK_SENDER_EMAIL` (and optional `OUTLOOK_TENANT`),
+  gated by `GRC_ENV = 'production'`. Nothing is committed; when Graph is
+  unconfigured or outside production the drain leaves rows PENDING.
+- The scheduled Worker drains every run (urgent individually, normal batched per
+  recipient into one digest), backs off between attempts (`updated_at` plus a
+  growing delay) and moves a row to `notification_dead_letter` at `max_attempts`.
+  Stale reminders run daily (deduplicated per work paper and recipient every three
+  days), overdue reminders weekly (Mondays).
+- The auditee responses table is not part of this build; RESPONSE_SUBMITTED is
+  driven from the work-paper events the modules already enqueue.
