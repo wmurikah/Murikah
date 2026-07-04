@@ -1,10 +1,228 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+
+/**
+ * Work papers list (Workpaperslist): a full-width, dense, drillable list scoped
+ * to the acting organisation, filterable by status, audit area, affiliate,
+ * auditor and year, with a full-text search over the observation and
+ * recommendation. Gate: WORK_PAPERS.view. Each row drills through to the detail
+ * with the shared affordance cues.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import {
+  listWorkPapers,
+  type WorkPaperListRow,
+  type WorkPaperFilters,
+} from '@grc/repos/workPapers';
+import {
+  listAuditAreas,
+  listAffiliates,
+  listAuditors,
+  type Option,
+} from '@grc/repos/workPaperLookups';
+import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
+import { loadEnumValues } from '@grc/workflow/transitions';
+import { WORK_PAPER_ENUM_TYPE } from '@grc/workflow/workPaperActions';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'WORK_PAPERS.view');
+const canCreate = can(Astro.locals, 'WORK_PAPERS.create');
+const p = Astro.url.searchParams;
+const filters: WorkPaperFilters = {
+  status: p.get('status') || undefined,
+  auditAreaId: p.get('area') || undefined,
+  affiliateCode: p.get('affiliate') || undefined,
+  assignedAuditorId: p.get('auditor') || undefined,
+  year: p.get('year') || undefined,
+  q: p.get('q') || undefined,
+};
+
+let rows: WorkPaperListRow[] = [];
+let areas: Option[] = [];
+let affiliates: Option[] = [];
+let auditors: Option[] = [];
+let statuses: string[] = [];
+let labels = new Map<string, string>();
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  [rows, areas, affiliates, auditors, statuses, labels] = await Promise.all([
+    listWorkPapers(db, grc.organizationId, filters),
+    listAuditAreas(db, grc.organizationId),
+    listAffiliates(db, grc.organizationId),
+    listAuditors(db, grc.organizationId),
+    loadEnumValues(db, WORK_PAPER_ENUM_TYPE),
+    loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
+  ]);
+}
+
+const riskClass = (r: string | null): string => {
+  const v = (r ?? '').toUpperCase();
+  if (v === 'CRITICAL') return 'grc-pill grc-pill--risk-critical';
+  if (v === 'HIGH') return 'grc-pill grc-pill--risk-high';
+  if (v === 'MEDIUM') return 'grc-pill grc-pill--risk-medium';
+  if (v === 'LOW') return 'grc-pill grc-pill--risk-low';
+  return 'grc-pill';
+};
+const fmtDate = (d: string | null): string => (d ? d.slice(0, 10) : '');
+const done = p.get('done');
 ---
 
-<GrcPlaceholder
-  title="Work papers"
-  lead="Observations, testing, review and the auditee response workflow."
-  note="The full work papers workflow arrives with its module, ported with its status transitions preserved."
-/>
+<GrcLayout title="Work papers">
+  <div class="grc-page-head">
+    <div>
+      <h1>Work papers</h1>
+      <p class="grc-lead">Audit findings for {grc.organizationName}.</p>
+    </div>
+    {
+      canCreate && (
+        <a href="/work-papers/new" class="grc-btn grc-btn--primary">
+          New work paper
+        </a>
+      )
+    }
+  </div>
+
+  {
+    done && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        {decodeURIComponent(done)}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have access to work papers.
+      </p>
+    ) : (
+      <>
+        <form method="get" class="grc-filters" role="search" aria-label="Filter work papers">
+          <div class="grc-field" style="min-width:14rem">
+            <label for="f-q">Search</label>
+            <input
+              type="search"
+              id="f-q"
+              name="q"
+              class="grc-input"
+              value={filters.q ?? ''}
+              placeholder="Observation or recommendation"
+            />
+          </div>
+          <div class="grc-field">
+            <label for="f-status">Status</label>
+            <select id="f-status" name="status" class="grc-select">
+              <option value="">All</option>
+              {statuses.map((sv) => (
+                <option value={sv} selected={filters.status === sv}>
+                  {statusLabel(labels, sv)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field">
+            <label for="f-area">Audit area</label>
+            <select id="f-area" name="area" class="grc-select">
+              <option value="">All</option>
+              {areas.map((a) => (
+                <option value={a.id} selected={filters.auditAreaId === a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field">
+            <label for="f-affiliate">Affiliate</label>
+            <select id="f-affiliate" name="affiliate" class="grc-select">
+              <option value="">All</option>
+              {affiliates.map((a) => (
+                <option value={a.id} selected={filters.affiliateCode === a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field">
+            <label for="f-auditor">Auditor</label>
+            <select id="f-auditor" name="auditor" class="grc-select">
+              <option value="">All</option>
+              {auditors.map((a) => (
+                <option value={a.id} selected={filters.assignedAuditorId === a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field" style="max-width:7rem">
+            <label for="f-year">Year</label>
+            <input
+              type="number"
+              id="f-year"
+              name="year"
+              class="grc-input"
+              value={filters.year ?? ''}
+            />
+          </div>
+          <button type="submit" class="grc-btn grc-btn--secondary">
+            Apply
+          </button>
+        </form>
+
+        {rows.length === 0 ? (
+          <div class="grc-empty">
+            <p>
+              <strong>No work papers match.</strong> Adjust the filters, or create the first
+              finding.
+            </p>
+          </div>
+        ) : (
+          <div class="grc-tablewrap">
+            <table class="grc-table" aria-label="Work papers">
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Title</th>
+                  <th>Affiliate</th>
+                  <th>Audit area</th>
+                  <th>Risk</th>
+                  <th>Auditor</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td>
+                      <a href={`/work-papers/${r.id}`}>{r.reference}</a>
+                    </td>
+                    <td>{r.observationTitle || 'Untitled'}</td>
+                    <td>{r.affiliateName ?? r.affiliateCode ?? '-'}</td>
+                    <td>{r.auditAreaName ?? '-'}</td>
+                    <td>
+                      {r.riskRating ? (
+                        <span class={riskClass(r.riskRating)}>{r.riskRating}</span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td>{r.assignedAuditorName ?? '-'}</td>
+                    <td>
+                      <span class="grc-pill">{statusLabel(labels, r.status)}</span>
+                    </td>
+                    <td class="grc-num">{fmtDate(r.updatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</GrcLayout>

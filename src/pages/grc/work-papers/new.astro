@@ -1,0 +1,77 @@
+---
+export const prerender = false;
+
+/**
+ * Create a work paper (Workpaperform, new). Gate: WORK_PAPERS.create. Captures
+ * the section 1 fields; the sub-area auto-populate runs client-side. On submit
+ * the endpoint creates the draft and redirects to its detail.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import WorkPaperForm from '@/components/grc/WorkPaperForm.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import {
+  listAuditAreas,
+  listAffiliates,
+  listAuditors,
+  listSubAreas,
+  type Option,
+  type SubAreaTemplate,
+} from '@grc/repos/workPaperLookups';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'WORK_PAPERS.create');
+const failed = Astro.url.searchParams.get('error');
+
+let areas: Option[] = [];
+let affiliates: Option[] = [];
+let auditors: Option[] = [];
+let subAreas: SubAreaTemplate[] = [];
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  [areas, affiliates, auditors, subAreas] = await Promise.all([
+    listAuditAreas(db, grc.organizationId),
+    listAffiliates(db, grc.organizationId),
+    listAuditors(db, grc.organizationId),
+    listSubAreas(db, grc.organizationId),
+  ]);
+}
+---
+
+<GrcLayout title="New work paper">
+  <div class="grc-page-head">
+    <div>
+      <h1>New work paper</h1>
+      <p class="grc-lead">Record a finding as a draft.</p>
+    </div>
+    <a href="/work-papers" class="grc-btn grc-btn--secondary">Back to list</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have permission to create a work paper.
+      </p>
+    ) : (
+      <>
+        {failed && (
+          <p class="grc-error" role="alert" style="margin-bottom:1rem">
+            The work paper could not be saved. Check the fields and try again.
+          </p>
+        )}
+        <WorkPaperForm
+          action="/api/work-papers"
+          submitLabel="Create draft"
+          areas={areas}
+          affiliates={affiliates}
+          auditors={auditors}
+          subAreas={subAreas}
+          values={null}
+        />
+      </>
+    )
+  }
+</GrcLayout>
