@@ -114,18 +114,6 @@ const spendByContractor = charts
               </h2>
               <p class="engr-card__count">{data.openWorkOrders.count}</p>
               <p class="engr-card__trend">{data.openWorkOrders.recent} new this week</p>
-              {data.openWorkOrders.items.length === 0 ? (
-                <p class="engr-card__empty">None open.</p>
-              ) : (
-                <ul class="engr-card__list">
-                  {data.openWorkOrders.items.map((w) => (
-                    <li>
-                      <span>{w.woNo}</span>
-                      <span class="engr-card__muted">{w.stationName ?? 'Unassigned'}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
               <p class="engr-card__cue">View all work orders &rarr;</p>
             </a>
 
@@ -135,18 +123,6 @@ const spendByContractor = charts
               </h2>
               <p class="engr-card__count">{data.pendingCostApprovals.count}</p>
               <p class="engr-card__trend">{data.pendingCostApprovals.recent} new this week</p>
-              {data.pendingCostApprovals.items.length === 0 ? (
-                <p class="engr-card__empty">Nothing awaiting approval.</p>
-              ) : (
-                <ul class="engr-card__list">
-                  {data.pendingCostApprovals.items.map((c) => (
-                    <li>
-                      <span>{formatMoneyMinor(c.totalMinor, c.currency)}</span>
-                      <span class="engr-card__muted">{c.status}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
               <p class="engr-card__cue">Go to cost approvals &rarr;</p>
             </a>
 
@@ -156,20 +132,6 @@ const spendByContractor = charts
               </h2>
               <p class="engr-card__count">{data.pendingBillApprovals.count}</p>
               <p class="engr-card__trend">{data.pendingBillApprovals.recent} new this week</p>
-              {data.pendingBillApprovals.items.length === 0 ? (
-                <p class="engr-card__empty">Nothing awaiting approval.</p>
-              ) : (
-                <ul class="engr-card__list">
-                  {data.pendingBillApprovals.items.map((b) => (
-                    <li>
-                      <span>{b.billNo}</span>
-                      <span class="engr-card__muted">
-                        {formatMoneyMinor(b.totalMinor, b.currency)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
               <p class="engr-card__cue">Go to bill approvals &rarr;</p>
             </a>
 
@@ -179,18 +141,6 @@ const spendByContractor = charts
               </h2>
               <p class="engr-card__count">{data.upcomingPm.count}</p>
               <p class="engr-card__trend">{data.upcomingPm.recent} due this week</p>
-              {data.upcomingPm.items.length === 0 ? (
-                <p class="engr-card__empty">Nothing scheduled.</p>
-              ) : (
-                <ul class="engr-card__list">
-                  {data.upcomingPm.items.map((p) => (
-                    <li>
-                      <span>{p.scheduleName}</span>
-                      <span class="engr-card__muted">{p.dueDate ?? 'Not set'}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
               <p class="engr-card__cue">Open the maintenance calendar &rarr;</p>
             </a>
           </div>
@@ -223,16 +173,14 @@ const spendByContractor = charts
                 />
                 <EngrLine
                   title="Requests over time"
-                  description="Service requests raised per week, last 11 weeks."
+                  description="Service requests raised each month, last six months. Select a month to open its list."
                   valueHeading="Requests"
-                  href="/requests?scope=all"
-                  data={charts.requestsByWeek}
+                  data={charts.requestsByMonth}
                 />
                 <EngrLine
                   title="Upcoming maintenance"
-                  description="Occurrences due per week for the next eight weeks."
+                  description="Occurrences due per week for the next eight weeks. Select a week to open its list."
                   valueHeading="Due"
-                  href="/pm/calendar"
                   data={charts.pmByWeek}
                 />
                 <EngrBarChart

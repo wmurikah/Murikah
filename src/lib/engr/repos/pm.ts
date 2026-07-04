@@ -399,15 +399,28 @@ export interface OccurrenceListRow {
 export async function listUpcomingOccurrences(
   db: Client,
   orgId: string,
-  limit = 200,
+  opts: { from?: string; to?: string; limit?: number } = {},
 ): Promise<OccurrenceListRow[]> {
+  const args: (string | number)[] = [orgId];
+  // An optional week window, drilled from the "Upcoming maintenance" chart: from
+  // inclusive, to exclusive, both YYYY-MM-DD against the due date.
+  let where = 'o.org_id = ?';
+  if (opts.from) {
+    where += ' AND o.due_date >= ?';
+    args.push(opts.from);
+  }
+  if (opts.to) {
+    where += ' AND o.due_date < ?';
+    args.push(opts.to);
+  }
+  args.push(Math.max(1, Math.min(opts.limit ?? 200, 500)));
   const res = await db.execute({
     sql: `SELECT o.id, o.due_date, o.status, o.notified_1m_at, o.notified_2w_at, s.name AS schedule_name
             FROM pm_occurrences o
             JOIN pm_schedules s ON s.id = o.pm_schedule_id
-           WHERE o.org_id = ?
+           WHERE ${where}
         ORDER BY o.due_date LIMIT ?`,
-    args: [orgId, Math.max(1, Math.min(limit, 500))],
+    args,
   });
   return res.rows.map((row) => ({
     id: String(row.id),
