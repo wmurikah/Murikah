@@ -141,3 +141,35 @@ Notes:
 - Evidence reuses the work-paper `files`/`file_attachments` seam with
   `entity_type = 'action_plan'`; bytes are still not stored (see
   `grc/docs/evidence-storage.md`).
+
+## Board and BARC reporting (Build Prompt 07)
+
+The reporting module adds no tables: it aggregates existing `work_papers` and
+`action_plans` joined with `affiliates`, `audit_areas`, `work_paper_responsibles`
+and `users`, and records generation and export in `audit_log`. Reads are scoped
+by `organization_id` and by role.
+
+Permissions used: `REPORTS.view` (see the page) and `REPORTS.board` (generate and
+export a report). Audit actions written: `REPORT.generate` and `REPORT.export`.
+
+Assumptions (reconcile in the listed module if the live schema differs):
+
+- `users.affiliate_code` (nullable) is the UNIT_MANAGER's own affiliate, read
+  defensively in `repos/reportData.ts` (`resolveUserAffiliate`): a schema without
+  the column simply yields null, and the manager is then scoped by assignment
+  alone rather than by affiliate. UNIT_MANAGER scoping is enforced server-side:
+  observations where they are the `assigned_auditor` or a `work_paper_responsibles`
+  row, and action plans whose `owner_ids` include them, within their affiliate.
+- The risk buckets are Extreme, High, Medium and Low. The work-paper `risk_rating`
+  may store the top band as CRITICAL, so `normaliseRisk` maps CRITICAL (and
+  EXTREME) to the Extreme bucket (`reports/reportModel.ts`).
+- The observation response status is derived, not stored: Responded when the
+  work-paper status is `RESPONSE_RECEIVED`/`RESPONSE_REVIEWED` or a
+  `management_response` is present, Awaiting response at `SENT_TO_AUDITEE`, else
+  Not sent (`repos/reportData.ts`).
+- An action plan is overdue when its due date has passed and its status is not
+  settled; the settled set is Implemented, Pending Verification, Verified, Not
+  Implemented, Closed and Rejected. Days overdue and days until due are computed
+  from the due date, matching the source (`reports/reportModel.ts`).
+- The Word export is generated with a dependency-free OOXML writer that runs on
+  the Worker; see `grc/docs/reporting.md`.
