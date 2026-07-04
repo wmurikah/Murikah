@@ -1,0 +1,88 @@
+---
+export const prerender = false;
+
+/**
+ * Edit a work paper (Workpaperform, edit). Gate: WORK_PAPERS.edit, and only in a
+ * state the source allows (Draft or Revision Required); in any other state the
+ * record is read-only and this redirects to the detail. The sub-area
+ * auto-populate is available; the endpoint saves and returns to the detail.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import WorkPaperForm from '@/components/grc/WorkPaperForm.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { getWorkPaper, type WorkPaperDetail } from '@grc/repos/workPapers';
+import {
+  listAuditAreas,
+  listAffiliates,
+  listAuditors,
+  listSubAreas,
+  type Option,
+  type SubAreaTemplate,
+} from '@grc/repos/workPaperLookups';
+import { isEditable } from '@grc/workflow/workPaperActions';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const { id } = Astro.params;
+
+const allowed = can(Astro.locals, 'WORK_PAPERS.edit');
+
+let wp: WorkPaperDetail | null = null;
+let areas: Option[] = [];
+let affiliates: Option[] = [];
+let auditors: Option[] = [];
+let subAreas: SubAreaTemplate[] = [];
+if (allowed && id) {
+  const db = await getDb(getGrcEnv());
+  wp = await getWorkPaper(db, grc.organizationId, id);
+  // Only editable in Draft or Revision Required; otherwise back to the detail.
+  if (wp && !isEditable(wp.status)) return Astro.redirect(`/work-papers/${id}`);
+  if (wp) {
+    [areas, affiliates, auditors, subAreas] = await Promise.all([
+      listAuditAreas(db, grc.organizationId),
+      listAffiliates(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+      listSubAreas(db, grc.organizationId),
+    ]);
+  }
+}
+if (allowed && !wp) Astro.response.status = 404;
+---
+
+<GrcLayout title={wp ? `Edit ${wp.reference}` : 'Edit work paper'}>
+  <div class="grc-page-head">
+    <div>
+      <h1>{wp ? `Edit ${wp.reference}` : 'Edit work paper'}</h1>
+      <p class="grc-lead">Amend the finding while it is in draft or revision.</p>
+    </div>
+    {
+      wp && (
+        <a href={`/work-papers/${id}`} class="grc-btn grc-btn--secondary">
+          Back to detail
+        </a>
+      )
+    }
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have permission to edit work papers.
+      </p>
+    ) : !wp ? (
+      <p class="grc-empty">That work paper was not found in your organisation.</p>
+    ) : (
+      <WorkPaperForm
+        action={`/api/work-papers/${id}`}
+        submitLabel="Save changes"
+        areas={areas}
+        affiliates={affiliates}
+        auditors={auditors}
+        subAreas={subAreas}
+        values={wp}
+      />
+    )
+  }
+</GrcLayout>
