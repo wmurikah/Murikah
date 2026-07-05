@@ -104,7 +104,7 @@ export async function listActionPlans(
   const res = await db.execute({
     sql: `SELECT ap.action_plan_id AS id, ap.action_number AS action_number,
                  ap.action_description AS description, ap.work_paper_id AS work_paper_id,
-                 wp.reference AS wp_reference, wp.risk_rating AS risk_rating,
+                 wp.work_paper_ref AS wp_reference, wp.risk_rating AS risk_rating,
                  ap.owner_ids AS owner_ids, ap.owner_names AS owner_names,
                  ap.due_date AS due_date, ap.status AS status,
                  ap.days_overdue AS days_overdue, ap.auditee_proposed AS auditee_proposed
@@ -172,7 +172,7 @@ export async function getActionPlan(
   id: string,
 ): Promise<ActionPlanDetail | null> {
   const res = await db.execute({
-    sql: `SELECT ap.*, wp.reference AS wp_reference, wp.risk_rating AS risk_rating,
+    sql: `SELECT ap.*, wp.work_paper_ref AS wp_reference, wp.risk_rating AS risk_rating,
                  wp.observation_title AS observation_title, wp.affiliate_code AS affiliate_code,
                  wp.observation_description AS observation_description
             FROM action_plans ap
@@ -204,9 +204,9 @@ export async function listWorkPaperOptions(
   organizationId: string,
 ): Promise<WorkPaperOption[]> {
   const res = await db.execute({
-    sql: `SELECT work_paper_id AS id, reference, observation_title AS title
+    sql: `SELECT work_paper_id AS id, work_paper_ref AS reference, observation_title AS title
             FROM work_papers WHERE organization_id = ?
-        ORDER BY reference DESC, observation_title
+        ORDER BY work_paper_ref DESC, observation_title
            LIMIT 500`,
     args: [organizationId],
   });
@@ -236,17 +236,22 @@ export async function createActionPlan(
   const now = new Date().toISOString();
   const status =
     input.dueDate && Date.parse(input.dueDate) > Date.now() ? AP_STATUS.NOT_DUE : AP_STATUS.PENDING;
-  const actionNumber = `AP-${new Date().getUTCFullYear()}-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+  // The human reference is action_ref; action_number is the sequential number.
+  // We stamp the generated reference into both so it shows regardless of which
+  // column the operator's schema populates, and reads COALESCE(action_ref,
+  // action_number) elsewhere.
+  const reference = `AP-${new Date().getUTCFullYear()}-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
   await db.execute({
     sql: `INSERT INTO action_plans
-            (action_plan_id, organization_id, action_number, work_paper_id, action_description,
+            (action_plan_id, organization_id, action_ref, action_number, work_paper_id, action_description,
              due_date, status, days_overdue, owner_ids, owner_names, auditee_proposed,
              created_by, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 0, '', '', ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, '', '', ?, ?, ?, ?)`,
     args: [
       id,
       organizationId,
-      actionNumber,
+      reference,
+      reference,
       input.workPaperId,
       input.actionDescription,
       input.dueDate,

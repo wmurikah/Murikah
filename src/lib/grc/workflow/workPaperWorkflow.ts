@@ -105,10 +105,19 @@ export async function executeTransition(
   const sets = ['status = ?', 'revision_count = revision_count + 1', 'updated_at = ?'];
   const updateArgs: (string | number | null)[] = [toStatus, now];
   if (meta.attribution) {
-    sets.push(`${meta.attribution.by} = ?`, `${meta.attribution.at} = ?`);
-    updateArgs.push(actor.userId, now);
-    if (meta.attribution.comments && comment) {
-      sets.push(`${meta.attribution.comments} = ?`);
+    const a = meta.attribution;
+    sets.push(`${a.date} = ?`);
+    updateArgs.push(now);
+    if (a.byId) {
+      sets.push(`${a.byId} = ?`);
+      updateArgs.push(actor.userId);
+    }
+    if (a.byName) {
+      sets.push(`${a.byName} = ?`);
+      updateArgs.push(actor.userName);
+    }
+    if (a.comments && comment) {
+      sets.push(`${a.comments} = ?`);
       updateArgs.push(comment);
     }
   }
@@ -119,7 +128,7 @@ export async function executeTransition(
       sql: `UPDATE work_papers SET ${sets.join(', ')} WHERE work_paper_id = ? AND organization_id = ?`,
       args: updateArgs,
     },
-    insertRevisionStatement(organizationId, {
+    insertRevisionStatement({
       workPaperId,
       revisionNumber: nextRevision,
       action: toStatus,

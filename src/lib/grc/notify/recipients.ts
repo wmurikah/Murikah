@@ -94,12 +94,16 @@ export async function workPaperPartyIds(
 ): Promise<string[]> {
   const [wp, resp] = await Promise.all([
     db.execute({
-      sql: `SELECT assigned_auditor FROM work_papers WHERE work_paper_id = ? AND organization_id = ? LIMIT 1`,
+      sql: `SELECT assigned_auditor_id AS assigned_auditor FROM work_papers
+             WHERE work_paper_id = ? AND organization_id = ? LIMIT 1`,
       args: [workPaperId, organizationId],
     }),
     db.execute({
-      sql: `SELECT user_id FROM work_paper_responsibles WHERE work_paper_id = ? AND organization_id = ?`,
-      args: [workPaperId, organizationId],
+      // work_paper_responsibles has no organization_id; scope through the paper.
+      sql: `SELECT r.user_id FROM work_paper_responsibles r
+              JOIN work_papers wp ON wp.work_paper_id = r.work_paper_id AND wp.organization_id = ?
+             WHERE r.work_paper_id = ?`,
+      args: [organizationId, workPaperId],
     }),
   ]);
   const ids = new Set<string>();
