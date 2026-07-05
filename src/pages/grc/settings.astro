@@ -14,6 +14,21 @@ const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
 
 const cards = [
   {
+    href: '/settings/users',
+    title: 'Users',
+    body: 'The people who can sign in, their roles, affiliates and passwords.',
+  },
+  {
+    href: '/settings/affiliates',
+    title: 'Affiliates',
+    body: 'The business units a work paper or action plan can be scoped to.',
+  },
+  {
+    href: '/settings/audit-universe',
+    title: 'Audit universe',
+    body: 'Audit areas and their sub-areas, which seed the work-paper templates.',
+  },
+  {
     href: '/settings/access-control',
     title: 'Access control',
     body: 'The permission matrix for each role, and the pages it unlocks.',
@@ -21,7 +36,12 @@ const cards = [
   {
     href: '/settings/dropdowns',
     title: 'Dropdowns',
-    body: 'The control-field values and the audit universe: areas, sub-areas and affiliates.',
+    body: 'The control-field vocabularies: risk ratings, classification, type and frequency.',
+  },
+  {
+    href: '/settings/general',
+    title: 'General settings',
+    body: 'Workflow deadlines, reminder cadence and notification sender defaults.',
   },
   {
     href: '/settings/ai',
