@@ -23,6 +23,26 @@
   --grc-surface: var(--color-porcelain, #fffcf6);
   --grc-stone: var(--color-stone, #e8e0d2);
 
+  /* Chart palette: a navy-and-gold rotation for categorical slices (audit areas). */
+  --grc-chart-1: #1f2d5c; /* navy-2 */
+  --grc-chart-2: #c9a227; /* gold */
+  --grc-chart-3: #3a4d88; /* mid navy */
+  --grc-chart-4: #8a6a22; /* deep gold */
+  --grc-chart-5: #6b7cb0; /* pale navy */
+  --grc-chart-6: #d8b24a; /* warm sand */
+  --grc-chart-7: #45507a; /* slate navy */
+  --grc-chart-8: #9aa6cc; /* faint navy */
+  --grc-chart-track: #e7e3d8; /* unfilled track */
+
+  /* Meaningful colours: risk ratings and action-plan status buckets. */
+  --grc-risk-extreme: #7f1d1d; /* deep red */
+  --grc-risk-high: #c0392b; /* red */
+  --grc-risk-medium: #c9a227; /* gold */
+  --grc-risk-low: #2e7d51; /* green */
+  --grc-status-notimpl: #c0392b; /* red */
+  --grc-status-impl: #2e7d51; /* green */
+  --grc-status-notdue: #2563a6; /* blue */
+
   /* Type scale, matching engr's tightened scale. */
   --grc-fs-body: 13px;
   --grc-fs-small: 12px;
@@ -1650,6 +1670,313 @@
   color: var(--grc-muted);
   font-size: var(--grc-fs-small);
   padding: var(--grc-s3) 0;
+}
+
+/* Dashboard analytics: a responsive 2x2 grid of chart cards on a paper surface. */
+.grc-charts-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--grc-s3);
+  margin-top: var(--grc-s5);
+}
+.grc-charts-head h2 {
+  color: var(--grc-navy);
+}
+.grc-yearform {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--grc-s2);
+}
+.grc-yearform .grc-field {
+  margin: 0;
+  max-width: 7rem;
+}
+.grc-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--grc-s4);
+  margin-top: var(--grc-s3);
+}
+@media (max-width: 60rem) {
+  .grc-charts {
+    grid-template-columns: 1fr;
+  }
+}
+.grc-chartcard {
+  background: var(--grc-surface);
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  padding: var(--grc-s4);
+  box-shadow: var(--grc-shadow);
+  min-width: 0;
+}
+.grc-chartcard .grc-chart__title {
+  color: var(--grc-navy);
+}
+
+/* Doughnut and pie (same server-rendered SVG approach as Engineering Rhythm). */
+.grc-chart--donut {
+  container: grc-donut / inline-size;
+}
+.grc-donut {
+  margin-top: var(--grc-s2);
+}
+.grc-donutwide {
+  display: none;
+}
+.grc-donutmini {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--grc-s4);
+}
+@container grc-donut (min-width: 22rem) {
+  .grc-donutwide {
+    display: block;
+  }
+  .grc-donutmini {
+    display: none;
+  }
+}
+.grc-donutwide__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.grc-donutmini__svg {
+  flex: 0 0 auto;
+  width: 7.5rem;
+  height: 7.5rem;
+}
+.grc-donutwide a,
+.grc-donutmini a {
+  cursor: pointer;
+}
+.grc-donut__slice {
+  transition: opacity 0.15s ease;
+}
+.grc-donutwide a:hover .grc-donut__slice,
+.grc-donutmini a:hover .grc-donut__slice {
+  opacity: 0.85;
+}
+.grc-donut__total {
+  font-size: 16px;
+  font-weight: 700;
+  fill: var(--grc-navy);
+}
+.grc-donutmini__svg .grc-donut__total {
+  font-size: 20px;
+}
+.grc-donut__unit {
+  font-size: 7px;
+  fill: var(--grc-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.grc-donutmini__svg .grc-donut__unit {
+  font-size: 8px;
+}
+.grc-callout__box {
+  fill: var(--grc-surface);
+  stroke: var(--grc-line);
+  stroke-width: 1;
+  transition: stroke 0.15s ease;
+}
+.grc-callout__name {
+  font-size: 7.5px;
+  font-weight: 600;
+  fill: var(--grc-ink);
+}
+.grc-callout__val {
+  font-size: 7px;
+  fill: var(--grc-muted);
+  font-variant-numeric: tabular-nums;
+}
+a.grc-callout {
+  cursor: pointer;
+}
+.grc-callout:hover .grc-callout__box {
+  stroke: var(--grc-navy-2);
+}
+.grc-donutwide a:focus-visible {
+  outline: none;
+}
+.grc-donutwide a:focus-visible .grc-callout__box {
+  stroke: var(--grc-gold-deep);
+  stroke-width: 2;
+}
+
+/* Shared donut legend (narrow fallback). */
+.grc-legend {
+  flex: 1 1 12rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.grc-legend--wrap {
+  margin-top: var(--grc-s3);
+}
+.grc-legend__row {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s2);
+  padding: 0.2rem 0.3rem;
+  border-radius: var(--grc-radius-sm);
+  font-size: var(--grc-fs-small);
+  color: var(--grc-ink);
+  text-decoration: none;
+}
+a.grc-legend__row {
+  cursor: pointer;
+}
+a.grc-legend__row:hover {
+  background: var(--grc-stone);
+}
+.grc-legend__swatch {
+  flex: 0 0 auto;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 0.2rem;
+}
+.grc-legend__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grc-legend__value {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.grc-legend__pct {
+  color: var(--grc-muted);
+  font-weight: 500;
+}
+
+/* Multi-series grouped bars (risk rating, action-plan status). */
+.grc-bars {
+  margin-top: var(--grc-s2);
+}
+.grc-bars__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--grc-s3);
+  list-style: none;
+  margin: 0 0 var(--grc-s2);
+  padding: 0;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-ink);
+}
+.grc-bars__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.grc-bars__swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  display: inline-block;
+}
+.grc-bars__swatch--extreme {
+  background: var(--grc-risk-extreme);
+}
+.grc-bars__swatch--high {
+  background: var(--grc-risk-high);
+}
+.grc-bars__swatch--medium {
+  background: var(--grc-risk-medium);
+}
+.grc-bars__swatch--low {
+  background: var(--grc-risk-low);
+}
+.grc-bars__swatch--notimpl {
+  background: var(--grc-status-notimpl);
+}
+.grc-bars__swatch--impl {
+  background: var(--grc-status-impl);
+}
+.grc-bars__swatch--notdue {
+  background: var(--grc-status-notdue);
+}
+.grc-bars__scroll {
+  overflow-x: auto;
+}
+.grc-bars__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.grc-bars__grid {
+  stroke: var(--grc-line);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.grc-bars__axis {
+  stroke: var(--grc-line);
+  stroke-width: 1.25;
+}
+.grc-bars__ylabel {
+  font-size: 8px;
+  fill: var(--grc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.grc-bars__xlabel {
+  font-size: 8.5px;
+  fill: var(--grc-ink);
+  font-weight: 600;
+}
+.grc-bars__hit {
+  fill: transparent;
+  transition: fill 0.15s ease;
+}
+a.grc-bars__group {
+  cursor: pointer;
+}
+a.grc-bars__group:hover .grc-bars__hit {
+  fill: rgba(11, 23, 51, 0.04);
+}
+a.grc-bars__group:focus-visible {
+  outline: none;
+}
+a.grc-bars__group:focus-visible .grc-bars__hit {
+  fill: rgba(201, 162, 39, 0.16);
+}
+.grc-bars__bar {
+  stroke: rgba(11, 23, 51, 0.14);
+  stroke-width: 0.5;
+  transition: opacity 0.15s ease;
+}
+a.grc-bars__group:hover .grc-bars__bar {
+  opacity: 0.88;
+}
+.grc-bars__bar--extreme {
+  fill: var(--grc-risk-extreme);
+}
+.grc-bars__bar--high {
+  fill: var(--grc-risk-high);
+}
+.grc-bars__bar--medium {
+  fill: var(--grc-risk-medium);
+}
+.grc-bars__bar--low {
+  fill: var(--grc-risk-low);
+}
+.grc-bars__bar--notimpl {
+  fill: var(--grc-status-notimpl);
+}
+.grc-bars__bar--impl {
+  fill: var(--grc-status-impl);
+}
+.grc-bars__bar--notdue {
+  fill: var(--grc-status-notdue);
 }
 
 /* Sidebar badge counts on the nav links. */
