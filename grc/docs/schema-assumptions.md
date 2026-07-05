@@ -306,3 +306,58 @@ Notes:
   `ai/validation.ts`) that it is advisory only and must be checked against
   professional judgement. The model's Markdown is rendered with `textContent`
   (never as HTML) and CSS preserves its whitespace.
+
+## Evidence storage on Cloudflare R2 (Build Prompt 11)
+
+Evidence bytes are stored in Cloudflare R2 behind the storage seam
+(`src/lib/grc/storage.ts`), with existing Google Drive files read through the same
+seam and migrated in the background. The operator applied a schema patch adding
+`storage_backend`, `storage_key`, `content_hash` and `content_hash_algo` to
+`files`; the governance tables (`deletion_queue`, `legal_holds`,
+`retention_policies`) are assumed to exist. No schema change is made in the repo.
+
+| Table                | Columns used                                                                                                                                                                              | Where                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `files`              | `file_id`, `organization_id`, `file_name`, `mime_type`, `size_bytes`, `storage_backend`, `storage_key`, `content_hash`, `content_hash_algo`, `drive_file_id`, `uploaded_by`, `created_at` | `repos/evidence.ts`, `repos/governance.ts` |
+| `file_attachments`   | `attachment_id`, `organization_id`, `file_id`, `entity_type` (`work_paper` or `action_plan`), `entity_id`, `created_at`                                                                   | `repos/evidence.ts`                        |
+| `deletion_queue`     | `queue_id`, `organization_id`, `entity_type`, `entity_id`, `file_id`, `requested_by`, `reason`, `status` (`PENDING`), `retain_until`, `created_at`                                        | `repos/governance.ts`                      |
+| `legal_holds`        | `organization_id`, `entity_type`, `entity_id`, `released_at` (NULL means active)                                                                                                          | `repos/governance.ts`                      |
+| `retention_policies` | `organization_id`, `entity_type`, `retention_days`                                                                                                                                        | `repos/governance.ts`                      |
+
+Notes:
+
+- Keys are per-tenant and immutable:
+  `org/{organization_id}/{entity}/{entity_id}/{file_id}/{safe_filename}`
+  (`storage/keys.ts`). The `file_id` in the key equals `files.file_id`, so a
+  replacement is a new id and a new key, never an overwrite. Every presign is
+  guarded by `keyBelongsToOrg`, so a signed URL only ever reaches the acting
+  tenant's prefix.
+- Integrity: on completion the object is verified (R2 head) and its sha256 is
+  computed server-side and stored on `content_hash`/`content_hash_algo`. Uploads
+  and downloads use presigned URLs so the large bytes never stream through the
+  worker; Drive-backed files are read through the worker instead.
+- Access: an upload or download is allowed for a platform owner, for a holder of
+  the entity's view/edit permission (`WORK_PAPERS.*`, `ACTION_PLANS.*`), or for an
+  auditee personally linked to the entity: a work paper they are a responsible
+  (`work_paper_responsibles`) or CC (`work_paper_cc_recipients`) on, or an action
+  plan they own (`action_plan_owners`, `is_active = 1`) or raised
+  (`action_plans.created_by`). This is the auditee-safe boundary on download.
+- Deletion is soft and governed: a request inserts a PENDING `deletion_queue`
+  row, is blocked outright when an unreleased `legal_holds` row covers the entity,
+  and is stamped with the retention floor (now plus the longest matching
+  `retention_policies.retention_days`) so the deferred purge honours retention.
+  Nothing is hard-deleted in the request path. The hold check fails safe
+  (blocked) rather than open.
+- Migration: the daily `scheduled()` block migrates a batch of Drive-backed files
+  (those whose entity is not under an active hold) to R2, updating
+  `storage_backend`, `storage_key`, `content_hash` and `content_hash_algo` and
+  keeping `drive_file_id` for provenance. `listDriveFilesToMigrate` is a
+  system-wide maintenance query across every organisation, each file still keyed
+  by its own `organization_id`, like the overdue refresh.
+- Uploads, deletions, and holds that block a deletion are written to `audit_log`
+  (`EVIDENCE.upload`, `EVIDENCE.delete_requested`, `EVIDENCE.delete_blocked_hold`).
+- Secrets are Worker-only: the `EVIDENCE_BUCKET` binding, the R2 S3 presign
+  credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+  `R2_BUCKET`) and the read-only Drive credential (`GDRIVE_CLIENT_ID`,
+  `GDRIVE_CLIENT_SECRET`, `GDRIVE_REFRESH_TOKEN`). All optional; when absent the
+  seam reports storage is not configured and the app is otherwise unaffected.
