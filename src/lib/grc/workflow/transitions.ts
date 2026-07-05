@@ -13,6 +13,7 @@
  * operator's column names differ.
  */
 import type { Client } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
 import {
   evaluateTransition,
   type TransitionRule,
@@ -28,8 +29,10 @@ function bool(v: unknown): boolean {
 
 /** The allowed values for an enum type, in their configured order. */
 export async function loadEnumValues(db: Client, enumType: string): Promise<string[]> {
+  const ev = cols(C.enum_values);
   const res = await db.execute({
-    sql: `SELECT value FROM enum_values WHERE enum_type = ? ORDER BY sort_order, value`,
+    sql: `SELECT ${ev.enum_value} AS value FROM enum_values
+           WHERE ${ev.enum_type} = ? ORDER BY ${ev.display_order}, ${ev.enum_value}`,
     args: [enumType],
   });
   return res.rows.map((r) => String(r.value));
@@ -37,9 +40,11 @@ export async function loadEnumValues(db: Client, enumType: string): Promise<stri
 
 /** The allowed transitions for an enum type. */
 export async function loadTransitions(db: Client, enumType: string): Promise<TransitionRule[]> {
+  const st = cols(C.status_transitions);
   const res = await db.execute({
-    sql: `SELECT from_status, to_status, required_role, requires_comment
-            FROM status_transitions WHERE enum_type = ?`,
+    sql: `SELECT ${st.from_status} AS from_status, ${st.to_status} AS to_status,
+                 ${st.required_role} AS required_role, ${st.requires_comment} AS requires_comment
+            FROM status_transitions WHERE ${st.enum_type} = ?`,
     args: [enumType],
   });
   return res.rows.map((r) => ({
@@ -50,13 +55,19 @@ export async function loadTransitions(db: Client, enumType: string): Promise<Tra
   }));
 }
 
-/** The end states for an enum type: statuses nothing may leave. */
+/**
+ * The end states for a workflow: statuses nothing may leave. The live table keys
+ * these by `workflow_name`/`terminal_status` (not the enum_type/status this once
+ * assumed); the enum type name is passed as the workflow name.
+ */
 export async function loadTerminalStates(db: Client, enumType: string): Promise<string[]> {
+  const wts = cols(C.workflow_terminal_states);
   const res = await db.execute({
-    sql: `SELECT status FROM workflow_terminal_states WHERE enum_type = ?`,
+    sql: `SELECT ${wts.terminal_status} AS terminal_status FROM workflow_terminal_states
+           WHERE ${wts.workflow_name} = ?`,
     args: [enumType],
   });
-  return res.rows.map((r) => String(r.status));
+  return res.rows.map((r) => String(r.terminal_status));
 }
 
 /**

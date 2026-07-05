@@ -1,14 +1,20 @@
 /**
- * The non-secret AI settings, held in the `config` table under the GLOBAL scope
- * (the source keys AI_ACTIVE_PROVIDER, AI_MODEL, AI_MAX_TOKENS, AI_TEMPERATURE,
- * AI_SYSTEM_PROMPT, AI_EVALUATION_ENABLED, AI_REJECTION_THRESHOLD and the per
- * provider enabled flags). The API keys are never here; they are Worker secrets
- * (ai/env.ts). Config is platform-wide (GLOBAL), so it is not org-scoped by
- * design. Column names follow grc/docs/schema-assumptions.md.
+ * The non-secret AI settings, held in the `config` table (the source keys
+ * AI_ACTIVE_PROVIDER, AI_MODEL, AI_MAX_TOKENS, AI_TEMPERATURE, AI_SYSTEM_PROMPT,
+ * AI_EVALUATION_ENABLED, AI_REJECTION_THRESHOLD and the per provider enabled
+ * flags). The API keys are never here; they are Worker secrets (ai/env.ts).
+ * Config is platform-wide by design, so it is keyed by a fixed `GLOBAL`
+ * organization_id sentinel rather than a real organisation. Column names come
+ * from the typed schema layer; the live `config` table keys rows by
+ * organization_id (there is no `scope` column).
  */
 import type { Client } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
 import { DEFAULT_MODELS, isProvider, type Provider } from './providers';
 import { DEFAULT_SYSTEM_PROMPT } from './prompts';
+
+const cfg = cols(C.config);
+const GLOBAL = 'GLOBAL';
 
 export interface AiConfig {
   activeProvider: Provider;
@@ -31,8 +37,9 @@ export async function loadAiConfig(db: Client): Promise<AiConfig> {
   const map = new Map<string, string>();
   try {
     const res = await db.execute({
-      sql: `SELECT config_key, config_value FROM config WHERE scope = 'GLOBAL' AND config_key LIKE 'AI_%'`,
-      args: [],
+      sql: `SELECT ${cfg.config_key}, ${cfg.config_value} FROM config
+             WHERE ${cfg.organization_id} = ? AND ${cfg.config_key} LIKE 'AI_%'`,
+      args: [GLOBAL],
     });
     for (const r of res.rows) {
       map.set(String(r.config_key), r.config_value == null ? '' : String(r.config_value));
@@ -70,13 +77,15 @@ export async function loadAiConfig(db: Client): Promise<AiConfig> {
 async function setConfig(db: Client, key: string, value: string): Promise<void> {
   const now = new Date().toISOString();
   const upd = await db.execute({
-    sql: `UPDATE config SET config_value = ?, updated_at = ? WHERE scope = 'GLOBAL' AND config_key = ?`,
-    args: [value, now, key],
+    sql: `UPDATE config SET ${cfg.config_value} = ?, ${cfg.updated_at} = ?
+           WHERE ${cfg.organization_id} = ? AND ${cfg.config_key} = ?`,
+    args: [value, now, GLOBAL, key],
   });
   if ((upd.rowsAffected ?? 0) === 0) {
     await db.execute({
-      sql: `INSERT INTO config (scope, config_key, config_value, updated_at) VALUES ('GLOBAL', ?, ?, ?)`,
-      args: [key, value, now],
+      sql: `INSERT INTO config (${cfg.organization_id}, ${cfg.config_key}, ${cfg.config_value}, ${cfg.updated_at})
+             VALUES (?, ?, ?, ?)`,
+      args: [GLOBAL, key, value, now],
     });
   }
 }
