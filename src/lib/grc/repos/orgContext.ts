@@ -42,14 +42,17 @@ export async function resolveActingContext(
   // An ordinary user never switches: they always act inside their home org.
   if (!isPlatformOwner) return fallback;
 
-  // A platform owner may act inside any organisation on the platform.
+  // A platform owner may act inside any active organisation on the platform.
+  // `organizations` names its label column `org_name` and its active flag
+  // `is_active` (there is no `name` or `status` column).
   const res = await db.execute({
-    sql: `SELECT organization_id, name FROM organizations ORDER BY name`,
+    sql: `SELECT organization_id, org_name FROM organizations
+           WHERE is_active = 1 ORDER BY org_name`,
     args: [],
   });
   const switchable: SwitchOrg[] = res.rows.map((r) => ({
     id: String(r.organization_id),
-    name: String(r.name),
+    name: String(r.org_name),
   }));
 
   // The requested id is honoured only when it is in the set; otherwise home.

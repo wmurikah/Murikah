@@ -68,7 +68,7 @@ export async function resolveSession(
     sql: `SELECT s.expires_at AS expires_at,
                  u.user_id AS user_id, u.full_name AS full_name, u.email AS email,
                  u.role_code AS role_code, u.is_platform_owner AS is_platform_owner,
-                 o.organization_id AS organization_id, o.name AS org_name
+                 o.organization_id AS organization_id, o.org_name AS org_name
             FROM sessions s
             JOIN users u ON u.user_id = s.user_id
             JOIN organizations o ON o.organization_id = u.organization_id
