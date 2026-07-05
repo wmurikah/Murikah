@@ -35,8 +35,8 @@ import type { ReportDocument } from '@grc/reports/reportTypes';
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'REPORTS.view');
-const canBoard = can(Astro.locals, 'REPORTS.board');
+const allowed = can(Astro.locals, 'read', 'REPORT');
+const canBoard = can(Astro.locals, 'read', 'REPORT');
 const now = new Date();
 const params = Astro.url.searchParams;
 const unitScope = isUnitManagerScope(grc.roleCode, grc.isPlatformOwner);

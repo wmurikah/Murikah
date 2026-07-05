@@ -1,10 +1,66 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+
+/**
+ * Settings home, admin only. Links to the SUPER_ADMIN configuration screens:
+ * access control (the permission matrix), managed dropdowns (control fields and
+ * the audit universe), and AI settings. Gated on SUPER_ADMIN or a platform owner.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+
+const cards = [
+  {
+    href: '/settings/access-control',
+    title: 'Access control',
+    body: 'The permission matrix for each role, and the pages it unlocks.',
+  },
+  {
+    href: '/settings/dropdowns',
+    title: 'Dropdowns',
+    body: 'The control-field values and the audit universe: areas, sub-areas and affiliates.',
+  },
+  {
+    href: '/settings/ai',
+    title: 'AI settings',
+    body: 'The AI assistance providers, model and evaluation defaults.',
+  },
+];
+// Provisioning a new customer organisation is a platform-owner action.
+if (grc.isPlatformOwner) {
+  cards.push({
+    href: '/settings/provision',
+    title: 'Provision organisation',
+    body: 'Create a customer organisation, seeded with its config, dropdowns, admin and trial.',
+  });
+}
 ---
 
-<GrcPlaceholder
-  title="Settings"
-  lead="Organisation settings for the audit workspace."
-  note="Settings arrive with the setup module."
-/>
+<GrcLayout title="Settings">
+  <div class="grc-page-head">
+    <div>
+      <h1>Settings</h1>
+      <p class="grc-lead">Configure the audit workspace for your organisation.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Settings are restricted to administrators.
+      </p>
+    ) : (
+      <div class="grc-cards">
+        {cards.map((c) => (
+          <a href={c.href} class="grc-card grc-card--link">
+            <p class="grc-card__label">{c.title}</p>
+            <p class="grc-card__note">{c.body}</p>
+          </a>
+        ))}
+      </div>
+    )
+  }
+</GrcLayout>

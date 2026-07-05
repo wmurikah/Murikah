@@ -26,8 +26,7 @@ If a name here differs from the live schema, change it in the listed file only.
 | `organizations`            | `organization_id`, `name`, `status`                                                                             | `src/lib/grc/repos/login.ts`, `session.ts`, `orgContext.ts`  |
 | `sessions`                 | `session_id`, `user_id`, `created_at`, `expires_at`                                                             | `src/lib/grc/repos/session.ts`                               |
 | `roles`                    | `role_code`                                                                                                     | (reference)                                                  |
-| `permissions`              | `permission_code`                                                                                               | `src/lib/grc/auth/rbac.ts`                                   |
-| `role_permissions`         | `role_code`, `permission_code`                                                                                  | `src/lib/grc/auth/rbac.ts`                                   |
+| `role_permissions`         | `role_code`, `module_code`, `action_code`, `is_allowed` (the matrix; see Build Prompt 12)                       | `src/lib/grc/auth/rbac.ts`                                   |
 | `enum_values`              | `enum_type`, `value`, `sort_order`                                                                              | `src/lib/grc/workflow/transitions.ts`                        |
 | `status_transitions`       | `enum_type`, `from_status`, `to_status`, `required_role`, `requires_comment`                                    | `src/lib/grc/workflow/transitions.ts`                        |
 | `workflow_terminal_states` | `enum_type`, `status`                                                                                           | `src/lib/grc/workflow/transitions.ts`                        |
@@ -52,10 +51,10 @@ active label never locks a valid user out (`src/pages/grc/api/auth/login.ts`).
 
 ## Reference vs tenant data
 
-`enum_values`, `status_transitions`, `workflow_terminal_states`, `roles`,
-`permissions` and `role_permissions` define the product's workflow and access
-model and are read without an `organization_id` filter (shared reference data).
-Every tenant table is always scoped by the acting `organization_id`.
+`enum_values`, `status_transitions`, `workflow_terminal_states`, `roles` and
+`role_permissions` (the permission matrix) define the product's workflow and
+access model and are read without an `organization_id` filter (shared reference
+data). Every tenant table is always scoped by the acting `organization_id`.
 
 ## Work Papers module (Build Prompt 04)
 
@@ -361,3 +360,57 @@ Notes:
   `R2_BUCKET`) and the read-only Drive credential (`GDRIVE_CLIENT_ID`,
   `GDRIVE_CLIENT_SECRET`, `GDRIVE_REFRESH_TOKEN`). All optional; when absent the
   seam reports storage is not configured and the app is otherwise unaffected.
+
+## RBAC matrix, dropdowns and provisioning (Build Prompt 12 addenda)
+
+The RBAC note in the foundation is superseded: the permission model is a matrix,
+not a permission-code list (PermissionService.gs). The operator applied
+`grc-permissions-fix.sql` and `grc-reference-seed.sql`; no schema change is made
+in the repo.
+
+| Table              | Columns used                                                                                                                  | Where                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `role_permissions` | `role_code`, `module_code`, `action_code`, `is_allowed`                                                                       | `auth/rbac.ts`, `repos/permissionsAdmin.ts`    |
+| `roles`            | `role_code`                                                                                                                   | `repos/permissionsAdmin.ts`                    |
+| `config`           | `scope` (an `organization_id`), `config_key` (`DROPDOWN_*` and Phase 1 keys), `config_value`, `updated_at`                    | `repos/dropdowns.ts`, `repos/provisioning*.ts` |
+| `audit_areas`      | `audit_area_id`, `organization_id`, `name`, `is_active`, `display_order`                                                      | `repos/workPaperLookups.ts`                    |
+| `sub_areas`        | `sub_area_id`, `audit_area_id`, `organization_id`, `name`, template fields, `is_active`, `display_order`                      | `repos/workPaperLookups.ts`                    |
+| `affiliates`       | `affiliate_code`, `organization_id`, `name`, `is_active`, `display_order`                                                     | `repos/workPaperLookups.ts`                    |
+| `organizations`    | `organization_id`, `name`, `status`, `created_at`                                                                             | `repos/provisioning.ts`                        |
+| `users`            | `user_id`, `organization_id`, `email`, `full_name`, `password_hash`, `role_code`, `is_platform_owner`, `status`, `created_at` | `repos/provisioning.ts`                        |
+| `subscriptions`    | `organization_id`, `plan_code`, `status`, `created_at`                                                                        | `repos/provisioning.ts`                        |
+
+Notes:
+
+- The matrix is `{ module: { action: boolean } }` built from `role_permissions`
+  (`auth/matrix.ts`, pure and unit-tested), cached per role in the isolate and
+  invalidated on a grant change. The modules are `WORK_PAPER`, `ACTION_PLAN`,
+  `AUDITEE_RESPONSE`, `AUDIT_WORKBENCH`, `REPORT`, `AI_ASSIST`, `USER`, `CONFIG`,
+  `AUDIT_LOG`; the actions are `read`, `create`, `update`, `delete`, `approve`,
+  `export`. Two source aliases apply before lookup: action `view` maps to `read`,
+  and module `WORK_PAPERS` maps to `WORK_PAPER`. `can(locals, action, module)` is
+  the server-side gate; `PAGE_PERMISSION_MAP` maps a page slug to its required
+  module and action. `role_permissions` and `roles` are shared reference data
+  (not tenant data), so they are not organisation-scoped; the acting `role_code`
+  is authoritative.
+- A SUPER_ADMIN and a platform owner hold the full matrix and are never modified.
+  The access-control screen (`settings/access-control.astro`) shows each role's
+  matrix and its resulting page access and writes grants to `role_permissions`
+  (`repos/permissionsAdmin.ts`), invalidating the cache; a legacy permission-code
+  list is derived from the matrix so earlier `perms.includes` checks keep working,
+  matrix-driven.
+- The work-paper control fields and risk rating are managed dropdowns from
+  per-organisation config: `DROPDOWN_RISK_RATINGS`,
+  `DROPDOWN_CONTROL_CLASSIFICATION`, `DROPDOWN_CONTROL_TYPE`,
+  `DROPDOWN_CONTROL_FREQUENCY`, each a JSON array under `scope = organization_id`
+  (`repos/dropdowns.ts`), cached and invalidated on change and manageable by a
+  SUPER_ADMIN (`settings/dropdowns.astro`); `standards` stays free text. Audit
+  areas, sub-areas and affiliates are filtered to `is_active` and ordered by
+  `display_order` then name.
+- Creating a new organisation seeds its defaults automatically in one
+  transactional batch (`repos/provisioning.ts`, with the pure builder in
+  `provisioningDefaults.ts`): the Phase 1 config, the reference dropdowns, a first
+  `SUPER_ADMIN` user (password hashed with `auth/password.ts`, never stored plain)
+  and a trial subscription (`plan_code = 'trial'`). The defaults live in one place
+  in code, in step with the seed scripts. Provisioning is a platform-owner action
+  (`api/organizations.ts`, `settings/provision.astro`).

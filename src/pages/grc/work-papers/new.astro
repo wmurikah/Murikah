@@ -19,24 +19,31 @@ import {
   type Option,
   type SubAreaTemplate,
 } from '@grc/repos/workPaperLookups';
+import {
+  loadControlDropdowns,
+  DROPDOWN_DEFAULTS,
+  type ControlDropdowns,
+} from '@grc/repos/dropdowns';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'WORK_PAPERS.create');
+const allowed = can(Astro.locals, 'create', 'WORK_PAPER');
 const failed = Astro.url.searchParams.get('error');
 
 let areas: Option[] = [];
 let affiliates: Option[] = [];
 let auditors: Option[] = [];
 let subAreas: SubAreaTemplate[] = [];
+let dropdowns: ControlDropdowns = DROPDOWN_DEFAULTS;
 if (allowed) {
   const db = await getDb(getGrcEnv());
-  [areas, affiliates, auditors, subAreas] = await Promise.all([
+  [areas, affiliates, auditors, subAreas, dropdowns] = await Promise.all([
     listAuditAreas(db, grc.organizationId),
     listAffiliates(db, grc.organizationId),
     listAuditors(db, grc.organizationId),
     listSubAreas(db, grc.organizationId),
+    loadControlDropdowns(db, grc.organizationId),
   ]);
 }
 ---
@@ -69,6 +76,7 @@ if (allowed) {
           affiliates={affiliates}
           auditors={auditors}
           subAreas={subAreas}
+          dropdowns={dropdowns}
           values={null}
         />
       </>

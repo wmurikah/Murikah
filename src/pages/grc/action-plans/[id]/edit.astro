@@ -20,7 +20,7 @@ const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const { id } = Astro.params;
 
-const allowed = can(Astro.locals, 'ACTION_PLANS.edit');
+const allowed = can(Astro.locals, 'update', 'ACTION_PLAN');
 const failed = Astro.url.searchParams.get('error');
 
 let plan: Awaited<ReturnType<typeof getActionPlan>> = null;
