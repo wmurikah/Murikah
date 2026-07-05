@@ -6,7 +6,7 @@
  * follow the hassaudit conventions (documented in grc/docs/schema-assumptions.md).
  */
 import type { Client } from '@libsql/client/web';
-import { newSessionId, SESSION_MAX_AGE_SECONDS } from '@grc/auth/session';
+import { newSessionId, hashToken, SESSION_MAX_AGE_SECONDS } from '@grc/auth/session';
 
 export interface SessionIdentity {
   userId: string;
@@ -18,15 +18,33 @@ export interface SessionIdentity {
   userEmail?: string;
 }
 
-/** Create a session row for a user and return its id. Expiry mirrors the cookie. */
-export async function createSession(db: Client, userId: string): Promise<string> {
+export interface SessionMeta {
+  ip: string | null;
+  userAgent: string | null;
+}
+
+/**
+ * Create a session row for a user and return its id. The cookie carries the
+ * signed id (auth/session.ts); the row stores a hash of that token in
+ * `token_hash`, never the raw token. Columns match the hassaudit `sessions`
+ * table exactly: session_id, user_id, token_hash, ip, user_agent, created_at,
+ * expires_at, last_seen_at. Expiry mirrors the cookie.
+ */
+export async function createSession(
+  db: Client,
+  userId: string,
+  meta: SessionMeta,
+): Promise<string> {
   const sessionId = newSessionId();
+  const tokenHash = await hashToken(sessionId);
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
   const expiresAt = new Date(now + SESSION_MAX_AGE_SECONDS * 1000).toISOString();
   await db.execute({
-    sql: `INSERT INTO sessions (session_id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
-    args: [sessionId, userId, createdAt, expiresAt],
+    sql: `INSERT INTO sessions
+            (session_id, user_id, token_hash, ip, user_agent, created_at, expires_at, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [sessionId, userId, tokenHash, meta.ip, meta.userAgent, createdAt, expiresAt, createdAt],
   });
   return sessionId;
 }
