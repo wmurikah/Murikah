@@ -25,6 +25,14 @@ const APa = cols(C.action_plans, 'ap');
 const RESP = cols(C.work_paper_responsibles, 'r');
 const AFF = cols(C.affiliates, 'aff');
 const USR = cols(C.users, 'u');
+const AA = cols(C.audit_areas, 'aa');
+
+// Seeded action-plan status literals the analytics buckets match. 'Not Implemented'
+// is a seed value distinct from the workflow enum (AP_STATUS); 'Verified' and
+// 'Closed' form the implemented bucket, and 'Not Due' the not-yet-due bucket, the
+// same human-readable values stored on the row.
+const NOT_IMPLEMENTED = 'Not Implemented';
+const NOT_DUE = 'Not Due';
 
 export interface DashboardScope {
   userId: string;
@@ -365,6 +373,190 @@ export async function getTeamPerformance(
       closed: num(r.closed),
     })),
   };
+}
+
+// ---- Dashboard analytics charts --------------------------------------------
+// Four org-scoped, year-filterable aggregations behind the dashboard charts.
+// Areas come from audit_areas; an action plan carries no area of its own, so it
+// joins through work_paper_id to the work paper and on to its audit area
+// (GAP-507). Every column name is from the typed schema layer, so a rename fails
+// the build rather than a chart.
+
+/** A multi-series grouped bar: named series (each a colour tone) and per-area rows. */
+export interface BarSeries {
+  label: string;
+  /** Semantic tone the view maps to a colour token (risk or status meaning). */
+  tone: string;
+}
+export interface GroupedBarRow {
+  /** The short x-axis tick (area code). */
+  label: string;
+  /** The full area name, for the tooltip and the accessible table. */
+  title: string;
+  href?: string;
+  /** Counts aligned to the series order. */
+  values: number[];
+}
+export interface GroupedBarData {
+  series: BarSeries[];
+  rows: GroupedBarRow[];
+}
+
+const areaHref = (base: string, areaId: string, year: number): string =>
+  `${base}?area=${encodeURIComponent(areaId)}&year=${year}`;
+
+/** Chart 1: work papers per audit area for the year, for the doughnut. */
+export async function getIssuesPerArea(
+  db: Client,
+  organizationId: string,
+  year: number,
+): Promise<ChartDatum[]> {
+  const res = await db.execute({
+    sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
+                 ${WPa.audit_area_id} AS area_id, COUNT(*) AS n
+            FROM work_papers wp
+            JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
+                 AND ${AA.organization_id} = ${WPa.organization_id}
+           WHERE ${WPa.organization_id} = ? AND ${WPa.year} = ?
+        GROUP BY ${WPa.audit_area_id}
+        ORDER BY n DESC`,
+    args: [organizationId, year],
+  });
+  return res.rows.map((r) => ({
+    label: String(r.code ?? r.name ?? 'Unassigned'),
+    value: num(r.n),
+    href: areaHref('/work-papers', String(r.area_id), year),
+  }));
+}
+
+/** Chart 2: work papers per audit area split by risk rating, for the grouped bar. */
+export async function getRiskPerArea(
+  db: Client,
+  organizationId: string,
+  year: number,
+): Promise<GroupedBarData> {
+  const res = await db.execute({
+    sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
+                 ${WPa.audit_area_id} AS area_id,
+                 SUM(CASE WHEN UPPER(${WPa.risk_rating}) = 'EXTREME' THEN 1 ELSE 0 END) AS extreme,
+                 SUM(CASE WHEN UPPER(${WPa.risk_rating}) = 'HIGH' THEN 1 ELSE 0 END) AS high,
+                 SUM(CASE WHEN UPPER(${WPa.risk_rating}) = 'MEDIUM' THEN 1 ELSE 0 END) AS medium,
+                 SUM(CASE WHEN UPPER(${WPa.risk_rating}) = 'LOW' THEN 1 ELSE 0 END) AS low
+            FROM work_papers wp
+            JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
+                 AND ${AA.organization_id} = ${WPa.organization_id}
+           WHERE ${WPa.organization_id} = ? AND ${WPa.year} = ?
+        GROUP BY ${WPa.audit_area_id}
+        ORDER BY ${AA.area_code}`,
+    args: [organizationId, year],
+  });
+  const rows: GroupedBarRow[] = res.rows
+    .map((r) => ({
+      label: String(r.code ?? r.name ?? '?'),
+      title: String(r.name ?? r.code ?? 'Audit area'),
+      href: areaHref('/work-papers', String(r.area_id), year),
+      values: [num(r.extreme), num(r.high), num(r.medium), num(r.low)],
+    }))
+    .filter((row) => row.values.some((v) => v > 0));
+  return {
+    series: [
+      { label: 'Extreme', tone: 'extreme' },
+      { label: 'High', tone: 'high' },
+      { label: 'Medium', tone: 'medium' },
+      { label: 'Low', tone: 'low' },
+    ],
+    rows,
+  };
+}
+
+/** Chart 3: not-implemented action plans on high-risk findings, by area, for the pie. */
+export async function getNotImplementedHighRisk(
+  db: Client,
+  organizationId: string,
+  year: number,
+): Promise<ChartDatum[]> {
+  const res = await db.execute({
+    sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
+                 ${WPa.audit_area_id} AS area_id, COUNT(*) AS n
+            FROM action_plans ap
+            JOIN work_papers wp ON ${WPa.work_paper_id} = ${APa.work_paper_id}
+                 AND ${WPa.organization_id} = ${APa.organization_id}
+            JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
+                 AND ${AA.organization_id} = ${WPa.organization_id}
+           WHERE ${APa.organization_id} = ? AND ${APa.status} = ?
+             AND UPPER(${WPa.risk_rating}) IN ('HIGH', 'EXTREME') AND ${WPa.year} = ?
+        GROUP BY ${WPa.audit_area_id}
+        ORDER BY n DESC`,
+    args: [organizationId, NOT_IMPLEMENTED, year],
+  });
+  return res.rows.map((r) => ({
+    label: String(r.code ?? r.name ?? 'Unassigned'),
+    value: num(r.n),
+    href: areaHref('/action-plans', String(r.area_id), year),
+  }));
+}
+
+/** Chart 4: action plans per audit area bucketed by status, for the grouped bar. */
+export async function getActionPlanStatusPerArea(
+  db: Client,
+  organizationId: string,
+  year: number,
+): Promise<GroupedBarData> {
+  const res = await db.execute({
+    sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
+                 ${WPa.audit_area_id} AS area_id,
+                 SUM(CASE WHEN ${APa.status} = ? THEN 1 ELSE 0 END) AS not_impl,
+                 SUM(CASE WHEN ${APa.status} IN ('Verified', 'Closed') THEN 1 ELSE 0 END) AS implemented,
+                 SUM(CASE WHEN ${APa.status} = ? THEN 1 ELSE 0 END) AS not_due
+            FROM action_plans ap
+            JOIN work_papers wp ON ${WPa.work_paper_id} = ${APa.work_paper_id}
+                 AND ${WPa.organization_id} = ${APa.organization_id}
+            JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
+                 AND ${AA.organization_id} = ${WPa.organization_id}
+           WHERE ${APa.organization_id} = ? AND ${WPa.year} = ?
+        GROUP BY ${WPa.audit_area_id}
+        ORDER BY ${AA.area_code}`,
+    args: [NOT_IMPLEMENTED, NOT_DUE, organizationId, year],
+  });
+  const rows: GroupedBarRow[] = res.rows
+    .map((r) => ({
+      label: String(r.code ?? r.name ?? '?'),
+      title: String(r.name ?? r.code ?? 'Audit area'),
+      href: areaHref('/action-plans', String(r.area_id), year),
+      values: [num(r.not_impl), num(r.implemented), num(r.not_due)],
+    }))
+    .filter((row) => row.values.some((v) => v > 0));
+  return {
+    series: [
+      { label: 'Not implemented', tone: 'notimpl' },
+      { label: 'Implemented', tone: 'impl' },
+      { label: 'Not due', tone: 'notdue' },
+    ],
+    rows,
+  };
+}
+
+export interface DashboardCharts {
+  issuesPerArea: ChartDatum[];
+  riskPerArea: GroupedBarData;
+  notImplementedHighRisk: ChartDatum[];
+  actionPlanStatusPerArea: GroupedBarData;
+}
+
+/** The four dashboard charts for the year, in one round of parallel queries. */
+export async function getDashboardCharts(
+  db: Client,
+  organizationId: string,
+  year: number,
+): Promise<DashboardCharts> {
+  const [issuesPerArea, riskPerArea, notImplementedHighRisk, actionPlanStatusPerArea] =
+    await Promise.all([
+      getIssuesPerArea(db, organizationId, year),
+      getRiskPerArea(db, organizationId, year),
+      getNotImplementedHighRisk(db, organizationId, year),
+      getActionPlanStatusPerArea(db, organizationId, year),
+    ]);
+  return { issuesPerArea, riskPerArea, notImplementedHighRisk, actionPlanStatusPerArea };
 }
 
 export interface SidebarCounts {

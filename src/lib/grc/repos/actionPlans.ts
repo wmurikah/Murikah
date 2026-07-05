@@ -38,6 +38,10 @@ export interface ActionPlanFilters {
   ownerId?: string;
   overdueOnly?: boolean;
   q?: string;
+  /** The audit area of the linked work paper, for the dashboard drill-through. */
+  auditAreaId?: string;
+  /** The year of the linked work paper, for the dashboard drill-through. */
+  year?: string;
 }
 
 /** The viewer, for the role-based list visibility. */
@@ -99,6 +103,15 @@ export async function listActionPlans(
     where += ' AND (ap.action_description LIKE ? OR ap.implementation_notes LIKE ?)';
     const like = `%${filters.q.trim()}%`;
     args.push(like, like);
+  }
+  // Area and year live on the linked work paper (a plan has neither of its own).
+  if (filters.auditAreaId) {
+    where += ' AND wp.audit_area_id = ?';
+    args.push(filters.auditAreaId);
+  }
+  if (filters.year) {
+    where += ' AND wp.year = ?';
+    args.push(Number(filters.year));
   }
 
   const res = await db.execute({
