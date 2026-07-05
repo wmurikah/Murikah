@@ -23,6 +23,8 @@ export interface SessionIdentity {
   homeOrganizationName: string;
   userName?: string;
   userEmail?: string;
+  /** True when users.must_change_password is set, forcing the change-password flow. */
+  mustChangePassword: boolean;
 }
 
 export interface SessionMeta {
@@ -76,6 +78,7 @@ export async function resolveSession(
     sql: `SELECT ${S.expires_at} AS expires_at,
                  ${U.user_id} AS user_id, ${U.full_name} AS full_name, ${U.email} AS email,
                  ${U.role_code} AS role_code, ${U.is_platform_owner} AS is_platform_owner,
+                 ${U.must_change_password} AS must_change_password,
                  ${O.organization_id} AS organization_id, ${O.org_name} AS org_name
             FROM sessions s
             JOIN users u ON ${U.user_id} = ${S.user_id}
@@ -98,5 +101,6 @@ export async function resolveSession(
     homeOrganizationName: String(row.org_name),
     userName: row.full_name == null ? undefined : String(row.full_name),
     userEmail: row.email == null ? undefined : String(row.email),
+    mustChangePassword: Number(row.must_change_password ?? 0) === 1,
   };
 }
