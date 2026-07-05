@@ -20,19 +20,19 @@ If a name here differs from the live schema, change it in the listed file only.
 
 ## Assumed column names (reconcile if the live schema differs)
 
-| Table                      | Columns used                                                                                                    | Where                                                        |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `users`                    | `user_id`, `email`, `password_hash`, `full_name`, `role_code`, `is_platform_owner`, `organization_id`, `status` | `src/lib/grc/repos/login.ts`, `src/lib/grc/repos/session.ts` |
-| `organizations`            | `organization_id`, `name`, `status`                                                                             | `src/lib/grc/repos/login.ts`, `session.ts`, `orgContext.ts`  |
-| `sessions`                 | `session_id`, `user_id`, `created_at`, `expires_at`                                                             | `src/lib/grc/repos/session.ts`                               |
-| `roles`                    | `role_code`                                                                                                     | (reference)                                                  |
-| `role_permissions`         | `role_code`, `module_code`, `action_code`, `is_allowed` (the matrix; see Build Prompt 12)                       | `src/lib/grc/auth/rbac.ts`                                   |
-| `enum_values`              | `enum_type`, `value`, `sort_order`                                                                              | `src/lib/grc/workflow/transitions.ts`                        |
-| `status_transitions`       | `enum_type`, `from_status`, `to_status`, `required_role`, `requires_comment`                                    | `src/lib/grc/workflow/transitions.ts`                        |
-| `workflow_terminal_states` | `enum_type`, `status`                                                                                           | `src/lib/grc/workflow/transitions.ts`                        |
-| `subscriptions`            | `organization_id`, `plan_code`, `status`                                                                        | `src/lib/grc/repos/features.ts`                              |
-| `plans`                    | `plan_code`, `features_json`                                                                                    | `src/lib/grc/repos/features.ts`                              |
-| `audit_log`                | `organization_id`, `user_id`, `action`, `details`, `created_at`                                                 | `src/lib/grc/repos/audit.ts`                                 |
+| Table                      | Columns used                                                                                                                                   | Where                                                        |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `users`                    | `user_id`, `email`, `password_hash`, `full_name`, `role_code`, `is_platform_owner`, `organization_id`, `status`, `deleted_at`, `last_login_at` | `src/lib/grc/repos/login.ts`, `src/lib/grc/repos/session.ts` |
+| `organizations`            | `organization_id`, `name`, `status`                                                                                                            | `src/lib/grc/repos/login.ts`, `session.ts`, `orgContext.ts`  |
+| `sessions`                 | `session_id`, `user_id`, `token_hash`, `ip`, `user_agent`, `created_at`, `expires_at`, `last_seen_at`                                          | `src/lib/grc/repos/session.ts`                               |
+| `roles`                    | `role_code`                                                                                                                                    | (reference)                                                  |
+| `role_permissions`         | `role_code`, `module_code`, `action_code`, `is_allowed` (the matrix; see Build Prompt 12)                                                      | `src/lib/grc/auth/rbac.ts`                                   |
+| `enum_values`              | `enum_type`, `value`, `sort_order`                                                                                                             | `src/lib/grc/workflow/transitions.ts`                        |
+| `status_transitions`       | `enum_type`, `from_status`, `to_status`, `required_role`, `requires_comment`                                                                   | `src/lib/grc/workflow/transitions.ts`                        |
+| `workflow_terminal_states` | `enum_type`, `status`                                                                                                                          | `src/lib/grc/workflow/transitions.ts`                        |
+| `subscriptions`            | `organization_id`, `plan_code`, `status`                                                                                                       | `src/lib/grc/repos/features.ts`                              |
+| `plans`                    | `plan_code`, `features_json`                                                                                                                   | `src/lib/grc/repos/features.ts`                              |
+| `audit_log`                | `organization_id`, `user_id`, `action`, `details`, `created_at`                                                                                | `src/lib/grc/repos/audit.ts`                                 |
 
 ## Passwords
 
