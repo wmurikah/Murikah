@@ -22,7 +22,7 @@ import {
   type ActionPlanStats,
   type Viewer,
 } from '@grc/repos/actionPlans';
-import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+import { listAuditors, listAuditAreas, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { loadEnumValues } from '@grc/workflow/transitions';
 import { ACTION_PLAN_ENUM_TYPE, AP_STATUS } from '@grc/workflow/actionPlanActions';
@@ -40,6 +40,8 @@ const filters: ActionPlanFilters = {
   ownerId: p.get('owner') || undefined,
   overdueOnly: p.get('overdue') === '1',
   q: p.get('q') || undefined,
+  auditAreaId: p.get('area') || undefined,
+  year: p.get('year') || undefined,
 };
 
 const viewer: Viewer = {
@@ -52,13 +54,15 @@ const viewer: Viewer = {
 let rows: ActionPlanListRow[] = [];
 let stats: ActionPlanStats = { total: 0, pending: 0, overdue: 0, implemented: 0, verified: 0 };
 let owners: Option[] = [];
+let areas: Option[] = [];
 let statuses: string[] = [];
 let labels = new Map<string, string>();
 if (allowed) {
   const db = await getDb(getGrcEnv());
-  [rows, owners, statuses, labels] = await Promise.all([
+  [rows, owners, areas, statuses, labels] = await Promise.all([
     listActionPlans(db, grc.organizationId, viewer, filters),
     listAuditors(db, grc.organizationId),
+    listAuditAreas(db, grc.organizationId),
     loadEnumValues(db, ACTION_PLAN_ENUM_TYPE),
     loadEnumLabels(db, ACTION_PLAN_ENUM_TYPE),
   ]);
@@ -103,6 +107,8 @@ const viewHref = (v: string): string => {
   const q = new URLSearchParams();
   if (filters.status) q.set('status', filters.status);
   if (filters.ownerId) q.set('owner', filters.ownerId);
+  if (filters.auditAreaId) q.set('area', filters.auditAreaId);
+  if (filters.year) q.set('year', filters.year);
   if (filters.overdueOnly) q.set('overdue', '1');
   if (filters.q) q.set('q', filters.q);
   if (v === 'kanban') q.set('view', 'kanban');
@@ -200,6 +206,27 @@ const done = p.get('done');
                 </option>
               ))}
             </select>
+          </div>
+          <div class="grc-field">
+            <label for="f-area">Audit area</label>
+            <select id="f-area" name="area" class="grc-select">
+              <option value="">All</option>
+              {areas.map((a) => (
+                <option value={a.id} selected={filters.auditAreaId === a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field" style="max-width:7rem">
+            <label for="f-year">Year</label>
+            <input
+              type="number"
+              id="f-year"
+              name="year"
+              class="grc-input"
+              value={filters.year ?? ''}
+            />
           </div>
           <div class="grc-field grc-field--check">
             <label class="grc-checkline">
