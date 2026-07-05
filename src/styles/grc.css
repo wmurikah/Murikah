@@ -615,6 +615,14 @@
   width: 100%;
   min-height: 2.75rem;
 }
+/* Auth-card action row: the full-width primary, with any secondary link centred
+   beneath it (e.g. the change-password "Back to dashboard" escape hatch). */
+.grc-authactions {
+  margin-top: var(--grc-s4);
+  display: grid;
+  gap: var(--grc-s3);
+  justify-items: center;
+}
 .grc-authmeta {
   margin-top: var(--grc-s4);
   font-size: var(--grc-fs-small);
