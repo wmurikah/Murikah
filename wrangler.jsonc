@@ -36,6 +36,25 @@
     "enabled": true,
   },
 
+  // GRC evidence storage (Build Prompt 11) uses an R2 bucket bound as
+  // EVIDENCE_BUCKET plus S3 presign credentials. Kept commented so this preview
+  // deploys with no pre-created bucket; the app degrades gracefully (evidence
+  // upload and download report that storage is not configured) until these are
+  // provisioned, and the rest of the app is unaffected. To enable, in an
+  // environment that has the bucket:
+  //   wrangler r2 bucket create murikah-grc-evidence
+  //   then uncomment the binding below and set the presign + Drive secrets:
+  //   wrangler secret put R2_ACCOUNT_ID
+  //   wrangler secret put R2_ACCESS_KEY_ID
+  //   wrangler secret put R2_SECRET_ACCESS_KEY
+  //   wrangler secret put R2_BUCKET            # e.g. murikah-grc-evidence
+  //   wrangler secret put GDRIVE_CLIENT_ID     # read-only Drive credential
+  //   wrangler secret put GDRIVE_CLIENT_SECRET # for read-through and migration
+  //   wrangler secret put GDRIVE_REFRESH_TOKEN
+  // "r2_buckets": [
+  //   { "binding": "EVIDENCE_BUCKET", "bucket_name": "murikah-grc-evidence" },
+  // ],
+
   // Bindings are intentionally minimal so the Worker deploys to a free
   // workers.dev preview with no pre-created Cloudflare resources. Each item
   // below returns with the feature branch that actually uses it:
