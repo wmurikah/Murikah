@@ -1,0 +1,236 @@
+---
+export const prerender = false;
+
+/**
+ * AI provider configuration (05_AIService.gs settings), SUPER_ADMIN only. Sets the
+ * active provider, per-provider enabled flags, model, max tokens, temperature,
+ * system prompt, evaluation toggle and rejection threshold in the GLOBAL config;
+ * the API keys are Worker secrets and only a masked tail is shown here. Each
+ * provider's connection can be tested. Gated behind the plan's AI feature and
+ * strictly on SUPER_ADMIN (or a platform owner).
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { loadAiConfig, type AiConfig } from '@grc/ai/config';
+import { PROVIDERS, PROVIDER_LABELS, DEFAULT_MODELS, type Provider } from '@grc/ai/providers';
+import { keyPresence, maskedKey } from '@grc/ai/env';
+import { aiEnabled } from '@grc/ai/gate';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const hasAi = aiEnabled((f) => grc.hasFeature(f));
+const allowed = hasAi && (grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN');
+const done = Astro.url.searchParams.get('done');
+
+let config: AiConfig | null = null;
+let presence: Record<Provider, boolean> = { openai: false, anthropic: false, google: false };
+let masked: Record<Provider, string> = { openai: '', anthropic: '', google: '' };
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  config = await loadAiConfig(db);
+  presence = keyPresence();
+  masked = {
+    openai: maskedKey('openai'),
+    anthropic: maskedKey('anthropic'),
+    google: maskedKey('google'),
+  };
+}
+const c = config;
+---
+
+<GrcLayout title="AI settings">
+  <div class="grc-page-head">
+    <div>
+      <h1>AI settings</h1>
+      <p class="grc-lead">Configure the AI assistance providers for the platform.</p>
+    </div>
+    <a href="/analytics" class="grc-btn grc-btn--secondary">Analytics</a>
+  </div>
+
+  {
+    !hasAi ? (
+      <div class="grc-empty">
+        <p>
+          <strong>AI assistance is not part of your plan.</strong> Upgrade to configure providers.
+        </p>
+      </div>
+    ) : !allowed ? (
+      <p class="grc-error" role="alert">
+        AI configuration is restricted to administrators.
+      </p>
+    ) : c ? (
+      <>
+        {done && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            {decodeURIComponent(done)}
+          </p>
+        )}
+
+        <div class="grc-panel">
+          <h2>Providers</h2>
+          <p class="grc-field__hint">
+            API keys are held only as Worker secrets (AI_API_KEY_OPENAI, AI_API_KEY_ANTHROPIC,
+            AI_API_KEY_GOOGLE_AI) and are never stored in the database. Only a masked tail is shown.
+          </p>
+          <div class="grc-tablewrap">
+            <table class="grc-table" aria-label="AI providers">
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Key</th>
+                  <th>Enabled</th>
+                  <th>Test</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PROVIDERS.map((prov) => (
+                  <tr>
+                    <td>{PROVIDER_LABELS[prov]}</td>
+                    <td>
+                      {presence[prov] ? masked[prov] : <span class="grc-tone--muted">Not set</span>}
+                    </td>
+                    <td>
+                      <label class="grc-checkline">
+                        <input
+                          type="checkbox"
+                          form="ai-config"
+                          name={`enabled_${prov}`}
+                          value="1"
+                          checked={c.enabled[prov]}
+                        />
+                        <span class="grc-vh">Enable {PROVIDER_LABELS[prov]}</span>
+                      </label>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        class="grc-btn grc-btn--secondary grc-btn--tiny ai-test"
+                        data-provider={prov}
+                      >
+                        Test
+                      </button>
+                      <span class="ai-test-out" data-for={prov} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <form id="ai-config" method="post" action="/api/ai/config" class="grc-form">
+          <div class="grc-report-filters__grid">
+            <div class="grc-field">
+              <label for="active">Active provider</label>
+              <select id="active" name="active_provider" class="grc-select">
+                {PROVIDERS.map((prov) => (
+                  <option value={prov} selected={c.activeProvider === prov}>
+                    {PROVIDER_LABELS[prov]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="grc-field">
+              <label for="model">Model</label>
+              <input
+                type="text"
+                id="model"
+                name="model"
+                class="grc-input"
+                value={c.model}
+                placeholder={DEFAULT_MODELS[c.activeProvider]}
+              />
+            </div>
+            <div class="grc-field">
+              <label for="max_tokens">Max tokens</label>
+              <input
+                type="number"
+                id="max_tokens"
+                name="max_tokens"
+                class="grc-input"
+                value={c.maxTokens}
+                min="64"
+                max="8000"
+              />
+            </div>
+            <div class="grc-field">
+              <label for="temperature">Temperature</label>
+              <input
+                type="number"
+                id="temperature"
+                name="temperature"
+                class="grc-input"
+                value={c.temperature}
+                min="0"
+                max="1"
+                step="0.1"
+              />
+            </div>
+            <div class="grc-field">
+              <label for="rejection">Rejection threshold</label>
+              <input
+                type="number"
+                id="rejection"
+                name="rejection_threshold"
+                class="grc-input"
+                value={c.rejectionThreshold}
+                min="0"
+                max="100"
+              />
+            </div>
+          </div>
+
+          <div class="grc-field">
+            <label for="system_prompt">System prompt</label>
+            <textarea
+              id="system_prompt"
+              name="system_prompt"
+              class="grc-textarea"
+              rows="3"
+              set:text={c.systemPrompt}
+            />
+          </div>
+
+          <label class="grc-checkline">
+            <input
+              type="checkbox"
+              name="evaluation_enabled"
+              value="1"
+              checked={c.evaluationEnabled}
+            />
+            <span>Auto-evaluate auditee responses (auto-reject below the threshold)</span>
+          </label>
+
+          <div class="grc-actionbar" style="margin-top:0.75rem">
+            <button type="submit" class="grc-btn grc-btn--primary">
+              Save settings
+            </button>
+          </div>
+        </form>
+      </>
+    ) : null
+  }
+</GrcLayout>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>('.ai-test').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const provider = btn.getAttribute('data-provider') ?? '';
+      const out = document.querySelector<HTMLElement>(`.ai-test-out[data-for="${provider}"]`);
+      if (!out) return;
+      btn.setAttribute('disabled', 'true');
+      out.textContent = ' Testing...';
+      try {
+        const body = new URLSearchParams({ provider });
+        const res = await fetch('/api/ai/test', { method: 'POST', body });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        out.textContent = data.ok ? ' OK' : ` ${data.error ?? 'Failed'}`;
+      } catch {
+        out.textContent = ' Request failed';
+      } finally {
+        btn.removeAttribute('disabled');
+      }
+    });
+  });
+</script>
