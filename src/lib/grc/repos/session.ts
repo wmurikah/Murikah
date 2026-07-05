@@ -6,7 +6,14 @@
  * follow the hassaudit conventions (documented in grc/docs/schema-assumptions.md).
  */
 import type { Client } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
 import { newSessionId, hashToken, SESSION_MAX_AGE_SECONDS } from '@grc/auth/session';
+
+// Column names come from the typed schema layer, so a wrong name fails the build.
+const SESS = cols(C.sessions);
+const S = cols(C.sessions, 's');
+const U = cols(C.users, 'u');
+const O = cols(C.organizations, 'o');
 
 export interface SessionIdentity {
   userId: string;
@@ -42,7 +49,8 @@ export async function createSession(
   const expiresAt = new Date(now + SESSION_MAX_AGE_SECONDS * 1000).toISOString();
   await db.execute({
     sql: `INSERT INTO sessions
-            (session_id, user_id, token_hash, ip, user_agent, created_at, expires_at, last_seen_at)
+            (${SESS.session_id}, ${SESS.user_id}, ${SESS.token_hash}, ${SESS.ip}, ${SESS.user_agent},
+             ${SESS.created_at}, ${SESS.expires_at}, ${SESS.last_seen_at})
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [sessionId, userId, tokenHash, meta.ip, meta.userAgent, createdAt, expiresAt, createdAt],
   });
@@ -51,7 +59,7 @@ export async function createSession(
 
 /** Delete a session row, on sign-out. */
 export async function deleteSession(db: Client, sessionId: string): Promise<void> {
-  await db.execute({ sql: `DELETE FROM sessions WHERE session_id = ?`, args: [sessionId] });
+  await db.execute({ sql: `DELETE FROM sessions WHERE ${SESS.session_id} = ?`, args: [sessionId] });
 }
 
 /**
@@ -65,14 +73,14 @@ export async function resolveSession(
   sessionId: string,
 ): Promise<SessionIdentity | null> {
   const res = await db.execute({
-    sql: `SELECT s.expires_at AS expires_at,
-                 u.user_id AS user_id, u.full_name AS full_name, u.email AS email,
-                 u.role_code AS role_code, u.is_platform_owner AS is_platform_owner,
-                 o.organization_id AS organization_id, o.org_name AS org_name
+    sql: `SELECT ${S.expires_at} AS expires_at,
+                 ${U.user_id} AS user_id, ${U.full_name} AS full_name, ${U.email} AS email,
+                 ${U.role_code} AS role_code, ${U.is_platform_owner} AS is_platform_owner,
+                 ${O.organization_id} AS organization_id, ${O.org_name} AS org_name
             FROM sessions s
-            JOIN users u ON u.user_id = s.user_id
-            JOIN organizations o ON o.organization_id = u.organization_id
-           WHERE s.session_id = ?
+            JOIN users u ON ${U.user_id} = ${S.user_id}
+            JOIN organizations o ON ${O.organization_id} = ${U.organization_id}
+           WHERE ${S.session_id} = ?
            LIMIT 1`,
     args: [sessionId],
   });

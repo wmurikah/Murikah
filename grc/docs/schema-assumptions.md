@@ -472,3 +472,45 @@ The notification queue, the send queue and the deletion queue keep their own
 internal status codes (`PENDING`, `SENT`, `DEAD_LETTER`), which are separate from
 this vocabulary. `humaniseStatus` passes an already-human status through
 unchanged.
+
+## Typed column layer, bound to the live schema (Build Prompt 18)
+
+The council decided the durable fix: keep the recovered `hassaudit` database as
+the source of truth and bind the code to it, so a wrong column name fails
+`pnpm build` rather than the user's screen. No database column is renamed.
+
+- `grc/db/schema.md` holds the authoritative column dictionary, taken directly
+  from the live Turso database (58 tables; the FTS shadow tables are excluded on
+  purpose and are only ever touched through `MATCH` helpers).
+- `grc/db/gen-columns.mjs` generates `src/lib/grc/schema/columns.ts` from it
+  (`node grc/db/gen-columns.mjs`). That module exports `C` (typed per-table column
+  constants) and `cols(table, alias?)`, which returns alias-qualified column names
+  whose keys are exactly the table's columns: a typo or a non-existent column is a
+  compile error. This is the guardrail; a wrong name now fails the build.
+
+New mismatches this dictionary surfaced (all fixed against the real columns):
+
+- `enum_values`: the value column is `enum_value` (not `value`) and the label is
+  `display_label` (not `label`), ordered by `display_order`. Fixed in
+  `repos/enums.ts` and `workflow/transitions.ts`.
+- `workflow_terminal_states`: keyed by `workflow_name`/`terminal_status` (the code
+  had assumed `enum_type`/`status`). Fixed in `workflow/transitions.ts`; the enum
+  type name is passed as the workflow name.
+- `config`: rows are keyed by `organization_id` (there is no `scope` column).
+  Fixed in `repos/dropdowns.ts` (per organisation) and `ai/config.ts` (the
+  platform-wide AI settings, kept under a fixed `GLOBAL` organization_id sentinel
+  by design).
+
+Paths bound to the typed layer so far (a wrong column fails the build): the
+authenticated shell (`repos/session.ts`, `repos/orgContext.ts`), the dashboard
+aggregations (`repos/dashboard.ts`), the enum and workflow reads
+(`repos/enums.ts`, `workflow/transitions.ts`) and the config reads
+(`repos/dropdowns.ts`, `ai/config.ts`). The remaining query paths (the module
+list and detail repos, the notify, storage, evidence, governance, admin and
+report repos) keep their column names correct from Build Prompt 16 and are being
+widened onto the typed layer incrementally, one repo at a time, so no query is
+rewritten blind.
+
+Errors on the dashboard data load are wrapped and logged with the
+`[grc.dashboard]` tag, showing a notice rather than a blank 500; enum-label reads
+fail soft to the humanised value.
