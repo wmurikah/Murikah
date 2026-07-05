@@ -198,6 +198,10 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
               </span>
             </span>
           </div>
+          <a href="/change-password" class="grc-signout">
+            <GrcIcon name="key" size={16} />
+            <span>Change password</span>
+          </a>
           <form method="post" action="/api/auth/logout">
             <button type="submit" class="grc-signout">
               <GrcIcon name="signout" size={16} />

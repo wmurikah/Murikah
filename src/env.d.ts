@@ -158,6 +158,8 @@ declare namespace App {
       userEmail?: string;
       /** True for a platform owner (users.is_platform_owner); only they may switch the acting organisation. */
       isPlatformOwner: boolean;
+      /** True while users.must_change_password is set; the middleware forces the change-password flow. */
+      mustChangePassword: boolean;
       /** The organisations a platform owner may switch between; empty for every other user. */
       switchable: { id: string; name: string }[];
       /**
