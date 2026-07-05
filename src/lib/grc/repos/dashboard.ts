@@ -8,15 +8,23 @@
  *
  * Action plans have no audit area or affiliate of their own (GAP-507): to group
  * them by affiliate this joins through work_paper_id to work_papers.affiliate_code,
- * never a field on the action plan. The clean columns are used directly (status,
- * created_at, affiliate_code, role_code = 'BOARD_MEMBER'); none of the source's
- * data-quality workarounds are reintroduced.
+ * never a field on the action plan.
  *
- * Column names follow grc/docs/schema-assumptions.md.
+ * Every column name comes from the typed schema layer (@grc/schema/columns), so a
+ * name that is not on the live table fails `pnpm build` rather than the dashboard.
  */
 import type { Client, InArgs } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
 import { NOT_OVERDUE_STATUSES } from '@grc/reports/reportModel';
 import { isAuditeeRole } from '@grc/dashboard/roleNav';
+
+const WP = cols(C.work_papers);
+const WPa = cols(C.work_papers, 'wp');
+const AP = cols(C.action_plans);
+const APa = cols(C.action_plans, 'ap');
+const RESP = cols(C.work_paper_responsibles, 'r');
+const AFF = cols(C.affiliates, 'aff');
+const USR = cols(C.users, 'u');
 
 export interface DashboardScope {
   userId: string;
@@ -36,7 +44,8 @@ const num = (v: unknown): number => Number(v ?? 0);
 // The overdue predicate on an action plan alias: past due and not settled.
 const settledPlaceholders = NOT_OVERDUE_STATUSES.map(() => '?').join(', ');
 function overdueClause(alias: string): string {
-  return `${alias}.due_date IS NOT NULL AND date(${alias}.due_date) < date('now') AND ${alias}.status NOT IN (${settledPlaceholders})`;
+  const ap = cols(C.action_plans, alias);
+  return `${ap.due_date} IS NOT NULL AND date(${ap.due_date}) < date('now') AND ${ap.status} NOT IN (${settledPlaceholders})`;
 }
 function ownerLike(userId: string): string {
   return `%,${userId},%`;
@@ -67,10 +76,10 @@ export async function getDashboardStats(
   if (auditee) {
     const res = await db.execute({
       sql: `SELECT COUNT(*) AS total FROM work_papers wp
-             WHERE wp.organization_id = ?
+             WHERE ${WPa.organization_id} = ?
                AND EXISTS (SELECT 1 FROM work_paper_responsibles r
-                            WHERE r.work_paper_id = wp.work_paper_id
-                              AND r.user_id = ?)`,
+                            WHERE ${RESP.work_paper_id} = ${WPa.work_paper_id}
+                              AND ${RESP.user_id} = ?)`,
       args: [organizationId, scope.userId],
     });
     workPapers = num(res.rows[0]?.total);
@@ -78,8 +87,8 @@ export async function getDashboardStats(
   } else {
     const res = await db.execute({
       sql: `SELECT COUNT(*) AS total,
-                   SUM(CASE WHEN status = 'Submitted' THEN 1 ELSE 0 END) AS pending
-              FROM work_papers WHERE organization_id = ?`,
+                   SUM(CASE WHEN ${WP.status} = 'Submitted' THEN 1 ELSE 0 END) AS pending
+              FROM work_papers WHERE ${WP.organization_id} = ?`,
       args: [organizationId],
     });
     workPapers = num(res.rows[0]?.total);
@@ -88,9 +97,9 @@ export async function getDashboardStats(
 
   // Action plans and overdue.
   const apArgs: InArgs = [organizationId];
-  let apWhere = 'organization_id = ?';
+  let apWhere = `${AP.organization_id} = ?`;
   if (auditee) {
-    apWhere += " AND (',' || IFNULL(owner_ids, '') || ',') LIKE ?";
+    apWhere += ` AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?`;
     apArgs.push(ownerLike(scope.userId));
   }
   const apRes = await db.execute({
@@ -137,26 +146,28 @@ export async function getPendingReviews(
 
   const [review, verify, responses] = await Promise.all([
     db.execute({
-      sql: `SELECT work_paper_id AS id, work_paper_ref AS reference, observation_title AS title, risk_rating AS risk
-              FROM work_papers WHERE organization_id = ? AND status = 'Submitted'
-          ORDER BY updated_at DESC LIMIT 10`,
+      sql: `SELECT ${WP.work_paper_id} AS id, ${WP.work_paper_ref} AS reference,
+                   ${WP.observation_title} AS title, ${WP.risk_rating} AS risk
+              FROM work_papers WHERE ${WP.organization_id} = ? AND ${WP.status} = 'Submitted'
+          ORDER BY ${WP.updated_at} DESC LIMIT 10`,
       args: [organizationId],
     }),
     db.execute({
-      sql: `SELECT action_plan_id AS id, COALESCE(action_ref, action_number) AS reference, action_description AS title
-              FROM action_plans WHERE organization_id = ? AND status = 'Pending Verification'
-          ORDER BY updated_at DESC LIMIT 10`,
+      sql: `SELECT ${AP.action_plan_id} AS id, COALESCE(${AP.action_ref}, ${AP.action_number}) AS reference,
+                   ${AP.action_description} AS title
+              FROM action_plans WHERE ${AP.organization_id} = ? AND ${AP.status} = 'Pending Verification'
+          ORDER BY ${AP.updated_at} DESC LIMIT 10`,
       args: [organizationId],
     }),
     db.execute({
-      sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference,
-                   wp.observation_title AS title, wp.risk_rating AS risk,
-                   aff.affiliate_name AS affiliate, wp.revision_count AS round
+      sql: `SELECT ${WPa.work_paper_id} AS id, ${WPa.work_paper_ref} AS reference,
+                   ${WPa.observation_title} AS title, ${WPa.risk_rating} AS risk,
+                   ${AFF.affiliate_name} AS affiliate, ${WPa.revision_count} AS round
               FROM work_papers wp
-              LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
-                   AND aff.organization_id = wp.organization_id
-             WHERE wp.organization_id = ? AND wp.status = 'Response Received'
-          ORDER BY wp.updated_at DESC LIMIT 10`,
+              LEFT JOIN affiliates aff ON ${AFF.affiliate_code} = ${WPa.affiliate_code}
+                   AND ${AFF.organization_id} = ${WPa.organization_id}
+             WHERE ${WPa.organization_id} = ? AND ${WPa.status} = 'Response Received'
+          ORDER BY ${WPa.updated_at} DESC LIMIT 10`,
       args: [organizationId],
     }),
   ]);
@@ -202,18 +213,18 @@ export async function getDueThisWeek(
   scope: DashboardScope,
 ): Promise<DueItem[]> {
   const args: InArgs = [organizationId, ...NOT_OVERDUE_STATUSES];
-  let where = `organization_id = ? AND due_date IS NOT NULL
-               AND date(due_date) >= date('now') AND date(due_date) <= date('now', '+7 days')
-               AND status NOT IN (${settledPlaceholders})`;
+  let where = `${AP.organization_id} = ? AND ${AP.due_date} IS NOT NULL
+               AND date(${AP.due_date}) >= date('now') AND date(${AP.due_date}) <= date('now', '+7 days')
+               AND ${AP.status} NOT IN (${settledPlaceholders})`;
   if (auditeeScoped(scope)) {
-    where += " AND (',' || IFNULL(owner_ids, '') || ',') LIKE ?";
+    where += ` AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?`;
     args.push(ownerLike(scope.userId));
   }
   const res = await db.execute({
-    sql: `SELECT action_plan_id AS id, COALESCE(action_ref, action_number) AS reference, action_description AS title,
-                 due_date, owner_names AS owners
+    sql: `SELECT ${AP.action_plan_id} AS id, COALESCE(${AP.action_ref}, ${AP.action_number}) AS reference,
+                 ${AP.action_description} AS title, ${AP.due_date}, ${AP.owner_names} AS owners
             FROM action_plans WHERE ${where}
-        ORDER BY due_date ASC LIMIT 12`,
+        ORDER BY ${AP.due_date} ASC LIMIT 12`,
     args,
   });
   return res.rows.map((r) => ({
@@ -243,33 +254,33 @@ export async function getRecentActivity(
 ): Promise<ActivityItem[]> {
   const auditee = auditeeScoped(scope);
   const wpArgs: InArgs = [organizationId];
-  let wpWhere = 'wp.organization_id = ?';
+  let wpWhere = `${WPa.organization_id} = ?`;
   if (auditee) {
     wpWhere +=
-      ' AND EXISTS (SELECT 1 FROM work_paper_responsibles r WHERE r.work_paper_id = wp.work_paper_id' +
-      ' AND r.user_id = ?)';
+      ` AND EXISTS (SELECT 1 FROM work_paper_responsibles r WHERE ${RESP.work_paper_id} = ${WPa.work_paper_id}` +
+      ` AND ${RESP.user_id} = ?)`;
     wpArgs.push(scope.userId);
   }
   const apArgs: InArgs = [organizationId];
-  let apWhere = 'organization_id = ?';
+  let apWhere = `${AP.organization_id} = ?`;
   if (auditee) {
-    apWhere += " AND (',' || IFNULL(owner_ids, '') || ',') LIKE ?";
+    apWhere += ` AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?`;
     apArgs.push(ownerLike(scope.userId));
   }
 
   const [wpRes, apRes] = await Promise.all([
     db.execute({
-      sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference,
-                   wp.observation_title AS title, wp.status AS status, wp.updated_at AS updated_at
+      sql: `SELECT ${WPa.work_paper_id} AS id, ${WPa.work_paper_ref} AS reference,
+                   ${WPa.observation_title} AS title, ${WPa.status} AS status, ${WPa.updated_at} AS updated_at
               FROM work_papers wp WHERE ${wpWhere}
-          ORDER BY wp.updated_at DESC LIMIT 12`,
+          ORDER BY ${WPa.updated_at} DESC LIMIT 12`,
       args: wpArgs,
     }),
     db.execute({
-      sql: `SELECT action_plan_id AS id, COALESCE(action_ref, action_number) AS reference,
-                   action_description AS title, status, updated_at
+      sql: `SELECT ${AP.action_plan_id} AS id, COALESCE(${AP.action_ref}, ${AP.action_number}) AS reference,
+                   ${AP.action_description} AS title, ${AP.status}, ${AP.updated_at}
               FROM action_plans WHERE ${apWhere}
-          ORDER BY updated_at DESC LIMIT 12`,
+          ORDER BY ${AP.updated_at} DESC LIMIT 12`,
       args: apArgs,
     }),
   ]);
@@ -318,26 +329,26 @@ export async function getTeamPerformance(
 ): Promise<TeamPerformance> {
   const [productivity, affiliates] = await Promise.all([
     db.execute({
-      sql: `SELECT u.full_name AS auditor, COUNT(*) AS n
+      sql: `SELECT ${USR.full_name} AS auditor, COUNT(*) AS n
               FROM work_papers wp
-              JOIN users u ON u.user_id = wp.assigned_auditor_id
-             WHERE wp.organization_id = ? AND wp.assigned_auditor_id IS NOT NULL
-          GROUP BY wp.assigned_auditor_id
+              JOIN users u ON ${USR.user_id} = ${WPa.assigned_auditor_id}
+             WHERE ${WPa.organization_id} = ? AND ${WPa.assigned_auditor_id} IS NOT NULL
+          GROUP BY ${WPa.assigned_auditor_id}
           ORDER BY n DESC LIMIT 10`,
       args: [organizationId],
     }),
     // Action plans have no affiliate of their own: join through the work paper (GAP-507).
     db.execute({
-      sql: `SELECT aff.affiliate_name AS affiliate,
-                   SUM(CASE WHEN ap.status IN (${settledPlaceholders}) THEN 1 ELSE 0 END) AS closed,
-                   SUM(CASE WHEN ap.status NOT IN (${settledPlaceholders}) THEN 1 ELSE 0 END) AS open
+      sql: `SELECT ${AFF.affiliate_name} AS affiliate,
+                   SUM(CASE WHEN ${APa.status} IN (${settledPlaceholders}) THEN 1 ELSE 0 END) AS closed,
+                   SUM(CASE WHEN ${APa.status} NOT IN (${settledPlaceholders}) THEN 1 ELSE 0 END) AS open
               FROM action_plans ap
-              JOIN work_papers wp ON wp.work_paper_id = ap.work_paper_id
-                   AND wp.organization_id = ap.organization_id
-              LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
-                   AND aff.organization_id = wp.organization_id
-             WHERE ap.organization_id = ?
-          GROUP BY wp.affiliate_code
+              JOIN work_papers wp ON ${WPa.work_paper_id} = ${APa.work_paper_id}
+                   AND ${WPa.organization_id} = ${APa.organization_id}
+              LEFT JOIN affiliates aff ON ${AFF.affiliate_code} = ${WPa.affiliate_code}
+                   AND ${AFF.organization_id} = ${WPa.organization_id}
+             WHERE ${APa.organization_id} = ?
+          GROUP BY ${WPa.affiliate_code}
           ORDER BY (open + closed) DESC LIMIT 10`,
       args: [...NOT_OVERDUE_STATUSES, ...NOT_OVERDUE_STATUSES, organizationId],
     }),
@@ -376,23 +387,23 @@ export async function getSidebarCounts(
   const [wp, ap] = await Promise.all([
     db.execute({
       sql: `SELECT
-              SUM(CASE WHEN wp.status = 'Submitted' THEN 1 ELSE 0 END) AS pending_review,
-              SUM(CASE WHEN wp.prepared_by_id = ? THEN 1 ELSE 0 END) AS my_work_papers,
-              SUM(CASE WHEN wp.status = 'Response Received' THEN 1 ELSE 0 END) AS responses_to_review,
-              SUM(CASE WHEN wp.status = 'Sent to Auditee' AND EXISTS (
-                    SELECT 1 FROM work_paper_responsibles r WHERE r.work_paper_id = wp.work_paper_id
-                      AND r.user_id = ?) THEN 1 ELSE 0 END) AS my_observations,
-              SUM(CASE WHEN wp.status = 'Approved' AND EXISTS (
-                    SELECT 1 FROM work_paper_responsibles r WHERE r.work_paper_id = wp.work_paper_id
+              SUM(CASE WHEN ${WPa.status} = 'Submitted' THEN 1 ELSE 0 END) AS pending_review,
+              SUM(CASE WHEN ${WPa.prepared_by_id} = ? THEN 1 ELSE 0 END) AS my_work_papers,
+              SUM(CASE WHEN ${WPa.status} = 'Response Received' THEN 1 ELSE 0 END) AS responses_to_review,
+              SUM(CASE WHEN ${WPa.status} = 'Sent to Auditee' AND EXISTS (
+                    SELECT 1 FROM work_paper_responsibles r WHERE ${RESP.work_paper_id} = ${WPa.work_paper_id}
+                      AND ${RESP.user_id} = ?) THEN 1 ELSE 0 END) AS my_observations,
+              SUM(CASE WHEN ${WPa.status} = 'Approved' AND EXISTS (
+                    SELECT 1 FROM work_paper_responsibles r WHERE ${RESP.work_paper_id} = ${WPa.work_paper_id}
                       ) THEN 1 ELSE 0 END) AS approved_queue
-            FROM work_papers wp WHERE wp.organization_id = ?`,
+            FROM work_papers wp WHERE ${WPa.organization_id} = ?`,
       args: [userId, userId, organizationId],
     }),
     db.execute({
       sql: `SELECT
-              SUM(CASE WHEN (',' || IFNULL(owner_ids, '') || ',') LIKE ? THEN 1 ELSE 0 END) AS my_action_plans,
-              SUM(CASE WHEN (',' || IFNULL(owner_ids, '') || ',') LIKE ? AND ${overdueClause('action_plans')} THEN 1 ELSE 0 END) AS my_overdue
-            FROM action_plans WHERE organization_id = ?`,
+              SUM(CASE WHEN (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ? THEN 1 ELSE 0 END) AS my_action_plans,
+              SUM(CASE WHEN (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ? AND ${overdueClause('action_plans')} THEN 1 ELSE 0 END) AS my_overdue
+            FROM action_plans WHERE ${AP.organization_id} = ?`,
       args: [like, like, ...NOT_OVERDUE_STATUSES, organizationId],
     }),
   ]);
@@ -418,7 +429,7 @@ export async function hasMyOverdue(
 ): Promise<boolean> {
   const res = await db.execute({
     sql: `SELECT 1 FROM action_plans
-           WHERE organization_id = ? AND (',' || IFNULL(owner_ids, '') || ',') LIKE ?
+           WHERE ${AP.organization_id} = ? AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?
              AND ${overdueClause('action_plans')}
            LIMIT 1`,
     args: [organizationId, ownerLike(userId), ...NOT_OVERDUE_STATUSES],

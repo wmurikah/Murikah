@@ -11,6 +11,9 @@
  * every other user acts inside their home organisation with no query.
  */
 import type { Client } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
+
+const O = cols(C.organizations);
 
 export interface SwitchOrg {
   id: string;
@@ -46,8 +49,8 @@ export async function resolveActingContext(
   // `organizations` names its label column `org_name` and its active flag
   // `is_active` (there is no `name` or `status` column).
   const res = await db.execute({
-    sql: `SELECT organization_id, org_name FROM organizations
-           WHERE is_active = 1 ORDER BY org_name`,
+    sql: `SELECT ${O.organization_id}, ${O.org_name} FROM organizations
+           WHERE ${O.is_active} = 1 ORDER BY ${O.org_name}`,
     args: [],
   });
   const switchable: SwitchOrg[] = res.rows.map((r) => ({
