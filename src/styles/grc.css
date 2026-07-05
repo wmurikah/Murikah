@@ -786,6 +786,30 @@
   margin-bottom: var(--grc-s3);
 }
 
+/* AI-generated output. The model returns Markdown that we render with
+   textContent (never as HTML), so whitespace is preserved here for readability
+   and the block reads as advisory, set apart from the surrounding content. */
+.grc-ai-out {
+  margin-top: var(--grc-s3);
+  padding: var(--grc-s3);
+  border: 1px solid var(--grc-line);
+  border-left: 3px solid var(--grc-gold);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-stone);
+  color: var(--grc-ink);
+  font-size: var(--grc-fs-body);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.grc-ai-out[hidden] {
+  display: none;
+}
+.ai-test-out {
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+}
+
 /* Status and risk pills, colour plus label (never colour alone). */
 .grc-pill {
   display: inline-block;

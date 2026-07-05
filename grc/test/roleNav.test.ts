@@ -18,6 +18,7 @@ const ctx = (over: Partial<NavContext>): NavContext => ({
   roleCode: 'AUDITOR',
   perms: [],
   isPlatformOwner: false,
+  hasAi: false,
   ...over,
 });
 
@@ -68,6 +69,23 @@ test('an auditee sees the auditee section and the dashboard, not setup or report
 test('board reports show for a board member', () => {
   const nav = buildNav(ctx({ roleCode: 'BOARD_MEMBER', perms: [] }));
   assert.ok(hrefs(nav).includes('/reports'));
+});
+
+test('analytics and AI settings are gated behind the AI feature', () => {
+  // Without the AI feature, neither link shows even for an admin.
+  const off = buildNav(ctx({ isPlatformOwner: true, hasAi: false }));
+  assert.ok(!hrefs(off).includes('/analytics'));
+  assert.ok(!hrefs(off).includes('/settings/ai'));
+
+  // With the AI feature, an admin sees analytics and AI settings.
+  const on = buildNav(ctx({ isPlatformOwner: true, hasAi: true }));
+  assert.ok(hrefs(on).includes('/analytics'));
+  assert.ok(hrefs(on).includes('/settings/ai'));
+
+  // An auditor with AI sees analytics but not AI settings (admin only).
+  const auditor = buildNav(ctx({ roleCode: 'AUDITOR', perms: ['WORK_PAPERS.view'], hasAi: true }));
+  assert.ok(hrefs(auditor).includes('/analytics'));
+  assert.ok(!hrefs(auditor).includes('/settings/ai'));
 });
 
 test('default landing: auditee to overdue then findings; everyone else to dashboard', () => {
