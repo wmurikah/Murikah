@@ -21,6 +21,8 @@ export interface NavContext {
   roleCode: string;
   perms: string[];
   isPlatformOwner: boolean;
+  /** Whether the subscription plan includes the AI feature (gates analytics and AI settings). */
+  hasAi: boolean;
 }
 
 export function isAuditeeRole(roleCode: string): boolean {
@@ -71,7 +73,8 @@ export interface NavGroupDef {
  * dashboard and notifications are for everyone; the audit workbench follows the
  * work-paper and action-plan permissions; the auditee section shows for the
  * auditee roles or anyone who responds or reviews; board reports follow the
- * reports permission or the board roles; setup is admin only.
+ * reports permission or the board roles; analytics is AI-gated for auditor
+ * roles; setup is admin only, with AI settings when the plan includes AI.
  */
 export function buildNav(ctx: NavContext): NavGroupDef[] {
   const show = {
@@ -82,6 +85,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
       hasPerm(ctx, 'AUDITEE.respond') ||
       hasPerm(ctx, 'WORK_PAPERS.review'),
     reports: hasPerm(ctx, 'REPORTS.view') || BOARD_ROLES.includes(ctx.roleCode) || isAdmin(ctx),
+    analytics: ctx.hasAi && (hasPerm(ctx, 'WORK_PAPERS.view') || hasPerm(ctx, 'REPORTS.view')),
     setup: isAdmin(ctx),
   };
 
@@ -109,17 +113,20 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
       countKey: 'responsesToReview',
     });
   if (show.reports) audit.push({ label: 'Reports', href: '/reports', icon: 'reports' });
+  if (show.analytics) audit.push({ label: 'Analytics', href: '/analytics', icon: 'analytics' });
 
-  const setup: NavItemDef[] = show.setup
-    ? [
-        { label: 'Affiliates', href: '/affiliates', icon: 'affiliates' },
-        { label: 'Audit universe', href: '/audit-universe', icon: 'universe' },
-        { label: 'Users', href: '/users', icon: 'users' },
-        { label: 'Roles', href: '/roles', icon: 'roles' },
-        { label: 'Send queue', href: '/send-queue', icon: 'bell' },
-        { label: 'Settings', href: '/settings', icon: 'settings' },
-      ]
-    : [];
+  const setup: NavItemDef[] = [];
+  if (show.setup) {
+    setup.push(
+      { label: 'Affiliates', href: '/affiliates', icon: 'affiliates' },
+      { label: 'Audit universe', href: '/audit-universe', icon: 'universe' },
+      { label: 'Users', href: '/users', icon: 'users' },
+      { label: 'Roles', href: '/roles', icon: 'roles' },
+      { label: 'Send queue', href: '/send-queue', icon: 'bell' },
+      { label: 'Settings', href: '/settings', icon: 'settings' },
+    );
+    if (ctx.hasAi) setup.push({ label: 'AI settings', href: '/settings/ai', icon: 'ai' });
+  }
 
   const groups: NavGroupDef[] = [
     {

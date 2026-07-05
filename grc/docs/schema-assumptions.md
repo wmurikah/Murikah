@@ -256,3 +256,53 @@ Notes:
   days), overdue reminders weekly (Mondays).
 - The auditee responses table is not part of this build; RESPONSE_SUBMITTED is
   driven from the work-paper events the modules already enqueue.
+
+## AI assistance and analytics (Build Prompt 10)
+
+The AI service (05_AIService.gs) is ported as a unified `callAI` that routes to
+the active provider over `fetch` (OpenAI chat completions, Anthropic messages
+with the version header, Google generateContent) and logs every call. No schema
+change is made in the repo: `ai_providers` and `ai_invocations` are assumed to
+exist, and the non-secret settings live in the existing `config` table.
+
+| Table            | Columns used                                                                                                                                                                                               | Where                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `ai_providers`   | `provider_id`, `organization_id`, `provider`, `created_at`                                                                                                                                                 | `ai/service.ts` (parent row) |
+| `ai_invocations` | `invocation_id`, `organization_id`, `user_id`, `provider`, `model`, `purpose`, `related_entity_type`, `related_entity_id`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `success`, `created_at`   | `ai/service.ts` (per call)   |
+| `config`         | `scope` (`GLOBAL`), `config_key` (`AI_%`), `config_value`, `updated_at`                                                                                                                                    | `ai/config.ts`               |
+| `work_papers`    | read for insights (`observation_title`, `observation_description`, `risk_rating`, `recommendation`) and analytics (`status`, `risk_rating`, `affiliate_id`, `created_at`), all scoped by `organization_id` | `ai/*`, `repos/analytics.ts` |
+| `action_plans`   | read for analytics (`status`, `due_date`, `created_at`), scoped by `organization_id`                                                                                                                       | `repos/analytics.ts`         |
+| `affiliates`     | `affiliate_id`, `name`, joined for the by-affiliate chart within the same `organization_id`                                                                                                                | `repos/analytics.ts`         |
+| `audit_log`      | a config change writes `AI.config`                                                                                                                                                                         | `api/ai/config.ts`           |
+
+Notes:
+
+- Provider API keys are held only as Worker secrets `AI_API_KEY_OPENAI`,
+  `AI_API_KEY_ANTHROPIC`, `AI_API_KEY_GOOGLE_AI` (`ai/env.ts`). They are never
+  written to the database and never returned to the client; the settings page
+  shows only a masked tail. When the active provider's key is absent or the
+  provider is disabled, `callAI` returns an error without contacting a provider.
+- The non-secret settings are GLOBAL config keys: `AI_ACTIVE_PROVIDER`,
+  `AI_MODEL`, `AI_MAX_TOKENS` (clamped 64 to 8000), `AI_TEMPERATURE` (clamped 0
+  to 1), `AI_SYSTEM_PROMPT`, `AI_EVALUATION_ENABLED`, `AI_REJECTION_THRESHOLD`
+  (0 to 100), and the per-provider flags `AI_ENABLED_OPENAI`,
+  `AI_ENABLED_ANTHROPIC`, `AI_ENABLED_GOOGLE`. Config is platform-wide, so it is
+  GLOBAL rather than org-scoped by design; a save updates then inserts each key
+  so no unique constraint is assumed.
+- Every invocation logs an `ai_invocations` row with the `purpose`
+  (`WORK_PAPER_INSIGHTS`, `VALIDATE_ACTION_PLAN`, `EVALUATE_AUDITEE_RESPONSE`,
+  `ANALYTICS_INSIGHTS`), the token counts and a success flag, ensuring the
+  `ai_providers` parent row exists first. Logging is best-effort, so a schema
+  difference never fails the call.
+- The whole module is gated behind the subscription plan's `ai` feature
+  (`ai/gate.ts`); provider configuration and connection tests are further
+  restricted to SUPER_ADMIN (or a platform owner). Insights and validation are
+  for auditor roles; the auditee auto-evaluation runs server-side on the
+  action-plan create path (the auditee "propose" route), auto-rejecting a
+  proposal below `AI_REJECTION_THRESHOLD` with feedback rather than creating it.
+  When AI is disabled the SMART validation falls back to a non-AI check so the
+  feature still works.
+- Every AI output carries an advisory disclaimer (`AI_DISCLAIMER` in
+  `ai/validation.ts`) that it is advisory only and must be checked against
+  professional judgement. The model's Markdown is rendered with `textContent`
+  (never as HTML) and CSS preserves its whitespace.

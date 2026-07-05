@@ -15,6 +15,10 @@ import { createActionPlan, type ActionPlanInput } from '@grc/repos/actionPlans';
 import { resolveOwners, setOwners } from '@grc/repos/actionPlanOwners';
 import { enqueueNotification } from '@grc/repos/notify';
 import { writeAuditLog } from '@grc/repos/audit';
+import { getWorkPaper } from '@grc/repos/workPapers';
+import { loadAiConfig } from '@grc/ai/config';
+import { evaluateAuditeeResponse } from '@grc/ai/features';
+import { aiEnabled } from '@grc/ai/gate';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
@@ -48,6 +52,46 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .filter(Boolean);
 
   const db = await getDb(getGrcEnv());
+
+  // Auditee auto-evaluation hook: when the plan's AI feature and evaluation are
+  // enabled, evaluate an auditee-proposed plan against the finding, and if it
+  // scores below the rejection threshold return it with feedback rather than
+  // creating it. Best-effort, so AI never blocks a legitimate submission.
+  if (auditeeProposed && input.workPaperId && aiEnabled((f) => grc.hasFeature(f))) {
+    try {
+      const config = await loadAiConfig(db);
+      if (config.evaluationEnabled) {
+        const wp = await getWorkPaper(db, grc.organizationId, input.workPaperId);
+        if (wp) {
+          const verdict = await evaluateAuditeeResponse(
+            db,
+            grc.organizationId,
+            grc.userId,
+            {
+              observation: String(wp.observation_title ?? ''),
+              recommendation: String(wp.recommendation ?? ''),
+              response: input.actionDescription,
+              plans: input.actionDescription,
+            },
+            config.rejectionThreshold,
+            input.workPaperId,
+          );
+          if (verdict.aiUsed && verdict.autoReject) {
+            const msg =
+              verdict.feedback ||
+              'The proposed action plan did not meet the required standard. Please strengthen it and resubmit.';
+            return new Response(null, {
+              status: 303,
+              headers: { location: `/action-plans/new?error=${encodeURIComponent(msg)}` },
+            });
+          }
+        }
+      }
+    } catch {
+      // best-effort: a failed evaluation must not block the submission.
+    }
+  }
+
   const id = await createActionPlan(db, grc.organizationId, grc.userId, input, auditeeProposed);
 
   if (ownerIds.length > 0) {

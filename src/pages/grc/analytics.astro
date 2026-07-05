@@ -1,0 +1,180 @@
+---
+export const prerender = false;
+
+/**
+ * Analytics (AI Assist), ported from Analytics.html. Renders the portfolio
+ * aggregation for the acting organisation as charts in the Murikah style, with a
+ * "Generate AI insights" action that calls the analytics insight and shows the
+ * result with its disclaimer. Gated behind the plan's AI feature and an auditor
+ * role. Scoped by organisation.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcBarChart from '@/components/grc/GrcBarChart.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { loadEnumLabels } from '@grc/repos/enums';
+import { getPortfolio, type Portfolio } from '@grc/repos/analytics';
+import { aiEnabled } from '@grc/ai/gate';
+import { AI_DISCLAIMER } from '@grc/ai/validation';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const hasAi = aiEnabled((f) => grc.hasFeature(f));
+const isAuditor =
+  grc.isPlatformOwner || can(Astro.locals, 'WORK_PAPERS.view') || can(Astro.locals, 'REPORTS.view');
+const allowed = hasAi && isAuditor;
+
+let portfolio: Portfolio | null = null;
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  const [wpLabels, apLabels] = await Promise.all([
+    loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+    loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+  ]);
+  portfolio = await getPortfolio(
+    db,
+    grc.organizationId,
+    new Map([...wpLabels, ...apLabels]),
+    new Date(),
+  );
+}
+const p = portfolio;
+const rateTone =
+  (p?.apImplementationRate ?? 0) >= 70
+    ? 'grc-tone--good'
+    : (p?.apImplementationRate ?? 0) >= 40
+      ? 'grc-tone--warn'
+      : 'grc-tone--bad';
+---
+
+<GrcLayout title="Analytics">
+  <div class="grc-page-head">
+    <div>
+      <h1>Analytics</h1>
+      <p class="grc-lead">Portfolio analytics and AI insights for {grc.organizationName}.</p>
+    </div>
+  </div>
+
+  {
+    !hasAi ? (
+      <div class="grc-empty">
+        <p>
+          <strong>AI assistance is not part of your plan.</strong> Upgrade to unlock portfolio
+          analytics and AI insights.
+        </p>
+      </div>
+    ) : !isAuditor ? (
+      <p class="grc-error" role="alert">
+        Analytics is available to auditor roles.
+      </p>
+    ) : p ? (
+      <>
+        <div class="grc-cards grc-cards--stats">
+          <div class="grc-card">
+            <p class="grc-card__label">Work papers</p>
+            <p class="grc-card__count">{p.workPapersTotal}</p>
+          </div>
+          <div class="grc-card">
+            <p class="grc-card__label">Action plans</p>
+            <p class="grc-card__count">{p.apTotal}</p>
+          </div>
+          <div class:list={['grc-card', { 'grc-card--alert': p.apOverdue > 0 }]}>
+            <p class="grc-card__label">Overdue</p>
+            <p class="grc-card__count">{p.apOverdue}</p>
+          </div>
+          <div class="grc-card">
+            <p class="grc-card__label">Implementation rate</p>
+            <p class:list={['grc-card__count', rateTone]}>{p.apImplementationRate}%</p>
+          </div>
+        </div>
+
+        <div class="grc-dash-grid">
+          <section class="grc-panel">
+            <GrcBarChart title="Work papers by status" data={p.wpByStatus} valueHeading="Count" />
+          </section>
+          <section class="grc-panel">
+            <GrcBarChart title="Work papers by risk" data={p.wpByRisk} valueHeading="Count" />
+          </section>
+          <section class="grc-panel">
+            <GrcBarChart
+              title="Work papers by affiliate"
+              data={p.wpByAffiliate}
+              valueHeading="Count"
+            />
+          </section>
+          <section class="grc-panel">
+            <GrcBarChart title="Action plans by status" data={p.apByStatus} valueHeading="Count" />
+          </section>
+        </div>
+
+        <section class="grc-panel">
+          <h2>Six-month trend</h2>
+          <div class="grc-tablewrap">
+            <table class="grc-table" aria-label="Six-month creation trend">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th class="grc-num">Work papers</th>
+                  <th class="grc-num">Action plans</th>
+                </tr>
+              </thead>
+              <tbody>
+                {p.trends.map((t) => (
+                  <tr>
+                    <td>{t.month}</td>
+                    <td class="grc-num">{t.workPapers}</td>
+                    <td class="grc-num">{t.actionPlans}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="grc-panel">
+          <div class="grc-actionbar" style="margin:0 0 0.5rem;justify-content:space-between">
+            <h2 style="margin:0">AI insights</h2>
+            <button type="button" id="ai-insight-btn" class="grc-btn grc-btn--primary">
+              Generate AI insights
+            </button>
+          </div>
+          <p class="grc-field__hint">{AI_DISCLAIMER}</p>
+          <div id="ai-insight-status" class="grc-lead" role="status" aria-live="polite" />
+          <div id="ai-insight-out" class="grc-ai-out" hidden />
+        </section>
+      </>
+    ) : null
+  }
+</GrcLayout>
+
+<script>
+  const btn = document.getElementById('ai-insight-btn');
+  const out = document.getElementById('ai-insight-out');
+  const status = document.getElementById('ai-insight-status');
+  btn?.addEventListener('click', async () => {
+    if (!out || !status) return;
+    btn.setAttribute('disabled', 'true');
+    status.textContent = 'Generating insights...';
+    out.hidden = true;
+    try {
+      const res = await fetch('/api/ai/analytics', {
+        method: 'POST',
+        headers: { accept: 'application/json' },
+      });
+      const data = (await res.json()) as { ok?: boolean; markdown?: string; error?: string };
+      if (data.ok && data.markdown) {
+        out.textContent = data.markdown; // textContent keeps it safe; CSS preserves whitespace
+        out.hidden = false;
+        status.textContent = '';
+      } else {
+        status.textContent = data.error || 'AI insights are unavailable right now.';
+      }
+    } catch {
+      status.textContent = 'The request failed. Try again.';
+    } finally {
+      btn.removeAttribute('disabled');
+    }
+  });
+</script>

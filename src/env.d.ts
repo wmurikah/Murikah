@@ -52,6 +52,13 @@ declare namespace Cloudflare {
     OUTLOOK_SENDER_EMAIL?: string;
     OUTLOOK_TENANT?: string; // optional AAD tenant; defaults to 'common'
 
+    // GRC AI assistance provider API keys. Held only as Worker secrets, never in
+    // the database; the config module shows only a masked tail. Absent keys leave
+    // that provider unconfigured and the AI features degrade gracefully.
+    AI_API_KEY_OPENAI?: string;
+    AI_API_KEY_ANTHROPIC?: string;
+    AI_API_KEY_GOOGLE_AI?: string;
+
     // Engineering Rhythm notification dispatcher. All optional: absent or a
     // non-production ENGR_ENV keeps the dispatcher in dry-run and never contacts
     // a provider. Secrets are set as Worker secrets or in .dev.vars.
