@@ -23,7 +23,9 @@
  *
  * The GRC overdue refresh runs against the GRC database and is wrapped so a
  * missing GRC binding or a schema difference never fails the engr crons; it is a
- * system maintenance job across every organisation, not a tenant request.
+ * system maintenance job across every organisation, not a tenant request. The
+ * same daily block migrates a batch of Drive-backed evidence to R2 (a no-op until
+ * both the R2 bucket and the read-only Drive credential are configured).
  */
 import astro from '@astrojs/cloudflare/entrypoints/server';
 import { requestHost, routeDecision } from './lib/engr/routing';
@@ -45,6 +47,7 @@ import { updateOverdueStatuses } from './lib/grc/repos/overdue';
 import { getGrcDeliveryEnv } from './lib/grc/notify/env';
 import { runGrcDispatch } from './lib/grc/notify/dispatch';
 import { runStaleReminders, runOverdueReminders } from './lib/grc/notify/reminders';
+import { runEvidenceMigration } from './lib/grc/storage/migrate';
 
 const DAILY_PM_CRON = '0 3 * * *';
 
@@ -214,6 +217,9 @@ export default {
             if (systemClock.now().getUTCDay() === 1) {
               await runOverdueReminders(grcDb, systemClock);
             }
+            // Migrate a batch of Drive-backed evidence to R2 (skipping legal
+            // holds). A no-op until both R2 and the Drive credential are set.
+            await runEvidenceMigration(grcDb, 25);
           }
         } catch {
           // best-effort GRC maintenance

@@ -59,6 +59,27 @@ declare namespace Cloudflare {
     AI_API_KEY_ANTHROPIC?: string;
     AI_API_KEY_GOOGLE_AI?: string;
 
+    // GRC evidence storage on Cloudflare R2 (Build Prompt 11). The bucket binding
+    // and the S3 presign credentials are optional so the preview deploys with no
+    // pre-created bucket; when absent, evidence upload and download report that
+    // storage is not configured and the rest of the app is unaffected. The binding
+    // gives head/get/put/delete; the S3 credentials sign the presigned URLs that
+    // carry the large object bytes directly between the client and R2. Secrets are
+    // Worker secrets or .dev.vars, never committed.
+    EVIDENCE_BUCKET?: R2Bucket;
+    R2_ACCOUNT_ID?: string;
+    R2_ACCESS_KEY_ID?: string;
+    R2_SECRET_ACCESS_KEY?: string;
+    R2_BUCKET?: string; // the bucket name used in the S3 presign path
+
+    // Read-only Google Drive credential for reading and migrating existing
+    // Drive-backed evidence (never writing). OAuth2 refresh-token flow from the
+    // Worker, scope drive.readonly. Optional; absent leaves Drive files unreadable
+    // until provisioned. Worker secrets only, never committed.
+    GDRIVE_CLIENT_ID?: string;
+    GDRIVE_CLIENT_SECRET?: string;
+    GDRIVE_REFRESH_TOKEN?: string;
+
     // Engineering Rhythm notification dispatcher. All optional: absent or a
     // non-production ENGR_ENV keeps the dispatcher in dry-run and never contacts
     // a provider. Secrets are set as Worker secrets or in .dev.vars.
