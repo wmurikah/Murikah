@@ -14,6 +14,7 @@ import {
   isGrcPassthroughAsset,
   isGrcPublicPath,
   isGrcApiPath,
+  isGrcChangePasswordExempt,
   grcMarketingRedirect,
 } from '../../src/lib/grc/routing.ts';
 
@@ -51,6 +52,15 @@ test('public grc paths cover sign-in only', () => {
   assert.equal(isGrcPublicPath('/api/auth/logout'), false);
   assert.equal(isGrcApiPath('/api/org/switch'), true);
   assert.equal(isGrcApiPath('/work-papers'), false);
+});
+
+test('change-password exemption covers only the screen, its endpoint and sign-out', () => {
+  assert.equal(isGrcChangePasswordExempt('/change-password'), true);
+  assert.equal(isGrcChangePasswordExempt('/api/auth/change-password'), true);
+  assert.equal(isGrcChangePasswordExempt('/api/auth/logout'), true);
+  assert.equal(isGrcChangePasswordExempt('/'), false);
+  assert.equal(isGrcChangePasswordExempt('/work-papers'), false);
+  assert.equal(isGrcChangePasswordExempt('/api/auth/login'), false);
 });
 
 test('grcMarketingRedirect sends a /grc path to the subdomain, else null', () => {

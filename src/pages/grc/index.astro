@@ -97,6 +97,7 @@ if (allowed) {
   }
 }
 
+const passwordChanged = Astro.url.searchParams.get('passwordChanged') === '1';
 const reviewCount =
   reviews.toReview.length + reviews.toVerify.length + reviews.responsesToReview.length;
 const needsAttention = (stats?.overdue.count ?? 0) > 0 || reviewCount > 0 || dueThisWeek.length > 0;
@@ -117,6 +118,14 @@ const riskClass = (r: string | null): string => {
       <p class="grc-lead">Your internal audit workspace for {grc.organizationName}.</p>
     </div>
   </div>
+
+  {
+    passwordChanged && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        Your password has been changed.
+      </p>
+    )
+  }
 
   {
     !allowed ? (
