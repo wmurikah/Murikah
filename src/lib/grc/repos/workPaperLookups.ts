@@ -23,9 +23,9 @@ export interface SubAreaTemplate {
 
 export async function listAuditAreas(db: Client, organizationId: string): Promise<Option[]> {
   const res = await db.execute({
-    sql: `SELECT audit_area_id AS id, name FROM audit_areas
+    sql: `SELECT audit_area_id AS id, area_name AS name FROM audit_areas
            WHERE organization_id = ? AND (is_active IS NULL OR is_active = 1)
-        ORDER BY COALESCE(display_order, 999999), name`,
+        ORDER BY area_name`,
     args: [organizationId],
   });
   return res.rows.map((r) => ({ id: String(r.id), label: String(r.name) }));
@@ -33,9 +33,9 @@ export async function listAuditAreas(db: Client, organizationId: string): Promis
 
 export async function listAffiliates(db: Client, organizationId: string): Promise<Option[]> {
   const res = await db.execute({
-    sql: `SELECT affiliate_code AS id, name FROM affiliates
+    sql: `SELECT affiliate_code AS id, affiliate_name AS name FROM affiliates
            WHERE organization_id = ? AND (is_active IS NULL OR is_active = 1)
-        ORDER BY COALESCE(display_order, 999999), name`,
+        ORDER BY affiliate_name`,
     args: [organizationId],
   });
   return res.rows.map((r) => ({ id: String(r.id), label: String(r.name) }));
@@ -65,10 +65,10 @@ export async function listSubAreas(
     args.push(auditAreaId);
   }
   const res = await db.execute({
-    sql: `SELECT sub_area_id AS id, audit_area_id, name, control_objectives,
+    sql: `SELECT sub_area_id AS id, audit_area_id, sub_area_name AS name, control_objectives,
                  risk_description, test_objective, testing_steps
             FROM sub_areas WHERE ${where}
-        ORDER BY COALESCE(display_order, 999999), name`,
+        ORDER BY sub_area_name`,
     args,
   });
   return res.rows.map((r) => ({

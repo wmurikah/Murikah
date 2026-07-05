@@ -14,16 +14,20 @@
 
 export const ACTION_PLAN_ENUM_TYPE = 'ACTION_PLAN_STATUS';
 
+// Statuses are the human-readable strings the hassaudit schema stores in
+// action_plans.status and keys status_transitions by (Build Prompt 16); they are
+// not short codes. These labels are the single source the workflow, the stats
+// bar and the queries share, so none of them drift from the database.
 export const AP_STATUS = {
-  NOT_DUE: 'NOT_DUE',
-  PENDING: 'PENDING',
-  IN_PROGRESS: 'IN_PROGRESS',
-  OVERDUE: 'OVERDUE',
-  IMPLEMENTED: 'IMPLEMENTED',
-  PENDING_VERIFICATION: 'PENDING_VERIFICATION',
-  VERIFIED: 'VERIFIED',
-  CLOSED: 'CLOSED',
-  REJECTED: 'REJECTED',
+  NOT_DUE: 'Not Due',
+  PENDING: 'Pending',
+  IN_PROGRESS: 'In Progress',
+  OVERDUE: 'Overdue',
+  IMPLEMENTED: 'Implemented',
+  PENDING_VERIFICATION: 'Pending Verification',
+  VERIFIED: 'Verified',
+  CLOSED: 'Closed',
+  REJECTED: 'Rejected',
 } as const;
 
 /** The side effect a transition applies beyond setting the status. */

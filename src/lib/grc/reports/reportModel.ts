@@ -46,35 +46,40 @@ export const RISK_LABELS: Record<RiskBucket, string> = {
   LOW: 'Low',
 };
 
+// Statuses are the human-readable strings the hassaudit schema stores (Build
+// Prompt 16), matching the WP_STATUS and AP_STATUS labels in workflow/, so the
+// report filters and queries agree with work_papers.status and
+// action_plans.status exactly.
+
 /** The work-paper statuses the report filters by, with their labels. */
 export const STATUS_OPTIONS: { value: string; label: string; auditeeOnly?: boolean }[] = [
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'SENT_TO_AUDITEE', label: 'Sent to Auditee' },
-  { value: 'SUBMITTED', label: 'Submitted', auditeeOnly: true },
-  { value: 'DRAFT', label: 'Draft', auditeeOnly: true },
+  { value: 'Approved', label: 'Approved' },
+  { value: 'Sent to Auditee', label: 'Sent to Auditee' },
+  { value: 'Submitted', label: 'Submitted', auditeeOnly: true },
+  { value: 'Draft', label: 'Draft', auditeeOnly: true },
 ];
 
 /** Statuses a UNIT_MANAGER never sees in the report (drafts and submissions). */
-export const UNIT_MANAGER_HIDDEN_STATUSES = ['DRAFT', 'SUBMITTED'];
+export const UNIT_MANAGER_HIDDEN_STATUSES = ['Draft', 'Submitted'];
 
 /**
  * Action-plan statuses that are not counted as overdue: the plan is implemented
  * or otherwise settled. The source treats Implemented, Verified, Not Implemented,
- * Closed and Rejected as not-overdue; PENDING_VERIFICATION is the
+ * Closed and Rejected as not-overdue; Pending Verification is the
  * implemented-and-awaiting-verification state in this build, settled from the
  * owner's side, so it is included here too.
  */
 export const NOT_OVERDUE_STATUSES = [
-  'IMPLEMENTED',
-  'PENDING_VERIFICATION',
-  'VERIFIED',
-  'NOT_IMPLEMENTED',
-  'CLOSED',
-  'REJECTED',
+  'Implemented',
+  'Pending Verification',
+  'Verified',
+  'Not Implemented',
+  'Closed',
+  'Rejected',
 ];
 
 /** Statuses that count towards the implementation rate. */
-export const IMPLEMENTED_STATUSES = ['IMPLEMENTED', 'PENDING_VERIFICATION', 'VERIFIED', 'CLOSED'];
+export const IMPLEMENTED_STATUSES = ['Implemented', 'Pending Verification', 'Verified', 'Closed'];
 
 export function reportTypeLabel(type: ReportType): string {
   return REPORT_TYPES.find((t) => t.value === type)?.label ?? 'Report';

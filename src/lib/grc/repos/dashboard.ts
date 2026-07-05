@@ -70,7 +70,7 @@ export async function getDashboardStats(
              WHERE wp.organization_id = ?
                AND EXISTS (SELECT 1 FROM work_paper_responsibles r
                             WHERE r.work_paper_id = wp.work_paper_id
-                              AND r.organization_id = wp.organization_id AND r.user_id = ?)`,
+                              AND r.user_id = ?)`,
       args: [organizationId, scope.userId],
     });
     workPapers = num(res.rows[0]?.total);
@@ -78,7 +78,7 @@ export async function getDashboardStats(
   } else {
     const res = await db.execute({
       sql: `SELECT COUNT(*) AS total,
-                   SUM(CASE WHEN status = 'SUBMITTED' THEN 1 ELSE 0 END) AS pending
+                   SUM(CASE WHEN status = 'Submitted' THEN 1 ELSE 0 END) AS pending
               FROM work_papers WHERE organization_id = ?`,
       args: [organizationId],
     });
@@ -104,7 +104,7 @@ export async function getDashboardStats(
     workPapers: { count: workPapers, href: '/work-papers' },
     pendingReview: {
       count: pendingReview,
-      href: '/work-papers?status=SUBMITTED',
+      href: '/work-papers?status=Submitted',
     },
     actionPlans: { count: num(apRes.rows[0]?.total), href: '/action-plans' },
     overdue: { count: num(apRes.rows[0]?.overdue), href: '/action-plans?overdue=1' },
@@ -137,25 +137,25 @@ export async function getPendingReviews(
 
   const [review, verify, responses] = await Promise.all([
     db.execute({
-      sql: `SELECT work_paper_id AS id, reference, observation_title AS title, risk_rating AS risk
-              FROM work_papers WHERE organization_id = ? AND status = 'SUBMITTED'
+      sql: `SELECT work_paper_id AS id, work_paper_ref AS reference, observation_title AS title, risk_rating AS risk
+              FROM work_papers WHERE organization_id = ? AND status = 'Submitted'
           ORDER BY updated_at DESC LIMIT 10`,
       args: [organizationId],
     }),
     db.execute({
-      sql: `SELECT action_plan_id AS id, action_number AS reference, action_description AS title
-              FROM action_plans WHERE organization_id = ? AND status = 'PENDING_VERIFICATION'
+      sql: `SELECT action_plan_id AS id, COALESCE(action_ref, action_number) AS reference, action_description AS title
+              FROM action_plans WHERE organization_id = ? AND status = 'Pending Verification'
           ORDER BY updated_at DESC LIMIT 10`,
       args: [organizationId],
     }),
     db.execute({
-      sql: `SELECT wp.work_paper_id AS id, wp.reference AS reference,
+      sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference,
                    wp.observation_title AS title, wp.risk_rating AS risk,
-                   aff.name AS affiliate, wp.revision_count AS round
+                   aff.affiliate_name AS affiliate, wp.revision_count AS round
               FROM work_papers wp
               LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                    AND aff.organization_id = wp.organization_id
-             WHERE wp.organization_id = ? AND wp.status = 'RESPONSE_RECEIVED'
+             WHERE wp.organization_id = ? AND wp.status = 'Response Received'
           ORDER BY wp.updated_at DESC LIMIT 10`,
       args: [organizationId],
     }),
@@ -210,7 +210,7 @@ export async function getDueThisWeek(
     args.push(ownerLike(scope.userId));
   }
   const res = await db.execute({
-    sql: `SELECT action_plan_id AS id, action_number AS reference, action_description AS title,
+    sql: `SELECT action_plan_id AS id, COALESCE(action_ref, action_number) AS reference, action_description AS title,
                  due_date, owner_names AS owners
             FROM action_plans WHERE ${where}
         ORDER BY due_date ASC LIMIT 12`,
@@ -247,7 +247,7 @@ export async function getRecentActivity(
   if (auditee) {
     wpWhere +=
       ' AND EXISTS (SELECT 1 FROM work_paper_responsibles r WHERE r.work_paper_id = wp.work_paper_id' +
-      ' AND r.organization_id = wp.organization_id AND r.user_id = ?)';
+      ' AND r.user_id = ?)';
     wpArgs.push(scope.userId);
   }
   const apArgs: InArgs = [organizationId];
@@ -259,14 +259,14 @@ export async function getRecentActivity(
 
   const [wpRes, apRes] = await Promise.all([
     db.execute({
-      sql: `SELECT wp.work_paper_id AS id, wp.reference AS reference,
+      sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference,
                    wp.observation_title AS title, wp.status AS status, wp.updated_at AS updated_at
               FROM work_papers wp WHERE ${wpWhere}
           ORDER BY wp.updated_at DESC LIMIT 12`,
       args: wpArgs,
     }),
     db.execute({
-      sql: `SELECT action_plan_id AS id, action_number AS reference,
+      sql: `SELECT action_plan_id AS id, COALESCE(action_ref, action_number) AS reference,
                    action_description AS title, status, updated_at
               FROM action_plans WHERE ${apWhere}
           ORDER BY updated_at DESC LIMIT 12`,
@@ -320,15 +320,15 @@ export async function getTeamPerformance(
     db.execute({
       sql: `SELECT u.full_name AS auditor, COUNT(*) AS n
               FROM work_papers wp
-              JOIN users u ON u.user_id = wp.assigned_auditor
-             WHERE wp.organization_id = ? AND wp.assigned_auditor IS NOT NULL
-          GROUP BY wp.assigned_auditor
+              JOIN users u ON u.user_id = wp.assigned_auditor_id
+             WHERE wp.organization_id = ? AND wp.assigned_auditor_id IS NOT NULL
+          GROUP BY wp.assigned_auditor_id
           ORDER BY n DESC LIMIT 10`,
       args: [organizationId],
     }),
     // Action plans have no affiliate of their own: join through the work paper (GAP-507).
     db.execute({
-      sql: `SELECT aff.name AS affiliate,
+      sql: `SELECT aff.affiliate_name AS affiliate,
                    SUM(CASE WHEN ap.status IN (${settledPlaceholders}) THEN 1 ELSE 0 END) AS closed,
                    SUM(CASE WHEN ap.status NOT IN (${settledPlaceholders}) THEN 1 ELSE 0 END) AS open
               FROM action_plans ap
@@ -376,15 +376,15 @@ export async function getSidebarCounts(
   const [wp, ap] = await Promise.all([
     db.execute({
       sql: `SELECT
-              SUM(CASE WHEN wp.status = 'SUBMITTED' THEN 1 ELSE 0 END) AS pending_review,
-              SUM(CASE WHEN wp.prepared_by = ? THEN 1 ELSE 0 END) AS my_work_papers,
-              SUM(CASE WHEN wp.status = 'RESPONSE_RECEIVED' THEN 1 ELSE 0 END) AS responses_to_review,
-              SUM(CASE WHEN wp.status = 'SENT_TO_AUDITEE' AND EXISTS (
+              SUM(CASE WHEN wp.status = 'Submitted' THEN 1 ELSE 0 END) AS pending_review,
+              SUM(CASE WHEN wp.prepared_by_id = ? THEN 1 ELSE 0 END) AS my_work_papers,
+              SUM(CASE WHEN wp.status = 'Response Received' THEN 1 ELSE 0 END) AS responses_to_review,
+              SUM(CASE WHEN wp.status = 'Sent to Auditee' AND EXISTS (
                     SELECT 1 FROM work_paper_responsibles r WHERE r.work_paper_id = wp.work_paper_id
-                      AND r.organization_id = wp.organization_id AND r.user_id = ?) THEN 1 ELSE 0 END) AS my_observations,
-              SUM(CASE WHEN wp.status = 'APPROVED' AND EXISTS (
+                      AND r.user_id = ?) THEN 1 ELSE 0 END) AS my_observations,
+              SUM(CASE WHEN wp.status = 'Approved' AND EXISTS (
                     SELECT 1 FROM work_paper_responsibles r WHERE r.work_paper_id = wp.work_paper_id
-                      AND r.organization_id = wp.organization_id) THEN 1 ELSE 0 END) AS approved_queue
+                      ) THEN 1 ELSE 0 END) AS approved_queue
             FROM work_papers wp WHERE wp.organization_id = ?`,
       args: [userId, userId, organizationId],
     }),

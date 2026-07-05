@@ -43,10 +43,10 @@ async function alreadyReminded(
 export async function runStaleReminders(db: Client, clock: Clock): Promise<{ queued: number }> {
   const nowIso = clock.now().toISOString();
   const res = await db.execute({
-    sql: `SELECT work_paper_id AS id, organization_id, reference, observation_title AS title,
-                 assigned_auditor
+    sql: `SELECT work_paper_id AS id, organization_id, work_paper_ref AS reference, observation_title AS title,
+                 assigned_auditor_id AS assigned_auditor
             FROM work_papers
-           WHERE status = 'DRAFT' AND assigned_auditor IS NOT NULL AND created_at IS NOT NULL
+           WHERE status = 'Draft' AND assigned_auditor_id IS NOT NULL AND created_at IS NOT NULL
              AND datetime(created_at, '+' || ? || ' days') <= ?
            LIMIT 500`,
     args: [STALE_REMINDER_DAYS, nowIso],
@@ -102,7 +102,7 @@ export async function runOverdueReminders(db: Client, clock: Clock): Promise<{ q
   const nowIso = clock.now().toISOString();
   const placeholders = NOT_OVERDUE_STATUSES.map(() => '?').join(', ');
   const res = await db.execute({
-    sql: `SELECT action_plan_id AS id, organization_id, action_number AS reference,
+    sql: `SELECT action_plan_id AS id, organization_id, COALESCE(action_ref, action_number) AS reference,
                  action_description AS title, owner_ids, due_date
             FROM action_plans
            WHERE due_date IS NOT NULL AND date(due_date) < date('now')

@@ -26,11 +26,12 @@ export async function listRevisions(
   workPaperId: string,
 ): Promise<Revision[]> {
   const res = await db.execute({
-    sql: `SELECT revision_id AS id, revision_number, action, from_status, to_status,
-                 comments, changes_summary, user_id, user_name, created_at
-            FROM work_paper_revisions
-           WHERE organization_id = ? AND work_paper_id = ?
-        ORDER BY revision_number DESC, created_at DESC`,
+    sql: `SELECT wr.revision_id AS id, wr.revision_number, wr.action, wr.from_status, wr.to_status,
+                 wr.comments, wr.changes_summary, wr.user_id, wr.user_name, wr.action_date AS created_at
+            FROM work_paper_revisions wr
+            JOIN work_papers wp ON wp.work_paper_id = wr.work_paper_id AND wp.organization_id = ?
+           WHERE wr.work_paper_id = ?
+        ORDER BY wr.revision_number DESC, wr.action_date DESC`,
     args: [organizationId, workPaperId],
   });
   return res.rows.map((r) => ({
@@ -59,16 +60,20 @@ export interface RevisionInput {
   userName: string;
 }
 
-/** Build the INSERT statement for a revision, so the executor can batch it atomically. */
-export function insertRevisionStatement(organizationId: string, input: RevisionInput): InStatement {
+/**
+ * Build the INSERT statement for a revision, so the executor can batch it
+ * atomically. work_paper_revisions has no organization_id of its own; the row is
+ * tied to its (org-scoped) work paper, and the executor only reaches here after
+ * resolving that work paper in the acting organisation.
+ */
+export function insertRevisionStatement(input: RevisionInput): InStatement {
   return {
     sql: `INSERT INTO work_paper_revisions
-            (revision_id, organization_id, work_paper_id, revision_number, action,
-             from_status, to_status, comments, changes_summary, user_id, user_name, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (revision_id, work_paper_id, revision_number, action,
+             from_status, to_status, comments, changes_summary, user_id, user_name, action_date)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       crypto.randomUUID(),
-      organizationId,
       input.workPaperId,
       input.revisionNumber,
       input.action,
