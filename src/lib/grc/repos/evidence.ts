@@ -50,28 +50,32 @@ export async function listAttachments(
 }
 
 export interface RecordAttachmentInput {
+  /** The file id that also names the immutable storage key. */
+  fileId: string;
   entityType: string;
   entityId: string;
   fileName: string;
   contentType: string;
   sizeBytes: number;
   uploadedBy: string;
-  /** The reference returned by the storage backend once the bytes are stored. */
+  /** The reference the storage backend returned once the bytes were stored. */
   ref: StoredObjectRef;
+  /** The content hash computed on completion, for integrity. */
+  contentHash: string;
+  contentHashAlgo: string;
 }
 
 /**
- * Record the metadata for an already-stored object: a `files` row and a
- * `file_attachments` link. Called only after the storage backend has stored the
- * bytes (the backend is not wired in this prompt), so evidence is modelled
- * end-to-end without choosing the backend here.
+ * Record the metadata for an already-stored object: a `files` row (with the
+ * storage backend, immutable key and content hash) and a `file_attachments`
+ * link. Called only after the object has been uploaded and verified, so evidence
+ * is modelled end-to-end regardless of backend.
  */
 export async function recordAttachment(
   db: Client,
   organizationId: string,
   input: RecordAttachmentInput,
 ): Promise<string> {
-  const fileId = crypto.randomUUID();
   const attachmentId = crypto.randomUUID();
   const now = new Date().toISOString();
   await db.batch(
@@ -79,16 +83,19 @@ export async function recordAttachment(
       {
         sql: `INSERT INTO files
                 (file_id, organization_id, file_name, mime_type, size_bytes,
-                 storage_backend, storage_key, uploaded_by, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 storage_backend, storage_key, content_hash, content_hash_algo,
+                 uploaded_by, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
-          fileId,
+          input.fileId,
           organizationId,
           input.fileName,
           input.contentType,
           input.sizeBytes,
           input.ref.backend,
           input.ref.key,
+          input.contentHash,
+          input.contentHashAlgo,
           input.uploadedBy,
           now,
         ],
@@ -97,10 +104,58 @@ export async function recordAttachment(
         sql: `INSERT INTO file_attachments
                 (attachment_id, organization_id, file_id, entity_type, entity_id, created_at)
               VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [attachmentId, organizationId, fileId, input.entityType, input.entityId, now],
+        args: [attachmentId, organizationId, input.fileId, input.entityType, input.entityId, now],
       },
     ],
     'write',
   );
   return attachmentId;
+}
+
+export interface AttachmentAccess {
+  attachmentId: string;
+  fileId: string;
+  fileName: string;
+  mimeType: string | null;
+  backend: string;
+  storageKey: string | null;
+  driveFileId: string | null;
+  entityType: string;
+  entityId: string;
+}
+
+/**
+ * Resolve one attachment to the file reference and the entity it hangs off,
+ * scoped to the acting organisation, for the download and deletion paths. The
+ * entity is what the RBAC and auditee-safe checks are run against.
+ */
+export async function getAttachmentForAccess(
+  db: Client,
+  organizationId: string,
+  attachmentId: string,
+): Promise<AttachmentAccess | null> {
+  const res = await db.execute({
+    sql: `SELECT fa.attachment_id AS attachment_id, f.file_id AS file_id, f.file_name AS file_name,
+                 f.mime_type AS mime_type, f.storage_backend AS backend, f.storage_key AS storage_key,
+                 f.drive_file_id AS drive_file_id, fa.entity_type AS entity_type,
+                 fa.entity_id AS entity_id
+            FROM file_attachments fa
+            JOIN files f ON f.file_id = fa.file_id AND f.organization_id = fa.organization_id
+           WHERE fa.organization_id = ? AND fa.attachment_id = ?
+           LIMIT 1`,
+    args: [organizationId, attachmentId],
+  });
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    attachmentId: String(r.attachment_id),
+    fileId: String(r.file_id),
+    fileName: String(r.file_name ?? ''),
+    mimeType: r.mime_type == null ? null : String(r.mime_type),
+    backend: String(r.backend ?? 'r2'),
+    storageKey: r.storage_key == null ? null : String(r.storage_key),
+    driveFileId: r.drive_file_id == null ? null : String(r.drive_file_id),
+    entityType: String(r.entity_type ?? ''),
+    entityId: String(r.entity_id ?? ''),
+  };
 }
