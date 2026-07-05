@@ -26,6 +26,8 @@ import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { WORK_PAPER_ENUM_TYPE, isEditable } from '@grc/workflow/workPaperActions';
 import { offeredActions, type OfferedAction } from '@grc/workflow/workPaperWorkflow';
+import { aiEnabled } from '@grc/ai/gate';
+import { AI_DISCLAIMER } from '@grc/ai/validation';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -34,6 +36,7 @@ const { id } = Astro.params;
 const allowed = can(Astro.locals, 'WORK_PAPERS.view');
 const canEdit = can(Astro.locals, 'WORK_PAPERS.edit');
 const canManageReq = can(Astro.locals, 'REQUIREMENTS.manage');
+const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 
@@ -248,6 +251,25 @@ const val = (key: string): string => {
             </>
           </dl>
         </div>
+
+        {hasAi && (
+          <div class="grc-panel">
+            <div class="grc-actionbar" style="margin:0 0 0.5rem;justify-content:space-between">
+              <h2 style="margin:0">AI insights</h2>
+              <button
+                type="button"
+                id="wp-insight-btn"
+                class="grc-btn grc-btn--secondary"
+                data-wp-id={id}
+              >
+                Generate insights
+              </button>
+            </div>
+            <p class="grc-field__hint">{AI_DISCLAIMER}</p>
+            <div id="wp-insight-status" class="grc-lead" role="status" aria-live="polite" />
+            <div id="wp-insight-out" class="grc-ai-out" hidden />
+          </div>
+        )}
 
         <div class="grc-panel">
           <h2>Requirements</h2>
@@ -472,3 +494,35 @@ const val = (key: string): string => {
     )
   }
 </GrcLayout>
+
+<script>
+  // On-demand work-paper insights. The output is written with textContent so the
+  // model's Markdown is never interpreted as HTML; CSS preserves its whitespace.
+  const btn = document.getElementById('wp-insight-btn');
+  const out = document.getElementById('wp-insight-out');
+  const status = document.getElementById('wp-insight-status');
+  btn?.addEventListener('click', async () => {
+    if (!out || !status) return;
+    const id = btn.getAttribute('data-wp-id') ?? '';
+    if (!id) return;
+    btn.setAttribute('disabled', 'true');
+    status.textContent = 'Generating insights...';
+    out.hidden = true;
+    try {
+      const body = new URLSearchParams({ work_paper_id: id });
+      const res = await fetch('/api/ai/insights', { method: 'POST', body });
+      const data = (await res.json()) as { ok?: boolean; markdown?: string; error?: string };
+      if (data.ok && data.markdown) {
+        out.textContent = data.markdown;
+        out.hidden = false;
+        status.textContent = '';
+      } else {
+        status.textContent = data.error || 'AI insights are unavailable right now.';
+      }
+    } catch {
+      status.textContent = 'The request failed. Try again.';
+    } finally {
+      btn.removeAttribute('disabled');
+    }
+  });
+</script>
