@@ -23,7 +23,9 @@ if (!grc) return Astro.redirect('/login');
 
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const isAuditor =
-  grc.isPlatformOwner || can(Astro.locals, 'WORK_PAPERS.view') || can(Astro.locals, 'REPORTS.view');
+  grc.isPlatformOwner ||
+  can(Astro.locals, 'read', 'WORK_PAPER') ||
+  can(Astro.locals, 'read', 'REPORT');
 const allowed = hasAi && isAuditor;
 
 let portfolio: Portfolio | null = null;

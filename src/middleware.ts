@@ -30,7 +30,7 @@ import {
   resolveActingContext as resolveGrcActingContext,
   type SwitchOrg as GrcSwitchOrg,
 } from '@grc/repos/orgContext';
-import { loadPermissions } from '@grc/auth/rbac';
+import { getPermissionMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
 import { loadSubscription } from '@grc/repos/features';
 import { toGrcAppPath, isGrcPublicPath, isGrcApiPath } from '@grc/routing';
 
@@ -96,7 +96,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
       }
     }
 
-    const perms = await loadPermissions(db, identity.roleCode);
+    // The permission matrix from role_permissions drives every gate. A SUPER_ADMIN
+    // and a platform owner hold the full matrix; every other role holds its grants.
+    // The legacy perms list is derived from the matrix, so existing code keeps
+    // working, matrix-driven.
+    const matrix =
+      identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN'
+        ? fullMatrix()
+        : await getPermissionMatrix(db, identity.roleCode);
+    const perms = deriveLegacyPerms(matrix);
     const subscription = await loadSubscription(db, organizationId);
     const features = subscription.features;
 
@@ -110,9 +118,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
       userEmail: identity.userEmail,
       isPlatformOwner: identity.isPlatformOwner,
       switchable,
+      matrix,
       perms,
       features,
-      can: (code: string) => perms.includes(code),
+      can: (action: string, module: string) => canMatrix(matrix, action, module),
       // A platform owner is entitled to every feature regardless of the acting
       // organisation's plan; an ordinary user is gated by their plan flags.
       hasFeature: (flag: string) => identity.isPlatformOwner || features[flag] === true,
