@@ -23,6 +23,7 @@ import { WORK_PAPER_ENUM_TYPE, WP_STATUS, actionForTarget } from './workPaperAct
 import { getWorkPaper } from '@grc/repos/workPapers';
 import { insertRevisionStatement } from '@grc/repos/revisions';
 import { enqueueNotification } from '@grc/repos/notify';
+import { buildAuditStatement } from '@grc/repos/audit';
 
 export interface TransitionActor {
   userId: string;
@@ -139,17 +140,14 @@ export async function executeTransition(
       userId: actor.userId,
       userName: actor.userName,
     }),
-    {
-      sql: `INSERT INTO audit_log (organization_id, user_id, action, details, created_at)
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [
-        organizationId,
-        actor.userId,
-        'WORK_PAPER.transition',
-        `${workPaperId}: ${fromStatus} -> ${toStatus}`,
-        now,
-      ],
-    },
+    buildAuditStatement({
+      organizationId,
+      userId: actor.userId,
+      action: 'WORK_PAPER.transition',
+      entityType: 'work_paper',
+      entityId: workPaperId,
+      details: `${fromStatus} -> ${toStatus}`,
+    }),
   ];
   await db.batch(statements, 'write');
 
