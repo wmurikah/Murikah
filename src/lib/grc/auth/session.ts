@@ -52,6 +52,12 @@ export function newSessionId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** The sha256 hex of a session token, stored in sessions.token_hash. */
+export async function hashToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 function cookie(value: string, maxAge: number, secure: boolean): string {
   const secureAttr = secure ? '; Secure' : '';
   return `${GRC_SESSION_COOKIE}=${value}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
