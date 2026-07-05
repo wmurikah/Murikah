@@ -2,45 +2,27 @@
  * Managed dropdown values for the work-paper control fields, ported from
  * 11_DropdownService.gs. The risk rating and the control classification, type and
  * frequency are held per organisation as JSON arrays in the `config` table
- * (scope = organization_id), so a SUPER_ADMIN can manage them. control_standards
+ * (keyed by organization_id), so a SUPER_ADMIN can manage them. control_standards
  * stays free text. Values are cached per organisation and key, and the cache is
  * invalidated on change. The standard defaults live here, in one place, in step
- * with the seed scripts and the signup provisioning.
+ * with the seed scripts and the signup provisioning. Column names come from the
+ * typed schema layer.
  */
 import type { Client } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
+import {
+  DROPDOWN_DEFAULTS,
+  DROPDOWN_KEYS,
+  type ControlDropdowns,
+  type DropdownKey,
+} from './dropdownDefaults';
 
-export const DROPDOWN_KEYS = {
-  riskRatings: 'DROPDOWN_RISK_RATINGS',
-  classification: 'DROPDOWN_CONTROL_CLASSIFICATION',
-  controlType: 'DROPDOWN_CONTROL_TYPE',
-  controlFrequency: 'DROPDOWN_CONTROL_FREQUENCY',
-} as const;
+// Re-export the pure constants so existing consumers keep importing them from
+// here; the defaults themselves live in the leaf dropdownDefaults.ts.
+export { DROPDOWN_DEFAULTS, DROPDOWN_KEYS };
+export type { ControlDropdowns, DropdownKey };
 
-export type DropdownKey = (typeof DROPDOWN_KEYS)[keyof typeof DROPDOWN_KEYS];
-
-export interface ControlDropdowns {
-  riskRatings: string[];
-  classification: string[];
-  controlType: string[];
-  controlFrequency: string[];
-}
-
-/** The standard values seeded for every organisation. Keep in step with the seed. */
-export const DROPDOWN_DEFAULTS: ControlDropdowns = {
-  riskRatings: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
-  classification: ['KEY', 'SECONDARY', 'COMPENSATING'],
-  controlType: ['PREVENTIVE', 'DETECTIVE', 'CORRECTIVE', 'DIRECTIVE'],
-  controlFrequency: [
-    'CONTINUOUS',
-    'DAILY',
-    'WEEKLY',
-    'MONTHLY',
-    'QUARTERLY',
-    'SEMI_ANNUAL',
-    'ANNUAL',
-    'AD_HOC',
-  ],
-};
+const cfg = cols(C.config);
 
 const cache = new Map<string, string[]>();
 
@@ -75,7 +57,8 @@ export async function loadDropdown(
   let values = fallback;
   try {
     const res = await db.execute({
-      sql: `SELECT config_value FROM config WHERE scope = ? AND config_key = ? LIMIT 1`,
+      sql: `SELECT ${cfg.config_value} FROM config
+             WHERE ${cfg.organization_id} = ? AND ${cfg.config_key} = ? LIMIT 1`,
       args: [organizationId, key],
     });
     const raw = res.rows[0]?.config_value;
@@ -122,12 +105,14 @@ export async function saveDropdown(
   const json = JSON.stringify(clean);
   const now = new Date().toISOString();
   const upd = await db.execute({
-    sql: `UPDATE config SET config_value = ?, updated_at = ? WHERE scope = ? AND config_key = ?`,
+    sql: `UPDATE config SET ${cfg.config_value} = ?, ${cfg.updated_at} = ?
+           WHERE ${cfg.organization_id} = ? AND ${cfg.config_key} = ?`,
     args: [json, now, organizationId, key],
   });
   if ((upd.rowsAffected ?? 0) === 0) {
     await db.execute({
-      sql: `INSERT INTO config (scope, config_key, config_value, updated_at) VALUES (?, ?, ?, ?)`,
+      sql: `INSERT INTO config (${cfg.organization_id}, ${cfg.config_key}, ${cfg.config_value}, ${cfg.updated_at})
+             VALUES (?, ?, ?, ?)`,
       args: [organizationId, key, json, now],
     });
   }
