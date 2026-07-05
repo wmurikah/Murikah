@@ -20,8 +20,8 @@ import { AI_DISCLAIMER } from '@grc/ai/validation';
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
-const canCreate = can(Astro.locals, 'ACTION_PLANS.create');
-const canPropose = can(Astro.locals, 'AUDITEE.respond');
+const canCreate = can(Astro.locals, 'create', 'ACTION_PLAN');
+const canPropose = can(Astro.locals, 'create', 'AUDITEE_RESPONSE');
 const allowed = canCreate || canPropose;
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const failed = Astro.url.searchParams.get('error');

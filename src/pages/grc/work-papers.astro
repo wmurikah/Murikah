@@ -30,8 +30,8 @@ import { WORK_PAPER_ENUM_TYPE } from '@grc/workflow/workPaperActions';
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'WORK_PAPERS.view');
-const canCreate = can(Astro.locals, 'WORK_PAPERS.create');
+const allowed = can(Astro.locals, 'read', 'WORK_PAPER');
+const canCreate = can(Astro.locals, 'create', 'WORK_PAPER');
 const p = Astro.url.searchParams;
 const filters: WorkPaperFilters = {
   status: p.get('status') || undefined,

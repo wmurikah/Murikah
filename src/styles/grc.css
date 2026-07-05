@@ -844,6 +844,48 @@
   border-top: 1px solid var(--grc-line);
 }
 
+/* Selectable chips (the role picker on the access-control screen). */
+.grc-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--grc-line);
+  background: var(--grc-surface);
+  color: var(--grc-ink);
+  font-size: var(--grc-fs-caption);
+  font-weight: 600;
+  text-decoration: none;
+}
+.grc-chip--on {
+  background: var(--grc-navy, #1f2d5c);
+  border-color: var(--grc-navy, #1f2d5c);
+  color: #fff;
+}
+
+/* The permission matrix grid: row headers left, checkbox cells centred. */
+.grc-matrix th[scope='row'] {
+  text-align: left;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.grc-matrix td {
+  text-align: center;
+}
+
+/* A card that is itself a link (the settings home). */
+.grc-card--link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease;
+}
+.grc-card--link:hover,
+.grc-card--link:focus-visible {
+  border-color: var(--grc-gold);
+}
+
 /* Status and risk pills, colour plus label (never colour alone). */
 .grc-pill {
   display: inline-block;
