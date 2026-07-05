@@ -31,7 +31,7 @@ const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const { id } = Astro.params;
 
-const allowed = can(Astro.locals, 'ACTION_PLANS.view');
+const allowed = can(Astro.locals, 'read', 'ACTION_PLAN');
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 
@@ -109,8 +109,10 @@ const overdue = p ? isOverdue(p.status, daysOverdue) : false;
 const auditeeProposed = p ? Number(p.auditee_proposed ?? 0) === 1 : false;
 const ownerViewer = p ? grc.isPlatformOwner || isOwner(p.ownerIds, grc.userId) : false;
 const nonTerminal = p ? !isTerminal(p.status) : false;
-const canEdit = p ? can(Astro.locals, 'ACTION_PLANS.edit') && isEditableByAuditor(p.status) : false;
-const canDelete = p ? can(Astro.locals, 'ACTION_PLANS.edit') && isDeletable(p.status) : false;
+const canEdit = p
+  ? can(Astro.locals, 'update', 'ACTION_PLAN') && isEditableByAuditor(p.status)
+  : false;
+const canDelete = p ? can(Astro.locals, 'update', 'ACTION_PLAN') && isDeletable(p.status) : false;
 const canDelegate = ownerViewer && nonTerminal;
 const delegationPending = has('delegated_date') && !has('delegation_accepted_date');
 const canDecideDelegation =
