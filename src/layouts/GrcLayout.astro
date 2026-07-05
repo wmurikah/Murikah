@@ -23,7 +23,7 @@ interface Props {
   title: string;
 }
 const { title } = Astro.props;
-const pageTitle = `${title}, Murikah GRC`;
+const pageTitle = `${title} - Assurance OS`;
 
 const grc = Astro.locals.grc;
 const path = Astro.locals.grcPath ?? '/';
@@ -81,7 +81,7 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
         <a href="/" class="grc-brand">
           <span class="grc-brand__badge" aria-hidden="true">M</span>
           <span>
-            <span class="grc-brand__name">Murikah GRC</span>
+            <span class="grc-brand__name">Assurance OS</span>
             <span class="grc-brand__sub">Internal audit</span>
           </span>
         </a>
