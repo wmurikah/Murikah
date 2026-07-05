@@ -21,30 +21,37 @@ import {
   type Option,
   type SubAreaTemplate,
 } from '@grc/repos/workPaperLookups';
+import {
+  loadControlDropdowns,
+  DROPDOWN_DEFAULTS,
+  type ControlDropdowns,
+} from '@grc/repos/dropdowns';
 import { isEditable } from '@grc/workflow/workPaperActions';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const { id } = Astro.params;
 
-const allowed = can(Astro.locals, 'WORK_PAPERS.edit');
+const allowed = can(Astro.locals, 'update', 'WORK_PAPER');
 
 let wp: WorkPaperDetail | null = null;
 let areas: Option[] = [];
 let affiliates: Option[] = [];
 let auditors: Option[] = [];
 let subAreas: SubAreaTemplate[] = [];
+let dropdowns: ControlDropdowns = DROPDOWN_DEFAULTS;
 if (allowed && id) {
   const db = await getDb(getGrcEnv());
   wp = await getWorkPaper(db, grc.organizationId, id);
   // Only editable in Draft or Revision Required; otherwise back to the detail.
   if (wp && !isEditable(wp.status)) return Astro.redirect(`/work-papers/${id}`);
   if (wp) {
-    [areas, affiliates, auditors, subAreas] = await Promise.all([
+    [areas, affiliates, auditors, subAreas, dropdowns] = await Promise.all([
       listAuditAreas(db, grc.organizationId),
       listAffiliates(db, grc.organizationId),
       listAuditors(db, grc.organizationId),
       listSubAreas(db, grc.organizationId),
+      loadControlDropdowns(db, grc.organizationId),
     ]);
   }
 }
@@ -81,6 +88,7 @@ if (allowed && !wp) Astro.response.status = 404;
         affiliates={affiliates}
         auditors={auditors}
         subAreas={subAreas}
+        dropdowns={dropdowns}
         values={wp}
       />
     )

@@ -160,12 +160,18 @@ declare namespace App {
       isPlatformOwner: boolean;
       /** The organisations a platform owner may switch between; empty for every other user. */
       switchable: { id: string; name: string }[];
-      /** Permission codes resolved from role_code, e.g. WORK_PAPERS.review. */
+      /**
+       * The RBAC permission matrix from role_permissions, module to action to
+       * boolean. A SUPER_ADMIN and a platform owner hold the full matrix. This
+       * is the authority for every gate.
+       */
+      matrix: Record<string, Record<string, boolean>>;
+      /** Legacy permission codes derived from the matrix, e.g. WORK_PAPERS.view. */
       perms: string[];
       /** Plan feature flags from the subscription's plan features_json. */
       features: Record<string, boolean>;
-      /** True when the session carries the permission code. */
-      can: (code: string) => boolean;
+      /** True when the matrix grants the action on the module (aliases applied). */
+      can: (action: string, module: string) => boolean;
       /** True when the plan enables the named feature (a platform owner is always true). */
       hasFeature: (flag: string) => boolean;
     };

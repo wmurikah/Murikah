@@ -34,9 +34,9 @@ const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const { id } = Astro.params;
 
-const allowed = can(Astro.locals, 'WORK_PAPERS.view');
-const canEdit = can(Astro.locals, 'WORK_PAPERS.edit');
-const canManageReq = can(Astro.locals, 'REQUIREMENTS.manage');
+const allowed = can(Astro.locals, 'read', 'WORK_PAPER');
+const canEdit = can(Astro.locals, 'update', 'WORK_PAPER');
+const canManageReq = can(Astro.locals, 'update', 'WORK_PAPER');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const canUpload = canEdit && storageConfigured();
 const errorCode = Astro.url.searchParams.get('error');

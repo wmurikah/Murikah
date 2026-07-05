@@ -9,6 +9,7 @@
  * existing values (or null for a new draft) and the POST action.
  */
 import type { Option, SubAreaTemplate } from '@grc/repos/workPaperLookups';
+import type { ControlDropdowns } from '@grc/repos/dropdowns';
 
 interface Props {
   action: string;
@@ -17,15 +18,19 @@ interface Props {
   affiliates: Option[];
   auditors: Option[];
   subAreas: SubAreaTemplate[];
+  dropdowns: ControlDropdowns;
   values: Record<string, unknown> | null;
 }
-const { action, submitLabel, areas, affiliates, auditors, subAreas, values } = Astro.props;
+const { action, submitLabel, areas, affiliates, auditors, subAreas, dropdowns, values } =
+  Astro.props;
 
 const v = (key: string): string => {
   const raw = values?.[key];
   return raw == null ? '' : String(raw);
 };
-const RISK = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+// Present a stored code (e.g. AD_HOC) as a readable label (Ad hoc).
+const human = (s: string): string =>
+  s.charAt(0).toUpperCase() + s.slice(1).toLowerCase().replace(/_/g, ' ');
 // The sub-area templates for the client-side auto-populate.
 const templateJson = JSON.stringify(
   Object.fromEntries(
@@ -158,33 +163,42 @@ const templateJson = JSON.stringify(
     <div class="grc-formgrid">
       <div class="grc-field">
         <label for="classification">Classification</label>
-        <input
-          type="text"
-          id="classification"
-          name="classification"
-          class="grc-input"
-          value={v('classification')}
-        />
+        <select id="classification" name="classification" class="grc-select">
+          <option value="">Not set</option>
+          {
+            dropdowns.classification.map((c) => (
+              <option value={c} selected={v('classification') === c}>
+                {human(c)}
+              </option>
+            ))
+          }
+        </select>
       </div>
       <div class="grc-field">
         <label for="control_type">Type</label>
-        <input
-          type="text"
-          id="control_type"
-          name="control_type"
-          class="grc-input"
-          value={v('control_type')}
-        />
+        <select id="control_type" name="control_type" class="grc-select">
+          <option value="">Not set</option>
+          {
+            dropdowns.controlType.map((c) => (
+              <option value={c} selected={v('control_type') === c}>
+                {human(c)}
+              </option>
+            ))
+          }
+        </select>
       </div>
       <div class="grc-field">
         <label for="control_frequency">Frequency</label>
-        <input
-          type="text"
-          id="control_frequency"
-          name="control_frequency"
-          class="grc-input"
-          value={v('control_frequency')}
-        />
+        <select id="control_frequency" name="control_frequency" class="grc-select">
+          <option value="">Not set</option>
+          {
+            dropdowns.controlFrequency.map((c) => (
+              <option value={c} selected={v('control_frequency') === c}>
+                {human(c)}
+              </option>
+            ))
+          }
+        </select>
       </div>
       <div class="grc-field">
         <label for="standards">Standards</label>
@@ -247,9 +261,9 @@ const templateJson = JSON.stringify(
         <select id="risk_rating" name="risk_rating" class="grc-select">
           <option value="">Not rated</option>
           {
-            RISK.map((r) => (
+            dropdowns.riskRatings.map((r) => (
               <option value={r} selected={v('risk_rating') === r}>
-                {r.charAt(0) + r.slice(1).toLowerCase()}
+                {human(r)}
               </option>
             ))
           }

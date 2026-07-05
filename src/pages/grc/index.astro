@@ -35,7 +35,7 @@ import {
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'DASHBOARD.view');
+const allowed = can(Astro.locals, 'read', 'AUDIT_WORKBENCH');
 const scope: DashboardScope = {
   userId: grc.userId,
   roleCode: grc.roleCode,

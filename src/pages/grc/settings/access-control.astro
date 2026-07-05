@@ -1,0 +1,183 @@
+---
+export const prerender = false;
+
+/**
+ * Access control (PermissionService.gs), SUPER_ADMIN only. Shows, per role, the
+ * granted module and action pairs as a matrix and the resulting page access, and
+ * lets a SUPER_ADMIN toggle grants (written to role_permissions). SUPER_ADMIN is
+ * shown read-only: it always holds the full matrix and is never modified. The
+ * server is always the authority; this screen edits the shared permission model.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import {
+  MODULES,
+  ACTIONS,
+  PAGE_PERMISSION_MAP,
+  pageAccess,
+  fullMatrix,
+  type PermissionMatrix,
+} from '@grc/auth/rbac';
+import { listRoleCodes, getRoleMatrix } from '@grc/repos/permissionsAdmin';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+const done = Astro.url.searchParams.get('done');
+const error = Astro.url.searchParams.get('error');
+
+let roles: string[] = [];
+let selected = '';
+let matrix: PermissionMatrix = {};
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  roles = await listRoleCodes(db);
+  const requested = Astro.url.searchParams.get('role') ?? '';
+  selected = roles.includes(requested)
+    ? requested
+    : (roles.find((r) => r !== 'SUPER_ADMIN') ?? roles[0] ?? '');
+  if (selected) {
+    matrix = selected === 'SUPER_ADMIN' ? fullMatrix() : await getRoleMatrix(db, selected);
+  }
+}
+const isSuperAdmin = selected === 'SUPER_ADMIN';
+const pageSlugs = Object.keys(PAGE_PERMISSION_MAP);
+const granted = (module: string, action: string): boolean => matrix[module]?.[action] === true;
+---
+
+<GrcLayout title="Access control">
+  <div class="grc-page-head">
+    <div>
+      <h1>Access control</h1>
+      <p class="grc-lead">The permission matrix for each role, and the pages it unlocks.</p>
+    </div>
+    <a href="/settings" class="grc-btn grc-btn--secondary">Back to settings</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Access control is restricted to administrators.
+      </p>
+    ) : (
+      <>
+        {done && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            {decodeURIComponent(done)}
+          </p>
+        )}
+        {error && (
+          <p class="grc-error" role="alert" style="margin-bottom:1rem">
+            {decodeURIComponent(error)}
+          </p>
+        )}
+
+        <div class="grc-panel">
+          <h2>Role</h2>
+          <div class="grc-tags">
+            {roles.map((r) => (
+              <a
+                href={`/settings/access-control?role=${encodeURIComponent(r)}`}
+                class:list={['grc-chip', { 'grc-chip--on': r === selected }]}
+                aria-current={r === selected ? 'true' : undefined}
+              >
+                {r}
+              </a>
+            ))}
+          </div>
+        </div>
+
+        {selected && (
+          <form method="post" action="/api/access-control" class="grc-panel">
+            <div class="grc-actionbar" style="margin:0 0 0.75rem;justify-content:space-between">
+              <h2 style="margin:0">Permissions for {selected}</h2>
+              {!isSuperAdmin && (
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Save permissions
+                </button>
+              )}
+            </div>
+            <input type="hidden" name="role_code" value={selected} />
+            {isSuperAdmin && (
+              <p class="grc-field__hint">
+                SUPER_ADMIN always holds every permission and cannot be changed.
+              </p>
+            )}
+            <div class="grc-tablewrap">
+              <table class="grc-table grc-matrix" aria-label={`Permissions for ${selected}`}>
+                <thead>
+                  <tr>
+                    <th scope="col">Module</th>
+                    {ACTIONS.map((a) => (
+                      <th scope="col" class="grc-num">
+                        {a}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {MODULES.map((m) => (
+                    <tr>
+                      <th scope="row">{m}</th>
+                      {ACTIONS.map((a) => (
+                        <td class="grc-num">
+                          <label class="grc-checkline" style="justify-content:center">
+                            <input
+                              type="checkbox"
+                              name={`grant_${m}_${a}`}
+                              value="1"
+                              checked={granted(m, a)}
+                              disabled={isSuperAdmin}
+                            />
+                            <span class="grc-vh">
+                              {a} {m}
+                            </span>
+                          </label>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </form>
+        )}
+
+        {selected && (
+          <div class="grc-panel">
+            <h2>Resulting page access</h2>
+            <div class="grc-tablewrap">
+              <table class="grc-table" aria-label={`Page access for ${selected}`}>
+                <thead>
+                  <tr>
+                    <th>Page</th>
+                    <th>Requires</th>
+                    <th>Access</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageSlugs.map((slug) => (
+                    <tr>
+                      <td>{slug}</td>
+                      <td>
+                        {PAGE_PERMISSION_MAP[slug].module}.{PAGE_PERMISSION_MAP[slug].action}
+                      </td>
+                      <td>
+                        {pageAccess(matrix, slug) ? (
+                          <span class="grc-pill">Allowed</span>
+                        ) : (
+                          <span class="grc-tone--muted">No</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+</GrcLayout>
