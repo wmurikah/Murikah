@@ -54,7 +54,7 @@ async function loadEntityPayload(
   try {
     if (entity === 'action_plan') {
       const res = await db.execute({
-        sql: `SELECT action_number, action_description, status, due_date, owner_names
+        sql: `SELECT COALESCE(action_ref, action_number) AS action_number, action_description, status, due_date, owner_names
                 FROM action_plans WHERE action_plan_id = ? AND organization_id = ? LIMIT 1`,
         args: [entityId, organizationId],
       });
@@ -68,7 +68,7 @@ async function loadEntityPayload(
       }
     } else {
       const res = await db.execute({
-        sql: `SELECT reference, observation_title, status, risk_rating
+        sql: `SELECT work_paper_ref AS reference, observation_title, status, risk_rating
                 FROM work_papers WHERE work_paper_id = ? AND organization_id = ? LIMIT 1`,
         args: [entityId, organizationId],
       });

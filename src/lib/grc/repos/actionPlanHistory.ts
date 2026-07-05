@@ -22,10 +22,12 @@ export async function listHistory(
   actionPlanId: string,
 ): Promise<HistoryRow[]> {
   const res = await db.execute({
-    sql: `SELECT history_id AS id, previous_status, new_status, comments, user_id, user_name, created_at
-            FROM action_plan_history
-           WHERE organization_id = ? AND action_plan_id = ?
-        ORDER BY created_at DESC`,
+    sql: `SELECT h.history_id AS id, h.from_status AS previous_status, h.to_status AS new_status,
+                 h.comments, h.user_id, h.user_name, h.action_date AS created_at
+            FROM action_plan_history h
+            JOIN action_plans ap ON ap.action_plan_id = h.action_plan_id AND ap.organization_id = ?
+           WHERE h.action_plan_id = ?
+        ORDER BY h.action_date DESC`,
     args: [organizationId, actionPlanId],
   });
   return res.rows.map((r) => ({
@@ -48,16 +50,21 @@ export interface HistoryInput {
   userName: string;
 }
 
-/** The INSERT statement for a history row, so the executor can batch it atomically. */
-export function insertHistoryStatement(organizationId: string, input: HistoryInput): InStatement {
+/**
+ * The INSERT statement for a history row, so the executor can batch it
+ * atomically. action_plan_history has no organization_id of its own (it is tied
+ * to its org-scoped plan) and records who and when as from_status/to_status and
+ * action_date. The `action` column is stamped with the target status.
+ */
+export function insertHistoryStatement(input: HistoryInput): InStatement {
   return {
     sql: `INSERT INTO action_plan_history
-            (history_id, organization_id, action_plan_id, previous_status, new_status, comments, user_id, user_name, created_at)
+            (history_id, action_plan_id, action, from_status, to_status, comments, user_id, user_name, action_date)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       crypto.randomUUID(),
-      organizationId,
       input.actionPlanId,
+      input.newStatus,
       input.previousStatus,
       input.newStatus,
       input.comments,

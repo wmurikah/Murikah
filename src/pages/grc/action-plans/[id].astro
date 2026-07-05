@@ -96,11 +96,11 @@ const riskClass = (r: string): string => {
   return 'grc-pill';
 };
 const statusClass = (st: string): string => {
-  if (st === 'OVERDUE') return 'grc-badge grc-badge--overdue';
-  if (st === 'IN_PROGRESS') return 'grc-badge grc-badge--progress';
-  if (st === 'IMPLEMENTED' || st === 'PENDING_VERIFICATION') return 'grc-badge grc-badge--review';
-  if (st === 'VERIFIED' || st === 'CLOSED') return 'grc-badge grc-badge--done';
-  if (st === 'REJECTED') return 'grc-badge grc-badge--rejected';
+  if (st === 'Overdue') return 'grc-badge grc-badge--overdue';
+  if (st === 'In Progress') return 'grc-badge grc-badge--progress';
+  if (st === 'Implemented' || st === 'Pending Verification') return 'grc-badge grc-badge--review';
+  if (st === 'Verified' || st === 'Closed') return 'grc-badge grc-badge--done';
+  if (st === 'Rejected') return 'grc-badge grc-badge--rejected';
   return 'grc-badge grc-badge--pending';
 };
 

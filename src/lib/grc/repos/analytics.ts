@@ -69,7 +69,7 @@ export async function getPortfolio(
       args: [organizationId],
     }),
     db.execute({
-      sql: `SELECT COALESCE(aff.name, 'Unassigned') AS affiliate, COUNT(*) AS n
+      sql: `SELECT COALESCE(aff.affiliate_name, 'Unassigned') AS affiliate, COUNT(*) AS n
               FROM work_papers wp
               LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                    AND aff.organization_id = wp.organization_id

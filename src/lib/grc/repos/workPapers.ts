@@ -75,10 +75,10 @@ const FIELDS: { col: string; key: keyof WorkPaperInput }[] = [
   { col: 'audit_period_from', key: 'auditPeriodFrom' },
   { col: 'audit_period_to', key: 'auditPeriodTo' },
   { col: 'control_objectives', key: 'controlObjectives' },
-  { col: 'classification', key: 'classification' },
+  { col: 'control_classification', key: 'classification' },
   { col: 'control_type', key: 'controlType' },
   { col: 'control_frequency', key: 'controlFrequency' },
-  { col: 'standards', key: 'standards' },
+  { col: 'control_standards', key: 'standards' },
   { col: 'risk_description', key: 'riskDescription' },
   { col: 'test_objective', key: 'testObjective' },
   { col: 'testing_steps', key: 'testingSteps' },
@@ -88,7 +88,7 @@ const FIELDS: { col: string; key: keyof WorkPaperInput }[] = [
   { col: 'risk_summary', key: 'riskSummary' },
   { col: 'recommendation', key: 'recommendation' },
   { col: 'management_response', key: 'managementResponse' },
-  { col: 'assigned_auditor', key: 'assignedAuditorId' },
+  { col: 'assigned_auditor_id', key: 'assignedAuditorId' },
 ];
 
 const s = (v: unknown): string | null => (v == null ? null : String(v));
@@ -160,7 +160,7 @@ export async function listWorkPapers(
     args.push(filters.affiliateCode);
   }
   if (filters.assignedAuditorId) {
-    where += ' AND wp.assigned_auditor = ?';
+    where += ' AND wp.assigned_auditor_id = ?';
     args.push(filters.assignedAuditorId);
   }
   if (filters.year) {
@@ -169,20 +169,20 @@ export async function listWorkPapers(
   }
 
   const res = await db.execute({
-    sql: `SELECT wp.work_paper_id AS id, wp.reference AS reference,
+    sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference,
                  wp.observation_title AS observation_title, wp.affiliate_code AS affiliate_code,
-                 aff.name AS affiliate_name, wp.audit_area_id AS audit_area_id,
-                 aa.name AS audit_area_name, wp.risk_rating AS risk_rating,
-                 wp.assigned_auditor AS assigned_auditor, u.full_name AS auditor_name,
+                 aff.affiliate_name AS affiliate_name, wp.audit_area_id AS audit_area_id,
+                 aa.area_name AS audit_area_name, wp.risk_rating AS risk_rating,
+                 wp.assigned_auditor_id AS assigned_auditor, u.full_name AS auditor_name,
                  wp.status AS status, wp.year AS year, wp.updated_at AS updated_at
             FROM work_papers wp
             ${ftsJoin}
             LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                  AND aff.organization_id = wp.organization_id
             LEFT JOIN audit_areas aa ON aa.audit_area_id = wp.audit_area_id
-            LEFT JOIN users u ON u.user_id = wp.assigned_auditor
+            LEFT JOIN users u ON u.user_id = wp.assigned_auditor_id
            WHERE ${where}
-        ORDER BY wp.updated_at DESC, wp.reference DESC
+        ORDER BY wp.updated_at DESC, wp.work_paper_ref DESC
            LIMIT 500`,
     args,
   });
@@ -217,14 +217,14 @@ export async function getWorkPaper(
   id: string,
 ): Promise<WorkPaperDetail | null> {
   const res = await db.execute({
-    sql: `SELECT wp.*, aff.name AS affiliate_name, aa.name AS audit_area_name,
-                 sa.name AS sub_area_name, u.full_name AS assigned_auditor_name
+    sql: `SELECT wp.*, aff.affiliate_name AS affiliate_name, aa.area_name AS audit_area_name,
+                 sa.sub_area_name AS sub_area_name, u.full_name AS assigned_auditor_name
             FROM work_papers wp
             LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                  AND aff.organization_id = wp.organization_id
             LEFT JOIN audit_areas aa ON aa.audit_area_id = wp.audit_area_id
             LEFT JOIN sub_areas sa ON sa.sub_area_id = wp.sub_area_id
-            LEFT JOIN users u ON u.user_id = wp.assigned_auditor
+            LEFT JOIN users u ON u.user_id = wp.assigned_auditor_id
            WHERE wp.work_paper_id = ? AND wp.organization_id = ?
            LIMIT 1`,
     args: [id, organizationId],
@@ -233,7 +233,7 @@ export async function getWorkPaper(
   if (!row) return null;
   const detail = { ...row } as Record<string, unknown>;
   detail.id = String(row.work_paper_id);
-  detail.reference = String(row.reference ?? row.work_paper_id);
+  detail.reference = String(row.work_paper_ref ?? row.work_paper_id);
   detail.status = String(row.status);
   detail.revisionCount = Number(row.revision_count ?? 0);
   return detail as WorkPaperDetail;
@@ -255,7 +255,7 @@ export async function createWorkPaper(
   const reference = buildReference(input.year);
   const now = new Date().toISOString();
 
-  const cols = ['work_paper_id', 'organization_id', 'reference', 'status', 'revision_count'];
+  const cols = ['work_paper_id', 'organization_id', 'work_paper_ref', 'status', 'revision_count'];
   const placeholders = ['?', '?', '?', '?', '0'];
   const args: InArgs = [id, organizationId, reference, draftStatus];
   for (const f of FIELDS) {
@@ -263,7 +263,7 @@ export async function createWorkPaper(
     placeholders.push('?');
     args.push(inputValue(input, f.key));
   }
-  cols.push('prepared_by', 'prepared_at', 'created_by', 'created_at', 'updated_at');
+  cols.push('prepared_by_id', 'prepared_date', 'created_by', 'created_at', 'updated_at');
   placeholders.push('?', '?', '?', '?', '?');
   args.push(userId, now, userId, now, now);
 

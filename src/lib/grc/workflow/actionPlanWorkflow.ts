@@ -118,7 +118,7 @@ export async function executeTransition(
       sql: `UPDATE action_plans SET ${sets.join(', ')} WHERE action_plan_id = ? AND organization_id = ?`,
       args,
     },
-    insertHistoryStatement(organizationId, {
+    insertHistoryStatement({
       actionPlanId: id,
       previousStatus: from,
       newStatus: toStatus,
@@ -180,7 +180,7 @@ export async function delegate(
   await setOwners(db, organizationId, id, [newOwner]);
   await db.batch(
     [
-      insertHistoryStatement(organizationId, {
+      insertHistoryStatement({
         actionPlanId: id,
         previousStatus: from,
         newStatus: from,
@@ -253,7 +253,7 @@ export async function decideDelegation(
   }
   await db.batch(
     [
-      insertHistoryStatement(organizationId, {
+      insertHistoryStatement({
         actionPlanId: id,
         previousStatus: from,
         newStatus: from,
