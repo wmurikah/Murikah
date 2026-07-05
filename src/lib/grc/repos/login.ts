@@ -20,6 +20,8 @@ export interface LoginUser {
 }
 
 export async function resolveUserByEmail(db: Client, email: string): Promise<LoginUser | null> {
+  // Look up by email, excluding soft-deleted rows. Column names match the
+  // hassaudit `users` table exactly; the role is `users.role_code` (no join).
   const res = await db.execute({
     sql: `SELECT u.user_id AS user_id, u.password_hash AS password_hash, u.status AS user_status,
                  u.full_name AS full_name, u.role_code AS role_code,
@@ -27,7 +29,7 @@ export async function resolveUserByEmail(db: Client, email: string): Promise<Log
                  o.organization_id AS organization_id, o.status AS org_status
             FROM users u
             JOIN organizations o ON o.organization_id = u.organization_id
-           WHERE u.email = ?
+           WHERE u.email = ? AND u.deleted_at IS NULL
            LIMIT 1`,
     args: [email],
   });
@@ -43,4 +45,12 @@ export async function resolveUserByEmail(db: Client, email: string): Promise<Log
     roleCode: String(row.role_code ?? ''),
     isPlatformOwner: Number(row.is_platform_owner ?? 0) === 1,
   };
+}
+
+/** Record a successful sign-in on users.last_login_at. Best-effort. */
+export async function touchLastLogin(db: Client, userId: string): Promise<void> {
+  await db.execute({
+    sql: `UPDATE users SET last_login_at = ? WHERE user_id = ?`,
+    args: [new Date().toISOString(), userId],
+  });
 }
