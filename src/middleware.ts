@@ -32,7 +32,13 @@ import {
 } from '@grc/repos/orgContext';
 import { getPermissionMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
 import { loadSubscription } from '@grc/repos/features';
-import { toGrcAppPath, isGrcPublicPath, isGrcApiPath } from '@grc/routing';
+import {
+  toGrcAppPath,
+  isGrcPublicPath,
+  isGrcApiPath,
+  isGrcChangePasswordExempt,
+  GRC_CHANGE_PASSWORD_PATH,
+} from '@grc/routing';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -117,6 +123,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       userName: identity.userName,
       userEmail: identity.userEmail,
       isPlatformOwner: identity.isPlatformOwner,
+      mustChangePassword: identity.mustChangePassword,
       switchable,
       matrix,
       perms,
@@ -126,6 +133,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // organisation's plan; an ordinary user is gated by their plan flags.
       hasFeature: (flag: string) => identity.isPlatformOwner || features[flag] === true,
     };
+
+    // A temporary password locks the account to the change-password flow: every
+    // route but the change-password screen, its endpoint and sign-out is sent
+    // there until the flag clears. locals.grc is still set, so the screen has
+    // the acting context.
+    if (identity.mustChangePassword && !isGrcChangePasswordExempt(appPath)) {
+      return isApi
+        ? jsonResponse({ error: 'password_change_required' }, 403)
+        : context.redirect(GRC_CHANGE_PASSWORD_PATH);
+    }
 
     return next();
   }
