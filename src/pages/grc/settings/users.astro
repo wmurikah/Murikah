@@ -1,0 +1,312 @@
+---
+export const prerender = false;
+
+/**
+ * Users Setup: manage the organisation's users. SUPER_ADMIN or platform owner
+ * only. Create (with an initial password and a forced change), edit name, role,
+ * affiliate and phone, reset the password, and activate or deactivate. A
+ * platform-owner account is shown but never edited here. Every mutation posts to
+ * /api/setup/users and returns with a saved or error banner.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcIcon from '@/components/grc/GrcIcon.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { listUsers, type ManagedUser } from '@grc/repos/usersAdmin';
+import { listRoleCodes } from '@grc/repos/permissionsAdmin';
+import { listAffiliates, type Affiliate } from '@grc/repos/affiliatesAdmin';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+
+const url = Astro.url;
+const saved = url.searchParams.get('saved');
+const error = url.searchParams.get('error');
+const editId = url.searchParams.get('edit');
+
+let users: ManagedUser[] = [];
+let roles: string[] = [];
+let affiliates: Affiliate[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    const db = await getDb(getGrcEnv());
+    [users, roles, affiliates] = await Promise.all([
+      listUsers(db, grc.organizationId),
+      listRoleCodes(db),
+      listAffiliates(db, grc.organizationId),
+    ]);
+  } catch (err) {
+    loadError = true;
+    console.error('[grc.setup.users] load failed', err);
+  }
+}
+const activeAffiliates = affiliates.filter((a) => a.isActive);
+const editing = editId
+  ? (users.find((u) => u.userId === editId && !u.isPlatformOwner) ?? null)
+  : null;
+const roleLabel = (code: string): string => code.replace(/_/g, ' ');
+---
+
+<GrcLayout title="Users">
+  <div class="grc-page-head">
+    <div>
+      <h1>Users</h1>
+      <p class="grc-lead">The people who can sign in to this organisation, and what they may do.</p>
+    </div>
+    <a class="grc-btn grc-btn--secondary" href="/settings">Back to settings</a>
+  </div>
+
+  {
+    saved && (
+      <p class="grc-notice" role="status">
+        {saved}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert">
+        {error}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Users are managed by administrators.
+      </p>
+    ) : loadError ? (
+      <p class="grc-error" role="alert">
+        Users could not be loaded. The problem has been logged; please try again.
+      </p>
+    ) : (
+      <>
+        {!editing && (
+          <details class="grc-editpanel" open={users.length <= 1}>
+            <summary>
+              <strong>Add a user</strong>
+            </summary>
+            <form method="post" action="/api/setup/users" class="grc-form grc-formgrid">
+              <input type="hidden" name="op" value="create" />
+              <div class="grc-field">
+                <label for="n-name">Full name</label>
+                <input id="n-name" name="full_name" class="grc-input" required maxlength="160" />
+              </div>
+              <div class="grc-field">
+                <label for="n-email">Email</label>
+                <input id="n-email" name="email" type="email" class="grc-input" required />
+              </div>
+              <div class="grc-field">
+                <label for="n-role">Role</label>
+                <select id="n-role" name="role_code" class="grc-select" required>
+                  {roles.map((r) => (
+                    <option value={r}>{roleLabel(r)}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="grc-field">
+                <label for="n-aff">Affiliate</label>
+                <select id="n-aff" name="affiliate_code" class="grc-select">
+                  <option value="">None</option>
+                  {activeAffiliates.map((a) => (
+                    <option value={a.code}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="grc-field">
+                <label for="n-pw">Initial password</label>
+                <input
+                  id="n-pw"
+                  name="password"
+                  type="text"
+                  class="grc-input"
+                  required
+                  minlength="8"
+                  autocomplete="off"
+                />
+                <p class="grc-field__hint">
+                  At least eight characters. The user must change it at first sign-in.
+                </p>
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Create user
+                </button>
+              </div>
+            </form>
+          </details>
+        )}
+
+        {editing && (
+          <div class="grc-editpanel" id={`u-${editing.userId}`}>
+            <h2>Edit {editing.fullName ?? editing.email}</h2>
+            <form method="post" action="/api/setup/users" class="grc-form grc-formgrid">
+              <input type="hidden" name="op" value="update" />
+              <input type="hidden" name="user_id" value={editing.userId} />
+              <div class="grc-field">
+                <label for="e-name">Full name</label>
+                <input
+                  id="e-name"
+                  name="full_name"
+                  class="grc-input"
+                  required
+                  maxlength="160"
+                  value={editing.fullName ?? ''}
+                />
+              </div>
+              <div class="grc-field">
+                <label for="e-role">Role</label>
+                <select id="e-role" name="role_code" class="grc-select" required>
+                  {roles.map((r) => (
+                    <option value={r} selected={r === editing.roleCode}>
+                      {roleLabel(r)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div class="grc-field">
+                <label for="e-aff">Affiliate</label>
+                <select id="e-aff" name="affiliate_code" class="grc-select">
+                  <option value="" selected={!editing.affiliateCode}>
+                    None
+                  </option>
+                  {activeAffiliates.map((a) => (
+                    <option value={a.code} selected={a.code === editing.affiliateCode}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div class="grc-field">
+                <label for="e-phone">Phone</label>
+                <input id="e-phone" name="phone" class="grc-input" maxlength="40" />
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Save changes
+                </button>
+                <a class="grc-btn grc-btn--secondary" href="/settings/users">
+                  Cancel
+                </a>
+              </div>
+            </form>
+
+            <form
+              method="post"
+              action="/api/setup/users"
+              class="grc-form grc-formgrid"
+              style="margin-top:1rem"
+            >
+              <input type="hidden" name="op" value="reset_password" />
+              <input type="hidden" name="user_id" value={editing.userId} />
+              <div class="grc-field">
+                <label for="e-pw">Reset password</label>
+                <input
+                  id="e-pw"
+                  name="password"
+                  type="text"
+                  class="grc-input"
+                  minlength="8"
+                  autocomplete="off"
+                />
+                <p class="grc-field__hint">
+                  Sets a new initial password; the user must change it at next sign-in.
+                </p>
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  <GrcIcon name="key" size={15} /> Reset password
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {users.length === 0 ? (
+          <p class="grc-empty">No users yet.</p>
+        ) : (
+          <div class="grc-tablewrap">
+            <table class="grc-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Affiliate</th>
+                  <th>Status</th>
+                  <th>
+                    <span class="grc-visually-hidden">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr class={u.isActive ? '' : 'is-inactive'}>
+                    <td>
+                      {u.fullName ?? '-'}
+                      {u.isPlatformOwner && (
+                        <span class="grc-chip" style="margin-left:.4rem">
+                          Platform owner
+                        </span>
+                      )}
+                    </td>
+                    <td>{u.email}</td>
+                    <td>{u.roleCode ? roleLabel(u.roleCode) : '-'}</td>
+                    <td>{u.affiliateCode ?? '-'}</td>
+                    <td>
+                      <span
+                        class={`grc-statuspill ${u.isActive ? 'grc-statuspill--on' : 'grc-statuspill--off'}`}
+                      >
+                        {u.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      {u.mustChangePassword && u.isActive && (
+                        <span class="grc-chip" style="margin-left:.4rem">
+                          Must change password
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {u.isPlatformOwner ? (
+                        <span class="grc-muted">Managed at platform level</span>
+                      ) : (
+                        <div class="grc-actions grc-actions--end">
+                          <a
+                            class="grc-iconbtn"
+                            href={`/settings/users?edit=${encodeURIComponent(u.userId)}#u-${u.userId}`}
+                            aria-label={`Edit ${u.fullName ?? u.email}`}
+                            title="Edit"
+                          >
+                            <GrcIcon name="pencil" size={16} />
+                          </a>
+                          {u.userId !== grc.userId && (
+                            <form method="post" action="/api/setup/users">
+                              <input
+                                type="hidden"
+                                name="op"
+                                value={u.isActive ? 'deactivate' : 'activate'}
+                              />
+                              <input type="hidden" name="user_id" value={u.userId} />
+                              <button
+                                type="submit"
+                                class="grc-btn grc-btn--secondary grc-btn--tiny"
+                              >
+                                {u.isActive ? 'Deactivate' : 'Activate'}
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</GrcLayout>

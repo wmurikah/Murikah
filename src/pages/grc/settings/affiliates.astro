@@ -1,0 +1,247 @@
+---
+export const prerender = false;
+
+/**
+ * Affiliates Setup: full CRUD for the organisation's business units. SUPER_ADMIN
+ * or platform owner only. Create, edit, activate, deactivate and delete (blocked
+ * while referenced). Every mutation posts to /api/setup/affiliates and returns
+ * here with a saved or error banner; the code is immutable once created.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcIcon from '@/components/grc/GrcIcon.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { listAffiliates, type Affiliate } from '@grc/repos/affiliatesAdmin';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = can(Astro.locals, 'read', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+const canWrite = can(Astro.locals, 'update', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+
+const url = Astro.url;
+const saved = url.searchParams.get('saved');
+const error = url.searchParams.get('error');
+const editCode = url.searchParams.get('edit');
+
+let affiliates: Affiliate[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    affiliates = await listAffiliates(await getDb(getGrcEnv()), grc.organizationId);
+  } catch (err) {
+    loadError = true;
+    console.error('[grc.setup.affiliates] load failed', err);
+  }
+}
+const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null) : null;
+---
+
+<GrcLayout title="Affiliates">
+  <div class="grc-page-head">
+    <div>
+      <h1>Affiliates</h1>
+      <p class="grc-lead">The business units a work paper or action plan can be scoped to.</p>
+    </div>
+    <a class="grc-btn grc-btn--secondary" href="/settings">Back to settings</a>
+  </div>
+
+  {
+    saved && (
+      <p class="grc-notice" role="status">
+        {saved}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert">
+        {error}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Affiliates are managed by administrators.
+      </p>
+    ) : loadError ? (
+      <p class="grc-error" role="alert">
+        Affiliates could not be loaded. The problem has been logged; please try again.
+      </p>
+    ) : (
+      <>
+        {canWrite && !editing && (
+          <details class="grc-editpanel" open={affiliates.length === 0}>
+            <summary>
+              <strong>Add an affiliate</strong>
+            </summary>
+            <form method="post" action="/api/setup/affiliates" class="grc-form grc-formgrid">
+              <input type="hidden" name="op" value="create" />
+              <div class="grc-field">
+                <label for="new-name">Name</label>
+                <input id="new-name" name="name" class="grc-input" required maxlength="120" />
+              </div>
+              <div class="grc-field">
+                <label for="new-code">Code (optional)</label>
+                <input
+                  id="new-code"
+                  name="code"
+                  class="grc-input"
+                  maxlength="32"
+                  placeholder="Derived from the name if left blank"
+                />
+              </div>
+              <div class="grc-field">
+                <label for="new-country">Country</label>
+                <input id="new-country" name="country" class="grc-input" maxlength="80" />
+              </div>
+              <div class="grc-field">
+                <label for="new-region">Region</label>
+                <input id="new-region" name="region" class="grc-input" maxlength="80" />
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Create affiliate
+                </button>
+              </div>
+            </form>
+          </details>
+        )}
+
+        {editing && canWrite && (
+          <div class="grc-editpanel" id={`af-${editing.code}`}>
+            <h2>Edit {editing.code}</h2>
+            <form method="post" action="/api/setup/affiliates" class="grc-form grc-formgrid">
+              <input type="hidden" name="op" value="update" />
+              <input type="hidden" name="code" value={editing.code} />
+              <div class="grc-field">
+                <label for="e-name">Name</label>
+                <input
+                  id="e-name"
+                  name="name"
+                  class="grc-input"
+                  required
+                  maxlength="120"
+                  value={editing.name}
+                />
+              </div>
+              <div class="grc-field">
+                <label for="e-country">Country</label>
+                <input
+                  id="e-country"
+                  name="country"
+                  class="grc-input"
+                  maxlength="80"
+                  value={editing.country ?? ''}
+                />
+              </div>
+              <div class="grc-field">
+                <label for="e-region">Region</label>
+                <input
+                  id="e-region"
+                  name="region"
+                  class="grc-input"
+                  maxlength="80"
+                  value={editing.region ?? ''}
+                />
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Save changes
+                </button>
+                <a class="grc-btn grc-btn--secondary" href="/settings/affiliates">
+                  Cancel
+                </a>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {affiliates.length === 0 ? (
+          <p class="grc-empty">No affiliates yet. Add the first one above.</p>
+        ) : (
+          <div class="grc-tablewrap">
+            <table class="grc-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Country</th>
+                  <th>Region</th>
+                  <th>Status</th>
+                  {canWrite && (
+                    <th>
+                      <span class="grc-visually-hidden">Actions</span>
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {affiliates.map((a) => (
+                  <tr class={a.isActive ? '' : 'is-inactive'}>
+                    <td>
+                      <code>{a.code}</code>
+                    </td>
+                    <td>{a.name}</td>
+                    <td>{a.country ?? '-'}</td>
+                    <td>{a.region ?? '-'}</td>
+                    <td>
+                      <span
+                        class={`grc-statuspill ${a.isActive ? 'grc-statuspill--on' : 'grc-statuspill--off'}`}
+                      >
+                        {a.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    {canWrite && (
+                      <td>
+                        <div class="grc-actions grc-actions--end">
+                          <a
+                            class="grc-iconbtn"
+                            href={`/settings/affiliates?edit=${encodeURIComponent(a.code)}#af-${a.code}`}
+                            aria-label={`Edit ${a.name}`}
+                            title="Edit"
+                          >
+                            <GrcIcon name="pencil" size={16} />
+                          </a>
+                          <form method="post" action="/api/setup/affiliates">
+                            <input
+                              type="hidden"
+                              name="op"
+                              value={a.isActive ? 'deactivate' : 'activate'}
+                            />
+                            <input type="hidden" name="code" value={a.code} />
+                            <button type="submit" class="grc-btn grc-btn--secondary grc-btn--tiny">
+                              {a.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </form>
+                          <form
+                            method="post"
+                            action="/api/setup/affiliates"
+                            onsubmit={`return confirm('Delete affiliate ${a.code}? This cannot be undone.');`}
+                          >
+                            <input type="hidden" name="op" value="delete" />
+                            <input type="hidden" name="code" value={a.code} />
+                            <button
+                              type="submit"
+                              class="grc-iconbtn grc-iconbtn--danger"
+                              aria-label={`Delete ${a.name}`}
+                              title="Delete"
+                            >
+                              <GrcIcon name="trash" size={16} />
+                            </button>
+                          </form>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</GrcLayout>

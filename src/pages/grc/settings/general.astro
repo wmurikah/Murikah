@@ -1,0 +1,98 @@
+---
+export const prerender = false;
+
+/**
+ * General organisation settings: the workflow deadlines and notification defaults
+ * held in the config table. SUPER_ADMIN or platform owner only. The form posts to
+ * /api/setup/settings and returns with a saved or error banner. The control-field
+ * vocabularies are on the Dropdowns page; the AI defaults on the AI settings page.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { getConfigValues, SETTINGS_FIELDS, SETTINGS_KEYS } from '@grc/repos/orgConfig';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = can(Astro.locals, 'read', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+const canWrite = can(Astro.locals, 'update', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+
+const url = Astro.url;
+const saved = url.searchParams.get('saved');
+const error = url.searchParams.get('error');
+
+let values = new Map<string, string>();
+let loadError = false;
+if (allowed) {
+  try {
+    values = await getConfigValues(await getDb(getGrcEnv()), grc.organizationId, SETTINGS_KEYS);
+  } catch (err) {
+    loadError = true;
+    console.error('[grc.setup.settings] load failed', err);
+  }
+}
+const inputType = (kind: string): 'number' | 'email' | 'text' =>
+  kind === 'number' ? 'number' : kind === 'email' ? 'email' : 'text';
+---
+
+<GrcLayout title="General settings">
+  <div class="grc-page-head">
+    <div>
+      <h1>General settings</h1>
+      <p class="grc-lead">Workflow deadlines and notification defaults for your organisation.</p>
+    </div>
+    <a class="grc-btn grc-btn--secondary" href="/settings">Back to settings</a>
+  </div>
+
+  {
+    saved && (
+      <p class="grc-notice" role="status">
+        {saved}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert">
+        {error}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Settings are managed by administrators.
+      </p>
+    ) : loadError ? (
+      <p class="grc-error" role="alert">
+        Settings could not be loaded. The problem has been logged; please try again.
+      </p>
+    ) : (
+      <form method="post" action="/api/setup/settings" class="grc-form grc-formgrid grc-card">
+        {SETTINGS_FIELDS.map((f) => (
+          <div class="grc-field">
+            <label for={`s-${f.key}`}>{f.label}</label>
+            <input
+              id={`s-${f.key}`}
+              name={f.key}
+              type={inputType(f.kind)}
+              class="grc-input"
+              value={values.get(f.key) ?? ''}
+              disabled={!canWrite}
+            />
+            {f.hint && <p class="grc-field__hint">{f.hint}</p>}
+          </div>
+        ))}
+        {canWrite && (
+          <div class="grc-actions grc-field--wide">
+            <button type="submit" class="grc-btn grc-btn--primary">
+              Save settings
+            </button>
+          </div>
+        )}
+      </form>
+    )
+  }
+</GrcLayout>
