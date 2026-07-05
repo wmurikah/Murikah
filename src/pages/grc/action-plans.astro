@@ -30,8 +30,9 @@ import { ACTION_PLAN_ENUM_TYPE, AP_STATUS } from '@grc/workflow/actionPlanAction
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'ACTION_PLANS.view');
-const canCreate = can(Astro.locals, 'ACTION_PLANS.create') || can(Astro.locals, 'AUDITEE.respond');
+const allowed = can(Astro.locals, 'read', 'ACTION_PLAN');
+const canCreate =
+  can(Astro.locals, 'create', 'ACTION_PLAN') || can(Astro.locals, 'create', 'AUDITEE_RESPONSE');
 const p = Astro.url.searchParams;
 const view = p.get('view') === 'kanban' ? 'kanban' : 'table';
 const filters: ActionPlanFilters = {
