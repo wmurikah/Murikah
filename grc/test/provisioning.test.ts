@@ -1,8 +1,8 @@
 /**
- * Per-customer provisioning. The statement builder is pure, and its only import
- * (dropdowns) is itself import-free, so node strips types and runs it directly.
- * These pin that a new organisation is seeded with its config, the reference
- * dropdowns, a first SUPER_ADMIN and a trial subscription, in one batch.
+ * Per-customer provisioning. The statement builder and the dropdown defaults are
+ * pure, import-free leaves, so node strips types and runs them directly. These
+ * pin that a new organisation is seeded with its config, the reference dropdowns,
+ * a first SUPER_ADMIN and a trial subscription, in one batch.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +11,7 @@ import {
   PHASE1_CONFIG_DEFAULTS,
   TRIAL_PLAN_CODE,
 } from '../../src/lib/grc/repos/provisioningDefaults.ts';
-import { DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from '../../src/lib/grc/repos/dropdowns.ts';
+import { DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from '../../src/lib/grc/repos/dropdownDefaults.ts';
 
 const ids = { organizationId: 'ORG1', adminUserId: 'USER1' };
 const input = {

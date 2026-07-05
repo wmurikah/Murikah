@@ -50,23 +50,34 @@ let dueThisWeek: DueItem[] = [];
 let recent: ActivityItem[] = [];
 let team: TeamPerformance | null = null;
 let labels = new Map<string, string>();
+let loadError = false;
 
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  const [statsR, reviewsR, dueR, recentR, wpLabels, apLabels] = await Promise.all([
-    getDashboardStats(db, grc.organizationId, scope),
-    getPendingReviews(db, grc.organizationId, scope),
-    getDueThisWeek(db, grc.organizationId, scope),
-    getRecentActivity(db, grc.organizationId, scope),
-    loadEnumLabels(db, 'WORK_PAPER_STATUS'),
-    loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
-  ]);
-  stats = statsR;
-  reviews = reviewsR;
-  dueThisWeek = dueR;
-  recent = recentR;
-  labels = new Map([...wpLabels, ...apLabels]);
-  if (canTeam) team = await getTeamPerformance(db, grc.organizationId);
+  // Wrap the aggregation so a query error is logged with the [grc.dashboard] tag
+  // and shown as a notice, never a blank 500.
+  try {
+    const db = await getDb(getGrcEnv());
+    const [statsR, reviewsR, dueR, recentR, wpLabels, apLabels] = await Promise.all([
+      getDashboardStats(db, grc.organizationId, scope),
+      getPendingReviews(db, grc.organizationId, scope),
+      getDueThisWeek(db, grc.organizationId, scope),
+      getRecentActivity(db, grc.organizationId, scope),
+      loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+    ]);
+    stats = statsR;
+    reviews = reviewsR;
+    dueThisWeek = dueR;
+    recent = recentR;
+    labels = new Map([...wpLabels, ...apLabels]);
+    if (canTeam) team = await getTeamPerformance(db, grc.organizationId);
+  } catch (err) {
+    loadError = true;
+    console.error(
+      '[grc.dashboard] data load failed',
+      err instanceof Error ? (err.stack ?? err.message) : String(err),
+    );
+  }
 }
 
 const reviewCount =
@@ -94,6 +105,10 @@ const riskClass = (r: string | null): string => {
     !allowed ? (
       <p class="grc-error" role="alert">
         You do not have access to the dashboard.
+      </p>
+    ) : loadError || !stats ? (
+      <p class="grc-error" role="alert">
+        The dashboard could not be loaded just now. The problem has been logged; please try again.
       </p>
     ) : (
       <>
