@@ -1,0 +1,97 @@
+---
+export const prerender = false;
+
+/**
+ * Provision a new customer organisation, platform owner only. Creating the org
+ * seeds its Phase 1 config, the reference dropdowns, a first SUPER_ADMIN and a
+ * trial subscription automatically, so every tenant starts configured.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner;
+const done = Astro.url.searchParams.get('done');
+const error = Astro.url.searchParams.get('error');
+---
+
+<GrcLayout title="Provision organisation">
+  <div class="grc-page-head">
+    <div>
+      <h1>Provision organisation</h1>
+      <p class="grc-lead">
+        Create a customer organisation, seeded with its defaults and a first administrator.
+      </p>
+    </div>
+    <a href="/settings" class="grc-btn grc-btn--secondary">Back to settings</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Provisioning is restricted to the platform owner.
+      </p>
+    ) : (
+      <>
+        {done && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            {decodeURIComponent(done)}
+          </p>
+        )}
+        {error && (
+          <p class="grc-error" role="alert" style="margin-bottom:1rem">
+            {decodeURIComponent(error)}
+          </p>
+        )}
+
+        <form method="post" action="/api/organizations" class="grc-panel grc-form">
+          <div class="grc-field">
+            <label for="organization_name">Organisation name</label>
+            <input
+              type="text"
+              id="organization_name"
+              name="organization_name"
+              class="grc-input"
+              required
+              maxlength="200"
+            />
+          </div>
+          <div class="grc-report-filters__grid">
+            <div class="grc-field">
+              <label for="admin_name">First administrator name</label>
+              <input type="text" id="admin_name" name="admin_name" class="grc-input" required />
+            </div>
+            <div class="grc-field">
+              <label for="admin_email">Administrator email</label>
+              <input type="email" id="admin_email" name="admin_email" class="grc-input" required />
+            </div>
+            <div class="grc-field">
+              <label for="admin_password">Temporary password</label>
+              <input
+                type="password"
+                id="admin_password"
+                name="admin_password"
+                class="grc-input"
+                required
+                minlength="8"
+                autocomplete="new-password"
+              />
+              <p class="grc-field__hint">
+                At least 8 characters. The administrator can change it later.
+              </p>
+            </div>
+          </div>
+          <p class="grc-field__hint">
+            The new organisation is seeded with its Phase 1 config, the reference dropdowns, this
+            SUPER_ADMIN and a trial subscription.
+          </p>
+          <div class="grc-actionbar" style="margin-top:0.75rem">
+            <button type="submit" class="grc-btn grc-btn--primary">
+              Provision organisation
+            </button>
+          </div>
+        </form>
+      </>
+    )
+  }
+</GrcLayout>
