@@ -13,22 +13,26 @@ export const prerender = false;
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcBarChart from '@/components/grc/GrcBarChart.astro';
 import GrcGroupedBar from '@/components/grc/GrcGroupedBar.astro';
+import GrcDonut from '@/components/grc/GrcDonut.astro';
+import GrcGroupedBars from '@/components/grc/GrcGroupedBars.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
-import { canSeeTeamPerformance } from '@grc/dashboard/roleNav';
+import { canSeeTeamPerformance, isAuditeeRole } from '@grc/dashboard/roleNav';
 import {
   getDashboardStats,
   getPendingReviews,
   getDueThisWeek,
   getRecentActivity,
   getTeamPerformance,
+  getDashboardCharts,
   type DashboardStats,
   type PendingReviews,
   type DueItem,
   type ActivityItem,
   type TeamPerformance,
+  type DashboardCharts,
   type DashboardScope,
 } from '@grc/repos/dashboard';
 
@@ -43,12 +47,20 @@ const scope: DashboardScope = {
   perms: grc.perms,
 };
 const canTeam = canSeeTeamPerformance(grc.roleCode);
+// The analytics charts are org-wide, so they show for roles with organisation
+// visibility (everyone but an auditee), matching the org-scoped list they drill
+// into. The year defaults to the seeded 2025; the filter re-scopes the charts.
+const canCharts = grc.isPlatformOwner || !isAuditeeRole(grc.roleCode);
+const YEAR_DEFAULT = 2025;
+const yearParam = Astro.url.searchParams.get('year');
+const chartYear = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : YEAR_DEFAULT;
 
 let stats: DashboardStats | null = null;
 let reviews: PendingReviews = { toReview: [], toVerify: [], responsesToReview: [] };
 let dueThisWeek: DueItem[] = [];
 let recent: ActivityItem[] = [];
 let team: TeamPerformance | null = null;
+let charts: DashboardCharts | null = null;
 let labels = new Map<string, string>();
 let loadError = false;
 
@@ -70,7 +82,12 @@ if (allowed) {
     dueThisWeek = dueR;
     recent = recentR;
     labels = new Map([...wpLabels, ...apLabels]);
-    if (canTeam) team = await getTeamPerformance(db, grc.organizationId);
+    const [teamR, chartsR] = await Promise.all([
+      canTeam ? getTeamPerformance(db, grc.organizationId) : Promise.resolve(null),
+      canCharts ? getDashboardCharts(db, grc.organizationId, chartYear) : Promise.resolve(null),
+    ]);
+    team = teamR;
+    charts = chartsR;
   } catch (err) {
     loadError = true;
     console.error(
@@ -175,6 +192,76 @@ const riskClass = (r: string | null): string => {
               {dueThisWeek.length > 0 && <li>{dueThisWeek.length} action plans due this week</li>}
             </ul>
           </div>
+        )}
+
+        {canCharts && charts && (
+          <section aria-labelledby="insights-head">
+            <div class="grc-charts-head">
+              <h2 id="insights-head">Insights</h2>
+              <form
+                method="get"
+                class="grc-yearform"
+                role="search"
+                aria-label="Filter charts by year"
+              >
+                <div class="grc-field">
+                  <label for="chart-year">Year</label>
+                  <input
+                    type="number"
+                    id="chart-year"
+                    name="year"
+                    class="grc-input"
+                    value={chartYear}
+                    min="2000"
+                    max="2100"
+                  />
+                </div>
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Apply
+                </button>
+              </form>
+            </div>
+            <div class="grc-charts">
+              <div class="grc-chartcard">
+                <GrcDonut
+                  title="Total issues per audit area"
+                  description={`Work papers raised in ${chartYear}, by audit area.`}
+                  data={charts.issuesPerArea}
+                  variant="donut"
+                  valueHeading="Work papers"
+                  emptyText={`No work papers for ${chartYear}.`}
+                />
+              </div>
+              <div class="grc-chartcard">
+                <GrcGroupedBars
+                  title="Issues by risk rating"
+                  description={`Work papers per audit area, split by risk rating, for ${chartYear}.`}
+                  data={charts.riskPerArea}
+                  valueHeading="Work papers"
+                  emptyText={`No work papers for ${chartYear}.`}
+                />
+              </div>
+              <div class="grc-chartcard">
+                <GrcDonut
+                  title="Not implemented, high risk"
+                  description={`Action plans not yet implemented on high and extreme risk findings, by area, for ${chartYear}.`}
+                  data={charts.notImplementedHighRisk}
+                  variant="pie"
+                  valueHeading="Action plans"
+                  emptyText={`None outstanding for ${chartYear}.`}
+                />
+              </div>
+              <div class="grc-chartcard">
+                <GrcGroupedBars
+                  title="Action plan status per area"
+                  description={`Action plans per audit area, by status, for ${chartYear}.`}
+                  data={charts.actionPlanStatusPerArea}
+                  valueHeading="Action plans"
+                  emptyText={`No action plans for ${chartYear}.`}
+                />
+              </div>
+            </div>
+          </section>
         )}
 
         <div class="grc-dash-grid">

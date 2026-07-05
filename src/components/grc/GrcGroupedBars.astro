@@ -1,0 +1,225 @@
+---
+/**
+ * An accessible multi-series grouped bar chart, rendered server-side as inline
+ * SVG (no client runtime), themed to the Murikah GRC palette. The x-axis is the
+ * audit-area codes and the y-axis a count, with subtle gridlines and a value
+ * scale. Each area is a group of coloured bars, one per series (risk rating or
+ * action-plan status), the colour carrying the series meaning. The whole area
+ * column drills through to that area's filtered list (pointer cursor), and each
+ * bar carries a tooltip with its exact figure. A visually-hidden table carries
+ * the same data for assistive tech.
+ */
+import type { GroupedBarData } from '@grc/repos/dashboard';
+
+interface Props {
+  title: string;
+  description?: string;
+  data: GroupedBarData;
+  valueHeading?: string;
+  emptyText?: string;
+}
+const {
+  title,
+  description,
+  data,
+  valueHeading = 'Count',
+  emptyText = 'No data yet.',
+} = Astro.props;
+
+const { series, rows } = data;
+const maxVal = rows.reduce((m, r) => Math.max(m, ...r.values), 0);
+const hasData = rows.length > 0 && maxVal > 0;
+
+// A tidy integer y-scale: a "nice" step so the gridline labels are whole counts.
+const TICKS = 4;
+function niceScale(peak: number, ticks: number): { max: number; step: number } {
+  const raw = peak / ticks || 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / pow;
+  const niceN = n <= 1 ? 1 : n <= 2 ? 2 : n <= 3 ? 3 : n <= 5 ? 5 : 10;
+  const step = Math.max(1, Math.round(niceN * pow));
+  return { max: step * ticks, step };
+}
+const { max: yMax, step } = niceScale(maxVal, TICKS);
+const yTicks = Array.from({ length: TICKS + 1 }, (_, i) => step * i);
+
+// Geometry. The viewBox width grows with the number of areas so bars keep a
+// sensible width; the svg scales to the card and scrolls if very wide.
+const seriesCount = Math.max(1, series.length);
+const padL = 26;
+const padR = 10;
+const padT = 12;
+const padB = 30;
+const groupSlot = Math.max(34, 15 * seriesCount + 14);
+const plotW = rows.length * groupSlot;
+const W = padL + plotW + padR;
+const H = 180;
+const plotTop = padT;
+const plotBottom = H - padB;
+const plotH = plotBottom - plotTop;
+const groupInnerPad = 9;
+const barGap = 3;
+const barW = Math.max(4, (groupSlot - groupInnerPad - barGap * (seriesCount - 1)) / seriesCount);
+const yOf = (v: number): number => plotBottom - (yMax > 0 ? (v / yMax) * plotH : 0);
+const f = (n: number): string => n.toFixed(2);
+const shortTick = (t: string): string => (t.length > 6 ? `${t.slice(0, 5)}…` : t);
+
+interface Bar {
+  x: number;
+  y: number;
+  h: number;
+  tone: string;
+  label: string;
+  value: number;
+}
+interface Group {
+  x0: number;
+  cx: number;
+  label: string;
+  title: string;
+  href?: string;
+  bars: Bar[];
+  summary: string;
+}
+const groups: Group[] = rows.map((r, i) => {
+  const x0 = padL + i * groupSlot;
+  const inner = x0 + groupInnerPad / 2;
+  const bars: Bar[] = series.map((sName, j) => {
+    const value = r.values[j] ?? 0;
+    const h = value > 0 ? plotBottom - yOf(value) : 0;
+    return {
+      x: inner + j * (barW + barGap),
+      y: yOf(value),
+      h,
+      tone: sName.tone,
+      label: sName.label,
+      value,
+    };
+  });
+  return {
+    x0,
+    cx: x0 + groupSlot / 2,
+    label: r.label,
+    title: r.title,
+    href: r.href,
+    bars,
+    summary: `${r.title}. ${series.map((sn, j) => `${sn.label} ${r.values[j] ?? 0}`).join(', ')}.`,
+  };
+});
+const ariaSummary = `${title}. ${valueHeading} by audit area for ${series
+  .map((sName) => sName.label)
+  .join(', ')}.`;
+---
+
+<figure class="grc-chart grc-chart--bars">
+  <figcaption class="grc-chart__cap">
+    <h3 class="grc-chart__title">{title}</h3>
+    {description && <p class="grc-chart__desc">{description}</p>}
+  </figcaption>
+  {
+    !hasData ? (
+      <p class="grc-chart__empty">{emptyText}</p>
+    ) : (
+      <div class="grc-bars">
+        <ul class="grc-bars__legend">
+          {series.map((sName) => (
+            <li class="grc-bars__key">
+              <span class={`grc-bars__swatch grc-bars__swatch--${sName.tone}`} aria-hidden="true" />
+              {sName.label}
+            </li>
+          ))}
+        </ul>
+
+        <div class="grc-bars__scroll">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            class="grc-bars__svg"
+            style={`min-width:${Math.max(W, 220)}px`}
+            role="img"
+            aria-label={ariaSummary}
+          >
+            {/* gridlines and y-axis labels */}
+            {yTicks.map((t) => (
+              <>
+                <line
+                  x1={padL}
+                  x2={W - padR}
+                  y1={f(yOf(t))}
+                  y2={f(yOf(t))}
+                  class={t === 0 ? 'grc-bars__axis' : 'grc-bars__grid'}
+                />
+                <text x={padL - 5} y={f(yOf(t) + 3)} class="grc-bars__ylabel" text-anchor="end">
+                  {t}
+                </text>
+              </>
+            ))}
+
+            {/* one drill-through link per area group; each bar has its own tooltip */}
+            {groups.map((g) => {
+              const cols = (
+                <>
+                  <rect
+                    x={f(g.x0)}
+                    y={plotTop}
+                    width={f(groupSlot)}
+                    height={plotH}
+                    class="grc-bars__hit"
+                  />
+                  {g.bars.map((b) =>
+                    b.h > 0 ? (
+                      <rect
+                        x={f(b.x)}
+                        y={f(b.y)}
+                        width={f(barW)}
+                        height={f(b.h)}
+                        rx="1.5"
+                        class={`grc-bars__bar grc-bars__bar--${b.tone}`}
+                      >
+                        <title>{`${g.label} · ${b.label}: ${b.value}`}</title>
+                      </rect>
+                    ) : null,
+                  )}
+                  <text x={f(g.cx)} y={H - padB + 14} class="grc-bars__xlabel" text-anchor="middle">
+                    {shortTick(g.label)}
+                  </text>
+                </>
+              );
+              return g.href ? (
+                <a href={g.href} class="grc-bars__group" aria-label={g.summary}>
+                  {cols}
+                </a>
+              ) : (
+                <g class="grc-bars__group" role="group" aria-label={g.summary}>
+                  {cols}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Accessible data equivalent for the bars. */}
+        <table class="grc-vh">
+          <caption>{title}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Audit area</th>
+              {series.map((sName) => (
+                <th scope="col">{sName.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <th scope="row">{r.title}</th>
+                {r.values.map((v) => (
+                  <td>{v}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</figure>
