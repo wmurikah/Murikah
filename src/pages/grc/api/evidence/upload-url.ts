@@ -1,0 +1,72 @@
+export const prerender = false;
+
+/**
+ * Issue a presigned PUT URL for a new evidence object, scoped to the exact tenant
+ * key, only after checking the user may upload to the target work paper or action
+ * plan. The large bytes go straight from the client to R2; the worker records
+ * nothing yet. The client keeps the returned file_id and calls /complete once the
+ * PUT succeeds. Gate: upload rights on the target entity (auditor edit permission,
+ * platform owner, or an auditee on their own finding or plan).
+ */
+import type { APIRoute } from 'astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { storageConfigured, presignUpload } from '@grc/storage';
+import { buildObjectKey, keyBelongsToOrg } from '@grc/storage/keys';
+import { canUploadEvidence, type EvidenceActor } from '@grc/storage/access';
+
+const ENTITY_TYPES = new Set(['work_paper', 'action_plan']);
+const MAX_EVIDENCE_BYTES = 100 * 1024 * 1024;
+const UPLOAD_TTL_SECONDS = 300;
+
+const json = (body: unknown, status: number): Response =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+export const POST: APIRoute = async ({ request, locals }) => {
+  const grc = locals.grc;
+  if (!grc) return json({ error: 'unauthorised' }, 401);
+  if (!storageConfigured()) return json({ error: 'Evidence storage is not configured.' }, 503);
+
+  const form = await request.formData();
+  const entityType = String(form.get('entity_type') ?? '').trim();
+  const entityId = String(form.get('entity_id') ?? '').trim();
+  const fileName = String(form.get('file_name') ?? '').trim();
+  const contentType = String(form.get('content_type') ?? 'application/octet-stream').trim();
+  const sizeBytes = Number(form.get('size_bytes') ?? 0);
+
+  if (!ENTITY_TYPES.has(entityType) || !entityId || !fileName) {
+    return json({ error: 'invalid request' }, 400);
+  }
+  if (Number.isFinite(sizeBytes) && sizeBytes > MAX_EVIDENCE_BYTES) {
+    return json({ error: 'The file exceeds the maximum evidence size.' }, 413);
+  }
+
+  const db = await getDb(getGrcEnv());
+  const actor: EvidenceActor = {
+    userId: grc.userId,
+    organizationId: grc.organizationId,
+    isPlatformOwner: grc.isPlatformOwner,
+    perms: grc.perms,
+  };
+  if (!(await canUploadEvidence(db, actor, entityType, entityId))) {
+    return json({ error: 'forbidden' }, 403);
+  }
+
+  const fileId = crypto.randomUUID();
+  const key = buildObjectKey({
+    organizationId: grc.organizationId,
+    entity: entityType,
+    entityId,
+    fileId,
+    fileName,
+  });
+  // Defensive: a key must always sit inside the acting tenant's prefix.
+  if (!keyBelongsToOrg(key, grc.organizationId)) return json({ error: 'forbidden' }, 403);
+
+  try {
+    const url = await presignUpload(key, UPLOAD_TTL_SECONDS);
+    return json({ fileId, backend: 'r2', method: 'PUT', url, contentType }, 200);
+  } catch {
+    return json({ error: 'Could not prepare the upload.' }, 502);
+  }
+};

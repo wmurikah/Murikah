@@ -810,6 +810,40 @@
   color: var(--grc-muted);
 }
 
+/* Evidence list: each attachment is a download link with its backend and a
+   governed deletion request; the upload control sits below. */
+.grc-evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--grc-s2);
+}
+.grc-evidence__item {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s3);
+  padding: var(--grc-s2) var(--grc-s3);
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-surface);
+}
+.grc-evidence__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.grc-evidence__del {
+  margin: 0;
+}
+.grc-evidence__upload {
+  margin-top: var(--grc-s3);
+  padding-top: var(--grc-s3);
+  border-top: 1px solid var(--grc-line);
+}
+
 /* Status and risk pills, colour plus label (never colour alone). */
 .grc-pill {
   display: inline-block;
