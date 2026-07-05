@@ -1,0 +1,404 @@
+---
+export const prerender = false;
+
+/**
+ * Audit universe Setup: manage audit areas and, nested under each, the sub-areas
+ * that carry the template fields the work-paper form auto-populates. SUPER_ADMIN
+ * or platform owner only. Full CRUD with guarded deletion (an area with sub-areas
+ * or referencing work papers, and a referenced sub-area, deactivate instead).
+ * Every mutation posts to /api/setup/audit-universe.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcIcon from '@/components/grc/GrcIcon.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import {
+  listAuditAreas,
+  listSubAreas,
+  type AuditArea,
+  type SubArea,
+} from '@grc/repos/auditUniverse';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = can(Astro.locals, 'read', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+
+const url = Astro.url;
+const saved = url.searchParams.get('saved');
+const error = url.searchParams.get('error');
+const editArea = url.searchParams.get('edit_area');
+const editSub = url.searchParams.get('edit_sub');
+
+let areas: AuditArea[] = [];
+const subs = new Map<string, SubArea[]>();
+let loadError = false;
+if (allowed) {
+  try {
+    const db = await getDb(getGrcEnv());
+    areas = await listAuditAreas(db, grc.organizationId);
+    const lists = await Promise.all(areas.map((a) => listSubAreas(db, grc.organizationId, a.id)));
+    areas.forEach((a, i) => subs.set(a.id, lists[i]));
+  } catch (err) {
+    loadError = true;
+    console.error('[grc.setup.audit-universe] load failed', err);
+  }
+}
+const areaBeingEdited = editArea ? (areas.find((a) => a.id === editArea) ?? null) : null;
+let subBeingEdited: SubArea | null = null;
+if (editSub) {
+  for (const list of subs.values()) {
+    const found = list.find((s) => s.id === editSub);
+    if (found) {
+      subBeingEdited = found;
+      break;
+    }
+  }
+}
+---
+
+<GrcLayout title="Audit universe">
+  <div class="grc-page-head">
+    <div>
+      <h1>Audit universe</h1>
+      <p class="grc-lead">Audit areas and their sub-areas, which seed the work-paper templates.</p>
+    </div>
+    <a class="grc-btn grc-btn--secondary" href="/settings">Back to settings</a>
+  </div>
+
+  {
+    saved && (
+      <p class="grc-notice" role="status">
+        {saved}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert">
+        {error}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        The audit universe is managed by administrators.
+      </p>
+    ) : loadError ? (
+      <p class="grc-error" role="alert">
+        The audit universe could not be loaded. The problem has been logged; please try again.
+      </p>
+    ) : (
+      <>
+        {areaBeingEdited ? (
+          <div class="grc-editpanel">
+            <h2>Edit area {areaBeingEdited.name}</h2>
+            <form method="post" action="/api/setup/audit-universe" class="grc-form grc-formgrid">
+              <input type="hidden" name="op" value="area_update" />
+              <input type="hidden" name="area_id" value={areaBeingEdited.id} />
+              <div class="grc-field">
+                <label for="ea-name">Name</label>
+                <input
+                  id="ea-name"
+                  name="name"
+                  class="grc-input"
+                  required
+                  maxlength="160"
+                  value={areaBeingEdited.name}
+                />
+              </div>
+              <div class="grc-field">
+                <label for="ea-code">Code</label>
+                <input
+                  id="ea-code"
+                  name="code"
+                  class="grc-input"
+                  maxlength="32"
+                  value={areaBeingEdited.code ?? ''}
+                />
+              </div>
+              <div class="grc-field grc-field--wide">
+                <label for="ea-desc">Description</label>
+                <textarea id="ea-desc" name="description" class="grc-input" rows="2">
+                  {areaBeingEdited.description ?? ''}
+                </textarea>
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Save area
+                </button>
+                <a class="grc-btn grc-btn--secondary" href="/settings/audit-universe">
+                  Cancel
+                </a>
+              </div>
+            </form>
+          </div>
+        ) : subBeingEdited ? (
+          <div class="grc-editpanel">
+            <h2>Edit sub-area {subBeingEdited.name}</h2>
+            <form method="post" action="/api/setup/audit-universe" class="grc-form grc-formgrid">
+              <input type="hidden" name="op" value="sub_update" />
+              <input type="hidden" name="sub_id" value={subBeingEdited.id} />
+              <div class="grc-field grc-field--wide">
+                <label for="es-name">Name</label>
+                <input
+                  id="es-name"
+                  name="name"
+                  class="grc-input"
+                  required
+                  maxlength="160"
+                  value={subBeingEdited.name}
+                />
+              </div>
+              <div class="grc-field grc-field--wide">
+                <label for="es-obj">Control objectives</label>
+                <textarea id="es-obj" name="control_objectives" class="grc-input" rows="2">
+                  {subBeingEdited.controlObjectives ?? ''}
+                </textarea>
+              </div>
+              <div class="grc-field grc-field--wide">
+                <label for="es-risk">Risk description</label>
+                <textarea id="es-risk" name="risk_description" class="grc-input" rows="2">
+                  {subBeingEdited.riskDescription ?? ''}
+                </textarea>
+              </div>
+              <div class="grc-field grc-field--wide">
+                <label for="es-test">Test objective</label>
+                <textarea id="es-test" name="test_objective" class="grc-input" rows="2">
+                  {subBeingEdited.testObjective ?? ''}
+                </textarea>
+              </div>
+              <div class="grc-field grc-field--wide">
+                <label for="es-steps">Testing steps</label>
+                <textarea id="es-steps" name="testing_steps" class="grc-input" rows="3">
+                  {subBeingEdited.testingSteps ?? ''}
+                </textarea>
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Save sub-area
+                </button>
+                <a class="grc-btn grc-btn--secondary" href="/settings/audit-universe">
+                  Cancel
+                </a>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <details class="grc-editpanel" open={areas.length === 0}>
+            <summary>
+              <strong>Add an audit area</strong>
+            </summary>
+            <form method="post" action="/api/setup/audit-universe" class="grc-form grc-formgrid">
+              <input type="hidden" name="op" value="area_create" />
+              <div class="grc-field">
+                <label for="na-name">Name</label>
+                <input id="na-name" name="name" class="grc-input" required maxlength="160" />
+              </div>
+              <div class="grc-field">
+                <label for="na-code">Code (optional)</label>
+                <input id="na-code" name="code" class="grc-input" maxlength="32" />
+              </div>
+              <div class="grc-field grc-field--wide">
+                <label for="na-desc">Description</label>
+                <textarea id="na-desc" name="description" class="grc-input" rows="2" />
+              </div>
+              <div class="grc-actions">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Create area
+                </button>
+              </div>
+            </form>
+          </details>
+        )}
+
+        {areas.length === 0 ? (
+          <p class="grc-empty">No audit areas yet. Add the first one above.</p>
+        ) : (
+          areas.map((area) => (
+            <details class="grc-setup-section grc-card" open>
+              <summary class="grc-setup-summary">
+                <span>
+                  <strong>{area.name}</strong>
+                  {area.code && <code style="margin-left:.5rem">{area.code}</code>}
+                  <span
+                    class={`grc-statuspill ${area.isActive ? 'grc-statuspill--on' : 'grc-statuspill--off'}`}
+                    style="margin-left:.6rem"
+                  >
+                    {area.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  <span class="grc-lead" style="margin-left:.6rem">
+                    {area.subAreaCount} sub-areas
+                  </span>
+                </span>
+                <span class="grc-actions">
+                  <a
+                    class="grc-iconbtn"
+                    href={`/settings/audit-universe?edit_area=${area.id}`}
+                    aria-label={`Edit ${area.name}`}
+                    title="Edit area"
+                  >
+                    <GrcIcon name="pencil" size={16} />
+                  </a>
+                  <form method="post" action="/api/setup/audit-universe">
+                    <input
+                      type="hidden"
+                      name="op"
+                      value={area.isActive ? 'area_deactivate' : 'area_activate'}
+                    />
+                    <input type="hidden" name="area_id" value={area.id} />
+                    <button type="submit" class="grc-btn grc-btn--secondary grc-btn--tiny">
+                      {area.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </form>
+                  <form
+                    method="post"
+                    action="/api/setup/audit-universe"
+                    onsubmit={`return confirm('Delete audit area ${area.name}?');`}
+                  >
+                    <input type="hidden" name="op" value="area_delete" />
+                    <input type="hidden" name="area_id" value={area.id} />
+                    <button
+                      type="submit"
+                      class="grc-iconbtn grc-iconbtn--danger"
+                      aria-label={`Delete ${area.name}`}
+                      title="Delete area"
+                    >
+                      <GrcIcon name="trash" size={16} />
+                    </button>
+                  </form>
+                </span>
+              </summary>
+
+              <div class="grc-setup-body">
+                {(subs.get(area.id) ?? []).length === 0 ? (
+                  <p class="grc-empty">No sub-areas yet.</p>
+                ) : (
+                  <ul class="grc-plainlist">
+                    {(subs.get(area.id) ?? []).map((sub) => (
+                      <li class={`grc-subarea ${sub.isActive ? '' : 'is-inactive'}`}>
+                        <span>
+                          {sub.name}
+                          <span
+                            class={`grc-statuspill ${sub.isActive ? 'grc-statuspill--on' : 'grc-statuspill--off'}`}
+                            style="margin-left:.5rem"
+                          >
+                            {sub.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </span>
+                        <span class="grc-actions">
+                          <a
+                            class="grc-iconbtn"
+                            href={`/settings/audit-universe?edit_sub=${sub.id}`}
+                            aria-label={`Edit ${sub.name}`}
+                            title="Edit sub-area"
+                          >
+                            <GrcIcon name="pencil" size={16} />
+                          </a>
+                          <form method="post" action="/api/setup/audit-universe">
+                            <input
+                              type="hidden"
+                              name="op"
+                              value={sub.isActive ? 'sub_deactivate' : 'sub_activate'}
+                            />
+                            <input type="hidden" name="sub_id" value={sub.id} />
+                            <button type="submit" class="grc-btn grc-btn--secondary grc-btn--tiny">
+                              {sub.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </form>
+                          <form
+                            method="post"
+                            action="/api/setup/audit-universe"
+                            onsubmit={`return confirm('Delete sub-area ${sub.name}?');`}
+                          >
+                            <input type="hidden" name="op" value="sub_delete" />
+                            <input type="hidden" name="sub_id" value={sub.id} />
+                            <button
+                              type="submit"
+                              class="grc-iconbtn grc-iconbtn--danger"
+                              aria-label={`Delete ${sub.name}`}
+                              title="Delete sub-area"
+                            >
+                              <GrcIcon name="trash" size={16} />
+                            </button>
+                          </form>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <details class="grc-editpanel">
+                  <summary>
+                    <strong>Add a sub-area</strong>
+                  </summary>
+                  <form
+                    method="post"
+                    action="/api/setup/audit-universe"
+                    class="grc-form grc-formgrid"
+                  >
+                    <input type="hidden" name="op" value="sub_create" />
+                    <input type="hidden" name="area_id" value={area.id} />
+                    <div class="grc-field grc-field--wide">
+                      <label for={`ns-name-${area.id}`}>Name</label>
+                      <input
+                        id={`ns-name-${area.id}`}
+                        name="name"
+                        class="grc-input"
+                        required
+                        maxlength="160"
+                      />
+                    </div>
+                    <div class="grc-field grc-field--wide">
+                      <label for={`ns-obj-${area.id}`}>Control objectives</label>
+                      <textarea
+                        id={`ns-obj-${area.id}`}
+                        name="control_objectives"
+                        class="grc-input"
+                        rows="2"
+                      />
+                    </div>
+                    <div class="grc-field grc-field--wide">
+                      <label for={`ns-risk-${area.id}`}>Risk description</label>
+                      <textarea
+                        id={`ns-risk-${area.id}`}
+                        name="risk_description"
+                        class="grc-input"
+                        rows="2"
+                      />
+                    </div>
+                    <div class="grc-field grc-field--wide">
+                      <label for={`ns-test-${area.id}`}>Test objective</label>
+                      <textarea
+                        id={`ns-test-${area.id}`}
+                        name="test_objective"
+                        class="grc-input"
+                        rows="2"
+                      />
+                    </div>
+                    <div class="grc-field grc-field--wide">
+                      <label for={`ns-steps-${area.id}`}>Testing steps</label>
+                      <textarea
+                        id={`ns-steps-${area.id}`}
+                        name="testing_steps"
+                        class="grc-input"
+                        rows="3"
+                      />
+                    </div>
+                    <div class="grc-actions">
+                      <button type="submit" class="grc-btn grc-btn--primary">
+                        Add sub-area
+                      </button>
+                    </div>
+                  </form>
+                </details>
+              </div>
+            </details>
+          ))
+        )}
+      </>
+    )
+  }
+</GrcLayout>

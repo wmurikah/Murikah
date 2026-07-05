@@ -23,6 +23,7 @@ import { getActionPlan } from '@grc/repos/actionPlans';
 import { isOwner, parseOwnerIds, setOwners, type OwnerRef } from '@grc/repos/actionPlanOwners';
 import { insertHistoryStatement } from '@grc/repos/actionPlanHistory';
 import { enqueueNotification } from '@grc/repos/notify';
+import { buildAuditStatement } from '@grc/repos/audit';
 
 export interface Actor {
   userId: string;
@@ -318,9 +319,11 @@ function auditStatement(
   action: string,
   details: string,
 ): InStatement {
-  return {
-    sql: `INSERT INTO audit_log (organization_id, user_id, action, details, created_at)
-          VALUES (?, ?, ?, ?, ?)`,
-    args: [organizationId, userId, action, details, new Date().toISOString()],
-  };
+  return buildAuditStatement({
+    organizationId,
+    userId,
+    action,
+    entityType: 'action_plan',
+    details,
+  });
 }

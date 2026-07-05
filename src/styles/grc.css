@@ -1837,3 +1837,187 @@ a.grc-notifrow__title:hover {
   padding: 0 0.55rem;
   font-size: var(--grc-fs-caption);
 }
+
+/* ---- Affordances (Build Prompt 19) -----------------------------------------
+   Users must be able to tell what is interactive: destructive actions read as
+   destructive, icon buttons and rows show a pointer and a hover state, drag
+   handles show a grab cursor, and disabled controls look disabled. */
+
+:root {
+  --grc-danger: #c0392b;
+  --grc-danger-deep: #9c2b20;
+  --grc-danger-tint: rgba(192, 57, 43, 0.1);
+}
+
+.grc-btn--danger {
+  background: var(--grc-danger);
+  color: #fff;
+}
+.grc-btn--danger:hover {
+  background: var(--grc-danger-deep);
+}
+
+/* Icon-only actions (edit pencil, delete bin, drag handle). */
+.grc-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--grc-radius-sm);
+  background: transparent;
+  color: var(--grc-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.grc-iconbtn:hover {
+  background: var(--grc-hover, rgba(11, 23, 51, 0.06));
+  color: var(--grc-ink);
+  border-color: var(--grc-line);
+}
+.grc-iconbtn:focus-visible {
+  outline: 2px solid var(--grc-navy-2);
+  outline-offset: 1px;
+}
+.grc-iconbtn--danger:hover {
+  background: var(--grc-danger-tint);
+  color: var(--grc-danger-deep);
+  border-color: var(--grc-danger);
+}
+.grc-iconbtn[disabled],
+.grc-iconbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A cluster of row actions, right-aligned. */
+.grc-actions {
+  display: inline-flex;
+  gap: var(--grc-s2);
+  align-items: center;
+}
+.grc-actions--end {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+/* A whole row that drills through: pointer and a hover wash. */
+.grc-table tbody tr[data-href] {
+  cursor: pointer;
+}
+.grc-table tbody tr[data-href]:hover {
+  background: var(--grc-hover, rgba(11, 23, 51, 0.05));
+}
+
+/* Drag handle for reorderable lists: grab cursor, dots glyph. */
+.grc-handle {
+  cursor: grab;
+  color: var(--grc-muted);
+  padding: 0 var(--grc-s2);
+  user-select: none;
+}
+.grc-handle:active {
+  cursor: grabbing;
+}
+.grc-reorder-item.is-dragging {
+  opacity: 0.6;
+}
+
+/* A status pill that also acts as an activate/deactivate control. */
+.grc-statuspill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--grc-fs-caption);
+  font-weight: 600;
+}
+.grc-statuspill--on {
+  color: var(--grc-gold-deep);
+}
+.grc-statuspill--off {
+  color: var(--grc-muted);
+}
+
+/* An inline edit form revealed under a row; a light framed panel. */
+.grc-editpanel {
+  background: var(--grc-surface);
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  padding: var(--grc-s4);
+  margin-top: var(--grc-s3);
+}
+.grc-setup-section {
+  margin-bottom: var(--grc-s6, 2rem);
+}
+.grc-setup-section > summary {
+  cursor: pointer;
+}
+
+/* Any element scripted to be clickable declares it, so the cursor is honest. */
+[role='button']:not(:disabled),
+[data-clickable] {
+  cursor: pointer;
+}
+
+/* A deactivated row reads as dimmed but stays legible. */
+.grc-table tbody tr.is-inactive td {
+  opacity: 0.6;
+}
+
+/* Visually hidden but available to assistive tech (icon-button labels, etc.). */
+.grc-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Setup layout helpers. */
+.grc-field--wide {
+  grid-column: 1 / -1;
+}
+.grc-field__hint {
+  margin: 0.25rem 0 0;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+}
+.grc-muted {
+  color: var(--grc-muted);
+}
+.grc-plainlist {
+  list-style: none;
+  margin: 0 0 var(--grc-s4);
+  padding: 0;
+}
+.grc-subarea {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--grc-s3);
+  padding: var(--grc-s2) 0;
+  border-bottom: 1px solid var(--grc-line);
+}
+.grc-subarea:last-child {
+  border-bottom: 0;
+}
+.grc-setup-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--grc-s3);
+  flex-wrap: wrap;
+}
+.grc-setup-body {
+  padding-top: var(--grc-s4);
+}
+.grc-setup-section {
+  padding: var(--grc-s4);
+  margin-bottom: var(--grc-s4);
+}
