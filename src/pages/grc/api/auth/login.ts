@@ -47,12 +47,6 @@ async function readCredentials(request: Request, wantsJson: boolean): Promise<Cr
   return { email: String(form.get('email') ?? ''), password: String(form.get('password') ?? '') };
 }
 
-// The audit system's status values are matched leniently: a sign-in is refused
-// only for an explicitly inactive account, so an unexpected active-status label
-// never locks a valid user out. See grc/docs/schema-assumptions.md.
-const INACTIVE = new Set(['INACTIVE', 'DISABLED', 'SUSPENDED', 'ARCHIVED', 'DELETED']);
-const isInactive = (status: string): boolean => INACTIVE.has(status.trim().toUpperCase());
-
 /** An authentication failure: a JSON 401 for API callers, a redirect for the form. */
 function invalid(wantsJson: boolean): Response {
   if (wantsJson) {
@@ -102,9 +96,10 @@ export const POST: APIRoute = async ({ request }) => {
     const env = getGrcEnv();
     const db = await getDb(env);
 
+    // The lookup already requires an active user and organisation, so a missing
+    // row covers an unknown email and an inactive user or organisation alike.
     const user = await resolveUserByEmail(db, emailNorm);
     if (!user || !user.passwordHash) return invalid(wantsJson);
-    if (isInactive(user.status) || isInactive(user.organizationStatus)) return invalid(wantsJson);
 
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) return invalid(wantsJson);
