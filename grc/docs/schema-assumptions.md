@@ -414,3 +414,61 @@ Notes:
   and a trial subscription (`plan_code = 'trial'`). The defaults live in one place
   in code, in step with the seed scripts. Provisioning is a platform-owner action
   (`api/organizations.ts`, `settings/provision.astro`).
+
+## Data dictionary alignment (Build Prompt 16)
+
+The operator supplied the authoritative `hassaudit` column list, so the assumed
+names above are superseded where they differ. Every GRC query was audited against
+the dictionary and corrected; the authoritative columns below are the ones the
+code now uses.
+
+Key corrections applied across the GRC data layer:
+
+- **work_papers**: the reference column is `work_paper_ref` (not `reference`);
+  the auditor is `assigned_auditor_id`/`assigned_auditor_name` (not
+  `assigned_auditor`); the control fields are `control_classification` and
+  `control_standards` (not `classification`/`standards`). Dated attribution is a
+  `_by_id`/`_by_name`/`_date` triple where the schema records who, and a bare
+  `_date` where it does not: `prepared_by_id`/`prepared_by_name`/`prepared_date`,
+  `submitted_date`, `reviewed_by_id`/`reviewed_by_name`/`review_date`/`review_comments`,
+  `approved_by_id`/`approved_by_name`/`approved_date`, `sent_to_auditee_date`, and
+  the response review columns `response_reviewed_by`/`response_review_date`/`response_review_comments`.
+- **action_plans**: the human reference is `action_ref`; `action_number` is the
+  sequential number. Both are populated on create and read as
+  `COALESCE(action_ref, action_number)`, so a reference always shows.
+- **affiliates / audit_areas / sub_areas**: the label columns are
+  `affiliate_name`, `area_name` and `sub_area_name` (not `name`); there is no
+  `display_order`, so pick lists order by the label.
+- **Junction tables carry no `organization_id` and no surrogate key.**
+  `work_paper_responsibles` and `work_paper_cc_recipients` are keyed by
+  `(work_paper_id, user_id)` with an `added_at` stamp; `action_plan_owners` uses
+  the integer flags `is_original`/`is_current` (not `owner_type`/`is_active`) and
+  is keyed by `(action_plan_id, user_id)`. Tenancy on these is enforced by joining
+  to (or requiring) a parent row in the acting organisation, never a column on the
+  junction itself.
+- **History tables** use `action_date` and `from_status`/`to_status`:
+  `work_paper_revisions` (no `organization_id`, no `created_at`) and
+  `action_plan_history` (no `organization_id`; `from_status`/`to_status` not
+  `previous_status`/`new_status`; an `action` column stamped with the target
+  status).
+- **organizations** has no `status` and no `name`: the active flag is `is_active`
+  (integer) and the label is `org_name`. Only `users` and `subscriptions` have a
+  `status`.
+
+### Status values are human-readable strings
+
+Work-paper and action-plan statuses are the human-readable strings the schema
+stores and `status_transitions` is keyed by, not short codes. They are defined
+once in `workflow/workPaperActions.ts` (`WP_STATUS`) and
+`workflow/actionPlanActions.ts` (`AP_STATUS`) and used consistently in every
+query and comparison:
+
+- Work paper: `Draft`, `Submitted`, `Under Review`, `Approved`, `Sent to Auditee`,
+  `Response Received`, `Response Reviewed`, `Revision Required`.
+- Action plan: `Not Due`, `Pending`, `In Progress`, `Overdue`, `Implemented`,
+  `Pending Verification`, `Verified`, `Closed`, `Rejected`.
+
+The notification queue, the send queue and the deletion queue keep their own
+internal status codes (`PENDING`, `SENT`, `DEAD_LETTER`), which are separate from
+this vocabulary. `humaniseStatus` passes an already-human status through
+unchanged.

@@ -138,21 +138,21 @@ const riskClass = (r: string | null): string => {
               )}
               {reviews.toReview.length > 0 && (
                 <li>
-                  <a href="/work-papers?status=SUBMITTED">
+                  <a href="/work-papers?status=Submitted">
                     {reviews.toReview.length} work papers to review
                   </a>
                 </li>
               )}
               {reviews.toVerify.length > 0 && (
                 <li>
-                  <a href="/action-plans?status=PENDING_VERIFICATION">
+                  <a href="/action-plans?status=Pending%20Verification">
                     {reviews.toVerify.length} action plans to verify
                   </a>
                 </li>
               )}
               {reviews.responsesToReview.length > 0 && (
                 <li>
-                  <a href="/work-papers?status=RESPONSE_RECEIVED">
+                  <a href="/work-papers?status=Response%20Received">
                     {reviews.responsesToReview.length} responses to review
                   </a>
                 </li>

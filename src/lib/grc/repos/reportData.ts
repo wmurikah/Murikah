@@ -52,9 +52,9 @@ export async function resolveUserAffiliate(
 
 /** Derive the auditee response state shown against an observation. */
 function responseStatus(status: string, managementResponse: string | null): string {
-  if (status === 'RESPONSE_RECEIVED' || status === 'RESPONSE_REVIEWED') return 'Responded';
+  if (status === 'Response Received' || status === 'Response Reviewed') return 'Responded';
   if (managementResponse && managementResponse.trim() !== '') return 'Responded';
-  if (status === 'SENT_TO_AUDITEE') return 'Awaiting response';
+  if (status === 'Sent to Auditee') return 'Awaiting response';
   return 'Not sent';
 }
 
@@ -105,8 +105,8 @@ export async function getComprehensiveReportData(
   let obsWhere = 'wp.organization_id = ?' + wp.clause;
   if (unitScope) {
     obsWhere +=
-      ' AND (wp.assigned_auditor = ? OR EXISTS (SELECT 1 FROM work_paper_responsibles r' +
-      ' WHERE r.work_paper_id = wp.work_paper_id AND r.organization_id = wp.organization_id AND r.user_id = ?))';
+      ' AND (wp.assigned_auditor_id = ? OR EXISTS (SELECT 1 FROM work_paper_responsibles r' +
+      ' WHERE r.work_paper_id = wp.work_paper_id AND r.user_id = ?))';
     obsArgs.push(viewer.userId, viewer.userId);
     if (unitAffiliate) {
       obsWhere += ' AND wp.affiliate_code = ?';
@@ -115,10 +115,10 @@ export async function getComprehensiveReportData(
   }
 
   const obsRes = await db.execute({
-    sql: `SELECT wp.work_paper_id AS id, wp.reference AS reference, wp.risk_rating AS risk_rating,
+    sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference, wp.risk_rating AS risk_rating,
                  wp.observation_title AS title, wp.observation_description AS description,
-                 wp.affiliate_code AS affiliate_code, aff.name AS affiliate_name,
-                 aa.name AS audit_area_name, wp.status AS status, wp.recommendation AS recommendation,
+                 wp.affiliate_code AS affiliate_code, aff.affiliate_name AS affiliate_name,
+                 aa.area_name AS audit_area_name, wp.status AS status, wp.recommendation AS recommendation,
                  wp.management_response AS management_response, wp.work_paper_date AS work_paper_date,
                  wp.year AS year
             FROM work_papers wp
@@ -126,7 +126,7 @@ export async function getComprehensiveReportData(
                  AND aff.organization_id = wp.organization_id
             LEFT JOIN audit_areas aa ON aa.audit_area_id = wp.audit_area_id
            WHERE ${obsWhere}
-        ORDER BY wp.work_paper_date DESC, wp.reference DESC
+        ORDER BY wp.work_paper_date DESC, wp.work_paper_ref DESC
            LIMIT 2000`,
     args: obsArgs,
   });
@@ -166,9 +166,9 @@ export async function getComprehensiveReportData(
                  ap.work_paper_id AS work_paper_id, ap.action_description AS description,
                  ap.owner_names AS owner_names, ap.due_date AS due_date, ap.status AS status,
                  ap.implementation_notes AS implementation_notes,
-                 wp.observation_title AS obs_title, wp.reference AS obs_reference,
+                 wp.observation_title AS obs_title, wp.work_paper_ref AS obs_reference,
                  wp.risk_rating AS obs_risk, wp.status AS obs_status,
-                 aff.name AS obs_affiliate, aa.name AS obs_audit_area
+                 aff.affiliate_name AS obs_affiliate, aa.area_name AS obs_audit_area
             FROM action_plans ap
             JOIN work_papers wp ON wp.work_paper_id = ap.work_paper_id
                  AND wp.organization_id = ap.organization_id

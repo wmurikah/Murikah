@@ -20,21 +20,34 @@
 /** The enum_type under which the work-paper statuses and transitions are stored. */
 export const WORK_PAPER_ENUM_TYPE = 'WORK_PAPER_STATUS';
 
+// Statuses are the human-readable strings the hassaudit schema stores in
+// work_papers.status and keys status_transitions by (Build Prompt 16); they are
+// not short codes. The lifecycle labels below are the single source both the
+// workflow and the queries use, so the two never diverge from the database.
 export const WP_STATUS = {
-  DRAFT: 'DRAFT',
-  SUBMITTED: 'SUBMITTED',
-  UNDER_REVIEW: 'UNDER_REVIEW',
-  APPROVED: 'APPROVED',
-  SENT_TO_AUDITEE: 'SENT_TO_AUDITEE',
-  RESPONSE_RECEIVED: 'RESPONSE_RECEIVED',
-  RESPONSE_REVIEWED: 'RESPONSE_REVIEWED',
-  REVISION_REQUIRED: 'REVISION_REQUIRED',
+  DRAFT: 'Draft',
+  SUBMITTED: 'Submitted',
+  UNDER_REVIEW: 'Under Review',
+  APPROVED: 'Approved',
+  SENT_TO_AUDITEE: 'Sent to Auditee',
+  RESPONSE_RECEIVED: 'Response Received',
+  RESPONSE_REVIEWED: 'Response Reviewed',
+  REVISION_REQUIRED: 'Revision Required',
 } as const;
 
-/** The dated attribution to stamp on a transition: a "by" and an "at" column, and optionally a comments column. */
+/**
+ * The dated attribution to stamp on a transition. The hassaudit schema records
+ * who and when as a `_by_id`/`_by_name`/`_date` triple (Build Prompt 16); some
+ * steps carry only a date. Only the columns that exist for a step are set.
+ */
 export interface Attribution {
-  by: string;
-  at: string;
+  /** The user-id column to stamp with the actor, when the step records who. */
+  byId?: string;
+  /** The user-name column to stamp with the actor's name, when the step records it. */
+  byName?: string;
+  /** The date column to stamp; every attributed step has one. */
+  date: string;
+  /** The comments column to stamp when the transition carries a comment. */
   comments?: string;
 }
 
@@ -57,7 +70,7 @@ export interface WpActionMeta {
 const ACTIONS: Record<string, WpActionMeta> = {
   [WP_STATUS.SUBMITTED]: {
     permission: 'WORK_PAPERS.submit',
-    attribution: { by: 'submitted_by', at: 'submitted_at' },
+    attribution: { date: 'submitted_date' },
     notifyTemplate: 'finding_submitted',
     label: 'Submit for review',
   },
@@ -67,17 +80,22 @@ const ACTIONS: Record<string, WpActionMeta> = {
   },
   [WP_STATUS.REVISION_REQUIRED]: {
     permission: 'WORK_PAPERS.review',
-    attribution: { by: 'reviewed_by', at: 'reviewed_at', comments: 'review_comments' },
+    attribution: {
+      byId: 'reviewed_by_id',
+      byName: 'reviewed_by_name',
+      date: 'review_date',
+      comments: 'review_comments',
+    },
     label: 'Request revision',
   },
   [WP_STATUS.APPROVED]: {
     permission: 'WORK_PAPERS.approve',
-    attribution: { by: 'approved_by', at: 'approved_at' },
+    attribution: { byId: 'approved_by_id', byName: 'approved_by_name', date: 'approved_date' },
     label: 'Approve',
   },
   [WP_STATUS.SENT_TO_AUDITEE]: {
     permission: 'WORK_PAPERS.send',
-    attribution: { by: 'sent_to_auditee_by', at: 'sent_to_auditee_at' },
+    attribution: { date: 'sent_to_auditee_date' },
     notifyTemplate: 'finding_shared',
     label: 'Send to auditee',
   },
@@ -88,7 +106,11 @@ const ACTIONS: Record<string, WpActionMeta> = {
   },
   [WP_STATUS.RESPONSE_REVIEWED]: {
     permission: 'WORK_PAPERS.review',
-    attribution: { by: 'reviewed_by', at: 'reviewed_at', comments: 'review_comments' },
+    attribution: {
+      byId: 'response_reviewed_by',
+      date: 'response_review_date',
+      comments: 'response_review_comments',
+    },
     label: 'Mark response reviewed',
   },
   [WP_STATUS.DRAFT]: {
