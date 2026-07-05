@@ -39,14 +39,15 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     const role = String(form.get('role_in_finding') ?? 'PRIMARY').trim() || 'PRIMARY';
     if (userId) await addResponsible(db, grc.organizationId, id, userId, role);
   } else if (op === 'remove_responsible') {
-    const responsibleId = String(form.get('responsible_id') ?? '');
-    if (responsibleId) await removeResponsible(db, grc.organizationId, responsibleId);
+    // The list keys a responsible by user id within the work paper.
+    const responsibleUserId = String(form.get('responsible_id') ?? '');
+    if (responsibleUserId) await removeResponsible(db, grc.organizationId, id, responsibleUserId);
   } else if (op === 'add_cc') {
     const userId = String(form.get('user_id') ?? '');
     if (userId) await addCcRecipient(db, grc.organizationId, id, userId);
   } else if (op === 'remove_cc') {
-    const ccId = String(form.get('cc_id') ?? '');
-    if (ccId) await removeCcRecipient(db, grc.organizationId, ccId);
+    const ccUserId = String(form.get('cc_id') ?? '');
+    if (ccUserId) await removeCcRecipient(db, grc.organizationId, id, ccUserId);
   }
 
   try {

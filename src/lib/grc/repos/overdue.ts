@@ -21,18 +21,18 @@ export async function updateOverdueStatuses(db: Client): Promise<OverdueResult> 
   const refreshed = await db.execute({
     sql: `UPDATE action_plans
              SET days_overdue = CAST(julianday('now') - julianday(due_date) AS INTEGER)
-           WHERE due_date IS NOT NULL AND status = 'OVERDUE' AND due_date < date('now')`,
+           WHERE due_date IS NOT NULL AND status = 'Overdue' AND due_date < date('now')`,
     args: [],
   });
 
   // Move newly past-due active plans to Overdue and set the day count.
   const became = await db.execute({
     sql: `UPDATE action_plans
-             SET status = 'OVERDUE',
+             SET status = 'Overdue',
                  days_overdue = CAST(julianday('now') - julianday(due_date) AS INTEGER),
                  updated_at = ?
            WHERE due_date IS NOT NULL AND due_date < date('now')
-             AND status IN ('NOT_DUE', 'PENDING', 'IN_PROGRESS')`,
+             AND status IN ('Not Due', 'Pending', 'In Progress')`,
     args: [new Date().toISOString()],
   });
 

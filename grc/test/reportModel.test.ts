@@ -34,7 +34,7 @@ function obs(p: Partial<Observation> & { id: string }): Observation {
     affiliateCode: null,
     affiliateName: null,
     auditAreaName: null,
-    status: 'APPROVED',
+    status: 'Approved',
     responseStatus: 'Not sent',
     recommendation: null,
     workPaperDate: null,
@@ -50,7 +50,7 @@ function plan(p: Partial<ActionPlan> & { id: string }): ActionPlan {
     description: 'Do the thing',
     ownerNames: 'Owner',
     dueDate: null,
-    status: 'PENDING',
+    status: 'Pending',
     implementationNotes: null,
     observationTitle: null,
     observationReference: null,
@@ -78,7 +78,7 @@ function fixture(): ReportDataset {
       affiliateName: 'Alpha',
       affiliateCode: 'A1',
       auditAreaName: 'Ops',
-      status: 'SENT_TO_AUDITEE',
+      status: 'Sent to Auditee',
       workPaperDate: '2026-05-01',
     }),
     obs({
@@ -102,7 +102,7 @@ function fixture(): ReportDataset {
     plan({
       id: 'ap1',
       workPaperId: 'o1',
-      status: 'VERIFIED',
+      status: 'Verified',
       dueDate: '2026-06-10',
       observationRisk: 'CRITICAL',
       observationAffiliate: 'Alpha',
@@ -111,7 +111,7 @@ function fixture(): ReportDataset {
     plan({
       id: 'ap2',
       workPaperId: 'o1',
-      status: 'IN_PROGRESS',
+      status: 'In Progress',
       dueDate: '2026-06-20',
       observationRisk: 'CRITICAL',
       observationAffiliate: 'Alpha',
@@ -120,7 +120,7 @@ function fixture(): ReportDataset {
     plan({
       id: 'ap3',
       workPaperId: 'o2',
-      status: 'IMPLEMENTED',
+      status: 'Implemented',
       dueDate: '2026-07-01',
       observationRisk: 'HIGH',
       observationAffiliate: 'Alpha',
@@ -129,7 +129,7 @@ function fixture(): ReportDataset {
     plan({
       id: 'ap4',
       workPaperId: 'o3',
-      status: 'PENDING',
+      status: 'Pending',
       dueDate: '2026-07-10',
       observationRisk: 'MEDIUM',
       observationAffiliate: 'Beta',
@@ -138,7 +138,7 @@ function fixture(): ReportDataset {
     plan({
       id: 'ap5',
       workPaperId: 'o4',
-      status: 'CLOSED',
+      status: 'Closed',
       dueDate: '2026-05-01',
       observationRisk: 'LOW',
       observationAffiliate: 'Beta',
@@ -155,7 +155,7 @@ const execFilters = {
   affiliateCode: null,
   auditAreaId: null,
   risks: ['EXTREME', 'HIGH', 'MEDIUM', 'LOW'] as const,
-  statuses: ['APPROVED', 'SENT_TO_AUDITEE', 'SUBMITTED', 'DRAFT'],
+  statuses: ['Approved', 'Sent to Auditee', 'Submitted', 'Draft'],
   overdueOnly: false,
   reportType: 'executive' as const,
 };
@@ -185,10 +185,10 @@ test('implementation rate colour: green >=70, amber >=40, else red', () => {
 });
 
 test('a plan overdue: past due and not settled; a verified plan is not overdue', () => {
-  assert.equal(isPlanOverdue({ dueDate: '2026-06-20', status: 'IN_PROGRESS' }, NOW), true);
-  assert.equal(isPlanOverdue({ dueDate: '2026-06-10', status: 'VERIFIED' }, NOW), false);
-  assert.equal(isPlanOverdue({ dueDate: '2026-08-01', status: 'PENDING' }, NOW), false);
-  assert.equal(daysOverdue({ dueDate: '2026-06-20', status: 'IN_PROGRESS' }, NOW), 14);
+  assert.equal(isPlanOverdue({ dueDate: '2026-06-20', status: 'In Progress' }, NOW), true);
+  assert.equal(isPlanOverdue({ dueDate: '2026-06-10', status: 'Verified' }, NOW), false);
+  assert.equal(isPlanOverdue({ dueDate: '2026-08-01', status: 'Pending' }, NOW), false);
+  assert.equal(daysOverdue({ dueDate: '2026-06-20', status: 'In Progress' }, NOW), 14);
 });
 
 test('executive summary KPIs: totals, 60% implementation rate (warn), 1 overdue', () => {
@@ -300,14 +300,14 @@ test('default filters: all risks and statuses on, six-month range, executive typ
 });
 
 test('UNIT_MANAGER scoping: no Draft or Submitted, affiliate forced', () => {
-  const params = new URLSearchParams('applied=1&affiliate=OTHER&status=DRAFT&status=APPROVED');
+  const params = new URLSearchParams('applied=1&affiliate=OTHER&status=Draft&status=Approved');
   const f = parseReportFilters(
     params,
     { roleCode: 'UNIT_MANAGER', isPlatformOwner: false, forcedAffiliateCode: 'MINE' },
     NOW,
   );
   assert.equal(f.affiliateCode, 'MINE');
-  assert.ok(!f.statuses.includes('DRAFT'));
-  assert.ok(!f.statuses.includes('SUBMITTED'));
-  assert.deepEqual(f.statuses, ['APPROVED']);
+  assert.ok(!f.statuses.includes('Draft'));
+  assert.ok(!f.statuses.includes('Submitted'));
+  assert.deepEqual(f.statuses, ['Approved']);
 });

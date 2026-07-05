@@ -28,21 +28,28 @@ test('each action maps to its WORK_PAPERS permission', () => {
   assert.equal(actionForTarget('NOT_A_STATUS'), null);
 });
 
-test('submit, approve and send stamp their dated attribution', () => {
+test('submit and send stamp only their dated attribution', () => {
+  // The hassaudit schema has only a date column for these two steps.
   assert.deepEqual(actionForTarget(WP_STATUS.SUBMITTED)?.attribution, {
-    by: 'submitted_by',
-    at: 'submitted_at',
+    date: 'submitted_date',
   });
-  assert.deepEqual(actionForTarget(WP_STATUS.APPROVED)?.attribution, {
-    by: 'approved_by',
-    at: 'approved_at',
+  assert.deepEqual(actionForTarget(WP_STATUS.SENT_TO_AUDITEE)?.attribution, {
+    date: 'sent_to_auditee_date',
   });
-  assert.equal(actionForTarget(WP_STATUS.SENT_TO_AUDITEE)?.attribution?.at, 'sent_to_auditee_at');
 });
 
-test('request revision records the reviewer and their comments', () => {
+test('approve records the approver id and name and the date', () => {
+  assert.deepEqual(actionForTarget(WP_STATUS.APPROVED)?.attribution, {
+    byId: 'approved_by_id',
+    byName: 'approved_by_name',
+    date: 'approved_date',
+  });
+});
+
+test('request revision records the reviewer, the date and their comments', () => {
   const meta = actionForTarget(WP_STATUS.REVISION_REQUIRED);
-  assert.equal(meta?.attribution?.by, 'reviewed_by');
+  assert.equal(meta?.attribution?.byId, 'reviewed_by_id');
+  assert.equal(meta?.attribution?.date, 'review_date');
   assert.equal(meta?.attribution?.comments, 'review_comments');
 });
 

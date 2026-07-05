@@ -25,11 +25,14 @@ async function isLinkedToEntity(
 ): Promise<boolean> {
   if (entityType === 'work_paper') {
     const res = await db.execute({
-      sql: `SELECT 1 FROM work_paper_responsibles
-             WHERE organization_id = ? AND work_paper_id = ? AND user_id = ?
+      // Neither junction carries organization_id; scope through the work paper.
+      sql: `SELECT 1 FROM work_paper_responsibles r
+              JOIN work_papers wp ON wp.work_paper_id = r.work_paper_id AND wp.organization_id = ?
+             WHERE r.work_paper_id = ? AND r.user_id = ?
              UNION ALL
-            SELECT 1 FROM work_paper_cc_recipients
-             WHERE organization_id = ? AND work_paper_id = ? AND user_id = ?
+            SELECT 1 FROM work_paper_cc_recipients c
+              JOIN work_papers wp ON wp.work_paper_id = c.work_paper_id AND wp.organization_id = ?
+             WHERE c.work_paper_id = ? AND c.user_id = ?
              LIMIT 1`,
       args: [organizationId, entityId, userId, organizationId, entityId, userId],
     });
@@ -37,8 +40,11 @@ async function isLinkedToEntity(
   }
   if (entityType === 'action_plan') {
     const res = await db.execute({
-      sql: `SELECT 1 FROM action_plan_owners
-             WHERE organization_id = ? AND action_plan_id = ? AND user_id = ? AND is_active = 1
+      // action_plan_owners has no organization_id; scope through the plan and use
+      // is_current (there is no is_active column).
+      sql: `SELECT 1 FROM action_plan_owners o
+              JOIN action_plans ap ON ap.action_plan_id = o.action_plan_id AND ap.organization_id = ?
+             WHERE o.action_plan_id = ? AND o.user_id = ? AND o.is_current = 1
              UNION ALL
             SELECT 1 FROM action_plans
              WHERE organization_id = ? AND action_plan_id = ? AND created_by = ?
