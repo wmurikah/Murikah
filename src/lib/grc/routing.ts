@@ -64,6 +64,22 @@ export function isGrcApiPath(appPath: string): boolean {
   return appPath === '/api' || appPath.startsWith('/api/');
 }
 
+// The only paths a user with must_change_password set may still reach: the
+// change-password screen, its endpoint, and sign-out. Everything else is
+// redirected to the change-password screen until the flag clears.
+const CHANGE_PASSWORD_EXEMPT = new Set([
+  '/change-password',
+  '/api/auth/change-password',
+  '/api/auth/logout',
+]);
+
+export function isGrcChangePasswordExempt(appPath: string): boolean {
+  return CHANGE_PASSWORD_EXEMPT.has(appPath);
+}
+
+/** The change-password screen, in root-relative form. */
+export const GRC_CHANGE_PASSWORD_PATH = '/change-password';
+
 /**
  * On the marketing apex, a /grc path is sent to the subdomain, mirroring how
  * /engr is redirected. Returns the absolute location, or null when the path is
