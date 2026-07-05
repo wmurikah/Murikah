@@ -52,26 +52,23 @@ export async function setOwners(
              WHERE action_plan_id = ? AND organization_id = ?`,
       args: [ownerIds, ownerNames, now, actionPlanId, organizationId],
     },
-    // Retire the current owners; the junction keeps the history.
+    // Retire the current owners; the junction keeps the history. action_plan_owners
+    // has no organization_id of its own, so tenancy is enforced through its plan.
     {
-      sql: `UPDATE action_plan_owners SET is_active = 0, removed_at = ?
-             WHERE organization_id = ? AND action_plan_id = ? AND is_active = 1`,
-      args: [now, organizationId, actionPlanId],
+      sql: `UPDATE action_plan_owners SET is_current = 0, removed_at = ?
+             WHERE action_plan_id = ? AND is_current = 1
+               AND EXISTS (SELECT 1 FROM action_plans WHERE action_plan_id = ? AND organization_id = ?)`,
+      args: [now, actionPlanId, actionPlanId, organizationId],
     },
   ];
   for (const o of owners) {
+    // Keyed by (action_plan_id, user_id); OR REPLACE refreshes an owner who stays
+    // on and records the original-owner flag on creation.
     statements.push({
-      sql: `INSERT INTO action_plan_owners
-              (owner_row_id, organization_id, action_plan_id, user_id, owner_type, is_active, added_at)
-            VALUES (?, ?, ?, ?, ?, 1, ?)`,
-      args: [
-        crypto.randomUUID(),
-        organizationId,
-        actionPlanId,
-        o.userId,
-        markOriginal ? 'ORIGINAL' : 'CURRENT',
-        now,
-      ],
+      sql: `INSERT OR REPLACE INTO action_plan_owners
+              (action_plan_id, user_id, is_original, is_current, added_at)
+            VALUES (?, ?, ?, 1, ?)`,
+      args: [actionPlanId, o.userId, markOriginal ? 1 : 0, now],
     });
   }
   await db.batch(statements, 'write');
@@ -120,18 +117,19 @@ export async function listOwnerHistory(
   actionPlanId: string,
 ): Promise<OwnerHistoryRow[]> {
   const res = await db.execute({
-    sql: `SELECT o.user_id, o.owner_type, o.is_active, o.added_at, o.removed_at, u.full_name AS name
+    sql: `SELECT o.user_id, o.is_original, o.is_current, o.added_at, o.removed_at, u.full_name AS name
             FROM action_plan_owners o
+            JOIN action_plans ap ON ap.action_plan_id = o.action_plan_id AND ap.organization_id = ?
             LEFT JOIN users u ON u.user_id = o.user_id
-           WHERE o.organization_id = ? AND o.action_plan_id = ?
+           WHERE o.action_plan_id = ?
         ORDER BY o.added_at`,
     args: [organizationId, actionPlanId],
   });
   return res.rows.map((r) => ({
     userId: String(r.user_id),
     name: r.name == null ? null : String(r.name),
-    ownerType: String(r.owner_type ?? ''),
-    isActive: Number(r.is_active ?? 0) === 1,
+    ownerType: Number(r.is_original ?? 0) === 1 ? 'ORIGINAL' : 'CURRENT',
+    isActive: Number(r.is_current ?? 0) === 1,
     addedAt: r.added_at == null ? null : String(r.added_at),
     removedAt: r.removed_at == null ? null : String(r.removed_at),
   }));
