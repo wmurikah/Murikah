@@ -17,6 +17,7 @@ import { getDb } from '@grc/db';
 import { getSidebarCounts, type SidebarCounts } from '@grc/repos/dashboard';
 import { unreadCount, listInApp, type InAppItem } from '@grc/repos/inApp';
 import { buildNav, type CountKey, type NavGroupDef, type NavItemDef } from '@grc/dashboard/roleNav';
+import { aiEnabled } from '@grc/ai/gate';
 
 interface Props {
   title: string;
@@ -32,6 +33,7 @@ const groups = buildNav({
   roleCode: grc?.roleCode ?? '',
   perms: grc?.perms ?? [],
   isPlatformOwner: grc?.isPlatformOwner ?? false,
+  hasAi: grc ? aiEnabled((f) => grc.hasFeature(f)) : false,
 });
 
 // Sidebar badge counts, server-rendered on every navigation and refreshed by a

@@ -14,6 +14,8 @@ import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
 import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+import { aiEnabled } from '@grc/ai/gate';
+import { AI_DISCLAIMER } from '@grc/ai/validation';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -21,6 +23,7 @@ if (!grc) return Astro.redirect('/login');
 const canCreate = can(Astro.locals, 'ACTION_PLANS.create');
 const canPropose = can(Astro.locals, 'AUDITEE.respond');
 const allowed = canCreate || canPropose;
+const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const failed = Astro.url.searchParams.get('error');
 const presetWorkPaper = Astro.url.searchParams.get('work_paper') ?? '';
 
@@ -59,10 +62,12 @@ if (allowed) {
       <>
         {failed && (
           <p class="grc-error" role="alert" style="margin-bottom:1rem">
-            The action plan could not be saved. Check the fields and try again.
+            {failed === 'invalid'
+              ? 'The action plan could not be saved. Check the fields and try again.'
+              : decodeURIComponent(failed)}
           </p>
         )}
-        <form method="post" action="/api/action-plans" class="grc-form">
+        <form id="ap-form" method="post" action="/api/action-plans" class="grc-form">
           <div class="grc-field">
             <label for="work-paper">Work paper (finding)</label>
             <select id="work-paper" name="work_paper_id" class="grc-select">
@@ -102,6 +107,20 @@ if (allowed) {
             <p class="grc-field__hint">Hold Ctrl or Cmd to select more than one owner.</p>
           </div>
 
+          {hasAi && (
+            <div class="grc-field">
+              <div class="grc-actionbar" style="margin:0 0 0.5rem;justify-content:space-between">
+                <label style="margin:0">SMART quality check</label>
+                <button type="button" id="ap-validate-btn" class="grc-btn grc-btn--secondary">
+                  Check SMART quality
+                </button>
+              </div>
+              <p class="grc-field__hint">{AI_DISCLAIMER}</p>
+              <div id="ap-validate-status" class="grc-lead" role="status" aria-live="polite" />
+              <div id="ap-validate-out" class="grc-ai-out" hidden />
+            </div>
+          )}
+
           <div class="grc-actionbar">
             <button type="submit" class="grc-btn grc-btn--primary">
               {canCreate ? 'Create action plan' : 'Propose action plan'}
@@ -115,3 +134,57 @@ if (allowed) {
     )
   }
 </GrcLayout>
+
+<script>
+  // On-demand SMART quality check. Posts the current form fields to the AI
+  // validation endpoint (which falls back to a non-AI check when AI is off) and
+  // renders the outcome as plain text, so nothing from the model becomes HTML.
+  const btn = document.getElementById('ap-validate-btn');
+  const form = document.getElementById('ap-form') as HTMLFormElement | null;
+  const out = document.getElementById('ap-validate-out');
+  const status = document.getElementById('ap-validate-status');
+  interface Outcome {
+    isValid?: boolean;
+    score?: number;
+    issues?: string[];
+    suggestions?: string[];
+    strengths?: string[];
+    aiUsed?: boolean;
+    error?: string;
+  }
+  btn?.addEventListener('click', async () => {
+    if (!form || !out || !status) return;
+    btn.setAttribute('disabled', 'true');
+    status.textContent = 'Checking...';
+    out.hidden = true;
+    try {
+      const res = await fetch('/api/ai/validate', { method: 'POST', body: new FormData(form) });
+      const data = (await res.json()) as Outcome;
+      if (data.error) {
+        status.textContent = data.error;
+        return;
+      }
+      const lines: string[] = [];
+      lines.push(`Score: ${data.score ?? 0}/100${data.aiUsed ? '' : ' (basic check)'}`);
+      lines.push(
+        data.isValid ? 'Assessment: meets the SMART standard.' : 'Assessment: needs strengthening.',
+      );
+      const section = (title: string, items?: string[]): void => {
+        if (items && items.length > 0) {
+          lines.push('', `${title}:`);
+          items.forEach((i) => lines.push(`- ${i}`));
+        }
+      };
+      section('Issues', data.issues);
+      section('Suggestions', data.suggestions);
+      section('Strengths', data.strengths);
+      out.textContent = lines.join('\n');
+      out.hidden = false;
+      status.textContent = '';
+    } catch {
+      status.textContent = 'The request failed. Try again.';
+    } finally {
+      btn.removeAttribute('disabled');
+    }
+  });
+</script>
