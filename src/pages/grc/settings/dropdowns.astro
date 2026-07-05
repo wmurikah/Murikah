@@ -1,0 +1,123 @@
+---
+export const prerender = false;
+
+/**
+ * Managed dropdowns (11_DropdownService.gs), SUPER_ADMIN only. Edits the control
+ * field and risk-rating value lists held per organisation in config
+ * (DROPDOWN_RISK_RATINGS, DROPDOWN_CONTROL_CLASSIFICATION, DROPDOWN_CONTROL_TYPE,
+ * DROPDOWN_CONTROL_FREQUENCY), one value per line. The audit universe (areas and
+ * sub-areas) and affiliates are managed in their own setup screens. Gated on
+ * SUPER_ADMIN or a platform owner.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import {
+  loadControlDropdowns,
+  DROPDOWN_DEFAULTS,
+  type ControlDropdowns,
+} from '@grc/repos/dropdowns';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+const done = Astro.url.searchParams.get('done');
+
+let values: ControlDropdowns = DROPDOWN_DEFAULTS;
+if (allowed) {
+  const db = await getDb(getGrcEnv());
+  values = await loadControlDropdowns(db, grc.organizationId);
+}
+
+const fields: Array<{ name: string; label: string; hint: string; values: string[] }> = [
+  {
+    name: 'risk_ratings',
+    label: 'Risk ratings',
+    hint: 'The risk rating options, most severe first.',
+    values: values.riskRatings,
+  },
+  {
+    name: 'classification',
+    label: 'Control classification',
+    hint: 'The control classification options.',
+    values: values.classification,
+  },
+  {
+    name: 'control_type',
+    label: 'Control type',
+    hint: 'The control type options.',
+    values: values.controlType,
+  },
+  {
+    name: 'control_frequency',
+    label: 'Control frequency',
+    hint: 'The control frequency options.',
+    values: values.controlFrequency,
+  },
+];
+---
+
+<GrcLayout title="Dropdowns">
+  <div class="grc-page-head">
+    <div>
+      <h1>Dropdowns</h1>
+      <p class="grc-lead">The control-field values used on the work-paper form.</p>
+    </div>
+    <a href="/settings" class="grc-btn grc-btn--secondary">Back to settings</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Dropdown management is restricted to administrators.
+      </p>
+    ) : (
+      <>
+        {done && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            {decodeURIComponent(done)}
+          </p>
+        )}
+
+        <form method="post" action="/api/dropdowns" class="grc-panel">
+          <div class="grc-report-filters__grid">
+            {fields.map((f) => (
+              <div class="grc-field">
+                <label for={f.name}>{f.label}</label>
+                <textarea
+                  id={f.name}
+                  name={f.name}
+                  class="grc-textarea"
+                  rows="6"
+                  set:text={f.values.join('\n')}
+                />
+                <p class="grc-field__hint">{f.hint} One value per line.</p>
+              </div>
+            ))}
+          </div>
+          <div class="grc-actionbar" style="margin-top:0.75rem">
+            <button type="submit" class="grc-btn grc-btn--primary">
+              Save dropdowns
+            </button>
+          </div>
+        </form>
+
+        <div class="grc-panel">
+          <h2>Audit universe and affiliates</h2>
+          <p class="grc-lead" style="margin:0 0 0.5rem">
+            Audit areas, sub-areas and affiliates are ordered, active-filtered dropdowns managed in
+            their own setup screens.
+          </p>
+          <div class="grc-actionbar" style="margin:0">
+            <a href="/audit-universe" class="grc-btn grc-btn--secondary">
+              Audit universe
+            </a>
+            <a href="/affiliates" class="grc-btn grc-btn--secondary">
+              Affiliates
+            </a>
+          </div>
+        </div>
+      </>
+    )
+  }
+</GrcLayout>
