@@ -78,10 +78,11 @@ video. The seed and migrations apply to that endpoint with the same tooling.
    CHECK. SLA timers, assignment, knowledge base and write actions next.)
 8. [pending] Omnichannel intake and notifications
 9. [pending] AI bot
-10. [in progress] Reports and analytics (customer analytics built and
-    smoke-certified against the seeded DB: summary tiles, bar and doughnut and pie
-    charts by country/type/status, top accounts. Order/invoice/payment/ticket time
-    series, funnels and exports follow as those modules are seeded.)
+10. [in progress] Reports and analytics (customer and sales analytics built and
+    smoke-certified against the seeded DB: customer summary tiles and charts by
+    country/type/status plus top accounts; a sales section with revenue by
+    month, the order funnel, the invoice payment mix and the payment-method mix,
+    over the seeded transactional data. Ticket SLA analytics and exports follow.)
 11. [in progress] Customer portal (the portal home shows the signed-in
     customer's own account and contacts, scoped to their customer_id, and links
     to their orders, invoices, payments and support tickets (all same scope;

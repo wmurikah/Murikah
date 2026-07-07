@@ -2,11 +2,12 @@
 export const prerender = false;
 
 /**
- * Staff analytics dashboard. This phase reports on the customer base (totals,
- * distribution by country, type and status, and the top accounts by value),
- * themed to the tenant brand and driven by the seeded data. Order, invoice,
- * payment and ticket time series join as those modules are seeded. RBAC-gated;
- * wrapped by the error boundary so an aggregation fault degrades in place.
+ * Staff analytics dashboard. Reports on the customer base (totals, distribution
+ * by country, type and status, and the top accounts by value) and on sales now
+ * that the transactional modules are seeded (revenue over time, the order
+ * funnel, the invoice payment mix and the payment-method mix), themed to the
+ * tenant brand. RBAC-gated; wrapped by the error boundary so an aggregation
+ * fault degrades in place.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsError from '@/components/cms/CmsError.astro';
@@ -14,17 +15,24 @@ import CmsBarChart from '@/components/cms/CmsBarChart.astro';
 import CmsDonut from '@/components/cms/CmsDonut.astro';
 import { getCmsEnv } from '@cms/env';
 import { getDb } from '@cms/db';
-import { getCustomerAnalytics, type CustomerAnalytics } from '@cms/repos/analytics';
+import {
+  getCustomerAnalytics,
+  getSalesAnalytics,
+  type CustomerAnalytics,
+  type SalesAnalytics,
+} from '@cms/repos/analytics';
 
 const cms = Astro.locals.cms;
 if (!cms) return Astro.redirect('/login');
 const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('reports.view'));
 
 let data: CustomerAnalytics | null = null;
+let sales: SalesAnalytics | null = null;
 let loadError = false;
 if (allowed) {
   try {
-    data = await getCustomerAnalytics(await getDb(getCmsEnv()));
+    const db = await getDb(getCmsEnv());
+    [data, sales] = await Promise.all([getCustomerAnalytics(db), getSalesAnalytics(db)]);
   } catch (err) {
     loadError = true;
     console.error('[cms.analytics] load failed', err);
@@ -112,6 +120,84 @@ const money = (v: number): string => v.toLocaleString('en-KE');
             />
           </div>
         </div>
+
+        {sales && (
+          <>
+            <div class="cms-page-head" style="margin-top:1.5rem">
+              <div>
+                <h2>Sales</h2>
+                <p class="cms-lead">Orders, invoicing and collections across the seeded period.</p>
+              </div>
+            </div>
+
+            <div class="cms-cards" style="margin-bottom:1rem">
+              <section class="cms-card">
+                <p class="cms-lead" style="margin:0">
+                  Orders
+                </p>
+                <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+                  {money(sales.summary.totalOrders)}
+                </p>
+              </section>
+              <section class="cms-card">
+                <p class="cms-lead" style="margin:0">
+                  Revenue
+                </p>
+                <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+                  {money(sales.summary.totalRevenue)}
+                </p>
+              </section>
+              <section class="cms-card">
+                <p class="cms-lead" style="margin:0">
+                  Invoiced
+                </p>
+                <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+                  {money(sales.summary.totalInvoiced)}
+                </p>
+              </section>
+              <section class="cms-card">
+                <p class="cms-lead" style="margin:0">
+                  Collected
+                </p>
+                <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+                  {money(sales.summary.totalCollected)}
+                </p>
+              </section>
+            </div>
+
+            <div class="cms-charts">
+              <div class="cms-card">
+                <CmsBarChart
+                  title="Revenue by month"
+                  data={sales.revenueByMonth}
+                  valueHeading="Revenue"
+                />
+              </div>
+              <div class="cms-card">
+                <CmsDonut
+                  title="Orders by status"
+                  data={sales.ordersByStatus}
+                  valueHeading="Orders"
+                />
+              </div>
+              <div class="cms-card">
+                <CmsDonut
+                  title="Invoices by payment status"
+                  data={sales.invoicesByPayment}
+                  variant="pie"
+                  valueHeading="Invoices"
+                />
+              </div>
+              <div class="cms-card">
+                <CmsBarChart
+                  title="Payments by method"
+                  data={sales.paymentsByMethod}
+                  valueHeading="Uploads"
+                />
+              </div>
+            </div>
+          </>
+        )}
       </>
     )
   }

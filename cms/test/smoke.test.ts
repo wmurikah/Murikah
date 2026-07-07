@@ -238,3 +238,36 @@ test('cms smoke: the customer analytics aggregations return shape', { skip }, as
   );
   assert.ok(byCountry.rows.length > 0, 'expected a country breakdown');
 });
+
+test('cms smoke: the sales analytics aggregations return shape', { skip }, async () => {
+  const db = createClient({ url });
+
+  // Revenue time series: one point per month, non-cancelled, chronological.
+  const revenue = await db.execute(
+    `SELECT substr(requested_date, 1, 7) AS label, COALESCE(SUM(total_amount), 0) AS value
+       FROM orders WHERE requested_date IS NOT NULL AND status != 'CANCELLED'
+      GROUP BY substr(requested_date, 1, 7) ORDER BY label ASC`,
+  );
+  assert.ok(revenue.rows.length > 0, 'expected a revenue time series');
+  assert.ok(
+    revenue.rows.every((r) => Number(r.value) >= 0),
+    'each revenue point is non-negative',
+  );
+
+  // The order funnel, invoice payment mix and payment-method mix each return
+  // at least one bucket.
+  const ordersByStatus = await db.execute(
+    "SELECT COALESCE(status, 'Unknown') AS label, COUNT(*) AS n FROM orders GROUP BY status",
+  );
+  assert.ok(ordersByStatus.rows.length > 0, 'expected an order status breakdown');
+
+  const invoicesByPayment = await db.execute(
+    "SELECT COALESCE(payment_status, 'Unknown') AS label, COUNT(*) AS n FROM invoices GROUP BY payment_status",
+  );
+  assert.ok(invoicesByPayment.rows.length > 0, 'expected an invoice payment breakdown');
+
+  const paymentsByMethod = await db.execute(
+    "SELECT COALESCE(payment_method, 'Unspecified') AS label, COUNT(*) AS n FROM payment_uploads GROUP BY payment_method",
+  );
+  assert.ok(paymentsByMethod.rows.length > 0, 'expected a payment-method breakdown');
+});
