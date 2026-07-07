@@ -101,10 +101,18 @@ const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
         </section>
 
         <section class="cms-card">
-          <h2>Coming to your portal</h2>
-          <p class="cms-lead">
-            View invoices, pay by M-Pesa, and raise support tickets, all in one place.
+          <h2>Your invoices</h2>
+          <p class="cms-lead">See your invoices, due dates and payment status.</p>
+          <p>
+            <a class="cms-btn cms-btn--primary" href="/portal/invoices">
+              View your invoices
+            </a>
           </p>
+        </section>
+
+        <section class="cms-card">
+          <h2>Coming to your portal</h2>
+          <p class="cms-lead">Pay by M-Pesa and raise support tickets, all in one place.</p>
         </section>
       </div>
     )

@@ -56,7 +56,12 @@ video. The seed and migrations apply to that endpoint with the same tooling.
    lines, portal orders scoped to the signed-in customer, RBAC gate
    `orders.view`, error boundary. Write CRUD, approvals and Oracle approvals
    next.)
-4. [pending] Invoices and ETIMS
+4. [in progress] Invoices and ETIMS (read surface built and smoke-certified
+   against the seeded DB: staff list with search + status, invoice detail with
+   the ETIMS block and the parent order's lines, portal invoices scoped to the
+   signed-in customer, RBAC gate `invoices.view`, error boundary. Seed invoices
+   the approved/fulfilled orders; paid ones carry an ETIMS submission. Write
+   CRUD, ETIMS submission and credit notes next.)
 5. [pending] Payments (M-Pesa, bank, Oracle receipts)
 6. [pending] Delivery locations and documents
 7. [pending] Tickets, SLA and knowledge

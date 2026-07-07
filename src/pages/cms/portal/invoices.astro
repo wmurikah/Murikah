@@ -1,0 +1,77 @@
+---
+export const prerender = false;
+
+/**
+ * The customer portal invoices list, scoped to the signed-in customer's own
+ * customer_id. Wrapped by the error boundary; an empty result shows a clear
+ * empty state.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { listInvoicesForCustomer, type InvoiceRow } from '@cms/repos/invoices';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/portal/login');
+
+let rows: InvoiceRow[] = [];
+let loadError = false;
+if (cms.customerId) {
+  try {
+    rows = await listInvoicesForCustomer(await getDb(getCmsEnv()), cms.customerId);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.portal.invoices] load failed', err);
+  }
+}
+const money = (v: number | null, cur: string | null): string =>
+  v == null ? '-' : `${cur ?? ''} ${v.toLocaleString('en-KE')}`.trim();
+const day = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+---
+
+<CmsPortalLayout title="Your invoices">
+  <div class="cms-page-head">
+    <div>
+      <h1>Your invoices</h1>
+      <p class="cms-lead"><a href="/portal">Back to your portal</a></p>
+    </div>
+  </div>
+
+  {
+    loadError ? (
+      <CmsError tag="[cms.portal.invoices]" area="Your invoices" />
+    ) : rows.length === 0 ? (
+      <div class="cms-card">
+        <p class="cms-lead">You have no invoices yet.</p>
+      </div>
+    ) : (
+      <div class="cms-card" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.4rem">Invoice</th>
+              <th style="text-align:left;padding:0.4rem">Issued</th>
+              <th style="text-align:left;padding:0.4rem">Due</th>
+              <th style="text-align:left;padding:0.4rem">Payment</th>
+              <th style="text-align:right;padding:0.4rem">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td style="padding:0.4rem">{r.invoiceNumber}</td>
+                <td style="padding:0.4rem">{day(r.issueDate)}</td>
+                <td style="padding:0.4rem">{day(r.dueDate)}</td>
+                <td style="padding:0.4rem">{r.paymentStatus ?? '-'}</td>
+                <td style="padding:0.4rem;text-align:right">
+                  {money(r.totalAmount, r.currencyCode)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</CmsPortalLayout>

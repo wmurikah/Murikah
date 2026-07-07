@@ -121,6 +121,43 @@ test('cms smoke: seeded orders read back and join to their lines', { skip }, asy
   assert.ok(withLines.rows.length > 0, 'expected at least one order with lines');
 });
 
+test(
+  'cms smoke: seeded invoices read back and resolve their parent order lines',
+  { skip },
+  async () => {
+    const db = createClient({ url });
+    const invoices = await db.execute(
+      `SELECT invoice_id, invoice_number, order_id, total_amount, payment_status
+       FROM invoices ORDER BY issue_date DESC`,
+    );
+    assert.ok(invoices.rows.length > 0, 'expected seeded invoices');
+
+    // Every invoice references a real order and customer (the list LEFT JOINs
+    // customers; the detail reads the parent order's lines).
+    const joined = await db.execute(
+      `SELECT i.invoice_number, c.company_name, i.order_id
+       FROM invoices i LEFT JOIN customers c ON c.customer_id = i.customer_id
+      ORDER BY i.issue_date DESC LIMIT 1`,
+    );
+    assert.equal(joined.rows.length, 1, 'the invoice-to-customer join returns a row');
+    const orderId = String(joined.rows[0].order_id);
+
+    const lines = await db.execute({
+      sql: 'SELECT COUNT(*) AS n FROM order_lines WHERE order_id = ?',
+      args: [orderId],
+    });
+    assert.ok(Number(lines.rows[0].n) > 0, "the invoice's parent order has lines");
+
+    // A paid invoice carries an ETIMS submission (the source billing flow).
+    const paid = await db.execute(
+      "SELECT etims_invoice_number FROM invoices WHERE payment_status = 'PAID' LIMIT 1",
+    );
+    if (paid.rows.length) {
+      assert.ok(paid.rows[0].etims_invoice_number, 'a paid invoice has an ETIMS number');
+    }
+  },
+);
+
 test('cms smoke: the customer analytics aggregations return shape', { skip }, async () => {
   const db = createClient({ url });
   const summary = await db.execute(

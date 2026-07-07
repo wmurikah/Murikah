@@ -1,0 +1,125 @@
+---
+export const prerender = false;
+
+/**
+ * Staff invoice detail: the invoice header (dates, status, ETIMS) and the lines
+ * from its parent order. RBAC-gated; wrapped by the error boundary; a missing
+ * invoice is a clean not-found, never a 500.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { getInvoice, type InvoiceDetail } from '@cms/repos/invoices';
+import { type OrderLine } from '@cms/repos/orders';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('invoices.view'));
+const id = Astro.params.id ?? '';
+
+let invoice: InvoiceDetail | null = null;
+let lines: OrderLine[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    const res = await getInvoice(await getDb(getCmsEnv()), id);
+    if (res) {
+      invoice = res.invoice;
+      lines = res.lines;
+    }
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.invoices.detail] load failed', err);
+  }
+}
+const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
+const money = (v: unknown): string => (v == null ? '-' : Number(v).toLocaleString('en-KE'));
+---
+
+<CmsLayout title={invoice ? String(invoice.invoiceNumber) : 'Invoice'}>
+  <div class="cms-page-head">
+    <div>
+      <h1>{invoice ? invoice.invoiceNumber : 'Invoice'}</h1>
+      <p class="cms-lead"><a href="/invoices">Back to invoices</a></p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to invoices.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.invoices.detail]" area="This invoice" />
+    ) : !invoice ? (
+      <div class="cms-card">
+        <p class="cms-lead">That invoice could not be found.</p>
+      </div>
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>Invoice</h2>
+          <dl>
+            <dt>Status</dt>
+            <dd>{field(invoice.status)}</dd>
+            <dt>Payment</dt>
+            <dd>{field(invoice.payment_status)}</dd>
+            <dt>Issue date</dt>
+            <dd>{field(invoice.issue_date)}</dd>
+            <dt>Due date</dt>
+            <dd>{field(invoice.due_date)}</dd>
+            <dt>Subtotal</dt>
+            <dd>{money(invoice.subtotal)}</dd>
+            <dt>Tax</dt>
+            <dd>{money(invoice.tax_amount)}</dd>
+            <dt>Total</dt>
+            <dd>{money(invoice.total_amount)}</dd>
+            <dt>Paid</dt>
+            <dd>{money(invoice.paid_amount)}</dd>
+          </dl>
+        </section>
+
+        <section class="cms-card">
+          <h2>ETIMS</h2>
+          <dl>
+            <dt>ETIMS number</dt>
+            <dd>{field(invoice.etims_invoice_number)}</dd>
+            <dt>ETIMS status</dt>
+            <dd>{field(invoice.etims_status)}</dd>
+            <dt>Submitted</dt>
+            <dd>{field(invoice.etims_submitted_at)}</dd>
+          </dl>
+        </section>
+
+        <section class="cms-card" style="grid-column:1/-1">
+          <h2>Lines</h2>
+          {lines.length === 0 ? (
+            <p class="cms-lead">No lines recorded for this invoice.</p>
+          ) : (
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:0.4rem">Product</th>
+                  <th style="text-align:right;padding:0.4rem">Quantity</th>
+                  <th style="text-align:right;padding:0.4rem">Unit price</th>
+                  <th style="text-align:right;padding:0.4rem">Line total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr>
+                    <td style="padding:0.4rem">{l.productName}</td>
+                    <td style="padding:0.4rem;text-align:right">{money(l.quantity)}</td>
+                    <td style="padding:0.4rem;text-align:right">{money(l.unitPrice)}</td>
+                    <td style="padding:0.4rem;text-align:right">{money(l.lineTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+    )
+  }
+</CmsLayout>

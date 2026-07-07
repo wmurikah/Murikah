@@ -217,6 +217,7 @@ async function seed() {
   const orderStatuses = ['DRAFT', 'SUBMITTED', 'APPROVED', 'FULFILLED', 'CANCELLED'];
   const payStatuses = ['UNPAID', 'PARTIAL', 'PAID'];
   const prodIds = products.map((p) => p[0]);
+  const orderRecords = [];
   let lineSeq = 0;
   for (let i = 0; i < 24; i++) {
     const id = `ord-${String(i + 1).padStart(3, '0')}`;
@@ -270,6 +271,56 @@ async function seed() {
         [`oln-${String(lineSeq).padStart(4, '0')}`, id, pid, pname, qty, price, lineTotal, reqDate],
       );
     }
+    orderRecords.push({ id, cust, cc, cur, status, pay, reqDate, subtotal, tax, total, month });
+  }
+
+  // Invoices for the orders that have been approved or fulfilled (FK-ordered
+  // after orders). Payment state mirrors the order; a paid invoice carries an
+  // ETIMS submission, matching the source billing flow.
+  const dueDate = (month) =>
+    month === 12 ? '2026-01-15' : `2025-${String(month + 1).padStart(2, '0')}-15`;
+  let invSeq = 0;
+  for (const o of orderRecords) {
+    if (o.status !== 'APPROVED' && o.status !== 'FULFILLED') continue;
+    invSeq += 1;
+    const invId = `inv-${String(invSeq).padStart(3, '0')}`;
+    const invNo = `INV-2025-${String(invSeq).padStart(4, '0')}`;
+    const paid = o.pay === 'PAID' ? o.total : o.pay === 'PARTIAL' ? Math.round(o.total / 2) : 0;
+    const invStatus = o.pay === 'PAID' ? 'PAID' : 'SENT';
+    const paidDate = o.pay === 'PAID' ? o.reqDate : null;
+    const etimsNo = o.pay === 'PAID' ? `KRA-${String(1000 + invSeq)}` : null;
+    const etimsStatus = o.pay === 'PAID' ? 'SUBMITTED' : null;
+    const etimsAt = o.pay === 'PAID' ? o.reqDate : null;
+    await run(
+      `INSERT OR REPLACE INTO invoices
+         (invoice_id, invoice_number, order_id, customer_id, country_code, currency_code,
+          issue_date, due_date, subtotal, tax_amount, total_amount, status, payment_status,
+          paid_amount, paid_date, etims_invoice_number, etims_status, etims_submitted_at,
+          created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        invId,
+        invNo,
+        o.id,
+        o.cust,
+        o.cc,
+        o.cur,
+        o.reqDate,
+        dueDate(o.month),
+        o.subtotal,
+        o.tax,
+        o.total,
+        invStatus,
+        o.pay,
+        paid,
+        paidDate,
+        etimsNo,
+        etimsStatus,
+        etimsAt,
+        o.reqDate,
+        o.reqDate,
+      ],
+    );
   }
 
   // Self-check: report row counts so a run verifies the seed landed.
@@ -284,6 +335,7 @@ async function seed() {
     'products',
     'orders',
     'order_lines',
+    'invoices',
   ]) {
     const r = await run(`SELECT COUNT(*) AS n FROM ${t}`);
     counts[t] = Number(r.rows[0].n);
