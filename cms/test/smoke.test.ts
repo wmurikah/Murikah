@@ -239,6 +239,47 @@ test('cms smoke: the customer analytics aggregations return shape', { skip }, as
   assert.ok(byCountry.rows.length > 0, 'expected a country breakdown');
 });
 
+test(
+  'cms smoke: seeded catalogue reads back and products price across lists',
+  { skip },
+  async () => {
+    const db = createClient({ url });
+    const products = await db.execute(
+      'SELECT product_id, sku, category FROM products ORDER BY name',
+    );
+    assert.ok(products.rows.length > 0, 'expected seeded products');
+
+    const priceLists = await db.execute('SELECT price_id, country_code FROM price_list');
+    assert.ok(priceLists.rows.length > 0, 'expected seeded price lists');
+
+    // The detail view joins a product's price rows to their price list; at least
+    // one product prices across more than one list (KE and UG).
+    const first = String(products.rows[0].product_id);
+    const prices = await db.execute({
+      sql: `SELECT pl.country_code, pli.unit_price
+            FROM price_list_items pli JOIN price_list pl ON pl.price_id = pli.price_list_id
+           WHERE pli.product_id = ? ORDER BY pl.country_code`,
+      args: [first],
+    });
+    assert.ok(prices.rows.length >= 1, 'the product-to-price-list join returns rows');
+    assert.ok(
+      prices.rows.every((r) => Number(r.unit_price) > 0),
+      'every price is positive',
+    );
+
+    // The price-lists overview counts items per list.
+    const counts = await db.execute(
+      `SELECT pl.price_id, COUNT(pli.item_id) AS n
+       FROM price_list pl LEFT JOIN price_list_items pli ON pli.price_list_id = pl.price_id
+      GROUP BY pl.price_id`,
+    );
+    assert.ok(
+      counts.rows.some((r) => Number(r.n) > 0),
+      'at least one price list covers products',
+    );
+  },
+);
+
 test('cms smoke: the sales analytics aggregations return shape', { skip }, async () => {
   const db = createClient({ url });
 

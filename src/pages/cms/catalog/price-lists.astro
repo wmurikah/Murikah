@@ -1,0 +1,79 @@
+---
+export const prerender = false;
+
+/**
+ * Staff price lists overview: each price list with its country, currency, status
+ * and the number of products it covers. RBAC-gated via can('catalog.view');
+ * wrapped by the error boundary.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { listPriceLists, type PriceListRow } from '@cms/repos/catalog';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('catalog.view'));
+
+let rows: PriceListRow[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    rows = await listPriceLists(await getDb(getCmsEnv()));
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.catalog.pricelists] list failed', err);
+  }
+}
+---
+
+<CmsLayout title="Price lists">
+  <div class="cms-page-head">
+    <div>
+      <h1>Price lists</h1>
+      <p class="cms-lead"><a href="/catalog">Back to catalogue</a></p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to the catalogue.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.catalog.pricelists]" area="Price lists" />
+    ) : rows.length === 0 ? (
+      <div class="cms-card">
+        <p class="cms-lead">No price lists are configured yet.</p>
+      </div>
+    ) : (
+      <div class="cms-card" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.4rem">Name</th>
+              <th style="text-align:left;padding:0.4rem">Country</th>
+              <th style="text-align:left;padding:0.4rem">Currency</th>
+              <th style="text-align:left;padding:0.4rem">Status</th>
+              <th style="text-align:left;padding:0.4rem">Default</th>
+              <th style="text-align:right;padding:0.4rem">Products</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td style="padding:0.4rem">{r.name ?? r.priceId}</td>
+                <td style="padding:0.4rem">{r.countryCode ?? '-'}</td>
+                <td style="padding:0.4rem">{r.currencyCode ?? '-'}</td>
+                <td style="padding:0.4rem">{r.status ?? '-'}</td>
+                <td style="padding:0.4rem">{r.isDefault ? 'Yes' : 'No'}</td>
+                <td style="padding:0.4rem;text-align:right">{r.itemCount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</CmsLayout>

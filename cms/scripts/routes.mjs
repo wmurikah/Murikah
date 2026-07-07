@@ -24,6 +24,13 @@ export const ROUTES = [
   // Staff list pages.
   { path: '/', file: 'src/pages/cms/index.astro', auth: 'staff', crawl: true },
   { path: '/customers', file: 'src/pages/cms/customers/index.astro', auth: 'staff', crawl: true },
+  { path: '/catalog', file: 'src/pages/cms/catalog/index.astro', auth: 'staff', crawl: true },
+  {
+    path: '/catalog/price-lists',
+    file: 'src/pages/cms/catalog/price-lists.astro',
+    auth: 'staff',
+    crawl: true,
+  },
   { path: '/orders', file: 'src/pages/cms/orders/index.astro', auth: 'staff', crawl: true },
   { path: '/invoices', file: 'src/pages/cms/invoices/index.astro', auth: 'staff', crawl: true },
   { path: '/payments', file: 'src/pages/cms/payments/index.astro', auth: 'staff', crawl: true },
@@ -34,6 +41,12 @@ export const ROUTES = [
   {
     path: '/customers/cust-001',
     file: 'src/pages/cms/customers/[id].astro',
+    auth: 'staff',
+    crawl: true,
+  },
+  {
+    path: '/catalog/prod-pms',
+    file: 'src/pages/cms/catalog/[id].astro',
     auth: 'staff',
     crawl: true,
   },
@@ -95,6 +108,7 @@ export const AUTH_ENDPOINTS = {
 // A search dry-run per list page: appending the query must not 500.
 export const SEARCH_DRY_RUNS = [
   '/customers?q=nairobi',
+  '/catalog?q=PMS&category=FUEL',
   '/orders?q=SO-2025',
   '/invoices?q=INV-2025',
   '/payments?q=QGH',

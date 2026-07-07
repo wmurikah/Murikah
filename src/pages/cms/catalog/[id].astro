@@ -1,0 +1,112 @@
+---
+export const prerender = false;
+
+/**
+ * Staff product detail: the product attributes and its price across every price
+ * list. RBAC-gated; wrapped by the error boundary; a missing product is a clean
+ * not-found, never a 500.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { getProduct, type ProductDetail, type PriceRow } from '@cms/repos/catalog';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('catalog.view'));
+const id = Astro.params.id ?? '';
+
+let product: ProductDetail | null = null;
+let prices: PriceRow[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    const res = await getProduct(await getDb(getCmsEnv()), id);
+    if (res) {
+      product = res.product;
+      prices = res.prices;
+    }
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.catalog.detail] load failed', err);
+  }
+}
+const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
+const money = (v: number | null, cur: string | null): string =>
+  v == null ? '-' : `${cur ?? ''} ${v.toLocaleString('en-KE')}`.trim();
+---
+
+<CmsLayout title={product ? String(product.name) : 'Product'}>
+  <div class="cms-page-head">
+    <div>
+      <h1>{product ? product.name : 'Product'}</h1>
+      <p class="cms-lead"><a href="/catalog">Back to catalogue</a></p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to the catalogue.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.catalog.detail]" area="This product" />
+    ) : !product ? (
+      <div class="cms-card">
+        <p class="cms-lead">That product could not be found.</p>
+      </div>
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>Product</h2>
+          <dl>
+            <dt>SKU</dt>
+            <dd>{field(product.sku)}</dd>
+            <dt>Category</dt>
+            <dd>{field(product.category)}</dd>
+            <dt>Unit of measure</dt>
+            <dd>{field(product.unit_of_measure)}</dd>
+            <dt>Active</dt>
+            <dd>{Number(product.is_active) === 1 ? 'Yes' : 'No'}</dd>
+          </dl>
+          {product.description ? <p class="cms-lead">{String(product.description)}</p> : null}
+        </section>
+
+        <section class="cms-card" style="grid-column:1/-1">
+          <h2>Pricing</h2>
+          {prices.length === 0 ? (
+            <p class="cms-lead">No prices are set for this product yet.</p>
+          ) : (
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:0.4rem">Price list</th>
+                  <th style="text-align:left;padding:0.4rem">Country</th>
+                  <th style="text-align:right;padding:0.4rem">Unit price</th>
+                  <th style="text-align:right;padding:0.4rem">Min qty</th>
+                  <th style="text-align:right;padding:0.4rem">Discount %</th>
+                  <th style="text-align:right;padding:0.4rem">Tax %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prices.map((pr) => (
+                  <tr>
+                    <td style="padding:0.4rem">{pr.priceListName ?? '-'}</td>
+                    <td style="padding:0.4rem">{pr.countryCode ?? '-'}</td>
+                    <td style="padding:0.4rem;text-align:right">
+                      {money(pr.unitPrice, pr.currencyCode)}
+                    </td>
+                    <td style="padding:0.4rem;text-align:right">{pr.minQuantity ?? '-'}</td>
+                    <td style="padding:0.4rem;text-align:right">{pr.discountPercent ?? '-'}</td>
+                    <td style="padding:0.4rem;text-align:right">{pr.taxRate ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+    )
+  }
+</CmsLayout>

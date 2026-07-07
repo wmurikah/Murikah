@@ -211,6 +211,38 @@ async function seed() {
     'prod-lpg': 320,
   };
 
+  // Price lists: a default per country (Kenya in KES, Uganda in UGX), each
+  // pricing every product (FK-ordered after countries and products). The Kenya
+  // list carries the KES prices the orders use; the Uganda list is a rough
+  // local-currency equivalent so a second affiliate has its own pricing.
+  const priceLists = [
+    ['pl-ke', 'Kenya retail', 'KE', 'KES', 1],
+    ['pl-ug', 'Uganda retail', 'UG', 'UGX', 1],
+  ];
+  for (const [id, name, cc, cur, isDefault] of priceLists) {
+    await run(
+      `INSERT OR REPLACE INTO price_list
+         (price_id, name, country_code, currency_code, is_default, status, effective_from, created_at, updated_at)
+       VALUES (?,?,?,?,?, 'ACTIVE', ?, ?, ?)`,
+      [id, name, cc, cur, isDefault, '2025-01-01', now, now],
+    );
+  }
+  const ugxFactor = 30; // rough KES→UGX for the demo local price.
+  let pliSeq = 0;
+  for (const [id] of products) {
+    for (const pl of priceLists) {
+      pliSeq += 1;
+      const base = unitPrice[id];
+      const price = pl[0] === 'pl-ug' ? base * ugxFactor : base;
+      await run(
+        `INSERT OR REPLACE INTO price_list_items
+           (item_id, price_list_id, product_id, unit_price, min_quantity, discount_percent, tax_rate, effective_from, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [`pli-${String(pliSeq).padStart(3, '0')}`, pl[0], id, price, 500, 0, 16, '2025-01-01', now],
+      );
+    }
+  }
+
   // Orders across the customers and the last twelve months, for a time series.
   const custIds = customers.map((c) => c[0]);
   const custCountry = Object.fromEntries(customers.map((c) => [c[0], [c[4], c[5]]]));
@@ -535,6 +567,8 @@ async function seed() {
     'customers',
     'contacts',
     'products',
+    'price_list',
+    'price_list_items',
     'orders',
     'order_lines',
     'invoices',

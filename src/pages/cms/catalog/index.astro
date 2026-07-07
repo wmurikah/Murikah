@@ -1,0 +1,122 @@
+---
+export const prerender = false;
+
+/**
+ * Staff catalogue: the product lines, filterable by search and category.
+ * RBAC-gated via can('catalog.view'); wrapped by the error boundary; an empty
+ * result shows a clear empty state. Links to the price lists.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { listProducts, type ProductRow, type ProductFilters } from '@cms/repos/catalog';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('catalog.view'));
+
+const p = Astro.url.searchParams;
+const filters: ProductFilters = {
+  q: p.get('q') || undefined,
+  category: p.get('category') || undefined,
+};
+const categories = ['FUEL', 'LUBRICANT', 'GAS'];
+
+let rows: ProductRow[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    rows = await listProducts(await getDb(getCmsEnv()), filters);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.catalog] list failed', err);
+  }
+}
+---
+
+<CmsLayout title="Catalogue">
+  <div class="cms-page-head">
+    <div>
+      <h1>Catalogue</h1>
+      <p class="cms-lead">
+        Product lines for {cms.tenantName}. <a href="/catalog/price-lists">Price lists</a>
+      </p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to the catalogue.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.catalog]" area="Catalogue" />
+    ) : (
+      <>
+        <form method="get" class="cms-card" role="search" style="margin-bottom:1rem">
+          <div class="cms-field" style="margin:0">
+            <label for="f-q">Search</label>
+            <input
+              type="search"
+              id="f-q"
+              name="q"
+              class="cms-input"
+              value={filters.q ?? ''}
+              placeholder="Product or SKU"
+            />
+          </div>
+          <div class="cms-field" style="margin-top:0.5rem">
+            <label for="f-category">Category</label>
+            <select id="f-category" name="category" class="cms-input">
+              <option value="">Any category</option>
+              {categories.map((c) => (
+                <option value={c} selected={filters.category === c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style="margin-top:0.5rem">
+            <button type="submit" class="cms-btn cms-btn--primary">
+              Apply
+            </button>
+          </div>
+        </form>
+
+        {rows.length === 0 ? (
+          <div class="cms-card">
+            <p class="cms-lead">No products match. Adjust the search.</p>
+          </div>
+        ) : (
+          <div class="cms-card" style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:0.4rem">SKU</th>
+                  <th style="text-align:left;padding:0.4rem">Product</th>
+                  <th style="text-align:left;padding:0.4rem">Category</th>
+                  <th style="text-align:left;padding:0.4rem">Unit</th>
+                  <th style="text-align:left;padding:0.4rem">Active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td style="padding:0.4rem">{r.sku}</td>
+                    <td style="padding:0.4rem">
+                      <a href={`/catalog/${r.productId}`}>{r.name}</a>
+                    </td>
+                    <td style="padding:0.4rem">{r.category ?? '-'}</td>
+                    <td style="padding:0.4rem">{r.unitOfMeasure ?? '-'}</td>
+                    <td style="padding:0.4rem">{r.isActive ? 'Yes' : 'No'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</CmsLayout>

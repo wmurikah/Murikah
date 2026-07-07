@@ -50,7 +50,12 @@ video. The seed and migrations apply to that endpoint with the same tooling.
 1. [in progress] Customers and contacts (read surface built and smoke-certified
    against the seeded DB: list, detail, contacts, RBAC gate, error boundary. Write
    CRUD, balances, self-signup and KYC fields next.)
-2. [pending] Catalog, pricing and bundles
+2. [in progress] Catalog, pricing and bundles (read surface built and
+   smoke-certified against the seeded DB: staff catalogue with search + category
+   filter, product detail with its price across every price list, a price-lists
+   overview with per-list product counts, RBAC gate `catalog.view`, error
+   boundary. Seed a default price list per country (KE/UG) pricing every
+   product. Bundles, write CRUD and effective-date pricing next.)
 3. [in progress] Orders and approvals (read surface built and smoke-certified
    against the seeded DB: staff list with search + status, order detail with
    lines, portal orders scoped to the signed-in customer, RBAC gate
