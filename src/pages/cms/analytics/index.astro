@@ -1,0 +1,118 @@
+---
+export const prerender = false;
+
+/**
+ * Staff analytics dashboard. This phase reports on the customer base (totals,
+ * distribution by country, type and status, and the top accounts by value),
+ * themed to the tenant brand and driven by the seeded data. Order, invoice,
+ * payment and ticket time series join as those modules are seeded. RBAC-gated;
+ * wrapped by the error boundary so an aggregation fault degrades in place.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import CmsBarChart from '@/components/cms/CmsBarChart.astro';
+import CmsDonut from '@/components/cms/CmsDonut.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { getCustomerAnalytics, type CustomerAnalytics } from '@cms/repos/analytics';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('reports.view'));
+
+let data: CustomerAnalytics | null = null;
+let loadError = false;
+if (allowed) {
+  try {
+    data = await getCustomerAnalytics(await getDb(getCmsEnv()));
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.analytics] load failed', err);
+  }
+}
+const money = (v: number): string => v.toLocaleString('en-KE');
+---
+
+<CmsLayout title="Analytics">
+  <div class="cms-page-head">
+    <div>
+      <h1>Analytics</h1>
+      <p class="cms-lead">Customer analytics for {cms.tenantName}.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to analytics.
+      </p>
+    ) : loadError || !data ? (
+      <CmsError tag="[cms.analytics]" area="Analytics" />
+    ) : (
+      <>
+        <div class="cms-cards" style="margin-bottom:1rem">
+          <section class="cms-card">
+            <p class="cms-lead" style="margin:0">
+              Customers
+            </p>
+            <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+              {money(data.summary.totalCustomers)}
+            </p>
+          </section>
+          <section class="cms-card">
+            <p class="cms-lead" style="margin:0">
+              Lifetime value
+            </p>
+            <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+              {money(data.summary.totalLifetimeValue)}
+            </p>
+          </section>
+          <section class="cms-card">
+            <p class="cms-lead" style="margin:0">
+              Credit limit
+            </p>
+            <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+              {money(data.summary.totalCreditLimit)}
+            </p>
+          </section>
+          <section class="cms-card">
+            <p class="cms-lead" style="margin:0">
+              Credit used
+            </p>
+            <p style="font-size:1.6rem;font-weight:700;margin:0.2rem 0 0">
+              {money(data.summary.totalCreditUsed)}
+            </p>
+          </section>
+        </div>
+
+        <div class="cms-charts">
+          <div class="cms-card">
+            <CmsBarChart
+              title="Customers by country"
+              data={data.byCountry}
+              valueHeading="Customers"
+            />
+          </div>
+          <div class="cms-card">
+            <CmsDonut title="Customers by type" data={data.byType} valueHeading="Customers" />
+          </div>
+          <div class="cms-card">
+            <CmsDonut
+              title="Customers by status"
+              data={data.byStatus}
+              variant="pie"
+              valueHeading="Customers"
+            />
+          </div>
+          <div class="cms-card">
+            <CmsBarChart
+              title="Top accounts by lifetime value"
+              data={data.topByValue}
+              valueHeading="Value"
+            />
+          </div>
+        </div>
+      </>
+    )
+  }
+</CmsLayout>

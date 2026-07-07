@@ -1,0 +1,132 @@
+---
+/**
+ * A compact accessible doughnut or pie, rendered server-side as inline SVG (no
+ * client runtime), with an inline legend and a visually-hidden data table for
+ * assistive tech. Themed to the CMS tenant brand via the chart palette. Slices
+ * are ordered as given; with more than eight categories the smallest fold into
+ * "Other" so the ring stays legible.
+ */
+import type { ChartDatum } from '@cms/repos/analytics';
+
+interface Props {
+  title: string;
+  data: ChartDatum[];
+  variant?: 'donut' | 'pie';
+  valueHeading?: string;
+  emptyText?: string;
+}
+const {
+  title,
+  data,
+  variant = 'donut',
+  valueHeading = 'Count',
+  emptyText = 'No data yet.',
+} = Astro.props;
+
+const present = data.filter((d) => d.value > 0);
+const total = present.reduce((sum, d) => sum + d.value, 0);
+const hasData = present.length > 0 && total > 0;
+
+let source = present;
+if (present.length > 8) {
+  const sorted = [...present].sort((a, b) => b.value - a.value);
+  const other = sorted.slice(7).reduce((sum, d) => sum + d.value, 0);
+  source = [...sorted.slice(0, 7), { label: 'Other', value: other }];
+}
+
+const R = 52;
+const RIN = variant === 'pie' ? 0 : 30;
+const pointOn = (deg: number, rho: number): [number, number] => {
+  const rad = (deg * Math.PI) / 180;
+  return [60 + rho * Math.sin(rad), 60 - rho * Math.cos(rad)];
+};
+const f = (nn: number): string => nn.toFixed(2);
+const sector = (a0: number, a1: number): string => {
+  const [ox0, oy0] = pointOn(a0, R);
+  const [ox1, oy1] = pointOn(a1, R);
+  const [ix1, iy1] = pointOn(a1, RIN);
+  const [ix0, iy0] = pointOn(a0, RIN);
+  const large = a1 - a0 > 180 ? 1 : 0;
+  return `M ${f(ox0)} ${f(oy0)} A ${R} ${R} 0 ${large} 1 ${f(ox1)} ${f(oy1)} L ${f(ix1)} ${f(iy1)} A ${RIN} ${RIN} 0 ${large} 0 ${f(ix0)} ${f(iy0)} Z`;
+};
+
+let cum = 0;
+const slices = source.map((d, i) => {
+  const frac = total > 0 ? d.value / total : 0;
+  const a0 = cum * 360;
+  const a1 = (cum + frac) * 360;
+  cum += frac;
+  return {
+    label: d.label,
+    value: d.value,
+    colour: `var(--cms-chart-${(i % 8) + 1})`,
+    pct: Math.round(frac * 100),
+    path: sector(a0, a1),
+    single: source.length === 1,
+  };
+});
+const ariaSummary = `${title}. ${slices.map((s) => `${s.label} ${s.value}, ${s.pct}%`).join('; ')}.`;
+---
+
+<figure class="cms-chart cms-chart--donut">
+  <figcaption class="cms-chart__title">{title}</figcaption>
+  {
+    !hasData ? (
+      <p class="cms-chart__empty">{emptyText}</p>
+    ) : (
+      <div class="cms-donut">
+        <svg viewBox="0 0 120 120" class="cms-donut__svg" role="img" aria-label={ariaSummary}>
+          {slices.map((s) =>
+            s.single ? (
+              <circle
+                cx="60"
+                cy="60"
+                r={variant === 'pie' ? R : (R + RIN) / 2}
+                fill={variant === 'pie' ? s.colour : 'none'}
+                stroke={variant === 'pie' ? 'none' : s.colour}
+                stroke-width={variant === 'pie' ? 0 : R - RIN}
+              />
+            ) : (
+              <path d={s.path} fill={s.colour} />
+            ),
+          )}
+          {variant === 'donut' && (
+            <text x="60" y="64" text-anchor="middle" class="cms-donut__total">
+              {total.toLocaleString('en-KE')}
+            </text>
+          )}
+        </svg>
+        <ul class="cms-donut__legend">
+          {slices.map((s) => (
+            <li>
+              <span class="cms-donut__swatch" style={`background:${s.colour}`} aria-hidden="true" />
+              <span class="cms-donut__label">{s.label}</span>
+              <span class="cms-donut__val">
+                {s.value.toLocaleString('en-KE')} ({s.pct}%)
+              </span>
+            </li>
+          ))}
+        </ul>
+        <table class="cms-vh">
+          <caption>{title}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Category</th>
+              <th scope="col">{valueHeading}</th>
+              <th scope="col">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {slices.map((s) => (
+              <tr>
+                <th scope="row">{s.label}</th>
+                <td>{s.value}</td>
+                <td>{s.pct}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</figure>

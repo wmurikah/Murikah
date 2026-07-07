@@ -97,3 +97,18 @@ test('cms smoke: a portal customer can sign in', { skip }, async () => {
   const ok = await verifyPassword('HassDemo1!', String(contact.rows[0].password_hash));
   assert.equal(ok, true, 'the demo portal password verifies');
 });
+
+test('cms smoke: the customer analytics aggregations return shape', { skip }, async () => {
+  const db = createClient({ url });
+  const summary = await db.execute(
+    `SELECT COUNT(*) AS total, COALESCE(SUM(lifetime_value), 0) AS ltv FROM customers`,
+  );
+  assert.ok(Number(summary.rows[0].total) > 0, 'expected customers for the summary');
+  assert.ok(Number(summary.rows[0].ltv) > 0, 'expected a non-zero lifetime value total');
+
+  const byCountry = await db.execute(
+    `SELECT COALESCE(country_code, 'Unknown') AS label, COUNT(*) AS n
+       FROM customers GROUP BY country_code ORDER BY n DESC`,
+  );
+  assert.ok(byCountry.rows.length > 0, 'expected a country breakdown');
+});

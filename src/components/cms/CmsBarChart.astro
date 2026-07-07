@@ -1,0 +1,59 @@
+---
+/**
+ * An accessible horizontal bar chart that is also its own data table, so it works
+ * with no client JavaScript (the Murikah house approach). Each row is a label and
+ * its value with a decorative bar behind it; a "no data" line shows when the
+ * series is empty. Themed to the CMS tenant brand.
+ */
+import type { ChartDatum } from '@cms/repos/analytics';
+
+interface Props {
+  title: string;
+  data: ChartDatum[];
+  valueHeading?: string;
+  emptyText?: string;
+}
+const { title, data, valueHeading = 'Count', emptyText = 'No data yet.' } = Astro.props;
+const max = data.reduce((m, d) => Math.max(m, d.value), 0);
+const hasData = data.length > 0 && max > 0;
+const pct = (v: number): number => (max > 0 ? Math.round((v / max) * 100) : 0);
+const fmt = (v: number): string => v.toLocaleString('en-KE');
+---
+
+<figure class="cms-chart">
+  <figcaption class="cms-chart__title">{title}</figcaption>
+  {
+    !hasData ? (
+      <p class="cms-chart__empty">{emptyText}</p>
+    ) : (
+      <table class="cms-chart__table">
+        <thead>
+          <tr>
+            <th scope="col">Item</th>
+            <th scope="col" class="cms-vh">
+              Bar
+            </th>
+            <th scope="col" style="text-align:right">
+              {valueHeading}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d) => (
+            <tr>
+              <th scope="row" class="cms-chart__label">
+                {d.label}
+              </th>
+              <td class="cms-chart__barcell">
+                <span class="cms-chart__track" aria-hidden="true">
+                  <span class="cms-chart__bar" style={`width:${pct(d.value)}%`} />
+                </span>
+              </td>
+              <td class="cms-chart__num">{fmt(d.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+</figure>

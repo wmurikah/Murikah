@@ -58,7 +58,10 @@ video. The seed and migrations apply to that endpoint with the same tooling.
 7. [pending] Tickets, SLA and knowledge
 8. [pending] Omnichannel intake and notifications
 9. [pending] AI bot
-10. [pending] Reports and analytics (all chart types)
+10. [in progress] Reports and analytics (customer analytics built and
+    smoke-certified against the seeded DB: summary tiles, bar and doughnut and pie
+    charts by country/type/status, top accounts. Order/invoice/payment/ticket time
+    series, funnels and exports follow as those modules are seeded.)
 11. [pending] Customer portal (full)
 12. [pending] Admin and config
 13. [pending] Oracle mirror and integrations wiring
