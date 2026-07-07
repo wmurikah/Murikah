@@ -35,6 +35,12 @@ import {
   isGrcPassthroughAsset,
   grcMarketingRedirect,
 } from './lib/grc/routing';
+import {
+  isCmsHost,
+  toCmsPath,
+  isCmsPassthroughAsset,
+  cmsMarketingRedirect,
+} from './lib/cms/routing';
 import { getEngrEnv } from './lib/engr/env';
 import { getDeliveryEnv } from './lib/engr/notify/env';
 import { getDb } from './lib/engr/db';
@@ -111,6 +117,27 @@ async function grcNotFound(response: Response, host: string): Promise<Response> 
   );
 }
 
+// The cms equivalent: a neutral not-found for the cms host, so no corporate
+// content renders there. The app's own not-found screens use the cms layout
+// (body class "cms"); keep those so their specific message survives.
+const CMS_NOT_FOUND_HTML = `<!doctype html>
+<html lang="en-KE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Page not found, Hass CMS</title><style>body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f6f4ee;color:#1b1b1b;display:grid;min-height:100vh;place-items:center;padding:1.5rem}main{max-width:32rem;text-align:center}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0 0 1.25rem;color:#565656}a{display:inline-block;min-height:2.75rem;line-height:2.75rem;padding:0 1.1rem;border-radius:.5rem;background:#12233b;color:#f6f4ee;text-decoration:none;font-weight:600}</style></head><body><main><h1>Page not found</h1><p>That page does not exist on Hass CMS. Check the address, or return to the sign-in page.</p><a href="/login">Go to sign in</a></main></body></html>`;
+
+async function cmsNotFound(response: Response, host: string): Promise<Response> {
+  const body = await response.text();
+  if (body.includes('class="cms"')) {
+    return stamp(new Response(body, response), host, 'cms-app');
+  }
+  return stamp(
+    new Response(CMS_NOT_FOUND_HTML, {
+      status: 404,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    }),
+    host,
+    'cms-app',
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -143,6 +170,24 @@ export default {
       return stamp(response, host, 'grc-app');
     }
 
+    // The Hass CMS platform host: serve the cms app, rewriting to the internal
+    // /cms route unless the path is already there or is a static asset. The
+    // browser URL is unchanged. The session guard then runs in src/middleware.ts
+    // against that /cms route.
+    if (isCmsHost(host)) {
+      const cmsPath = isCmsPassthroughAsset(url.pathname) ? url.pathname : toCmsPath(url.pathname);
+      let response: Response;
+      if (cmsPath === url.pathname) {
+        response = await astro.fetch(request, env, ctx);
+      } else {
+        const rewritten = new URL(url);
+        rewritten.pathname = cmsPath;
+        response = await astro.fetch(new Request(rewritten, request), env, ctx);
+      }
+      if (response.status === 404) return cmsNotFound(response, host);
+      return stamp(response, host, 'cms-app');
+    }
+
     const decision = routeDecision(host, url.pathname, url.search);
 
     // On the marketing apex a /grc path is sent to the subdomain, exactly as a
@@ -150,6 +195,8 @@ export default {
     if (decision.branch === 'marketing') {
       const grcLocation = grcMarketingRedirect(url.pathname, url.search);
       if (grcLocation) return stamp(redirect(grcLocation), host, 'redirect-grc-path');
+      const cmsLocation = cmsMarketingRedirect(url.pathname, url.search);
+      if (cmsLocation) return stamp(redirect(cmsLocation), host, 'redirect-cms-path');
     }
 
     switch (decision.branch) {

@@ -40,6 +40,14 @@ declare namespace Cloudflare {
     TURSO_GRC_AUTH_TOKEN?: string;
     GRC_SESSION_SECRET?: string;
 
+    // Hass CMS product, its own Turso database and session secret, namespaced so
+    // they never clash with engr, grc or the marketing site. Optional here so the
+    // marketing preview typechecks without them; the cms env accessor throws at
+    // runtime when any is missing. Runtime secrets, never committed.
+    TURSO_CMS_DATABASE_URL?: string;
+    TURSO_CMS_AUTH_TOKEN?: string;
+    CMS_SESSION_SECRET?: string;
+
     // GRC notification delivery via Microsoft Graph (Outlook). All optional: the
     // dispatcher's production gate keeps sends off unless GRC_ENV is 'production'
     // and these are present, so a preview or local run drains as a dry-run and a
