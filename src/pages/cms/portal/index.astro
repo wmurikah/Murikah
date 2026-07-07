@@ -2,31 +2,102 @@
 export const prerender = false;
 
 /**
- * The customer portal home. The foundation lands a portal customer here after
- * sign-in, in the tenant brand, scoped to their own account; orders, invoices,
- * payments and tickets arrive one per prompt. Self-contained, so it never 500s.
+ * The customer portal home, scoped to the signed-in customer's own account
+ * (cms.customerId). Shows their account summary and organisation contacts from
+ * the seeded data; orders, invoices, payments and tickets join as those modules
+ * are seeded. Wrapped by the error boundary so a query fault degrades in place,
+ * never a 500.
  */
 import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import {
+  getCustomer,
+  listContactsForCustomer,
+  type CustomerDetail,
+  type ContactRow,
+} from '@cms/repos/customers';
 
 const cms = Astro.locals.cms;
 if (!cms) return Astro.redirect('/portal/login');
+
+let account: CustomerDetail | null = null;
+let contacts: ContactRow[] = [];
+let loadError = false;
+if (cms.customerId) {
+  try {
+    const db = await getDb(getCmsEnv());
+    account = await getCustomer(db, cms.customerId);
+    if (account) contacts = await listContactsForCustomer(db, cms.customerId);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.portal.home] load failed', err);
+  }
+}
+const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
 ---
 
 <CmsPortalLayout title="Your portal">
   <div class="cms-page-head">
     <div>
       <h1>Welcome{cms.userName ? `, ${cms.userName}` : ''}</h1>
-      <p class="cms-lead">Your {cms.tenantName} customer portal.</p>
+      <p class="cms-lead">
+        {account ? account.companyName : `Your ${cms.tenantName} customer portal`}
+      </p>
     </div>
   </div>
 
-  <div class="cms-cards">
-    <section class="cms-card">
-      <h2>Your account</h2>
-      <p class="cms-lead">
-        Signed in as {cms.userEmail ?? 'a customer'}. Your orders, invoices and support tickets will
-        appear here.
-      </p>
-    </section>
-  </div>
+  {
+    loadError ? (
+      <CmsError tag="[cms.portal.home]" area="Your portal" />
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>Your account</h2>
+          {account ? (
+            <dl>
+              <dt>Account number</dt>
+              <dd>{field(account.account_number)}</dd>
+              <dt>Status</dt>
+              <dd>{field(account.status)}</dd>
+              <dt>Credit limit</dt>
+              <dd>{field(account.credit_limit)}</dd>
+              <dt>Credit used</dt>
+              <dd>{field(account.credit_used)}</dd>
+            </dl>
+          ) : (
+            <p class="cms-lead">
+              Signed in as {cms.userEmail ?? 'a customer'}. Your account details will appear here.
+            </p>
+          )}
+        </section>
+
+        <section class="cms-card">
+          <h2>Contacts</h2>
+          {contacts.length === 0 ? (
+            <p class="cms-lead">No contacts recorded.</p>
+          ) : (
+            <ul class="cms-nav" style="gap:0.4rem">
+              {contacts.map((c) => (
+                <li>
+                  <strong>{c.name}</strong>
+                  {c.jobTitle ? ` - ${c.jobTitle}` : ''}
+                  {c.email ? ` - ${c.email}` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section class="cms-card">
+          <h2>Coming to your portal</h2>
+          <p class="cms-lead">
+            Place and track orders, view invoices, pay by M-Pesa, and raise support tickets, all in
+            one place.
+          </p>
+        </section>
+      </div>
+    )
+  }
 </CmsPortalLayout>

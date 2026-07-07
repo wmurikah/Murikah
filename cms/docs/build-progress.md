@@ -62,7 +62,9 @@ video. The seed and migrations apply to that endpoint with the same tooling.
     smoke-certified against the seeded DB: summary tiles, bar and doughnut and pie
     charts by country/type/status, top accounts. Order/invoice/payment/ticket time
     series, funnels and exports follow as those modules are seeded.)
-11. [pending] Customer portal (full)
+11. [in progress] Customer portal (the portal home now shows the signed-in
+    customer's own account and contacts, scoped to their customer_id, error
+    boundaried. Order/invoice/payment/ticket views join as those modules land.)
 12. [pending] Admin and config
 13. [pending] Oracle mirror and integrations wiring
 
