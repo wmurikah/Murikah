@@ -1,0 +1,32 @@
+---
+export const prerender = false;
+
+/**
+ * The customer portal home. The foundation lands a portal customer here after
+ * sign-in, in the tenant brand, scoped to their own account; orders, invoices,
+ * payments and tickets arrive one per prompt. Self-contained, so it never 500s.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/portal/login');
+---
+
+<CmsPortalLayout title="Your portal">
+  <div class="cms-page-head">
+    <div>
+      <h1>Welcome{cms.userName ? `, ${cms.userName}` : ''}</h1>
+      <p class="cms-lead">Your {cms.tenantName} customer portal.</p>
+    </div>
+  </div>
+
+  <div class="cms-cards">
+    <section class="cms-card">
+      <h2>Your account</h2>
+      <p class="cms-lead">
+        Signed in as {cms.userEmail ?? 'a customer'}. Your orders, invoices and support tickets will
+        appear here.
+      </p>
+    </section>
+  </div>
+</CmsPortalLayout>
