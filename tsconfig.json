@@ -7,7 +7,8 @@
     "paths": {
       "@/*": ["src/*"],
       "@engr/*": ["src/lib/engr/*"],
-      "@grc/*": ["src/lib/grc/*"]
+      "@grc/*": ["src/lib/grc/*"],
+      "@cms/*": ["src/lib/cms/*"]
     }
   },
   "include": [".astro/types.d.ts", "**/*"],

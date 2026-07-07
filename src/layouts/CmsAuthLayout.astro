@@ -1,0 +1,88 @@
+---
+/**
+ * The Hass CMS front door: a full-viewport two-pane split, a brand panel beside a
+ * paper form pane, mirroring Engineering Rhythm and GRC so the products read as
+ * one family. Below 1024px it stacks. The brand colours and name come from the
+ * tenant brand when known, else the Murikah default. A single-signal guard
+ * disables the submit control on first click so repeated clicks send one request.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@/styles/global.css';
+import '@/styles/cms.css';
+import { DEFAULT_BRANDING, type Branding } from '@cms/repos/branding';
+
+interface Props {
+  title: string;
+  brand?: Branding;
+  headline?: string;
+  sub?: string;
+}
+const {
+  title,
+  brand = DEFAULT_BRANDING,
+  headline = 'Run your customers, orders and support in one place',
+  sub = 'The Hass customer management platform.',
+} = Astro.props;
+const pageTitle = `${title} - ${brand.appName}`;
+const brandVars = `--cms-brand-primary:${brand.primaryColor};--cms-brand-secondary:${brand.secondaryColor};--cms-brand-accent:${brand.accentColor};`;
+const initial = brand.appName.trim().charAt(0).toUpperCase() || 'H';
+---
+
+<!doctype html>
+<html lang="en-KE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="cms cms-authbody" style={brandVars}>
+    <a href="#cms-auth-main" class="cms-skip">Skip to content</a>
+    <div class="cms-authsplit">
+      <aside class="cms-authbrand">
+        <a href="/login" class="cms-authbrand__mark">
+          <span class="cms-authbrand__badge" aria-hidden="true">{initial}</span>
+          <span>{brand.appName}</span>
+        </a>
+        <div>
+          <h2 class="cms-authbrand__headline">{headline}</h2>
+          <p class="cms-authbrand__sub">{sub}</p>
+        </div>
+        <p class="cms-authbrand__sub">A Murikah product</p>
+      </aside>
+
+      <main id="cms-auth-main" class="cms-authpane">
+        <div class="cms-authcard">
+          <slot />
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Single-signal guard: on the first real submit, disable the submit button
+      // so repeated clicks send one request. Deferred so the button's name and
+      // value are still serialised.
+      document.addEventListener(
+        'submit',
+        (e) => {
+          const form = e.target;
+          if (!(form instanceof HTMLFormElement)) return;
+          if (form.dataset.cmsSubmitted === '1') {
+            e.preventDefault();
+            return;
+          }
+          form.dataset.cmsSubmitted = '1';
+          const btn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+          if (btn) {
+            setTimeout(() => {
+              btn.setAttribute('aria-busy', 'true');
+              btn.setAttribute('disabled', '');
+            }, 0);
+          }
+        },
+        true,
+      );
+    </script>
+  </body>
+</html>
