@@ -91,10 +91,30 @@ video. The seed and migrations apply to that endpoint with the same tooling.
 12. [pending] Admin and config
 13. [pending] Oracle mirror and integrations wiring
 
-## Final phase
+## App-level crawl and the overview video (staged, awaiting staging Turso)
 
-- [blocked] 60-second whole-system overview video
-  (`cms/docs/demo/hass-cms-overview.mp4`) recorded from the real running system
-  with Playwright: requires the live database and seed data. The recorder
-  (`cms/scripts/record-demo.ts`) and the designed-walkthrough fallback are staged
-  as the modules land.
+The app-level crawl and the 60-second video both need a running CMS app pointed
+at the seeded staging database (the Worker `@libsql/client/web` build cannot open
+a local `file:` database, so a staging Turso HTTP endpoint is required) and the
+`playwright` package. Both are **staged and ready**; execution awaits the staging
+endpoint. What is built:
+
+- `cms/scripts/routes.mjs` — the canonical route manifest (every page, its file
+  and auth context), the search dry-runs and the 60s storyboard: the single
+  source of truth for the crawl, the recorder and the coverage test.
+- `cms/scripts/crawl.mjs` (`pnpm cms:crawl`) — signs in as staff and as the
+  portal customer, GETs every page, dry-runs the search forms, and **fails on any
+  500 or on the error boundary rendering**. Skips honestly (exit 0, prints why)
+  when `playwright` or a reachable `BASE_URL` is absent.
+- `cms/scripts/record-demo.mjs` (`pnpm cms:demo:record`) — records the 60-second
+  walkthrough to `cms/docs/demo/hass-cms-overview.webm` from the running app.
+- `cms/docs/demo/storyboard.md` — the shot list and the run commands; doubles as
+  the written designed-walkthrough fallback until the video is recorded.
+- `cms/test/routes.test.ts` — runs now in `pnpm test`: guards that every page is
+  in the crawl manifest and behind the `CmsError` boundary, so the crawl target
+  set and the walkthrough stay complete as the app grows.
+
+Remaining (awaits the staging Turso endpoint):
+
+- [ ] Run `pnpm cms:crawl` green against staging.
+- [ ] Record and commit `cms/docs/demo/hass-cms-overview.webm`.
