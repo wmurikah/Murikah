@@ -1,0 +1,101 @@
+---
+export const prerender = false;
+
+/**
+ * Staff customer detail: the account and its contacts. RBAC-gated; wrapped by the
+ * error boundary; a missing customer is a clean not-found, never a 500.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import {
+  getCustomer,
+  listContactsForCustomer,
+  type CustomerDetail,
+  type ContactRow,
+} from '@cms/repos/customers';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('customers.view'));
+const id = Astro.params.id ?? '';
+
+let customer: CustomerDetail | null = null;
+let contacts: ContactRow[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    const db = await getDb(getCmsEnv());
+    customer = await getCustomer(db, id);
+    if (customer) contacts = await listContactsForCustomer(db, id);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.customers.detail] load failed', err);
+  }
+}
+const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
+---
+
+<CmsLayout title={customer ? customer.companyName : 'Customer'}>
+  <div class="cms-page-head">
+    <div>
+      <h1>{customer ? customer.companyName : 'Customer'}</h1>
+      <p class="cms-lead"><a href="/customers">Back to customers</a></p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to customers.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.customers.detail]" area="This customer" />
+    ) : !customer ? (
+      <div class="cms-card">
+        <p class="cms-lead">That customer could not be found.</p>
+      </div>
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>Account</h2>
+          <dl>
+            <dt>Account number</dt>
+            <dd>{field(customer.account_number)}</dd>
+            <dt>Country</dt>
+            <dd>{field(customer.country_code)}</dd>
+            <dt>Type</dt>
+            <dd>{field(customer.customer_type)}</dd>
+            <dt>Status</dt>
+            <dd>{field(customer.status)}</dd>
+            <dt>Tax PIN</dt>
+            <dd>{field(customer.tax_pin)}</dd>
+            <dt>Credit limit</dt>
+            <dd>{field(customer.credit_limit)}</dd>
+            <dt>Credit used</dt>
+            <dd>{field(customer.credit_used)}</dd>
+          </dl>
+        </section>
+
+        <section class="cms-card">
+          <h2>Contacts</h2>
+          {contacts.length === 0 ? (
+            <p class="cms-lead">No contacts recorded.</p>
+          ) : (
+            <ul class="cms-nav" style="gap:0.4rem">
+              {contacts.map((c) => (
+                <li>
+                  <strong>{c.name}</strong>
+                  {c.jobTitle ? ` - ${c.jobTitle}` : ''}
+                  {c.email ? ` - ${c.email}` : ''}
+                  {c.isPortalUser ? ' (portal user)' : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    )
+  }
+</CmsLayout>

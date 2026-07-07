@@ -21,7 +21,10 @@ const pageTitle = `${title} - ${brand.appName}`;
 const brandVars = `--cms-brand-primary:${brand.primaryColor};--cms-brand-secondary:${brand.secondaryColor};--cms-brand-accent:${brand.accentColor};`;
 const initial = brand.appName.trim().charAt(0).toUpperCase() || 'H';
 const path = Astro.locals.cmsPath ?? '/';
-const nav = [{ label: 'Dashboard', href: '/' }];
+const nav = [
+  { label: 'Dashboard', href: '/' },
+  { label: 'Customers', href: '/customers' },
+];
 const roleLabel = (cms?.role ?? '').replace(/_/g, ' ');
 ---
 

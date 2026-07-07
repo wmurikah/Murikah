@@ -1,0 +1,116 @@
+---
+export const prerender = false;
+
+/**
+ * Staff customers list. Scoped to the acting tenant, filterable by search,
+ * status, country and type. RBAC-gated via can(); wrapped by the error boundary
+ * so a query fault shows the branded card, never a blank 500; an empty result
+ * shows a clear empty state.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { listCustomers, type CustomerRow, type CustomerFilters } from '@cms/repos/customers';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('customers.view'));
+
+const p = Astro.url.searchParams;
+const filters: CustomerFilters = {
+  q: p.get('q') || undefined,
+  status: p.get('status') || undefined,
+  countryCode: p.get('country') || undefined,
+  customerType: p.get('type') || undefined,
+};
+
+let rows: CustomerRow[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    rows = await listCustomers(await getDb(getCmsEnv()), filters);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.customers] list failed', err);
+  }
+}
+const fmt = (v: number | null): string => (v == null ? '-' : v.toLocaleString('en-KE'));
+---
+
+<CmsLayout title="Customers">
+  <div class="cms-page-head">
+    <div>
+      <h1>Customers</h1>
+      <p class="cms-lead">Accounts for {cms.tenantName}.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to customers.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.customers]" area="Customers" />
+    ) : (
+      <>
+        <form method="get" class="cms-card" role="search" style="margin-bottom:1rem">
+          <div class="cms-field" style="margin:0">
+            <label for="f-q">Search</label>
+            <input
+              type="search"
+              id="f-q"
+              name="q"
+              class="cms-input"
+              value={filters.q ?? ''}
+              placeholder="Company, account number or email"
+            />
+          </div>
+          <div style="margin-top:0.5rem">
+            <button type="submit" class="cms-btn cms-btn--primary">
+              Apply
+            </button>
+          </div>
+        </form>
+
+        {rows.length === 0 ? (
+          <div class="cms-card">
+            <p class="cms-lead">No customers match. Adjust the search, or add the first account.</p>
+          </div>
+        ) : (
+          <div class="cms-card" style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:0.4rem">Company</th>
+                  <th style="text-align:left;padding:0.4rem">Account</th>
+                  <th style="text-align:left;padding:0.4rem">Country</th>
+                  <th style="text-align:left;padding:0.4rem">Type</th>
+                  <th style="text-align:left;padding:0.4rem">Status</th>
+                  <th style="text-align:right;padding:0.4rem">Credit limit</th>
+                  <th style="text-align:right;padding:0.4rem">Credit used</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td style="padding:0.4rem">
+                      <a href={`/customers/${r.customerId}`}>{r.companyName}</a>
+                    </td>
+                    <td style="padding:0.4rem">{r.accountNumber ?? '-'}</td>
+                    <td style="padding:0.4rem">{r.countryCode ?? '-'}</td>
+                    <td style="padding:0.4rem">{r.customerType ?? '-'}</td>
+                    <td style="padding:0.4rem">{r.status ?? '-'}</td>
+                    <td style="padding:0.4rem;text-align:right">{fmt(r.creditLimit)}</td>
+                    <td style="padding:0.4rem;text-align:right">{fmt(r.creditUsed)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</CmsLayout>
