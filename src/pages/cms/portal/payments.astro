@@ -1,0 +1,78 @@
+---
+export const prerender = false;
+
+/**
+ * The customer portal payments list, scoped to the signed-in customer's own
+ * customer_id: the proof-of-payment uploads they have submitted and their
+ * review status. Wrapped by the error boundary; an empty result shows a clear
+ * empty state.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { listPaymentsForCustomer, type PaymentRow } from '@cms/repos/payments';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/portal/login');
+
+let rows: PaymentRow[] = [];
+let loadError = false;
+if (cms.customerId) {
+  try {
+    rows = await listPaymentsForCustomer(await getDb(getCmsEnv()), cms.customerId);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.portal.payments] load failed', err);
+  }
+}
+const money = (v: number | null, cur: string | null): string =>
+  v == null ? '-' : `${cur ?? ''} ${v.toLocaleString('en-KE')}`.trim();
+const day = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+---
+
+<CmsPortalLayout title="Your payments">
+  <div class="cms-page-head">
+    <div>
+      <h1>Your payments</h1>
+      <p class="cms-lead"><a href="/portal">Back to your portal</a></p>
+    </div>
+  </div>
+
+  {
+    loadError ? (
+      <CmsError tag="[cms.portal.payments]" area="Your payments" />
+    ) : rows.length === 0 ? (
+      <div class="cms-card">
+        <p class="cms-lead">You have not submitted any payments yet.</p>
+      </div>
+    ) : (
+      <div class="cms-card" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.4rem">Reference</th>
+              <th style="text-align:left;padding:0.4rem">Method</th>
+              <th style="text-align:left;padding:0.4rem">Invoice</th>
+              <th style="text-align:left;padding:0.4rem">Submitted</th>
+              <th style="text-align:left;padding:0.4rem">Status</th>
+              <th style="text-align:right;padding:0.4rem">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td style="padding:0.4rem">{r.referenceNumber ?? r.uploadId}</td>
+                <td style="padding:0.4rem">{r.paymentMethod ?? '-'}</td>
+                <td style="padding:0.4rem">{r.invoiceNumber ?? '-'}</td>
+                <td style="padding:0.4rem">{day(r.uploadDate)}</td>
+                <td style="padding:0.4rem">{r.status ?? '-'}</td>
+                <td style="padding:0.4rem;text-align:right">{money(r.amount, r.currencyCode)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</CmsPortalLayout>

@@ -1,0 +1,94 @@
+---
+export const prerender = false;
+
+/**
+ * Staff payment detail: the proof-of-payment metadata, the matched invoice and
+ * the review status. RBAC-gated; wrapped by the error boundary; a missing
+ * upload is a clean not-found, never a 500.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { getPayment, type PaymentDetail } from '@cms/repos/payments';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('payments.view'));
+const id = Astro.params.id ?? '';
+
+let payment: PaymentDetail | null = null;
+let invoiceNumber: string | null = null;
+let loadError = false;
+if (allowed) {
+  try {
+    const res = await getPayment(await getDb(getCmsEnv()), id);
+    if (res) {
+      payment = res.payment;
+      invoiceNumber = res.invoiceNumber;
+    }
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.payments.detail] load failed', err);
+  }
+}
+const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
+const money = (v: unknown): string => (v == null ? '-' : Number(v).toLocaleString('en-KE'));
+---
+
+<CmsLayout title={payment ? `Payment ${field(payment.reference_number)}` : 'Payment'}>
+  <div class="cms-page-head">
+    <div>
+      <h1>{payment ? field(payment.reference_number) : 'Payment'}</h1>
+      <p class="cms-lead"><a href="/payments">Back to payments</a></p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to payments.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.payments.detail]" area="This payment" />
+    ) : !payment ? (
+      <div class="cms-card">
+        <p class="cms-lead">That payment upload could not be found.</p>
+      </div>
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>Payment</h2>
+          <dl>
+            <dt>Method</dt>
+            <dd>{field(payment.payment_method)}</dd>
+            <dt>Amount</dt>
+            <dd>
+              {field(payment.currency_code)} {money(payment.amount)}
+            </dd>
+            <dt>Reference</dt>
+            <dd>{field(payment.reference_number)}</dd>
+            <dt>Uploaded</dt>
+            <dd>{field(payment.upload_date)}</dd>
+            <dt>Matched invoice</dt>
+            <dd>{field(invoiceNumber)}</dd>
+          </dl>
+        </section>
+
+        <section class="cms-card">
+          <h2>Review</h2>
+          <dl>
+            <dt>Status</dt>
+            <dd>{field(payment.status)}</dd>
+            <dt>Reviewed by</dt>
+            <dd>{field(payment.reviewed_by)}</dd>
+            <dt>Notes</dt>
+            <dd>{field(payment.review_notes)}</dd>
+            <dt>File</dt>
+            <dd>{field(payment.file_name)}</dd>
+          </dl>
+        </section>
+      </div>
+    )
+  }
+</CmsLayout>

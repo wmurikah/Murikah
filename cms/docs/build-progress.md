@@ -62,7 +62,13 @@ video. The seed and migrations apply to that endpoint with the same tooling.
    signed-in customer, RBAC gate `invoices.view`, error boundary. Seed invoices
    the approved/fulfilled orders; paid ones carry an ETIMS submission. Write
    CRUD, ETIMS submission and credit notes next.)
-5. [pending] Payments (M-Pesa, bank, Oracle receipts)
+5. [in progress] Payments (M-Pesa, bank, Oracle receipts) (read surface built
+   and smoke-certified against the seeded DB: staff review list with search +
+   status, payment detail with the proof metadata, matched invoice and review
+   status, portal payments scoped to the signed-in customer, RBAC gate
+   `payments.view`, error boundary. Seed receipts match invoices; paid ones are
+   approved with a reviewer, partial ones pending. Approve/reject write actions
+   and M-Pesa STK reconciliation next.)
 6. [pending] Delivery locations and documents
 7. [in progress] Tickets, SLA and knowledge (read surface built and
    smoke-certified against the seeded DB: staff list with search + priority
@@ -78,9 +84,9 @@ video. The seed and migrations apply to that endpoint with the same tooling.
     series, funnels and exports follow as those modules are seeded.)
 11. [in progress] Customer portal (the portal home shows the signed-in
     customer's own account and contacts, scoped to their customer_id, and links
-    to their orders, invoices and support tickets (all same scope; internal
-    ticket notes hidden), error boundaried. Payment views join as that module
-    lands.)
+    to their orders, invoices, payments and support tickets (all same scope;
+    internal ticket notes hidden), error boundaried. Self-service order
+    placement and payment submission are the next writes.)
 12. [pending] Admin and config
 13. [pending] Oracle mirror and integrations wiring
 

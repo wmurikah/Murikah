@@ -279,6 +279,7 @@ async function seed() {
   // ETIMS submission, matching the source billing flow.
   const dueDate = (month) =>
     month === 12 ? '2026-01-15' : `2025-${String(month + 1).padStart(2, '0')}-15`;
+  const invoiceRecords = [];
   let invSeq = 0;
   for (const o of orderRecords) {
     if (o.status !== 'APPROVED' && o.status !== 'FULFILLED') continue;
@@ -319,6 +320,58 @@ async function seed() {
         etimsAt,
         o.reqDate,
         o.reqDate,
+      ],
+    );
+    invoiceRecords.push({
+      id: invId,
+      cust: o.cust,
+      cc: o.cc,
+      cur: o.cur,
+      total: o.total,
+      pay: o.pay,
+      reqDate: o.reqDate,
+    });
+  }
+
+  // Payment uploads: proof-of-payment receipts matched to invoices (FK-ordered
+  // after invoices). A paid invoice has an approved, matched receipt; a partial
+  // one is pending review. The portal customer always gets a pending upload so
+  // the portal payments view has content. Methods cycle M-Pesa/bank/Oracle.
+  const methods = ['MPESA', 'BANK_TRANSFER', 'ORACLE'];
+  const refPrefix = { MPESA: 'QGH', BANK_TRANSFER: 'FT', ORACLE: 'ORA' };
+  let paySeq = 0;
+  for (const inv of invoiceRecords) {
+    const isPortalCust = inv.cust === 'cust-001';
+    if (inv.pay !== 'PAID' && inv.pay !== 'PARTIAL' && !isPortalCust) continue;
+    paySeq += 1;
+    const method = methods[paySeq % methods.length];
+    const approved = inv.pay === 'PAID';
+    const amount =
+      inv.pay === 'PAID'
+        ? inv.total
+        : inv.pay === 'PARTIAL'
+          ? Math.round(inv.total / 2)
+          : inv.total;
+    await run(
+      `INSERT OR REPLACE INTO payment_uploads
+         (upload_id, customer_id, invoice_id, file_name, payment_method, amount, currency_code,
+          reference_number, upload_date, uploaded_by, status, reviewed_by, review_notes, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        `pay-${String(paySeq).padStart(3, '0')}`,
+        inv.cust,
+        inv.id,
+        `receipt-${paySeq}.pdf`,
+        method,
+        amount,
+        inv.cur,
+        `${refPrefix[method]}${String(100000 + paySeq)}`,
+        inv.reqDate,
+        'CUSTOMER',
+        approved ? 'APPROVED' : 'PENDING',
+        approved ? 'usr-admin' : null,
+        approved ? 'Matched to invoice.' : null,
+        inv.reqDate,
       ],
     );
   }
@@ -485,6 +538,7 @@ async function seed() {
     'orders',
     'order_lines',
     'invoices',
+    'payment_uploads',
     'tickets',
     'ticket_comments',
   ]) {

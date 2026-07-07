@@ -196,6 +196,34 @@ test(
   },
 );
 
+test('cms smoke: seeded payment uploads read back and match to invoices', { skip }, async () => {
+  const db = createClient({ url });
+  const payments = await db.execute(
+    `SELECT upload_id, customer_id, invoice_id, payment_method, status
+       FROM payment_uploads ORDER BY upload_date DESC`,
+  );
+  assert.ok(payments.rows.length > 0, 'expected seeded payment uploads');
+
+  // Every upload joins to its customer and (when matched) its invoice: the
+  // staff list LEFT JOINs both.
+  const joined = await db.execute(
+    `SELECT p.reference_number, c.company_name, iv.invoice_number
+       FROM payment_uploads p
+       LEFT JOIN customers c ON c.customer_id = p.customer_id
+       LEFT JOIN invoices iv ON iv.invoice_id = p.invoice_id
+      ORDER BY p.upload_date DESC LIMIT 1`,
+  );
+  assert.equal(joined.rows.length, 1, 'the payment-to-customer/invoice join returns a row');
+
+  // An approved receipt carries a reviewer (the source review flow).
+  const approved = await db.execute(
+    "SELECT reviewed_by FROM payment_uploads WHERE status = 'APPROVED' LIMIT 1",
+  );
+  if (approved.rows.length) {
+    assert.ok(approved.rows[0].reviewed_by, 'an approved payment records who reviewed it');
+  }
+});
+
 test('cms smoke: the customer analytics aggregations return shape', { skip }, async () => {
   const db = createClient({ url });
   const summary = await db.execute(

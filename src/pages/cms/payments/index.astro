@@ -1,0 +1,129 @@
+---
+export const prerender = false;
+
+/**
+ * Staff payments review list: proof-of-payment uploads, filterable by search and
+ * review status. RBAC-gated via can('payments.view'); wrapped by the error
+ * boundary; an empty result shows a clear empty state.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { listPayments, type PaymentRow, type PaymentFilters } from '@cms/repos/payments';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('payments.view'));
+
+const p = Astro.url.searchParams;
+const filters: PaymentFilters = {
+  q: p.get('q') || undefined,
+  status: p.get('status') || undefined,
+};
+const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
+
+let rows: PaymentRow[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    rows = await listPayments(await getDb(getCmsEnv()), filters);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.payments] list failed', err);
+  }
+}
+const money = (v: number | null, cur: string | null): string =>
+  v == null ? '-' : `${cur ?? ''} ${v.toLocaleString('en-KE')}`.trim();
+const day = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+---
+
+<CmsLayout title="Payments">
+  <div class="cms-page-head">
+    <div>
+      <h1>Payments</h1>
+      <p class="cms-lead">Proof-of-payment uploads for {cms.tenantName} to review and match.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to payments.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.payments]" area="Payments" />
+    ) : (
+      <>
+        <form method="get" class="cms-card" role="search" style="margin-bottom:1rem">
+          <div class="cms-field" style="margin:0">
+            <label for="f-q">Search</label>
+            <input
+              type="search"
+              id="f-q"
+              name="q"
+              class="cms-input"
+              value={filters.q ?? ''}
+              placeholder="Reference number"
+            />
+          </div>
+          <div class="cms-field" style="margin-top:0.5rem">
+            <label for="f-status">Status</label>
+            <select id="f-status" name="status" class="cms-input">
+              <option value="">Any status</option>
+              {statuses.map((st) => (
+                <option value={st} selected={filters.status === st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style="margin-top:0.5rem">
+            <button type="submit" class="cms-btn cms-btn--primary">
+              Apply
+            </button>
+          </div>
+        </form>
+
+        {rows.length === 0 ? (
+          <div class="cms-card">
+            <p class="cms-lead">No payment uploads match. Adjust the search.</p>
+          </div>
+        ) : (
+          <div class="cms-card" style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:0.4rem">Reference</th>
+                  <th style="text-align:left;padding:0.4rem">Customer</th>
+                  <th style="text-align:left;padding:0.4rem">Method</th>
+                  <th style="text-align:left;padding:0.4rem">Invoice</th>
+                  <th style="text-align:left;padding:0.4rem">Uploaded</th>
+                  <th style="text-align:left;padding:0.4rem">Status</th>
+                  <th style="text-align:right;padding:0.4rem">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td style="padding:0.4rem">
+                      <a href={`/payments/${r.uploadId}`}>{r.referenceNumber ?? r.uploadId}</a>
+                    </td>
+                    <td style="padding:0.4rem">{r.companyName ?? '-'}</td>
+                    <td style="padding:0.4rem">{r.paymentMethod ?? '-'}</td>
+                    <td style="padding:0.4rem">{r.invoiceNumber ?? '-'}</td>
+                    <td style="padding:0.4rem">{day(r.uploadDate)}</td>
+                    <td style="padding:0.4rem">{r.status ?? '-'}</td>
+                    <td style="padding:0.4rem;text-align:right">
+                      {money(r.amount, r.currencyCode)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</CmsLayout>
