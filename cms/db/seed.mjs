@@ -323,6 +323,155 @@ async function seed() {
     );
   }
 
+  // Support tickets across the customers, with a short comment thread each
+  // (FK-ordered after customers/contacts/orders). Priority honours the CHECK
+  // (CRITICAL/HIGH/MEDIUM/LOW). The first ticket is on the portal customer so
+  // the portal tickets view has content. A comment marked internal must not
+  // reach the portal thread.
+  const tickets = [
+    {
+      id: 'tkt-001',
+      no: 'TK-2025-0001',
+      cust: 'cust-001',
+      contact: 'con-001',
+      order: 'ord-001',
+      channel: 'PORTAL',
+      category: 'DELIVERY',
+      subject: 'Delivery arrived short by 200 litres',
+      description: 'The AGO delivery on order SO-2025-0001 was 200 litres short of the order.',
+      priority: 'HIGH',
+      status: 'RESOLVED',
+      resolvedAt: '2025-01-18',
+      comments: [
+        ['CUSTOMER', 'con-001', 'Achieng Otieno', 'Our dip reading is 200 litres under.', 0, 0],
+        [
+          'STAFF',
+          'usr-admin',
+          'Hass Support',
+          'Confirmed with the depot, arranging a top-up.',
+          0,
+          0,
+        ],
+        ['STAFF', 'usr-admin', 'Hass Support', 'Credit note raised; top-up delivered.', 0, 1],
+      ],
+    },
+    {
+      id: 'tkt-002',
+      no: 'TK-2025-0002',
+      cust: 'cust-002',
+      contact: null,
+      order: null,
+      channel: 'EMAIL',
+      category: 'BILLING',
+      subject: 'Invoice ETIMS number missing',
+      description: 'A customer invoice is missing its ETIMS reference for VAT filing.',
+      priority: 'MEDIUM',
+      status: 'IN_PROGRESS',
+      resolvedAt: null,
+      comments: [
+        ['STAFF', 'usr-admin', 'Hass Support', 'Resubmitting to ETIMS; will confirm.', 1, 0],
+      ],
+    },
+    {
+      id: 'tkt-003',
+      no: 'TK-2025-0003',
+      cust: 'cust-003',
+      contact: null,
+      order: null,
+      channel: 'PHONE',
+      category: 'ACCOUNT',
+      subject: 'Request to raise credit limit',
+      description: 'Customer requests a higher credit limit for the coming quarter.',
+      priority: 'LOW',
+      status: 'NEW',
+      resolvedAt: null,
+      comments: [],
+    },
+    {
+      id: 'tkt-004',
+      no: 'TK-2025-0004',
+      cust: 'cust-004',
+      contact: null,
+      order: null,
+      channel: 'PORTAL',
+      category: 'QUALITY',
+      subject: 'Suspected water in kerosene batch',
+      description: 'Customer reports a quality concern with a recent IK batch.',
+      priority: 'CRITICAL',
+      status: 'IN_PROGRESS',
+      resolvedAt: null,
+      comments: [
+        ['CUSTOMER', 'con-005', 'Grace Chebet', 'The batch smells off and burns poorly.', 0, 0],
+        ['STAFF', 'usr-admin', 'Hass Support', 'QA sample collected; escalated to the lab.', 0, 0],
+      ],
+    },
+    {
+      id: 'tkt-005',
+      no: 'TK-2025-0005',
+      cust: 'cust-005',
+      contact: null,
+      order: null,
+      channel: 'WHATSAPP',
+      category: 'DELIVERY',
+      subject: 'Reschedule tomorrow’s LPG delivery',
+      description: 'Customer asks to move the LPG delivery to the afternoon window.',
+      priority: 'MEDIUM',
+      status: 'CLOSED',
+      resolvedAt: '2025-02-02',
+      comments: [['STAFF', 'usr-admin', 'Hass Support', 'Rescheduled to the 2–5pm window.', 0, 1]],
+    },
+  ];
+  let cmtSeq = 0;
+  for (const t of tickets) {
+    const created = t.resolvedAt ?? '2025-01-10';
+    await run(
+      `INSERT OR REPLACE INTO tickets
+         (ticket_id, ticket_number, customer_id, contact_id, channel, category, subject,
+          description, priority, status, related_order_id, resolved_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        t.id,
+        t.no,
+        t.cust,
+        t.contact,
+        t.channel,
+        t.category,
+        t.subject,
+        t.description,
+        t.priority,
+        t.status,
+        t.order,
+        t.resolvedAt,
+        created,
+        created,
+      ],
+    );
+    let ci = 0;
+    for (const [atype, aid, aname, content, internal, resolution] of t.comments) {
+      cmtSeq += 1;
+      ci += 1;
+      const at = `${created}T0${Math.min(ci, 9)}:00:00.000Z`;
+      await run(
+        `INSERT OR REPLACE INTO ticket_comments
+           (comment_id, ticket_id, author_type, author_id, author_name, content,
+            is_internal, is_resolution, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        [
+          `cmt-${String(cmtSeq).padStart(4, '0')}`,
+          t.id,
+          atype,
+          aid,
+          aname,
+          content,
+          internal,
+          resolution,
+          at,
+          at,
+        ],
+      );
+    }
+  }
+
   // Self-check: report row counts so a run verifies the seed landed.
   const counts = {};
   for (const t of [
@@ -336,6 +485,8 @@ async function seed() {
     'orders',
     'order_lines',
     'invoices',
+    'tickets',
+    'ticket_comments',
   ]) {
     const r = await run(`SELECT COUNT(*) AS n FROM ${t}`);
     counts[t] = Number(r.rows[0].n);

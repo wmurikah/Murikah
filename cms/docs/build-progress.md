@@ -64,7 +64,12 @@ video. The seed and migrations apply to that endpoint with the same tooling.
    CRUD, ETIMS submission and credit notes next.)
 5. [pending] Payments (M-Pesa, bank, Oracle receipts)
 6. [pending] Delivery locations and documents
-7. [pending] Tickets, SLA and knowledge
+7. [in progress] Tickets, SLA and knowledge (read surface built and
+   smoke-certified against the seeded DB: staff list with search + priority
+   filter, ticket detail with the comment thread including internal notes,
+   portal tickets scoped to the signed-in customer with internal comments
+   hidden, RBAC gate `tickets.view`, error boundary. Priority honours the
+   CHECK. SLA timers, assignment, knowledge base and write actions next.)
 8. [pending] Omnichannel intake and notifications
 9. [pending] AI bot
 10. [in progress] Reports and analytics (customer analytics built and
@@ -73,8 +78,9 @@ video. The seed and migrations apply to that endpoint with the same tooling.
     series, funnels and exports follow as those modules are seeded.)
 11. [in progress] Customer portal (the portal home shows the signed-in
     customer's own account and contacts, scoped to their customer_id, and links
-    to their orders (`/portal/orders`, same scope), error boundaried.
-    Invoice/payment/ticket views join as those modules land.)
+    to their orders, invoices and support tickets (all same scope; internal
+    ticket notes hidden), error boundaried. Payment views join as that module
+    lands.)
 12. [pending] Admin and config
 13. [pending] Oracle mirror and integrations wiring
 

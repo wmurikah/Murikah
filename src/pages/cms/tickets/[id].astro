@@ -1,0 +1,101 @@
+---
+export const prerender = false;
+
+/**
+ * Staff ticket detail: the ticket header and its full comment thread (including
+ * internal notes). RBAC-gated; wrapped by the error boundary; a missing ticket
+ * is a clean not-found, never a 500.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { getTicket, type TicketDetail, type TicketComment } from '@cms/repos/tickets';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('tickets.view'));
+const id = Astro.params.id ?? '';
+
+let ticket: TicketDetail | null = null;
+let comments: TicketComment[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    const res = await getTicket(await getDb(getCmsEnv()), id, true);
+    if (res) {
+      ticket = res.ticket;
+      comments = res.comments;
+    }
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.tickets.detail] load failed', err);
+  }
+}
+const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
+---
+
+<CmsLayout title={ticket ? String(ticket.ticketNumber) : 'Ticket'}>
+  <div class="cms-page-head">
+    <div>
+      <h1>{ticket ? ticket.ticketNumber : 'Ticket'}</h1>
+      <p class="cms-lead"><a href="/tickets">Back to tickets</a></p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to tickets.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.tickets.detail]" area="This ticket" />
+    ) : !ticket ? (
+      <div class="cms-card">
+        <p class="cms-lead">That ticket could not be found.</p>
+      </div>
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>{field(ticket.subject)}</h2>
+          <dl>
+            <dt>Status</dt>
+            <dd>{field(ticket.status)}</dd>
+            <dt>Priority</dt>
+            <dd>{field(ticket.priority)}</dd>
+            <dt>Category</dt>
+            <dd>{field(ticket.category)}</dd>
+            <dt>Channel</dt>
+            <dd>{field(ticket.channel)}</dd>
+            <dt>Raised</dt>
+            <dd>{field(ticket.created_at)}</dd>
+            <dt>Resolved</dt>
+            <dd>{field(ticket.resolved_at)}</dd>
+          </dl>
+          {ticket.description ? <p class="cms-lead">{String(ticket.description)}</p> : null}
+        </section>
+
+        <section class="cms-card" style="grid-column:1/-1">
+          <h2>Conversation</h2>
+          {comments.length === 0 ? (
+            <p class="cms-lead">No comments yet.</p>
+          ) : (
+            <ul class="cms-nav" style="gap:0.75rem">
+              {comments.map((c) => (
+                <li class="cms-card" style="margin:0">
+                  <div class="cms-account__meta">
+                    <strong>{c.authorName ?? 'Unknown'}</strong>
+                    {c.isInternal ? ' - internal note' : ''}
+                    {c.isResolution ? ' - resolution' : ''}
+                    {c.createdAt ? ` - ${c.createdAt.slice(0, 10)}` : ''}
+                  </div>
+                  <p style="margin:0.25rem 0 0">{c.content}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    )
+  }
+</CmsLayout>

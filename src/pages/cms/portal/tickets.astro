@@ -1,0 +1,73 @@
+---
+export const prerender = false;
+
+/**
+ * The customer portal tickets list, scoped to the signed-in customer's own
+ * customer_id. Wrapped by the error boundary; an empty result shows a clear
+ * empty state.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { listTicketsForCustomer, type TicketRow } from '@cms/repos/tickets';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/portal/login');
+
+let rows: TicketRow[] = [];
+let loadError = false;
+if (cms.customerId) {
+  try {
+    rows = await listTicketsForCustomer(await getDb(getCmsEnv()), cms.customerId);
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.portal.tickets] load failed', err);
+  }
+}
+const day = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+---
+
+<CmsPortalLayout title="Your tickets">
+  <div class="cms-page-head">
+    <div>
+      <h1>Your tickets</h1>
+      <p class="cms-lead"><a href="/portal">Back to your portal</a></p>
+    </div>
+  </div>
+
+  {
+    loadError ? (
+      <CmsError tag="[cms.portal.tickets]" area="Your tickets" />
+    ) : rows.length === 0 ? (
+      <div class="cms-card">
+        <p class="cms-lead">You have no support tickets.</p>
+      </div>
+    ) : (
+      <div class="cms-card" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.4rem">Ticket</th>
+              <th style="text-align:left;padding:0.4rem">Subject</th>
+              <th style="text-align:left;padding:0.4rem">Priority</th>
+              <th style="text-align:left;padding:0.4rem">Status</th>
+              <th style="text-align:left;padding:0.4rem">Raised</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td style="padding:0.4rem">{r.ticketNumber}</td>
+                <td style="padding:0.4rem">{r.subject}</td>
+                <td style="padding:0.4rem">{r.priority ?? '-'}</td>
+                <td style="padding:0.4rem">{r.status ?? '-'}</td>
+                <td style="padding:0.4rem">{day(r.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</CmsPortalLayout>

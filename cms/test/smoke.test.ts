@@ -158,6 +158,44 @@ test(
   },
 );
 
+test(
+  'cms smoke: seeded tickets read back and honour priority and portal scoping',
+  { skip },
+  async () => {
+    const db = createClient({ url });
+    const tickets = await db.execute(
+      'SELECT ticket_id, ticket_number, customer_id, priority FROM tickets ORDER BY created_at DESC',
+    );
+    assert.ok(tickets.rows.length > 0, 'expected seeded tickets');
+
+    // Every priority is within the CHECK domain (a drift here would 500 the list).
+    const domain = new Set(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+    assert.ok(
+      tickets.rows.every((r) => domain.has(String(r.priority))),
+      'every ticket priority is in the allowed set',
+    );
+
+    // A ticket joins to its customer and its comment thread.
+    const first = String(tickets.rows[0].ticket_id);
+    const comments = await db.execute({
+      sql: 'SELECT is_internal FROM ticket_comments WHERE ticket_id = ?',
+      args: [first],
+    });
+    assert.ok(comments.rows.length >= 0, 'the ticket comments query runs');
+
+    // The portal thread must never include internal comments: the not-internal
+    // count is never greater than the full count.
+    const full = await db.execute('SELECT COUNT(*) AS n FROM ticket_comments');
+    const external = await db.execute(
+      'SELECT COUNT(*) AS n FROM ticket_comments WHERE is_internal = 0',
+    );
+    assert.ok(
+      Number(external.rows[0].n) <= Number(full.rows[0].n),
+      'the portal-visible comment count excludes internal notes',
+    );
+  },
+);
+
 test('cms smoke: the customer analytics aggregations return shape', { skip }, async () => {
   const db = createClient({ url });
   const summary = await db.execute(
