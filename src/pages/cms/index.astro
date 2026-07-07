@@ -1,0 +1,59 @@
+---
+export const prerender = false;
+
+/**
+ * The staff dashboard shell landing. The foundation lands staff here after
+ * sign-in, in the tenant brand; the modules (customers, orders, invoices,
+ * tickets and the rest) arrive one per prompt behind the smoke test. Read-only
+ * and self-contained, so it never 500s; a data load, when added, is wrapped by
+ * the error boundary.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+
+let loadError = false;
+try {
+  // No aggregation yet; the dashboard's data lands with the reporting prompt.
+  // The try/catch is the safety net every route carries from day one.
+} catch (err) {
+  loadError = true;
+  console.error('[cms.dashboard] load failed', err);
+}
+---
+
+<CmsLayout title="Dashboard">
+  <div class="cms-page-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="cms-lead">
+        Welcome back{cms.userName ? `, ${cms.userName}` : ''}. Your {cms.tenantName} workspace.
+      </p>
+    </div>
+  </div>
+
+  {
+    loadError ? (
+      <CmsError tag="[cms.dashboard]" area="The dashboard" />
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>Your workspace</h2>
+          <p class="cms-lead">
+            Signed in as {cms.userEmail ?? 'staff'}
+            {cms.isPlatformOwner ? ' with the platform-owner tier' : ''}.
+          </p>
+        </section>
+        <section class="cms-card">
+          <h2>Modules</h2>
+          <p class="cms-lead">
+            Customers, orders, invoices, payments, tickets and the rest arrive one at a time, each
+            behind the smoke test.
+          </p>
+        </section>
+      </div>
+    )
+  }
+</CmsLayout>

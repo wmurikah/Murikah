@@ -40,6 +40,14 @@ declare namespace Cloudflare {
     TURSO_GRC_AUTH_TOKEN?: string;
     GRC_SESSION_SECRET?: string;
 
+    // Hass CMS product, its own Turso database and session secret, namespaced so
+    // they never clash with engr, grc or the marketing site. Optional here so the
+    // marketing preview typechecks without them; the cms env accessor throws at
+    // runtime when any is missing. Runtime secrets, never committed.
+    TURSO_CMS_DATABASE_URL?: string;
+    TURSO_CMS_AUTH_TOKEN?: string;
+    CMS_SESSION_SECRET?: string;
+
     // GRC notification delivery via Microsoft Graph (Outlook). All optional: the
     // dispatcher's production gate keeps sends off unless GRC_ENV is 'production'
     // and these are present, so a preview or local run drains as a dry-run and a
@@ -180,5 +188,46 @@ declare namespace App {
 
     /** The visitor-facing root-relative path on grc.murikah.com, before the /grc rewrite. */
     grcPath?: string;
+
+    /**
+     * The signed-in Hass CMS user and their acting context, set by the middleware
+     * from the verified session. Present on authenticated cms routes only; every
+     * downstream read and write scopes by the acting tenant (and, for a customer,
+     * their own customer_id).
+     */
+    cms?: {
+      /** Which surface the user belongs to; the two never cross. */
+      userType: 'STAFF' | 'CUSTOMER';
+      /** users.user_id for staff, contacts.contact_id for a portal customer. */
+      userId: string;
+      /** The cached primary role code (staff role, or the contact's portal_role). */
+      role: string | null;
+      /** Staff home country (roles, branding and config scope by it); null for customers. */
+      countryCode: string | null;
+      /** The customer a portal user belongs to; null for staff. */
+      customerId: string | null;
+      userName?: string;
+      userEmail?: string;
+      /** The acting tenant. Hass is the first; every query scopes by this. */
+      tenantId: string;
+      tenantName: string;
+      /** True when the staff role may act across tenants. */
+      isPlatformOwner: boolean;
+      /** The resolved brand (tenant/country brand, or the Murikah default). */
+      branding: {
+        appName: string;
+        logoUrl: string | null;
+        primaryColor: string;
+        secondaryColor: string;
+        accentColor: string;
+      };
+      /** The permission codes the role holds, from the seeded matrix. */
+      perms: string[];
+      /** True when the role holds the permission code. */
+      can: (code: string) => boolean;
+    };
+
+    /** The visitor-facing root-relative path on cms.murikah.com, before the /cms rewrite. */
+    cmsPath?: string;
   }
 }
