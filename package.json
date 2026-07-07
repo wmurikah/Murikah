@@ -34,6 +34,8 @@
     "db:seed": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/seed.ts",
     "cms:db:columns": "node cms/db/gen-columns.mjs",
     "cms:db:introspect": "node --env-file-if-exists=.dev.vars --experimental-strip-types cms/db/introspect.mjs",
+    "cms:db:apply": "node cms/db/apply.mjs",
+    "cms:db:seed": "node cms/db/seed.mjs",
     "db:engr:apply": "node --env-file-if-exists=.dev.vars --experimental-strip-types engr/db/apply.ts",
     "db:engr:seed": "node --env-file-if-exists=.dev.vars --experimental-strip-types engr/db/seed.ts",
     "db:engr:bootstrap": "node --env-file-if-exists=.dev.vars --experimental-strip-types engr/db/bootstrap-tenant.ts",
