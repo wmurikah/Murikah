@@ -11,7 +11,7 @@ const DIGITS = 6;
 const PERIOD = 30;
 
 /** Decode a base32 (RFC 4648, no padding needed) secret to raw bytes. */
-export function base32Decode(input: string): Uint8Array {
+export function base32Decode(input: string): Uint8Array<ArrayBuffer> {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   const clean = input.toUpperCase().replace(/=+$/, '').replace(/\s+/g, '');
   let bits = 0;
@@ -30,7 +30,7 @@ export function base32Decode(input: string): Uint8Array {
   return new Uint8Array(out);
 }
 
-function counterBytes(counter: number): Uint8Array {
+function counterBytes(counter: number): Uint8Array<ArrayBuffer> {
   const buf = new Uint8Array(8);
   // 64-bit big-endian counter; the high 32 bits are ~0 for any realistic time.
   let n = counter;
@@ -41,7 +41,11 @@ function counterBytes(counter: number): Uint8Array {
   return buf;
 }
 
-async function hotp(secret: Uint8Array, counter: number, digits: number): Promise<string> {
+async function hotp(
+  secret: Uint8Array<ArrayBuffer>,
+  counter: number,
+  digits: number,
+): Promise<string> {
   const key = await crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-1' }, false, [
     'sign',
   ]);
