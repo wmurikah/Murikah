@@ -98,6 +98,29 @@ test('cms smoke: a portal customer can sign in', { skip }, async () => {
   assert.equal(ok, true, 'the demo portal password verifies');
 });
 
+test('cms smoke: seeded orders read back and join to their lines', { skip }, async () => {
+  const db = createClient({ url });
+  const orders = await db.execute(
+    'SELECT order_id, order_number, total_amount FROM orders ORDER BY requested_date DESC',
+  );
+  assert.ok(orders.rows.length > 0, 'expected seeded orders');
+
+  // Every order joins to its customer (the staff list LEFT JOINs customers).
+  const joined = await db.execute(
+    `SELECT o.order_number, c.company_name
+       FROM orders o LEFT JOIN customers c ON c.customer_id = o.customer_id
+      ORDER BY o.requested_date DESC LIMIT 1`,
+  );
+  assert.equal(joined.rows.length, 1, 'the order-to-customer join returns a row');
+
+  // At least one order has lines (the detail view reads order_lines by order_id).
+  const withLines = await db.execute(
+    `SELECT ol.order_id, COUNT(*) AS n
+       FROM order_lines ol GROUP BY ol.order_id HAVING n > 0 LIMIT 1`,
+  );
+  assert.ok(withLines.rows.length > 0, 'expected at least one order with lines');
+});
+
 test('cms smoke: the customer analytics aggregations return shape', { skip }, async () => {
   const db = createClient({ url });
   const summary = await db.execute(

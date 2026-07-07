@@ -188,9 +188,103 @@ async function seed() {
     );
   }
 
+  // Products (fuel and lubricants).
+  const products = [
+    ['prod-pms', 'PMS', 'Premium Motor Spirit (Petrol)', 'FUEL', 'litre'],
+    ['prod-ago', 'AGO', 'Automotive Gas Oil (Diesel)', 'FUEL', 'litre'],
+    ['prod-ik', 'IK', 'Illuminating Kerosene', 'FUEL', 'litre'],
+    ['prod-lub', 'LUB', 'Engine Lubricant 20W-50', 'LUBRICANT', 'litre'],
+    ['prod-lpg', 'LPG', 'Liquefied Petroleum Gas', 'GAS', 'kg'],
+  ];
+  for (const [id, sku, name, cat, uom] of products) {
+    await run(
+      `INSERT OR REPLACE INTO products (product_id, sku, name, category, unit_of_measure, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?, 1, ?, ?)`,
+      [id, sku, name, cat, uom, now, now],
+    );
+  }
+  const unitPrice = {
+    'prod-pms': 189,
+    'prod-ago': 175,
+    'prod-ik': 165,
+    'prod-lub': 950,
+    'prod-lpg': 320,
+  };
+
+  // Orders across the customers and the last twelve months, for a time series.
+  const custIds = customers.map((c) => c[0]);
+  const custCountry = Object.fromEntries(customers.map((c) => [c[0], [c[4], c[5]]]));
+  const orderStatuses = ['DRAFT', 'SUBMITTED', 'APPROVED', 'FULFILLED', 'CANCELLED'];
+  const payStatuses = ['UNPAID', 'PARTIAL', 'PAID'];
+  const prodIds = products.map((p) => p[0]);
+  let lineSeq = 0;
+  for (let i = 0; i < 24; i++) {
+    const id = `ord-${String(i + 1).padStart(3, '0')}`;
+    const cust = custIds[i % custIds.length];
+    const [cc, cur] = custCountry[cust];
+    const status = orderStatuses[i % orderStatuses.length];
+    const pay = payStatuses[i % payStatuses.length];
+    const month = (i % 12) + 1;
+    const reqDate = `2025-${String(month).padStart(2, '0')}-15`;
+    // One or two lines per order.
+    const lineCount = (i % 2) + 1;
+    let subtotal = 0;
+    const lines = [];
+    for (let l = 0; l < lineCount; l++) {
+      const pid = prodIds[(i + l) % prodIds.length];
+      const qty = 500 + ((i + l) % 5) * 250;
+      const price = unitPrice[pid];
+      const lineTotal = qty * price;
+      subtotal += lineTotal;
+      lines.push([pid, products.find((p) => p[0] === pid)[2], qty, price, lineTotal]);
+    }
+    const tax = Math.round(subtotal * 0.16);
+    const total = subtotal + tax;
+    await run(
+      `INSERT OR REPLACE INTO orders
+         (order_id, order_number, customer_id, country_code, currency_code, status, payment_status,
+          requested_date, subtotal, tax_amount, total_amount, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        id,
+        `SO-2025-${String(i + 1).padStart(4, '0')}`,
+        cust,
+        cc,
+        cur,
+        status,
+        pay,
+        reqDate,
+        subtotal,
+        tax,
+        total,
+        reqDate,
+        reqDate,
+      ],
+    );
+    for (const [pid, pname, qty, price, lineTotal] of lines) {
+      lineSeq += 1;
+      await run(
+        `INSERT OR REPLACE INTO order_lines
+           (line_id, order_id, product_id, product_name, quantity, unit_price, line_total, created_at)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [`oln-${String(lineSeq).padStart(4, '0')}`, id, pid, pname, qty, price, lineTotal, reqDate],
+      );
+    }
+  }
+
   // Self-check: report row counts so a run verifies the seed landed.
   const counts = {};
-  for (const t of ['countries', 'roles', 'permissions', 'users', 'customers', 'contacts']) {
+  for (const t of [
+    'countries',
+    'roles',
+    'permissions',
+    'users',
+    'customers',
+    'contacts',
+    'products',
+    'orders',
+    'order_lines',
+  ]) {
     const r = await run(`SELECT COUNT(*) AS n FROM ${t}`);
     counts[t] = Number(r.rows[0].n);
   }

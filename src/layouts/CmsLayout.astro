@@ -24,6 +24,7 @@ const path = Astro.locals.cmsPath ?? '/';
 const nav = [
   { label: 'Dashboard', href: '/' },
   { label: 'Customers', href: '/customers' },
+  { label: 'Orders', href: '/orders' },
   { label: 'Analytics', href: '/analytics' },
 ];
 const roleLabel = (cms?.role ?? '').replace(/_/g, ' ');

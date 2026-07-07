@@ -51,7 +51,11 @@ video. The seed and migrations apply to that endpoint with the same tooling.
    against the seeded DB: list, detail, contacts, RBAC gate, error boundary. Write
    CRUD, balances, self-signup and KYC fields next.)
 2. [pending] Catalog, pricing and bundles
-3. [pending] Orders and approvals (incl. Oracle approvals)
+3. [in progress] Orders and approvals (read surface built and smoke-certified
+   against the seeded DB: staff list with search + status, order detail with
+   lines, portal orders scoped to the signed-in customer, RBAC gate
+   `orders.view`, error boundary. Write CRUD, approvals and Oracle approvals
+   next.)
 4. [pending] Invoices and ETIMS
 5. [pending] Payments (M-Pesa, bank, Oracle receipts)
 6. [pending] Delivery locations and documents
@@ -62,9 +66,10 @@ video. The seed and migrations apply to that endpoint with the same tooling.
     smoke-certified against the seeded DB: summary tiles, bar and doughnut and pie
     charts by country/type/status, top accounts. Order/invoice/payment/ticket time
     series, funnels and exports follow as those modules are seeded.)
-11. [in progress] Customer portal (the portal home now shows the signed-in
-    customer's own account and contacts, scoped to their customer_id, error
-    boundaried. Order/invoice/payment/ticket views join as those modules land.)
+11. [in progress] Customer portal (the portal home shows the signed-in
+    customer's own account and contacts, scoped to their customer_id, and links
+    to their orders (`/portal/orders`, same scope), error boundaried.
+    Invoice/payment/ticket views join as those modules land.)
 12. [pending] Admin and config
 13. [pending] Oracle mirror and integrations wiring
 

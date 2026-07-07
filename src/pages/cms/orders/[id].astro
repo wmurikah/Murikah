@@ -1,0 +1,107 @@
+---
+export const prerender = false;
+
+/**
+ * Staff order detail: the order header and its lines. RBAC-gated; wrapped by the
+ * error boundary; a missing order is a clean not-found, never a 500.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsError from '@/components/cms/CmsError.astro';
+import { getCmsEnv } from '@cms/env';
+import { getDb } from '@cms/db';
+import { getOrder, type OrderDetail, type OrderLine } from '@cms/repos/orders';
+
+const cms = Astro.locals.cms;
+if (!cms) return Astro.redirect('/login');
+const allowed = cms.userType === 'STAFF' && (cms.isPlatformOwner || cms.can('orders.view'));
+const id = Astro.params.id ?? '';
+
+let order: OrderDetail | null = null;
+let lines: OrderLine[] = [];
+let loadError = false;
+if (allowed) {
+  try {
+    const res = await getOrder(await getDb(getCmsEnv()), id);
+    if (res) {
+      order = res.order;
+      lines = res.lines;
+    }
+  } catch (err) {
+    loadError = true;
+    console.error('[cms.orders.detail] load failed', err);
+  }
+}
+const field = (v: unknown): string => (v == null || v === '' ? '-' : String(v));
+const money = (v: number | null): string => (v == null ? '-' : v.toLocaleString('en-KE'));
+---
+
+<CmsLayout title={order ? String(order.orderNumber) : 'Order'}>
+  <div class="cms-page-head">
+    <div>
+      <h1>{order ? order.orderNumber : 'Order'}</h1>
+      <p class="cms-lead"><a href="/orders">Back to orders</a></p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="cms-error" role="alert">
+        You do not have access to orders.
+      </p>
+    ) : loadError ? (
+      <CmsError tag="[cms.orders.detail]" area="This order" />
+    ) : !order ? (
+      <div class="cms-card">
+        <p class="cms-lead">That order could not be found.</p>
+      </div>
+    ) : (
+      <div class="cms-cards">
+        <section class="cms-card">
+          <h2>Order</h2>
+          <dl>
+            <dt>Status</dt>
+            <dd>{field(order.status)}</dd>
+            <dt>Payment</dt>
+            <dd>{field(order.payment_status)}</dd>
+            <dt>Requested date</dt>
+            <dd>{field(order.requested_date)}</dd>
+            <dt>Subtotal</dt>
+            <dd>{money(order.subtotal == null ? null : Number(order.subtotal))}</dd>
+            <dt>Tax</dt>
+            <dd>{money(order.tax_amount == null ? null : Number(order.tax_amount))}</dd>
+            <dt>Total</dt>
+            <dd>{money(order.total_amount == null ? null : Number(order.total_amount))}</dd>
+          </dl>
+        </section>
+
+        <section class="cms-card" style="grid-column:1/-1">
+          <h2>Lines</h2>
+          {lines.length === 0 ? (
+            <p class="cms-lead">No lines on this order.</p>
+          ) : (
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:0.4rem">Product</th>
+                  <th style="text-align:right;padding:0.4rem">Quantity</th>
+                  <th style="text-align:right;padding:0.4rem">Unit price</th>
+                  <th style="text-align:right;padding:0.4rem">Line total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr>
+                    <td style="padding:0.4rem">{l.productName}</td>
+                    <td style="padding:0.4rem;text-align:right">{money(l.quantity)}</td>
+                    <td style="padding:0.4rem;text-align:right">{money(l.unitPrice)}</td>
+                    <td style="padding:0.4rem;text-align:right">{money(l.lineTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+    )
+  }
+</CmsLayout>
