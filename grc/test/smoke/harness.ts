@@ -177,13 +177,27 @@ export class SmokeServer {
     });
   }
 
-  /** A single request, no redirect following. */
-  request(
+  /**
+   * A single request, no redirect following. wrangler dev occasionally restarts
+   * workerd mid-request (a transport failure, not an app response), surfacing as
+   * a connection error or its "worker restarted mid-request" 503; those never
+   * reached the app, so they are retried a couple of times before counting.
+   */
+  async request(
     method: 'GET' | 'POST',
     path: string,
     form?: Record<string, string>,
   ): Promise<SmokeResponse> {
-    return this.rawRequest(method, path, form);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const res = await this.rawRequest(method, path, form);
+        const restarted = res.status === 503 && res.body.includes('restarted mid-request');
+        if (!restarted || attempt >= 2) return res;
+      } catch (err) {
+        if (attempt >= 2) throw err;
+      }
+      await delay(750);
+    }
   }
 
   /** A GET following same-host redirects, returning the final response and the hops. */
@@ -191,7 +205,7 @@ export class SmokeServer {
     const hops: string[] = [path];
     let current = path;
     for (let i = 0; i < maxHops; i++) {
-      const res = await this.rawRequest('GET', current);
+      const res = await this.request('GET', current);
       const location = res.headers.location;
       if (res.status >= 300 && res.status < 400 && typeof location === 'string') {
         current = location.startsWith('http')
