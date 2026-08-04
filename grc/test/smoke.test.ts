@@ -486,6 +486,20 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
+    // The list filters build their own WHERE clauses, so exercise them all at
+    // once (including the full-text search) rather than only the bare list.
+    await t.test('GET /work-papers with every filter applied', async () => {
+      const filtered =
+        `/work-papers?q=reconciliations&status=Draft&area=${SMOKE.auditAreaId}` +
+        `&affiliate=${SMOKE.affiliateCode}&auditor=${SMOKE.auditorId}&year=2026&risk=High`;
+      const res = await server.get(filtered);
+      assert.equal(
+        res.status,
+        200,
+        `filtered list answered ${res.status}: ${res.body.slice(0, 300)}`,
+      );
+    });
+
     for (const step of MUTATION_STEPS) {
       await t.test(step.title, async () => {
         const path = step.path(captured);
