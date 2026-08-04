@@ -15,8 +15,8 @@ export const GET: APIRoute = async ({ locals }) => {
   if (!grc) return new Response(JSON.stringify({ error: 'unauthorised' }), { status: 401 });
   const db = await getDb(getGrcEnv());
   const [unread, items] = await Promise.all([
-    unreadCount(db, grc.organizationId, grc.userId),
-    listInApp(db, grc.organizationId, grc.userId, 15),
+    unreadCount(db, grc.userId),
+    listInApp(db, grc.userId, 15),
   ]);
   return new Response(JSON.stringify({ unread, items }), {
     status: 200,
@@ -32,12 +32,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const id = String(form.get('id') ?? '').trim();
   const all = String(form.get('all') ?? '') === '1';
   const db = await getDb(getGrcEnv());
-  if (all) await markAllRead(db, grc.organizationId, grc.userId);
-  else if (id) await markRead(db, grc.organizationId, grc.userId, id);
+  if (all) await markAllRead(db, grc.userId);
+  else if (id) await markRead(db, grc.userId, id);
 
   const accept = request.headers.get('accept') ?? '';
   if (accept.includes('application/json')) {
-    const unread = await unreadCount(db, grc.organizationId, grc.userId);
+    const unread = await unreadCount(db, grc.userId);
     return new Response(JSON.stringify({ ok: true, unread }), {
       status: 200,
       headers: { 'content-type': 'application/json' },

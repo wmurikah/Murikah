@@ -8,9 +8,11 @@ export const prerender = false;
  * updates the fields and re-syncs the owners.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { getActionPlan, listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
 import { parseOwnerIds } from '@grc/repos/actionPlanOwners';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
@@ -23,20 +25,23 @@ const { id } = Astro.params;
 const allowed = can(Astro.locals, 'update', 'ACTION_PLAN');
 const failed = Astro.url.searchParams.get('error');
 
-let plan: Awaited<ReturnType<typeof getActionPlan>> = null;
+let plan = null as Awaited<ReturnType<typeof getActionPlan>>;
 let workPapers: WorkPaperOption[] = [];
 let users: Option[] = [];
 let ownerIds: string[] = [];
+let loadError = false;
 if (allowed && id) {
-  const db = await getDb(getGrcEnv());
-  plan = await getActionPlan(db, grc.organizationId, id);
-  if (plan) {
-    [workPapers, users] = await Promise.all([
-      listWorkPaperOptions(db, grc.organizationId),
-      listAuditors(db, grc.organizationId),
-    ]);
-    ownerIds = parseOwnerIds(plan.ownerIds);
-  }
+  loadError = !(await guardPageLoad('action-plans.edit', async () => {
+    const db = await getDb(getGrcEnv());
+    plan = await getActionPlan(db, grc.organizationId, id);
+    if (plan) {
+      [workPapers, users] = await Promise.all([
+        listWorkPaperOptions(db, grc.organizationId),
+        listAuditors(db, grc.organizationId),
+      ]);
+      ownerIds = parseOwnerIds(plan.ownerIds);
+    }
+  }));
 }
 const editable = plan ? isEditableByAuditor(plan.status) : false;
 const val = (key: string): string => {
@@ -59,6 +64,8 @@ const val = (key: string): string => {
       <p class="grc-error" role="alert">
         You do not have permission to edit an action plan.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="This action plan" />
     ) : !plan ? (
       <p class="grc-empty">That action plan was not found in your organisation.</p>
     ) : !editable ? (

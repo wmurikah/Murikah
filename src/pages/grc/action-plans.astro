@@ -11,9 +11,11 @@ export const prerender = false;
  * to the detail with the shared affordance cues.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import {
   listActionPlans,
   computeStats,
@@ -57,16 +59,19 @@ let owners: Option[] = [];
 let areas: Option[] = [];
 let statuses: string[] = [];
 let labels = new Map<string, string>();
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  [rows, owners, areas, statuses, labels] = await Promise.all([
-    listActionPlans(db, grc.organizationId, viewer, filters),
-    listAuditors(db, grc.organizationId),
-    listAuditAreas(db, grc.organizationId),
-    loadEnumValues(db, ACTION_PLAN_ENUM_TYPE),
-    loadEnumLabels(db, ACTION_PLAN_ENUM_TYPE),
-  ]);
-  stats = computeStats(rows);
+  loadError = !(await guardPageLoad('action-plans.list', async () => {
+    const db = await getDb(getGrcEnv());
+    [rows, owners, areas, statuses, labels] = await Promise.all([
+      listActionPlans(db, grc.organizationId, viewer, filters),
+      listAuditors(db, grc.organizationId),
+      listAuditAreas(db, grc.organizationId),
+      loadEnumValues(db, ACTION_PLAN_ENUM_TYPE),
+      loadEnumLabels(db, ACTION_PLAN_ENUM_TYPE),
+    ]);
+    stats = computeStats(rows);
+  }));
 }
 
 // The badge colour for a status (colour plus label, never colour alone).
@@ -147,6 +152,8 @@ const done = p.get('done');
       <p class="grc-error" role="alert">
         You do not have access to action plans.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The action plans list" />
     ) : (
       <>
         <div class="grc-stats" role="group" aria-label="Action plan summary">

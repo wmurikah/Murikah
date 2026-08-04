@@ -39,6 +39,7 @@ import {
   isGrcChangePasswordExempt,
   GRC_CHANGE_PASSWORD_PATH,
 } from '@grc/routing';
+import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { getCmsEnv } from '@cms/env';
 import { getDb as getCmsDb } from '@cms/db';
 import { readSessionCookie } from '@cms/auth/session';
@@ -67,96 +68,111 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const appPath = toGrcAppPath(pathname);
     context.locals.grcPath = appPath;
 
-    if (isGrcPublicPath(appPath)) return next();
     const isApi = isGrcApiPath(appPath);
 
-    let env: ReturnType<typeof getGrcEnv>;
-    try {
-      env = getGrcEnv();
-    } catch {
-      return isApi
-        ? jsonResponse({ error: 'unavailable' }, 503)
-        : new Response('The GRC platform is not configured.', { status: 503 });
-    }
+    // The last-resort error boundary (Build Prompt 22): anything the guard's own
+    // queries or a downstream route throws becomes a logged, branded response,
+    // a safe JSON error for an API path, the branded error screen for a page,
+    // never a blank 500. Pages carry their inline boundary (guardPageLoad) so
+    // the shell survives a data failure; this catches everything else.
+    const guarded = async (): Promise<Response> => {
+      if (isGrcPublicPath(appPath)) return next();
 
-    const sessionId = await readSessionId(context.request, env.sessionSecret);
-    if (!sessionId) {
-      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
-    }
-
-    const db = await getGrcDb(env);
-    const identity = await resolveSession(db, sessionId);
-    if (!identity) {
-      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
-    }
-
-    // The acting organisation defaults to home. Only a platform owner may act
-    // elsewhere, resolved and validated from the database; every other user is
-    // fixed to their home organisation, so a crafted acting cookie is never read.
-    let organizationId = identity.homeOrganizationId;
-    let organizationName = identity.homeOrganizationName;
-    let switchable: GrcSwitchOrg[] = [];
-    if (identity.isPlatformOwner) {
+      let env: ReturnType<typeof getGrcEnv>;
       try {
-        const requested = await readGrcActingOrg(context.request, env.sessionSecret);
-        const acting = await resolveGrcActingContext(
-          db,
-          identity.homeOrganizationId,
-          identity.homeOrganizationName,
-          true,
-          requested,
-        );
-        organizationId = acting.actingOrganizationId;
-        organizationName = acting.actingName;
-        switchable = acting.switchable;
+        env = getGrcEnv();
       } catch {
-        organizationId = identity.homeOrganizationId;
+        return isApi
+          ? jsonResponse({ error: 'unavailable' }, 503)
+          : new Response('The GRC platform is not configured.', { status: 503 });
       }
-    }
 
-    // The permission matrix from role_permissions drives every gate. A SUPER_ADMIN
-    // and a platform owner hold the full matrix; every other role holds its grants.
-    // The legacy perms list is derived from the matrix, so existing code keeps
-    // working, matrix-driven.
-    const matrix =
-      identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN'
-        ? fullMatrix()
-        : await getPermissionMatrix(db, identity.roleCode);
-    const perms = deriveLegacyPerms(matrix);
-    const subscription = await loadSubscription(db, organizationId);
-    const features = subscription.features;
+      const sessionId = await readSessionId(context.request, env.sessionSecret);
+      if (!sessionId) {
+        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+      }
 
-    context.locals.grc = {
-      userId: identity.userId,
-      organizationId,
-      homeOrganizationId: identity.homeOrganizationId,
-      organizationName,
-      roleCode: identity.roleCode,
-      userName: identity.userName,
-      userEmail: identity.userEmail,
-      isPlatformOwner: identity.isPlatformOwner,
-      mustChangePassword: identity.mustChangePassword,
-      switchable,
-      matrix,
-      perms,
-      features,
-      can: (action: string, module: string) => canMatrix(matrix, action, module),
-      // A platform owner is entitled to every feature regardless of the acting
-      // organisation's plan; an ordinary user is gated by their plan flags.
-      hasFeature: (flag: string) => identity.isPlatformOwner || features[flag] === true,
+      const db = await getGrcDb(env);
+      const identity = await resolveSession(db, sessionId);
+      if (!identity) {
+        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+      }
+
+      // The acting organisation defaults to home. Only a platform owner may act
+      // elsewhere, resolved and validated from the database; every other user is
+      // fixed to their home organisation, so a crafted acting cookie is never read.
+      let organizationId = identity.homeOrganizationId;
+      let organizationName = identity.homeOrganizationName;
+      let switchable: GrcSwitchOrg[] = [];
+      if (identity.isPlatformOwner) {
+        try {
+          const requested = await readGrcActingOrg(context.request, env.sessionSecret);
+          const acting = await resolveGrcActingContext(
+            db,
+            identity.homeOrganizationId,
+            identity.homeOrganizationName,
+            true,
+            requested,
+          );
+          organizationId = acting.actingOrganizationId;
+          organizationName = acting.actingName;
+          switchable = acting.switchable;
+        } catch {
+          organizationId = identity.homeOrganizationId;
+        }
+      }
+
+      // The permission matrix from role_permissions drives every gate. A SUPER_ADMIN
+      // and a platform owner hold the full matrix; every other role holds its grants.
+      // The legacy perms list is derived from the matrix, so existing code keeps
+      // working, matrix-driven.
+      const matrix =
+        identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN'
+          ? fullMatrix()
+          : await getPermissionMatrix(db, identity.roleCode);
+      const perms = deriveLegacyPerms(matrix);
+      const subscription = await loadSubscription(db, organizationId);
+      const features = subscription.features;
+
+      context.locals.grc = {
+        userId: identity.userId,
+        organizationId,
+        homeOrganizationId: identity.homeOrganizationId,
+        organizationName,
+        roleCode: identity.roleCode,
+        userName: identity.userName,
+        userEmail: identity.userEmail,
+        isPlatformOwner: identity.isPlatformOwner,
+        mustChangePassword: identity.mustChangePassword,
+        switchable,
+        matrix,
+        perms,
+        features,
+        can: (action: string, module: string) => canMatrix(matrix, action, module),
+        // A platform owner is entitled to every feature regardless of the acting
+        // organisation's plan; an ordinary user is gated by their plan flags.
+        hasFeature: (flag: string) => identity.isPlatformOwner || features[flag] === true,
+      };
+
+      // A temporary password locks the account to the change-password flow: every
+      // route but the change-password screen, its endpoint and sign-out is sent
+      // there until the flag clears. locals.grc is still set, so the screen has
+      // the acting context.
+      if (identity.mustChangePassword && !isGrcChangePasswordExempt(appPath)) {
+        return isApi
+          ? jsonResponse({ error: 'password_change_required' }, 403)
+          : context.redirect(GRC_CHANGE_PASSWORD_PATH);
+      }
+
+      return next();
     };
 
-    // A temporary password locks the account to the change-password flow: every
-    // route but the change-password screen, its endpoint and sign-out is sent
-    // there until the flag clears. locals.grc is still set, so the screen has
-    // the acting context.
-    if (identity.mustChangePassword && !isGrcChangePasswordExempt(appPath)) {
-      return isApi
-        ? jsonResponse({ error: 'password_change_required' }, 403)
-        : context.redirect(GRC_CHANGE_PASSWORD_PATH);
+    try {
+      return await guarded();
+    } catch (err) {
+      logGrcError(appPath, err);
+      return grcErrorResponse(isApi);
     }
-
-    return next();
   }
 
   // ---- Hass CMS guard (/cms routes) ----------------------------------------

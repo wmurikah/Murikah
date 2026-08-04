@@ -9,9 +9,11 @@ export const prerender = false;
  * with the shared affordance cues.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import {
   listWorkPapers,
   type WorkPaperListRow,
@@ -48,16 +50,19 @@ let affiliates: Option[] = [];
 let auditors: Option[] = [];
 let statuses: string[] = [];
 let labels = new Map<string, string>();
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  [rows, areas, affiliates, auditors, statuses, labels] = await Promise.all([
-    listWorkPapers(db, grc.organizationId, filters),
-    listAuditAreas(db, grc.organizationId),
-    listAffiliates(db, grc.organizationId),
-    listAuditors(db, grc.organizationId),
-    loadEnumValues(db, WORK_PAPER_ENUM_TYPE),
-    loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
-  ]);
+  loadError = !(await guardPageLoad('work-papers.list', async () => {
+    const db = await getDb(getGrcEnv());
+    [rows, areas, affiliates, auditors, statuses, labels] = await Promise.all([
+      listWorkPapers(db, grc.organizationId, filters),
+      listAuditAreas(db, grc.organizationId),
+      listAffiliates(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+      loadEnumValues(db, WORK_PAPER_ENUM_TYPE),
+      loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
+    ]);
+  }));
 }
 
 const riskClass = (r: string | null): string => {
@@ -100,6 +105,8 @@ const done = p.get('done');
       <p class="grc-error" role="alert">
         You do not have access to work papers.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The work papers list" />
     ) : (
       <>
         <form method="get" class="grc-filters" role="search" aria-label="Filter work papers">

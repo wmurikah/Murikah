@@ -9,9 +9,11 @@ export const prerender = false;
  * detail.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { aiEnabled } from '@grc/ai/gate';
@@ -29,12 +31,15 @@ const presetWorkPaper = Astro.url.searchParams.get('work_paper') ?? '';
 
 let workPapers: WorkPaperOption[] = [];
 let users: Option[] = [];
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  [workPapers, users] = await Promise.all([
-    listWorkPaperOptions(db, grc.organizationId),
-    listAuditors(db, grc.organizationId),
-  ]);
+  loadError = !(await guardPageLoad('action-plans.new', async () => {
+    const db = await getDb(getGrcEnv());
+    [workPapers, users] = await Promise.all([
+      listWorkPaperOptions(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+    ]);
+  }));
 }
 ---
 
@@ -58,6 +63,8 @@ if (allowed) {
       <p class="grc-error" role="alert">
         You do not have permission to create an action plan.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The action plan form" />
     ) : (
       <>
         {failed && (
