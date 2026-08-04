@@ -8,8 +8,10 @@ export const prerender = false;
  * the acting organisation; gated strictly on SUPER_ADMIN (or a platform owner).
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import {
   getQueueCounts,
   listQueue,
@@ -29,13 +31,16 @@ const done = Astro.url.searchParams.get('done');
 let counts: QueueCounts = { pending: 0, failed: 0, sent: 0, deadLetter: 0 };
 let rows: QueueRow[] = [];
 let dead: DeadLetterRow[] = [];
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  [counts, rows, dead] = await Promise.all([
-    getQueueCounts(db, grc.organizationId),
-    listQueue(db, grc.organizationId, { status, limit: 100 }),
-    listDeadLetter(db, grc.organizationId, 40),
-  ]);
+  loadError = !(await guardPageLoad('send-queue', async () => {
+    const db = await getDb(getGrcEnv());
+    [counts, rows, dead] = await Promise.all([
+      getQueueCounts(db, grc.organizationId),
+      listQueue(db, grc.organizationId, { status, limit: 100 }),
+      listDeadLetter(db, grc.organizationId, 40),
+    ]);
+  }));
 }
 
 const statusClass = (s: string): string => {
@@ -66,6 +71,8 @@ const filters: { value: string; label: string }[] = [
       <p class="grc-error" role="alert">
         The send queue is restricted to administrators.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The send queue" />
     ) : (
       <>
         {done && (

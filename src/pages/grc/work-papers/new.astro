@@ -8,9 +8,11 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import WorkPaperForm from '@/components/grc/WorkPaperForm.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import {
   listAuditAreas,
   listAffiliates,
@@ -36,15 +38,18 @@ let affiliates: Option[] = [];
 let auditors: Option[] = [];
 let subAreas: SubAreaTemplate[] = [];
 let dropdowns: ControlDropdowns = DROPDOWN_DEFAULTS;
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  [areas, affiliates, auditors, subAreas, dropdowns] = await Promise.all([
-    listAuditAreas(db, grc.organizationId),
-    listAffiliates(db, grc.organizationId),
-    listAuditors(db, grc.organizationId),
-    listSubAreas(db, grc.organizationId),
-    loadControlDropdowns(db, grc.organizationId),
-  ]);
+  loadError = !(await guardPageLoad('work-papers.new', async () => {
+    const db = await getDb(getGrcEnv());
+    [areas, affiliates, auditors, subAreas, dropdowns] = await Promise.all([
+      listAuditAreas(db, grc.organizationId),
+      listAffiliates(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+      listSubAreas(db, grc.organizationId),
+      loadControlDropdowns(db, grc.organizationId),
+    ]);
+  }));
 }
 ---
 
@@ -62,6 +67,8 @@ if (allowed) {
       <p class="grc-error" role="alert">
         You do not have permission to create a work paper.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The work paper form" />
     ) : (
       <>
         {failed && (

@@ -9,9 +9,11 @@ export const prerender = false;
  * WORK_PAPERS.view.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { getWorkPaper, type WorkPaperDetail } from '@grc/repos/workPapers';
 import { listRequirements, type Requirement } from '@grc/repos/requirements';
 import {
@@ -42,7 +44,7 @@ const canUpload = canEdit && storageConfigured();
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 
-let wp: WorkPaperDetail | null = null;
+let wp = null as WorkPaperDetail | null;
 let requirements: Requirement[] = [];
 let responsibles: Responsible[] = [];
 let cc: CcRecipient[] = [];
@@ -51,30 +53,35 @@ let evidence: Attachment[] = [];
 let auditors: Option[] = [];
 let labels = new Map<string, string>();
 let actions: OfferedAction[] = [];
+let loadError = false;
 
 if (allowed && id) {
-  const db = await getDb(getGrcEnv());
-  wp = await getWorkPaper(db, grc.organizationId, id);
-  if (wp) {
-    [requirements, responsibles, cc, revisions, evidence, auditors, labels] = await Promise.all([
-      listRequirements(db, grc.organizationId, id),
-      listResponsibles(db, grc.organizationId, id),
-      listCcRecipients(db, grc.organizationId, id),
-      listRevisions(db, grc.organizationId, id),
-      listAttachments(db, grc.organizationId, 'work_paper', id),
-      listAuditors(db, grc.organizationId),
-      loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
-    ]);
-    actions = await offeredActions(db, wp.status, {
-      userId: grc.userId,
-      userName: grc.userName ?? grc.userEmail ?? grc.userId,
-      roleCode: grc.roleCode,
-      isPlatformOwner: grc.isPlatformOwner,
-      perms: grc.perms,
-    });
-  }
+  // A query error is logged under [grc.work-papers.detail] and shows the error
+  // card, never a blank 500 or a misleading "not found".
+  loadError = !(await guardPageLoad('work-papers.detail', async () => {
+    const db = await getDb(getGrcEnv());
+    wp = await getWorkPaper(db, grc.organizationId, id);
+    if (wp) {
+      [requirements, responsibles, cc, revisions, evidence, auditors, labels] = await Promise.all([
+        listRequirements(db, grc.organizationId, id),
+        listResponsibles(db, grc.organizationId, id),
+        listCcRecipients(db, grc.organizationId, id),
+        listRevisions(db, grc.organizationId, id),
+        listAttachments(db, grc.organizationId, 'work_paper', id),
+        listAuditors(db, grc.organizationId),
+        loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
+      ]);
+      actions = await offeredActions(db, wp.status, {
+        userId: grc.userId,
+        userName: grc.userName ?? grc.userEmail ?? grc.userId,
+        roleCode: grc.roleCode,
+        isPlatformOwner: grc.isPlatformOwner,
+        perms: grc.perms,
+      });
+    }
+  }));
 }
-if (allowed && !wp) Astro.response.status = 404;
+if (allowed && !loadError && !wp) Astro.response.status = 404;
 
 const editable = wp ? isEditable(wp.status) : false;
 const val = (key: string): string => {
@@ -130,6 +137,8 @@ const val = (key: string): string => {
       <p class="grc-error" role="alert">
         You do not have access to work papers.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="This work paper" />
     ) : !wp ? (
       <p class="grc-empty">That work paper was not found in your organisation.</p>
     ) : (

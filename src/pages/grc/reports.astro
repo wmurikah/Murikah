@@ -10,9 +10,11 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import ReportPreview from '@/components/grc/ReportPreview.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { listAffiliates, listAuditAreas, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels } from '@grc/repos/enums';
 import { writeAuditLog } from '@grc/repos/audit';
@@ -43,81 +45,84 @@ const unitScope = isUnitManagerScope(grc.roleCode, grc.isPlatformOwner);
 
 let affiliates: Option[] = [];
 let auditAreas: Option[] = [];
-let forcedAffiliate: string | null = null;
-let doc: ReportDocument | null = null;
-let filtersState: ReturnType<typeof parseReportFilters> | null = null;
+let forcedAffiliate = null as string | null;
+let doc = null as ReportDocument | null;
+let filtersState = null as ReturnType<typeof parseReportFilters> | null;
+let loadError = false;
 
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  forcedAffiliate = unitScope
-    ? await resolveUserAffiliate(db, grc.organizationId, grc.userId)
-    : null;
-  const filters = parseReportFilters(
-    params,
-    {
-      roleCode: grc.roleCode,
-      isPlatformOwner: grc.isPlatformOwner,
-      forcedAffiliateCode: forcedAffiliate,
-    },
-    now,
-  );
-  filtersState = filters;
-  [affiliates, auditAreas] = await Promise.all([
-    listAffiliates(db, grc.organizationId),
-    listAuditAreas(db, grc.organizationId),
-  ]);
-
-  if (canBoard) {
-    const [dataset, wpLabels, apLabels] = await Promise.all([
-      getComprehensiveReportData(
-        db,
-        grc.organizationId,
-        { userId: grc.userId, roleCode: grc.roleCode, isPlatformOwner: grc.isPlatformOwner },
-        filters,
-        forcedAffiliate,
-      ),
-      loadEnumLabels(db, 'WORK_PAPER_STATUS'),
-      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
-    ]);
-    const statusLabels: Record<string, string> = {};
-    for (const [k, v] of wpLabels) statusLabels[k] = v;
-    for (const [k, v] of apLabels) statusLabels[k] = v;
-
-    const affiliateName = filters.affiliateCode
-      ? (affiliates.find((a) => a.id === filters.affiliateCode)?.label ?? filters.affiliateCode)
+  loadError = !(await guardPageLoad('reports', async () => {
+    const db = await getDb(getGrcEnv());
+    forcedAffiliate = unitScope
+      ? await resolveUserAffiliate(db, grc.organizationId, grc.userId)
       : null;
-    const auditAreaName = filters.auditAreaId
-      ? (auditAreas.find((a) => a.id === filters.auditAreaId)?.label ?? filters.auditAreaId)
-      : null;
-
-    doc = buildReport(dataset, filters, {
-      header: {
-        organisation: grc.organizationName,
-        documentTitle: 'Internal Audit Report',
-        reportLabel: reportTypeLabel(filters.reportType),
-        generatedAt: ymd(now),
-        filterSummary: filterSummary(filters, { affiliateName, auditAreaName }),
-        scopeNotice: unitScope
-          ? 'Scoped to your affiliate and the observations and action plans assigned to you.'
-          : undefined,
+    const filters = parseReportFilters(
+      params,
+      {
+        roleCode: grc.roleCode,
+        isPlatformOwner: grc.isPlatformOwner,
+        forcedAffiliateCode: forcedAffiliate,
       },
       now,
-      statusLabels,
-    });
+    );
+    filtersState = filters;
+    [affiliates, auditAreas] = await Promise.all([
+      listAffiliates(db, grc.organizationId),
+      listAuditAreas(db, grc.organizationId),
+    ]);
 
-    if (params.get('applied') === '1') {
-      try {
-        await writeAuditLog(db, {
-          organizationId: grc.organizationId,
-          userId: grc.userId,
-          action: 'REPORT.generate',
-          details: `${filters.reportType}: ${filterSummary(filters, { affiliateName, auditAreaName })}`,
-        });
-      } catch {
-        // best-effort audit
+    if (canBoard) {
+      const [dataset, wpLabels, apLabels] = await Promise.all([
+        getComprehensiveReportData(
+          db,
+          grc.organizationId,
+          { userId: grc.userId, roleCode: grc.roleCode, isPlatformOwner: grc.isPlatformOwner },
+          filters,
+          forcedAffiliate,
+        ),
+        loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+        loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+      ]);
+      const statusLabels: Record<string, string> = {};
+      for (const [k, v] of wpLabels) statusLabels[k] = v;
+      for (const [k, v] of apLabels) statusLabels[k] = v;
+
+      const affiliateName = filters.affiliateCode
+        ? (affiliates.find((a) => a.id === filters.affiliateCode)?.label ?? filters.affiliateCode)
+        : null;
+      const auditAreaName = filters.auditAreaId
+        ? (auditAreas.find((a) => a.id === filters.auditAreaId)?.label ?? filters.auditAreaId)
+        : null;
+
+      doc = buildReport(dataset, filters, {
+        header: {
+          organisation: grc.organizationName,
+          documentTitle: 'Internal Audit Report',
+          reportLabel: reportTypeLabel(filters.reportType),
+          generatedAt: ymd(now),
+          filterSummary: filterSummary(filters, { affiliateName, auditAreaName }),
+          scopeNotice: unitScope
+            ? 'Scoped to your affiliate and the observations and action plans assigned to you.'
+            : undefined,
+        },
+        now,
+        statusLabels,
+      });
+
+      if (params.get('applied') === '1') {
+        try {
+          await writeAuditLog(db, {
+            organizationId: grc.organizationId,
+            userId: grc.userId,
+            action: 'REPORT.generate',
+            details: `${filters.reportType}: ${filterSummary(filters, { affiliateName, auditAreaName })}`,
+          });
+        } catch {
+          // best-effort audit
+        }
       }
     }
-  }
+  }));
 }
 
 const years: number[] = [];
@@ -144,6 +149,8 @@ const visibleStatuses = STATUS_OPTIONS.filter(
       <p class="grc-error" role="alert">
         You do not have access to reports.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="Reports" />
     ) : (
       <>
         {unitScope && (

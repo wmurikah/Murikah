@@ -7,11 +7,17 @@
  *
  * On send the row goes SENT with sent_at; on failure attempts is incremented and
  * error_message recorded, with an exponential backoff before the next try; when
- * attempts reach max_attempts the row is moved to notification_dead_letter. When
- * Graph is not configured (or outside production) nothing is sent and the rows
- * are left PENDING, so a preview or local run never contacts a provider.
+ * attempts reach max_attempts the row is recorded in notification_dead_letter.
+ * When Graph is not configured (or outside production) nothing is sent and the
+ * rows are left PENDING, so a preview or local run never contacts a provider.
+ *
+ * Column names come from the typed schema layer. The queue has no updated_at:
+ * the backoff is held in `scheduled_for` (the not-before time the next attempt
+ * may run), and the live `notification_dead_letter` stores the frozen queue row
+ * as `original_queue_data` JSON with `last_error`/`failed_at`.
  */
 import type { Client, InArgs } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
 import type { Clock } from '@engr/time';
 import { canSend, type GrcDeliveryEnv } from './env';
 import { sendViaGraph } from './graph';
@@ -41,18 +47,24 @@ interface QueueRow {
   maxAttempts: number;
 }
 
+const Q = cols(C.notification_queue);
+const DL = cols(C.notification_dead_letter);
+
 // The backoff before the next attempt grows with attempts (0, 5, 20, 45, 80
-// minutes), applied in fetchDue against updated_at.
+// minutes): recordFailure writes the not-before time into scheduled_for, and
+// fetchDue only picks rows whose scheduled_for has passed.
 async function fetchDue(db: Client, nowIso: string, limit: number): Promise<QueueRow[]> {
   const res = await db.execute({
-    sql: `SELECT notification_id AS id, organization_id, batch_type, priority,
-                 recipient_email, rendered_subject, rendered_body, payload,
-                 attempts, max_attempts
+    sql: `SELECT ${Q.notification_id} AS id, ${Q.organization_id} AS organization_id,
+                 ${Q.batch_type} AS batch_type, ${Q.priority} AS priority,
+                 ${Q.recipient_email} AS recipient_email, ${Q.rendered_subject} AS rendered_subject,
+                 ${Q.rendered_body} AS rendered_body, ${Q.payload} AS payload,
+                 ${Q.attempts} AS attempts, ${Q.max_attempts} AS max_attempts
             FROM notification_queue
-           WHERE status = 'PENDING' AND channel = 'email' AND recipient_email IS NOT NULL
-             AND (updated_at IS NULL
-                  OR datetime(updated_at, '+' || (attempts * attempts * 5) || ' minutes') <= ?)
-        ORDER BY (priority = 'urgent') DESC, created_at ASC
+           WHERE ${Q.status} = 'PENDING' AND ${Q.channel} = 'email'
+             AND ${Q.recipient_email} IS NOT NULL
+             AND (${Q.scheduled_for} IS NULL OR ${Q.scheduled_for} <= ?)
+        ORDER BY (${Q.priority} = 'urgent') DESC, ${Q.created_at} ASC
            LIMIT ?`,
     args: [nowIso, Math.max(1, Math.min(limit, 500))],
   });
@@ -74,10 +86,15 @@ async function markSent(db: Client, ids: string[], nowIso: string): Promise<void
   if (ids.length === 0) return;
   const ph = ids.map(() => '?').join(', ');
   await db.execute({
-    sql: `UPDATE notification_queue SET status = 'SENT', sent_at = ?, updated_at = ?
-           WHERE notification_id IN (${ph})`,
-    args: [nowIso, nowIso, ...ids] as InArgs,
+    sql: `UPDATE notification_queue SET ${Q.status} = 'SENT', ${Q.sent_at} = ?
+           WHERE ${Q.notification_id} IN (${ph})`,
+    args: [nowIso, ...ids] as InArgs,
   });
+}
+
+/** The not-before time for the next attempt: now plus attempts^2 * 5 minutes. */
+function backoffIso(nowIso: string, attempts: number): string {
+  return new Date(new Date(nowIso).getTime() + attempts * attempts * 5 * 60_000).toISOString();
 }
 
 async function recordFailure(
@@ -92,24 +109,25 @@ async function recordFailure(
       [
         {
           sql: `INSERT INTO notification_dead_letter
-                  (notification_id, organization_id, batch_type, recipient_email,
-                   rendered_subject, error_message, attempts, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                  (${DL.notification_id}, ${DL.original_queue_data}, ${DL.last_error}, ${DL.failed_at})
+                VALUES (?, ?, ?, ?)`,
           args: [
             row.id,
-            row.organizationId,
-            row.batchType,
-            row.recipientEmail,
-            row.subject,
+            JSON.stringify({
+              organizationId: row.organizationId,
+              batchType: row.batchType,
+              recipientEmail: row.recipientEmail,
+              subject: row.subject,
+              attempts: nextAttempts,
+            }),
             error,
-            nextAttempts,
             nowIso,
           ],
         },
         {
-          sql: `UPDATE notification_queue SET status = 'DEAD_LETTER', attempts = ?,
-                   error_message = ?, updated_at = ? WHERE notification_id = ?`,
-          args: [nextAttempts, error, nowIso, row.id],
+          sql: `UPDATE notification_queue SET ${Q.status} = 'DEAD_LETTER', ${Q.attempts} = ?,
+                   ${Q.error_message} = ? WHERE ${Q.notification_id} = ?`,
+          args: [nextAttempts, error, row.id],
         },
       ],
       'write',
@@ -117,9 +135,9 @@ async function recordFailure(
     return true;
   }
   await db.execute({
-    sql: `UPDATE notification_queue SET attempts = ?, error_message = ?, updated_at = ?
-           WHERE notification_id = ?`,
-    args: [nextAttempts, error, nowIso, row.id],
+    sql: `UPDATE notification_queue SET ${Q.attempts} = ?, ${Q.error_message} = ?,
+                 ${Q.scheduled_for} = ? WHERE ${Q.notification_id} = ?`,
+    args: [nextAttempts, error, backoffIso(nowIso, nextAttempts), row.id],
   });
   return false;
 }
