@@ -10,9 +10,11 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcBarChart from '@/components/grc/GrcBarChart.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { loadEnumLabels } from '@grc/repos/enums';
 import { getPortfolio, type Portfolio } from '@grc/repos/analytics';
 import { aiEnabled } from '@grc/ai/gate';
@@ -28,19 +30,22 @@ const isAuditor =
   can(Astro.locals, 'read', 'REPORT');
 const allowed = hasAi && isAuditor;
 
-let portfolio: Portfolio | null = null;
+let portfolio = null as Portfolio | null;
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  const [wpLabels, apLabels] = await Promise.all([
-    loadEnumLabels(db, 'WORK_PAPER_STATUS'),
-    loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
-  ]);
-  portfolio = await getPortfolio(
-    db,
-    grc.organizationId,
-    new Map([...wpLabels, ...apLabels]),
-    new Date(),
-  );
+  loadError = !(await guardPageLoad('analytics', async () => {
+    const db = await getDb(getGrcEnv());
+    const [wpLabels, apLabels] = await Promise.all([
+      loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+    ]);
+    portfolio = await getPortfolio(
+      db,
+      grc.organizationId,
+      new Map([...wpLabels, ...apLabels]),
+      new Date(),
+    );
+  }));
 }
 const p = portfolio;
 const rateTone =
@@ -71,6 +76,8 @@ const rateTone =
       <p class="grc-error" role="alert">
         Analytics is available to auditor roles.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="Analytics" />
     ) : p ? (
       <>
         <div class="grc-cards grc-cards--stats">

@@ -8,8 +8,10 @@ export const prerender = false;
  * vocabularies are on the Dropdowns page; the AI defaults on the AI settings page.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import { can } from '@grc/auth/rbac';
 import { getConfigValues, SETTINGS_FIELDS, SETTINGS_KEYS } from '@grc/repos/orgConfig';
 
@@ -25,12 +27,9 @@ const error = url.searchParams.get('error');
 let values = new Map<string, string>();
 let loadError = false;
 if (allowed) {
-  try {
+  loadError = !(await guardPageLoad('setup.settings', async () => {
     values = await getConfigValues(await getDb(getGrcEnv()), grc.organizationId, SETTINGS_KEYS);
-  } catch (err) {
-    loadError = true;
-    console.error('[grc.setup.settings] load failed', err);
-  }
+  }));
 }
 const inputType = (kind: string): 'number' | 'email' | 'text' =>
   kind === 'number' ? 'number' : kind === 'email' ? 'email' : 'text';
@@ -66,9 +65,7 @@ const inputType = (kind: string): 'number' | 'email' | 'text' =>
         Settings are managed by administrators.
       </p>
     ) : loadError ? (
-      <p class="grc-error" role="alert">
-        Settings could not be loaded. The problem has been logged; please try again.
-      </p>
+      <GrcErrorCard subject="Settings" />
     ) : (
       <form method="post" action="/api/setup/settings" class="grc-form grc-formgrid grc-card">
         {SETTINGS_FIELDS.map((f) => (
