@@ -353,6 +353,31 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({}),
   },
   {
+    endpoint: 'ai/draft.ts',
+    title: 'AI observation draft degrades without a provider key',
+    method: 'POST',
+    path: () => '/api/ai/draft',
+    form: () => ({
+      kind: 'observation',
+      observation_title: 'Smoke finding',
+      risk_description: 'Controls may fail.',
+    }),
+  },
+  {
+    endpoint: 'ai/draft.ts',
+    title: 'AI risk-rating suggestion degrades without a provider key',
+    method: 'POST',
+    path: () => '/api/ai/draft',
+    form: () => ({ kind: 'risk_rating', observation_title: 'Smoke finding' }),
+  },
+  {
+    endpoint: 'ai/draft.ts',
+    title: 'an unknown drafting kind is refused, not 500',
+    method: 'POST',
+    path: () => '/api/ai/draft',
+    form: () => ({ kind: 'sonnet' }),
+  },
+  {
     endpoint: 'ai/test.ts',
     title: 'AI connection test degrades without a provider key',
     method: 'POST',
