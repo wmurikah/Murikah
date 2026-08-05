@@ -1,10 +1,257 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+
+/**
+ * Auditee responses: one route, two audiences, decided by permission.
+ *
+ * An auditee (UNIT_MANAGER, JUNIOR_STAFF and the like) sees only the findings
+ * shared with them, with the response deadline stated plainly and the round they
+ * are on. The scoping is in the query, not the page, so the auditee's universe
+ * is restricted at the source. A reviewer (AUDITOR and above) sees the queue of
+ * responses awaiting a decision. Someone who is both, such as a platform owner,
+ * sees both sections.
+ *
+ * Gate: AUDITEE.respond for the auditee side, WORK_PAPERS.review for the queue.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import {
+  listAuditeeFindings,
+  listReviewQueue,
+  type AuditeeFinding,
+  type ResponseRow,
+} from '@grc/repos/auditeeResponses';
+import { getConfigValues } from '@grc/repos/orgConfig';
+import {
+  responseDeadline,
+  deadlineState,
+  configuredNumber,
+  DEFAULT_RESPONSE_DEADLINE_DAYS,
+} from '@grc/workflow/responseRounds';
+import { WP_STATUS } from '@grc/workflow/workPaperActions';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const canReview = grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review');
+const canRespond = grc.isPlatformOwner || grc.perms.includes('AUDITEE.respond');
+const allowed = canReview || canRespond;
+
+// The statuses a finding can be answered in: with the auditee now, or already
+// answered this round and awaiting the reviewer.
+const AUDITEE_STATUSES = [WP_STATUS.SENT_TO_AUDITEE, WP_STATUS.RESPONSE_RECEIVED];
+
+let findings: AuditeeFinding[] = [];
+let queue: ResponseRow[] = [];
+let deadlineDays = DEFAULT_RESPONSE_DEADLINE_DAYS;
+let loadError = false;
+if (allowed) {
+  loadError = !(await guardPageLoad('auditee-responses', async () => {
+    const db = await getDb(getGrcEnv());
+    const [mine, awaiting, config] = await Promise.all([
+      canRespond
+        ? listAuditeeFindings(db, grc.organizationId, grc.userId, AUDITEE_STATUSES)
+        : Promise.resolve([]),
+      canReview ? listReviewQueue(db, grc.organizationId) : Promise.resolve([]),
+      getConfigValues(db, grc.organizationId, ['RESPONSE_DEADLINE_DAYS']),
+    ]);
+    findings = mine;
+    queue = awaiting;
+    deadlineDays = configuredNumber(
+      config.get('RESPONSE_DEADLINE_DAYS'),
+      DEFAULT_RESPONSE_DEADLINE_DAYS,
+    );
+  }));
+}
+
+const riskClass = (r: string | null): string => {
+  const v = (r ?? '').toUpperCase();
+  if (v === 'CRITICAL' || v === 'HIGH') return 'grc-pill grc-pill--risk-high';
+  if (v === 'MEDIUM') return 'grc-pill grc-pill--risk-medium';
+  if (v === 'LOW') return 'grc-pill grc-pill--risk-low';
+  return 'grc-pill';
+};
+const fmtDate = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+
+/** The deadline for a finding: the stored one when set, else derived from the sent date. */
+const deadlineFor = (f: AuditeeFinding): string | null =>
+  f.storedDeadline ?? responseDeadline(f.sentDate, deadlineDays);
+
+const done = Astro.url.searchParams.get('done');
+const failed = Astro.url.searchParams.get('error');
 ---
 
-<GrcPlaceholder
-  title="Auditee responses"
-  lead="The auditee portal and the reviewer queue."
-  note="Auditee responses and the review queue arrive with the portal module."
-/>
+<GrcLayout title="Auditee responses">
+  <div class="grc-page-head">
+    <div>
+      <h1>Auditee responses</h1>
+      <p class="grc-lead">
+        {
+          canRespond && !canReview
+            ? 'Findings shared with you, and your response to each.'
+            : 'Management responses and the review queue.'
+        }
+      </p>
+    </div>
+  </div>
+
+  {
+    done && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        {decodeURIComponent(done)}
+      </p>
+    )
+  }
+  {
+    failed && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {decodeURIComponent(failed)}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have access to auditee responses.
+      </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="Auditee responses" />
+    ) : (
+      <>
+        {canRespond && (
+          <section class="grc-section">
+            <h2>Findings shared with you</h2>
+            {findings.length === 0 ? (
+              <div class="grc-empty">
+                <p>
+                  <strong>Nothing awaits your response.</strong> Findings appear here once an
+                  auditor shares them with you.
+                </p>
+              </div>
+            ) : (
+              <div class="grc-tablewrap">
+                <table class="grc-table" aria-label="Findings shared with you">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Finding</th>
+                      <th>Risk</th>
+                      <th>Round</th>
+                      <th>Respond by</th>
+                      <th>State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {findings.map((f) => {
+                      const deadline = deadlineFor(f);
+                      const state = deadlineState(deadline);
+                      return (
+                        <tr>
+                          <td>
+                            <a href={`/auditee-responses/${f.workPaperId}`}>{f.reference}</a>
+                          </td>
+                          <td>{f.observationTitle || 'Untitled finding'}</td>
+                          <td>
+                            {f.riskRating ? (
+                              <span class={riskClass(f.riskRating)}>{f.riskRating}</span>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                          <td class="grc-num">{f.round}</td>
+                          <td class="grc-num">
+                            {fmtDate(deadline)}
+                            {state.overdue && (
+                              <span class="grc-overdue">
+                                {' '}
+                                {Math.abs(state.daysRemaining ?? 0)}d late
+                              </span>
+                            )}
+                            {!state.overdue && state.dueSoon && (
+                              <span class="grc-duesoon"> due soon</span>
+                            )}
+                          </td>
+                          <td>
+                            {f.answeredThisRound ? (
+                              <span class="grc-badge grc-badge--review">Awaiting review</span>
+                            ) : (
+                              <span class="grc-badge grc-badge--pending">Response needed</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {canReview && (
+          <section class="grc-section">
+            <h2>Responses awaiting review</h2>
+            {queue.length === 0 ? (
+              <div class="grc-empty">
+                <p>
+                  <strong>The review queue is clear.</strong> Responses appear here as auditees
+                  submit them.
+                </p>
+              </div>
+            ) : (
+              <div class="grc-tablewrap">
+                <table class="grc-table" aria-label="Responses awaiting review">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Finding</th>
+                      <th>Round</th>
+                      <th>Submitted by</th>
+                      <th>Submitted</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queue.map((r) => (
+                      <tr>
+                        <td>
+                          <a href={`/auditee-responses/${r.workPaperId}`}>{r.reference}</a>
+                        </td>
+                        <td>{r.observationTitle || 'Untitled finding'}</td>
+                        <td class="grc-num">{r.round}</td>
+                        <td>{r.submittedByName ?? '-'}</td>
+                        <td class="grc-num">{fmtDate(r.submittedDate)}</td>
+                        <td>
+                          <a
+                            href={`/auditee-responses/${r.workPaperId}`}
+                            class="grc-btn grc-btn--secondary"
+                          >
+                            Review
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+      </>
+    )
+  }
+</GrcLayout>
+
+<style>
+  .grc-section {
+    margin-bottom: 2rem;
+  }
+  .grc-section h2 {
+    font-size: 1.05rem;
+    margin: 0 0 0.75rem;
+  }
+</style>

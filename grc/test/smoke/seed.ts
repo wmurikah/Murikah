@@ -67,6 +67,8 @@ const WP_TRANSITIONS: [string, string][] = [
   ['Approved', 'Sent to Auditee'],
   ['Sent to Auditee', 'Response Received'],
   ['Response Received', 'Response Reviewed'],
+  // Requesting changes reopens the finding to the auditee for the next round.
+  ['Response Received', 'Sent to Auditee'],
 ];
 
 const AP_TRANSITIONS: [string, string][] = [
@@ -304,6 +306,9 @@ export function seedDatabase(db: DatabaseSync): void {
     [SMOKE.sentWorkPaperId, 'WP/2026/002', 'Sent to Auditee'],
   ];
   for (const [id, ref, status] of workPapers) {
+    // A finding that has reached the auditee carries the date it was shared and
+    // the round it is on, which the deadline and the reopen path both read.
+    const sent = status === 'Sent to Auditee';
     insert(db, 'work_papers', {
       work_paper_id: id,
       organization_id: SMOKE.orgId,
@@ -324,6 +329,9 @@ export function seedDatabase(db: DatabaseSync): void {
       revision_count: 0,
       prepared_by_id: SMOKE.userId,
       prepared_by_name: 'Wilberforce Murikah',
+      sent_to_auditee_date: sent ? now : null,
+      response_round: sent ? 1 : null,
+      response_status: sent ? 'SUBMITTED' : null,
       created_at: now,
       updated_at: now,
     });
