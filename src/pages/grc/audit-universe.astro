@@ -1,10 +1,5 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+// The audit universe screen lives in Setup; this route survives for old bookmarks.
+return Astro.redirect('/settings/audit-universe', 303);
 ---
-
-<GrcPlaceholder
-  title="Audit universe"
-  lead="The auditable entities and their assessed risk."
-  note="The audit universe arrives with the setup module."
-/>
