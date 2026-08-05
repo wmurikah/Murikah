@@ -52,8 +52,16 @@ export function isGrcPassthroughAsset(pathname: string): boolean {
 }
 
 // Public, unauthenticated app paths on the grc host, in root-relative form: the
-// sign-in screen and the sign-in endpoint only.
-const PUBLIC_GRC_PATHS = new Set(['/login', '/api/auth/login']);
+// sign-in screen and endpoint, and the forgotten-password flow (its two screens
+// and endpoints), which by nature runs before a session exists.
+const PUBLIC_GRC_PATHS = new Set([
+  '/login',
+  '/api/auth/login',
+  '/forgot-password',
+  '/api/auth/forgot-password',
+  '/reset-password',
+  '/api/auth/reset-password',
+]);
 
 export function isGrcPublicPath(appPath: string): boolean {
   return PUBLIC_GRC_PATHS.has(appPath);

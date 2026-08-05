@@ -47,9 +47,13 @@ test('isGrcPassthroughAsset spots infra and file paths, not app routes', () => {
   assert.equal(isGrcPassthroughAsset('/work-papers/abc123'), false);
 });
 
-test('public grc paths cover sign-in only', () => {
+test('public grc paths cover sign-in and the forgotten-password flow only', () => {
   assert.equal(isGrcPublicPath('/login'), true);
   assert.equal(isGrcPublicPath('/api/auth/login'), true);
+  assert.equal(isGrcPublicPath('/forgot-password'), true);
+  assert.equal(isGrcPublicPath('/api/auth/forgot-password'), true);
+  assert.equal(isGrcPublicPath('/reset-password'), true);
+  assert.equal(isGrcPublicPath('/api/auth/reset-password'), true);
   assert.equal(isGrcPublicPath('/'), false);
   assert.equal(isGrcPublicPath('/api/auth/logout'), false);
   assert.equal(isGrcApiPath('/api/org/switch'), true);
