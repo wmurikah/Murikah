@@ -1,10 +1,5 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+// The user management screen lives in Setup; this route survives for old bookmarks.
+return Astro.redirect('/settings/users', 303);
 ---
-
-<GrcPlaceholder
-  title="Users"
-  lead="People in your organisation and their access."
-  note="User management arrives with the setup module."
-/>
