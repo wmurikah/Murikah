@@ -31,6 +31,7 @@ import {
   type SwitchOrg as GrcSwitchOrg,
 } from '@grc/repos/orgContext';
 import { getPermissionMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
+import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
 import { loadSubscription } from '@grc/repos/features';
 import {
   toGrcAppPath,
@@ -162,6 +163,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return isApi
           ? jsonResponse({ error: 'password_change_required' }, 403)
           : context.redirect(GRC_CHANGE_PASSWORD_PATH);
+      }
+
+      // Central page-map enforcement (PAGE_PERMISSION_MAP): a page section the
+      // matrix does not unlock redirects to the dashboard before the page runs.
+      // Unmapped sections (dashboard, notifications, change-password) pass and
+      // gate themselves; API endpoints carry their own gates.
+      if (!isApi && !pageAccess(matrix, pageSlugForPath(appPath))) {
+        return context.redirect('/');
       }
 
       return next();

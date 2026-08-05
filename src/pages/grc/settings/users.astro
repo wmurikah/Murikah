@@ -2,8 +2,9 @@
 export const prerender = false;
 
 /**
- * Users Setup: manage the organisation's users. SUPER_ADMIN or platform owner
- * only. Create (with an initial password and a forced change), edit name, role,
+ * Users Setup: manage the organisation's users. Gated on the matrix (USER
+ * read; the mutations gate per action on /api/setup/users), platform owner
+ * always. Create (with an initial password and a forced change), edit name, role,
  * affiliate and phone, reset the password, and activate or deactivate. A
  * platform-owner account is shown but never edited here. Every mutation posts to
  * /api/setup/users and returns with a saved or error banner.
@@ -17,10 +18,11 @@ import { guardPageLoad } from '@grc/pageGuard';
 import { listUsers, type ManagedUser } from '@grc/repos/usersAdmin';
 import { listRoleCodes } from '@grc/repos/permissionsAdmin';
 import { listAffiliates, type Affiliate } from '@grc/repos/affiliatesAdmin';
+import { can } from '@grc/auth/rbac';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
-const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'USER');
 
 const url = Astro.url;
 const saved = url.searchParams.get('saved');
