@@ -8,6 +8,7 @@
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
 import { newSessionId, hashToken, SESSION_MAX_AGE_SECONDS } from '@grc/auth/session';
+import { sessionLiveness } from '@grc/auth/sessionRules';
 
 // Column names come from the typed schema layer, so a wrong name fails the build.
 const SESS = cols(C.sessions);
@@ -75,7 +76,7 @@ export async function resolveSession(
   sessionId: string,
 ): Promise<SessionIdentity | null> {
   const res = await db.execute({
-    sql: `SELECT ${S.expires_at} AS expires_at,
+    sql: `SELECT ${S.expires_at} AS expires_at, ${S.last_seen_at} AS last_seen_at,
                  ${U.user_id} AS user_id, ${U.full_name} AS full_name, ${U.email} AS email,
                  ${U.role_code} AS role_code, ${U.is_platform_owner} AS is_platform_owner,
                  ${U.must_change_password} AS must_change_password,
@@ -90,8 +91,27 @@ export async function resolveSession(
   const row = res.rows[0];
   if (!row) return null;
 
-  const expiresAt = String(row.expires_at);
-  if (expiresAt && Date.parse(expiresAt) <= Date.now()) return null;
+  // The absolute expiry and the sliding idle window (sessionRules.ts): a
+  // session idle beyond the window dies even though the cookie is still valid,
+  // so a stolen cookie is only useful while its session stays active.
+  const liveness = sessionLiveness(
+    row.expires_at == null ? null : String(row.expires_at),
+    row.last_seen_at == null ? null : String(row.last_seen_at),
+    Date.now(),
+  );
+  if (!liveness.alive) return null;
+  if (liveness.shouldTouch) {
+    // Best-effort activity stamp, throttled by the rules so it is not a write
+    // on every request; a failed stamp never fails the request.
+    try {
+      await db.execute({
+        sql: `UPDATE sessions SET ${SESS.last_seen_at} = ? WHERE ${SESS.session_id} = ?`,
+        args: [new Date().toISOString(), sessionId],
+      });
+    } catch (err) {
+      console.error('[grc.session] last_seen_at stamp failed', err);
+    }
+  }
 
   return {
     userId: String(row.user_id),

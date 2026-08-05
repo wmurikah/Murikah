@@ -18,6 +18,9 @@ import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
+// The same RFC 6238 implementation the worker verifies against, so the round
+// trip computes real codes for the enrolled secret.
+import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -520,6 +523,26 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    endpoint: 'auth/mfa/enrol.ts',
+    title: 'MFA enrolment starts for the signed-in admin',
+    method: 'POST',
+    path: () => '/api/auth/mfa/enrol',
+  },
+  {
+    endpoint: 'auth/mfa/confirm.ts',
+    title: 'a wrong MFA confirmation code is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/confirm',
+    form: () => ({ code: '000000' }),
+  },
+  {
+    endpoint: 'auth/mfa/verify.ts',
+    title: 'the MFA step without a pending session is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/verify',
+    form: () => ({ code: '000000' }),
+  },
+  {
     endpoint: 'auth/logout.ts',
     title: 'sign out',
     method: 'POST',
@@ -620,6 +643,144 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         }
       });
     }
+
+    // Login security round trips (Build Prompt 25). The admin session signed
+    // out above; each block manages its own session state.
+
+    await t.test('repeated failures lock the account, right password included', async () => {
+      server.clearCookies();
+      for (let i = 0; i < 5; i++) {
+        const res = await server.request('POST', '/api/auth/login', {
+          email: 'lockout@hasspetroleum.com',
+          password: 'wrong-password',
+        });
+        assert.equal(res.status, 303, `failure ${i + 1} answered ${res.status}`);
+      }
+      const locked = await server.request('POST', '/api/auth/login', {
+        email: 'lockout@hasspetroleum.com',
+        password: SMOKE.password,
+      });
+      assert.ok(
+        String(locked.headers.location ?? '').includes('error=1'),
+        'the lockout must refuse even the right password',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const ev = db
+        .prepare(`SELECT COUNT(*) AS n FROM security_events WHERE event_type = 'LOGIN_LOCKOUT'`)
+        .get() as { n: number | bigint };
+      assert.ok(Number(ev.n) >= 1, 'the lockout must be recorded in security_events');
+    });
+
+    await t.test('an idle session dies before its absolute expiry', async () => {
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: 'auditor@hasspetroleum.com',
+        password: SMOKE.password,
+      });
+      assert.ok(!String(login.headers.location ?? '').includes('error'), 'auditor must sign in');
+      const alive = await server.get('/work-papers');
+      assert.equal(alive.status, 200);
+      assert.ok(!alive.hops[alive.hops.length - 1].startsWith('/login'));
+      const db = server.database;
+      assert.ok(db);
+      const stale = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      db.prepare(`UPDATE sessions SET last_seen_at = ? WHERE user_id = ?`).run(
+        stale,
+        SMOKE.auditorId,
+      );
+      const bounced = await server.get('/work-papers');
+      assert.ok(
+        bounced.hops[bounced.hops.length - 1].startsWith('/login'),
+        `an idle session must be rejected (via ${bounced.hops.join(' -> ')})`,
+      );
+    });
+
+    let mfaSecret = '';
+    let mfaBackup: string[] = [];
+
+    await t.test('MFA enrolment shows the key, the QR and the backup codes', async () => {
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      assert.equal(login.status, 303);
+      const enrol = await server.request('POST', '/api/auth/mfa/enrol');
+      assert.equal(enrol.status, 303, `enrol answered ${enrol.status}`);
+      const page = await server.get('/mfa/setup');
+      assert.equal(page.status, 200, `setup screen answered ${page.status}`);
+      const key = /Manual key: <code>([A-Z2-7 ]+)<\/code>/.exec(page.body);
+      assert.ok(key, 'the setup screen shows the manual key');
+      mfaSecret = key[1].replace(/ /g, '');
+      assert.ok(page.body.includes('<svg'), 'the setup screen renders the QR in-worker');
+      mfaBackup = [...page.body.matchAll(/<code>([A-Z2-9]{10})<\/code>/g)].map((m) => m[1]);
+      assert.equal(mfaBackup.length, 8, 'eight backup codes are shown once');
+    });
+
+    await t.test('confirming a real code activates the factor', async () => {
+      const code = await totpAt(mfaSecret, Math.floor(Date.now() / 1000));
+      const res = await server.request('POST', '/api/auth/mfa/confirm', { code });
+      assert.ok(
+        String(res.headers.location ?? '').includes('done=1'),
+        `confirm redirected to ${res.headers.location}`,
+      );
+    });
+
+    await t.test('the next sign-in demands the code and a real one passes', async () => {
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      assert.equal(
+        String(login.headers.location ?? ''),
+        '/mfa',
+        'an enrolled account must be sent to the TOTP step',
+      );
+      const blocked = await server.get('/work-papers');
+      assert.equal(
+        blocked.hops[blocked.hops.length - 1],
+        '/mfa',
+        'a pending session must not reach the app',
+      );
+      const code = await totpAt(mfaSecret, Math.floor(Date.now() / 1000));
+      const wrongCode = code === '000001' ? '000002' : '000001';
+      const wrong = await server.request('POST', '/api/auth/mfa/verify', { code: wrongCode });
+      assert.ok(String(wrong.headers.location ?? '').includes('error=1'));
+      const ok = await server.request('POST', '/api/auth/mfa/verify', { code });
+      assert.equal(String(ok.headers.location ?? ''), '/', 'a valid code must promote the session');
+      const home = await server.get('/work-papers');
+      assert.equal(home.status, 200, 'the promoted session reaches the app');
+    });
+
+    await t.test('a backup code passes the step once and only once', async () => {
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const first = await server.request('POST', '/api/auth/mfa/verify', {
+        backup_code: mfaBackup[0],
+      });
+      assert.equal(
+        String(first.headers.location ?? ''),
+        '/',
+        'a backup code must promote the session',
+      );
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const again = await server.request('POST', '/api/auth/mfa/verify', {
+        backup_code: mfaBackup[0],
+      });
+      assert.ok(
+        String(again.headers.location ?? '').includes('error=1'),
+        'a used backup code must be refused',
+      );
+    });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
     console.error('---- worker log (tail) ----');

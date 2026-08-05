@@ -74,26 +74,60 @@ function readRawCookie(request: Request): string | null {
   return null;
 }
 
-/** The Set-Cookie value carrying a signed session id. */
+/**
+ * Whether the session has cleared the second factor. Mirroring the CMS: after
+ * the password step, a user with MFA enrolled gets a `pending` cookie that
+ * only the TOTP step (or sign-out) accepts; verifying promotes it to `ok`.
+ */
+export type GrcMfaState = 'ok' | 'pending';
+
+export interface GrcSessionCookie {
+  sessionId: string;
+  mfa: GrcMfaState;
+}
+
+// The signed payload is `${sessionId}.${mfa}` (or the bare id for cookies from
+// before the MFA step, which read as `ok`); the signature covers the whole
+// payload, so the MFA state cannot be tampered with client-side.
+/** The Set-Cookie value carrying a signed session id and its MFA state. */
 export async function createSessionCookie(
   sessionId: string,
   secret: string,
   secure: boolean,
+  mfa: GrcMfaState = 'ok',
 ): Promise<string> {
-  const sig = await hmac(sessionId, secret);
-  return cookie(`${sessionId}.${sig}`, SESSION_MAX_AGE_SECONDS, secure);
+  const body = mfa === 'ok' ? sessionId : `${sessionId}.${mfa}`;
+  const sig = await hmac(body, secret);
+  return cookie(`${body}.${sig}`, SESSION_MAX_AGE_SECONDS, secure);
 }
 
-/** Read the cookie and return the session id only when its signature verifies. */
-export async function readSessionId(request: Request, secret: string): Promise<string | null> {
+/** Read the cookie into its session id and MFA state, only when the signature verifies. */
+export async function readGrcSessionCookie(
+  request: Request,
+  secret: string,
+): Promise<GrcSessionCookie | null> {
   const raw = readRawCookie(request);
   if (!raw) return null;
   const dot = raw.lastIndexOf('.');
   if (dot <= 0) return null;
-  const sessionId = raw.slice(0, dot);
+  const body = raw.slice(0, dot);
   const sig = raw.slice(dot + 1);
-  const expected = await hmac(sessionId, secret);
-  return timingSafeEqual(sig, expected) ? sessionId : null;
+  const expected = await hmac(body, secret);
+  if (!timingSafeEqual(sig, expected)) return null;
+  const sep = body.indexOf('.');
+  if (sep <= 0) return { sessionId: body, mfa: 'ok' };
+  const mfa = body.slice(sep + 1);
+  if (mfa !== 'pending') return null;
+  return { sessionId: body.slice(0, sep), mfa };
+}
+
+/**
+ * Read the cookie and return the session id only when its signature verifies,
+ * whatever the MFA state (sign-out and rotation work from a pending session).
+ */
+export async function readSessionId(request: Request, secret: string): Promise<string | null> {
+  const parsed = await readGrcSessionCookie(request, secret);
+  return parsed ? parsed.sessionId : null;
 }
 
 /** The Set-Cookie value that clears the session; attributes match the set cookie. */

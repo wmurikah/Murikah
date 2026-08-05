@@ -23,9 +23,12 @@ import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
 import { toAppPath, isPublicAppPath, isEngrApiPath } from '@engr/routing';
 import { getGrcEnv } from '@grc/env';
 import { getDb as getGrcDb } from '@grc/db';
-import { readSessionId } from '@grc/auth/session';
+import { readGrcSessionCookie } from '@grc/auth/session';
 import { readActingOrg as readGrcActingOrg } from '@grc/auth/actingOrg';
 import { resolveSession } from '@grc/repos/session';
+import { parseMfaRecord, mfaConfigKey } from '@grc/repos/mfa';
+import { mfaRequiredForRole, MFA_REQUIRED_ROLES_KEY } from '@grc/auth/mfaPolicy';
+import { getConfigValues } from '@grc/repos/orgConfig';
 import {
   resolveActingContext as resolveGrcActingContext,
   type SwitchOrg as GrcSwitchOrg,
@@ -37,7 +40,11 @@ import {
   isGrcPublicPath,
   isGrcApiPath,
   isGrcChangePasswordExempt,
+  isGrcMfaPendingAllowed,
+  isGrcMfaEnrolExempt,
   GRC_CHANGE_PASSWORD_PATH,
+  GRC_MFA_PATH,
+  GRC_MFA_SETUP_PATH,
 } from '@grc/routing';
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { getCmsEnv } from '@cms/env';
@@ -87,9 +94,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
           : new Response('The GRC platform is not configured.', { status: 503 });
       }
 
-      const sessionId = await readSessionId(context.request, env.sessionSecret);
-      if (!sessionId) {
+      const sessionCookie = await readGrcSessionCookie(context.request, env.sessionSecret);
+      if (!sessionCookie) {
         return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+      }
+      const sessionId = sessionCookie.sessionId;
+
+      // A half-authorised (MFA pending) session may only reach the TOTP step
+      // and sign-out; the step's endpoint resolves the session itself, so no
+      // locals are attached until the second factor clears.
+      if (sessionCookie.mfa === 'pending') {
+        if (isGrcMfaPendingAllowed(appPath)) return next();
+        return isApi
+          ? jsonResponse({ error: 'mfa_required' }, 401)
+          : context.redirect(GRC_MFA_PATH);
       }
 
       const db = await getGrcDb(env);
@@ -162,6 +180,33 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return isApi
           ? jsonResponse({ error: 'password_change_required' }, 403)
           : context.redirect(GRC_CHANGE_PASSWORD_PATH);
+      }
+
+      // MFA enrolment lock: when the organisation's rule requires a second
+      // factor for this role and the user has none confirmed, every route but
+      // the enrolment flow (and sign-out and change-password) redirects to the
+      // setup screen. One config read covers the rule and the user's record.
+      if (!isGrcMfaEnrolExempt(appPath)) {
+        try {
+          const mfaValues = await getConfigValues(db, identity.homeOrganizationId, [
+            MFA_REQUIRED_ROLES_KEY,
+            mfaConfigKey(identity.userId),
+          ]);
+          const required = mfaRequiredForRole(
+            identity.roleCode,
+            mfaValues.get(MFA_REQUIRED_ROLES_KEY),
+          );
+          const record = parseMfaRecord(mfaValues.get(mfaConfigKey(identity.userId)));
+          if (required && !record?.confirmed) {
+            return isApi
+              ? jsonResponse({ error: 'mfa_enrolment_required' }, 403)
+              : context.redirect(GRC_MFA_SETUP_PATH);
+          }
+        } catch (err) {
+          // The lock is defence in depth: a read failure logs and lets the
+          // request through rather than locking the whole product out.
+          logGrcError(appPath, err);
+        }
       }
 
       return next();
