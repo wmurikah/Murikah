@@ -156,8 +156,10 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
       action_description: 'Smoke-created action plan.',
+      target_date: today,
       due_date: today,
       priority: 'High',
+      implementation_notes: 'Smoke implementation notes.',
       owner_ids: SMOKE.auditeeId,
     }),
     capture: { key: 'apId', from: /\/action-plans\/([^/?]+)/ },
@@ -170,7 +172,10 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
       action_description: 'Smoke-created action plan (edited).',
+      target_date: today,
       due_date: today,
+      priority: 'Critical',
+      implementation_notes: 'Smoke implementation notes (edited).',
     }),
   },
   {
@@ -193,6 +198,13 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: () => `/api/action-plans/${SMOKE.verifyActionPlanId}/transition`,
     form: () => ({ to_status: 'Verified', comment: 'Smoke verification' }),
+  },
+  {
+    endpoint: 'action-plans/[id]/transition.ts',
+    title: 'a Kanban drop transitions and returns to the board',
+    method: 'POST',
+    path: (c) => `/api/action-plans/${c.get('apId')}/transition`,
+    form: () => ({ to_status: 'In Progress', return_to: '/action-plans?view=kanban' }),
   },
   {
     endpoint: 'action-plans/[id]/delete.ts',
@@ -485,6 +497,17 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         );
       });
     }
+
+    // The Kanban board and the list filters build their own queries, so cover
+    // the board and every filter rather than only the default table view.
+    await t.test('GET /action-plans as a Kanban board with every filter', async () => {
+      const board =
+        `/action-plans?view=kanban&q=reconciliation&status=In%20Progress` +
+        `&owner=${SMOKE.auditeeId}&area=${SMOKE.auditAreaId}` +
+        `&affiliate=${SMOKE.affiliateCode}&priority=High&year=2026`;
+      const res = await server.get(board);
+      assert.equal(res.status, 200, `board answered ${res.status}: ${res.body.slice(0, 300)}`);
+    });
 
     for (const step of MUTATION_STEPS) {
       await t.test(step.title, async () => {
