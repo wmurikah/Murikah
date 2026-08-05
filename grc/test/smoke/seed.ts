@@ -31,6 +31,11 @@ export const SMOKE = {
   responseId: 'RESP-1',
   notificationId: 'NQ-1',
   attachmentId: 'ATT-MISSING',
+  heldAttachmentId: 'ATT-HELD',
+  freeAttachmentId: 'ATT-FREE',
+  heldFileId: 'FILE-HELD',
+  freeFileId: 'FILE-FREE',
+  driveFileId: 'FILE-DRIVE',
 } as const;
 
 const WP_STATUSES = [
@@ -490,6 +495,73 @@ export function seedDatabase(db: DatabaseSync): void {
     deep_link: `/work-papers/${SMOKE.sentWorkPaperId}`,
     created_at: now,
   });
+
+  // Evidence governance: a legal hold over the sent finding (its evidence must
+  // be undeletable), a platform-wide retention policy, and three files: one held,
+  // one deletable, and one still on Drive for the migration worklist.
+  insert(db, 'legal_holds', {
+    hold_id: 'HOLD-1',
+    name: 'Regulator inquiry 2026',
+    description: 'Hold everything on the treasury finding.',
+    entity_filter: JSON.stringify({ entity_type: 'work_paper', entity_id: SMOKE.sentWorkPaperId }),
+    placed_at: now,
+    placed_by: SMOKE.userId,
+  });
+  insert(db, 'retention_policies', {
+    policy_id: 'RET-1',
+    entity_type: 'work_paper',
+    retention_days: 90,
+    is_active: 1,
+    description: 'Work paper evidence is kept at least ninety days.',
+  });
+  const files: [string, string, string, string | null, string | null][] = [
+    // file_id, attached entity, backend, storage_key, drive_file_id
+    [
+      SMOKE.heldFileId,
+      SMOKE.sentWorkPaperId,
+      'r2',
+      `org/${SMOKE.orgId}/evidence/${SMOKE.heldFileId}`,
+      null,
+    ],
+    [
+      SMOKE.freeFileId,
+      SMOKE.draftWorkPaperId,
+      'r2',
+      `org/${SMOKE.orgId}/evidence/${SMOKE.freeFileId}`,
+      null,
+    ],
+    [SMOKE.driveFileId, SMOKE.draftWorkPaperId, 'drive', null, 'drive-abc-123'],
+  ];
+  for (const [fileId, entityId, backend, key, driveId] of files) {
+    insert(db, 'files', {
+      file_id: fileId,
+      organization_id: SMOKE.orgId,
+      file_name: `${fileId.toLowerCase()}.pdf`,
+      mime_type: 'application/pdf',
+      size_bytes: 2048,
+      uploaded_by: SMOKE.userId,
+      storage_backend: backend,
+      storage_key: key,
+      drive_file_id: driveId,
+      content_hash: 'a'.repeat(64),
+      content_hash_algo: 'SHA-256',
+      created_at: now,
+    });
+    insert(db, 'file_attachments', {
+      attachment_id:
+        fileId === SMOKE.heldFileId
+          ? SMOKE.heldAttachmentId
+          : fileId === SMOKE.freeFileId
+            ? SMOKE.freeAttachmentId
+            : `ATT-${fileId}`,
+      file_id: fileId,
+      entity_type: 'work_paper',
+      entity_id: entityId,
+      file_category: 'EVIDENCE',
+      attached_by: SMOKE.userId,
+      attached_at: now,
+    });
+  }
 
   for (const [i, action] of ['LOGIN', 'WORK_PAPER.create', 'ACTION_PLAN.update'].entries()) {
     insert(db, 'audit_activity', {

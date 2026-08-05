@@ -386,6 +386,26 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    endpoint: 'evidence/[attachmentId]/delete.ts',
+    title: 'deleting held evidence is blocked by the legal hold',
+    method: 'POST',
+    path: () => `/api/evidence/${SMOKE.heldAttachmentId}/delete`,
+    form: () => ({ reason: 'smoke: should be refused' }),
+  },
+  {
+    endpoint: 'evidence/[attachmentId]/delete.ts',
+    title: 'deleting unheld evidence queues the governed soft deletion',
+    method: 'POST',
+    path: () => `/api/evidence/${SMOKE.freeAttachmentId}/delete`,
+    form: () => ({ reason: 'smoke: superseded document' }),
+  },
+  {
+    endpoint: 'evidence/[attachmentId]/download.ts',
+    title: 'a Drive-backed file still opens through the read-through',
+    method: 'GET',
+    path: () => `/api/evidence/ATT-${SMOKE.driveFileId}/download`,
+  },
+  {
     endpoint: 'evidence/[attachmentId]/download.ts',
     title: 'downloading a missing attachment is not a 500',
     method: 'GET',
