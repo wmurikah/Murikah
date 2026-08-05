@@ -22,13 +22,26 @@ import {
   escapeHtml,
 } from '../../src/lib/grc/notify/render.ts';
 
-test('the catalogue has all eighteen source types with valid metadata', () => {
-  assert.equal(NOTIFICATION_TYPES.length, 18);
+test('the catalogue has the eighteen source types plus the due-soon reminder', () => {
+  assert.equal(NOTIFICATION_TYPES.length, 19);
+  assert.ok(NOTIFICATION_TYPES.includes('DUE_SOON_REMINDER'));
   for (const t of NOTIFICATION_TYPES) {
     const m = TYPE_META[t];
     assert.ok(m.priority === 'normal' || m.priority === 'urgent');
     assert.ok(m.entity === 'work_paper' || m.entity === 'action_plan');
   }
+});
+
+test('the due-soon reminder warns without urgency and renders a fallback', () => {
+  // Approaching is a warning, not an urgent overdue; the overdue mail stays urgent.
+  assert.equal(priorityOf('DUE_SOON_REMINDER'), 'normal');
+  assert.equal(severityOf('DUE_SOON_REMINDER'), 'warning');
+  const rendered = renderNotification(null, 'DUE_SOON_REMINDER', {
+    reference: 'AP-1',
+    dueDate: '2026-08-08',
+  });
+  assert.ok(rendered.subject.includes('AP-1'));
+  assert.ok(rendered.subject.toLowerCase().includes('approaching'));
 });
 
 test('priority and HOA copy match the source rules', () => {
