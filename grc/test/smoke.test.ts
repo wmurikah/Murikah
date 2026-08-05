@@ -156,8 +156,10 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
       action_description: 'Smoke-created action plan.',
+      target_date: today,
       due_date: today,
       priority: 'High',
+      implementation_notes: 'Smoke implementation notes.',
       owner_ids: SMOKE.auditeeId,
     }),
     capture: { key: 'apId', from: /\/action-plans\/([^/?]+)/ },
@@ -170,7 +172,10 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
       action_description: 'Smoke-created action plan (edited).',
+      target_date: today,
       due_date: today,
+      priority: 'Critical',
+      implementation_notes: 'Smoke implementation notes (edited).',
     }),
   },
   {
@@ -193,6 +198,13 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: () => `/api/action-plans/${SMOKE.verifyActionPlanId}/transition`,
     form: () => ({ to_status: 'Verified', comment: 'Smoke verification' }),
+  },
+  {
+    endpoint: 'action-plans/[id]/transition.ts',
+    title: 'a Kanban drop transitions and returns to the board',
+    method: 'POST',
+    path: (c) => `/api/action-plans/${c.get('apId')}/transition`,
+    form: () => ({ to_status: 'In Progress', return_to: '/action-plans?view=kanban' }),
   },
   {
     endpoint: 'action-plans/[id]/delete.ts',
