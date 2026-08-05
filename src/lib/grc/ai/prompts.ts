@@ -90,3 +90,55 @@ export function analyticsInsightsPrompt(portfolioSummary: string): string {
     portfolioSummary,
   ].join('\n');
 }
+
+/** The fields the drafting assistant works from (any may be blank on a new form). */
+export interface DraftContext {
+  title: string;
+  description: string;
+  riskDescription: string;
+  testObjective: string;
+  recommendation: string;
+  auditArea: string;
+}
+
+export function draftObservationPrompt(d: DraftContext): string {
+  return [
+    'Draft the detailed description of an internal audit observation. Two to four',
+    'short paragraphs of plain prose: what was found, the condition against the',
+    'criteria, and why it matters. No headings, no lists, no preamble; return only',
+    'the draft text, ready for the auditor to edit.',
+    '',
+    `Observation title: ${d.title}`,
+    `Audit area: ${d.auditArea}`,
+    `Risk description: ${d.riskDescription}`,
+    `Test objective: ${d.testObjective}`,
+    `Notes so far: ${d.description}`,
+  ].join('\n');
+}
+
+export function draftRecommendationPrompt(d: DraftContext): string {
+  return [
+    'Draft the recommendation for this internal audit observation: the specific,',
+    'actionable steps management should take, numbered (1., 2., ...), each starting',
+    'with a verb, each independently completable. Return only the numbered list,',
+    'ready for the auditor to edit.',
+    '',
+    `Observation title: ${d.title}`,
+    `Observation detail: ${d.description}`,
+    `Risk description: ${d.riskDescription}`,
+    `Recommendation notes so far: ${d.recommendation}`,
+  ].join('\n');
+}
+
+export function suggestRiskRatingPrompt(d: DraftContext): string {
+  return [
+    'Suggest a risk rating for this internal audit observation. Answer on the first',
+    'line with exactly one of: Critical, High, Medium, Low. On the second line give',
+    'a one-sentence rationale. Nothing else.',
+    '',
+    `Observation title: ${d.title}`,
+    `Observation detail: ${d.description}`,
+    `Risk description: ${d.riskDescription}`,
+    `Test objective: ${d.testObjective}`,
+  ].join('\n');
+}

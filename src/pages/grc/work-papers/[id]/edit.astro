@@ -9,6 +9,7 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import WorkPaperForm from '@/components/grc/WorkPaperForm.astro';
+import { aiEnabled } from '@grc/ai/gate';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -32,6 +33,7 @@ import { isEditable } from '@grc/workflow/workPaperActions';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
+const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const { id } = Astro.params;
 
 const allowed = can(Astro.locals, 'update', 'WORK_PAPER');
@@ -99,6 +101,7 @@ if (allowed && !loadError && !wp) Astro.response.status = 404;
         subAreas={subAreas}
         dropdowns={dropdowns}
         values={wp}
+        hasAi={hasAi}
       />
     )
   }
