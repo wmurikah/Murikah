@@ -45,6 +45,7 @@ const PAGE_PARAMS: Record<string, string> = {
   '/work-papers/[id]/edit': SMOKE.draftWorkPaperId,
   '/action-plans/[id]': SMOKE.actionPlanId,
   '/action-plans/[id]/edit': SMOKE.actionPlanId,
+  '/auditee-responses/[id]': SMOKE.sentWorkPaperId,
 };
 
 interface MutationStep {
@@ -199,6 +200,31 @@ const MUTATION_STEPS: MutationStep[] = [
     title: 'delete the created action plan',
     method: 'POST',
     path: (c) => `/api/action-plans/${c.get('apId')}/delete`,
+  },
+  {
+    endpoint: 'auditee-responses/submit.ts',
+    title: 'submit a management response',
+    method: 'POST',
+    path: () => '/api/auditee-responses/submit',
+    form: () => ({
+      work_paper_id: SMOKE.sentWorkPaperId,
+      management_response: 'Management accepts the finding and will remediate.',
+      action_plan_ids: SMOKE.actionPlanId,
+    }),
+  },
+  {
+    endpoint: 'auditee-responses/[id]/review.ts',
+    title: 'request changes, reopening the next round',
+    method: 'POST',
+    path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
+    form: () => ({ decision: 'request_changes', review_comments: 'Please add dates and owners.' }),
+  },
+  {
+    endpoint: 'auditee-responses/[id]/review.ts',
+    title: 'a response already reviewed is refused, not 500',
+    method: 'POST',
+    path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
+    form: () => ({ decision: 'accept' }),
   },
   {
     endpoint: 'setup/affiliates.ts',
