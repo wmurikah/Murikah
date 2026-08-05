@@ -56,6 +56,13 @@ test('an ordinary auditor sees the workbench they have permission for, not setup
   assert.ok(!paths.includes('/auditee-responses'));
 });
 
+test('a delegated role with the CONFIG grant sees the setup group', () => {
+  const nav = buildNav(ctx({ roleCode: 'HEAD_OF_AUDIT', perms: ['CONFIG.view'] }));
+  const paths = hrefs(nav);
+  assert.ok(paths.includes('/settings'));
+  assert.ok(paths.includes('/send-queue'));
+});
+
 test('an auditee sees the auditee section and the dashboard, not setup or reports', () => {
   const nav = buildNav(ctx({ roleCode: 'UNIT_MANAGER', perms: ['ACTION_PLANS.view'] }));
   const paths = hrefs(nav);

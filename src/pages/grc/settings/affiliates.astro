@@ -2,7 +2,7 @@
 export const prerender = false;
 
 /**
- * Affiliates Setup: full CRUD for the organisation's business units. SUPER_ADMIN
+ * Affiliates Setup: full CRUD for the organisation's business units. CONFIG grant
  * or platform owner only. Create, edit, activate, deactivate and delete (blocked
  * while referenced). Every mutation posts to /api/setup/affiliates and returns
  * here with a saved or error banner; the code is immutable once created.
@@ -18,8 +18,8 @@ import { listAffiliates, type Affiliate } from '@grc/repos/affiliatesAdmin';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
-const allowed = can(Astro.locals, 'read', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
-const canWrite = can(Astro.locals, 'update', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
+const canWrite = grc.isPlatformOwner || can(Astro.locals, 'update', 'CONFIG');
 
 const url = Astro.url;
 const saved = url.searchParams.get('saved');

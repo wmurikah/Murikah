@@ -620,6 +620,56 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         }
       });
     }
+
+    // Row scope and matrix gating, seen from the auditee side (Build Prompt
+    // 26). The admin session signed out above, so sign in as the seeded
+    // UNIT_MANAGER, whose role holds WORK_PAPER read but no CONFIG or USER
+    // grant and none of the auditor-side actions.
+    await t.test('sign in as the seeded auditee', async () => {
+      server.clearCookies();
+      const res = await server.request('POST', '/api/auth/login', {
+        email: 'owner@hasspetroleum.com',
+        password: SMOKE.password,
+      });
+      assert.equal(res.status, 303, `auditee login answered ${res.status}`);
+      const location = String(res.headers.location ?? '');
+      assert.ok(!location.includes('error'), `auditee login redirected to ${location}`);
+    });
+
+    await t.test('the auditee list shows their finding and hides the foreign draft', async () => {
+      const res = await server.get('/work-papers');
+      assert.equal(res.status, 200, `auditee list answered ${res.status}`);
+      assert.ok(
+        res.body.includes('WP/2026/002'),
+        'the finding the auditee is responsible for is missing from their list',
+      );
+      assert.ok(
+        !res.body.includes('WP/2026/001'),
+        'a draft finding the auditee is not part of leaked into their list',
+      );
+    });
+
+    await t.test('the page map turns the auditee away from the admin sections', async () => {
+      for (const path of ['/settings', '/settings/users', '/send-queue', '/reports']) {
+        const res = await server.get(path);
+        const final = res.hops[res.hops.length - 1];
+        assert.equal(
+          final,
+          '/',
+          `${path} was not redirected to the dashboard (via ${res.hops.join(' -> ')})`,
+        );
+      }
+    });
+
+    await t.test('an admin mutation refuses the auditee with a 403, not a 500', async () => {
+      const res = await server.request('POST', '/api/dropdowns', {
+        risk_ratings: 'High',
+        classification: 'Financial',
+        control_type: 'Preventive',
+        control_frequency: 'Monthly',
+      });
+      assert.equal(res.status, 403, `/api/dropdowns answered ${res.status} for the auditee`);
+    });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
     console.error('---- worker log (tail) ----');
