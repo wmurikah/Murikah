@@ -78,8 +78,12 @@ function queueStmt(organizationId: string, r: QueueRow): InStatement {
   };
 }
 
+// The live `in_app_notifications` is user-scoped with no organisation column;
+// its key is in_app_id and its link column deep_link (grc/docs/
+// schema-assumptions.md, matching repos/inApp.ts). The earlier column list
+// (notification_id, organization_id, link) failed the whole enqueue batch
+// silently on the live shape.
 function inAppStmt(
-  organizationId: string,
   userId: string,
   title: string,
   body: string,
@@ -88,18 +92,9 @@ function inAppStmt(
 ): InStatement {
   return {
     sql: `INSERT INTO in_app_notifications
-            (notification_id, organization_id, user_id, title, body, severity, link, read_at, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
-    args: [
-      crypto.randomUUID(),
-      organizationId,
-      userId,
-      title,
-      body,
-      severity,
-      link,
-      new Date().toISOString(),
-    ],
+            (in_app_id, user_id, title, body, severity, deep_link, read_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+    args: [crypto.randomUUID(), userId, title, body, severity, link, new Date().toISOString()],
   };
 }
 
@@ -150,7 +145,6 @@ export async function queueNotification(
         isCc: false,
       }),
       inAppStmt(
-        organizationId,
         params.recipient.userId,
         rendered.subject,
         inAppBody(params.data),
@@ -177,8 +171,10 @@ export async function queueNotification(
       );
     }
     await db.batch(stmts, 'write');
-  } catch {
+  } catch (err) {
     // Best-effort: enqueue must never break the transition that triggered it.
+    // But a silent swallow hid a schema mismatch for months, so it is logged.
+    console.error('[grc.notify.queue] enqueue failed', err);
   }
 }
 
@@ -225,7 +221,6 @@ export async function queueHoaCc(
           isCc: true,
         }),
         inAppStmt(
-          organizationId,
           r.userId,
           rendered.subject,
           inAppBody(params.data),
@@ -235,7 +230,7 @@ export async function queueHoaCc(
       );
     }
     await db.batch(stmts, 'write');
-  } catch {
-    // best-effort
+  } catch (err) {
+    console.error('[grc.notify.queue] HOA CC enqueue failed', err);
   }
 }

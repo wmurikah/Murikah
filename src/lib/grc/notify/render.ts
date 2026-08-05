@@ -123,6 +123,11 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
     subject: 'Deadline approaching: action plan {{reference}}',
     intro: 'An action plan you own is due within the next few days.',
   },
+  PASSWORD_RESET: {
+    subject: 'Reset your Internal Audit System password',
+    intro:
+      'A password reset was requested for your account. The link below is valid for 45 minutes and works once. If you did not request it, you can ignore this email.',
+  },
 };
 
 const DETAIL_FIELDS: { key: string; label: string }[] = [
