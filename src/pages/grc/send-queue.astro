@@ -2,16 +2,17 @@
 export const prerender = false;
 
 /**
- * The send-queue admin (Sendqueue.html), SUPER_ADMIN only. Monitors the
- * notification queue with counts, lists rows with their status and attempts,
- * retries a failed or dead-lettered row, and inspects the dead-letter. Scoped to
- * the acting organisation; gated strictly on SUPER_ADMIN (or a platform owner).
+ * The send-queue admin (Sendqueue.html). Monitors the notification queue with
+ * counts, lists rows with their status and attempts, retries a failed or
+ * dead-lettered row, and inspects the dead-letter. Scoped to the acting
+ * organisation; gated on the matrix (CONFIG read), platform owner always.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { guardPageLoad } from '@grc/pageGuard';
+import { can } from '@grc/auth/rbac';
 import {
   getQueueCounts,
   listQueue,
@@ -23,7 +24,7 @@ import {
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
-const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
 
 const status = Astro.url.searchParams.get('status') || undefined;
 const done = Astro.url.searchParams.get('done');

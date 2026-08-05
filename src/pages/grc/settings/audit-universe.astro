@@ -3,7 +3,7 @@ export const prerender = false;
 
 /**
  * Audit universe Setup: manage audit areas and, nested under each, the sub-areas
- * that carry the template fields the work-paper form auto-populates. SUPER_ADMIN
+ * that carry the template fields the work-paper form auto-populates. CONFIG grant
  * or platform owner only. Full CRUD with guarded deletion (an area with sub-areas
  * or referencing work papers, and a referenced sub-area, deactivate instead).
  * Every mutation posts to /api/setup/audit-universe.
@@ -24,7 +24,7 @@ import {
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
-const allowed = can(Astro.locals, 'read', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
 
 const url = Astro.url;
 const saved = url.searchParams.get('saved');

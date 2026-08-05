@@ -25,11 +25,12 @@ export type NotificationType =
   | 'AP_OVERDUE'
   | 'STALE_REMINDER'
   | 'OVERDUE_REMINDER'
-  | 'DUE_SOON_REMINDER';
+  | 'DUE_SOON_REMINDER'
+  | 'PASSWORD_RESET';
 
 export type Priority = 'normal' | 'urgent';
 export type Severity = 'info' | 'warning' | 'urgent';
-export type EntityType = 'work_paper' | 'action_plan';
+export type EntityType = 'work_paper' | 'action_plan' | 'user';
 
 export interface TypeMeta {
   label: string;
@@ -173,6 +174,13 @@ export const TYPE_META: Record<NotificationType, TypeMeta> = {
     severity: 'warning',
     ccHoa: false,
     entity: 'action_plan',
+  },
+  PASSWORD_RESET: {
+    label: 'Password reset link',
+    priority: 'urgent',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'user',
   },
 };
 
