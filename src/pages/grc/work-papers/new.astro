@@ -8,6 +8,7 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import WorkPaperForm from '@/components/grc/WorkPaperForm.astro';
+import { aiEnabled } from '@grc/ai/gate';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -29,6 +30,7 @@ import {
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
+const hasAi = aiEnabled((f) => grc.hasFeature(f));
 
 const allowed = can(Astro.locals, 'create', 'WORK_PAPER');
 const failed = Astro.url.searchParams.get('error');
@@ -85,6 +87,7 @@ if (allowed) {
           subAreas={subAreas}
           dropdowns={dropdowns}
           values={null}
+          hasAi={hasAi}
         />
       </>
     )
