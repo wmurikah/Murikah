@@ -49,14 +49,21 @@ if (grc) {
       unreadCount(db, grc.userId),
       listInApp(db, grc.userId, 6),
     ]);
-  } catch {
+  } catch (err) {
+    console.error('[grc.layout] sidebar counts failed', err);
     counts = null;
   }
 }
 const countFor = (key: CountKey | undefined): number => (key && counts ? counts[key] : 0);
 
-const isActive = (href: string): boolean =>
+// Nested items can share a prefix (Settings at /settings, Users at
+// /settings/users), so the longest matching href wins and only one item is
+// marked current.
+const matches = (href: string): boolean =>
   href === '/' ? path === '/' : path === href || path.startsWith(href + '/');
+const allHrefs = groups.flatMap((g: NavGroupDef) => g.items.map((i: NavItemDef) => i.href));
+const isActive = (href: string): boolean =>
+  matches(href) && !allHrefs.some((h) => h !== href && h.length > href.length && matches(h));
 const groupActive = (g: NavGroupDef): boolean => g.items.some((i: NavItemDef) => isActive(i.href));
 
 const orgName = grc?.organizationName ?? 'Organisation';
