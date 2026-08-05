@@ -45,6 +45,36 @@ const cellClass = (c: Cell): string =>
       if (block.kind === 'note') {
         return <p class="grc-lead grc-report__note">{block.text}</p>;
       }
+      if (block.kind === 'heading') {
+        return block.level === 1 ? (
+          <h2 class="grc-report__section">{block.text}</h2>
+        ) : (
+          <h3 class="grc-report__subsection">{block.text}</h3>
+        );
+      }
+      if (block.kind === 'narrative') {
+        return <p class="grc-report__narrative">{block.text}</p>;
+      }
+      if (block.kind === 'list') {
+        return (
+          <section class="grc-report__list">
+            {block.title && <h4 class="grc-report__listh">{block.title}</h4>}
+            {block.ordered === false ? (
+              <ul>
+                {block.items.map((i) => (
+                  <li>{i}</li>
+                ))}
+              </ul>
+            ) : (
+              <ol>
+                {block.items.map((i) => (
+                  <li>{i}</li>
+                ))}
+              </ol>
+            )}
+          </section>
+        );
+      }
       if (block.kind === 'group') {
         return (
           <section class="grc-report__group">
