@@ -33,6 +33,7 @@ export interface WorkPaperFilters {
   affiliateCode?: string;
   assignedAuditorId?: string;
   year?: string;
+  riskRating?: string;
   /** Full-text query over the observation and recommendation. */
   q?: string;
 }
@@ -166,6 +167,10 @@ export async function listWorkPapers(
   if (filters.year) {
     where += ' AND wp.year = ?';
     args.push(Number(filters.year));
+  }
+  if (filters.riskRating) {
+    where += ' AND wp.risk_rating = ?';
+    args.push(filters.riskRating);
   }
 
   const res = await db.execute({

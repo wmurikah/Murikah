@@ -4,9 +4,9 @@ export const prerender = false;
 /**
  * Work papers list (Workpaperslist): a full-width, dense, drillable list scoped
  * to the acting organisation, filterable by status, audit area, affiliate,
- * auditor and year, with a full-text search over the observation and
- * recommendation. Gate: WORK_PAPERS.view. Each row drills through to the detail
- * with the shared affordance cues.
+ * auditor, year and risk rating, with a full-text search over the observation
+ * and recommendation. Gate: WORK_PAPERS.view. Each row drills through to the
+ * detail with the shared affordance cues.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
@@ -28,6 +28,7 @@ import {
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { loadEnumValues } from '@grc/workflow/transitions';
 import { WORK_PAPER_ENUM_TYPE } from '@grc/workflow/workPaperActions';
+import { loadDropdown, DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from '@grc/repos/dropdowns';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -41,6 +42,7 @@ const filters: WorkPaperFilters = {
   affiliateCode: p.get('affiliate') || undefined,
   assignedAuditorId: p.get('auditor') || undefined,
   year: p.get('year') || undefined,
+  riskRating: p.get('risk') || undefined,
   q: p.get('q') || undefined,
 };
 
@@ -49,17 +51,24 @@ let areas: Option[] = [];
 let affiliates: Option[] = [];
 let auditors: Option[] = [];
 let statuses: string[] = [];
+let riskRatings: string[] = [];
 let labels = new Map<string, string>();
 let loadError = false;
 if (allowed) {
   loadError = !(await guardPageLoad('work-papers.list', async () => {
     const db = await getDb(getGrcEnv());
-    [rows, areas, affiliates, auditors, statuses, labels] = await Promise.all([
+    [rows, areas, affiliates, auditors, statuses, riskRatings, labels] = await Promise.all([
       listWorkPapers(db, grc.organizationId, filters),
       listAuditAreas(db, grc.organizationId),
       listAffiliates(db, grc.organizationId),
       listAuditors(db, grc.organizationId),
       loadEnumValues(db, WORK_PAPER_ENUM_TYPE),
+      loadDropdown(
+        db,
+        grc.organizationId,
+        DROPDOWN_KEYS.riskRatings,
+        DROPDOWN_DEFAULTS.riskRatings,
+      ),
       loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
     ]);
   }));
@@ -161,6 +170,17 @@ const done = p.get('done');
               {auditors.map((a) => (
                 <option value={a.id} selected={filters.assignedAuditorId === a.id}>
                   {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field">
+            <label for="f-risk">Risk rating</label>
+            <select id="f-risk" name="risk" class="grc-select">
+              <option value="">All</option>
+              {riskRatings.map((rr) => (
+                <option value={rr} selected={filters.riskRating === rr}>
+                  {rr}
                 </option>
               ))}
             </select>
