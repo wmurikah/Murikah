@@ -15,9 +15,11 @@ import GrcBarChart from '@/components/grc/GrcBarChart.astro';
 import GrcGroupedBar from '@/components/grc/GrcGroupedBar.astro';
 import GrcDonut from '@/components/grc/GrcDonut.astro';
 import GrcGroupedBars from '@/components/grc/GrcGroupedBars.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { canSeeTeamPerformance, isAuditeeRole } from '@grc/dashboard/roleNav';
 import {
@@ -55,46 +57,55 @@ const YEAR_DEFAULT = 2025;
 const yearParam = Astro.url.searchParams.get('year');
 const chartYear = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : YEAR_DEFAULT;
 
-let stats: DashboardStats | null = null;
+let stats = null as DashboardStats | null;
 let reviews: PendingReviews = { toReview: [], toVerify: [], responsesToReview: [] };
 let dueThisWeek: DueItem[] = [];
 let recent: ActivityItem[] = [];
-let team: TeamPerformance | null = null;
-let charts: DashboardCharts | null = null;
+let team = null as TeamPerformance | null;
+let charts = null as DashboardCharts | null;
 let labels = new Map<string, string>();
 let loadError = false;
+let statsError = false;
+let reviewsError = false;
+let activityError = false;
+let chartsError = false;
 
 if (allowed) {
-  // Wrap the aggregation so a query error is logged with the [grc.dashboard] tag
-  // and shown as a notice, never a blank 500.
-  try {
+  // The db handle is guarded on its own: without it nothing can load, so a
+  // failure there raises the page-level [grc.dashboard] notice. Each widget
+  // group then loads behind its own guard, so one broken query degrades that
+  // widget to an error card while the rest of the dashboard still renders.
+  loadError = !(await guardPageLoad('dashboard', async () => {
     const db = await getDb(getGrcEnv());
-    const [statsR, reviewsR, dueR, recentR, wpLabels, apLabels] = await Promise.all([
-      getDashboardStats(db, grc.organizationId, scope),
-      getPendingReviews(db, grc.organizationId, scope),
-      getDueThisWeek(db, grc.organizationId, scope),
-      getRecentActivity(db, grc.organizationId, scope),
-      loadEnumLabels(db, 'WORK_PAPER_STATUS'),
-      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
-    ]);
-    stats = statsR;
-    reviews = reviewsR;
-    dueThisWeek = dueR;
-    recent = recentR;
-    labels = new Map([...wpLabels, ...apLabels]);
-    const [teamR, chartsR] = await Promise.all([
-      canTeam ? getTeamPerformance(db, grc.organizationId) : Promise.resolve(null),
-      canCharts ? getDashboardCharts(db, grc.organizationId, chartYear) : Promise.resolve(null),
-    ]);
-    team = teamR;
-    charts = chartsR;
-  } catch (err) {
-    loadError = true;
-    console.error(
-      '[grc.dashboard] data load failed',
-      err instanceof Error ? (err.stack ?? err.message) : String(err),
-    );
-  }
+    statsError = !(await guardPageLoad('dashboard.stats', async () => {
+      const [statsR, wpLabels, apLabels] = await Promise.all([
+        getDashboardStats(db, grc.organizationId, scope),
+        loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+        loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+      ]);
+      stats = statsR;
+      labels = new Map([...wpLabels, ...apLabels]);
+    }));
+    reviewsError = !(await guardPageLoad('dashboard.reviews', async () => {
+      const [reviewsR, dueR] = await Promise.all([
+        getPendingReviews(db, grc.organizationId, scope),
+        getDueThisWeek(db, grc.organizationId, scope),
+      ]);
+      reviews = reviewsR;
+      dueThisWeek = dueR;
+    }));
+    activityError = !(await guardPageLoad('dashboard.activity', async () => {
+      recent = await getRecentActivity(db, grc.organizationId, scope);
+    }));
+    chartsError = !(await guardPageLoad('dashboard.charts', async () => {
+      const [teamR, chartsR] = await Promise.all([
+        canTeam ? getTeamPerformance(db, grc.organizationId) : Promise.resolve(null),
+        canCharts ? getDashboardCharts(db, grc.organizationId, chartYear) : Promise.resolve(null),
+      ]);
+      team = teamR;
+      charts = chartsR;
+    }));
+  }));
 }
 
 const passwordChanged = Astro.url.searchParams.get('passwordChanged') === '1';
@@ -132,49 +143,53 @@ const riskClass = (r: string | null): string => {
       <p class="grc-error" role="alert">
         You do not have access to the dashboard.
       </p>
-    ) : loadError || !stats ? (
+    ) : loadError ? (
       <p class="grc-error" role="alert">
         The dashboard could not be loaded just now. The problem has been logged; please try again.
       </p>
     ) : (
       <>
-        <div class="grc-cards grc-cards--stats">
-          <a class="grc-card grc-card--link" href={stats!.workPapers.href}>
-            <p class="grc-card__label">Work papers</p>
-            <p class="grc-card__count">{stats!.workPapers.count}</p>
-            <p class="grc-card__note">View all</p>
-          </a>
-          <a class="grc-card grc-card--link" href={stats!.pendingReview.href}>
-            <p class="grc-card__label">Pending review</p>
-            <p class="grc-card__count">{stats!.pendingReview.count}</p>
-            <p class="grc-card__note">Submitted for review</p>
-          </a>
-          <a class="grc-card grc-card--link" href={stats!.actionPlans.href}>
-            <p class="grc-card__label">Action plans</p>
-            <p class="grc-card__count">{stats!.actionPlans.count}</p>
-            <p class="grc-card__note">View all</p>
-          </a>
-          <a
-            class:list={[
-              'grc-card',
-              'grc-card--link',
-              { 'grc-card--alert': stats!.overdue.count > 0 },
-            ]}
-            href={stats!.overdue.href}
-          >
-            <p class="grc-card__label">Overdue</p>
-            <p class="grc-card__count">{stats!.overdue.count}</p>
-            <p class="grc-card__note">Past due, not settled</p>
-          </a>
-        </div>
+        {statsError || !stats ? (
+          <GrcErrorCard subject="The dashboard statistics" />
+        ) : (
+          <div class="grc-cards grc-cards--stats">
+            <a class="grc-card grc-card--link" href={stats.workPapers.href}>
+              <p class="grc-card__label">Work papers</p>
+              <p class="grc-card__count">{stats.workPapers.count}</p>
+              <p class="grc-card__note">View all</p>
+            </a>
+            <a class="grc-card grc-card--link" href={stats.pendingReview.href}>
+              <p class="grc-card__label">Pending review</p>
+              <p class="grc-card__count">{stats.pendingReview.count}</p>
+              <p class="grc-card__note">Submitted for review</p>
+            </a>
+            <a class="grc-card grc-card--link" href={stats.actionPlans.href}>
+              <p class="grc-card__label">Action plans</p>
+              <p class="grc-card__count">{stats.actionPlans.count}</p>
+              <p class="grc-card__note">View all</p>
+            </a>
+            <a
+              class:list={[
+                'grc-card',
+                'grc-card--link',
+                { 'grc-card--alert': stats.overdue.count > 0 },
+              ]}
+              href={stats.overdue.href}
+            >
+              <p class="grc-card__label">Overdue</p>
+              <p class="grc-card__count">{stats.overdue.count}</p>
+              <p class="grc-card__note">Past due, not settled</p>
+            </a>
+          </div>
+        )}
 
         {needsAttention && (
           <div class="grc-attention" role="status">
             <h2 class="grc-attention__title">Needs your attention</h2>
             <ul class="grc-attention__list">
-              {stats!.overdue.count > 0 && (
+              {stats && stats.overdue.count > 0 && (
                 <li>
-                  <a href={stats!.overdue.href}>{stats!.overdue.count} overdue action plans</a>
+                  <a href={stats.overdue.href}>{stats.overdue.count} overdue action plans</a>
                 </li>
               )}
               {reviews.toReview.length > 0 && (
@@ -202,6 +217,8 @@ const riskClass = (r: string | null): string => {
             </ul>
           </div>
         )}
+
+        {canCharts && chartsError && <GrcErrorCard subject="The insight charts" />}
 
         {canCharts && charts && (
           <section aria-labelledby="insights-head">
@@ -276,7 +293,9 @@ const riskClass = (r: string | null): string => {
         <div class="grc-dash-grid">
           <section class="grc-panel">
             <h2>Pending reviews</h2>
-            {reviewCount === 0 ? (
+            {reviewsError ? (
+              <GrcErrorCard subject="Pending reviews" />
+            ) : reviewCount === 0 ? (
               <p class="grc-lead" style="margin:0">
                 Nothing waiting on you.
               </p>
@@ -330,7 +349,9 @@ const riskClass = (r: string | null): string => {
 
           <section class="grc-panel">
             <h2>Due this week</h2>
-            {dueThisWeek.length === 0 ? (
+            {reviewsError ? (
+              <GrcErrorCard subject="Due this week" />
+            ) : dueThisWeek.length === 0 ? (
               <p class="grc-lead" style="margin:0">
                 No action plans due in the next seven days.
               </p>
@@ -353,7 +374,9 @@ const riskClass = (r: string | null): string => {
 
         <section class="grc-panel">
           <h2>Recent activity</h2>
-          {recent.length === 0 ? (
+          {activityError ? (
+            <GrcErrorCard subject="Recent activity" />
+          ) : recent.length === 0 ? (
             <p class="grc-lead" style="margin:0">
               No recent activity.
             </p>
@@ -373,6 +396,8 @@ const riskClass = (r: string | null): string => {
             </ul>
           )}
         </section>
+
+        {canTeam && chartsError && <GrcErrorCard subject="The team performance charts" />}
 
         {canTeam && team && (
           <section class="grc-panel">

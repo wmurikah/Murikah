@@ -1,0 +1,32 @@
+---
+/**
+ * The branded inline error state a page shows when a data load fails behind the
+ * guardPageLoad boundary. The shell (sidebar, header) still renders; this card
+ * takes the place of the content that could not load. The real cause is already
+ * in the Worker log under the page's [grc.<tag>].
+ */
+interface Props {
+  /** What could not load, e.g. "This work paper". Defaults to the section. */
+  subject?: string;
+}
+const { subject = 'This section' } = Astro.props;
+---
+
+<div class="grc-error" role="alert">
+  <p class="grc-error-card__title">{subject} could not load.</p>
+  <p class="grc-error-card__body">
+    Something went wrong on our side and the details have been logged. Refresh the page to try
+    again, and contact your administrator if it keeps happening.
+  </p>
+</div>
+
+<style>
+  .grc-error-card__title {
+    margin: 0;
+    font-weight: 600;
+  }
+  .grc-error-card__body {
+    margin: var(--grc-s1) 0 0;
+    font-size: var(--grc-fs-caption);
+  }
+</style>

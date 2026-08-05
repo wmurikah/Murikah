@@ -5,15 +5,25 @@ export const prerender = false;
  * Action plans list (Actionplanslist): remediation and follow-up of findings,
  * scoped to the acting organisation and to the source's role-based visibility.
  * Two views of the same data, toggled by ?view: a dense table and a Kanban
- * board grouped by status. Filterable by status, owner and overdue-only, with a
- * search over the action and its implementation notes. A stats bar summarises
- * the visible plans. Gate: ACTION_PLANS.view; each row and card drills through
- * to the detail with the shared affordance cues.
+ * board grouped by status. Filterable by status, affiliate, audit area, owner,
+ * priority and overdue-only, with a search over the action and its
+ * implementation notes. A stats bar summarises the visible plans. Gate:
+ * ACTION_PLANS.view; each row and card drills through to the detail with the
+ * shared affordance cues.
+ *
+ * On the board a card is draggable to any status the engine actually offers for
+ * that plan and this actor, computed server-side from status_transitions (one
+ * pair of reads for the whole board). Dropping posts the ordinary transition
+ * endpoint, which re-validates the move, so the drag is an affordance and never
+ * the authority. Moves that need a comment are not drag-droppable: they carry a
+ * comment the board cannot collect, so they stay on the detail.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import {
   listActionPlans,
   computeStats,
@@ -22,10 +32,22 @@ import {
   type ActionPlanStats,
   type Viewer,
 } from '@grc/repos/actionPlans';
-import { listAuditors, listAuditAreas, type Option } from '@grc/repos/workPaperLookups';
+import {
+  listAuditors,
+  listAuditAreas,
+  listAffiliates,
+  type Option,
+} from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
-import { loadEnumValues } from '@grc/workflow/transitions';
+import {
+  loadEnumValues,
+  loadTransitions,
+  loadTerminalStates,
+  type TransitionRule,
+} from '@grc/workflow/transitions';
 import { ACTION_PLAN_ENUM_TYPE, AP_STATUS } from '@grc/workflow/actionPlanActions';
+import { offeredActionsFrom } from '@grc/workflow/actionPlanWorkflow';
+import { PRIORITIES } from '@grc/repos/actionPlans';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -42,6 +64,8 @@ const filters: ActionPlanFilters = {
   q: p.get('q') || undefined,
   auditAreaId: p.get('area') || undefined,
   year: p.get('year') || undefined,
+  affiliateCode: p.get('affiliate') || undefined,
+  priority: p.get('priority') || undefined,
 };
 
 const viewer: Viewer = {
@@ -55,19 +79,45 @@ let rows: ActionPlanListRow[] = [];
 let stats: ActionPlanStats = { total: 0, pending: 0, overdue: 0, implemented: 0, verified: 0 };
 let owners: Option[] = [];
 let areas: Option[] = [];
+let affiliates: Option[] = [];
 let statuses: string[] = [];
 let labels = new Map<string, string>();
+let transitions: TransitionRule[] = [];
+let terminals: string[] = [];
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  [rows, owners, areas, statuses, labels] = await Promise.all([
-    listActionPlans(db, grc.organizationId, viewer, filters),
-    listAuditors(db, grc.organizationId),
-    listAuditAreas(db, grc.organizationId),
-    loadEnumValues(db, ACTION_PLAN_ENUM_TYPE),
-    loadEnumLabels(db, ACTION_PLAN_ENUM_TYPE),
-  ]);
-  stats = computeStats(rows);
+  loadError = !(await guardPageLoad('action-plans.list', async () => {
+    const db = await getDb(getGrcEnv());
+    [rows, owners, areas, affiliates, statuses, labels, transitions, terminals] = await Promise.all(
+      [
+        listActionPlans(db, grc.organizationId, viewer, filters),
+        listAuditors(db, grc.organizationId),
+        listAuditAreas(db, grc.organizationId),
+        listAffiliates(db, grc.organizationId),
+        loadEnumValues(db, ACTION_PLAN_ENUM_TYPE),
+        loadEnumLabels(db, ACTION_PLAN_ENUM_TYPE),
+        loadTransitions(db, ACTION_PLAN_ENUM_TYPE),
+        loadTerminalStates(db, ACTION_PLAN_ENUM_TYPE),
+      ],
+    );
+    stats = computeStats(rows);
+  }));
 }
+
+// The statuses a card may be dragged to: the moves the engine offers this actor
+// for that plan, minus the ones that require a comment (the board cannot collect
+// one, so those stay on the detail). The server still re-validates every drop.
+const actor = {
+  userId: grc.userId,
+  userName: grc.userName ?? grc.userEmail ?? grc.userId,
+  roleCode: grc.roleCode,
+  isPlatformOwner: grc.isPlatformOwner,
+  perms: grc.perms,
+};
+const dragTargets = (r: ActionPlanListRow): string[] =>
+  offeredActionsFrom(transitions, terminals, { status: r.status, ownerIds: r.ownerIds }, actor)
+    .filter((a) => !a.requiresComment)
+    .map((a) => a.toStatus);
 
 // The badge colour for a status (colour plus label, never colour alone).
 const statusClass = (st: string): string => {
@@ -108,6 +158,8 @@ const viewHref = (v: string): string => {
   if (filters.status) q.set('status', filters.status);
   if (filters.ownerId) q.set('owner', filters.ownerId);
   if (filters.auditAreaId) q.set('area', filters.auditAreaId);
+  if (filters.affiliateCode) q.set('affiliate', filters.affiliateCode);
+  if (filters.priority) q.set('priority', filters.priority);
   if (filters.year) q.set('year', filters.year);
   if (filters.overdueOnly) q.set('overdue', '1');
   if (filters.q) q.set('q', filters.q);
@@ -115,6 +167,8 @@ const viewHref = (v: string): string => {
   const s = q.toString();
   return s ? `/action-plans?${s}` : '/action-plans';
 };
+// Where a dropped card returns to: this board, filters and all.
+const returnTo = viewHref('kanban');
 
 const done = p.get('done');
 ---
@@ -147,6 +201,8 @@ const done = p.get('done');
       <p class="grc-error" role="alert">
         You do not have access to action plans.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The action plans list" />
     ) : (
       <>
         <div class="grc-stats" role="group" aria-label="Action plan summary">
@@ -218,6 +274,28 @@ const done = p.get('done');
               ))}
             </select>
           </div>
+          <div class="grc-field">
+            <label for="f-affiliate">Affiliate</label>
+            <select id="f-affiliate" name="affiliate" class="grc-select">
+              <option value="">All</option>
+              {affiliates.map((a) => (
+                <option value={a.id} selected={filters.affiliateCode === a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="grc-field">
+            <label for="f-priority">Priority</label>
+            <select id="f-priority" name="priority" class="grc-select">
+              <option value="">All</option>
+              {PRIORITIES.map((pr) => (
+                <option value={pr} selected={filters.priority === pr}>
+                  {pr}
+                </option>
+              ))}
+            </select>
+          </div>
           <div class="grc-field" style="max-width:7rem">
             <label for="f-year">Year</label>
             <input
@@ -274,6 +352,7 @@ const done = p.get('done');
                   <th>Action</th>
                   <th>Work paper</th>
                   <th>Owner</th>
+                  <th>Priority</th>
                   <th>Due</th>
                   <th>Status</th>
                 </tr>
@@ -287,6 +366,7 @@ const done = p.get('done');
                     <td>{truncate(r.description || 'Untitled action', 80)}</td>
                     <td>{r.workPaperReference ?? '-'}</td>
                     <td>{firstOwner(r.ownerNames)}</td>
+                    <td>{r.priority ?? '-'}</td>
                     <td class="grc-num">
                       {dueLabel(r.dueDate)}
                       {r.daysOverdue > 0 && <span class="grc-overdue"> {r.daysOverdue}d over</span>}
@@ -300,26 +380,68 @@ const done = p.get('done');
             </table>
           </div>
         ) : (
-          <div class="grc-kanban" aria-label="Action plans by status">
+          <div class="grc-kanban" aria-label="Action plans by status" data-kanban>
             {columns.map((st) => (
-              <section class="grc-kancol" aria-label={statusLabel(labels, st)}>
+              <section class="grc-kancol" aria-label={statusLabel(labels, st)} data-status={st}>
                 <header class="grc-kancol__head">
                   <span class={statusClass(st)}>{statusLabel(labels, st)}</span>
                   <span class="grc-kancol__count">{rowsByStatus(st).length}</span>
                 </header>
                 <div class="grc-kancol__body">
-                  {rowsByStatus(st).map((r) => (
-                    <a href={`/action-plans/${r.id}`} class="grc-kancard">
-                      <span class="grc-kancard__id">{r.actionNumber}</span>
-                      <span class="grc-kancard__desc">
-                        {truncate(r.description || 'Untitled action', 96)}
-                      </span>
-                      <span class="grc-kancard__meta">
-                        <span>{firstOwner(r.ownerNames)}</span>
-                        <span class={dueBadge(r).cls}>{dueBadge(r).text}</span>
-                      </span>
-                    </a>
-                  ))}
+                  {rowsByStatus(st).map((r) => {
+                    const targets = dragTargets(r);
+                    return (
+                      <article
+                        class:list={['grc-kancard', { 'is-draggable': targets.length > 0 }]}
+                        draggable={targets.length > 0 ? 'true' : undefined}
+                        data-plan={r.id}
+                        data-targets={targets.join('|')}
+                      >
+                        <div class="grc-kancard__top">
+                          {targets.length > 0 && (
+                            <span
+                              class="grc-kancard__handle"
+                              aria-hidden="true"
+                              title="Drag to another status"
+                            >
+                              ⠿
+                            </span>
+                          )}
+                          <a href={`/action-plans/${r.id}`} class="grc-kancard__id">
+                            {r.actionNumber}
+                          </a>
+                          {r.priority && <span class="grc-kancard__pri">{r.priority}</span>}
+                        </div>
+                        <a href={`/action-plans/${r.id}`} class="grc-kancard__desc">
+                          {truncate(r.description || 'Untitled action', 96)}
+                        </a>
+                        <span class="grc-kancard__meta">
+                          <span>{firstOwner(r.ownerNames)}</span>
+                          <span class={dueBadge(r).cls}>{dueBadge(r).text}</span>
+                        </span>
+                        {targets.length > 0 && (
+                          <form
+                            method="post"
+                            action={`/api/action-plans/${r.id}/transition`}
+                            class="grc-kancard__move"
+                          >
+                            <input type="hidden" name="return_to" value={returnTo} />
+                            <label class="grc-vh" for={`mv-${r.id}`}>
+                              Move {r.actionNumber} to
+                            </label>
+                            <select id={`mv-${r.id}`} name="to_status" class="grc-kancard__movesel">
+                              {targets.map((t) => (
+                                <option value={t}>{statusLabel(labels, t)}</option>
+                              ))}
+                            </select>
+                            <button type="submit" class="grc-kancard__movego">
+                              Move
+                            </button>
+                          </form>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -329,3 +451,147 @@ const done = p.get('done');
     )
   }
 </GrcLayout>
+
+<script>
+  // Kanban drag: a progressive enhancement over the per-card Move form, which
+  // stays the accessible single-pointer and keyboard path (WCAG 2.2 AA 2.5.7).
+  // A card advertises the statuses the server said this actor may move it to;
+  // dropping submits that same form, so the transition endpoint re-validates the
+  // move and nothing persists on the strength of the drag alone.
+  const board = document.querySelector('[data-kanban]') as HTMLElement | null;
+  if (board) {
+    let dragged: HTMLElement | null = null;
+
+    const columnsOf = (): HTMLElement[] =>
+      Array.from(board.querySelectorAll('.grc-kancol')) as HTMLElement[];
+    const cardFrom = (target: EventTarget | null): HTMLElement | null =>
+      (target as HTMLElement | null)?.closest('.grc-kancard') as HTMLElement | null;
+    const columnFrom = (target: EventTarget | null): HTMLElement | null =>
+      (target as HTMLElement | null)?.closest('.grc-kancol') as HTMLElement | null;
+
+    const clear = (): void => {
+      dragged?.classList.remove('is-dragging');
+      dragged = null;
+      for (const col of columnsOf()) col.classList.remove('is-dropok', 'is-dropover');
+    };
+
+    board.addEventListener('dragstart', (event) => {
+      const card = cardFrom(event.target);
+      if (!card || card.getAttribute('draggable') !== 'true') return;
+      dragged = card;
+      card.classList.add('is-dragging');
+      event.dataTransfer?.setData('text/plain', card.dataset.plan ?? '');
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      // Light up only the columns this card may actually move to.
+      const allowed = (card.dataset.targets ?? '').split('|').filter(Boolean);
+      for (const col of columnsOf()) {
+        if (col.dataset.status && allowed.includes(col.dataset.status)) {
+          col.classList.add('is-dropok');
+        }
+      }
+    });
+
+    board.addEventListener('dragend', clear);
+
+    board.addEventListener('dragover', (event) => {
+      const col = columnFrom(event.target);
+      if (!col?.classList.contains('is-dropok')) return;
+      // Only a permitted column accepts the drop, so the cursor tells the truth.
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      col.classList.add('is-dropover');
+    });
+
+    board.addEventListener('dragleave', (event) => {
+      columnFrom(event.target)?.classList.remove('is-dropover');
+    });
+
+    board.addEventListener('drop', (event) => {
+      const col = columnFrom(event.target);
+      const card = dragged;
+      const to = col?.dataset.status;
+      if (!col?.classList.contains('is-dropok') || !card || !to) return;
+      event.preventDefault();
+      const form = card.querySelector('.grc-kancard__move') as HTMLFormElement | null;
+      const select = form?.querySelector('select[name="to_status"]') as HTMLSelectElement | null;
+      if (!form || !select) return;
+      select.value = to;
+      card.classList.add('is-saving');
+      clear();
+      form.submit();
+    });
+  }
+</script>
+
+<style>
+  .grc-kancard.is-draggable {
+    cursor: grab;
+  }
+  .grc-kancard.is-dragging {
+    cursor: grabbing;
+    opacity: 0.55;
+  }
+  .grc-kancard.is-saving {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .grc-kancard__top {
+    display: flex;
+    align-items: center;
+    gap: var(--grc-s2);
+  }
+  .grc-kancard__handle {
+    cursor: grab;
+    color: var(--grc-muted);
+    letter-spacing: -0.1em;
+    line-height: 1;
+  }
+  .grc-kancard__pri {
+    margin-left: auto;
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+  }
+  .grc-kancard__move {
+    display: flex;
+    gap: var(--grc-s2);
+    margin-top: var(--grc-s2);
+  }
+  .grc-kancard__movesel {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: var(--grc-fs-caption);
+    border: 1px solid var(--grc-line);
+    border-radius: var(--grc-radius-sm);
+    background: var(--grc-surface);
+    color: var(--grc-ink);
+    padding: 0.15rem 0.3rem;
+    cursor: pointer;
+  }
+  .grc-kancard__movego {
+    font: inherit;
+    font-size: var(--grc-fs-caption);
+    border: 1px solid var(--grc-line);
+    border-radius: var(--grc-radius-sm);
+    background: var(--grc-stone);
+    color: var(--grc-ink);
+    padding: 0.15rem 0.5rem;
+    cursor: pointer;
+  }
+  .grc-kancard__movego:hover {
+    background: var(--grc-gold);
+  }
+  /* A column this card may move to, and the one under the pointer. */
+  .grc-kancol.is-dropok {
+    outline: 2px dashed var(--grc-gold);
+    outline-offset: 2px;
+  }
+  .grc-kancol.is-dropover {
+    background: color-mix(in srgb, var(--grc-gold) 12%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .grc-kancard.is-dragging {
+      opacity: 1;
+    }
+  }
+</style>

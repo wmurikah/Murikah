@@ -1,10 +1,5 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+// The affiliates screen lives in Setup; this route survives for old bookmarks.
+return Astro.redirect('/settings/affiliates', 303);
 ---
-
-<GrcPlaceholder
-  title="Affiliates"
-  lead="Group entities within the audit universe."
-  note="Affiliate setup arrives with the setup module."
-/>

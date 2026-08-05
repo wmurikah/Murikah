@@ -9,8 +9,10 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcIcon from '@/components/grc/GrcIcon.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import { can } from '@grc/auth/rbac';
 import { listAffiliates, type Affiliate } from '@grc/repos/affiliatesAdmin';
 
@@ -27,12 +29,9 @@ const editCode = url.searchParams.get('edit');
 let affiliates: Affiliate[] = [];
 let loadError = false;
 if (allowed) {
-  try {
+  loadError = !(await guardPageLoad('setup.affiliates', async () => {
     affiliates = await listAffiliates(await getDb(getGrcEnv()), grc.organizationId);
-  } catch (err) {
-    loadError = true;
-    console.error('[grc.setup.affiliates] load failed', err);
-  }
+  }));
 }
 const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null) : null;
 ---
@@ -67,9 +66,7 @@ const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null)
         Affiliates are managed by administrators.
       </p>
     ) : loadError ? (
-      <p class="grc-error" role="alert">
-        Affiliates could not be loaded. The problem has been logged; please try again.
-      </p>
+      <GrcErrorCard subject="Affiliates" />
     ) : (
       <>
         {canWrite && !editing && (

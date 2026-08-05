@@ -9,8 +9,10 @@ export const prerender = false;
  * server is always the authority; this screen edits the shared permission model.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import {
   MODULES,
   ACTIONS,
@@ -26,20 +28,23 @@ if (!grc) return Astro.redirect('/login');
 const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
 const done = Astro.url.searchParams.get('done');
 const error = Astro.url.searchParams.get('error');
+const requested = Astro.url.searchParams.get('role') ?? '';
 
 let roles: string[] = [];
 let selected = '';
 let matrix: PermissionMatrix = {};
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  roles = await listRoleCodes(db);
-  const requested = Astro.url.searchParams.get('role') ?? '';
-  selected = roles.includes(requested)
-    ? requested
-    : (roles.find((r) => r !== 'SUPER_ADMIN') ?? roles[0] ?? '');
-  if (selected) {
-    matrix = selected === 'SUPER_ADMIN' ? fullMatrix() : await getRoleMatrix(db, selected);
-  }
+  loadError = !(await guardPageLoad('settings.access-control', async () => {
+    const db = await getDb(getGrcEnv());
+    roles = await listRoleCodes(db);
+    selected = roles.includes(requested)
+      ? requested
+      : (roles.find((r) => r !== 'SUPER_ADMIN') ?? roles[0] ?? '');
+    if (selected) {
+      matrix = selected === 'SUPER_ADMIN' ? fullMatrix() : await getRoleMatrix(db, selected);
+    }
+  }));
 }
 const isSuperAdmin = selected === 'SUPER_ADMIN';
 const pageSlugs = Object.keys(PAGE_PERMISSION_MAP);
@@ -60,6 +65,8 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
       <p class="grc-error" role="alert">
         Access control is restricted to administrators.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The access control matrix" />
     ) : (
       <>
         {done && (

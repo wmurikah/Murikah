@@ -9,9 +9,12 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import WorkPaperForm from '@/components/grc/WorkPaperForm.astro';
+import { aiEnabled } from '@grc/ai/gate';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { getWorkPaper, type WorkPaperDetail } from '@grc/repos/workPapers';
 import {
   listAuditAreas,
@@ -30,32 +33,38 @@ import { isEditable } from '@grc/workflow/workPaperActions';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
+const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const { id } = Astro.params;
 
 const allowed = can(Astro.locals, 'update', 'WORK_PAPER');
 
-let wp: WorkPaperDetail | null = null;
+let wp = null as WorkPaperDetail | null;
 let areas: Option[] = [];
 let affiliates: Option[] = [];
 let auditors: Option[] = [];
 let subAreas: SubAreaTemplate[] = [];
 let dropdowns: ControlDropdowns = DROPDOWN_DEFAULTS;
+let loadError = false;
 if (allowed && id) {
-  const db = await getDb(getGrcEnv());
-  wp = await getWorkPaper(db, grc.organizationId, id);
+  loadError = !(await guardPageLoad('work-papers.edit', async () => {
+    const db = await getDb(getGrcEnv());
+    wp = await getWorkPaper(db, grc.organizationId, id);
+    // The lookups are only needed when the paper is editable; the redirect for
+    // a locked state happens outside the boundary.
+    if (wp && isEditable(wp.status)) {
+      [areas, affiliates, auditors, subAreas, dropdowns] = await Promise.all([
+        listAuditAreas(db, grc.organizationId),
+        listAffiliates(db, grc.organizationId),
+        listAuditors(db, grc.organizationId),
+        listSubAreas(db, grc.organizationId),
+        loadControlDropdowns(db, grc.organizationId),
+      ]);
+    }
+  }));
   // Only editable in Draft or Revision Required; otherwise back to the detail.
-  if (wp && !isEditable(wp.status)) return Astro.redirect(`/work-papers/${id}`);
-  if (wp) {
-    [areas, affiliates, auditors, subAreas, dropdowns] = await Promise.all([
-      listAuditAreas(db, grc.organizationId),
-      listAffiliates(db, grc.organizationId),
-      listAuditors(db, grc.organizationId),
-      listSubAreas(db, grc.organizationId),
-      loadControlDropdowns(db, grc.organizationId),
-    ]);
-  }
+  if (!loadError && wp && !isEditable(wp.status)) return Astro.redirect(`/work-papers/${id}`);
 }
-if (allowed && !wp) Astro.response.status = 404;
+if (allowed && !loadError && !wp) Astro.response.status = 404;
 ---
 
 <GrcLayout title={wp ? `Edit ${wp.reference}` : 'Edit work paper'}>
@@ -78,6 +87,8 @@ if (allowed && !wp) Astro.response.status = 404;
       <p class="grc-error" role="alert">
         You do not have permission to edit work papers.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="This work paper" />
     ) : !wp ? (
       <p class="grc-empty">That work paper was not found in your organisation.</p>
     ) : (
@@ -90,6 +101,7 @@ if (allowed && !wp) Astro.response.status = 404;
         subAreas={subAreas}
         dropdowns={dropdowns}
         values={wp}
+        hasAi={hasAi}
       />
     )
   }

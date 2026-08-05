@@ -43,14 +43,19 @@ export type TransitionResult =
 
 const EVIDENCE_OVERRIDE = 'WORK_PAPERS.evidence_override';
 
+// The organisation scope lives on files, not on the file_attachments link table
+// (which has no organization_id of its own), so the count joins through it.
 async function evidenceCount(
   db: Client,
   organizationId: string,
   workPaperId: string,
 ): Promise<number> {
   const res = await db.execute({
-    sql: `SELECT COUNT(*) AS n FROM file_attachments
-           WHERE organization_id = ? AND entity_type = 'work_paper' AND entity_id = ?`,
+    sql: `SELECT COUNT(*) AS n
+            FROM file_attachments fa
+            JOIN files f ON f.file_id = fa.file_id
+           WHERE f.organization_id = ? AND f.deleted_at IS NULL
+             AND fa.entity_type = 'work_paper' AND fa.entity_id = ?`,
     args: [organizationId, workPaperId],
   });
   return Number(res.rows[0]?.n ?? 0);
@@ -87,8 +92,12 @@ export async function executeTransition(
   });
   if (!outcome.ok) return { ok: false, code: outcome.code, message: outcome.message };
 
-  // Evidence gate on sending to the auditee, with the SUPER_ADMIN override.
-  if (toStatus === WP_STATUS.SENT_TO_AUDITEE) {
+  // Evidence gate on sending to the auditee, with the SUPER_ADMIN override. It
+  // guards the first share only: reopening a finding for another response round
+  // is not a fresh disclosure, and the evidence it demanded was already attached
+  // when the finding first went out.
+  const alreadySent = wp.sent_to_auditee_date != null;
+  if (toStatus === WP_STATUS.SENT_TO_AUDITEE && !alreadySent) {
     const mayOverride = actor.perms.includes(EVIDENCE_OVERRIDE);
     if (!mayOverride && (await evidenceCount(db, organizationId, workPaperId)) === 0) {
       return {

@@ -2,17 +2,24 @@
 export const prerender = false;
 
 /**
- * Board and BARC reporting (BoardReports). A filters panel drives four report
- * types, each previewed in the Murikah house style and downloadable as a Word
- * document. The heavy filters and the role scope are enforced server-side (a
- * UNIT_MANAGER is limited to their own affiliate and their assigned items). Gate:
- * REPORTS.view to see the page, REPORTS.board to generate a report.
+ * Board and BARC reporting (BoardReports). A filters panel drives the report
+ * types (the period audit report, the BARC board pack, the detailed
+ * observations, the observation trend, the action-plan status summary and the
+ * overdue view), each previewed in the Murikah house style and downloadable as
+ * a Word document. The heavy filters and the role scope are enforced
+ * server-side (a UNIT_MANAGER is limited to their own affiliate and their
+ * assigned items).
+ *
+ * Gate: read on REPORT to see and preview a report, export on REPORT to take
+ * the document away; they are separate grants.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import ReportPreview from '@/components/grc/ReportPreview.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { listAffiliates, listAuditAreas, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels } from '@grc/repos/enums';
 import { writeAuditLog } from '@grc/repos/audit';
@@ -36,38 +43,41 @@ const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'read', 'REPORT');
-const canBoard = can(Astro.locals, 'read', 'REPORT');
+// Viewing on screen and taking the document away are separate grants; the
+// download button only shows when the matrix allows the export.
+const canExport = can(Astro.locals, 'export', 'REPORT');
 const now = new Date();
 const params = Astro.url.searchParams;
 const unitScope = isUnitManagerScope(grc.roleCode, grc.isPlatformOwner);
 
 let affiliates: Option[] = [];
 let auditAreas: Option[] = [];
-let forcedAffiliate: string | null = null;
-let doc: ReportDocument | null = null;
-let filtersState: ReturnType<typeof parseReportFilters> | null = null;
+let forcedAffiliate = null as string | null;
+let doc = null as ReportDocument | null;
+let filtersState = null as ReturnType<typeof parseReportFilters> | null;
+let loadError = false;
 
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  forcedAffiliate = unitScope
-    ? await resolveUserAffiliate(db, grc.organizationId, grc.userId)
-    : null;
-  const filters = parseReportFilters(
-    params,
-    {
-      roleCode: grc.roleCode,
-      isPlatformOwner: grc.isPlatformOwner,
-      forcedAffiliateCode: forcedAffiliate,
-    },
-    now,
-  );
-  filtersState = filters;
-  [affiliates, auditAreas] = await Promise.all([
-    listAffiliates(db, grc.organizationId),
-    listAuditAreas(db, grc.organizationId),
-  ]);
+  loadError = !(await guardPageLoad('reports', async () => {
+    const db = await getDb(getGrcEnv());
+    forcedAffiliate = unitScope
+      ? await resolveUserAffiliate(db, grc.organizationId, grc.userId)
+      : null;
+    const filters = parseReportFilters(
+      params,
+      {
+        roleCode: grc.roleCode,
+        isPlatformOwner: grc.isPlatformOwner,
+        forcedAffiliateCode: forcedAffiliate,
+      },
+      now,
+    );
+    filtersState = filters;
+    [affiliates, auditAreas] = await Promise.all([
+      listAffiliates(db, grc.organizationId),
+      listAuditAreas(db, grc.organizationId),
+    ]);
 
-  if (canBoard) {
     const [dataset, wpLabels, apLabels] = await Promise.all([
       getComprehensiveReportData(
         db,
@@ -117,7 +127,7 @@ if (allowed) {
         // best-effort audit
       }
     }
-  }
+  }));
 }
 
 const years: number[] = [];
@@ -144,6 +154,8 @@ const visibleStatuses = STATUS_OPTIONS.filter(
       <p class="grc-error" role="alert">
         You do not have access to reports.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="Reports" />
     ) : (
       <>
         {unitScope && (
@@ -274,7 +286,7 @@ const visibleStatuses = STATUS_OPTIONS.filter(
             <button type="submit" class="grc-btn grc-btn--primary">
               Preview
             </button>
-            {canBoard && (
+            {canExport && (
               <button
                 type="submit"
                 class="grc-btn grc-btn--secondary"
@@ -287,12 +299,14 @@ const visibleStatuses = STATUS_OPTIONS.filter(
           </div>
         </form>
 
-        {!canBoard ? (
-          <p class="grc-empty">
-            <strong>Board report generation needs the board reports permission.</strong> You can set
-            the filters, but generating and downloading a report requires REPORTS.board.
+        {!canExport && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            You can read reports on screen. Downloading the document needs the export permission on
+            reports.
           </p>
-        ) : doc ? (
+        )}
+
+        {doc ? (
           <section class="grc-report-pane" aria-label="Report preview">
             <div class="grc-report-pane__bar">
               <span class="grc-report-pane__title">Preview</span>

@@ -10,9 +10,11 @@ export const prerender = false;
  * through the engine), plus delegation for an owner. Gate: ACTION_PLANS.view.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
 import { getActionPlan, type ActionPlanDetail } from '@grc/repos/actionPlans';
 import { listHistory, type HistoryRow } from '@grc/repos/actionPlanHistory';
 import { isOwner, resolveOwners } from '@grc/repos/actionPlanOwners';
@@ -35,43 +37,48 @@ const allowed = can(Astro.locals, 'read', 'ACTION_PLAN');
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 
-let plan: ActionPlanDetail | null = null;
+let plan = null as ActionPlanDetail | null;
 let history: HistoryRow[] = [];
 let evidence: Attachment[] = [];
 let users: Option[] = [];
 let labels = new Map<string, string>();
 let actions: OfferedAction[] = [];
 let names = new Map<string, string>();
+let loadError = false;
 
 if (allowed && id) {
-  const db = await getDb(getGrcEnv());
-  plan = await getActionPlan(db, grc.organizationId, id);
-  if (plan) {
-    [history, evidence, users, labels] = await Promise.all([
-      listHistory(db, grc.organizationId, id),
-      listAttachments(db, grc.organizationId, 'action_plan', id),
-      listAuditors(db, grc.organizationId),
-      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
-    ]);
-    const actor = {
-      userId: grc.userId,
-      userName: grc.userName ?? grc.userEmail ?? grc.userId,
-      roleCode: grc.roleCode,
-      isPlatformOwner: grc.isPlatformOwner,
-      perms: grc.perms,
-    };
-    actions = await offeredActions(db, { status: plan.status, ownerIds: plan.ownerIds }, actor);
-    // Readable names for the creator and the reviewers (best-effort display).
-    const ids = [plan.created_by, plan.auditor_review_by, plan.hoa_review_by]
-      .filter((v): v is string => v != null && String(v) !== '')
-      .map((v) => String(v));
-    if (ids.length > 0) {
-      const refs = await resolveOwners(db, grc.organizationId, ids);
-      names = new Map(refs.map((r) => [r.userId, r.name]));
+  // A query error is logged under [grc.action-plans.detail] and shows the error
+  // card, never a blank 500 or a misleading "not found".
+  loadError = !(await guardPageLoad('action-plans.detail', async () => {
+    const db = await getDb(getGrcEnv());
+    plan = await getActionPlan(db, grc.organizationId, id);
+    if (plan) {
+      [history, evidence, users, labels] = await Promise.all([
+        listHistory(db, grc.organizationId, id),
+        listAttachments(db, grc.organizationId, 'action_plan', id),
+        listAuditors(db, grc.organizationId),
+        loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+      ]);
+      const actor = {
+        userId: grc.userId,
+        userName: grc.userName ?? grc.userEmail ?? grc.userId,
+        roleCode: grc.roleCode,
+        isPlatformOwner: grc.isPlatformOwner,
+        perms: grc.perms,
+      };
+      actions = await offeredActions(db, { status: plan.status, ownerIds: plan.ownerIds }, actor);
+      // Readable names for the creator and the reviewers (best-effort display).
+      const ids = [plan.created_by, plan.auditor_review_by, plan.hoa_review_by]
+        .filter((v): v is string => v != null && String(v) !== '')
+        .map((v) => String(v));
+      if (ids.length > 0) {
+        const refs = await resolveOwners(db, grc.organizationId, ids);
+        names = new Map(refs.map((r) => [r.userId, r.name]));
+      }
     }
-  }
+  }));
 }
-if (allowed && !plan) Astro.response.status = 404;
+if (allowed && !loadError && !plan) Astro.response.status = 404;
 
 const p = plan;
 const val = (key: string): string => {
@@ -170,6 +177,8 @@ const commentLabel = (effect: string): string =>
       <p class="grc-error" role="alert">
         You do not have access to action plans.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="This action plan" />
     ) : !p ? (
       <p class="grc-empty">That action plan was not found in your organisation.</p>
     ) : (
@@ -290,6 +299,14 @@ const commentLabel = (effect: string): string =>
             <>
               <dt>Owners</dt>
               <dd>{val('owner_names')}</dd>
+            </>
+            <>
+              <dt>Priority</dt>
+              <dd>{val('priority') || 'Not set'}</dd>
+            </>
+            <>
+              <dt>Target date</dt>
+              <dd>{fmtDate(p.target_date)}</dd>
             </>
             <>
               <dt>Due date</dt>

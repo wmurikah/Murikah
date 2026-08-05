@@ -5,9 +5,18 @@
  * deliberately not wired until the Google Drive vs R2 decision is made; this
  * module only reads and writes the metadata, so the detail can list evidence and
  * a chosen backend can be attached in one place later.
+ *
+ * Column names come from the typed schema layer. The organisation scope lives on
+ * `files.organization_id`; `file_attachments` is the link table (attachment_id,
+ * file_id, entity_type, entity_id, file_category, attached_by, attached_at) and
+ * carries no organisation of its own.
  */
 import type { Client } from '@libsql/client/web';
 import type { StoredObjectRef } from '@grc/storage';
+import { C, cols } from '@grc/schema/columns';
+
+const F = cols(C.files);
+const FA = cols(C.file_attachments);
 
 export interface Attachment {
   attachmentId: string;
@@ -28,13 +37,15 @@ export async function listAttachments(
   entityId: string,
 ): Promise<Attachment[]> {
   const res = await db.execute({
-    sql: `SELECT fa.attachment_id AS attachment_id, f.file_id AS file_id, f.file_name AS file_name,
-                 f.mime_type AS mime_type, f.size_bytes AS size_bytes, f.storage_backend AS backend,
-                 f.uploaded_by AS uploaded_by, f.created_at AS created_at
+    sql: `SELECT fa.${FA.attachment_id} AS attachment_id, f.${F.file_id} AS file_id,
+                 f.${F.file_name} AS file_name, f.${F.mime_type} AS mime_type,
+                 f.${F.size_bytes} AS size_bytes, f.${F.storage_backend} AS backend,
+                 f.${F.uploaded_by} AS uploaded_by, f.${F.created_at} AS created_at
             FROM file_attachments fa
-            JOIN files f ON f.file_id = fa.file_id
-           WHERE fa.organization_id = ? AND fa.entity_type = ? AND fa.entity_id = ?
-        ORDER BY f.created_at DESC`,
+            JOIN files f ON f.${F.file_id} = fa.${FA.file_id}
+           WHERE f.${F.organization_id} = ? AND f.${F.deleted_at} IS NULL
+             AND fa.${FA.entity_type} = ? AND fa.${FA.entity_id} = ?
+        ORDER BY f.${F.created_at} DESC`,
     args: [organizationId, entityType, entityId],
   });
   return res.rows.map((r) => ({
@@ -102,9 +113,18 @@ export async function recordAttachment(
       },
       {
         sql: `INSERT INTO file_attachments
-                (attachment_id, organization_id, file_id, entity_type, entity_id, created_at)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [attachmentId, organizationId, input.fileId, input.entityType, input.entityId, now],
+                (${FA.attachment_id}, ${FA.file_id}, ${FA.entity_type}, ${FA.entity_id},
+                 ${FA.file_category}, ${FA.attached_by}, ${FA.attached_at})
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          attachmentId,
+          input.fileId,
+          input.entityType,
+          input.entityId,
+          'EVIDENCE',
+          input.uploadedBy,
+          now,
+        ],
       },
     ],
     'write',
@@ -135,13 +155,15 @@ export async function getAttachmentForAccess(
   attachmentId: string,
 ): Promise<AttachmentAccess | null> {
   const res = await db.execute({
-    sql: `SELECT fa.attachment_id AS attachment_id, f.file_id AS file_id, f.file_name AS file_name,
-                 f.mime_type AS mime_type, f.storage_backend AS backend, f.storage_key AS storage_key,
-                 f.drive_file_id AS drive_file_id, fa.entity_type AS entity_type,
-                 fa.entity_id AS entity_id
+    sql: `SELECT fa.${FA.attachment_id} AS attachment_id, f.${F.file_id} AS file_id,
+                 f.${F.file_name} AS file_name, f.${F.mime_type} AS mime_type,
+                 f.${F.storage_backend} AS backend, f.${F.storage_key} AS storage_key,
+                 f.${F.drive_file_id} AS drive_file_id, fa.${FA.entity_type} AS entity_type,
+                 fa.${FA.entity_id} AS entity_id
             FROM file_attachments fa
-            JOIN files f ON f.file_id = fa.file_id AND f.organization_id = fa.organization_id
-           WHERE fa.organization_id = ? AND fa.attachment_id = ?
+            JOIN files f ON f.${F.file_id} = fa.${FA.file_id}
+           WHERE f.${F.organization_id} = ? AND f.${F.deleted_at} IS NULL
+             AND fa.${FA.attachment_id} = ?
            LIMIT 1`,
     args: [organizationId, attachmentId],
   });
