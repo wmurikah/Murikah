@@ -8,6 +8,7 @@ export const prerender = false;
  * updates the fields and re-syncs the owners.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcRichText from '@/components/grc/GrcRichText.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -99,14 +100,13 @@ const val = (key: string): string => {
 
           <div class="grc-field">
             <label for="desc">Action description</label>
-            <textarea
+            <GrcRichText
               id="desc"
               name="action_description"
-              class="grc-textarea"
+              rows={4}
+              maxlength={2000}
               required
-              rows="4"
-              maxlength="2000"
-              set:text={val('action_description')}
+              value={val('action_description')}
             />
           </div>
 
@@ -148,13 +148,12 @@ const val = (key: string): string => {
 
           <div class="grc-field">
             <label for="notes">Implementation notes</label>
-            <textarea
+            <GrcRichText
               id="notes"
               name="implementation_notes"
-              class="grc-textarea"
-              rows="3"
-              maxlength="2000"
-              set:text={val('implementation_notes')}
+              rows={3}
+              maxlength={2000}
+              value={val('implementation_notes')}
             />
           </div>
 
