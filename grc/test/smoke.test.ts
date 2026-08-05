@@ -520,6 +520,24 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    endpoint: 'auth/forgot-password.ts',
+    title: 'a reset request for an unknown email answers neutrally',
+    method: 'POST',
+    path: () => '/api/auth/forgot-password',
+    form: () => ({ email: 'nobody@hasspetroleum.com' }),
+  },
+  {
+    endpoint: 'auth/reset-password.ts',
+    title: 'an invalid reset token is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/reset-password',
+    form: () => ({
+      token: 'not-a-real-token',
+      new_password: 'Grc-Reset-Password-1',
+      confirm_password: 'Grc-Reset-Password-1',
+    }),
+  },
+  {
     endpoint: 'auth/logout.ts',
     title: 'sign out',
     method: 'POST',
@@ -620,6 +638,75 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         }
       });
     }
+
+    // The full forgotten-password round trip (Build Prompt 24): request a link
+    // for the seeded auditor, pull the single-use token out of the queued
+    // email, redeem it, sign in with the new password, and prove the token
+    // died with its first use. The admin session signed out above; the flow is
+    // public by nature.
+    const resetPassword = 'Grc-Smoke-Reset-2026-A';
+    let resetToken = '';
+
+    await t.test('a reset request queues an email carrying the link', async () => {
+      server.clearCookies();
+      const res = await server.request('POST', '/api/auth/forgot-password', {
+        email: 'auditor@hasspetroleum.com',
+      });
+      assert.equal(res.status, 303, `forgot-password answered ${res.status}`);
+      assert.ok(
+        String(res.headers.location ?? '').includes('sent=1'),
+        'expected the neutral redirect',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const row = db
+        .prepare(
+          `SELECT rendered_body AS body FROM notification_queue
+            WHERE batch_type = 'PASSWORD_RESET' ORDER BY rowid DESC LIMIT 1`,
+        )
+        .get() as { body?: string } | undefined;
+      assert.ok(row?.body, 'the reset email was queued');
+      const m = /reset-password\?token=([0-9a-f]+)/.exec(String(row.body));
+      assert.ok(m, 'the queued email carries the reset link');
+      resetToken = m[1];
+    });
+
+    await t.test('the reset screen validates the token and the endpoint redeems it', async () => {
+      const page = await server.get(`/reset-password?token=${resetToken}`);
+      assert.equal(page.status, 200, `reset screen answered ${page.status}`);
+      assert.ok(!page.body.includes('not valid any more'), 'a fresh token must render the form');
+      const res = await server.request('POST', '/api/auth/reset-password', {
+        token: resetToken,
+        new_password: resetPassword,
+        confirm_password: resetPassword,
+      });
+      assert.equal(res.status, 303, `reset answered ${res.status}`);
+      assert.ok(
+        String(res.headers.location ?? '').includes('reset=1'),
+        `reset redirected to ${res.headers.location}`,
+      );
+    });
+
+    await t.test('the new password signs in and the used token is dead', async () => {
+      const res = await server.request('POST', '/api/auth/login', {
+        email: 'auditor@hasspetroleum.com',
+        password: resetPassword,
+      });
+      assert.equal(res.status, 303, `login answered ${res.status}`);
+      assert.ok(
+        !String(res.headers.location ?? '').includes('error'),
+        'the reset password must sign in',
+      );
+      const again = await server.request('POST', '/api/auth/reset-password', {
+        token: resetToken,
+        new_password: 'Grc-Smoke-Reset-2026-B',
+        confirm_password: 'Grc-Smoke-Reset-2026-B',
+      });
+      assert.ok(
+        String(again.headers.location ?? '').includes('error='),
+        'a used token must be refused',
+      );
+    });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
     console.error('---- worker log (tail) ----');
