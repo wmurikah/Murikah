@@ -20,8 +20,10 @@ interface Props {
   subAreas: SubAreaTemplate[];
   dropdowns: ControlDropdowns;
   values: Record<string, unknown> | null;
+  /** Offers the AI drafting help when the plan includes the AI feature. */
+  hasAi?: boolean;
 }
-const { action, submitLabel, areas, affiliates, auditors, subAreas, dropdowns, values } =
+const { action, submitLabel, areas, affiliates, auditors, subAreas, dropdowns, values, hasAi } =
   Astro.props;
 
 const v = (key: string): string => {
@@ -250,14 +252,42 @@ const templateJson = JSON.stringify(
       />
     </div>
     <div class="grc-field">
-      <label for="observation_description">Observation description</label>
+      <div class="grc-aihead">
+        <label for="observation_description">Observation description</label>
+        {
+          hasAi && (
+            <button
+              type="button"
+              class="grc-btn grc-btn--secondary grc-aihead__btn"
+              data-ai-draft="observation"
+              data-ai-target="observation_description"
+            >
+              Draft with AI
+            </button>
+          )
+        }
+      </div>
       <textarea id="observation_description" name="observation_description" class="grc-textarea"
         >{v('observation_description')}</textarea
       >
     </div>
     <div class="grc-formgrid">
       <div class="grc-field">
-        <label for="risk_rating">Risk rating</label>
+        <div class="grc-aihead">
+          <label for="risk_rating">Risk rating</label>
+          {
+            hasAi && (
+              <button
+                type="button"
+                class="grc-btn grc-btn--secondary grc-aihead__btn"
+                data-ai-draft="risk_rating"
+                data-ai-target="risk_rating"
+              >
+                Suggest rating
+              </button>
+            )
+          }
+        </div>
         <select id="risk_rating" name="risk_rating" class="grc-select">
           <option value="">Not rated</option>
           {
@@ -277,11 +307,32 @@ const templateJson = JSON.stringify(
       >
     </div>
     <div class="grc-field">
-      <label for="recommendation">Recommendation</label>
+      <div class="grc-aihead">
+        <label for="recommendation">Recommendation</label>
+        {
+          hasAi && (
+            <button
+              type="button"
+              class="grc-btn grc-btn--secondary grc-aihead__btn"
+              data-ai-draft="recommendation"
+              data-ai-target="recommendation"
+            >
+              Draft with AI
+            </button>
+          )
+        }
+      </div>
       <textarea id="recommendation" name="recommendation" class="grc-textarea"
         >{v('recommendation')}</textarea
       >
     </div>
+    {
+      hasAi && (
+        <p class="grc-field__hint" id="wp-ai-status" role="status" aria-live="polite">
+          AI drafting is advisory and clearly yours to edit; nothing is saved until you submit.
+        </p>
+      )
+    }
   </fieldset>
 
   <fieldset class="grc-fieldset">
@@ -326,3 +377,86 @@ const templateJson = JSON.stringify(
     });
   }
 </script>
+
+<script>
+  // AI drafting help. Each button posts the current form fields to the drafting
+  // endpoint and drops the result into its editable field; a suggestion never
+  // submits anything, so the auditor always has the final word. Failures land
+  // in the status line as plain text, never as an interruption.
+  const status = document.getElementById('wp-ai-status');
+  const say = (text: string) => {
+    if (status) status.textContent = text;
+  };
+  const fieldValue = (id: string): string => {
+    const el = document.getElementById(id) as
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | HTMLSelectElement
+      | null;
+    return el ? el.value : '';
+  };
+  document.querySelectorAll('[data-ai-draft]').forEach((el) => {
+    const btn = el as HTMLButtonElement;
+    btn.addEventListener('click', async () => {
+      const kind = btn.dataset.aiDraft ?? '';
+      const targetId = btn.dataset.aiTarget ?? '';
+      btn.disabled = true;
+      say('Asking the AI assistant...');
+      try {
+        const body = new FormData();
+        body.set('kind', kind);
+        body.set('observation_title', fieldValue('observation_title'));
+        body.set('observation_description', fieldValue('observation_description'));
+        body.set('risk_description', fieldValue('risk_description'));
+        body.set('test_objective', fieldValue('test_objective'));
+        body.set('recommendation', fieldValue('recommendation'));
+        const res = await fetch('/api/ai/draft', { method: 'POST', body });
+        const data = (await res.json()) as {
+          content?: string;
+          rating?: string | null;
+          disclaimer?: string;
+          error?: string;
+        };
+        if (!res.ok || data.error) {
+          say(data.error ?? 'The AI assistant is unavailable right now.');
+          return;
+        }
+        if (kind === 'risk_rating') {
+          const select = document.getElementById(targetId) as HTMLSelectElement | null;
+          if (select && data.rating) {
+            const match = Array.from(select.options).find(
+              (o) => o.value.toLowerCase() === String(data.rating).toLowerCase(),
+            );
+            if (match) select.value = match.value;
+          }
+          say(
+            `AI-suggested rating${data.rating ? `: ${data.rating}` : ''}. ${data.content ?? ''} ` +
+              'Yours to change.',
+          );
+        } else {
+          const area = document.getElementById(targetId) as HTMLTextAreaElement | null;
+          if (area) area.value = data.content ?? '';
+          say('AI-assisted draft inserted. Edit it as your own before submitting.');
+        }
+      } catch {
+        say('The AI assistant is unavailable right now.');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>
+
+<style>
+  .grc-aihead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .grc-aihead__btn {
+    min-height: 1.8rem;
+    padding: 0 0.6rem;
+    font-size: var(--grc-fs-caption);
+  }
+</style>

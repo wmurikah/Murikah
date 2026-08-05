@@ -1,13 +1,16 @@
 /**
  * The unified AI call, ported from 05_AIService.gs callAI. It routes to the
  * configured active provider (a fetch from the Worker), returns the content and
- * token usage, and logs an ai_invocations row for every call (ensuring the
- * ai_providers parent row exists first). The API key comes from Worker secrets;
- * when the active provider is disabled or unconfigured the call returns an error
- * without contacting a provider, and the feature layer falls back. Column names
- * follow grc/docs/schema-assumptions.md.
+ * token usage, and logs an ai_invocations row for every call: provider, model,
+ * tokens, latency, and the outcome (success or the error), ensuring the
+ * ai_providers reference row exists first. The API key comes from Worker
+ * secrets; when the active provider is disabled or unconfigured the call
+ * returns an error without contacting a provider, and the feature layer falls
+ * back. A daily per-organisation call allowance caps runaway usage. Column
+ * names come from the typed schema layer.
  */
 import type { Client } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
 import {
   buildRequest,
   parseResponse,
@@ -19,10 +22,23 @@ import {
 import { aiKeyFor } from './env';
 import { loadAiConfig } from './config';
 
+const INV = cols(C.ai_invocations);
+const PROV = cols(C.ai_providers);
+
+/**
+ * The daily per-organisation call allowance. Generous for real assistance use,
+ * far below anything a runaway loop or a scripted client would need; when it is
+ * exhausted the call refuses with a plain message rather than contacting a
+ * provider.
+ */
+export const AI_DAILY_CALL_LIMIT = 200;
+
 export interface CallContext {
   organizationId: string;
   userId: string;
   purpose: string;
+  /** The actor's role, recorded on the invocation for the usage trail. */
+  invokerRole?: string | null;
   relatedEntityType?: string | null;
   relatedEntityId?: string | null;
 }
@@ -38,29 +54,24 @@ export interface CallResult {
 
 const ZERO: AiUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
-async function ensureProvider(
-  db: Client,
-  organizationId: string,
-  provider: Provider,
-): Promise<void> {
-  try {
-    await db.execute({
-      sql: `INSERT INTO ai_providers (provider_id, organization_id, provider, created_at)
-            SELECT ?, ?, ?, ?
-             WHERE NOT EXISTS (SELECT 1 FROM ai_providers
-                                WHERE organization_id = ? AND provider = ?)`,
-      args: [
-        crypto.randomUUID(),
-        organizationId,
-        provider,
-        new Date().toISOString(),
-        organizationId,
-        provider,
-      ],
-    });
-  } catch {
-    // best-effort: the invocation log is not worth failing the call over.
-  }
+// The live ai_providers is a global reference table keyed by provider_code (it
+// carries no organisation of its own); ensure the row exists so an invocation
+// always points at a real provider entry.
+async function ensureProvider(db: Client, provider: Provider): Promise<void> {
+  await db.execute({
+    sql: `INSERT INTO ai_providers
+            (${PROV.provider_code}, ${PROV.display_name}, ${PROV.default_model},
+             ${PROV.is_enabled}, ${PROV.updated_at})
+          SELECT ?, ?, ?, 1, ?
+           WHERE NOT EXISTS (SELECT 1 FROM ai_providers WHERE ${PROV.provider_code} = ?)`,
+    args: [
+      provider,
+      provider.charAt(0).toUpperCase() + provider.slice(1),
+      DEFAULT_MODELS[provider],
+      new Date().toISOString(),
+      provider,
+    ],
+  });
 }
 
 async function logInvocation(
@@ -69,16 +80,19 @@ async function logInvocation(
   provider: Provider,
   model: string,
   usage: AiUsage,
-  success: boolean,
+  latencyMs: number,
+  error: string | null,
 ): Promise<void> {
   try {
-    await ensureProvider(db, ctx.organizationId, provider);
+    await ensureProvider(db, provider);
     await db.execute({
       sql: `INSERT INTO ai_invocations
-              (invocation_id, organization_id, user_id, provider, model, purpose,
-               related_entity_type, related_entity_id, prompt_tokens, completion_tokens,
-               total_tokens, success, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              (${INV.invocation_id}, ${INV.organization_id}, ${INV.user_id}, ${INV.provider_code},
+               ${INV.model}, ${INV.purpose}, ${INV.related_entity_type}, ${INV.related_entity_id},
+               ${INV.prompt_tokens}, ${INV.completion_tokens}, ${INV.total_tokens},
+               ${INV.latency_ms}, ${INV.success}, ${INV.error_message}, ${INV.invoker_role},
+               ${INV.occurred_at})
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         crypto.randomUUID(),
         ctx.organizationId,
@@ -91,13 +105,28 @@ async function logInvocation(
         usage.promptTokens,
         usage.completionTokens,
         usage.totalTokens,
-        success ? 1 : 0,
+        Math.max(0, Math.round(latencyMs)),
+        error == null ? 1 : 0,
+        error,
+        ctx.invokerRole ?? null,
         new Date().toISOString(),
       ],
     });
-  } catch {
-    // best-effort logging.
+  } catch (err) {
+    // The call itself must not fail over its own record, but a broken usage
+    // trail is a finding, not a shrug: say why in the log.
+    console.error('[grc.ai.service] invocation log failed', err);
   }
+}
+
+/** Today's call count for the organisation, for the daily allowance. */
+async function callsToday(db: Client, organizationId: string): Promise<number> {
+  const res = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM ai_invocations
+           WHERE ${INV.organization_id} = ? AND date(${INV.occurred_at}) = date('now')`,
+    args: [organizationId],
+  });
+  return Number(res.rows[0]?.n ?? 0);
 }
 
 export interface CallOverrides {
@@ -119,16 +148,26 @@ export async function callAI(
   const model = overrides.model ?? config.model;
   const apiKey = aiKeyFor(provider);
 
-  if (!apiKey || !config.enabled[provider]) {
-    await logInvocation(db, ctx, provider, model, ZERO, false);
+  const refuse = async (error: string): Promise<CallResult> => {
+    await logInvocation(db, ctx, provider, model, ZERO, 0, error);
+    return { ok: false, content: '', usage: ZERO, provider, model, error };
+  };
+
+  // The daily allowance is the outermost guardrail: past it, nothing runs and
+  // nothing floods the log with per-call refusals either.
+  if ((await callsToday(db, ctx.organizationId)) >= AI_DAILY_CALL_LIMIT) {
     return {
       ok: false,
       content: '',
       usage: ZERO,
       provider,
       model,
-      error: 'The active AI provider is not configured or is disabled.',
+      error: `The organisation's daily AI allowance (${AI_DAILY_CALL_LIMIT} calls) is used up. Try again tomorrow.`,
     };
+  }
+
+  if (!apiKey || !config.enabled[provider]) {
+    return refuse('The active AI provider is not configured or is disabled.');
   }
 
   const opts: CallOptions = {
@@ -144,34 +183,24 @@ export async function callAI(
     opts,
   );
 
+  const started = Date.now();
   try {
     const res = await fetch(req.url, { method: 'POST', headers: req.headers, body: req.body });
+    const latency = Date.now() - started;
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      await logInvocation(db, ctx, provider, model, ZERO, false);
-      return {
-        ok: false,
-        content: '',
-        usage: ZERO,
-        provider,
-        model,
-        error: `${provider} ${res.status}: ${text.slice(0, 200)}`,
-      };
+      const error = `${provider} ${res.status}: ${text.slice(0, 200)}`;
+      await logInvocation(db, ctx, provider, model, ZERO, latency, error);
+      return { ok: false, content: '', usage: ZERO, provider, model, error };
     }
     const json = (await res.json()) as unknown;
     const parsed = parseResponse(provider, json);
-    await logInvocation(db, ctx, provider, model, parsed.usage, true);
+    await logInvocation(db, ctx, provider, model, parsed.usage, Date.now() - started, null);
     return { ok: true, content: parsed.content, usage: parsed.usage, provider, model };
   } catch {
-    await logInvocation(db, ctx, provider, model, ZERO, false);
-    return {
-      ok: false,
-      content: '',
-      usage: ZERO,
-      provider,
-      model,
-      error: 'The AI request failed.',
-    };
+    const error = 'The AI request failed.';
+    await logInvocation(db, ctx, provider, model, ZERO, Date.now() - started, error);
+    return { ok: false, content: '', usage: ZERO, provider, model, error };
   }
 }
 
