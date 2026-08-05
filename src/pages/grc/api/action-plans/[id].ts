@@ -9,7 +9,13 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { getActionPlan, updateActionPlan, parseActionPlanInput } from '@grc/repos/actionPlans';
+import {
+  getActionPlan,
+  updateActionPlan,
+  parseActionPlanInput,
+  checkActionPlanInput,
+} from '@grc/repos/actionPlans';
+import { getWorkPaper } from '@grc/repos/workPapers';
 import { resolveOwners, setOwners } from '@grc/repos/actionPlanOwners';
 import { writeAuditLog } from '@grc/repos/audit';
 import { isEditableByAuditor } from '@grc/workflow/actionPlanActions';
@@ -40,10 +46,24 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
   const form = await request.formData();
   const input = parseActionPlanInput(form);
-  if (!input.actionDescription) {
+  const inputError = checkActionPlanInput(input);
+  if (inputError) {
     return new Response(null, {
       status: 303,
-      headers: { location: `/action-plans/${id}/edit?error=invalid` },
+      headers: { location: `/action-plans/${id}/edit?error=${encodeURIComponent(inputError)}` },
+    });
+  }
+  // The parent must be a real finding in the acting organisation; an edit can
+  // relink a stray plan but never unlink one.
+  const parent = input.workPaperId
+    ? await getWorkPaper(db, grc.organizationId, input.workPaperId)
+    : null;
+  if (!parent) {
+    return new Response(null, {
+      status: 303,
+      headers: {
+        location: `/action-plans/${id}/edit?error=${encodeURIComponent('Every action plan must be linked to a parent finding. Choose the work paper it remediates.')}`,
+      },
     });
   }
   await updateActionPlan(db, grc.organizationId, id, input);

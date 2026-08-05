@@ -87,8 +87,8 @@ const val = (key: string): string => {
         <form method="post" action={`/api/action-plans/${id}`} class="grc-form">
           <div class="grc-field">
             <label for="work-paper">Work paper (finding)</label>
-            <select id="work-paper" name="work_paper_id" class="grc-select">
-              <option value="">Not linked to a finding</option>
+            <select id="work-paper" name="work_paper_id" class="grc-select" required>
+              <option value="">Choose the parent finding</option>
               {workPapers.map((w) => (
                 <option value={w.id} selected={val('work_paper_id') === w.id}>
                   {w.label}

@@ -27,6 +27,7 @@ export const SMOKE = {
   sentWorkPaperId: 'WP-SENT-1',
   requirementId: 'REQ-1',
   actionPlanId: 'AP-PROG-1',
+  orphanPlanId: 'AP-ORPHAN-1',
   verifyActionPlanId: 'AP-VERIFY-1',
   responseId: 'RESP-1',
   notificationId: 'NQ-1',
@@ -429,6 +430,27 @@ export function seedDatabase(db: DatabaseSync): void {
       action_date: now,
     });
   }
+
+  // A stray from before the parent rule: no work_paper_id and no owners, so
+  // only the orphan panel and its relink path see it.
+  insert(db, 'action_plans', {
+    action_plan_id: SMOKE.orphanPlanId,
+    organization_id: SMOKE.orgId,
+    work_paper_id: null,
+    affiliate_code: SMOKE.affiliateCode,
+    action_ref: 'AP/2026/009',
+    action_number: 9,
+    action_description: 'Legacy stray plan with no parent finding.',
+    priority: 'Low',
+    status: 'Pending',
+    target_date: today,
+    due_date: today,
+    created_by: SMOKE.userId,
+    created_by_role: 'SUPER_ADMIN',
+    days_overdue: 0,
+    created_at: now,
+    updated_at: now,
+  });
 
   insert(db, 'auditee_responses', {
     response_id: SMOKE.responseId,
