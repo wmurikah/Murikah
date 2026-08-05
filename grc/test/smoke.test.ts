@@ -51,6 +51,9 @@ const PAGE_PARAMS: Record<string, string> = {
   '/auditee-responses/[id]': SMOKE.sentWorkPaperId,
 };
 
+/** The seeded database handle, for the state round-trip assertions. */
+type SmokeDb = NonNullable<SmokeServer['database']>;
+
 interface MutationStep {
   /** The endpoint file this step covers, relative to src/pages/grc/api. */
   endpoint: string;
@@ -61,6 +64,19 @@ interface MutationStep {
   form?: (captured: Map<string, string>) => Record<string, string>;
   /** Capture a value out of the response's redirect location. */
   capture?: { key: string; from: RegExp };
+  /**
+   * What the step means. A 'success' step must not bounce back with an error
+   * redirect or an error body (a silent 303-with-error is a failure, not a
+   * pass); a 'refusal' step must visibly refuse. Unmarked steps only keep the
+   * no-500 rule (deliberate degradations that answer 200 with ok:false).
+   */
+  expect?: 'success' | 'refusal';
+  /**
+   * Assert the database effect of the step (the state round trip): a mutation
+   * that "passed" without changing state is a failure the status code alone
+   * cannot see.
+   */
+  verify?: (db: SmokeDb, captured: Map<string, string>) => void;
 }
 
 const today = new Date().toISOString().slice(0, 10);
@@ -72,6 +88,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'auth/login.ts',
     title: 'sign-in rejects a wrong password without a 500',
+    expect: 'refusal',
     method: 'POST',
     path: () => '/api/auth/login',
     form: () => ({ email: SMOKE.email, password: 'not-the-password' }),
@@ -79,18 +96,21 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'sidebar-counts.ts',
     title: 'sidebar counts',
+    expect: 'success',
     method: 'GET',
     path: () => '/api/sidebar-counts',
   },
   {
     endpoint: 'notifications.ts',
     title: 'notifications list',
+    expect: 'success',
     method: 'GET',
     path: () => '/api/notifications',
   },
   {
     endpoint: 'notifications.ts',
     title: 'mark a notification read',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/notifications',
     form: () => ({ id: 'IAN-1' }),
@@ -98,6 +118,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'work-papers/index.ts',
     title: 'create a work paper',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT status FROM work_papers WHERE observation_title = 'Smoke-created finding'`)
+        .get() as { status?: string } | undefined;
+      assert.equal(String(r?.status), 'Draft', 'the created work paper must exist as a draft');
+    },
     method: 'POST',
     path: () => '/api/work-papers',
     form: () => ({
@@ -116,6 +143,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'work-papers/[id].ts',
     title: 'edit the created work paper',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT observation_title AS t FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { t?: string };
+      assert.equal(String(r.t), 'Smoke-created finding (edited)', 'the edit must persist');
+    },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}`,
     form: () => ({
@@ -128,6 +162,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'work-papers/[id]/requirements.ts',
     title: 'add a requirement',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM work_paper_requirements WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'the requirement row must exist');
+    },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/requirements`,
     form: () => ({ op: 'add', description: 'Provide the smoke evidence.', status: 'OPEN' }),
@@ -135,6 +176,15 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'work-papers/[id]/responsibles.ts',
     title: 'add a responsible',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM work_paper_responsibles WHERE work_paper_id = ? AND user_id = ?`,
+        )
+        .get(String(c.get('wpId')), SMOKE.auditeeId) as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'the responsible row must exist');
+    },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/responsibles`,
     form: () => ({ op: 'add_responsible', user_id: SMOKE.auditeeId, role_in_finding: 'PRIMARY' }),
@@ -142,19 +192,68 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'work-papers/[id]/transition.ts',
     title: 'submit the created work paper',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { status?: string };
+      assert.equal(String(r.status), 'Submitted', 'the transition must land in the database');
+    },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
     form: () => ({ to_status: 'Submitted', comment: 'Smoke transition' }),
   },
   {
     endpoint: 'work-papers/[id]/delete.ts',
-    title: 'delete the created work paper',
+    title: 'a submitted work paper refuses deletion',
+    expect: 'refusal',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT deleted_at FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { deleted_at?: string | null };
+      assert.ok(r.deleted_at == null, 'a submitted finding must survive a delete attempt');
+    },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/delete`,
   },
   {
+    endpoint: 'work-papers/index.ts',
+    title: 'create a disposable draft',
+    expect: 'success',
+    method: 'POST',
+    path: () => '/api/work-papers',
+    form: () => ({
+      observation_title: 'Disposable smoke draft',
+      year: '2026',
+      affiliate_code: SMOKE.affiliateCode,
+      audit_area_id: SMOKE.auditAreaId,
+      assigned_auditor: SMOKE.auditorId,
+    }),
+    capture: { key: 'wpId2', from: /\/work-papers\/([^/?]+)/ },
+  },
+  {
+    endpoint: 'work-papers/[id]/delete.ts',
+    title: 'delete the disposable draft',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT deleted_at FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId2'))) as { deleted_at?: string | null } | undefined;
+      assert.ok(!r || r.deleted_at != null, 'the draft must be deleted');
+    },
+    method: 'POST',
+    path: (c) => `/api/work-papers/${c.get('wpId2')}/delete`,
+  },
+  {
     endpoint: 'action-plans/index.ts',
     title: 'create an action plan',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT work_paper_id AS wp FROM action_plans WHERE action_plan_id = ?`)
+        .get(String(c.get('apId'))) as { wp?: string };
+      assert.equal(String(r.wp), SMOKE.sentWorkPaperId, 'the created plan must carry its parent');
+    },
     method: 'POST',
     path: () => '/api/action-plans',
     form: () => ({
@@ -171,6 +270,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'action-plans/[id].ts',
     title: 'edit the created action plan',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT action_description AS d FROM action_plans WHERE action_plan_id = ?`)
+        .get(String(c.get('apId'))) as { d?: string };
+      assert.equal(String(r.d), 'Smoke-created action plan (edited).', 'the edit must persist');
+    },
     method: 'POST',
     path: (c) => `/api/action-plans/${c.get('apId')}`,
     form: () => ({
@@ -185,6 +291,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'action-plans/[id]/delegate.ts',
     title: 'delegate the seeded action plan',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT delegated_date AS d FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.actionPlanId) as { d?: string | null };
+      assert.ok(r.d != null, 'the delegation must be recorded');
+    },
     method: 'POST',
     path: () => `/api/action-plans/${SMOKE.actionPlanId}/delegate`,
     form: () => ({ new_owner_id: SMOKE.auditorId, notes: 'Smoke delegation' }),
@@ -192,6 +305,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'action-plans/[id]/delegation.ts',
     title: 'answer the delegation',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT delegation_accepted_date AS d FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.actionPlanId) as { d?: string | null };
+      assert.ok(r.d != null, 'the acceptance must be recorded');
+    },
     method: 'POST',
     path: () => `/api/action-plans/${SMOKE.actionPlanId}/delegation`,
     form: () => ({ decision: 'accept' }),
@@ -199,6 +319,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'action-plans/[id]/transition.ts',
     title: 'verify the pending action plan',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT status FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.verifyActionPlanId) as { status?: string };
+      assert.equal(String(r.status), 'Verified', 'the verification must land in the database');
+    },
     method: 'POST',
     path: () => `/api/action-plans/${SMOKE.verifyActionPlanId}/transition`,
     form: () => ({ to_status: 'Verified', comment: 'Smoke verification' }),
@@ -206,19 +333,43 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'action-plans/[id]/transition.ts',
     title: 'a Kanban drop transitions and returns to the board',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT status FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.verifyActionPlanId) as { status?: string };
+      assert.equal(String(r.status), 'Closed', 'the drop must move the card in the database');
+    },
     method: 'POST',
-    path: (c) => `/api/action-plans/${c.get('apId')}/transition`,
-    form: () => ({ to_status: 'In Progress', return_to: '/action-plans?view=kanban' }),
+    path: () => `/api/action-plans/${SMOKE.verifyActionPlanId}/transition`,
+    form: () => ({ to_status: 'Closed', return_to: '/action-plans?view=kanban' }),
   },
   {
     endpoint: 'action-plans/[id]/delete.ts',
     title: 'delete the created action plan',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT deleted_at FROM action_plans WHERE action_plan_id = ?`)
+        .get(String(c.get('apId'))) as { deleted_at?: string | null } | undefined;
+      assert.ok(!r || r.deleted_at != null, 'the plan must be deleted');
+    },
     method: 'POST',
     path: (c) => `/api/action-plans/${c.get('apId')}/delete`,
   },
   {
     endpoint: 'auditee-responses/submit.ts',
     title: 'submit a management response',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM auditee_responses
+            WHERE work_paper_id = ? AND management_response LIKE '%accepts the finding%'`,
+        )
+        .get(SMOKE.sentWorkPaperId) as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'the response row must exist with its text');
+    },
     method: 'POST',
     path: () => '/api/auditee-responses/submit',
     form: () => ({
@@ -230,6 +381,14 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'auditee-responses/[id]/review.ts',
     title: 'request changes, reopening the next round',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT status, response_round AS rr FROM work_papers WHERE work_paper_id = ?`)
+        .get(SMOKE.sentWorkPaperId) as { status?: string; rr?: number | bigint };
+      assert.equal(String(r.status), 'Sent to Auditee', 'the finding must reopen to the auditee');
+      assert.equal(Number(r.rr), 2, 'the next round must be recorded');
+    },
     method: 'POST',
     path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
     form: () => ({ decision: 'request_changes', review_comments: 'Please add dates and owners.' }),
@@ -237,6 +396,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'auditee-responses/[id]/review.ts',
     title: 'a response already reviewed is refused, not 500',
+    expect: 'refusal',
     method: 'POST',
     path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
     form: () => ({ decision: 'accept' }),
@@ -244,6 +404,15 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'setup/affiliates.ts',
     title: 'create an affiliate',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM affiliates WHERE affiliate_code = 'MSA' AND deleted_at IS NULL`,
+        )
+        .get() as { n: number | bigint };
+      assert.equal(Number(r.n), 1, 'the affiliate row must exist');
+    },
     method: 'POST',
     path: () => '/api/setup/affiliates',
     form: () => ({
@@ -257,6 +426,16 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'setup/affiliates.ts',
     title: 'update then delete the affiliate',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM affiliates
+            WHERE affiliate_code = 'MSA' AND deleted_at IS NULL AND is_active = 1`,
+        )
+        .get() as { n: number | bigint };
+      assert.equal(Number(r.n), 0, 'the affiliate must be gone or inactive after the delete');
+    },
     method: 'POST',
     path: () => '/api/setup/affiliates',
     form: () => ({ op: 'delete', code: 'MSA' }),
@@ -264,6 +443,15 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'setup/audit-universe.ts',
     title: 'create an audit area',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_areas WHERE area_code = 'OPS' AND deleted_at IS NULL`,
+        )
+        .get() as { n: number | bigint };
+      assert.equal(Number(r.n), 1, 'the audit area must exist');
+    },
     method: 'POST',
     path: () => '/api/setup/audit-universe',
     form: () => ({ op: 'area_create', code: 'OPS', name: 'Operations', description: 'Smoke area' }),
@@ -271,6 +459,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'setup/users.ts',
     title: 'create a user',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM users WHERE email = 'smoke.user@hasspetroleum.com'`)
+        .get() as { n: number | bigint };
+      assert.equal(Number(r.n), 1, 'the user row must exist');
+    },
     method: 'POST',
     path: () => '/api/setup/users',
     form: () => ({
@@ -285,6 +480,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'setup/settings.ts',
     title: 'save general settings',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/setup/settings',
     form: () => ({}),
@@ -292,6 +488,16 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'dropdowns.ts',
     title: 'save the control dropdowns',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = ? AND config_key = 'DROPDOWN_RISK_RATINGS'`,
+        )
+        .get(SMOKE.orgId) as { v?: string } | undefined;
+      assert.ok(String(r?.v ?? '').includes('High'), 'the dropdown values must be stored');
+    },
     method: 'POST',
     path: () => '/api/dropdowns',
     form: () => ({
@@ -304,6 +510,16 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'access-control.ts',
     title: 'save the auditor permission matrix',
+    expect: 'success',
+    verify: (db) => {
+      const granted = db
+        .prepare(
+          `SELECT is_allowed AS a FROM role_permissions
+            WHERE role_code = 'AUDITOR' AND module_code = 'WORK_PAPER' AND action_code = 'read'`,
+        )
+        .get() as { a?: number | bigint } | undefined;
+      assert.equal(Number(granted?.a ?? 0), 1, 'a granted cell must be stored as allowed');
+    },
     method: 'POST',
     path: () => '/api/access-control',
     form: () => ({
@@ -317,6 +533,16 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'ai/config.ts',
     title: 'save the AI configuration',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = 'GLOBAL' AND config_key = 'AI_ACTIVE_PROVIDER'`,
+        )
+        .get() as { v?: string } | undefined;
+      assert.equal(String(r?.v), 'anthropic', 'the active provider must be stored');
+    },
     method: 'POST',
     path: () => '/api/ai/config',
     form: () => ({
@@ -390,6 +616,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'evidence/upload-url.ts',
     title: 'evidence upload refuses cleanly when storage is unconfigured',
+    expect: 'refusal',
     method: 'POST',
     path: () => '/api/evidence/upload-url',
     form: () => ({
@@ -403,6 +630,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'evidence/complete.ts',
     title: 'evidence completion refuses cleanly when storage is unconfigured',
+    expect: 'refusal',
     method: 'POST',
     path: () => '/api/evidence/complete',
     form: () => ({
@@ -416,6 +644,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'evidence/[attachmentId]/delete.ts',
     title: 'deleting held evidence is blocked by the legal hold',
+    expect: 'refusal',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT deleted_at FROM files WHERE file_id = ?`)
+        .get(SMOKE.heldFileId) as { deleted_at?: string | null };
+      assert.ok(r.deleted_at == null, 'a held file must never be deleted');
+    },
     method: 'POST',
     path: () => `/api/evidence/${SMOKE.heldAttachmentId}/delete`,
     form: () => ({ reason: 'smoke: should be refused' }),
@@ -423,6 +658,15 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'evidence/[attachmentId]/delete.ts',
     title: 'deleting unheld evidence queues the governed soft deletion',
+    expect: 'success',
+    verify: (db) => {
+      const q = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM deletion_queue WHERE entity_type = 'file' AND entity_id = ?`,
+        )
+        .get(SMOKE.freeFileId) as { n: number | bigint };
+      assert.ok(Number(q.n) >= 1, 'the governed deletion must be queued');
+    },
     method: 'POST',
     path: () => `/api/evidence/${SMOKE.freeAttachmentId}/delete`,
     form: () => ({ reason: 'smoke: superseded document' }),
@@ -436,12 +680,14 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'evidence/[attachmentId]/download.ts',
     title: 'downloading a missing attachment is not a 500',
+    expect: 'refusal',
     method: 'GET',
     path: () => `/api/evidence/${SMOKE.attachmentId}/download`,
   },
   {
     endpoint: 'evidence/[attachmentId]/delete.ts',
     title: 'deleting a missing attachment is not a 500',
+    expect: 'refusal',
     method: 'POST',
     path: () => `/api/evidence/${SMOKE.attachmentId}/delete`,
     form: () => ({ reason: 'smoke' }),
@@ -449,6 +695,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'reports/export.ts',
     title: 'export the period audit report',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/reports/export',
     form: () => ({ type: 'executive', year: '2026' }),
@@ -456,6 +703,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'reports/export.ts',
     title: 'export the BARC board pack',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/reports/export',
     form: () => ({ type: 'barc', year: '2026' }),
@@ -463,6 +711,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'reports/export.ts',
     title: 'export the observation trend',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/reports/export',
     form: () => ({ type: 'trend', year: '2026' }),
@@ -470,6 +719,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'send-queue/retry.ts',
     title: 'retry a failed notification',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT status FROM notification_queue WHERE notification_id = ?`)
+        .get(SMOKE.notificationId) as { status?: string };
+      assert.equal(String(r.status), 'PENDING', 'the retried row must return to PENDING');
+    },
     method: 'POST',
     path: () => '/api/send-queue/retry',
     form: () => ({ id: SMOKE.notificationId }),
@@ -477,6 +733,15 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'organizations.ts',
     title: 'provision an organisation',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM organizations WHERE org_name = 'Smoke Test Organisation'`,
+        )
+        .get() as { n: number | bigint };
+      assert.equal(Number(r.n), 1, 'the provisioned organisation must exist');
+    },
     method: 'POST',
     path: () => '/api/organizations',
     form: () => ({
@@ -489,6 +754,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'org/switch.ts',
     title: 'switch the acting organisation and back',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/org/switch',
     form: () => ({ organization_id: SMOKE.otherOrgId }),
@@ -496,6 +762,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'org/switch.ts',
     title: 'switch back to the home organisation',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/org/switch',
     form: () => ({ organization_id: SMOKE.orgId }),
@@ -503,6 +770,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'auth/change-password.ts',
     title: 'change the password and change it back',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM password_history WHERE user_id = ?`)
+        .get(SMOKE.userId) as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'the previous credential must be recorded');
+    },
     method: 'POST',
     path: () => '/api/auth/change-password',
     form: () => ({
@@ -514,6 +788,13 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'auth/change-password.ts',
     title: 'restore the password',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM password_history WHERE user_id = ?`)
+        .get(SMOKE.userId) as { n: number | bigint };
+      assert.ok(Number(r.n) >= 2, 'both changes must be recorded');
+    },
     method: 'POST',
     path: () => '/api/auth/change-password',
     form: () => ({
@@ -545,6 +826,7 @@ const MUTATION_STEPS: MutationStep[] = [
   {
     endpoint: 'auth/logout.ts',
     title: 'sign out',
+    expect: 'success',
     method: 'POST',
     path: () => '/api/auth/logout',
   },
@@ -640,6 +922,40 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
             `${path} was expected to redirect with an id, got ${location || res.status}`,
           );
           captured.set(step.capture.key, m[1]);
+        }
+
+        // The 500-detector cannot see a handler that catches its own failure
+        // and answers 303-with-an-error, so a step that should succeed must
+        // not bounce back with an error, and a deliberate refusal must
+        // visibly refuse.
+        const location = String(res.headers.location ?? '');
+        if (step.expect === 'success') {
+          assert.ok(
+            res.status < 400,
+            `${step.method} ${path} answered ${res.status}: ${res.body.slice(0, 300)}`,
+          );
+          assert.ok(
+            !/[?&](error|failed)=/.test(location),
+            `${step.method} ${path} silently bounced with an error: ${location}`,
+          );
+        } else if (step.expect === 'refusal') {
+          const refused =
+            res.status >= 400 ||
+            /[?&]error=/.test(location) ||
+            res.body.includes('"error"') ||
+            res.body.includes('"ok":false');
+          assert.ok(
+            refused,
+            `${step.method} ${path} was expected to refuse, got ${res.status} ${location}`,
+          );
+        }
+
+        // The state round trip: a mutation that "passed" without changing the
+        // database is a failure the status code alone cannot see.
+        if (step.verify) {
+          const db = server.database;
+          assert.ok(db, 'the fake database is reachable for verification');
+          step.verify(db, captured);
         }
       });
     }
