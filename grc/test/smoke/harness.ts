@@ -40,6 +40,11 @@ export class SmokeServer {
     return this.serverLog;
   }
 
+  /** The seeded database itself, so a verification script can read state back. */
+  get database(): FakeTursoServer['db'] | null {
+    return this.turso ? this.turso.db : null;
+  }
+
   async start(): Promise<void> {
     if (!existsSync(WRANGLER_CONFIG)) {
       // The smoke test runs against the build output; build it when absent so a
