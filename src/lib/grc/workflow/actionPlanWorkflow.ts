@@ -39,10 +39,15 @@ export type Result =
 
 const EVIDENCE_OVERRIDE = 'ACTION_PLANS.evidence_override';
 
+// The organisation scope lives on files, not on the file_attachments link table
+// (which has no organization_id of its own), so the count joins through it.
 async function evidenceCount(db: Client, organizationId: string, id: string): Promise<number> {
   const res = await db.execute({
-    sql: `SELECT COUNT(*) AS n FROM file_attachments
-           WHERE organization_id = ? AND entity_type = 'action_plan' AND entity_id = ?`,
+    sql: `SELECT COUNT(*) AS n
+            FROM file_attachments fa
+            JOIN files f ON f.file_id = fa.file_id
+           WHERE f.organization_id = ? AND f.deleted_at IS NULL
+             AND fa.entity_type = 'action_plan' AND fa.entity_id = ?`,
     args: [organizationId, id],
   });
   return Number(res.rows[0]?.n ?? 0);
