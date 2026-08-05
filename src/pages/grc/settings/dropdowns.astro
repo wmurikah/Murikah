@@ -2,18 +2,20 @@
 export const prerender = false;
 
 /**
- * Managed dropdowns (11_DropdownService.gs), SUPER_ADMIN only. Edits the control
+ * Managed dropdowns (11_DropdownService.gs). Edits the control
  * field and risk-rating value lists held per organisation in config
  * (DROPDOWN_RISK_RATINGS, DROPDOWN_CONTROL_CLASSIFICATION, DROPDOWN_CONTROL_TYPE,
  * DROPDOWN_CONTROL_FREQUENCY), one value per line. The audit universe (areas and
  * sub-areas) and affiliates are managed in their own setup screens. Gated on
- * SUPER_ADMIN or a platform owner.
+ * the matrix (CONFIG read; the save endpoint needs CONFIG update), platform
+ * owner always.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { guardPageLoad } from '@grc/pageGuard';
+import { can } from '@grc/auth/rbac';
 import {
   loadControlDropdowns,
   DROPDOWN_DEFAULTS,
@@ -22,7 +24,7 @@ import {
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
-const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
 const done = Astro.url.searchParams.get('done');
 
 let values: ControlDropdowns = DROPDOWN_DEFAULTS;
