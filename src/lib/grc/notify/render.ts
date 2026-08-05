@@ -119,6 +119,10 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
     subject: 'Reminder: overdue action plan {{reference}}',
     intro: 'An action plan remains overdue.',
   },
+  DUE_SOON_REMINDER: {
+    subject: 'Deadline approaching: action plan {{reference}}',
+    intro: 'An action plan you own is due within the next few days.',
+  },
 };
 
 const DETAIL_FIELDS: { key: string; label: string }[] = [
