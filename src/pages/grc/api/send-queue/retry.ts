@@ -1,19 +1,20 @@
 export const prerender = false;
 
 /**
- * Retry a failed or dead-lettered notification, SUPER_ADMIN only. Returns the row
- * to PENDING with a clean slate so the next drain re-sends it. Scoped to the
- * acting organisation and gated strictly on SUPER_ADMIN (or a platform owner).
+ * Retry a failed or dead-lettered notification. Returns the row to PENDING
+ * with a clean slate so the next drain re-sends it. Scoped to the acting
+ * organisation and gated on the matrix (CONFIG update), platform owner always.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { retryRow } from '@grc/repos/sendQueue';
+import { can } from '@grc/auth/rbac';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
   if (!grc) return new Response(null, { status: 303, headers: { location: '/login' } });
-  if (!grc.isPlatformOwner && grc.roleCode !== 'SUPER_ADMIN') {
+  if (!grc.isPlatformOwner && !can(locals, 'update', 'CONFIG')) {
     return new Response('Forbidden', { status: 403 });
   }
 
