@@ -56,6 +56,18 @@ test('deriveLegacyPerms maps the matrix to the legacy codes in use', () => {
   assert.ok(legacy.includes('ACTION_PLANS.view'));
   assert.ok(legacy.includes('REPORTS.view'));
   assert.ok(!legacy.includes('WORK_PAPERS.edit')); // update was false
+  assert.ok(!legacy.includes('WORK_PAPERS.submit')); // submit follows update
+  // Every permission the work-paper workflow catalogue gates on must be
+  // derivable, or that transition is impossible for everyone.
+  const full = deriveLegacyPerms(fullMatrix());
+  for (const code of [
+    'WORK_PAPERS.submit',
+    'WORK_PAPERS.review',
+    'WORK_PAPERS.approve',
+    'WORK_PAPERS.send',
+  ]) {
+    assert.ok(full.includes(code), `${code} must be derivable from a full matrix`);
+  }
   assert.ok(!legacy.includes('ACTION_PLANS.create')); // not granted
   // A full matrix yields every legacy code.
   assert.ok(deriveLegacyPerms(fullMatrix()).includes('ACTION_PLANS.verify'));

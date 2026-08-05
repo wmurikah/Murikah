@@ -17,7 +17,12 @@
  * owners, not status), each with their own history, audit and notification.
  */
 import type { Client, InStatement } from '@libsql/client/web';
-import { checkTransition, loadTransitions, loadTerminalStates } from './transitions';
+import {
+  checkTransition,
+  loadTransitions,
+  loadTerminalStates,
+  type TransitionRule,
+} from './transitions';
 import { ACTION_PLAN_ENUM_TYPE, actionForTransition } from './actionPlanActions';
 import { getActionPlan } from '@grc/repos/actionPlans';
 import { isOwner, parseOwnerIds, setOwners, type OwnerRef } from '@grc/repos/actionPlanOwners';
@@ -39,10 +44,15 @@ export type Result =
 
 const EVIDENCE_OVERRIDE = 'ACTION_PLANS.evidence_override';
 
+// The organisation scope lives on files, not on the file_attachments link table
+// (which has no organization_id of its own), so the count joins through it.
 async function evidenceCount(db: Client, organizationId: string, id: string): Promise<number> {
   const res = await db.execute({
-    sql: `SELECT COUNT(*) AS n FROM file_attachments
-           WHERE organization_id = ? AND entity_type = 'action_plan' AND entity_id = ?`,
+    sql: `SELECT COUNT(*) AS n
+            FROM file_attachments fa
+            JOIN files f ON f.file_id = fa.file_id
+           WHERE f.organization_id = ? AND f.deleted_at IS NULL
+             AND fa.entity_type = 'action_plan' AND fa.entity_id = ?`,
     args: [organizationId, id],
   });
   return Number(res.rows[0]?.n ?? 0);
@@ -284,15 +294,18 @@ export interface OfferedAction {
   effect: string;
 }
 
-export async function offeredActions(
-  db: Client,
+/**
+ * The offered actions from already-loaded transition rules, so a list can work
+ * out every row's moves from one pair of reads rather than one pair per row.
+ * Pure, and the same filter the async form applies; both are only an
+ * affordance, since executeTransition re-validates every move server-side.
+ */
+export function offeredActionsFrom(
+  transitions: TransitionRule[],
+  terminals: string[],
   plan: { status: string; ownerIds: string | null },
   actor: Actor,
-): Promise<OfferedAction[]> {
-  const [transitions, terminals] = await Promise.all([
-    loadTransitions(db, ACTION_PLAN_ENUM_TYPE),
-    loadTerminalStates(db, ACTION_PLAN_ENUM_TYPE),
-  ]);
+): OfferedAction[] {
   if (terminals.includes(plan.status)) return [];
   const out: OfferedAction[] = [];
   for (const t of transitions) {
@@ -311,6 +324,18 @@ export async function offeredActions(
     });
   }
   return out;
+}
+
+export async function offeredActions(
+  db: Client,
+  plan: { status: string; ownerIds: string | null },
+  actor: Actor,
+): Promise<OfferedAction[]> {
+  const [transitions, terminals] = await Promise.all([
+    loadTransitions(db, ACTION_PLAN_ENUM_TYPE),
+    loadTerminalStates(db, ACTION_PLAN_ENUM_TYPE),
+  ]);
+  return offeredActionsFrom(transitions, terminals, plan, actor);
 }
 
 function auditStatement(

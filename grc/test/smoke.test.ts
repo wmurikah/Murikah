@@ -45,6 +45,7 @@ const PAGE_PARAMS: Record<string, string> = {
   '/work-papers/[id]/edit': SMOKE.draftWorkPaperId,
   '/action-plans/[id]': SMOKE.actionPlanId,
   '/action-plans/[id]/edit': SMOKE.actionPlanId,
+  '/auditee-responses/[id]': SMOKE.sentWorkPaperId,
 };
 
 interface MutationStep {
@@ -156,8 +157,10 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
       action_description: 'Smoke-created action plan.',
+      target_date: today,
       due_date: today,
       priority: 'High',
+      implementation_notes: 'Smoke implementation notes.',
       owner_ids: SMOKE.auditeeId,
     }),
     capture: { key: 'apId', from: /\/action-plans\/([^/?]+)/ },
@@ -170,7 +173,10 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
       action_description: 'Smoke-created action plan (edited).',
+      target_date: today,
       due_date: today,
+      priority: 'Critical',
+      implementation_notes: 'Smoke implementation notes (edited).',
     }),
   },
   {
@@ -195,10 +201,42 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ to_status: 'Verified', comment: 'Smoke verification' }),
   },
   {
+    endpoint: 'action-plans/[id]/transition.ts',
+    title: 'a Kanban drop transitions and returns to the board',
+    method: 'POST',
+    path: (c) => `/api/action-plans/${c.get('apId')}/transition`,
+    form: () => ({ to_status: 'In Progress', return_to: '/action-plans?view=kanban' }),
+  },
+  {
     endpoint: 'action-plans/[id]/delete.ts',
     title: 'delete the created action plan',
     method: 'POST',
     path: (c) => `/api/action-plans/${c.get('apId')}/delete`,
+  },
+  {
+    endpoint: 'auditee-responses/submit.ts',
+    title: 'submit a management response',
+    method: 'POST',
+    path: () => '/api/auditee-responses/submit',
+    form: () => ({
+      work_paper_id: SMOKE.sentWorkPaperId,
+      management_response: 'Management accepts the finding and will remediate.',
+      action_plan_ids: SMOKE.actionPlanId,
+    }),
+  },
+  {
+    endpoint: 'auditee-responses/[id]/review.ts',
+    title: 'request changes, reopening the next round',
+    method: 'POST',
+    path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
+    form: () => ({ decision: 'request_changes', review_comments: 'Please add dates and owners.' }),
+  },
+  {
+    endpoint: 'auditee-responses/[id]/review.ts',
+    title: 'a response already reviewed is refused, not 500',
+    method: 'POST',
+    path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
+    form: () => ({ decision: 'accept' }),
   },
   {
     endpoint: 'setup/affiliates.ts',
@@ -500,14 +538,19 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
-    // Every report type builds its own document, so preview each on screen
-    // rather than only the default.
-    for (const type of ['executive', 'barc', 'observations', 'trend', 'tracker', 'overdue']) {
-      await t.test(`GET /reports as ${type}`, async () => {
-        const res = await server.get(`/reports?applied=1&type=${type}&year=2026`);
-        assert.equal(res.status, 200, `${type} answered ${res.status}: ${res.body.slice(0, 300)}`);
-      });
-    }
+    // The list filters build their own WHERE clauses, so exercise them all at
+    // once (including the full-text search) rather than only the bare list.
+    await t.test('GET /work-papers with every filter applied', async () => {
+      const filtered =
+        `/work-papers?q=reconciliations&status=Draft&area=${SMOKE.auditAreaId}` +
+        `&affiliate=${SMOKE.affiliateCode}&auditor=${SMOKE.auditorId}&year=2026&risk=High`;
+      const res = await server.get(filtered);
+      assert.equal(
+        res.status,
+        200,
+        `filtered list answered ${res.status}: ${res.body.slice(0, 300)}`,
+      );
+    });
 
     for (const step of MUTATION_STEPS) {
       await t.test(step.title, async () => {

@@ -105,6 +105,14 @@ const LEGACY_MAP: Array<{ code: string; module: string; action: string }> = [
   { code: 'WORK_PAPERS.create', module: 'WORK_PAPER', action: 'create' },
   { code: 'WORK_PAPERS.edit', module: 'WORK_PAPER', action: 'update' },
   { code: 'WORK_PAPERS.review', module: 'WORK_PAPER', action: 'approve' },
+  // The work-paper workflow catalogue also gates on submit, approve and send.
+  // Without these three the matrix grants them to nobody, so a finding can never
+  // leave Draft, be approved, or reach the auditee. Submitting is an authoring
+  // step (whoever may edit the draft may submit it); approving and sending are
+  // the reviewer's, so both follow the approve grant.
+  { code: 'WORK_PAPERS.submit', module: 'WORK_PAPER', action: 'update' },
+  { code: 'WORK_PAPERS.approve', module: 'WORK_PAPER', action: 'approve' },
+  { code: 'WORK_PAPERS.send', module: 'WORK_PAPER', action: 'approve' },
   { code: 'REQUIREMENTS.manage', module: 'WORK_PAPER', action: 'update' },
   { code: 'ACTION_PLANS.view', module: 'ACTION_PLAN', action: 'read' },
   { code: 'ACTION_PLANS.create', module: 'ACTION_PLAN', action: 'create' },

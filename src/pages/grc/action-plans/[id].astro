@@ -301,6 +301,14 @@ const commentLabel = (effect: string): string =>
               <dd>{val('owner_names')}</dd>
             </>
             <>
+              <dt>Priority</dt>
+              <dd>{val('priority') || 'Not set'}</dd>
+            </>
+            <>
+              <dt>Target date</dt>
+              <dd>{fmtDate(p.target_date)}</dd>
+            </>
+            <>
               <dt>Due date</dt>
               <dd>
                 {fmtDate(p.due_date)}

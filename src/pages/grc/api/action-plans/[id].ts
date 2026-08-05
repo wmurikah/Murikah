@@ -9,7 +9,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { getActionPlan, updateActionPlan, type ActionPlanInput } from '@grc/repos/actionPlans';
+import { getActionPlan, updateActionPlan, parseActionPlanInput } from '@grc/repos/actionPlans';
 import { resolveOwners, setOwners } from '@grc/repos/actionPlanOwners';
 import { writeAuditLog } from '@grc/repos/audit';
 import { isEditableByAuditor } from '@grc/workflow/actionPlanActions';
@@ -39,11 +39,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   }
 
   const form = await request.formData();
-  const input: ActionPlanInput = {
-    workPaperId: String(form.get('work_paper_id') ?? '').trim() || null,
-    actionDescription: String(form.get('action_description') ?? '').trim(),
-    dueDate: String(form.get('due_date') ?? '').trim() || null,
-  };
+  const input = parseActionPlanInput(form);
   if (!input.actionDescription) {
     return new Response(null, {
       status: 303,
