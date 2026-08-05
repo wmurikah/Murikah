@@ -7,18 +7,21 @@ export const prerender = false;
  * the user. The queue that feeds these is drained by the scheduled Worker.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import { listInApp, unreadCount, type InAppItem } from '@grc/repos/inApp';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
-const db = await getDb(getGrcEnv());
-const [items, unread] = await Promise.all([
-  listInApp(db, grc.organizationId, grc.userId, 60),
-  unreadCount(db, grc.organizationId, grc.userId),
-]);
+let items: InAppItem[] = [];
+let unread = 0;
+const loadError = !(await guardPageLoad('notifications', async () => {
+  const db = await getDb(getGrcEnv());
+  [items, unread] = await Promise.all([listInApp(db, grc.userId, 60), unreadCount(db, grc.userId)]);
+}));
 
 const sevClass = (s: string): string => {
   if (s === 'urgent') return 'grc-dot grc-dot--urgent';
@@ -34,7 +37,8 @@ const groups: InAppItem[] = items;
     <div>
       <h1>Notifications</h1>
       <p class="grc-lead">
-        {unread > 0 ? `${unread} unread` : 'All caught up'} for {grc.organizationName}.
+        {loadError ? 'Notifications' : unread > 0 ? `${unread} unread` : 'All caught up'} for{' '}
+        {grc.organizationName}.
       </p>
     </div>
     {
@@ -50,7 +54,9 @@ const groups: InAppItem[] = items;
   </div>
 
   {
-    groups.length === 0 ? (
+    loadError ? (
+      <GrcErrorCard subject="Your notifications" />
+    ) : groups.length === 0 ? (
       <div class="grc-empty">
         <p>
           <strong>No notifications yet.</strong> Assignments, reviews, delegations and reminders

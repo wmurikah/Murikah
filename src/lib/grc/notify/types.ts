@@ -24,7 +24,8 @@ export type NotificationType =
   | 'AP_HOA_REVIEWED'
   | 'AP_OVERDUE'
   | 'STALE_REMINDER'
-  | 'OVERDUE_REMINDER';
+  | 'OVERDUE_REMINDER'
+  | 'DUE_SOON_REMINDER';
 
 export type Priority = 'normal' | 'urgent';
 export type Severity = 'info' | 'warning' | 'urgent';
@@ -162,6 +163,13 @@ export const TYPE_META: Record<NotificationType, TypeMeta> = {
   OVERDUE_REMINDER: {
     label: 'Overdue reminder',
     priority: 'urgent',
+    severity: 'warning',
+    ccHoa: false,
+    entity: 'action_plan',
+  },
+  DUE_SOON_REMINDER: {
+    label: 'Deadline approaching',
+    priority: 'normal',
     severity: 'warning',
     ccHoa: false,
     entity: 'action_plan',

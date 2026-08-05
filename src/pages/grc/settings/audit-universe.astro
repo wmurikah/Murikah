@@ -10,8 +10,10 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcIcon from '@/components/grc/GrcIcon.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import { can } from '@grc/auth/rbac';
 import {
   listAuditAreas,
@@ -34,15 +36,12 @@ let areas: AuditArea[] = [];
 const subs = new Map<string, SubArea[]>();
 let loadError = false;
 if (allowed) {
-  try {
+  loadError = !(await guardPageLoad('setup.audit-universe', async () => {
     const db = await getDb(getGrcEnv());
     areas = await listAuditAreas(db, grc.organizationId);
     const lists = await Promise.all(areas.map((a) => listSubAreas(db, grc.organizationId, a.id)));
     areas.forEach((a, i) => subs.set(a.id, lists[i]));
-  } catch (err) {
-    loadError = true;
-    console.error('[grc.setup.audit-universe] load failed', err);
-  }
+  }));
 }
 const areaBeingEdited = editArea ? (areas.find((a) => a.id === editArea) ?? null) : null;
 let subBeingEdited: SubArea | null = null;
@@ -87,9 +86,7 @@ if (editSub) {
         The audit universe is managed by administrators.
       </p>
     ) : loadError ? (
-      <p class="grc-error" role="alert">
-        The audit universe could not be loaded. The problem has been logged; please try again.
-      </p>
+      <GrcErrorCard subject="The audit universe" />
     ) : (
       <>
         {areaBeingEdited ? (

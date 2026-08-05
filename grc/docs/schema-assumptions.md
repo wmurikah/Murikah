@@ -500,6 +500,18 @@ New mismatches this dictionary surfaced (all fixed against the real columns):
   Fixed in `repos/dropdowns.ts` (per organisation) and `ai/config.ts` (the
   platform-wide AI settings, kept under a fixed `GLOBAL` organization_id sentinel
   by design).
+- `legal_holds`: carries no entity columns; what a hold covers lives in
+  `entity_filter`, which this build reads as JSON
+  (`{"entity_type": "...", "entity_id": "..."}`, either key optional to widen
+  the hold). A filter that cannot be parsed is treated as covering everything,
+  so a malformed hold blocks deletions rather than quietly failing open. Fixed
+  in `repos/holdRules.ts` (the matcher) and `repos/governance.ts`.
+- `retention_policies` and `deletion_queue`: platform-wide, with no
+  organization_id. A queued deletion maps onto the live columns as
+  `entity_type = 'file'`, `entity_id` = the file being removed,
+  `soft_deleted_at` = the request instant and `hard_delete_after` = the
+  retention floor; the parent entity is preserved in `reason`. Fixed in
+  `repos/governance.ts`.
 
 Paths bound to the typed layer so far (a wrong column fails the build): the
 authenticated shell (`repos/session.ts`, `repos/orgContext.ts`), the dashboard

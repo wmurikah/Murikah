@@ -10,8 +10,10 @@ export const prerender = false;
  * SUPER_ADMIN or a platform owner.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import {
   loadControlDropdowns,
   DROPDOWN_DEFAULTS,
@@ -24,9 +26,12 @@ const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
 const done = Astro.url.searchParams.get('done');
 
 let values: ControlDropdowns = DROPDOWN_DEFAULTS;
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  values = await loadControlDropdowns(db, grc.organizationId);
+  loadError = !(await guardPageLoad('settings.dropdowns', async () => {
+    const db = await getDb(getGrcEnv());
+    values = await loadControlDropdowns(db, grc.organizationId);
+  }));
 }
 
 const fields: Array<{ name: string; label: string; hint: string; values: string[] }> = [
@@ -71,6 +76,8 @@ const fields: Array<{ name: string; label: string; hint: string; values: string[
       <p class="grc-error" role="alert">
         Dropdown management is restricted to administrators.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The dropdown values" />
     ) : (
       <>
         {done && (

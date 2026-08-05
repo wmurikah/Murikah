@@ -10,8 +10,10 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcIcon from '@/components/grc/GrcIcon.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import { listUsers, type ManagedUser } from '@grc/repos/usersAdmin';
 import { listRoleCodes } from '@grc/repos/permissionsAdmin';
 import { listAffiliates, type Affiliate } from '@grc/repos/affiliatesAdmin';
@@ -30,17 +32,14 @@ let roles: string[] = [];
 let affiliates: Affiliate[] = [];
 let loadError = false;
 if (allowed) {
-  try {
+  loadError = !(await guardPageLoad('setup.users', async () => {
     const db = await getDb(getGrcEnv());
     [users, roles, affiliates] = await Promise.all([
       listUsers(db, grc.organizationId),
       listRoleCodes(db),
       listAffiliates(db, grc.organizationId),
     ]);
-  } catch (err) {
-    loadError = true;
-    console.error('[grc.setup.users] load failed', err);
-  }
+  }));
 }
 const activeAffiliates = affiliates.filter((a) => a.isActive);
 const editing = editId
@@ -79,9 +78,7 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
         Users are managed by administrators.
       </p>
     ) : loadError ? (
-      <p class="grc-error" role="alert">
-        Users could not be loaded. The problem has been logged; please try again.
-      </p>
+      <GrcErrorCard subject="Users" />
     ) : (
       <>
         {!editing && (
