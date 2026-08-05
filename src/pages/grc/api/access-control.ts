@@ -1,7 +1,8 @@
 export const prerender = false;
 
 /**
- * Save a role's permission matrix, SUPER_ADMIN only. Writes each module and
+ * Save a role's permission matrix, gated on the matrix itself (CONFIG
+ * update), platform owner always. Writes each module and
  * action grant to role_permissions from the submitted checkboxes, never touching
  * SUPER_ADMIN (which always holds the full matrix), invalidates the cached matrix
  * so the change takes effect, and records the change in audit_log.
@@ -9,7 +10,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { MODULES, ACTIONS, invalidateRoleMatrix } from '@grc/auth/rbac';
+import { MODULES, ACTIONS, invalidateRoleMatrix, can } from '@grc/auth/rbac';
 import { setGrant } from '@grc/repos/permissionsAdmin';
 import { writeAuditLog } from '@grc/repos/audit';
 
@@ -20,7 +21,7 @@ function redirect(location: string): Response {
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
   if (!grc) return redirect('/login');
-  if (!grc.isPlatformOwner && grc.roleCode !== 'SUPER_ADMIN') {
+  if (!grc.isPlatformOwner && !can(locals, 'update', 'CONFIG')) {
     return new Response('Forbidden', { status: 403 });
   }
 

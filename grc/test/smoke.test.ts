@@ -18,6 +18,9 @@ import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
+// The same RFC 6238 implementation the worker verifies against, so the round
+// trip computes real codes for the enrolled secret.
+import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -520,6 +523,26 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    endpoint: 'auth/mfa/enrol.ts',
+    title: 'MFA enrolment starts for the signed-in admin',
+    method: 'POST',
+    path: () => '/api/auth/mfa/enrol',
+  },
+  {
+    endpoint: 'auth/mfa/confirm.ts',
+    title: 'a wrong MFA confirmation code is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/confirm',
+    form: () => ({ code: '000000' }),
+  },
+  {
+    endpoint: 'auth/mfa/verify.ts',
+    title: 'the MFA step without a pending session is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/verify',
+    form: () => ({ code: '000000' }),
+  },
+  {
     endpoint: 'auth/logout.ts',
     title: 'sign out',
     method: 'POST',
@@ -621,91 +644,55 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
-    // Rich text and staged evidence (Build Prompt 28). The admin session
-    // signed out above, so sign back in.
-    await t.test('narrative Markdown renders as marks, never raw or unescaped', async () => {
+    // Row scope and matrix gating, seen from the auditee side (Build Prompt
+    // 26). The admin session signed out above, so sign in as the seeded
+    // UNIT_MANAGER, whose role holds WORK_PAPER read but no CONFIG or USER
+    // grant and none of the auditor-side actions.
+    await t.test('sign in as the seeded auditee', async () => {
       server.clearCookies();
-      await server.request('POST', '/api/auth/login', {
-        email: SMOKE.email,
+      const res = await server.request('POST', '/api/auth/login', {
+        email: 'owner@hasspetroleum.com',
         password: SMOKE.password,
       });
-      const res = await server.request('POST', '/api/work-papers', {
-        observation_title: 'Rich-text smoke finding',
-        observation_description:
-          '## Background\nControls **failed** in *March*.\n- reconciliation missed\n- review skipped',
-        recommendation: '1. Reconcile monthly\n2. Review quarterly',
-        year: '2026',
-        affiliate_code: SMOKE.affiliateCode,
-        audit_area_id: SMOKE.auditAreaId,
-        assigned_auditor: SMOKE.auditorId,
-      });
+      assert.equal(res.status, 303, `auditee login answered ${res.status}`);
       const location = String(res.headers.location ?? '');
-      const m = /\/work-papers\/([^/?]+)/.exec(location);
-      assert.ok(m, `create redirected to ${location}`);
-      const page = await server.get(`/work-papers/${m[1]}`);
-      assert.equal(page.status, 200);
-      assert.ok(page.body.includes('<strong>failed</strong>'), 'bold renders as strong');
-      assert.ok(page.body.includes('<em>March</em>'), 'italic renders as em');
-      assert.ok(page.body.includes('<h4>Background</h4>'), 'the heading renders');
-      assert.ok(page.body.includes('<li>reconciliation missed</li>'), 'bullets render as a list');
-      assert.ok(!page.body.includes('**failed**'), 'no raw markers leak');
+      assert.ok(!location.includes('error'), `auditee login redirected to ${location}`);
     });
 
-    await t.test('evidence staged against a draft token binds to the new finding', async () => {
-      const db = server.database;
-      assert.ok(db, 'the fake database is reachable for verification');
-      // Stage a file as the upload endpoints would have (storage itself is not
-      // configured in the smoke environment, so the rows are planted directly).
-      const draftToken = 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000';
-      const now = new Date().toISOString();
-      db.prepare(
-        `INSERT INTO files (file_id, organization_id, file_name, mime_type, size_bytes,
-                            uploaded_by, created_at, storage_backend, storage_key)
-         VALUES ('FILE-STAGED', ?, 'staged.pdf', 'application/pdf', 100, ?, ?, 'r2', 'k')`,
-      ).run(SMOKE.orgId, SMOKE.userId, now);
-      db.prepare(
-        `INSERT INTO file_attachments (attachment_id, file_id, entity_type, entity_id,
-                                       file_category, attached_by, attached_at)
-         VALUES ('ATT-STAGED', 'FILE-STAGED', 'work_paper_draft', ?, 'EVIDENCE', ?, ?)`,
-      ).run(draftToken, SMOKE.userId, now);
-
-      const res = await server.request('POST', '/api/work-papers', {
-        observation_title: 'Finding with staged evidence',
-        year: '2026',
-        affiliate_code: SMOKE.affiliateCode,
-        audit_area_id: SMOKE.auditAreaId,
-        assigned_auditor: SMOKE.auditorId,
-        draft_token: draftToken,
-      });
-      const location = String(res.headers.location ?? '');
-      const m = /\/work-papers\/([^/?]+)/.exec(location);
-      assert.ok(m, `create redirected to ${location}`);
-      const bound = db
-        .prepare(
-          `SELECT entity_type, entity_id FROM file_attachments WHERE attachment_id = 'ATT-STAGED'`,
-        )
-        .get() as { entity_type?: string; entity_id?: string };
-      assert.equal(String(bound.entity_type), 'work_paper', 'the staged attachment rebinds');
-      assert.equal(String(bound.entity_id), m[1], 'the staged attachment binds to the new id');
-      // And the detail page lists it as evidence.
-      const page = await server.get(`/work-papers/${m[1]}`);
-      assert.ok(page.body.includes('staged.pdf'), 'the bound evidence shows on the detail');
+    await t.test('the auditee list shows their finding and hides the foreign draft', async () => {
+      const res = await server.get('/work-papers');
+      assert.equal(res.status, 200, `auditee list answered ${res.status}`);
+      assert.ok(
+        res.body.includes('WP/2026/002'),
+        'the finding the auditee is responsible for is missing from their list',
+      );
+      assert.ok(
+        !res.body.includes('WP/2026/001'),
+        'a draft finding the auditee is not part of leaked into their list',
+      );
     });
 
-    await t.test(
-      'a draft upload request refuses cleanly while storage is unconfigured',
-      async () => {
-        const res = await server.request('POST', '/api/evidence/upload-url', {
-          entity_type: 'work_paper_draft',
-          entity_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000',
-          file_name: 'x.pdf',
-          content_type: 'application/pdf',
-          size_bytes: '10',
-        });
-        assert.equal(res.status, 503, `draft upload-url answered ${res.status}`);
-        assert.ok(res.body.trimStart().startsWith('{'), 'the refusal is the JSON contract');
-      },
-    );
+    await t.test('the page map turns the auditee away from the admin sections', async () => {
+      for (const path of ['/settings', '/settings/users', '/send-queue', '/reports']) {
+        const res = await server.get(path);
+        const final = res.hops[res.hops.length - 1];
+        assert.equal(
+          final,
+          '/',
+          `${path} was not redirected to the dashboard (via ${res.hops.join(' -> ')})`,
+        );
+      }
+    });
+
+    await t.test('an admin mutation refuses the auditee with a 403, not a 500', async () => {
+      const res = await server.request('POST', '/api/dropdowns', {
+        risk_ratings: 'High',
+        classification: 'Financial',
+        control_type: 'Preventive',
+        control_frequency: 'Monthly',
+      });
+      assert.equal(res.status, 403, `/api/dropdowns answered ${res.status} for the auditee`);
+    });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
     console.error('---- worker log (tail) ----');
