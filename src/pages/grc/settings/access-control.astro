@@ -2,11 +2,13 @@
 export const prerender = false;
 
 /**
- * Access control (PermissionService.gs), SUPER_ADMIN only. Shows, per role, the
- * granted module and action pairs as a matrix and the resulting page access, and
- * lets a SUPER_ADMIN toggle grants (written to role_permissions). SUPER_ADMIN is
- * shown read-only: it always holds the full matrix and is never modified. The
- * server is always the authority; this screen edits the shared permission model.
+ * Access control (PermissionService.gs). Shows, per role, the granted module
+ * and action pairs as a matrix and the resulting page access, and lets an
+ * administrator toggle grants (written to role_permissions). Gated on the
+ * matrix (CONFIG read to view; the save endpoint needs CONFIG update), platform
+ * owner always. SUPER_ADMIN is shown read-only: it always holds the full matrix
+ * and is never modified. The server is always the authority; this screen edits
+ * the shared permission model.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
@@ -22,10 +24,11 @@ import {
   type PermissionMatrix,
 } from '@grc/auth/rbac';
 import { listRoleCodes, getRoleMatrix } from '@grc/repos/permissionsAdmin';
+import { can } from '@grc/auth/rbac';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
-const allowed = grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN';
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
 const done = Astro.url.searchParams.get('done');
 const error = Astro.url.searchParams.get('error');
 const requested = Astro.url.searchParams.get('role') ?? '';
@@ -168,7 +171,9 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
                     <tr>
                       <td>{slug}</td>
                       <td>
-                        {PAGE_PERMISSION_MAP[slug].module}.{PAGE_PERMISSION_MAP[slug].action}
+                        {PAGE_PERMISSION_MAP[slug]
+                          .map((p) => `${p.module}.${p.action}`)
+                          .join(' or ')}
                       </td>
                       <td>
                         {pageAccess(matrix, slug) ? (

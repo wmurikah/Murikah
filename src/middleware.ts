@@ -23,21 +23,29 @@ import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
 import { toAppPath, isPublicAppPath, isEngrApiPath } from '@engr/routing';
 import { getGrcEnv } from '@grc/env';
 import { getDb as getGrcDb } from '@grc/db';
-import { readSessionId } from '@grc/auth/session';
+import { readGrcSessionCookie } from '@grc/auth/session';
 import { readActingOrg as readGrcActingOrg } from '@grc/auth/actingOrg';
 import { resolveSession } from '@grc/repos/session';
+import { parseMfaRecord, mfaConfigKey } from '@grc/repos/mfa';
+import { mfaRequiredForRole, MFA_REQUIRED_ROLES_KEY } from '@grc/auth/mfaPolicy';
+import { getConfigValues } from '@grc/repos/orgConfig';
 import {
   resolveActingContext as resolveGrcActingContext,
   type SwitchOrg as GrcSwitchOrg,
 } from '@grc/repos/orgContext';
 import { getPermissionMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
+import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
 import { loadSubscription } from '@grc/repos/features';
 import {
   toGrcAppPath,
   isGrcPublicPath,
   isGrcApiPath,
   isGrcChangePasswordExempt,
+  isGrcMfaPendingAllowed,
+  isGrcMfaEnrolExempt,
   GRC_CHANGE_PASSWORD_PATH,
+  GRC_MFA_PATH,
+  GRC_MFA_SETUP_PATH,
 } from '@grc/routing';
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { getCmsEnv } from '@cms/env';
@@ -87,9 +95,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
           : new Response('The GRC platform is not configured.', { status: 503 });
       }
 
-      const sessionId = await readSessionId(context.request, env.sessionSecret);
-      if (!sessionId) {
+      const sessionCookie = await readGrcSessionCookie(context.request, env.sessionSecret);
+      if (!sessionCookie) {
         return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+      }
+      const sessionId = sessionCookie.sessionId;
+
+      // A half-authorised (MFA pending) session may only reach the TOTP step
+      // and sign-out; the step's endpoint resolves the session itself, so no
+      // locals are attached until the second factor clears.
+      if (sessionCookie.mfa === 'pending') {
+        if (isGrcMfaPendingAllowed(appPath)) return next();
+        return isApi
+          ? jsonResponse({ error: 'mfa_required' }, 401)
+          : context.redirect(GRC_MFA_PATH);
       }
 
       const db = await getGrcDb(env);
@@ -162,6 +181,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return isApi
           ? jsonResponse({ error: 'password_change_required' }, 403)
           : context.redirect(GRC_CHANGE_PASSWORD_PATH);
+      }
+
+      // Central page-map enforcement (PAGE_PERMISSION_MAP): a page section the
+      // matrix does not unlock redirects to the dashboard before the page runs.
+      // Unmapped sections (dashboard, notifications, change-password) pass and
+      // gate themselves; API endpoints carry their own gates.
+      if (!isApi && !pageAccess(matrix, pageSlugForPath(appPath))) {
+        return context.redirect('/');
       }
 
       return next();
