@@ -18,6 +18,9 @@ import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
+// The same RFC 6238 implementation the worker verifies against, so the round
+// trip computes real codes for the enrolled secret.
+import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -518,6 +521,26 @@ const MUTATION_STEPS: MutationStep[] = [
       new_password: SMOKE.password,
       confirm_password: SMOKE.password,
     }),
+  },
+  {
+    endpoint: 'auth/mfa/enrol.ts',
+    title: 'MFA enrolment starts for the signed-in admin',
+    method: 'POST',
+    path: () => '/api/auth/mfa/enrol',
+  },
+  {
+    endpoint: 'auth/mfa/confirm.ts',
+    title: 'a wrong MFA confirmation code is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/confirm',
+    form: () => ({ code: '000000' }),
+  },
+  {
+    endpoint: 'auth/mfa/verify.ts',
+    title: 'the MFA step without a pending session is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/verify',
+    form: () => ({ code: '000000' }),
   },
   {
     endpoint: 'auth/logout.ts',
