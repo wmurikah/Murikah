@@ -59,7 +59,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return redirect(
       `/settings/provision?done=${encodeURIComponent(`Provisioned ${organizationName}. The first SUPER_ADMIN can now sign in.`)}`,
     );
-  } catch {
+  } catch (err) {
+    // Never a silent swallow: the earlier one hid a schema mismatch that made
+    // every provisioning attempt fail behind this generic message.
+    console.error('[grc.setup.provision]', err instanceof Error ? (err.stack ?? err.message) : err);
     return redirect(
       `/settings/provision?error=${encodeURIComponent('Could not provision the organisation. Check that the email is not already in use.')}`,
     );
