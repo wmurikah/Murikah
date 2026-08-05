@@ -63,6 +63,8 @@ function run(text: string, opts: RunOpts = {}): string {
 interface ParaOpts {
   align?: 'left' | 'right' | 'center';
   after?: number;
+  /** Space above the paragraph, so a section heading breathes. */
+  before?: number;
   rule?: boolean;
 }
 
@@ -72,7 +74,9 @@ function para(runsXml: string, opts: ParaOpts = {}): string {
     ppr.push(`<w:pBdr><w:bottom w:val="single" w:sz="12" w:color="${GOLD}" w:space="2"/></w:pBdr>`);
   }
   if (opts.align) ppr.push(`<w:jc w:val="${opts.align}"/>`);
-  ppr.push(`<w:spacing w:after="${opts.after ?? 120}"/>`);
+  ppr.push(
+    `<w:spacing${opts.before ? ` w:before="${opts.before}"` : ''} w:after="${opts.after ?? 120}"/>`,
+  );
   return `<w:p><w:pPr>${ppr.join('')}</w:pPr>${runsXml}</w:p>`;
 }
 
@@ -154,6 +158,34 @@ function blockXml(block: ReportBlock): string {
     }
     case 'note':
       return para(run(block.text, { italic: true, size: 20, colour: TONE_COLOUR.muted }));
+    case 'heading':
+      // A section heading: the level-1 parts of the house structure, and the
+      // level-2 headings of each observation within them.
+      return para(
+        run(block.text, {
+          bold: true,
+          size: block.level === 1 ? 32 : 26,
+          colour: block.level === 1 ? NAVY : GOLD,
+        }),
+        { before: block.level === 1 ? 240 : 160, after: 80 },
+      );
+    case 'narrative':
+      return para(run(block.text, { size: 20 }), { after: 120 });
+    case 'list': {
+      const heading = block.title
+        ? para(run(block.title, { bold: true, size: 22, colour: NAVY }), { after: 40 })
+        : '';
+      // Numbered inline rather than through a numbering part, so the document
+      // needs no numbering.xml and still reads as an ordered list.
+      const items = block.items
+        .map((item, i) =>
+          para(run(`${block.ordered === false ? '•' : `${i + 1}.`} ${item}`, { size: 20 }), {
+            after: 40,
+          }),
+        )
+        .join('');
+      return heading + items + para('');
+    }
     default:
       return '';
   }

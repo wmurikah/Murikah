@@ -11,6 +11,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
 import { listAffiliates, listAuditAreas } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels } from '@grc/repos/enums';
 import { writeAuditLog } from '@grc/repos/audit';
@@ -28,8 +29,12 @@ import { renderReportDocx, reportFilename } from '@grc/reports/docx/ooxml';
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
   if (!grc) return new Response('Unauthorised', { status: 401 });
-  if (!grc.perms.includes('REPORTS.view') || !grc.perms.includes('REPORTS.board')) {
-    return new Response('You do not have permission to generate board reports.', { status: 403 });
+  // Generating a document is the export action on the REPORT module, so the
+  // matrix decides it. Reading a report on screen is a separate, weaker grant:
+  // a role may be allowed to look without being allowed to take the document
+  // away, and gating both on read would have collapsed that distinction.
+  if (!can(locals, 'export', 'REPORT')) {
+    return new Response('You do not have permission to export board reports.', { status: 403 });
   }
 
   const form = await request.formData();

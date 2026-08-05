@@ -2,11 +2,16 @@
 export const prerender = false;
 
 /**
- * Board and BARC reporting (BoardReports). A filters panel drives four report
- * types, each previewed in the Murikah house style and downloadable as a Word
- * document. The heavy filters and the role scope are enforced server-side (a
- * UNIT_MANAGER is limited to their own affiliate and their assigned items). Gate:
- * REPORTS.view to see the page, REPORTS.board to generate a report.
+ * Board and BARC reporting (BoardReports). A filters panel drives the report
+ * types (the period audit report, the BARC board pack, the detailed
+ * observations, the observation trend, the action-plan status summary and the
+ * overdue view), each previewed in the Murikah house style and downloadable as
+ * a Word document. The heavy filters and the role scope are enforced
+ * server-side (a UNIT_MANAGER is limited to their own affiliate and their
+ * assigned items).
+ *
+ * Gate: read on REPORT to see and preview a report, export on REPORT to take
+ * the document away; they are separate grants.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import ReportPreview from '@/components/grc/ReportPreview.astro';
@@ -38,7 +43,9 @@ const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'read', 'REPORT');
-const canBoard = can(Astro.locals, 'read', 'REPORT');
+// Viewing on screen and taking the document away are separate grants; the
+// download button only shows when the matrix allows the export.
+const canExport = can(Astro.locals, 'export', 'REPORT');
 const now = new Date();
 const params = Astro.url.searchParams;
 const unitScope = isUnitManagerScope(grc.roleCode, grc.isPlatformOwner);
@@ -71,55 +78,53 @@ if (allowed) {
       listAuditAreas(db, grc.organizationId),
     ]);
 
-    if (canBoard) {
-      const [dataset, wpLabels, apLabels] = await Promise.all([
-        getComprehensiveReportData(
-          db,
-          grc.organizationId,
-          { userId: grc.userId, roleCode: grc.roleCode, isPlatformOwner: grc.isPlatformOwner },
-          filters,
-          forcedAffiliate,
-        ),
-        loadEnumLabels(db, 'WORK_PAPER_STATUS'),
-        loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
-      ]);
-      const statusLabels: Record<string, string> = {};
-      for (const [k, v] of wpLabels) statusLabels[k] = v;
-      for (const [k, v] of apLabels) statusLabels[k] = v;
+    const [dataset, wpLabels, apLabels] = await Promise.all([
+      getComprehensiveReportData(
+        db,
+        grc.organizationId,
+        { userId: grc.userId, roleCode: grc.roleCode, isPlatformOwner: grc.isPlatformOwner },
+        filters,
+        forcedAffiliate,
+      ),
+      loadEnumLabels(db, 'WORK_PAPER_STATUS'),
+      loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
+    ]);
+    const statusLabels: Record<string, string> = {};
+    for (const [k, v] of wpLabels) statusLabels[k] = v;
+    for (const [k, v] of apLabels) statusLabels[k] = v;
 
-      const affiliateName = filters.affiliateCode
-        ? (affiliates.find((a) => a.id === filters.affiliateCode)?.label ?? filters.affiliateCode)
-        : null;
-      const auditAreaName = filters.auditAreaId
-        ? (auditAreas.find((a) => a.id === filters.auditAreaId)?.label ?? filters.auditAreaId)
-        : null;
+    const affiliateName = filters.affiliateCode
+      ? (affiliates.find((a) => a.id === filters.affiliateCode)?.label ?? filters.affiliateCode)
+      : null;
+    const auditAreaName = filters.auditAreaId
+      ? (auditAreas.find((a) => a.id === filters.auditAreaId)?.label ?? filters.auditAreaId)
+      : null;
 
-      doc = buildReport(dataset, filters, {
-        header: {
-          organisation: grc.organizationName,
-          documentTitle: 'Internal Audit Report',
-          reportLabel: reportTypeLabel(filters.reportType),
-          generatedAt: ymd(now),
-          filterSummary: filterSummary(filters, { affiliateName, auditAreaName }),
-          scopeNotice: unitScope
-            ? 'Scoped to your affiliate and the observations and action plans assigned to you.'
-            : undefined,
-        },
-        now,
-        statusLabels,
-      });
+    doc = buildReport(dataset, filters, {
+      header: {
+        organisation: grc.organizationName,
+        documentTitle: 'Internal Audit Report',
+        reportLabel: reportTypeLabel(filters.reportType),
+        generatedAt: ymd(now),
+        filterSummary: filterSummary(filters, { affiliateName, auditAreaName }),
+        scopeNotice: unitScope
+          ? 'Scoped to your affiliate and the observations and action plans assigned to you.'
+          : undefined,
+      },
+      now,
+      statusLabels,
+    });
 
-      if (params.get('applied') === '1') {
-        try {
-          await writeAuditLog(db, {
-            organizationId: grc.organizationId,
-            userId: grc.userId,
-            action: 'REPORT.generate',
-            details: `${filters.reportType}: ${filterSummary(filters, { affiliateName, auditAreaName })}`,
-          });
-        } catch {
-          // best-effort audit
-        }
+    if (params.get('applied') === '1') {
+      try {
+        await writeAuditLog(db, {
+          organizationId: grc.organizationId,
+          userId: grc.userId,
+          action: 'REPORT.generate',
+          details: `${filters.reportType}: ${filterSummary(filters, { affiliateName, auditAreaName })}`,
+        });
+      } catch {
+        // best-effort audit
       }
     }
   }));
@@ -281,7 +286,7 @@ const visibleStatuses = STATUS_OPTIONS.filter(
             <button type="submit" class="grc-btn grc-btn--primary">
               Preview
             </button>
-            {canBoard && (
+            {canExport && (
               <button
                 type="submit"
                 class="grc-btn grc-btn--secondary"
@@ -294,12 +299,14 @@ const visibleStatuses = STATUS_OPTIONS.filter(
           </div>
         </form>
 
-        {!canBoard ? (
-          <p class="grc-empty">
-            <strong>Board report generation needs the board reports permission.</strong> You can set
-            the filters, but generating and downloading a report requires REPORTS.board.
+        {!canExport && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            You can read reports on screen. Downloading the document needs the export permission on
+            reports.
           </p>
-        ) : doc ? (
+        )}
+
+        {doc ? (
           <section class="grc-report-pane" aria-label="Report preview">
             <div class="grc-report-pane__bar">
               <span class="grc-report-pane__title">Preview</span>

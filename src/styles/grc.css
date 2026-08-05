@@ -1391,6 +1391,45 @@
 .grc-report__note {
   color: var(--grc-muted);
 }
+/* The house-style report structure: numbered sections, the analytical
+   narrative, and an observation's numbered recommendations. */
+.grc-report__section {
+  font-size: 1.1rem;
+  color: var(--grc-navy);
+  margin: var(--grc-s5) 0 var(--grc-s2);
+  padding-bottom: var(--grc-s1);
+  border-bottom: 2px solid var(--grc-gold);
+}
+.grc-report__subsection {
+  font-size: 1rem;
+  color: var(--grc-navy-2);
+  margin: var(--grc-s4) 0 var(--grc-s2);
+}
+.grc-report__narrative {
+  margin: 0 0 var(--grc-s3);
+  max-width: 62ch;
+  line-height: 1.6;
+}
+.grc-report__list {
+  margin: 0 0 var(--grc-s3);
+}
+.grc-report__listh {
+  font-size: var(--grc-fs-small);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--grc-muted);
+  margin: 0 0 var(--grc-s1);
+}
+.grc-report__list ol,
+.grc-report__list ul {
+  margin: 0;
+  padding-left: 1.4rem;
+  max-width: 62ch;
+  line-height: 1.6;
+}
+.grc-report__list li + li {
+  margin-top: 0.35rem;
+}
 .grc-report__table {
   width: 100%;
   border-collapse: collapse;

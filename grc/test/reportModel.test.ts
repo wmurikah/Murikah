@@ -21,6 +21,7 @@ import {
   daysOverdue,
   applyModelFilters,
   defaultDateRange,
+  splitRecommendations,
 } from '../../src/lib/grc/reports/reportModel.ts';
 
 const NOW = new Date('2026-07-04T00:00:00Z');
@@ -39,6 +40,9 @@ function obs(p: Partial<Observation> & { id: string }): Observation {
     recommendation: null,
     workPaperDate: null,
     year: 2026,
+    implications: null,
+    responsibility: null,
+    managementResponse: null,
     ...p,
   };
 }
@@ -197,15 +201,17 @@ test('executive summary KPIs: totals, 60% implementation rate (warn), 1 overdue'
     { ...execFilters, risks: [...execFilters.risks] },
     { header, now: NOW },
   );
-  const kpis = doc.blocks[0];
-  assert.equal(kpis.kind, 'kpis');
+  // The report opens with the introduction, so the summary is found by kind.
+  const kpis = doc.blocks.find((b) => b.kind === 'kpis');
+  assert.ok(kpis && kpis.kind === 'kpis');
   if (kpis.kind !== 'kpis') return;
   assert.equal(kpis.items[0].value, '4'); // observations
-  assert.equal(kpis.items[1].value, '5'); // action plans
-  assert.equal(kpis.items[2].value, '60%');
-  assert.equal(kpis.items[2].tone, 'warn');
-  assert.equal(kpis.items[3].value, '1'); // overdue
-  assert.equal(kpis.items[3].tone, 'bad');
+  assert.equal(kpis.items[1].value, '2'); // high and extreme risk (CRITICAL + HIGH)
+  assert.equal(kpis.items[2].value, '5'); // action plans
+  assert.equal(kpis.items[3].value, '60%');
+  assert.equal(kpis.items[3].tone, 'warn');
+  assert.equal(kpis.items[4].value, '1'); // overdue
+  assert.equal(kpis.items[4].tone, 'bad');
 });
 
 test('risk distribution counts each bucket once at 25%', () => {
@@ -214,8 +220,8 @@ test('risk distribution counts each bucket once at 25%', () => {
     { ...execFilters, risks: [...execFilters.risks] },
     { header, now: NOW },
   );
-  const dist = doc.blocks[1];
-  assert.equal(dist.kind === 'table' && dist.title, 'Risk distribution');
+  const dist = doc.blocks.find((b) => b.kind === 'table' && b.title === 'Risk distribution');
+  assert.ok(dist && dist.kind === 'table');
   if (dist.kind !== 'table') return;
   // Extreme row: label, count 1, 25%.
   assert.equal(dist.rows[0][1].text, '1');
@@ -262,14 +268,17 @@ test('overdue report: 1 overdue, 1 at-risk within 14 days, average 14 days', () 
     { ...execFilters, risks: [...execFilters.risks], reportType: 'overdue' },
     { header, now: NOW },
   );
-  const kpis = doc.blocks[0];
-  assert.equal(kpis.kind, 'kpis');
+  // The overdue body follows the shared introduction and executive summary, so
+  // its own KPI block is the last one in the document.
+  const kpiBlocks = doc.blocks.filter((b) => b.kind === 'kpis');
+  const kpis = kpiBlocks[kpiBlocks.length - 1];
+  assert.ok(kpis && kpis.kind === 'kpis');
   if (kpis.kind !== 'kpis') return;
   assert.equal(kpis.items[0].value, '1'); // total overdue
   assert.equal(kpis.items[1].value, '1'); // at risk
   assert.equal(kpis.items[2].value, '14'); // average days overdue
-  const overdueTable = doc.blocks[1];
-  assert.ok(overdueTable.kind === 'table' && overdueTable.rows.length === 1);
+  const overdueTable = doc.blocks.find((b) => b.kind === 'table' && b.rows.length === 1);
+  assert.ok(overdueTable && overdueTable.kind === 'table');
 });
 
 test('overdue-only filter keeps only observations with an overdue plan', () => {
@@ -310,4 +319,147 @@ test('UNIT_MANAGER scoping: no Draft or Submitted, affiliate forced', () => {
   assert.ok(!f.statuses.includes('Draft'));
   assert.ok(!f.statuses.includes('Submitted'));
   assert.deepEqual(f.statuses, ['Approved']);
+});
+
+// ---- The house structure and the added report types ------------------------
+
+function build(reportType: string) {
+  return buildReport(
+    fixture(),
+    { ...execFilters, risks: [...execFilters.risks], reportType: reportType as 'executive' },
+    { header, now: NOW },
+  );
+}
+const headings = (doc: ReturnType<typeof build>): string[] =>
+  doc.blocks.filter((b) => b.kind === 'heading').map((b) => (b.kind === 'heading' ? b.text : ''));
+
+test('every report opens in the house structure: introduction, executive summary, review summary', () => {
+  for (const type of ['executive', 'barc', 'observations', 'trend', 'tracker', 'overdue']) {
+    const h = headings(build(type));
+    assert.ok(h[0]?.startsWith('1. Introduction'), `${type} must open with the introduction`);
+    assert.ok(
+      h.some((t) => t.startsWith('2. Executive summary')),
+      `${type} must carry an executive summary`,
+    );
+    assert.ok(
+      h.some((t) => t.startsWith('3. Review summary')),
+      `${type} must carry a review summary`,
+    );
+  }
+});
+
+test('the narrative reports carry detailed observations and an appendix', () => {
+  for (const type of ['executive', 'barc', 'observations']) {
+    const h = headings(build(type));
+    assert.ok(
+      h.some((t) => t.startsWith('5. Detailed observations')),
+      `${type} must carry the detailed observations`,
+    );
+    assert.ok(
+      h.some((t) => t.startsWith('Appendix A')),
+      `${type} must carry the appendix`,
+    );
+  }
+});
+
+test('the BARC pack leads on the portfolio across affiliates', () => {
+  const doc = build('barc');
+  assert.ok(headings(doc).some((t) => t.startsWith('4. Portfolio position')));
+  const kpiBlocks = doc.blocks.filter((b) => b.kind === 'kpis');
+  // The shared executive summary, then the pack's own portfolio KPIs.
+  assert.ok(kpiBlocks.length >= 2);
+  const portfolio = kpiBlocks[1];
+  assert.ok(portfolio.kind === 'kpis');
+  if (portfolio.kind !== 'kpis') return;
+  assert.equal(portfolio.items[0].label, 'Affiliates covered');
+  assert.equal(portfolio.items[0].value, '2'); // Alpha and Beta
+  assert.ok(doc.blocks.some((b) => b.kind === 'table' && b.title === 'By affiliate'));
+});
+
+test('the trend report buckets observations by quarter, oldest first', () => {
+  const doc = build('trend');
+  const table = doc.blocks.find((b) => b.kind === 'table' && b.title?.startsWith('By period'));
+  assert.ok(table && table.kind === 'table');
+  if (!table || table.kind !== 'table') return;
+  // The fixture spans March to June 2026, so Q1 and Q2, oldest first.
+  assert.deepEqual(
+    table.rows.map((r) => r[0].text),
+    ['2026 Q1', '2026 Q2'],
+  );
+  // Q1 holds o4 (March); Q2 holds o3 (April), o2 (May) and o1 (June).
+  assert.equal(table.rows[0][1].text, '1');
+  assert.equal(table.rows[1][1].text, '3');
+});
+
+test('an observation section carries its evidence table and numbered recommendations', () => {
+  const data = fixture();
+  data.observations[0].recommendation =
+    '1. Reconcile monthly. 2. Have the reconciliation reviewed.';
+  data.observations[0].implications = 'Unreconciled balances may hide misstatement.';
+  const doc = buildReport(
+    data,
+    { ...execFilters, risks: [...execFilters.risks], reportType: 'observations' },
+    { header, now: NOW },
+  );
+  const evidence = doc.blocks.find((b) => b.kind === 'table' && b.title === 'Evidence');
+  assert.ok(evidence && evidence.kind === 'table');
+  const list = doc.blocks.find((b) => b.kind === 'list');
+  assert.ok(list && list.kind === 'list');
+  if (!list || list.kind !== 'list') return;
+  assert.deepEqual(list.items, ['Reconcile monthly.', 'Have the reconciliation reviewed.']);
+  assert.equal(list.ordered, true);
+  // The implications belong to the analytical narrative, not a table.
+  assert.ok(
+    doc.blocks.some((b) => b.kind === 'narrative' && b.text.includes('may hide misstatement')),
+  );
+});
+
+test('the appendix carries the management response recorded for each observation', () => {
+  const data = fixture();
+  data.observations[0].managementResponse = 'Agreed, remediation begins in August.';
+  const doc = buildReport(
+    data,
+    { ...execFilters, risks: [...execFilters.risks], reportType: 'observations' },
+    { header, now: NOW },
+  );
+  assert.ok(
+    doc.blocks.some(
+      (b) =>
+        b.kind === 'narrative' &&
+        b.text === 'Management response: Agreed, remediation begins in August.',
+    ),
+  );
+  // An observation with none recorded says so rather than going silent.
+  assert.ok(
+    doc.blocks.some(
+      (b) => b.kind === 'narrative' && b.text === 'Management response: none recorded.',
+    ),
+  );
+});
+
+test('recommendations split on numbering or newlines, and survive a single sentence', () => {
+  assert.deepEqual(splitRecommendations('1. First point 2. Second point'), [
+    'First point',
+    'Second point',
+  ]);
+  assert.deepEqual(splitRecommendations('First line\nSecond line'), ['First line', 'Second line']);
+  assert.deepEqual(splitRecommendations('(1) Alpha (2) Beta'), ['Alpha', 'Beta']);
+  assert.deepEqual(splitRecommendations('Just the one recommendation.'), [
+    'Just the one recommendation.',
+  ]);
+  assert.deepEqual(splitRecommendations(null), []);
+  assert.deepEqual(splitRecommendations('   '), []);
+});
+
+test('an empty scope still produces a readable report rather than an empty page', () => {
+  const doc = buildReport(
+    { observations: [], actionPlans: [] },
+    { ...execFilters, risks: [...execFilters.risks], reportType: 'executive' },
+    { header, now: NOW },
+  );
+  assert.ok(headings(doc).some((t) => t.startsWith('1. Introduction')));
+  assert.ok(
+    doc.blocks.some((b) => b.kind === 'note' && b.text.includes('No observations')),
+    'the observations section states the scope is empty',
+  );
 });
