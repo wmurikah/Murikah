@@ -20,6 +20,7 @@ export const SMOKE = {
   userId: 'USR-WM',
   auditorId: 'USR-AUD',
   auditeeId: 'USR-OWN',
+  lockoutUserId: 'USR-LOCK',
   affiliateCode: 'HKL',
   auditAreaId: 'AA-FIN',
   subAreaId: 'SA-TREAS',
@@ -202,6 +203,9 @@ export function seedDatabase(db: DatabaseSync): void {
     [SMOKE.userId, SMOKE.email, 'Wilberforce Murikah', 'SUPER_ADMIN', 1],
     [SMOKE.auditorId, 'auditor@hasspetroleum.com', 'Amina Auditor', 'AUDITOR', 0],
     [SMOKE.auditeeId, 'owner@hasspetroleum.com', 'Otieno Owner', 'UNIT_MANAGER', 0],
+    // Exists only for the lockout check: the smoke test burns its failure
+    // budget and proves the right password is then refused too.
+    [SMOKE.lockoutUserId, 'lockout@hasspetroleum.com', 'Larry Lockout', 'AUDITOR', 0],
   ];
   for (const [id, email, name, role, isOwner] of users) {
     insert(db, 'users', {
@@ -216,6 +220,18 @@ export function seedDatabase(db: DatabaseSync): void {
       must_change_password: 0,
       is_platform_owner: isOwner,
       created_at: now,
+    });
+  }
+
+  // MFA is not required by role in the smoke organisation (the default rule
+  // would lock the seeded SUPER_ADMIN to enrolment and break every page
+  // check); the voluntary enrolment round trip covers the flow instead.
+  for (const orgId of [SMOKE.orgId, SMOKE.otherOrgId]) {
+    insert(db, 'config', {
+      organization_id: orgId,
+      config_key: 'MFA_REQUIRED_ROLES',
+      config_value: 'NONE',
+      updated_at: now,
     });
   }
 
