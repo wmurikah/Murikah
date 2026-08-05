@@ -48,6 +48,12 @@ export const SETTINGS_FIELDS: SettingField[] = [
     hint: 'The weekday the overdue action-plan reminder runs, e.g. Monday.',
   },
   {
+    key: 'MFA_REQUIRED_ROLES',
+    label: 'Roles requiring two-step verification',
+    kind: 'text',
+    hint: 'SUPER_ADMIN when blank; ALL for every role; NONE to disable; or a comma-separated list of role codes.',
+  },
+  {
     key: 'NOTIFY_SENDER_EMAIL',
     label: 'Notification sender email',
     kind: 'email',

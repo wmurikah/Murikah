@@ -16,6 +16,8 @@ import {
   isGrcApiPath,
   isGrcChangePasswordExempt,
   grcMarketingRedirect,
+  isGrcMfaPendingAllowed,
+  isGrcMfaEnrolExempt,
 } from '../../src/lib/grc/routing.ts';
 
 test('isGrcHost matches the apex, sub-labels and local equivalents only', () => {
@@ -52,6 +54,25 @@ test('public grc paths cover sign-in only', () => {
   assert.equal(isGrcPublicPath('/api/auth/logout'), false);
   assert.equal(isGrcApiPath('/api/org/switch'), true);
   assert.equal(isGrcApiPath('/work-papers'), false);
+});
+
+test('a pending MFA session reaches only the step, its endpoint and sign-out', () => {
+  assert.equal(isGrcMfaPendingAllowed('/mfa'), true);
+  assert.equal(isGrcMfaPendingAllowed('/api/auth/mfa/verify'), true);
+  assert.equal(isGrcMfaPendingAllowed('/api/auth/logout'), true);
+  assert.equal(isGrcMfaPendingAllowed('/'), false);
+  assert.equal(isGrcMfaPendingAllowed('/work-papers'), false);
+  assert.equal(isGrcMfaPendingAllowed('/mfa/setup'), false);
+});
+
+test('the enrolment lock exempts setup, its endpoints, sign-out and change-password', () => {
+  assert.equal(isGrcMfaEnrolExempt('/mfa/setup'), true);
+  assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/enrol'), true);
+  assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/confirm'), true);
+  assert.equal(isGrcMfaEnrolExempt('/api/auth/logout'), true);
+  assert.equal(isGrcMfaEnrolExempt('/change-password'), true);
+  assert.equal(isGrcMfaEnrolExempt('/'), false);
+  assert.equal(isGrcMfaEnrolExempt('/work-papers'), false);
 });
 
 test('change-password exemption covers only the screen, its endpoint and sign-out', () => {
