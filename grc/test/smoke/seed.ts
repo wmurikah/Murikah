@@ -198,6 +198,22 @@ export function seedDatabase(db: DatabaseSync): void {
       });
     }
   }
+  // The auditee role: read findings (the list is row-scoped to their own),
+  // respond, and read their action plans. No CONFIG or USER grant, so the
+  // central page map keeps them out of settings and the send queue.
+  for (const [module, action] of [
+    ['WORK_PAPER', 'read'],
+    ['ACTION_PLAN', 'read'],
+    ['AUDITEE_RESPONSE', 'read'],
+    ['AUDITEE_RESPONSE', 'create'],
+  ] as const) {
+    insert(db, 'role_permissions', {
+      role_code: 'UNIT_MANAGER',
+      module_code: module,
+      action_code: action,
+      is_allowed: 1,
+    });
+  }
 
   const users: [string, string, string, string, number][] = [
     [SMOKE.userId, SMOKE.email, 'Wilberforce Murikah', 'SUPER_ADMIN', 1],

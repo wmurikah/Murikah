@@ -58,7 +58,17 @@ if (allowed) {
   loadError = !(await guardPageLoad('work-papers.list', async () => {
     const db = await getDb(getGrcEnv());
     [rows, areas, affiliates, auditors, statuses, riskRatings, labels] = await Promise.all([
-      listWorkPapers(db, grc.organizationId, filters),
+      listWorkPapers(
+        db,
+        grc.organizationId,
+        {
+          userId: grc.userId,
+          roleCode: grc.roleCode,
+          perms: grc.perms,
+          isPlatformOwner: grc.isPlatformOwner,
+        },
+        filters,
+      ),
       listAuditAreas(db, grc.organizationId),
       listAffiliates(db, grc.organizationId),
       listAuditors(db, grc.organizationId),
