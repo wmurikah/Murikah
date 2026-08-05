@@ -91,6 +91,9 @@ export async function enqueueNotification(db: Client, input: NotifyInput): Promi
     const type = TEMPLATE_TO_TYPE[input.templateCode];
     if (!type) return; // unknown code: nothing to send.
     const entity = entityOf(type);
+    // Only entity-driven types route through here; the account-level types
+    // (password reset) queue directly with an explicit recipient.
+    if (entity !== 'work_paper' && entity !== 'action_plan') return;
 
     const userIds =
       entity === 'action_plan'

@@ -1,7 +1,8 @@
 export const prerender = false;
 
 /**
- * Test an AI provider's connection, SUPER_ADMIN only. Sends a tiny request with
+ * Test an AI provider's connection, gated on the matrix (CONFIG update),
+ * platform owner always. Sends a tiny request with
  * that provider's Worker-secret key and reports success or the error. Gated
  * behind the plan's AI feature and strictly on SUPER_ADMIN (or a platform owner).
  */
@@ -9,13 +10,14 @@ import type { APIRoute } from 'astro';
 import { testConnection } from '@grc/ai/service';
 import { isProvider } from '@grc/ai/providers';
 import { aiEnabled } from '@grc/ai/gate';
+import { can } from '@grc/auth/rbac';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
   if (!grc) return new Response(JSON.stringify({ error: 'unauthorised' }), { status: 401 });
   if (
     !aiEnabled((f) => grc.hasFeature(f)) ||
-    (!grc.isPlatformOwner && grc.roleCode !== 'SUPER_ADMIN')
+    (!grc.isPlatformOwner && !can(locals, 'update', 'CONFIG'))
   ) {
     return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
   }
