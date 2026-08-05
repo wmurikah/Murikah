@@ -34,6 +34,7 @@ import {
   type SwitchOrg as GrcSwitchOrg,
 } from '@grc/repos/orgContext';
 import { getPermissionMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
+import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
 import { loadSubscription } from '@grc/repos/features';
 import {
   toGrcAppPath,
@@ -182,31 +183,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
           : context.redirect(GRC_CHANGE_PASSWORD_PATH);
       }
 
-      // MFA enrolment lock: when the organisation's rule requires a second
-      // factor for this role and the user has none confirmed, every route but
-      // the enrolment flow (and sign-out and change-password) redirects to the
-      // setup screen. One config read covers the rule and the user's record.
-      if (!isGrcMfaEnrolExempt(appPath)) {
-        try {
-          const mfaValues = await getConfigValues(db, identity.homeOrganizationId, [
-            MFA_REQUIRED_ROLES_KEY,
-            mfaConfigKey(identity.userId),
-          ]);
-          const required = mfaRequiredForRole(
-            identity.roleCode,
-            mfaValues.get(MFA_REQUIRED_ROLES_KEY),
-          );
-          const record = parseMfaRecord(mfaValues.get(mfaConfigKey(identity.userId)));
-          if (required && !record?.confirmed) {
-            return isApi
-              ? jsonResponse({ error: 'mfa_enrolment_required' }, 403)
-              : context.redirect(GRC_MFA_SETUP_PATH);
-          }
-        } catch (err) {
-          // The lock is defence in depth: a read failure logs and lets the
-          // request through rather than locking the whole product out.
-          logGrcError(appPath, err);
-        }
+      // Central page-map enforcement (PAGE_PERMISSION_MAP): a page section the
+      // matrix does not unlock redirects to the dashboard before the page runs.
+      // Unmapped sections (dashboard, notifications, change-password) pass and
+      // gate themselves; API endpoints carry their own gates.
+      if (!isApi && !pageAccess(matrix, pageSlugForPath(appPath))) {
+        return context.redirect('/');
       }
 
       return next();

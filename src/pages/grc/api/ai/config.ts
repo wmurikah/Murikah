@@ -1,7 +1,8 @@
 export const prerender = false;
 
 /**
- * Save the AI configuration, SUPER_ADMIN only. Writes the non-secret settings to
+ * Save the AI configuration, gated on the matrix (CONFIG update), platform
+ * owner always. Writes the non-secret settings to
  * the GLOBAL config scope (the API keys stay Worker secrets) and records the
  * change in audit_log. Gated behind the plan's AI feature and strictly on
  * SUPER_ADMIN (or a platform owner).
@@ -13,13 +14,14 @@ import { saveAiConfig } from '@grc/ai/config';
 import { isProvider } from '@grc/ai/providers';
 import { aiEnabled } from '@grc/ai/gate';
 import { writeAuditLog } from '@grc/repos/audit';
+import { can } from '@grc/auth/rbac';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
   if (!grc) return new Response(null, { status: 303, headers: { location: '/login' } });
   if (
     !aiEnabled((f) => grc.hasFeature(f)) ||
-    (!grc.isPlatformOwner && grc.roleCode !== 'SUPER_ADMIN')
+    (!grc.isPlatformOwner && !can(locals, 'update', 'CONFIG'))
   ) {
     return new Response('Forbidden', { status: 403 });
   }
