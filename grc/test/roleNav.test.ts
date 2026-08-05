@@ -39,7 +39,7 @@ test('a platform owner sees the setup group and the whole workbench', () => {
   const paths = hrefs(nav);
   assert.ok(paths.includes('/work-papers'));
   assert.ok(paths.includes('/reports'));
-  assert.ok(paths.includes('/users'));
+  assert.ok(paths.includes('/settings/users'));
   assert.ok(paths.includes('/settings'));
 });
 
@@ -50,7 +50,7 @@ test('an ordinary auditor sees the workbench they have permission for, not setup
   const paths = hrefs(nav);
   assert.ok(paths.includes('/work-papers'));
   assert.ok(paths.includes('/action-plans'));
-  assert.ok(!paths.includes('/users'));
+  assert.ok(!paths.includes('/settings/users'));
   assert.ok(!paths.includes('/settings'));
   // Auditee section only shows with the review permission or an auditee role.
   assert.ok(!paths.includes('/auditee-responses'));
@@ -62,7 +62,7 @@ test('an auditee sees the auditee section and the dashboard, not setup or report
   assert.ok(paths.includes('/')); // dashboard for all
   assert.ok(paths.includes('/auditee-responses'));
   assert.ok(paths.includes('/action-plans'));
-  assert.ok(!paths.includes('/users'));
+  assert.ok(!paths.includes('/settings/users'));
   assert.ok(!paths.includes('/reports'));
 });
 

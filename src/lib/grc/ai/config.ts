@@ -7,6 +7,12 @@
  * organization_id sentinel rather than a real organisation. Column names come
  * from the typed schema layer; the live `config` table keys rows by
  * organization_id (there is no `scope` column).
+ *
+ * The live schema may enforce a foreign key from config.organization_id to
+ * organizations (connections run with foreign keys ON), which would refuse the
+ * sentinel and 500 the save. saveAiConfig self-heals: when the first write is
+ * refused it creates the inactive GLOBAL sentinel organisation row (data, not
+ * schema) and retries once, so the save round-trips either way.
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
@@ -90,6 +96,26 @@ async function setConfig(db: Client, key: string, value: string): Promise<void> 
   }
 }
 
+/**
+ * Create the inactive GLOBAL sentinel organisation the platform-wide config rows
+ * hang off, for a schema that enforces the organizations foreign key. Inactive
+ * (is_active 0), so it never appears in organisation lists or the switcher.
+ */
+async function ensureGlobalSentinel(db: Client): Promise<void> {
+  const org = cols(C.organizations);
+  const existing = await db.execute({
+    sql: `SELECT ${org.organization_id} FROM organizations WHERE ${org.organization_id} = ? LIMIT 1`,
+    args: [GLOBAL],
+  });
+  if (existing.rows.length > 0) return;
+  await db.execute({
+    sql: `INSERT INTO organizations
+            (${org.organization_id}, ${org.org_code}, ${org.org_name}, ${org.is_active}, ${org.created_at})
+          VALUES (?, ?, ?, 0, ?)`,
+    args: [GLOBAL, GLOBAL, 'Platform (global configuration)', new Date().toISOString()],
+  });
+}
+
 export interface AiConfigInput {
   activeProvider: string;
   model: string;
@@ -114,7 +140,16 @@ export async function saveAiConfig(db: Client, input: AiConfigInput): Promise<vo
     ['AI_ENABLED_ANTHROPIC', input.enabled.anthropic ? 'true' : 'false'],
     ['AI_ENABLED_GOOGLE', input.enabled.google ? 'true' : 'false'],
   ];
+  let healed = false;
   for (const [key, value] of pairs) {
-    await setConfig(db, key, value);
+    try {
+      await setConfig(db, key, value);
+    } catch (err) {
+      if (healed) throw err;
+      healed = true;
+      console.error('[grc.ai.config] first write refused, creating the GLOBAL sentinel', err);
+      await ensureGlobalSentinel(db);
+      await setConfig(db, key, value);
+    }
   }
 }

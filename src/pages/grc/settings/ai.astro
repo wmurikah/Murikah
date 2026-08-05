@@ -10,8 +10,10 @@ export const prerender = false;
  * strictly on SUPER_ADMIN (or a platform owner).
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
 import { loadAiConfig, type AiConfig } from '@grc/ai/config';
 import { PROVIDERS, PROVIDER_LABELS, DEFAULT_MODELS, type Provider } from '@grc/ai/providers';
 import { keyPresence, maskedKey } from '@grc/ai/env';
@@ -23,12 +25,15 @@ const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const allowed = hasAi && (grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN');
 const done = Astro.url.searchParams.get('done');
 
-let config: AiConfig | null = null;
+let config = null as AiConfig | null;
 let presence: Record<Provider, boolean> = { openai: false, anthropic: false, google: false };
 let masked: Record<Provider, string> = { openai: '', anthropic: '', google: '' };
+let loadError = false;
 if (allowed) {
-  const db = await getDb(getGrcEnv());
-  config = await loadAiConfig(db);
+  loadError = !(await guardPageLoad('settings.ai', async () => {
+    const db = await getDb(getGrcEnv());
+    config = await loadAiConfig(db);
+  }));
   presence = keyPresence();
   masked = {
     openai: maskedKey('openai'),
@@ -59,6 +64,8 @@ const c = config;
       <p class="grc-error" role="alert">
         AI configuration is restricted to administrators.
       </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The AI settings" />
     ) : c ? (
       <>
         {done && (

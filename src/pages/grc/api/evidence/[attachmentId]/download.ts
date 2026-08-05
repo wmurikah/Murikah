@@ -59,7 +59,14 @@ export const GET: APIRoute = async ({ params, locals }) => {
         'content-disposition': `attachment; filename="${safeFilename(att.fileName)}"`,
       },
     });
-  } catch {
-    return new Response('The evidence is not available right now.', { status: 502 });
+  } catch (err) {
+    // The storage backend refused or is unconfigured: a deliberate, logged
+    // unavailability in the same JSON 503 contract the upload endpoints use,
+    // never a blank failure.
+    console.error('[grc.evidence.download] backend unavailable', err);
+    return new Response(JSON.stringify({ error: 'The evidence is not available right now.' }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    });
   }
 };
