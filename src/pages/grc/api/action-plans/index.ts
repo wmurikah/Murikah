@@ -15,6 +15,7 @@ import { createActionPlan, parseActionPlanInput } from '@grc/repos/actionPlans';
 import { resolveOwners, setOwners } from '@grc/repos/actionPlanOwners';
 import { enqueueNotification } from '@grc/repos/notify';
 import { writeAuditLog } from '@grc/repos/audit';
+import { bindDraftAttachments } from '@grc/repos/evidence';
 import { getWorkPaper } from '@grc/repos/workPapers';
 import { loadAiConfig } from '@grc/ai/config';
 import { evaluateAuditeeResponse } from '@grc/ai/features';
@@ -89,6 +90,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const id = await createActionPlan(db, grc.organizationId, grc.userId, input, auditeeProposed);
+
+  // Evidence staged on the create form becomes this plan's evidence.
+  const draftToken = String(form.get('draft_token') ?? '').trim();
+  if (draftToken !== '') {
+    try {
+      await bindDraftAttachments(
+        db,
+        grc.organizationId,
+        grc.userId,
+        'action_plan_draft',
+        draftToken,
+        'action_plan',
+        id,
+      );
+    } catch (err) {
+      console.error('[grc.evidence.bind] draft binding failed', err);
+    }
+  }
 
   if (ownerIds.length > 0) {
     const owners = await resolveOwners(db, grc.organizationId, ownerIds);

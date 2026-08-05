@@ -9,6 +9,7 @@ export const prerender = false;
  * WORK_PAPERS.view.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import { renderRichHtml } from '@grc/richtext';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -87,6 +88,11 @@ const editable = wp ? isEditable(wp.status) : false;
 const val = (key: string): string => {
   const raw = wp?.[key];
   return raw == null || String(raw) === '' ? '-' : String(raw);
+};
+// Narrative fields render their stored Markdown as safe, escaped HTML.
+const rich = (key: string): string => {
+  const raw = wp?.[key];
+  return raw == null || String(raw) === '' ? '<p>-</p>' : renderRichHtml(String(raw));
 };
 ---
 
@@ -226,23 +232,23 @@ const val = (key: string): string => {
             </>
             <>
               <dt>Control objectives</dt>
-              <dd>{val('control_objectives')}</dd>
+              <dd class="grc-richbody" set:html={rich('control_objectives')} />
             </>
             <>
               <dt>Risk description</dt>
-              <dd>{val('risk_description')}</dd>
+              <dd class="grc-richbody" set:html={rich('risk_description')} />
             </>
             <>
               <dt>Test objective</dt>
-              <dd>{val('test_objective')}</dd>
+              <dd class="grc-richbody" set:html={rich('test_objective')} />
             </>
             <>
               <dt>Testing steps</dt>
-              <dd>{val('testing_steps')}</dd>
+              <dd class="grc-richbody" set:html={rich('testing_steps')} />
             </>
             <>
               <dt>Observation</dt>
-              <dd>{val('observation_description')}</dd>
+              <dd class="grc-richbody" set:html={rich('observation_description')} />
             </>
             <>
               <dt>Risk rating</dt>
@@ -250,15 +256,15 @@ const val = (key: string): string => {
             </>
             <>
               <dt>Risk summary</dt>
-              <dd>{val('risk_summary')}</dd>
+              <dd class="grc-richbody" set:html={rich('risk_summary')} />
             </>
             <>
               <dt>Recommendation</dt>
-              <dd>{val('recommendation')}</dd>
+              <dd class="grc-richbody" set:html={rich('recommendation')} />
             </>
             <>
               <dt>Management response</dt>
-              <dd>{val('management_response')}</dd>
+              <dd class="grc-richbody" set:html={rich('management_response')} />
             </>
           </dl>
         </div>

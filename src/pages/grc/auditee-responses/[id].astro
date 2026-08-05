@@ -13,6 +13,8 @@ export const prerender = false;
  * another team's finding.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcRichText from '@/components/grc/GrcRichText.astro';
+import { renderRichHtml } from '@grc/richtext';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -218,10 +220,14 @@ const failed = Astro.url.searchParams.get('error');
                       {r.submittedByName ?? 'Unknown'} on {fmtDate(r.submittedDate)}
                     </span>
                   </div>
-                  <p class="grc-round__body">{r.managementResponse}</p>
+                  <div
+                    class="grc-round__body grc-richbody"
+                    set:html={renderRichHtml(r.managementResponse)}
+                  />
                   {r.reviewComments && (
                     <p class="grc-round__review">
-                      <strong>Reviewer:</strong> {r.reviewComments}
+                      <strong>Reviewer:</strong>
+                      <span class="grc-richbody" set:html={renderRichHtml(r.reviewComments)} />
                       <span class="grc-round__who">
                         {' '}
                         ({r.reviewedByName ?? 'Reviewer'}, {fmtDate(r.reviewDate)})
@@ -236,12 +242,11 @@ const failed = Astro.url.searchParams.get('error');
                     >
                       <div class="grc-field">
                         <label for={`rc-${r.responseId}`}>Review comments</label>
-                        <textarea
+                        <GrcRichText
                           id={`rc-${r.responseId}`}
                           name="review_comments"
-                          class="grc-textarea"
-                          rows="3"
-                          maxlength="2000"
+                          rows={3}
+                          maxlength={2000}
                         />
                       </div>
                       <div class="grc-actionbar">
@@ -284,13 +289,12 @@ const failed = Astro.url.searchParams.get('error');
               <input type="hidden" name="work_paper_id" value={id} />
               <div class="grc-field">
                 <label for="management_response">Management response</label>
-                <textarea
+                <GrcRichText
                   id="management_response"
                   name="management_response"
-                  class="grc-textarea"
+                  rows={6}
+                  maxlength={4000}
                   required
-                  rows="6"
-                  maxlength="4000"
                 />
                 <p class="grc-field__hint">
                   Explain what management accepts, disputes, and what will be done.
