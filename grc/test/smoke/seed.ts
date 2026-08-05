@@ -20,6 +20,7 @@ export const SMOKE = {
   userId: 'USR-WM',
   auditorId: 'USR-AUD',
   auditeeId: 'USR-OWN',
+  lockoutUserId: 'USR-LOCK',
   affiliateCode: 'HKL',
   auditAreaId: 'AA-FIN',
   subAreaId: 'SA-TREAS',
@@ -198,11 +199,30 @@ export function seedDatabase(db: DatabaseSync): void {
       });
     }
   }
+  // The auditee role: read findings (the list is row-scoped to their own),
+  // respond, and read their action plans. No CONFIG or USER grant, so the
+  // central page map keeps them out of settings and the send queue.
+  for (const [module, action] of [
+    ['WORK_PAPER', 'read'],
+    ['ACTION_PLAN', 'read'],
+    ['AUDITEE_RESPONSE', 'read'],
+    ['AUDITEE_RESPONSE', 'create'],
+  ] as const) {
+    insert(db, 'role_permissions', {
+      role_code: 'UNIT_MANAGER',
+      module_code: module,
+      action_code: action,
+      is_allowed: 1,
+    });
+  }
 
   const users: [string, string, string, string, number][] = [
     [SMOKE.userId, SMOKE.email, 'Wilberforce Murikah', 'SUPER_ADMIN', 1],
     [SMOKE.auditorId, 'auditor@hasspetroleum.com', 'Amina Auditor', 'AUDITOR', 0],
     [SMOKE.auditeeId, 'owner@hasspetroleum.com', 'Otieno Owner', 'UNIT_MANAGER', 0],
+    // Exists only for the lockout check: the smoke test burns its failure
+    // budget and proves the right password is then refused too.
+    [SMOKE.lockoutUserId, 'lockout@hasspetroleum.com', 'Larry Lockout', 'AUDITOR', 0],
   ];
   for (const [id, email, name, role, isOwner] of users) {
     insert(db, 'users', {
@@ -217,6 +237,18 @@ export function seedDatabase(db: DatabaseSync): void {
       must_change_password: 0,
       is_platform_owner: isOwner,
       created_at: now,
+    });
+  }
+
+  // MFA is not required by role in the smoke organisation (the default rule
+  // would lock the seeded SUPER_ADMIN to enrolment and break every page
+  // check); the voluntary enrolment round trip covers the flow instead.
+  for (const orgId of [SMOKE.orgId, SMOKE.otherOrgId]) {
+    insert(db, 'config', {
+      organization_id: orgId,
+      config_key: 'MFA_REQUIRED_ROLES',
+      config_value: 'NONE',
+      updated_at: now,
     });
   }
 

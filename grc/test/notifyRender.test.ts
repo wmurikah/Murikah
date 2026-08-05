@@ -22,14 +22,24 @@ import {
   escapeHtml,
 } from '../../src/lib/grc/notify/render.ts';
 
-test('the catalogue has the eighteen source types plus the due-soon reminder', () => {
-  assert.equal(NOTIFICATION_TYPES.length, 19);
+test('the catalogue has the source types plus due-soon and password-reset', () => {
+  assert.equal(NOTIFICATION_TYPES.length, 20);
   assert.ok(NOTIFICATION_TYPES.includes('DUE_SOON_REMINDER'));
+  assert.ok(NOTIFICATION_TYPES.includes('PASSWORD_RESET'));
   for (const t of NOTIFICATION_TYPES) {
     const m = TYPE_META[t];
     assert.ok(m.priority === 'normal' || m.priority === 'urgent');
-    assert.ok(m.entity === 'work_paper' || m.entity === 'action_plan');
+    assert.ok(m.entity === 'work_paper' || m.entity === 'action_plan' || m.entity === 'user');
   }
+});
+
+test('the password-reset email is urgent, never copies HOA, and carries the link', () => {
+  assert.equal(priorityOf('PASSWORD_RESET'), 'urgent');
+  assert.equal(ccsHoa('PASSWORD_RESET'), false);
+  const link = 'https://grc.murikah.com/reset-password?token=abc123';
+  const rendered = renderNotification(null, 'PASSWORD_RESET', { link });
+  assert.ok(rendered.subject.toLowerCase().includes('reset'));
+  assert.ok(rendered.body.includes(link), 'the reset link must appear in the email body');
 });
 
 test('the due-soon reminder warns without urgency and renders a fallback', () => {

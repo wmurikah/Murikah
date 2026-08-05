@@ -52,8 +52,16 @@ export function isGrcPassthroughAsset(pathname: string): boolean {
 }
 
 // Public, unauthenticated app paths on the grc host, in root-relative form: the
-// sign-in screen and the sign-in endpoint only.
-const PUBLIC_GRC_PATHS = new Set(['/login', '/api/auth/login']);
+// sign-in screen and endpoint, and the forgotten-password flow (its two screens
+// and endpoints), which by nature runs before a session exists.
+const PUBLIC_GRC_PATHS = new Set([
+  '/login',
+  '/api/auth/login',
+  '/forgot-password',
+  '/api/auth/forgot-password',
+  '/reset-password',
+  '/api/auth/reset-password',
+]);
 
 export function isGrcPublicPath(appPath: string): boolean {
   return PUBLIC_GRC_PATHS.has(appPath);
@@ -79,6 +87,36 @@ export function isGrcChangePasswordExempt(appPath: string): boolean {
 
 /** The change-password screen, in root-relative form. */
 export const GRC_CHANGE_PASSWORD_PATH = '/change-password';
+
+// The only paths a half-authorised (MFA pending) session may reach: the TOTP
+// step, its endpoint, and sign-out. Everything else redirects to the step.
+const MFA_PENDING_ALLOWED = new Set(['/mfa', '/api/auth/mfa/verify', '/api/auth/logout']);
+
+export function isGrcMfaPendingAllowed(appPath: string): boolean {
+  return MFA_PENDING_ALLOWED.has(appPath);
+}
+
+// The only paths a user whose role requires MFA may reach before enrolling:
+// the enrolment screen and its endpoints, sign-out, and the change-password
+// flow (a forced password change may precede enrolment).
+const MFA_ENROL_EXEMPT = new Set([
+  '/mfa/setup',
+  '/api/auth/mfa/enrol',
+  '/api/auth/mfa/confirm',
+  '/api/auth/logout',
+  '/change-password',
+  '/api/auth/change-password',
+]);
+
+export function isGrcMfaEnrolExempt(appPath: string): boolean {
+  return MFA_ENROL_EXEMPT.has(appPath);
+}
+
+/** The TOTP verification step, in root-relative form. */
+export const GRC_MFA_PATH = '/mfa';
+
+/** The enrolment screen, in root-relative form. */
+export const GRC_MFA_SETUP_PATH = '/mfa/setup';
 
 /**
  * On the marketing apex, a /grc path is sent to the subdomain, mirroring how

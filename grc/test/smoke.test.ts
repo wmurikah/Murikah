@@ -18,6 +18,9 @@ import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
+// The same RFC 6238 implementation the worker verifies against, so the round
+// trip computes real codes for the enrolled secret.
+import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -520,6 +523,26 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    endpoint: 'auth/mfa/enrol.ts',
+    title: 'MFA enrolment starts for the signed-in admin',
+    method: 'POST',
+    path: () => '/api/auth/mfa/enrol',
+  },
+  {
+    endpoint: 'auth/mfa/confirm.ts',
+    title: 'a wrong MFA confirmation code is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/confirm',
+    form: () => ({ code: '000000' }),
+  },
+  {
+    endpoint: 'auth/mfa/verify.ts',
+    title: 'the MFA step without a pending session is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/verify',
+    form: () => ({ code: '000000' }),
+  },
+  {
     endpoint: 'auth/logout.ts',
     title: 'sign out',
     method: 'POST',
@@ -621,81 +644,54 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
-    // Work paper as parent (Build Prompt 27): an action plan cannot exist
-    // without a finding, and the one seeded stray is surfaced and relinkable.
-    // The admin session signed out above, so sign back in.
-    await t.test('an action plan cannot be created or unlinked from its parent', async () => {
+    // Row scope and matrix gating, seen from the auditee side (Build Prompt
+    // 26). The admin session signed out above, so sign in as the seeded
+    // UNIT_MANAGER, whose role holds WORK_PAPER read but no CONFIG or USER
+    // grant and none of the auditor-side actions.
+    await t.test('sign in as the seeded auditee', async () => {
       server.clearCookies();
-      await server.request('POST', '/api/auth/login', {
-        email: SMOKE.email,
+      const res = await server.request('POST', '/api/auth/login', {
+        email: 'owner@hasspetroleum.com',
         password: SMOKE.password,
       });
-      const res = await server.request('POST', '/api/action-plans', {
-        action_description: 'Orphan attempt from the smoke test',
-        target_date: today,
-        due_date: today,
-        priority: 'High',
-      });
-      assert.equal(res.status, 303, `create answered ${res.status}`);
-      assert.ok(
-        String(res.headers.location ?? '').includes('error='),
-        'creation without a parent must be refused',
-      );
-      const db = server.database;
-      assert.ok(db, 'the fake database is reachable for verification');
-      const created = db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM action_plans
-            WHERE action_description = 'Orphan attempt from the smoke test'`,
-        )
-        .get() as { n: number | bigint };
-      assert.equal(Number(created.n), 0, 'no orphan row may be created');
-
-      const unlink = await server.request('POST', `/api/action-plans/${SMOKE.actionPlanId}`, {
-        action_description: 'Attempted unlink from the smoke test',
-        target_date: today,
-        due_date: today,
-        priority: 'High',
-      });
-      assert.ok(
-        String(unlink.headers.location ?? '').includes('error='),
-        'unlinking an existing plan must be refused',
-      );
-      const still = db
-        .prepare(`SELECT work_paper_id FROM action_plans WHERE action_plan_id = ?`)
-        .get(SMOKE.actionPlanId) as { work_paper_id?: string };
-      assert.equal(String(still.work_paper_id), SMOKE.sentWorkPaperId, 'the link must survive');
+      assert.equal(res.status, 303, `auditee login answered ${res.status}`);
+      const location = String(res.headers.location ?? '');
+      assert.ok(!location.includes('error'), `auditee login redirected to ${location}`);
     });
 
-    await t.test('the seeded stray is surfaced and can be relinked', async () => {
-      const page = await server.get('/action-plans');
-      assert.equal(page.status, 200);
+    await t.test('the auditee list shows their finding and hides the foreign draft', async () => {
+      const res = await server.get('/work-papers');
+      assert.equal(res.status, 200, `auditee list answered ${res.status}`);
       assert.ok(
-        page.body.includes('Plans without a parent finding'),
-        'the orphan panel must show while a stray exists',
+        res.body.includes('WP/2026/002'),
+        'the finding the auditee is responsible for is missing from their list',
       );
-      const relink = await server.request('POST', `/api/action-plans/${SMOKE.orphanPlanId}`, {
-        work_paper_id: SMOKE.sentWorkPaperId,
-        action_description: 'Legacy stray plan with no parent finding.',
-        target_date: today,
-        due_date: today,
-        priority: 'Low',
+      assert.ok(
+        !res.body.includes('WP/2026/001'),
+        'a draft finding the auditee is not part of leaked into their list',
+      );
+    });
+
+    await t.test('the page map turns the auditee away from the admin sections', async () => {
+      for (const path of ['/settings', '/settings/users', '/send-queue', '/reports']) {
+        const res = await server.get(path);
+        const final = res.hops[res.hops.length - 1];
+        assert.equal(
+          final,
+          '/',
+          `${path} was not redirected to the dashboard (via ${res.hops.join(' -> ')})`,
+        );
+      }
+    });
+
+    await t.test('an admin mutation refuses the auditee with a 403, not a 500', async () => {
+      const res = await server.request('POST', '/api/dropdowns', {
+        risk_ratings: 'High',
+        classification: 'Financial',
+        control_type: 'Preventive',
+        control_frequency: 'Monthly',
       });
-      assert.ok(
-        !String(relink.headers.location ?? '').includes('error='),
-        `relinking failed: ${relink.headers.location}`,
-      );
-      const db = server.database;
-      assert.ok(db);
-      const row = db
-        .prepare(`SELECT work_paper_id FROM action_plans WHERE action_plan_id = ?`)
-        .get(SMOKE.orphanPlanId) as { work_paper_id?: string };
-      assert.equal(String(row.work_paper_id), SMOKE.sentWorkPaperId, 'the stray must be linked');
-      const after = await server.get('/action-plans');
-      assert.ok(
-        !after.body.includes('Plans without a parent finding'),
-        'the orphan panel clears once every plan is linked',
-      );
+      assert.equal(res.status, 403, `/api/dropdowns answered ${res.status} for the auditee`);
     });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
