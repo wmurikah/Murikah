@@ -400,10 +400,24 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'reports/export.ts',
-    title: 'export a board report',
+    title: 'export the period audit report',
     method: 'POST',
     path: () => '/api/reports/export',
-    form: () => ({ report_type: 'comprehensive', year: '2026' }),
+    form: () => ({ type: 'executive', year: '2026' }),
+  },
+  {
+    endpoint: 'reports/export.ts',
+    title: 'export the BARC board pack',
+    method: 'POST',
+    path: () => '/api/reports/export',
+    form: () => ({ type: 'barc', year: '2026' }),
+  },
+  {
+    endpoint: 'reports/export.ts',
+    title: 'export the observation trend',
+    method: 'POST',
+    path: () => '/api/reports/export',
+    form: () => ({ type: 'trend', year: '2026' }),
   },
   {
     endpoint: 'send-queue/retry.ts',
