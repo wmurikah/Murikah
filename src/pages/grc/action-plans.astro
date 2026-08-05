@@ -26,10 +26,12 @@ import { can } from '@grc/auth/rbac';
 import { guardPageLoad } from '@grc/pageGuard';
 import {
   listActionPlans,
+  listOrphanActionPlans,
   computeStats,
   type ActionPlanListRow,
   type ActionPlanFilters,
   type ActionPlanStats,
+  type OrphanActionPlan,
   type Viewer,
 } from '@grc/repos/actionPlans';
 import {
@@ -84,7 +86,9 @@ let statuses: string[] = [];
 let labels = new Map<string, string>();
 let transitions: TransitionRule[] = [];
 let terminals: string[] = [];
+let orphans: OrphanActionPlan[] = [];
 let loadError = false;
+const canRelink = can(Astro.locals, 'update', 'ACTION_PLAN');
 if (allowed) {
   loadError = !(await guardPageLoad('action-plans.list', async () => {
     const db = await getDb(getGrcEnv());
@@ -101,6 +105,9 @@ if (allowed) {
       ],
     );
     stats = computeStats(rows);
+    // Strays from before the parent rule, shown to auditors so each gets
+    // linked through its edit screen rather than stranded.
+    if (canRelink) orphans = await listOrphanActionPlans(db, grc.organizationId);
   }));
 }
 
@@ -205,6 +212,26 @@ const done = p.get('done');
       <GrcErrorCard subject="The action plans list" />
     ) : (
       <>
+        {orphans.length > 0 && (
+          <div class="grc-panel" style="margin-bottom:1rem">
+            <h2>Plans without a parent finding</h2>
+            <p>
+              Every action plan must be linked to the finding it remediates. These plans predate
+              that rule and are invisible to the finding drill-downs and reports until they are
+              linked. Open each one and choose its work paper.
+            </p>
+            <ul>
+              {orphans.map((o) => (
+                <li>
+                  <a href={`/action-plans/${o.id}/edit`}>
+                    {o.actionNumber}: {o.description.slice(0, 90)}
+                  </a>{' '}
+                  <span class="grc-tone--muted">({o.status})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div class="grc-stats" role="group" aria-label="Action plan summary">
           <div class="grc-stat">
             <span class="grc-stat__n">{stats.total}</span>

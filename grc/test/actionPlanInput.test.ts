@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseActionPlanInput,
+  checkActionPlanInput,
   safeReturnPath,
   PRIORITIES,
 } from '../../src/lib/grc/repos/actionPlanInput.ts';
@@ -52,6 +53,22 @@ test('blank fields become null rather than empty strings', () => {
   assert.equal(input.implementationNotes, null);
   assert.equal(input.targetDate, null);
   assert.equal(input.dueDate, null);
+});
+
+test('the parent finding is required: no description, no parent, no plan', () => {
+  const linked = parseActionPlanInput(
+    form({ action_description: 'Reconcile monthly.', work_paper_id: 'WP-1' }),
+  );
+  assert.equal(checkActionPlanInput(linked), null);
+  const noParent = parseActionPlanInput(form({ action_description: 'Reconcile monthly.' }));
+  assert.match(String(checkActionPlanInput(noParent)), /parent finding/);
+  // A blank selection is the same as none.
+  const blankParent = parseActionPlanInput(
+    form({ action_description: 'Reconcile monthly.', work_paper_id: '   ' }),
+  );
+  assert.match(String(checkActionPlanInput(blankParent)), /parent finding/);
+  const noDescription = parseActionPlanInput(form({ work_paper_id: 'WP-1' }));
+  assert.match(String(checkActionPlanInput(noDescription)), /description/);
 });
 
 test('the priority vocabulary runs most to least severe', () => {
