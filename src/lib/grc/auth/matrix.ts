@@ -50,26 +50,69 @@ export interface PagePermission {
   action: string;
 }
 
-/** Page slug to its required module and action (PAGE_PERMISSION_MAP). */
-export const PAGE_PERMISSION_MAP: Record<string, PagePermission> = {
-  'work-papers': { module: 'WORK_PAPER', action: 'read' },
-  'work-paper-view': { module: 'WORK_PAPER', action: 'read' },
-  'send-queue': { module: 'WORK_PAPER', action: 'read' },
-  'work-paper-form': { module: 'WORK_PAPER', action: 'create' },
-  'responses-to-review': { module: 'AUDITEE_RESPONSE', action: 'read' },
-  'audit-workbench': { module: 'AUDIT_WORKBENCH', action: 'read' },
-  'action-plans': { module: 'ACTION_PLAN', action: 'read' },
-  'audit-reports': { module: 'REPORT', action: 'read' },
-  'ai-assist': { module: 'AI_ASSIST', action: 'read' },
-  'user-management': { module: 'USER', action: 'read' },
-  'system-settings': { module: 'CONFIG', action: 'read' },
-  'audit-log': { module: 'AUDIT_LOG', action: 'read' },
+/**
+ * Page slug to the grants that unlock it: holding ANY listed grant suffices.
+ * The slugs are the real route sections under /grc (first path segment, or the
+ * first two for /settings/*), so the map describes the deployed product and the
+ * middleware can enforce it centrally. Pages keep their own, sometimes stricter,
+ * gates (e.g. work-papers/new needs create); this map is the section door.
+ *
+ * Sections with only identity- or row-scoped access carry no entry and pass:
+ * the dashboard (self-gates in the shell), notifications (user-scoped),
+ * change-password, and settings/provision (platform owner, not a role grant).
+ */
+export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
+  'work-papers': [{ module: 'WORK_PAPER', action: 'read' }],
+  'action-plans': [
+    { module: 'ACTION_PLAN', action: 'read' },
+    // An auditee proposing a plan reaches /action-plans/new on this grant alone.
+    { module: 'AUDITEE_RESPONSE', action: 'create' },
+  ],
+  'auditee-responses': [
+    // The queue serves the auditee (respond) and the reviewer (approve) sides.
+    { module: 'AUDITEE_RESPONSE', action: 'create' },
+    { module: 'AUDITEE_RESPONSE', action: 'read' },
+    { module: 'WORK_PAPER', action: 'approve' },
+  ],
+  reports: [{ module: 'REPORT', action: 'read' }],
+  analytics: [
+    { module: 'WORK_PAPER', action: 'read' },
+    { module: 'REPORT', action: 'read' },
+  ],
+  'send-queue': [{ module: 'CONFIG', action: 'read' }],
+  settings: [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'USER', action: 'read' },
+  ],
+  'settings/general': [{ module: 'CONFIG', action: 'read' }],
+  'settings/affiliates': [{ module: 'CONFIG', action: 'read' }],
+  'settings/audit-universe': [{ module: 'CONFIG', action: 'read' }],
+  'settings/dropdowns': [{ module: 'CONFIG', action: 'read' }],
+  'settings/access-control': [{ module: 'CONFIG', action: 'read' }],
+  'settings/ai': [{ module: 'CONFIG', action: 'read' }],
+  'settings/users': [{ module: 'USER', action: 'read' }],
 };
 
-/** Whether the matrix grants access to a mapped page slug. */
+/**
+ * The map slug for an app path: the first segment, or the first two under
+ * /settings ('/settings/users' stays distinct from the settings home). Returns
+ * '' for the root.
+ */
+export function pageSlugForPath(appPath: string): string {
+  const segments = appPath.split('/').filter((s) => s !== '');
+  if (segments.length === 0) return '';
+  if (segments[0] === 'settings' && segments.length > 1) return `settings/${segments[1]}`;
+  return segments[0];
+}
+
+/**
+ * Whether the matrix grants access to a mapped page slug. An unmapped slug is
+ * allowed here: those sections gate on identity or row scope, on the page.
+ */
 export function pageAccess(matrix: PermissionMatrix, slug: string): boolean {
   const need = PAGE_PERMISSION_MAP[slug];
-  return need ? canMatrix(matrix, need.action, need.module) : false;
+  if (!need) return true;
+  return need.some((p) => canMatrix(matrix, p.action, p.module));
 }
 
 export interface MatrixRow {
@@ -123,6 +166,10 @@ const LEGACY_MAP: Array<{ code: string; module: string; action: string }> = [
   { code: 'DASHBOARD.view', module: 'AUDIT_WORKBENCH', action: 'read' },
   { code: 'REPORTS.view', module: 'REPORT', action: 'read' },
   { code: 'REPORTS.board', module: 'REPORT', action: 'read' },
+  // The setup surfaces gate on the matrix (CONFIG and USER); the navigation,
+  // which reads legacy codes, follows the same grants through these two.
+  { code: 'CONFIG.view', module: 'CONFIG', action: 'read' },
+  { code: 'USERS.manage', module: 'USER', action: 'read' },
 ];
 
 /** The legacy permission codes a matrix grants (for perms.includes call sites). */

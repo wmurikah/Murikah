@@ -2,12 +2,13 @@
 export const prerender = false;
 
 /**
- * AI provider configuration (05_AIService.gs settings), SUPER_ADMIN only. Sets the
+ * AI provider configuration (05_AIService.gs settings). Sets the
  * active provider, per-provider enabled flags, model, max tokens, temperature,
  * system prompt, evaluation toggle and rejection threshold in the GLOBAL config;
  * the API keys are Worker secrets and only a masked tail is shown here. Each
  * provider's connection can be tested. Gated behind the plan's AI feature and
- * strictly on SUPER_ADMIN (or a platform owner).
+ * the matrix (CONFIG read; the save and test endpoints need CONFIG update),
+ * platform owner always.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
@@ -18,11 +19,12 @@ import { loadAiConfig, type AiConfig } from '@grc/ai/config';
 import { PROVIDERS, PROVIDER_LABELS, DEFAULT_MODELS, type Provider } from '@grc/ai/providers';
 import { keyPresence, maskedKey } from '@grc/ai/env';
 import { aiEnabled } from '@grc/ai/gate';
+import { can } from '@grc/auth/rbac';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
-const allowed = hasAi && (grc.isPlatformOwner || grc.roleCode === 'SUPER_ADMIN');
+const allowed = hasAi && (grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG'));
 const done = Astro.url.searchParams.get('done');
 
 let config = null as AiConfig | null;

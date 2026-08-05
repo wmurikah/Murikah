@@ -38,9 +38,15 @@ function hasPerm(ctx: NavContext, code: string): boolean {
   return ctx.isPlatformOwner || ctx.perms.includes(code);
 }
 
-/** Setup and the full workbench are the admin/super-admin view. */
+/**
+ * The setup section follows the matrix, through the derived legacy codes: any
+ * role granted CONFIG or USER read sees it (SUPER_ADMIN holds the full matrix,
+ * so it always qualifies; a platform owner always passes).
+ */
 function isAdmin(ctx: NavContext): boolean {
-  return ctx.isPlatformOwner || ctx.roleCode === 'SUPER_ADMIN';
+  return (
+    ctx.isPlatformOwner || ctx.perms.includes('CONFIG.view') || ctx.perms.includes('USERS.manage')
+  );
 }
 
 /** The sidebar badge counts, keyed as getSidebarCounts returns them. */
