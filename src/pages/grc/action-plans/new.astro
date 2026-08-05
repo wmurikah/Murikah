@@ -14,7 +14,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
 import { guardPageLoad } from '@grc/pageGuard';
-import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
+import { listWorkPaperOptions, PRIORITIES, type WorkPaperOption } from '@grc/repos/actionPlans';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { aiEnabled } from '@grc/ai/gate';
 import { AI_DISCLAIMER } from '@grc/ai/validation';
@@ -100,8 +100,38 @@ if (allowed) {
           </div>
 
           <div class="grc-field">
+            <label for="priority">Priority</label>
+            <select id="priority" name="priority" class="grc-select">
+              {PRIORITIES.map((pr) => (
+                <option value={pr} selected={pr === 'Medium'}>
+                  {pr}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="grc-field">
+            <label for="target">Target date</label>
+            <input type="date" id="target" name="target_date" class="grc-input" />
+            <p class="grc-field__hint">
+              The agreed remediation date. The due date defaults to it when left blank.
+            </p>
+          </div>
+
+          <div class="grc-field">
             <label for="due">Due date</label>
             <input type="date" id="due" name="due_date" class="grc-input" />
+          </div>
+
+          <div class="grc-field">
+            <label for="notes">Implementation notes</label>
+            <textarea
+              id="notes"
+              name="implementation_notes"
+              class="grc-textarea"
+              rows="3"
+              maxlength="2000"
+            />
           </div>
 
           <div class="grc-field">
