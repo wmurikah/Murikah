@@ -9,6 +9,8 @@
  * existing values (or null for a new draft) and the POST action.
  */
 import type { Option, SubAreaTemplate } from '@grc/repos/workPaperLookups';
+import GrcRichText from '@/components/grc/GrcRichText.astro';
+import GrcDraftEvidence from '@/components/grc/GrcDraftEvidence.astro';
 import type { ControlDropdowns } from '@grc/repos/dropdowns';
 
 interface Props {
@@ -22,9 +24,25 @@ interface Props {
   values: Record<string, unknown> | null;
   /** Offers the AI drafting help when the plan includes the AI feature. */
   hasAi?: boolean;
+  /**
+   * A random token the create form stages evidence uploads against; the save
+   * binds the staged files to the new finding. Absent on edit (the detail
+   * page uploads directly) and when storage is unconfigured.
+   */
+  draftToken?: string | null;
 }
-const { action, submitLabel, areas, affiliates, auditors, subAreas, dropdowns, values, hasAi } =
-  Astro.props;
+const {
+  action,
+  submitLabel,
+  areas,
+  affiliates,
+  auditors,
+  subAreas,
+  dropdowns,
+  values,
+  hasAi,
+  draftToken = null,
+} = Astro.props;
 
 const v = (key: string): string => {
   const raw = values?.[key];
@@ -158,9 +176,11 @@ const templateJson = JSON.stringify(
     <legend>Control</legend>
     <div class="grc-field">
       <label for="control_objectives">Control objectives</label>
-      <textarea id="control_objectives" name="control_objectives" class="grc-textarea"
-        >{v('control_objectives')}</textarea
-      >
+      <GrcRichText
+        id="control_objectives"
+        name="control_objectives"
+        value={v('control_objectives')}
+      />
     </div>
     <div class="grc-formgrid">
       <div class="grc-field">
@@ -219,21 +239,15 @@ const templateJson = JSON.stringify(
     <legend>Risk and testing</legend>
     <div class="grc-field">
       <label for="risk_description">Risk description</label>
-      <textarea id="risk_description" name="risk_description" class="grc-textarea"
-        >{v('risk_description')}</textarea
-      >
+      <GrcRichText id="risk_description" name="risk_description" value={v('risk_description')} />
     </div>
     <div class="grc-field">
       <label for="test_objective">Test objective</label>
-      <textarea id="test_objective" name="test_objective" class="grc-textarea"
-        >{v('test_objective')}</textarea
-      >
+      <GrcRichText id="test_objective" name="test_objective" value={v('test_objective')} />
     </div>
     <div class="grc-field">
       <label for="testing_steps">Testing steps</label>
-      <textarea id="testing_steps" name="testing_steps" class="grc-textarea"
-        >{v('testing_steps')}</textarea
-      >
+      <GrcRichText id="testing_steps" name="testing_steps" value={v('testing_steps')} />
     </div>
   </fieldset>
 
@@ -267,9 +281,11 @@ const templateJson = JSON.stringify(
           )
         }
       </div>
-      <textarea id="observation_description" name="observation_description" class="grc-textarea"
-        >{v('observation_description')}</textarea
-      >
+      <GrcRichText
+        id="observation_description"
+        name="observation_description"
+        value={v('observation_description')}
+      />
     </div>
     <div class="grc-formgrid">
       <div class="grc-field">
@@ -302,9 +318,7 @@ const templateJson = JSON.stringify(
     </div>
     <div class="grc-field">
       <label for="risk_summary">Risk summary</label>
-      <textarea id="risk_summary" name="risk_summary" class="grc-textarea"
-        >{v('risk_summary')}</textarea
-      >
+      <GrcRichText id="risk_summary" name="risk_summary" value={v('risk_summary')} />
     </div>
     <div class="grc-field">
       <div class="grc-aihead">
@@ -322,9 +336,7 @@ const templateJson = JSON.stringify(
           )
         }
       </div>
-      <textarea id="recommendation" name="recommendation" class="grc-textarea"
-        >{v('recommendation')}</textarea
-      >
+      <GrcRichText id="recommendation" name="recommendation" value={v('recommendation')} />
     </div>
     {
       hasAi && (
@@ -339,11 +351,22 @@ const templateJson = JSON.stringify(
     <legend>Management response</legend>
     <div class="grc-field">
       <label for="management_response">Management response</label>
-      <textarea id="management_response" name="management_response" class="grc-textarea"
-        >{v('management_response')}</textarea
-      >
+      <GrcRichText
+        id="management_response"
+        name="management_response"
+        value={v('management_response')}
+      />
     </div>
   </fieldset>
+
+  {
+    draftToken && (
+      <fieldset class="grc-fieldset">
+        <legend>Evidence</legend>
+        <GrcDraftEvidence entityType="work_paper_draft" draftToken={draftToken} />
+      </fieldset>
+    )
+  }
 
   <div class="grc-actionbar">
     <button type="submit" class="grc-btn grc-btn--primary">{submitLabel}</button>

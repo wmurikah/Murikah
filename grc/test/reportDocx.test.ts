@@ -98,6 +98,32 @@ test('makeZip produces a valid archive: PK signature and end-of-central-director
   assert.equal(zip[found + 10] | (zip[found + 11] << 8), 5);
 });
 
+test('narrative Markdown survives into WordML: marks, headings and lists', () => {
+  const doc = sampleDoc();
+  doc.blocks = [
+    {
+      kind: 'narrative',
+      text: '## Findings\nManagement **must** act *now*.\n- first control\n- second control\n1. do this\n2. then this',
+    },
+    { kind: 'list', title: 'Recommendations', items: ['Fix **all** reconciliations'] },
+  ];
+  const xml = documentXml(doc);
+  // Bold and italic runs, not one flat run.
+  assert.ok(xml.includes('<w:b/>'), 'a bold run is emitted');
+  assert.ok(xml.includes('<w:i/>'), 'an italic run is emitted');
+  assert.ok(xml.includes('>must<'), 'the bold text is its own run');
+  // The heading renders as its own styled paragraph, without the ## marker.
+  assert.ok(xml.includes('>Findings<'));
+  assert.ok(!xml.includes('##'), 'no raw Markdown markers leak into the pack');
+  assert.ok(!xml.includes('**'), 'no raw bold markers leak into the pack');
+  // Bullets and inline numbering, indented.
+  assert.ok(xml.includes('• '), 'bullet items are marked');
+  assert.ok(xml.includes('>1. <') || xml.includes('1. '), 'numbered items are numbered');
+  assert.ok(xml.includes('<w:ind w:left="360"/>'), 'list items are indented');
+  // A list block item with inline marks keeps them.
+  assert.ok(xml.includes('>all<'), 'inline marks inside list items are separate runs');
+});
+
 test('reportFilename is filesystem-safe', () => {
   assert.equal(reportFilename('executive', '2026-07-04'), 'board-report-executive-2026-07-04.docx');
   assert.equal(
