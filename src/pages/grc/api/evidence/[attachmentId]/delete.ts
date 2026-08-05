@@ -42,7 +42,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   }
 
   // A legal hold blocks the request outright; record the attempt.
-  if (await isUnderLegalHold(db, grc.organizationId, att.entityType, att.entityId)) {
+  if (await isUnderLegalHold(db, att.entityType, att.entityId)) {
     try {
       await writeAuditLog(db, {
         organizationId: grc.organizationId,
@@ -60,9 +60,9 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
 
   const form = await request.formData();
   const reason = String(form.get('reason') ?? '').trim() || 'requested by user';
-  const retainUntil = await retentionFloor(db, grc.organizationId, att.entityType, new Date());
+  const retainUntil = await retentionFloor(db, att.entityType, new Date());
 
-  await queueDeletion(db, grc.organizationId, {
+  await queueDeletion(db, {
     entityType: att.entityType,
     entityId: att.entityId,
     fileId: att.fileId,
