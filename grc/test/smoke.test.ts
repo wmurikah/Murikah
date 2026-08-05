@@ -498,15 +498,18 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
-    // The Kanban board and the list filters build their own queries, so cover
-    // the board and every filter rather than only the default table view.
-    await t.test('GET /action-plans as a Kanban board with every filter', async () => {
-      const board =
-        `/action-plans?view=kanban&q=reconciliation&status=In%20Progress` +
-        `&owner=${SMOKE.auditeeId}&area=${SMOKE.auditAreaId}` +
-        `&affiliate=${SMOKE.affiliateCode}&priority=High&year=2026`;
-      const res = await server.get(board);
-      assert.equal(res.status, 200, `board answered ${res.status}: ${res.body.slice(0, 300)}`);
+    // The list filters build their own WHERE clauses, so exercise them all at
+    // once (including the full-text search) rather than only the bare list.
+    await t.test('GET /work-papers with every filter applied', async () => {
+      const filtered =
+        `/work-papers?q=reconciliations&status=Draft&area=${SMOKE.auditAreaId}` +
+        `&affiliate=${SMOKE.affiliateCode}&auditor=${SMOKE.auditorId}&year=2026&risk=High`;
+      const res = await server.get(filtered);
+      assert.equal(
+        res.status,
+        200,
+        `filtered list answered ${res.status}: ${res.body.slice(0, 300)}`,
+      );
     });
 
     for (const step of MUTATION_STEPS) {

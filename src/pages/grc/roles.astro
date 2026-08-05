@@ -1,10 +1,5 @@
 ---
 export const prerender = false;
-import GrcPlaceholder from '@/components/grc/GrcPlaceholder.astro';
+// Roles and the permission matrix live in Setup; this route survives for old bookmarks.
+return Astro.redirect('/settings/access-control', 303);
 ---
-
-<GrcPlaceholder
-  title="Roles"
-  lead="Roles and their permission matrix."
-  note="Role and permission management arrives with the setup module."
-/>
