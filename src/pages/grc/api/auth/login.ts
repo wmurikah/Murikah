@@ -25,6 +25,10 @@ import { createSession } from '@grc/repos/session';
 import { createSessionCookie } from '@grc/auth/session';
 import { defaultLandingPath, isAuditeeRole } from '@grc/dashboard/roleNav';
 import { hasMyOverdue } from '@grc/repos/dashboard';
+import { throttleDecision } from '@grc/auth/loginThrottle';
+import { failureStreaks, recordLoginAttempt, recordSecurityEvent } from '@grc/repos/loginAttempts';
+import { getMfaRecord } from '@grc/repos/mfa';
+import { GRC_MFA_PATH } from '@grc/routing';
 
 const TAG = '[grc.auth.login]';
 const REQUIRED_BINDINGS = [
@@ -95,17 +99,75 @@ export const POST: APIRoute = async ({ request }) => {
 
     const env = getGrcEnv();
     const db = await getDb(env);
+    const ip = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for');
+    const userAgent = request.headers.get('user-agent');
+
+    // Durable throttle from login_attempts: a failure streak inside the window
+    // locks the email or the IP temporarily. The answer stays the generic
+    // failure so the throttle never becomes an account-existence oracle.
+    const streaks = await failureStreaks(db, emailNorm, ip);
+    const throttle = throttleDecision(streaks.byEmail, streaks.byIp);
+    if (throttle.locked) {
+      await recordLoginAttempt(db, {
+        email: emailNorm,
+        userId: null,
+        organizationId: null,
+        success: false,
+        failureReason: 'locked_out',
+        ip,
+        userAgent,
+      });
+      await recordSecurityEvent(db, {
+        eventType: 'LOGIN_LOCKOUT',
+        severity: 'warning',
+        userId: null,
+        actorEmail: emailNorm,
+        ip,
+        details: `Sign-in throttled: too many recent failures for this ${throttle.reason}.`,
+      });
+      return invalid(wantsJson);
+    }
 
     // The lookup already requires an active user and organisation, so a missing
     // row covers an unknown email and an inactive user or organisation alike.
     const user = await resolveUserByEmail(db, emailNorm);
-    if (!user || !user.passwordHash) return invalid(wantsJson);
+    if (!user || !user.passwordHash) {
+      await recordLoginAttempt(db, {
+        email: emailNorm,
+        userId: null,
+        organizationId: null,
+        success: false,
+        failureReason: 'unknown_email',
+        ip,
+        userAgent,
+      });
+      return invalid(wantsJson);
+    }
 
     const ok = await verifyPassword(password, user.passwordHash);
-    if (!ok) return invalid(wantsJson);
+    if (!ok) {
+      await recordLoginAttempt(db, {
+        email: emailNorm,
+        userId: user.userId,
+        organizationId: user.organizationId,
+        success: false,
+        failureReason: 'bad_password',
+        ip,
+        userAgent,
+      });
+      return invalid(wantsJson);
+    }
 
-    const ip = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for');
-    const userAgent = request.headers.get('user-agent');
+    await recordLoginAttempt(db, {
+      email: emailNorm,
+      userId: user.userId,
+      organizationId: user.organizationId,
+      success: true,
+      failureReason: null,
+      ip,
+      userAgent,
+    });
+
     const sessionId = await createSession(db, user.userId, { ip, userAgent });
 
     // Record the sign-in; never fail the login if this update does.
@@ -116,6 +178,23 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const secure = new URL(request.url).protocol === 'https:';
+
+    // A user with a confirmed second factor gets a half-authorised session:
+    // the cookie carries mfa=pending, and only the TOTP step accepts it.
+    const mfaRecord = await getMfaRecord(db, user.organizationId, user.userId);
+    if (mfaRecord?.confirmed) {
+      const pendingCookie = await createSessionCookie(
+        sessionId,
+        env.sessionSecret,
+        secure,
+        'pending',
+      );
+      return new Response(null, {
+        status: 303,
+        headers: { location: GRC_MFA_PATH, 'set-cookie': pendingCookie },
+      });
+    }
+
     const cookie = await createSessionCookie(sessionId, env.sessionSecret, secure);
 
     // Role-based default landing: an auditee lands on their overdue action plans

@@ -1,0 +1,62 @@
+---
+export const prerender = false;
+
+/**
+ * The TOTP step. Reached with a half-authorised session (cookie mfa=pending)
+ * after the password step; /api/auth/mfa/verify checks the code (or a backup
+ * code) and promotes the session. The middleware admits only this screen, its
+ * endpoint and sign-out while pending; a fully authorised visitor is sent
+ * home.
+ */
+import GrcAuthLayout from '@/layouts/GrcAuthLayout.astro';
+
+if (Astro.locals.grc) return Astro.redirect('/');
+
+const failed = Astro.url.searchParams.get('error') === '1';
+---
+
+<GrcAuthLayout title="Two-step verification">
+  <h1>Two-step verification</h1>
+  <p class="grc-authcard__lead">Enter the 6-digit code from your authenticator app.</p>
+
+  {
+    failed && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        That code was not valid. Please try again.
+      </p>
+    )
+  }
+
+  <form method="post" action="/api/auth/mfa/verify">
+    <div class="grc-field">
+      <label for="code">Verification code</label>
+      <input
+        type="text"
+        id="code"
+        name="code"
+        class="grc-input"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        pattern="[0-9]{6}"
+        maxlength="6"
+        aria-invalid={failed ? 'true' : undefined}
+      />
+    </div>
+    <div class="grc-field">
+      <label for="backup_code">Or a backup code</label>
+      <input
+        type="text"
+        id="backup_code"
+        name="backup_code"
+        class="grc-input"
+        autocomplete="off"
+        maxlength="20"
+      />
+    </div>
+    <button type="submit" class="grc-btn grc-btn--primary">Verify</button>
+  </form>
+
+  <form method="post" action="/api/auth/logout" style="margin-top:1rem">
+    <button type="submit" class="grc-btn grc-btn--secondary">Cancel and sign out</button>
+  </form>
+</GrcAuthLayout>
