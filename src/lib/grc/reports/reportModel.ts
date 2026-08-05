@@ -31,9 +31,11 @@ const AT_RISK_DAYS = 14;
 // ---- Constants -------------------------------------------------------------
 
 export const REPORT_TYPES: { value: ReportType; label: string }[] = [
-  { value: 'executive', label: 'Executive Summary' },
+  { value: 'executive', label: 'Period Audit Report' },
+  { value: 'barc', label: 'BARC Board Pack' },
   { value: 'observations', label: 'Detailed Observations' },
-  { value: 'tracker', label: 'Action Plan Tracker' },
+  { value: 'trend', label: 'Observation Trend' },
+  { value: 'tracker', label: 'Action Plan Status Summary' },
   { value: 'overdue', label: 'Overdue and At-Risk' },
 ];
 
@@ -495,7 +497,406 @@ function executiveSummary(
   ];
 }
 
-// ---- Detailed Observations -------------------------------------------------
+// ---- The house-style report frame ------------------------------------------
+
+/**
+ * Split a recommendation blob into the numbered points the house style wants.
+ * Auditors write these as newline-separated lines, or as "1. ... 2. ..." in one
+ * paragraph; both give the same list, and a single sentence stays one item.
+ */
+export function splitRecommendations(text: string | null): string[] {
+  const raw = (text ?? '').trim();
+  if (raw === '') return [];
+  const lines = raw
+    .split(/\r?\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const source =
+    lines.length > 1
+      ? lines
+      : // One line: split on embedded numbering such as "1." or "(2)", keeping
+        // the text that follows each marker.
+        raw
+          .split(/(?:^|\s)(?:\(?\d{1,2}[.)])\s+/)
+          .map((l) => l.trim())
+          .filter(Boolean);
+  return source.map((l) => l.replace(/^(?:\(?\d{1,2}[.)])\s*/, '').trim()).filter(Boolean);
+}
+
+/** The counts an introduction and executive narrative are written from. */
+function portfolioFacts(data: ReportDataset, now: Date) {
+  const { observations, actionPlans } = data;
+  const implemented = actionPlans.filter(isImplemented).length;
+  const overdue = actionPlans.filter((ap) => isPlanOverdue(ap, now)).length;
+  const high = observations.filter((o) => {
+    const b = normaliseRisk(o.riskRating);
+    return b === 'EXTREME' || b === 'HIGH';
+  }).length;
+  const affiliates = new Set(
+    observations.map((o) => affiliateKey(o.affiliateName, o.affiliateCode)),
+  ).size;
+  const responded = observations.filter((o) => o.responseStatus === 'Responded').length;
+  return {
+    observations: observations.length,
+    actionPlans: actionPlans.length,
+    implemented,
+    overdue,
+    high,
+    affiliates,
+    responded,
+    rate: percent(implemented, actionPlans.length),
+  };
+}
+
+/** The introduction: what the report covers and how to read it. */
+function introduction(data: ReportDataset, filters: ReportFilters, now: Date): ReportBlock[] {
+  const f = portfolioFacts(data, now);
+  return [
+    { kind: 'heading', text: '1. Introduction', level: 1 },
+    {
+      kind: 'narrative',
+      text:
+        `This report covers ${f.observations} audit ${plural(f.observations, 'observation')} ` +
+        `raised across ${f.affiliates} ${plural(f.affiliates, 'affiliate')}, together with the ` +
+        `${f.actionPlans} remediation ${plural(f.actionPlans, 'action plan')} agreed against them. ` +
+        `${filterSummary(filters)}.`,
+    },
+    {
+      kind: 'narrative',
+      text:
+        'Each observation is presented in the summary-and-proof style: a short analytical ' +
+        'statement of what was found and why it matters, a compact evidence table, and the ' +
+        'numbered recommendations agreed with management. The full detail of every observation ' +
+        'is carried in the appendix.',
+    },
+  ];
+}
+
+/** The review summary: how the portfolio stands, in words before tables. */
+function reviewSummary(data: ReportDataset, now: Date): ReportBlock[] {
+  const f = portfolioFacts(data, now);
+  const responseLine =
+    f.observations === 0
+      ? 'No observations fall within this scope.'
+      : `Management has responded to ${f.responded} of ${f.observations} ` +
+        `${plural(f.observations, 'observation')}.`;
+  const overdueLine =
+    f.overdue === 0
+      ? 'No agreed action is past its due date.'
+      : `${f.overdue} agreed ${plural(f.overdue, 'action')} ${f.overdue === 1 ? 'is' : 'are'} past ` +
+        'the date management committed to, and require the committee’s attention.';
+  return [
+    { kind: 'heading', text: '3. Review summary', level: 1 },
+    {
+      kind: 'narrative',
+      text:
+        `${f.high} of the ${f.observations} ${plural(f.observations, 'observation')} ` +
+        `${f.high === 1 ? 'carries' : 'carry'} a high or extreme risk rating. ` +
+        `${f.implemented} of ${f.actionPlans} agreed ${plural(f.actionPlans, 'action')} ` +
+        `${f.implemented === 1 ? 'has' : 'have'} been implemented, an implementation rate of ` +
+        `${f.rate} per cent. ${overdueLine} ${responseLine}`,
+    },
+  ];
+}
+
+function plural(n: number, singular: string): string {
+  return n === 1 ? singular : `${singular}s`;
+}
+
+// ---- BARC board pack -------------------------------------------------------
+
+/**
+ * The Board Audit and Risk Committee pack: the portfolio across affiliates
+ * rather than one engagement, so the committee sees where risk and unfinished
+ * remediation sit, and which affiliates are carrying them.
+ */
+function barcBoardPack(
+  data: ReportDataset,
+  now: Date,
+  labels?: Record<string, string>,
+): ReportBlock[] {
+  const { observations, actionPlans } = data;
+  const f = portfolioFacts(data, now);
+  // Due within the at-risk window and not already overdue, the same reading the
+  // overdue-and-at-risk report uses.
+  const atRisk = actionPlans.filter((ap) => {
+    if (isPlanOverdue(ap, now)) return false;
+    const due = parseMs(ap.dueDate);
+    if (due == null) return false;
+    const until = daysBetween(now.getTime(), due);
+    return until >= 0 && until <= AT_RISK_DAYS;
+  }).length;
+  const kpis: Kpi[] = [
+    { label: 'Affiliates covered', value: String(f.affiliates) },
+    { label: 'Observations', value: String(f.observations) },
+    { label: 'High and extreme risk', value: String(f.high), tone: f.high > 0 ? 'bad' : 'good' },
+    { label: 'Implementation rate', value: `${f.rate}%`, tone: implementationTone(f.rate) },
+    { label: 'Overdue actions', value: String(f.overdue), tone: f.overdue > 0 ? 'bad' : 'good' },
+    { label: 'Due within 14 days', value: String(atRisk), tone: atRisk > 0 ? 'warn' : undefined },
+  ];
+  return [
+    { kind: 'heading', text: '4. Portfolio position', level: 1 },
+    { kind: 'kpis', items: kpis },
+    {
+      kind: 'narrative',
+      text:
+        'The table below ranks affiliates by outstanding exposure, so the committee can see ' +
+        'where remediation is lagging rather than only the group total.',
+    },
+    byAffiliate(observations, actionPlans, now),
+    riskDistribution(observations),
+    byAuditArea(observations, actionPlans, now),
+    implementationStatus(actionPlans, labels),
+  ];
+}
+
+// ---- Observation trend -----------------------------------------------------
+
+/** The period an observation falls in, by its work paper date, else its year. */
+function periodKey(o: Observation): string {
+  const ms = parseMs(o.workPaperDate);
+  if (ms == null) return o.year == null ? 'Undated' : String(o.year);
+  const d = new Date(ms);
+  const quarter = Math.floor(d.getUTCMonth() / 3) + 1;
+  return `${d.getUTCFullYear()} Q${quarter}`;
+}
+
+/**
+ * The observation trend: how many observations were raised per period and at
+ * what risk, so the committee can see whether the control environment is
+ * improving rather than reading a single point in time.
+ */
+function observationTrend(data: ReportDataset): ReportBlock[] {
+  const { observations, actionPlans } = data;
+  const periods = new Map<string, Observation[]>();
+  for (const o of observations) {
+    const key = periodKey(o);
+    const list = periods.get(key) ?? [];
+    list.push(o);
+    periods.set(key, list);
+  }
+  // Undated observations sort last; everything else runs oldest to newest so the
+  // direction of travel reads left to right.
+  const keys = [...periods.keys()].sort((a, b) => {
+    if (a === 'Undated') return 1;
+    if (b === 'Undated') return -1;
+    return a.localeCompare(b);
+  });
+
+  const plansByObs = new Map<string, ActionPlan[]>();
+  for (const ap of actionPlans) {
+    if (!ap.workPaperId) continue;
+    const list = plansByObs.get(ap.workPaperId) ?? [];
+    list.push(ap);
+    plansByObs.set(ap.workPaperId, list);
+  }
+
+  const rows: Cell[][] = keys.map((key) => {
+    const list = periods.get(key) ?? [];
+    const count = (b: RiskBucket): number =>
+      list.filter((o) => normaliseRisk(o.riskRating) === b).length;
+    const plans = list.flatMap((o) => plansByObs.get(o.id) ?? []);
+    const implemented = plans.filter(isImplemented).length;
+    const rate = percent(implemented, plans.length);
+    return [
+      { text: key },
+      { text: String(list.length), align: 'right' as const },
+      { text: String(count('EXTREME')), align: 'right' as const },
+      {
+        text: String(count('HIGH')),
+        align: 'right' as const,
+        tone: count('HIGH') > 0 ? ('bad' as const) : undefined,
+      },
+      { text: String(count('MEDIUM')), align: 'right' as const },
+      { text: String(count('LOW')), align: 'right' as const },
+      { text: `${rate}%`, align: 'right' as const, tone: implementationTone(rate) },
+    ];
+  });
+
+  const first = keys[0] ? (periods.get(keys[0])?.length ?? 0) : 0;
+  const last = keys.length > 1 ? (periods.get(keys[keys.length - 1])?.length ?? 0) : first;
+  const direction =
+    keys.length < 2
+      ? 'A single period is in scope, so no trend can be read yet.'
+      : last > first
+        ? `Observations raised have risen from ${first} in ${keys[0]} to ${last} in ${keys[keys.length - 1]}.`
+        : last < first
+          ? `Observations raised have fallen from ${first} in ${keys[0]} to ${last} in ${keys[keys.length - 1]}.`
+          : `Observations raised have held steady at ${last} per period.`;
+
+  return [
+    { kind: 'heading', text: '4. Observation trend', level: 1 },
+    { kind: 'narrative', text: direction },
+    {
+      kind: 'table',
+      title: `By period (${keys.length} ${plural(keys.length, 'period')})`,
+      columns: [
+        'Period',
+        'Observations',
+        'Extreme',
+        'High',
+        'Medium',
+        'Low',
+        'Implementation rate',
+      ],
+      rows,
+    },
+    riskDistribution(observations),
+  ];
+}
+
+// ---- Observations in the summary-and-proof style ---------------------------
+
+/**
+ * One observation written the way the house report presents it: an analytical
+ * paragraph saying what was found and what it means, a compact evidence table
+ * carrying the facts that support it, and the numbered recommendations. The
+ * full narrative and management response go to the appendix, so the body reads
+ * as analysis rather than as a data dump.
+ */
+function observationSection(
+  o: Observation,
+  index: number,
+  plans: ActionPlan[],
+  now: Date,
+  labels?: Record<string, string>,
+): ReportBlock[] {
+  const bucket = normaliseRisk(o.riskRating);
+  const riskLabel = bucket ? RISK_LABELS[bucket] : (o.riskRating ?? 'Unrated');
+  const overdue = plans.filter((ap) => isPlanOverdue(ap, now)).length;
+  const implemented = plans.filter(isImplemented).length;
+  const title = o.observationTitle || 'Untitled observation';
+
+  const remediation =
+    plans.length === 0
+      ? 'No remediation has been agreed for this observation.'
+      : `${plans.length} ${plural(plans.length, 'action')} agreed, of which ${implemented} ` +
+        `${implemented === 1 ? 'has' : 'have'} been implemented` +
+        (overdue > 0 ? ` and ${overdue} ${overdue === 1 ? 'is' : 'are'} overdue.` : '.');
+
+  const blocks: ReportBlock[] = [
+    { kind: 'heading', text: `5.${index} ${title}`, level: 2 },
+    {
+      kind: 'narrative',
+      text:
+        `${shorten(o.observationDescription, 600) || title} ` +
+        (o.implications ? `${o.implications} ` : '') +
+        remediation,
+    },
+    {
+      kind: 'table',
+      title: 'Evidence',
+      columns: ['Reference', 'Risk', 'Affiliate', 'Audit area', 'Status', 'Response', 'Owner'],
+      rows: [
+        [
+          { text: o.reference },
+          { text: riskLabel, tone: bucket ? riskTone(bucket) : undefined },
+          { text: o.affiliateName ?? o.affiliateCode ?? '-' },
+          { text: o.auditAreaName ?? '-' },
+          { text: humaniseStatus(o.status, labels) },
+          { text: o.responseStatus },
+          { text: o.responsibility ?? 'Unassigned' },
+        ],
+      ],
+    },
+  ];
+
+  const recommendations = splitRecommendations(o.recommendation);
+  if (recommendations.length > 0) {
+    blocks.push({ kind: 'list', title: 'Recommendations', items: recommendations, ordered: true });
+  }
+  if (plans.length > 0) {
+    blocks.push({
+      kind: 'table',
+      title: 'Agreed actions',
+      columns: ['Action', 'Owner', 'Due', 'Status'],
+      rows: plans.map((ap) => [
+        { text: shorten(ap.description, 120) },
+        { text: ap.ownerNames ?? 'Unassigned' },
+        { text: ap.dueDate ?? '-' },
+        {
+          text: humaniseStatus(ap.status, labels),
+          tone: isPlanOverdue(ap, now) ? ('bad' as const) : undefined,
+        },
+      ]),
+    });
+  }
+  return blocks;
+}
+
+/** The appendix: the full text of every observation and its management response. */
+function observationAppendix(observations: Observation[]): ReportBlock[] {
+  if (observations.length === 0) return [];
+  const blocks: ReportBlock[] = [
+    { kind: 'heading', text: 'Appendix A: observations in full', level: 1 },
+    {
+      kind: 'narrative',
+      text:
+        'The complete text of each observation, its implications and the response management ' +
+        'recorded, in the order the observations appear above.',
+    },
+  ];
+  for (const [i, o] of observations.entries()) {
+    blocks.push({
+      kind: 'heading',
+      text: `A.${i + 1} ${o.reference}: ${o.observationTitle || 'Untitled observation'}`,
+      level: 2,
+    });
+    blocks.push({
+      kind: 'narrative',
+      text: o.observationDescription ?? 'No detailed description was recorded.',
+    });
+    if (o.implications) {
+      blocks.push({ kind: 'narrative', text: `Implications: ${o.implications}` });
+    }
+    blocks.push({
+      kind: 'narrative',
+      text: o.managementResponse
+        ? `Management response: ${o.managementResponse}`
+        : 'Management response: none recorded.',
+    });
+  }
+  return blocks;
+}
+
+/** Observations sorted by risk, then most recent first. */
+function sortedByRisk(observations: Observation[]): Observation[] {
+  return [...observations].sort((a, b) => {
+    const r = riskRank(normaliseRisk(a.riskRating)) - riskRank(normaliseRisk(b.riskRating));
+    if (r !== 0) return r;
+    return (parseMs(b.workPaperDate) ?? 0) - (parseMs(a.workPaperDate) ?? 0);
+  });
+}
+
+/** The detailed observations part of the report, in the house style. */
+function observationNarratives(
+  data: ReportDataset,
+  now: Date,
+  labels?: Record<string, string>,
+): ReportBlock[] {
+  const plansByObs = new Map<string, ActionPlan[]>();
+  for (const ap of data.actionPlans) {
+    if (!ap.workPaperId) continue;
+    const list = plansByObs.get(ap.workPaperId) ?? [];
+    list.push(ap);
+    plansByObs.set(ap.workPaperId, list);
+  }
+  const sorted = sortedByRisk(data.observations);
+  const blocks: ReportBlock[] = [{ kind: 'heading', text: '5. Detailed observations', level: 1 }];
+  if (sorted.length === 0) {
+    blocks.push({
+      kind: 'note',
+      text: 'No observations fall within the selected scope.',
+    });
+    return blocks;
+  }
+  for (const [i, o] of sorted.entries()) {
+    blocks.push(...observationSection(o, i + 1, plansByObs.get(o.id) ?? [], now, labels));
+  }
+  return blocks;
+}
+
+// ---- Detailed Observations (the dense table view) --------------------------
 
 function detailedObservations(
   data: ReportDataset,
@@ -725,21 +1126,64 @@ export function buildReport(
 ): ReportDocument {
   const data = applyModelFilters(dataset, filters, opts.now);
   const labels = opts.statusLabels;
-  let blocks: ReportBlock[];
+
+  // Every report is assembled in the house structure: the cover comes from the
+  // header the renderers draw, then the introduction, the executive summary,
+  // the review summary, the type's own body, and the appendices.
+  const body: ReportBlock[] = [];
+  let appendices: ReportBlock[] = [];
+
   switch (filters.reportType) {
+    case 'barc':
+      body.push(...barcBoardPack(data, opts.now, labels));
+      body.push(...observationNarratives(data, opts.now, labels));
+      appendices = observationAppendix(sortedByRisk(data.observations));
+      break;
+    case 'trend':
+      body.push(...observationTrend(data));
+      break;
     case 'observations':
-      blocks = detailedObservations(data, opts.now, labels);
+      body.push(...observationNarratives(data, opts.now, labels));
+      body.push({ kind: 'heading', text: '6. Observation register', level: 1 });
+      body.push(...detailedObservations(data, opts.now, labels));
+      appendices = observationAppendix(sortedByRisk(data.observations));
       break;
     case 'tracker':
-      blocks = actionPlanTracker(data, opts.now, labels);
+      body.push({ kind: 'heading', text: '4. Action plan status', level: 1 });
+      body.push(...actionPlanTracker(data, opts.now, labels));
       break;
     case 'overdue':
-      blocks = overdueAtRisk(data, opts.now, labels);
+      body.push({ kind: 'heading', text: '4. Overdue and at-risk actions', level: 1 });
+      body.push(...overdueAtRisk(data, opts.now, labels));
       break;
     case 'executive':
     default:
-      blocks = executiveSummary(data, opts.now, labels);
+      body.push({ kind: 'heading', text: '4. Period audit summary', level: 1 });
+      body.push(...executiveSummary(data, opts.now, labels));
+      body.push(...observationNarratives(data, opts.now, labels));
+      appendices = observationAppendix(sortedByRisk(data.observations));
       break;
   }
+
+  const blocks: ReportBlock[] = [
+    ...introduction(data, filters, opts.now),
+    { kind: 'heading', text: '2. Executive summary', level: 1 },
+    { kind: 'kpis', items: executiveKpis(data, opts.now) },
+    ...reviewSummary(data, opts.now),
+    ...body,
+    ...appendices,
+  ];
   return { header: opts.header, blocks };
+}
+
+/** The headline numbers the executive summary opens with. */
+function executiveKpis(data: ReportDataset, now: Date): Kpi[] {
+  const f = portfolioFacts(data, now);
+  return [
+    { label: 'Observations', value: String(f.observations) },
+    { label: 'High and extreme risk', value: String(f.high), tone: f.high > 0 ? 'bad' : 'good' },
+    { label: 'Action plans', value: String(f.actionPlans) },
+    { label: 'Implementation rate', value: `${f.rate}%`, tone: implementationTone(f.rate) },
+    { label: 'Overdue actions', value: String(f.overdue), tone: f.overdue > 0 ? 'bad' : 'good' },
+  ];
 }

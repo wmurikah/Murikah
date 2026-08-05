@@ -120,7 +120,16 @@ export async function getComprehensiveReportData(
                  wp.affiliate_code AS affiliate_code, aff.affiliate_name AS affiliate_name,
                  aa.area_name AS audit_area_name, wp.status AS status, wp.recommendation AS recommendation,
                  wp.management_response AS management_response, wp.work_paper_date AS work_paper_date,
-                 wp.year AS year
+                 wp.year AS year, wp.risk_summary AS risk_summary,
+                 wp.assigned_auditor_name AS assigned_auditor_name,
+                 -- The latest management response recorded through the auditee
+                 -- cycle, which supersedes the copy held on the work paper.
+                 (SELECT ar.management_response FROM auditee_responses ar
+                   WHERE ar.work_paper_id = wp.work_paper_id
+                     AND ar.organization_id = wp.organization_id
+                     AND ar.deleted_at IS NULL
+                ORDER BY ar.round_number DESC, ar.submitted_date DESC
+                   LIMIT 1) AS latest_response
             FROM work_papers wp
             LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                  AND aff.organization_id = wp.organization_id
@@ -132,6 +141,7 @@ export async function getComprehensiveReportData(
   });
   const observations: Observation[] = obsRes.rows.map((r) => {
     const status = String(r.status);
+    const managementResponse = s(r.latest_response) ?? s(r.management_response);
     return {
       id: String(r.id),
       reference: String(r.reference ?? r.id),
@@ -142,10 +152,13 @@ export async function getComprehensiveReportData(
       affiliateName: s(r.affiliate_name),
       auditAreaName: s(r.audit_area_name),
       status,
-      responseStatus: responseStatus(status, s(r.management_response)),
+      responseStatus: responseStatus(status, managementResponse),
       recommendation: s(r.recommendation),
       workPaperDate: s(r.work_paper_date),
       year: n(r.year),
+      implications: s(r.risk_summary),
+      responsibility: s(r.assigned_auditor_name),
+      managementResponse,
     };
   });
 

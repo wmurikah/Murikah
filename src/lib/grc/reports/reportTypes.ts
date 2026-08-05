@@ -8,8 +8,14 @@
  * No runtime dependencies live here; these are types only.
  */
 
-/** The four report types, faithful to the source board report. */
-export type ReportType = 'executive' | 'observations' | 'tracker' | 'overdue';
+/**
+ * The report types. `executive` is the period audit report for an affiliate and
+ * period; `barc` is the Board Audit and Risk Committee pack, a portfolio view
+ * across affiliates; `trend` is the observation trend over periods; `tracker`
+ * is the action-plan status summary. `observations` and `overdue` are the
+ * detailed and exception views the source board report also carries.
+ */
+export type ReportType = 'executive' | 'barc' | 'observations' | 'trend' | 'tracker' | 'overdue';
 
 /** The four risk buckets the board report groups by (source labels). */
 export type RiskBucket = 'EXTREME' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -30,6 +36,12 @@ export interface Observation {
   recommendation: string | null;
   workPaperDate: string | null;
   year: number | null;
+  /** What the finding means for the business, from the work paper's risk summary. */
+  implications: string | null;
+  /** Who owns the finding: the assigned auditor, and the responsible parties. */
+  responsibility: string | null;
+  /** The latest management response recorded for the finding. */
+  managementResponse: string | null;
 }
 
 /** A normalised action plan for reporting, carrying its observation context. */
@@ -115,7 +127,15 @@ export type ReportBlock =
       columns: string[];
       rows: Cell[][];
     }
-  | { kind: 'note'; text: string };
+  | { kind: 'note'; text: string }
+  // The house-style report sections: a numbered heading opens each part of the
+  // document (introduction, executive summary, review summary, the detailed
+  // observations, the appendices).
+  | { kind: 'heading'; text: string; level: 1 | 2 }
+  /** An analytical paragraph: the "summary" half of summary-plus-proof. */
+  | { kind: 'narrative'; text: string }
+  /** A numbered list, for an observation's recommendations. */
+  | { kind: 'list'; title?: string; items: string[]; ordered?: boolean };
 
 export interface ReportHeader {
   organisation: string;
