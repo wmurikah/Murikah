@@ -13,9 +13,18 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { storageConfigured, presignUpload } from '@grc/storage';
 import { buildObjectKey, keyBelongsToOrg } from '@grc/storage/keys';
-import { canUploadEvidence, type EvidenceActor } from '@grc/storage/access';
+import { canUploadEvidence, isDraftEntity, type EvidenceActor } from '@grc/storage/access';
 
-const ENTITY_TYPES = new Set(['work_paper', 'action_plan']);
+const ENTITY_TYPES = new Set([
+  'work_paper',
+  'action_plan',
+  'work_paper_draft',
+  'action_plan_draft',
+]);
+// A draft token is client-generated; keep it to a UUID-like shape so it can
+// never smuggle path segments into the object key.
+const DRAFT_TOKEN_RE = /^[0-9a-fA-F-]{16,64}$/;
+
 const MAX_EVIDENCE_BYTES = 100 * 1024 * 1024;
 const UPLOAD_TTL_SECONDS = 300;
 
@@ -35,6 +44,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const sizeBytes = Number(form.get('size_bytes') ?? 0);
 
   if (!ENTITY_TYPES.has(entityType) || !entityId || !fileName) {
+    return json({ error: 'invalid request' }, 400);
+  }
+  if (isDraftEntity(entityType) && !DRAFT_TOKEN_RE.test(entityId)) {
     return json({ error: 'invalid request' }, 400);
   }
   if (Number.isFinite(sizeBytes) && sizeBytes > MAX_EVIDENCE_BYTES) {

@@ -181,3 +181,30 @@ export async function getAttachmentForAccess(
     entityId: String(r.entity_id ?? ''),
   };
 }
+
+/**
+ * Bind evidence staged against a create-form draft token to the record the
+ * save just created. Only rows the same user staged, on files inside the
+ * acting organisation, move; anything else is untouched. Returns how many
+ * attachments were bound.
+ */
+export async function bindDraftAttachments(
+  db: Client,
+  organizationId: string,
+  userId: string,
+  draftEntityType: 'work_paper_draft' | 'action_plan_draft',
+  draftToken: string,
+  entityType: 'work_paper' | 'action_plan',
+  entityId: string,
+): Promise<number> {
+  if (draftToken.trim() === '') return 0;
+  const res = await db.execute({
+    sql: `UPDATE file_attachments
+             SET ${FA.entity_type} = ?, ${FA.entity_id} = ?
+           WHERE ${FA.entity_type} = ? AND ${FA.entity_id} = ? AND ${FA.attached_by} = ?
+             AND ${FA.file_id} IN (SELECT ${F.file_id} FROM files
+                                    WHERE ${F.organization_id} = ? AND ${F.deleted_at} IS NULL)`,
+    args: [entityType, entityId, draftEntityType, draftToken.trim(), userId, organizationId],
+  });
+  return res.rowsAffected ?? 0;
+}

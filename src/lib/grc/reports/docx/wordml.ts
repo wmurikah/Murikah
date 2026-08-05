@@ -8,6 +8,7 @@
  * Imports are types only, so node can strip types and unit-test the XML output.
  */
 import type { Cell, Kpi, ReportBlock, ReportDocument, Tone } from '../reportTypes';
+import { parseRichText, parseInlines, type RichBlock, type RichInline } from '../../richtext.ts';
 
 const NAVY = '1A365D';
 const GOLD = 'C9A83E';
@@ -66,6 +67,8 @@ interface ParaOpts {
   /** Space above the paragraph, so a section heading breathes. */
   before?: number;
   rule?: boolean;
+  /** Left indent in twentieths of a point, for list items. */
+  indent?: number;
 }
 
 function para(runsXml: string, opts: ParaOpts = {}): string {
@@ -74,10 +77,48 @@ function para(runsXml: string, opts: ParaOpts = {}): string {
     ppr.push(`<w:pBdr><w:bottom w:val="single" w:sz="12" w:color="${GOLD}" w:space="2"/></w:pBdr>`);
   }
   if (opts.align) ppr.push(`<w:jc w:val="${opts.align}"/>`);
+  if (opts.indent) ppr.push(`<w:ind w:left="${opts.indent}"/>`);
   ppr.push(
     `<w:spacing${opts.before ? ` w:before="${opts.before}"` : ''} w:after="${opts.after ?? 120}"/>`,
   );
   return `<w:p><w:pPr>${ppr.join('')}</w:pPr>${runsXml}</w:p>`;
+}
+
+/** One line's rich inlines as WordML runs: bold and italic marks survive. */
+function inlineRuns(inlines: RichInline[], opts: RunOpts): string {
+  if (inlines.length === 0) return run('', opts);
+  return inlines
+    .map((r) =>
+      run(r.text, { ...opts, bold: opts.bold || r.bold, italic: opts.italic || r.italic }),
+    )
+    .join('');
+}
+
+/**
+ * A narrative's Markdown as WordML: paragraphs with inline marks, bold navy
+ * headings, and list items numbered inline (no numbering.xml part needed).
+ */
+function richBlockXml(b: RichBlock): string {
+  if (b.kind === 'heading') {
+    return para(
+      inlineRuns(b.inlines, { bold: true, size: b.level === 2 ? 24 : 21, colour: NAVY }),
+      {
+        before: 120,
+        after: 60,
+      },
+    );
+  }
+  if (b.kind === 'list') {
+    return b.items
+      .map((item, i) =>
+        para(run(b.ordered ? `${i + 1}. ` : '• ', { size: 20 }) + inlineRuns(item, { size: 20 }), {
+          after: 40,
+          indent: 360,
+        }),
+      )
+      .join('');
+  }
+  return para(inlineRuns(b.inlines, { size: 20 }), { after: 120 });
 }
 
 const TBL_BORDERS = `<w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
@@ -169,19 +210,27 @@ function blockXml(block: ReportBlock): string {
         }),
         { before: block.level === 1 ? 240 : 160, after: 80 },
       );
-    case 'narrative':
-      return para(run(block.text, { size: 20 }), { after: 120 });
+    case 'narrative': {
+      // The narrative carries the Markdown subset; its marks, headings and
+      // lists survive into the pack rather than collapsing to one plain run.
+      const rich = parseRichText(block.text);
+      if (rich.length === 0) return para(run('', { size: 20 }), { after: 120 });
+      return rich.map(richBlockXml).join('');
+    }
     case 'list': {
       const heading = block.title
         ? para(run(block.title, { bold: true, size: 22, colour: NAVY }), { after: 40 })
         : '';
       // Numbered inline rather than through a numbering part, so the document
-      // needs no numbering.xml and still reads as an ordered list.
+      // needs no numbering.xml and still reads as an ordered list. Items may
+      // carry inline marks.
       const items = block.items
         .map((item, i) =>
-          para(run(`${block.ordered === false ? '•' : `${i + 1}.`} ${item}`, { size: 20 }), {
-            after: 40,
-          }),
+          para(
+            run(`${block.ordered === false ? '•' : `${i + 1}.`} `, { size: 20 }) +
+              inlineRuns(parseInlines(item), { size: 20 }),
+            { after: 40 },
+          ),
         )
         .join('');
       return heading + items + para('');
