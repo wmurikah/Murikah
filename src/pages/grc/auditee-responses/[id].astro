@@ -1,0 +1,429 @@
+---
+export const prerender = false;
+
+/**
+ * The response thread for one finding: the observation and its deadline, every
+ * round recorded so far with its decision, and then whichever action this
+ * visitor may take. An assigned auditee gets the response form (and can propose
+ * action plans alongside it); a reviewer gets accept and request-changes on the
+ * round awaiting a decision. Both sides see the same history.
+ *
+ * Visibility is enforced here as well as in the queries: an auditee who is not
+ * assigned to this finding is refused, so the route cannot be used to read
+ * another team's finding.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import { getWorkPaper, type WorkPaperDetail } from '@grc/repos/workPapers';
+import { listRounds, isAssignedAuditee, type ResponseRow } from '@grc/repos/auditeeResponses';
+import { listActionPlans, type ActionPlanListRow } from '@grc/repos/actionPlans';
+import { getConfigValues } from '@grc/repos/orgConfig';
+import {
+  responseDeadline,
+  deadlineState,
+  configuredNumber,
+  nextRound,
+  roundsExhausted,
+  RESPONSE_STATUS,
+  DEFAULT_RESPONSE_DEADLINE_DAYS,
+  DEFAULT_MAX_RESPONSE_ROUNDS,
+} from '@grc/workflow/responseRounds';
+import { WP_STATUS } from '@grc/workflow/workPaperActions';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const { id } = Astro.params;
+
+const canReview = grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review');
+const canRespondPerm = grc.isPlatformOwner || grc.perms.includes('AUDITEE.respond');
+
+let wp = null as WorkPaperDetail | null;
+let rounds: ResponseRow[] = [];
+let myPlans: ActionPlanListRow[] = [];
+let assigned = false;
+let deadlineDays = DEFAULT_RESPONSE_DEADLINE_DAYS;
+let maxRounds = DEFAULT_MAX_RESPONSE_ROUNDS;
+let loadError = false;
+
+if (id && (canReview || canRespondPerm)) {
+  loadError = !(await guardPageLoad('auditee-responses.thread', async () => {
+    const db = await getDb(getGrcEnv());
+    const [detail, thread, isAssigned, config] = await Promise.all([
+      getWorkPaper(db, grc.organizationId, id),
+      listRounds(db, grc.organizationId, id),
+      isAssignedAuditee(db, grc.organizationId, id, grc.userId),
+      getConfigValues(db, grc.organizationId, ['RESPONSE_DEADLINE_DAYS', 'MAX_RESPONSE_ROUNDS']),
+    ]);
+    wp = detail;
+    rounds = thread;
+    assigned = isAssigned;
+    deadlineDays = configuredNumber(
+      config.get('RESPONSE_DEADLINE_DAYS'),
+      DEFAULT_RESPONSE_DEADLINE_DAYS,
+    );
+    maxRounds = configuredNumber(config.get('MAX_RESPONSE_ROUNDS'), DEFAULT_MAX_RESPONSE_ROUNDS);
+    // The plans raised against this finding, so a response can point at them.
+    myPlans = detail
+      ? await listActionPlans(
+          db,
+          grc.organizationId,
+          {
+            userId: grc.userId,
+            roleCode: grc.roleCode,
+            perms: grc.perms,
+            isPlatformOwner: grc.isPlatformOwner,
+          },
+          {},
+        ).then((all) => all.filter((p) => p.workPaperId === id))
+      : [];
+  }));
+}
+
+// A reader must be assigned to the finding or hold the review permission.
+const mayRead = canReview || assigned;
+const currentRound = wp ? Number(wp.response_round ?? 1) || 1 : 1;
+const status = wp ? String(wp.status) : '';
+const awaitingReview = rounds.find(
+  (r) => r.status === RESPONSE_STATUS.SUBMITTED && r.round === currentRound,
+);
+// The auditee may answer when the finding is with them, they are assigned, and
+// they have not already answered this round.
+const mayRespond =
+  wp != null &&
+  canRespondPerm &&
+  (assigned || grc.isPlatformOwner) &&
+  status === WP_STATUS.SENT_TO_AUDITEE &&
+  !awaitingReview;
+const roundsUsedUp = roundsExhausted(nextRound(currentRound, 'request_changes'), maxRounds);
+
+const deadline = wp
+  ? ((wp.response_deadline as string | null) ??
+    responseDeadline(wp.sent_to_auditee_date as string | null, deadlineDays))
+  : null;
+const dstate = deadlineState(deadline);
+
+const fmtDate = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+const val = (key: string): string => {
+  const raw = wp?.[key];
+  return raw == null ? '' : String(raw);
+};
+const statusLabelFor = (s: string): string => {
+  if (s === RESPONSE_STATUS.ACCEPTED) return 'Accepted';
+  if (s === RESPONSE_STATUS.CHANGES_REQUESTED) return 'Changes requested';
+  return 'Awaiting review';
+};
+const statusClassFor = (s: string): string => {
+  if (s === RESPONSE_STATUS.ACCEPTED) return 'grc-badge grc-badge--done';
+  if (s === RESPONSE_STATUS.CHANGES_REQUESTED) return 'grc-badge grc-badge--rejected';
+  return 'grc-badge grc-badge--review';
+};
+
+const done = Astro.url.searchParams.get('done');
+const failed = Astro.url.searchParams.get('error');
+---
+
+<GrcLayout title="Response thread">
+  <div class="grc-page-head">
+    <div>
+      <h1>{wp ? val('work_paper_ref') : 'Response'}</h1>
+      <p class="grc-lead">{wp ? val('observation_title') : ''}</p>
+    </div>
+    <a href="/auditee-responses" class="grc-btn grc-btn--secondary">Back to responses</a>
+  </div>
+
+  {
+    done && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        {decodeURIComponent(done)}
+      </p>
+    )
+  }
+  {
+    failed && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {decodeURIComponent(failed)}
+      </p>
+    )
+  }
+
+  {
+    !canReview && !canRespondPerm ? (
+      <p class="grc-error" role="alert">
+        You do not have access to auditee responses.
+      </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="This response thread" />
+    ) : !wp ? (
+      <div class="grc-empty">
+        <p>
+          <strong>That finding was not found.</strong> It may have been removed.
+        </p>
+      </div>
+    ) : !mayRead ? (
+      <p class="grc-error" role="alert">
+        That finding is not shared with you.
+      </p>
+    ) : (
+      <>
+        <section class="grc-section">
+          <div class="grc-deadline" class:list={[{ 'is-overdue': dstate.overdue }]}>
+            <span class="grc-deadline__label">Respond by</span>
+            <span class="grc-deadline__date">{fmtDate(deadline)}</span>
+            {dstate.overdue && (
+              <span class="grc-overdue">{Math.abs(dstate.daysRemaining ?? 0)} days late</span>
+            )}
+            {!dstate.overdue && dstate.daysRemaining != null && (
+              <span class="grc-deadline__left">{dstate.daysRemaining} days remaining</span>
+            )}
+            <span class="grc-deadline__round">
+              Round {currentRound} of {maxRounds}
+            </span>
+          </div>
+
+          <dl class="grc-deflist">
+            <>
+              <dt>Observation</dt>
+              <dd>{val('observation_description') || val('observation_title')}</dd>
+            </>
+            <>
+              <dt>Recommendation</dt>
+              <dd>{val('recommendation') || 'None recorded.'}</dd>
+            </>
+            <>
+              <dt>Finding status</dt>
+              <dd>{status}</dd>
+            </>
+          </dl>
+        </section>
+
+        <section class="grc-section">
+          <h2>Response history</h2>
+          {rounds.length === 0 ? (
+            <div class="grc-empty">
+              <p>
+                <strong>No response yet.</strong> Nothing has been submitted for this finding.
+              </p>
+            </div>
+          ) : (
+            <ol class="grc-rounds">
+              {rounds.map((r) => (
+                <li class="grc-round">
+                  <div class="grc-round__head">
+                    <span class="grc-round__n">Round {r.round}</span>
+                    <span class={statusClassFor(r.status)}>{statusLabelFor(r.status)}</span>
+                    <span class="grc-round__who">
+                      {r.submittedByName ?? 'Unknown'} on {fmtDate(r.submittedDate)}
+                    </span>
+                  </div>
+                  <p class="grc-round__body">{r.managementResponse}</p>
+                  {r.reviewComments && (
+                    <p class="grc-round__review">
+                      <strong>Reviewer:</strong> {r.reviewComments}
+                      <span class="grc-round__who">
+                        {' '}
+                        ({r.reviewedByName ?? 'Reviewer'}, {fmtDate(r.reviewDate)})
+                      </span>
+                    </p>
+                  )}
+                  {canReview && r.status === RESPONSE_STATUS.SUBMITTED && (
+                    <form
+                      method="post"
+                      action={`/api/auditee-responses/${r.responseId}/review`}
+                      class="grc-round__form"
+                    >
+                      <div class="grc-field">
+                        <label for={`rc-${r.responseId}`}>Review comments</label>
+                        <textarea
+                          id={`rc-${r.responseId}`}
+                          name="review_comments"
+                          class="grc-textarea"
+                          rows="3"
+                          maxlength="2000"
+                        />
+                      </div>
+                      <div class="grc-actionbar">
+                        <button
+                          type="submit"
+                          name="decision"
+                          value="accept"
+                          class="grc-btn grc-btn--primary"
+                        >
+                          Accept response
+                        </button>
+                        <button
+                          type="submit"
+                          name="decision"
+                          value="request_changes"
+                          class="grc-btn grc-btn--danger"
+                          disabled={roundsUsedUp}
+                        >
+                          Request changes
+                        </button>
+                      </div>
+                      {roundsUsedUp && (
+                        <p class="grc-field__hint">
+                          The {maxRounds} response rounds are used up, so changes can no longer be
+                          requested. Resolve the finding directly.
+                        </p>
+                      )}
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        {mayRespond && (
+          <section class="grc-section">
+            <h2>Your response (round {currentRound})</h2>
+            <form method="post" action="/api/auditee-responses/submit" class="grc-form">
+              <input type="hidden" name="work_paper_id" value={id} />
+              <div class="grc-field">
+                <label for="management_response">Management response</label>
+                <textarea
+                  id="management_response"
+                  name="management_response"
+                  class="grc-textarea"
+                  required
+                  rows="6"
+                  maxlength="4000"
+                />
+                <p class="grc-field__hint">
+                  Explain what management accepts, disputes, and what will be done.
+                </p>
+              </div>
+
+              {myPlans.length > 0 && (
+                <div class="grc-field">
+                  <label for="action_plan_ids">Action plans this response relies on</label>
+                  <select
+                    id="action_plan_ids"
+                    name="action_plan_ids"
+                    class="grc-select"
+                    multiple
+                    size="5"
+                  >
+                    {myPlans.map((p) => (
+                      <option value={p.id}>
+                        {p.actionNumber}: {p.description.slice(0, 70)}
+                      </option>
+                    ))}
+                  </select>
+                  <p class="grc-field__hint">Hold Ctrl or Cmd to select more than one.</p>
+                </div>
+              )}
+
+              <div class="grc-actionbar">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Submit response
+                </button>
+                <a
+                  href={`/action-plans/new?work_paper=${encodeURIComponent(id ?? '')}`}
+                  class="grc-btn grc-btn--secondary"
+                >
+                  Propose an action plan
+                </a>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {!mayRespond && canRespondPerm && assigned && awaitingReview && (
+          <p class="grc-notice" role="status">
+            Your round {currentRound} response is with the auditor. You will be able to respond
+            again if changes are requested.
+          </p>
+        )}
+      </>
+    )
+  }
+</GrcLayout>
+
+<style>
+  .grc-section {
+    margin-bottom: 2rem;
+  }
+  .grc-section h2 {
+    font-size: 1.05rem;
+    margin: 0 0 0.75rem;
+  }
+  .grc-deadline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--grc-line);
+    border-left: 3px solid var(--grc-gold);
+    border-radius: var(--grc-radius-sm);
+    background: var(--grc-surface);
+  }
+  .grc-deadline.is-overdue {
+    border-left-color: #b42318;
+  }
+  .grc-deadline__label {
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .grc-deadline__date {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .grc-deadline__left,
+  .grc-deadline__round {
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+  }
+  .grc-deadline__round {
+    margin-left: auto;
+  }
+  .grc-rounds {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .grc-round {
+    border: 1px solid var(--grc-line);
+    border-radius: var(--grc-radius-sm);
+    background: var(--grc-surface);
+    padding: 0.85rem 1rem;
+  }
+  .grc-round__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+  }
+  .grc-round__n {
+    font-weight: 600;
+  }
+  .grc-round__who {
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+  }
+  .grc-round__body {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .grc-round__review {
+    margin: 0.6rem 0 0;
+    padding-top: 0.6rem;
+    border-top: 1px dashed var(--grc-line);
+    white-space: pre-wrap;
+  }
+  .grc-round__form {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--grc-line);
+  }
+</style>
