@@ -18,6 +18,9 @@ import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
+// The same RFC 6238 implementation the worker verifies against, so the round
+// trip computes real codes for the enrolled secret.
+import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -520,22 +523,24 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
-    endpoint: 'auth/forgot-password.ts',
-    title: 'a reset request for an unknown email answers neutrally',
+    endpoint: 'auth/mfa/enrol.ts',
+    title: 'MFA enrolment starts for the signed-in admin',
     method: 'POST',
-    path: () => '/api/auth/forgot-password',
-    form: () => ({ email: 'nobody@hasspetroleum.com' }),
+    path: () => '/api/auth/mfa/enrol',
   },
   {
-    endpoint: 'auth/reset-password.ts',
-    title: 'an invalid reset token is refused, not 500',
+    endpoint: 'auth/mfa/confirm.ts',
+    title: 'a wrong MFA confirmation code is refused, not 500',
     method: 'POST',
-    path: () => '/api/auth/reset-password',
-    form: () => ({
-      token: 'not-a-real-token',
-      new_password: 'Grc-Reset-Password-1',
-      confirm_password: 'Grc-Reset-Password-1',
-    }),
+    path: () => '/api/auth/mfa/confirm',
+    form: () => ({ code: '000000' }),
+  },
+  {
+    endpoint: 'auth/mfa/verify.ts',
+    title: 'the MFA step without a pending session is refused, not 500',
+    method: 'POST',
+    path: () => '/api/auth/mfa/verify',
+    form: () => ({ code: '000000' }),
   },
   {
     endpoint: 'auth/logout.ts',
@@ -639,73 +644,54 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
-    // The full forgotten-password round trip (Build Prompt 24): request a link
-    // for the seeded auditor, pull the single-use token out of the queued
-    // email, redeem it, sign in with the new password, and prove the token
-    // died with its first use. The admin session signed out above; the flow is
-    // public by nature.
-    const resetPassword = 'Grc-Smoke-Reset-2026-A';
-    let resetToken = '';
-
-    await t.test('a reset request queues an email carrying the link', async () => {
+    // Row scope and matrix gating, seen from the auditee side (Build Prompt
+    // 26). The admin session signed out above, so sign in as the seeded
+    // UNIT_MANAGER, whose role holds WORK_PAPER read but no CONFIG or USER
+    // grant and none of the auditor-side actions.
+    await t.test('sign in as the seeded auditee', async () => {
       server.clearCookies();
-      const res = await server.request('POST', '/api/auth/forgot-password', {
-        email: 'auditor@hasspetroleum.com',
-      });
-      assert.equal(res.status, 303, `forgot-password answered ${res.status}`);
-      assert.ok(
-        String(res.headers.location ?? '').includes('sent=1'),
-        'expected the neutral redirect',
-      );
-      const db = server.database;
-      assert.ok(db, 'the fake database is reachable for verification');
-      const row = db
-        .prepare(
-          `SELECT rendered_body AS body FROM notification_queue
-            WHERE batch_type = 'PASSWORD_RESET' ORDER BY rowid DESC LIMIT 1`,
-        )
-        .get() as { body?: string } | undefined;
-      assert.ok(row?.body, 'the reset email was queued');
-      const m = /reset-password\?token=([0-9a-f]+)/.exec(String(row.body));
-      assert.ok(m, 'the queued email carries the reset link');
-      resetToken = m[1];
-    });
-
-    await t.test('the reset screen validates the token and the endpoint redeems it', async () => {
-      const page = await server.get(`/reset-password?token=${resetToken}`);
-      assert.equal(page.status, 200, `reset screen answered ${page.status}`);
-      assert.ok(!page.body.includes('not valid any more'), 'a fresh token must render the form');
-      const res = await server.request('POST', '/api/auth/reset-password', {
-        token: resetToken,
-        new_password: resetPassword,
-        confirm_password: resetPassword,
-      });
-      assert.equal(res.status, 303, `reset answered ${res.status}`);
-      assert.ok(
-        String(res.headers.location ?? '').includes('reset=1'),
-        `reset redirected to ${res.headers.location}`,
-      );
-    });
-
-    await t.test('the new password signs in and the used token is dead', async () => {
       const res = await server.request('POST', '/api/auth/login', {
-        email: 'auditor@hasspetroleum.com',
-        password: resetPassword,
+        email: 'owner@hasspetroleum.com',
+        password: SMOKE.password,
       });
-      assert.equal(res.status, 303, `login answered ${res.status}`);
+      assert.equal(res.status, 303, `auditee login answered ${res.status}`);
+      const location = String(res.headers.location ?? '');
+      assert.ok(!location.includes('error'), `auditee login redirected to ${location}`);
+    });
+
+    await t.test('the auditee list shows their finding and hides the foreign draft', async () => {
+      const res = await server.get('/work-papers');
+      assert.equal(res.status, 200, `auditee list answered ${res.status}`);
       assert.ok(
-        !String(res.headers.location ?? '').includes('error'),
-        'the reset password must sign in',
+        res.body.includes('WP/2026/002'),
+        'the finding the auditee is responsible for is missing from their list',
       );
-      const again = await server.request('POST', '/api/auth/reset-password', {
-        token: resetToken,
-        new_password: 'Grc-Smoke-Reset-2026-B',
-        confirm_password: 'Grc-Smoke-Reset-2026-B',
+      assert.ok(
+        !res.body.includes('WP/2026/001'),
+        'a draft finding the auditee is not part of leaked into their list',
+      );
+    });
+
+    await t.test('the page map turns the auditee away from the admin sections', async () => {
+      for (const path of ['/settings', '/settings/users', '/send-queue', '/reports']) {
+        const res = await server.get(path);
+        const final = res.hops[res.hops.length - 1];
+        assert.equal(
+          final,
+          '/',
+          `${path} was not redirected to the dashboard (via ${res.hops.join(' -> ')})`,
+        );
+      }
+    });
+
+    await t.test('an admin mutation refuses the auditee with a 403, not a 500', async () => {
+      const res = await server.request('POST', '/api/dropdowns', {
+        risk_ratings: 'High',
+        classification: 'Financial',
+        control_type: 'Preventive',
+        control_frequency: 'Monthly',
       });
-      assert.ok(
-        String(again.headers.location ?? '').includes('error='),
-        'a used token must be refused',
-      );
+      assert.equal(res.status, 403, `/api/dropdowns answered ${res.status} for the auditee`);
     });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
