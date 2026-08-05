@@ -52,7 +52,11 @@ import { getDb as getGrcDb } from './lib/grc/db';
 import { updateOverdueStatuses } from './lib/grc/repos/overdue';
 import { getGrcDeliveryEnv } from './lib/grc/notify/env';
 import { runGrcDispatch } from './lib/grc/notify/dispatch';
-import { runStaleReminders, runOverdueReminders } from './lib/grc/notify/reminders';
+import {
+  runStaleReminders,
+  runOverdueReminders,
+  runDueSoonReminders,
+} from './lib/grc/notify/reminders';
 import { runEvidenceMigration } from './lib/grc/storage/migrate';
 
 const DAILY_PM_CRON = '0 3 * * *';
@@ -253,17 +257,18 @@ export default {
         // GRC maintenance and notification delivery. Wrapped so a missing GRC
         // binding or a schema difference never fails the engr crons. The queue is
         // drained every run (urgent promptly, normal batched into digests); the
-        // daily cron also refreshes overdue statuses and sends the stale reminders,
-        // and the weekly overdue reminders on Mondays.
+        // daily cron also refreshes overdue statuses and sends the reminders.
+        // The stale window and the weekly overdue day come from each
+        // organisation's config (the reminder runners read them), so the cron
+        // simply runs daily and each tenant keeps its own schedule.
         try {
           const grcDb = await getGrcDb(getGrcEnv());
           await runGrcDispatch(grcDb, getGrcDeliveryEnv(), systemClock, { limit: 200 });
           if (controller.cron === DAILY_PM_CRON) {
             await updateOverdueStatuses(grcDb);
             await runStaleReminders(grcDb, systemClock);
-            if (systemClock.now().getUTCDay() === 1) {
-              await runOverdueReminders(grcDb, systemClock);
-            }
+            await runDueSoonReminders(grcDb, systemClock);
+            await runOverdueReminders(grcDb, systemClock);
             // Migrate a batch of Drive-backed evidence to R2 (skipping legal
             // holds). A no-op until both R2 and the Drive credential are set.
             await runEvidenceMigration(grcDb, 25);
