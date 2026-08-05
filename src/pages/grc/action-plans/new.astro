@@ -9,6 +9,9 @@ export const prerender = false;
  * detail.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcRichText from '@/components/grc/GrcRichText.astro';
+import GrcDraftEvidence from '@/components/grc/GrcDraftEvidence.astro';
+import { storageConfigured } from '@grc/storage';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -24,6 +27,7 @@ if (!grc) return Astro.redirect('/login');
 
 const canCreate = can(Astro.locals, 'create', 'ACTION_PLAN');
 const canPropose = can(Astro.locals, 'create', 'AUDITEE_RESPONSE');
+const draftToken = storageConfigured() ? crypto.randomUUID() : null;
 const allowed = canCreate || canPropose;
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const failed = Astro.url.searchParams.get('error');
@@ -89,14 +93,7 @@ if (allowed) {
 
           <div class="grc-field">
             <label for="desc">Action description</label>
-            <textarea
-              id="desc"
-              name="action_description"
-              class="grc-textarea"
-              required
-              rows="4"
-              maxlength="2000"
-            />
+            <GrcRichText id="desc" name="action_description" rows={4} maxlength={2000} required />
           </div>
 
           <div class="grc-field">
@@ -125,13 +122,7 @@ if (allowed) {
 
           <div class="grc-field">
             <label for="notes">Implementation notes</label>
-            <textarea
-              id="notes"
-              name="implementation_notes"
-              class="grc-textarea"
-              rows="3"
-              maxlength="2000"
-            />
+            <GrcRichText id="notes" name="implementation_notes" rows={3} maxlength={2000} />
           </div>
 
           <div class="grc-field">
@@ -155,6 +146,12 @@ if (allowed) {
               <p class="grc-field__hint">{AI_DISCLAIMER}</p>
               <div id="ap-validate-status" class="grc-lead" role="status" aria-live="polite" />
               <div id="ap-validate-out" class="grc-ai-out" hidden />
+            </div>
+          )}
+
+          {draftToken && (
+            <div class="grc-field">
+              <GrcDraftEvidence entityType="action_plan_draft" draftToken={draftToken} />
             </div>
           )}
 

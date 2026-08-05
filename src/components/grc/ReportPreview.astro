@@ -6,6 +6,7 @@
  * maps to the brand tokens. Print styles live in grc.css.
  */
 import type { ReportDocument, Tone, Cell } from '@grc/reports/reportTypes';
+import { renderRichHtml, renderInlinesHtml, parseInlines } from '@grc/richtext';
 
 interface Props {
   doc: ReportDocument;
@@ -53,7 +54,9 @@ const cellClass = (c: Cell): string =>
         );
       }
       if (block.kind === 'narrative') {
-        return <p class="grc-report__narrative">{block.text}</p>;
+        return (
+          <div class="grc-report__narrative grc-richbody" set:html={renderRichHtml(block.text)} />
+        );
       }
       if (block.kind === 'list') {
         return (
@@ -62,13 +65,13 @@ const cellClass = (c: Cell): string =>
             {block.ordered === false ? (
               <ul>
                 {block.items.map((i) => (
-                  <li>{i}</li>
+                  <li set:html={renderInlinesHtml(parseInlines(i))} />
                 ))}
               </ul>
             ) : (
               <ol>
                 {block.items.map((i) => (
-                  <li>{i}</li>
+                  <li set:html={renderInlinesHtml(parseInlines(i))} />
                 ))}
               </ol>
             )}
