@@ -620,6 +620,83 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         }
       });
     }
+
+    // Work paper as parent (Build Prompt 27): an action plan cannot exist
+    // without a finding, and the one seeded stray is surfaced and relinkable.
+    // The admin session signed out above, so sign back in.
+    await t.test('an action plan cannot be created or unlinked from its parent', async () => {
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const res = await server.request('POST', '/api/action-plans', {
+        action_description: 'Orphan attempt from the smoke test',
+        target_date: today,
+        due_date: today,
+        priority: 'High',
+      });
+      assert.equal(res.status, 303, `create answered ${res.status}`);
+      assert.ok(
+        String(res.headers.location ?? '').includes('error='),
+        'creation without a parent must be refused',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const created = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM action_plans
+            WHERE action_description = 'Orphan attempt from the smoke test'`,
+        )
+        .get() as { n: number | bigint };
+      assert.equal(Number(created.n), 0, 'no orphan row may be created');
+
+      const unlink = await server.request('POST', `/api/action-plans/${SMOKE.actionPlanId}`, {
+        action_description: 'Attempted unlink from the smoke test',
+        target_date: today,
+        due_date: today,
+        priority: 'High',
+      });
+      assert.ok(
+        String(unlink.headers.location ?? '').includes('error='),
+        'unlinking an existing plan must be refused',
+      );
+      const still = db
+        .prepare(`SELECT work_paper_id FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.actionPlanId) as { work_paper_id?: string };
+      assert.equal(String(still.work_paper_id), SMOKE.sentWorkPaperId, 'the link must survive');
+    });
+
+    await t.test('the seeded stray is surfaced and can be relinked', async () => {
+      const page = await server.get('/action-plans');
+      assert.equal(page.status, 200);
+      assert.ok(
+        page.body.includes('Plans without a parent finding'),
+        'the orphan panel must show while a stray exists',
+      );
+      const relink = await server.request('POST', `/api/action-plans/${SMOKE.orphanPlanId}`, {
+        work_paper_id: SMOKE.sentWorkPaperId,
+        action_description: 'Legacy stray plan with no parent finding.',
+        target_date: today,
+        due_date: today,
+        priority: 'Low',
+      });
+      assert.ok(
+        !String(relink.headers.location ?? '').includes('error='),
+        `relinking failed: ${relink.headers.location}`,
+      );
+      const db = server.database;
+      assert.ok(db);
+      const row = db
+        .prepare(`SELECT work_paper_id FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.orphanPlanId) as { work_paper_id?: string };
+      assert.equal(String(row.work_paper_id), SMOKE.sentWorkPaperId, 'the stray must be linked');
+      const after = await server.get('/action-plans');
+      assert.ok(
+        !after.body.includes('Plans without a parent finding'),
+        'the orphan panel clears once every plan is linked',
+      );
+    });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
     console.error('---- worker log (tail) ----');
