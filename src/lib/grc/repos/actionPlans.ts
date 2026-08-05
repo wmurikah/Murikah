@@ -22,7 +22,12 @@ const AP = cols(C.action_plans);
 
 // The form input and the priority vocabulary live in an import-free module so
 // node can unit-test them; they are re-exported here so callers keep one import.
-export { PRIORITIES, parseActionPlanInput, type ActionPlanInput } from '@grc/repos/actionPlanInput';
+export {
+  PRIORITIES,
+  parseActionPlanInput,
+  checkActionPlanInput,
+  type ActionPlanInput,
+} from '@grc/repos/actionPlanInput';
 import type { ActionPlanInput } from '@grc/repos/actionPlanInput';
 
 export interface ActionPlanListRow {
@@ -170,6 +175,41 @@ export async function listActionPlans(
     daysOverdue: Number(r.days_overdue ?? 0),
     daysUntilDue: daysUntil(s(r.due_date)),
     auditeeProposed: Number(r.auditee_proposed ?? 0) === 1,
+  }));
+}
+
+export interface OrphanActionPlan {
+  id: string;
+  actionNumber: string;
+  description: string;
+  status: string;
+}
+
+/**
+ * Plans with no parent finding. The forms and endpoints now require the
+ * linkage, so these are strays from before the rule; they are surfaced to
+ * auditors so each can be linked through its edit screen rather than stranded
+ * outside every drill-down and report.
+ */
+export async function listOrphanActionPlans(
+  db: Client,
+  organizationId: string,
+): Promise<OrphanActionPlan[]> {
+  const res = await db.execute({
+    sql: `SELECT ${AP.action_plan_id} AS id, ${AP.action_number} AS action_number,
+                 ${AP.action_description} AS description, ${AP.status} AS status
+            FROM action_plans
+           WHERE ${AP.organization_id} = ? AND ${AP.deleted_at} IS NULL
+             AND (${AP.work_paper_id} IS NULL OR ${AP.work_paper_id} = '')
+        ORDER BY ${AP.action_number} ASC
+           LIMIT 100`,
+    args: [organizationId],
+  });
+  return res.rows.map((r) => ({
+    id: String(r.id),
+    actionNumber: String(r.action_number ?? r.id),
+    description: String(r.description ?? ''),
+    status: String(r.status ?? ''),
   }));
 }
 
