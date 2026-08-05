@@ -5,9 +5,10 @@
  * Statuses are data-driven; this module stores fields and reads, never deciding
  * workflow validity (that is the engine's job in workflow/).
  *
- * Column names follow the operator's schema patch (grc/docs/schema-assumptions.md).
+ * Column names come from the typed schema layer (@grc/schema/columns).
  */
 import type { Client, InArgs } from '@libsql/client/web';
+import { C, cols } from '@grc/schema/columns';
 import {
   PENDING_SET,
   IMPLEMENTED_SET,
@@ -16,6 +17,13 @@ import {
   OVERDUE_EXCLUDE_SET,
   AP_STATUS,
 } from '@grc/workflow/actionPlanActions';
+
+const AP = cols(C.action_plans);
+
+// The form input and the priority vocabulary live in an import-free module so
+// node can unit-test them; they are re-exported here so callers keep one import.
+export { PRIORITIES, parseActionPlanInput, type ActionPlanInput } from '@grc/repos/actionPlanInput';
+import type { ActionPlanInput } from '@grc/repos/actionPlanInput';
 
 export interface ActionPlanListRow {
   id: string;
@@ -27,6 +35,9 @@ export interface ActionPlanListRow {
   ownerIds: string | null;
   ownerNames: string | null;
   dueDate: string | null;
+  targetDate: string | null;
+  priority: string | null;
+  affiliateCode: string | null;
   status: string;
   daysOverdue: number;
   daysUntilDue: number | null;
@@ -42,6 +53,9 @@ export interface ActionPlanFilters {
   auditAreaId?: string;
   /** The year of the linked work paper, for the dashboard drill-through. */
   year?: string;
+  /** The plan's own affiliate (a plan carries its affiliate_code). */
+  affiliateCode?: string;
+  priority?: string;
 }
 
 /** The viewer, for the role-based list visibility. */
@@ -113,19 +127,29 @@ export async function listActionPlans(
     where += ' AND wp.year = ?';
     args.push(Number(filters.year));
   }
+  if (filters.affiliateCode) {
+    where += ` AND ap.${AP.affiliate_code} = ?`;
+    args.push(filters.affiliateCode);
+  }
+  if (filters.priority) {
+    where += ` AND ap.${AP.priority} = ?`;
+    args.push(filters.priority);
+  }
 
   const res = await db.execute({
-    sql: `SELECT ap.action_plan_id AS id, ap.action_number AS action_number,
-                 ap.action_description AS description, ap.work_paper_id AS work_paper_id,
+    sql: `SELECT ap.${AP.action_plan_id} AS id, ap.${AP.action_number} AS action_number,
+                 ap.${AP.action_description} AS description, ap.${AP.work_paper_id} AS work_paper_id,
                  wp.work_paper_ref AS wp_reference, wp.risk_rating AS risk_rating,
-                 ap.owner_ids AS owner_ids, ap.owner_names AS owner_names,
-                 ap.due_date AS due_date, ap.status AS status,
-                 ap.days_overdue AS days_overdue, ap.auditee_proposed AS auditee_proposed
+                 ap.${AP.owner_ids} AS owner_ids, ap.${AP.owner_names} AS owner_names,
+                 ap.${AP.due_date} AS due_date, ap.${AP.target_date} AS target_date,
+                 ap.${AP.priority} AS priority, ap.${AP.affiliate_code} AS affiliate_code,
+                 ap.${AP.status} AS status,
+                 ap.${AP.days_overdue} AS days_overdue, ap.${AP.auditee_proposed} AS auditee_proposed
             FROM action_plans ap
-            LEFT JOIN work_papers wp ON wp.work_paper_id = ap.work_paper_id
-                 AND wp.organization_id = ap.organization_id
+            LEFT JOIN work_papers wp ON wp.work_paper_id = ap.${AP.work_paper_id}
+                 AND wp.organization_id = ap.${AP.organization_id}
            WHERE ${where}
-        ORDER BY ap.due_date IS NULL, ap.due_date ASC, ap.action_number ASC
+        ORDER BY ap.${AP.due_date} IS NULL, ap.${AP.due_date} ASC, ap.${AP.action_number} ASC
            LIMIT 500`,
     args,
   });
@@ -139,6 +163,9 @@ export async function listActionPlans(
     ownerIds: s(r.owner_ids),
     ownerNames: s(r.owner_names),
     dueDate: s(r.due_date),
+    targetDate: s(r.target_date),
+    priority: s(r.priority),
+    affiliateCode: s(r.affiliate_code),
     status: String(r.status),
     daysOverdue: Number(r.days_overdue ?? 0),
     daysUntilDue: daysUntil(s(r.due_date)),
@@ -231,12 +258,6 @@ export async function listWorkPaperOptions(
   });
 }
 
-export interface ActionPlanInput {
-  workPaperId: string | null;
-  actionDescription: string;
-  dueDate: string | null;
-}
-
 /** Create a plan, at Pending (or Not Due when the due date is still ahead). */
 export async function createActionPlan(
   db: Client,
@@ -256,10 +277,15 @@ export async function createActionPlan(
   const reference = `AP-${new Date().getUTCFullYear()}-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
   await db.execute({
     sql: `INSERT INTO action_plans
-            (action_plan_id, organization_id, action_ref, action_number, work_paper_id, action_description,
-             due_date, status, days_overdue, owner_ids, owner_names, auditee_proposed,
-             created_by, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, '', '', ?, ?, ?, ?)`,
+            (${AP.action_plan_id}, ${AP.organization_id}, ${AP.action_ref}, ${AP.action_number},
+             ${AP.work_paper_id}, ${AP.action_description}, ${AP.target_date}, ${AP.due_date},
+             ${AP.priority}, ${AP.implementation_notes}, ${AP.affiliate_code}, ${AP.status},
+             ${AP.days_overdue}, ${AP.owner_ids}, ${AP.owner_names}, ${AP.auditee_proposed},
+             ${AP.created_by}, ${AP.created_at}, ${AP.updated_at})
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                  (SELECT wp.affiliate_code FROM work_papers wp
+                    WHERE wp.work_paper_id = ? AND wp.organization_id = ?),
+                  ?, 0, '', '', ?, ?, ?, ?)`,
     args: [
       id,
       organizationId,
@@ -267,7 +293,14 @@ export async function createActionPlan(
       reference,
       input.workPaperId,
       input.actionDescription,
+      input.targetDate,
       input.dueDate,
+      input.priority,
+      input.implementationNotes,
+      // The plan inherits the finding's affiliate, so the affiliate filter and
+      // the affiliate-scoped reports see it without a second write.
+      input.workPaperId,
+      organizationId,
       status,
       auditeeProposed ? 1 : 0,
       userId,
@@ -278,7 +311,7 @@ export async function createActionPlan(
   return id;
 }
 
-/** Edit the description and due date (owners are set through setOwners). */
+/** Edit the writable fields (owners are set through setOwners). */
 export async function updateActionPlan(
   db: Client,
   organizationId: string,
@@ -286,9 +319,22 @@ export async function updateActionPlan(
   input: ActionPlanInput,
 ): Promise<void> {
   await db.execute({
-    sql: `UPDATE action_plans SET action_description = ?, due_date = ?, updated_at = ?
-           WHERE action_plan_id = ? AND organization_id = ?`,
-    args: [input.actionDescription, input.dueDate, new Date().toISOString(), id, organizationId],
+    sql: `UPDATE action_plans
+             SET ${AP.action_description} = ?, ${AP.target_date} = ?, ${AP.due_date} = ?,
+                 ${AP.priority} = ?, ${AP.implementation_notes} = ?,
+                 ${AP.work_paper_id} = ?, ${AP.updated_at} = ?
+           WHERE ${AP.action_plan_id} = ? AND ${AP.organization_id} = ?`,
+    args: [
+      input.actionDescription,
+      input.targetDate,
+      input.dueDate,
+      input.priority,
+      input.implementationNotes,
+      input.workPaperId,
+      new Date().toISOString(),
+      id,
+      organizationId,
+    ],
   });
 }
 
