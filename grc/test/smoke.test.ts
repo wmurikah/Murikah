@@ -362,10 +362,24 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'reports/export.ts',
-    title: 'export a board report',
+    title: 'export the period audit report',
     method: 'POST',
     path: () => '/api/reports/export',
-    form: () => ({ report_type: 'comprehensive', year: '2026' }),
+    form: () => ({ type: 'executive', year: '2026' }),
+  },
+  {
+    endpoint: 'reports/export.ts',
+    title: 'export the BARC board pack',
+    method: 'POST',
+    path: () => '/api/reports/export',
+    form: () => ({ type: 'barc', year: '2026' }),
+  },
+  {
+    endpoint: 'reports/export.ts',
+    title: 'export the observation trend',
+    method: 'POST',
+    path: () => '/api/reports/export',
+    form: () => ({ type: 'trend', year: '2026' }),
   },
   {
     endpoint: 'send-queue/retry.ts',
@@ -483,6 +497,15 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           concrete === '/login' || !final.startsWith('/login'),
           `${concrete} bounced to the sign-in screen (via ${res.hops.join(' -> ')})`,
         );
+      });
+    }
+
+    // Every report type builds its own document, so preview each on screen
+    // rather than only the default.
+    for (const type of ['executive', 'barc', 'observations', 'trend', 'tracker', 'overdue']) {
+      await t.test(`GET /reports as ${type}`, async () => {
+        const res = await server.get(`/reports?applied=1&type=${type}&year=2026`);
+        assert.equal(res.status, 200, `${type} answered ${res.status}: ${res.body.slice(0, 300)}`);
       });
     }
 
