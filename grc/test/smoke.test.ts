@@ -481,9 +481,30 @@ const MUTATION_STEPS: MutationStep[] = [
     endpoint: 'setup/settings.ts',
     title: 'save general settings',
     expect: 'success',
+    // A real browser posts the whole pre-filled form; an empty post would
+    // blank MFA_REQUIRED_ROLES, whose blank falls back to the default rule
+    // (SUPER_ADMIN must enrol) and would lock the admin out of the rest of
+    // the run - which is exactly what the field is for.
+    form: () => ({
+      RESPONSE_DEADLINE_DAYS: '14',
+      MAX_RESPONSE_ROUNDS: '3',
+      STALE_REMINDER_DAYS: '3',
+      OVERDUE_REMINDER_DAY: 'Monday',
+      MFA_REQUIRED_ROLES: 'NONE',
+      NOTIFY_SENDER_EMAIL: 'audit@hasspetroleum.com',
+      NOTIFY_REPLY_TO: 'audit@hasspetroleum.com',
+    }),
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = ? AND config_key = 'MFA_REQUIRED_ROLES'`,
+        )
+        .get(SMOKE.orgId) as { v?: string } | undefined;
+      assert.equal(String(r?.v), 'NONE', 'the saved settings must persist');
+    },
     method: 'POST',
     path: () => '/api/setup/settings',
-    form: () => ({}),
   },
   {
     endpoint: 'dropdowns.ts',
@@ -824,6 +845,26 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ code: '000000' }),
   },
   {
+    endpoint: 'auth/forgot-password.ts',
+    title: 'a reset request for an unknown email answers neutrally',
+    expect: 'success',
+    method: 'POST',
+    path: () => '/api/auth/forgot-password',
+    form: () => ({ email: 'nobody@hasspetroleum.com' }),
+  },
+  {
+    endpoint: 'auth/reset-password.ts',
+    title: 'an invalid reset token is refused, not 500',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/auth/reset-password',
+    form: () => ({
+      token: 'not-a-real-token',
+      new_password: 'Grc-Reset-Password-1',
+      confirm_password: 'Grc-Reset-Password-1',
+    }),
+  },
+  {
     endpoint: 'auth/logout.ts',
     title: 'sign out',
     expect: 'success',
@@ -960,6 +1001,159 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
+    // Work paper as parent (Build Prompt 27): an action plan cannot exist
+    // without a finding, and the one seeded stray is surfaced and relinkable.
+    // The admin session signed out above, so sign back in.
+    await t.test('an action plan cannot be created or unlinked from its parent', async () => {
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const res = await server.request('POST', '/api/action-plans', {
+        action_description: 'Orphan attempt from the smoke test',
+        target_date: today,
+        due_date: today,
+        priority: 'High',
+      });
+      assert.equal(res.status, 303, `create answered ${res.status}`);
+      assert.ok(
+        String(res.headers.location ?? '').includes('error='),
+        'creation without a parent must be refused',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const created = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM action_plans
+            WHERE action_description = 'Orphan attempt from the smoke test'`,
+        )
+        .get() as { n: number | bigint };
+      assert.equal(Number(created.n), 0, 'no orphan row may be created');
+
+      const unlink = await server.request('POST', `/api/action-plans/${SMOKE.actionPlanId}`, {
+        action_description: 'Attempted unlink from the smoke test',
+        target_date: today,
+        due_date: today,
+        priority: 'High',
+      });
+      assert.ok(
+        String(unlink.headers.location ?? '').includes('error='),
+        'unlinking an existing plan must be refused',
+      );
+      const still = db
+        .prepare(`SELECT work_paper_id FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.actionPlanId) as { work_paper_id?: string };
+      assert.equal(String(still.work_paper_id), SMOKE.sentWorkPaperId, 'the link must survive');
+    });
+
+    await t.test('the seeded stray is surfaced and can be relinked', async () => {
+      const page = await server.get('/action-plans');
+      assert.equal(page.status, 200);
+      assert.ok(
+        page.body.includes('Plans without a parent finding'),
+        'the orphan panel must show while a stray exists',
+      );
+      const relink = await server.request('POST', `/api/action-plans/${SMOKE.orphanPlanId}`, {
+        work_paper_id: SMOKE.sentWorkPaperId,
+        action_description: 'Legacy stray plan with no parent finding.',
+        target_date: today,
+        due_date: today,
+        priority: 'Low',
+      });
+      assert.ok(
+        !String(relink.headers.location ?? '').includes('error='),
+        `relinking failed: ${relink.headers.location}`,
+      );
+      const db = server.database;
+      assert.ok(db);
+      const row = db
+        .prepare(`SELECT work_paper_id FROM action_plans WHERE action_plan_id = ?`)
+        .get(SMOKE.orphanPlanId) as { work_paper_id?: string };
+      assert.equal(String(row.work_paper_id), SMOKE.sentWorkPaperId, 'the stray must be linked');
+      const after = await server.get('/action-plans');
+      assert.ok(
+        !after.body.includes('Plans without a parent finding'),
+        'the orphan panel clears once every plan is linked',
+      );
+    });
+
+    // Rich text and staged evidence (Build Prompt 28), on the admin session.
+    await t.test('narrative Markdown renders as marks, never raw or unescaped', async () => {
+      const res = await server.request('POST', '/api/work-papers', {
+        observation_title: 'Rich-text smoke finding',
+        observation_description:
+          '## Background\nControls **failed** in *March*.\n- reconciliation missed\n- review skipped',
+        recommendation: '1. Reconcile monthly\n2. Review quarterly',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const location = String(res.headers.location ?? '');
+      const m = /\/work-papers\/([^/?]+)/.exec(location);
+      assert.ok(m, `create redirected to ${location}`);
+      const page = await server.get(`/work-papers/${m[1]}`);
+      assert.equal(page.status, 200);
+      assert.ok(page.body.includes('<strong>failed</strong>'), 'bold renders as strong');
+      assert.ok(page.body.includes('<em>March</em>'), 'italic renders as em');
+      assert.ok(page.body.includes('<h4>Background</h4>'), 'the heading renders');
+      assert.ok(page.body.includes('<li>reconciliation missed</li>'), 'bullets render as a list');
+      assert.ok(!page.body.includes('**failed**'), 'no raw markers leak');
+    });
+
+    await t.test('evidence staged against a draft token binds to the new finding', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      // Stage a file as the upload endpoints would have (storage itself is not
+      // configured in the smoke environment, so the rows are planted directly).
+      const draftToken = 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000';
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO files (file_id, organization_id, file_name, mime_type, size_bytes,
+                            uploaded_by, created_at, storage_backend, storage_key)
+         VALUES ('FILE-STAGED', ?, 'staged.pdf', 'application/pdf', 100, ?, ?, 'r2', 'k')`,
+      ).run(SMOKE.orgId, SMOKE.userId, now);
+      db.prepare(
+        `INSERT INTO file_attachments (attachment_id, file_id, entity_type, entity_id,
+                                       file_category, attached_by, attached_at)
+         VALUES ('ATT-STAGED', 'FILE-STAGED', 'work_paper_draft', ?, 'EVIDENCE', ?, ?)`,
+      ).run(draftToken, SMOKE.userId, now);
+
+      const res = await server.request('POST', '/api/work-papers', {
+        observation_title: 'Finding with staged evidence',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        assigned_auditor: SMOKE.auditorId,
+        draft_token: draftToken,
+      });
+      const location = String(res.headers.location ?? '');
+      const m = /\/work-papers\/([^/?]+)/.exec(location);
+      assert.ok(m, `create redirected to ${location}`);
+      const bound = db
+        .prepare(
+          `SELECT entity_type, entity_id FROM file_attachments WHERE attachment_id = 'ATT-STAGED'`,
+        )
+        .get() as { entity_type?: string; entity_id?: string };
+      assert.equal(String(bound.entity_type), 'work_paper', 'the staged attachment rebinds');
+      assert.equal(String(bound.entity_id), m[1], 'the staged attachment binds to the new id');
+      const page = await server.get(`/work-papers/${m[1]}`);
+      assert.ok(page.body.includes('staged.pdf'), 'the bound evidence shows on the detail');
+    });
+
+    await t.test('a draft upload refuses cleanly while storage is unconfigured', async () => {
+      const res = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper_draft',
+        entity_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000',
+        file_name: 'x.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '10',
+      });
+      assert.equal(res.status, 503, `draft upload-url answered ${res.status}`);
+      assert.ok(res.body.trimStart().startsWith('{'), 'the refusal is the JSON contract');
+    });
+
     // Row scope and matrix gating, seen from the auditee side (Build Prompt
     // 26). The admin session signed out above, so sign in as the seeded
     // UNIT_MANAGER, whose role holds WORK_PAPER read but no CONFIG or USER
@@ -1008,6 +1202,241 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         control_frequency: 'Monthly',
       });
       assert.equal(res.status, 403, `/api/dropdowns answered ${res.status} for the auditee`);
+    });
+
+    // Login security round trips (Build Prompt 25), then the forgotten-password
+    // round trip (Build Prompt 24). The lockout and idle checks run first on
+    // the seeded passwords; the reset then changes the auditor's password; MFA
+    // enrolment goes last because it changes how the admin signs in.
+
+    await t.test('repeated failures lock the account, right password included', async () => {
+      server.clearCookies();
+      for (let i = 0; i < 5; i++) {
+        const res = await server.request('POST', '/api/auth/login', {
+          email: 'lockout@hasspetroleum.com',
+          password: 'wrong-password',
+        });
+        assert.equal(res.status, 303, `failure ${i + 1} answered ${res.status}`);
+      }
+      const locked = await server.request('POST', '/api/auth/login', {
+        email: 'lockout@hasspetroleum.com',
+        password: SMOKE.password,
+      });
+      assert.ok(
+        String(locked.headers.location ?? '').includes('error=1'),
+        'the lockout must refuse even the right password',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const ev = db
+        .prepare(`SELECT COUNT(*) AS n FROM security_events WHERE event_type = 'LOGIN_LOCKOUT'`)
+        .get() as { n: number | bigint };
+      assert.ok(Number(ev.n) >= 1, 'the lockout must be recorded in security_events');
+    });
+
+    await t.test('an idle session dies before its absolute expiry', async () => {
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: 'auditor@hasspetroleum.com',
+        password: SMOKE.password,
+      });
+      assert.ok(!String(login.headers.location ?? '').includes('error'), 'auditor must sign in');
+      const alive = await server.get('/work-papers');
+      assert.equal(alive.status, 200);
+      assert.ok(!alive.hops[alive.hops.length - 1].startsWith('/login'));
+      const db = server.database;
+      assert.ok(db);
+      const stale = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      db.prepare(`UPDATE sessions SET last_seen_at = ? WHERE user_id = ?`).run(
+        stale,
+        SMOKE.auditorId,
+      );
+      const bounced = await server.get('/work-papers');
+      assert.ok(
+        bounced.hops[bounced.hops.length - 1].startsWith('/login'),
+        `an idle session must be rejected (via ${bounced.hops.join(' -> ')})`,
+      );
+    });
+
+    // The full forgotten-password round trip (Build Prompt 24): request a link
+    // for the seeded auditor, pull the single-use token out of the queued
+    // email, redeem it, sign in with the new password, and prove the token
+    // died with its first use.
+    const resetPassword = 'Grc-Smoke-Reset-2026-A';
+    let resetToken = '';
+
+    await t.test('a reset request queues an email carrying the link', async () => {
+      server.clearCookies();
+      const res = await server.request('POST', '/api/auth/forgot-password', {
+        email: 'auditor@hasspetroleum.com',
+      });
+      assert.equal(res.status, 303, `forgot-password answered ${res.status}`);
+      assert.ok(
+        String(res.headers.location ?? '').includes('sent=1'),
+        'expected the neutral redirect',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const row = db
+        .prepare(
+          `SELECT rendered_body AS body FROM notification_queue
+            WHERE batch_type = 'PASSWORD_RESET' ORDER BY rowid DESC LIMIT 1`,
+        )
+        .get() as { body?: string } | undefined;
+      assert.ok(row?.body, 'the reset email was queued');
+      const m = /reset-password\?token=([0-9a-f]+)/.exec(String(row.body));
+      assert.ok(m, 'the queued email carries the reset link');
+      resetToken = m[1];
+    });
+
+    await t.test('the reset screen validates the token and the endpoint redeems it', async () => {
+      const page = await server.get(`/reset-password?token=${resetToken}`);
+      assert.equal(page.status, 200, `reset screen answered ${page.status}`);
+      assert.ok(!page.body.includes('not valid any more'), 'a fresh token must render the form');
+      const res = await server.request('POST', '/api/auth/reset-password', {
+        token: resetToken,
+        new_password: resetPassword,
+        confirm_password: resetPassword,
+      });
+      assert.equal(res.status, 303, `reset answered ${res.status}`);
+      assert.ok(
+        String(res.headers.location ?? '').includes('reset=1'),
+        `reset redirected to ${res.headers.location}`,
+      );
+    });
+
+    await t.test('the new password signs in and the used token is dead', async () => {
+      const res = await server.request('POST', '/api/auth/login', {
+        email: 'auditor@hasspetroleum.com',
+        password: resetPassword,
+      });
+      assert.equal(res.status, 303, `login answered ${res.status}`);
+      assert.ok(
+        !String(res.headers.location ?? '').includes('error'),
+        'the reset password must sign in',
+      );
+      const again = await server.request('POST', '/api/auth/reset-password', {
+        token: resetToken,
+        new_password: 'Grc-Smoke-Reset-2026-B',
+        confirm_password: 'Grc-Smoke-Reset-2026-B',
+      });
+      assert.ok(
+        String(again.headers.location ?? '').includes('error='),
+        'a used token must be refused',
+      );
+    });
+
+    // The full MFA life cycle (Build Prompt 25), last because enrolment
+    // changes how the admin signs in.
+    let mfaSecret = '';
+    let mfaBackup: string[] = [];
+
+    await t.test('MFA enrolment shows the key, the QR and the backup codes', async () => {
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      assert.equal(login.status, 303);
+      const enrol = await server.request('POST', '/api/auth/mfa/enrol');
+      assert.equal(enrol.status, 303, `enrol answered ${enrol.status}`);
+      const page = await server.get('/mfa/setup');
+      assert.equal(page.status, 200, `setup screen answered ${page.status}`);
+      const key = /Manual key: <code>([A-Z2-7 ]+)<\/code>/.exec(page.body);
+      assert.ok(key, 'the setup screen shows the manual key');
+      mfaSecret = key[1].replace(/ /g, '');
+      assert.ok(page.body.includes('<svg'), 'the setup screen renders the QR in-worker');
+      mfaBackup = [...page.body.matchAll(/<code>([A-Z2-9]{10})<\/code>/g)].map((m) => m[1]);
+      assert.equal(mfaBackup.length, 8, 'eight backup codes are shown once');
+    });
+
+    await t.test('confirming a real code activates the factor', async () => {
+      const code = await totpAt(mfaSecret, Math.floor(Date.now() / 1000));
+      const res = await server.request('POST', '/api/auth/mfa/confirm', { code });
+      assert.ok(
+        String(res.headers.location ?? '').includes('done=1'),
+        `confirm redirected to ${res.headers.location}`,
+      );
+    });
+
+    await t.test('the next sign-in demands the code and a real one passes', async () => {
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      assert.equal(
+        String(login.headers.location ?? ''),
+        '/mfa',
+        'an enrolled account must be sent to the TOTP step',
+      );
+      const blocked = await server.get('/work-papers');
+      assert.equal(
+        blocked.hops[blocked.hops.length - 1],
+        '/mfa',
+        'a pending session must not reach the app',
+      );
+      const code = await totpAt(mfaSecret, Math.floor(Date.now() / 1000));
+      const wrongCode = code === '000001' ? '000002' : '000001';
+      const wrong = await server.request('POST', '/api/auth/mfa/verify', { code: wrongCode });
+      assert.ok(String(wrong.headers.location ?? '').includes('error=1'));
+      const ok = await server.request('POST', '/api/auth/mfa/verify', { code });
+      assert.equal(String(ok.headers.location ?? ''), '/', 'a valid code must promote the session');
+      const home = await server.get('/work-papers');
+      assert.equal(home.status, 200, 'the promoted session reaches the app');
+    });
+
+    await t.test('a backup code passes the step once and only once', async () => {
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const first = await server.request('POST', '/api/auth/mfa/verify', {
+        backup_code: mfaBackup[0],
+      });
+      assert.equal(
+        String(first.headers.location ?? ''),
+        '/',
+        'a backup code must promote the session',
+      );
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const again = await server.request('POST', '/api/auth/mfa/verify', {
+        backup_code: mfaBackup[0],
+      });
+      assert.ok(
+        String(again.headers.location ?? '').includes('error='),
+        'a used backup code must be refused',
+      );
+    });
+
+    await t.test('an unenrolled user under a required rule is locked to enrolment', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      db.prepare(
+        `UPDATE config SET config_value = 'ALL'
+          WHERE organization_id = ? AND config_key = 'MFA_REQUIRED_ROLES'`,
+      ).run(SMOKE.orgId);
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: 'owner@hasspetroleum.com',
+        password: SMOKE.password,
+      });
+      assert.ok(!String(login.headers.location ?? '').includes('error'), 'the auditee signs in');
+      const res = await server.get('/work-papers');
+      assert.equal(
+        res.hops[res.hops.length - 1],
+        '/mfa/setup',
+        `an unenrolled user must be locked to enrolment (via ${res.hops.join(' -> ')})`,
+      );
+      db.prepare(
+        `UPDATE config SET config_value = 'NONE'
+          WHERE organization_id = ? AND config_key = 'MFA_REQUIRED_ROLES'`,
+      ).run(SMOKE.orgId);
     });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.
