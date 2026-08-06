@@ -467,11 +467,13 @@ const MUTATION_STEPS: MutationStep[] = [
     endpoint: 'setup/users.ts',
     title: 'create a user',
     expect: 'success',
-    verify: (db) => {
+    verify: (db, captured) => {
       const r = db
-        .prepare(`SELECT COUNT(*) AS n FROM users WHERE email = 'smoke.user@hasspetroleum.com'`)
-        .get() as { n: number | bigint };
-      assert.equal(Number(r.n), 1, 'the user row must exist');
+        .prepare(`SELECT user_id AS id FROM users WHERE email = 'smoke.user@hasspetroleum.com'`)
+        .get() as { id?: string } | undefined;
+      assert.ok(r?.id, 'the user row must exist');
+      // The edit steps below need the new id, which the redirect does not carry.
+      captured.set('newUserId', String(r.id));
     },
     method: 'POST',
     path: () => '/api/setup/users',
@@ -482,6 +484,49 @@ const MUTATION_STEPS: MutationStep[] = [
       role_code: 'AUDITOR',
       affiliate_code: SMOKE.affiliateCode,
       password: 'Smoke-User-Password-1',
+    }),
+  },
+  {
+    // Every account must carry a valid email: it is where the universal
+    // second-factor code goes (Build Prompt 37), so an edit that clears it is
+    // refused rather than silently saved.
+    endpoint: 'setup/users.ts',
+    title: 'an edit that drops the email is refused',
+    expect: 'refusal',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM users WHERE email = 'smoke.user@hasspetroleum.com'`)
+        .get() as { n: number | bigint };
+      assert.equal(Number(r.n), 1, 'the address must survive the refused edit');
+    },
+    method: 'POST',
+    path: () => '/api/setup/users',
+    form: (captured) => ({
+      op: 'update',
+      user_id: captured.get('newUserId') ?? '',
+      email: '',
+      full_name: 'Smoke User',
+      role_code: 'AUDITOR',
+    }),
+  },
+  {
+    endpoint: 'setup/users.ts',
+    title: 'an edit sets a valid email on the account',
+    expect: 'success',
+    verify: (db, captured) => {
+      const r = db
+        .prepare(`SELECT email FROM users WHERE user_id = ?`)
+        .get(captured.get('newUserId') ?? '') as { email?: string } | undefined;
+      assert.equal(r?.email, 'smoke.edited@hasspetroleum.com', 'the new address must be stored');
+    },
+    method: 'POST',
+    path: () => '/api/setup/users',
+    form: (captured) => ({
+      op: 'update',
+      user_id: captured.get('newUserId') ?? '',
+      email: 'smoke.edited@hasspetroleum.com',
+      full_name: 'Smoke User',
+      role_code: 'AUDITOR',
     }),
   },
   {
@@ -1062,6 +1107,16 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         '/mfa',
         'a pending session must not reach the app',
       );
+      // The password step provisions the email default with its first set of
+      // backup codes, so an unavailable inbox never locks the account out and
+      // there is still nothing to set up.
+      const provisionDb = server.database;
+      assert.ok(provisionDb, 'the fake database is reachable for verification');
+      const provisioned = readMfa(provisionDb, SMOKE.userId);
+      assert.equal(provisioned.method, 'email', 'the automatic default is email codes');
+      assert.equal(provisioned.confirmed, true, 'the default needs no enrolment');
+      assert.equal(provisioned.backup.length, 8, 'backup codes come with the account');
+      assert.ok(provisioned.backupPlain, 'the sealed shown-once plaintext rides along');
       const step = await server.get('/mfa');
       assert.equal(step.status, 200, `step screen answered ${step.status}`);
       assert.ok(step.body.includes('code we emailed'), 'the step defaults to the email copy');
