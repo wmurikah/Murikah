@@ -1,0 +1,158 @@
+---
+export const prerender = false;
+
+/**
+ * Email settings: the Outlook mailbox notifications send from, through
+ * Microsoft Graph. Shows the connection state (Connected as ... / Not
+ * connected / stale), the one-time Connect Outlook action and a test-email
+ * button. Gated on the CONFIG grant (platform owner always); connecting and
+ * testing need CONFIG update. The refresh token itself never reaches this
+ * page: only the state and the connected address are shown.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import { can } from '@grc/auth/rbac';
+import { getGrcDeliveryEnv } from '@grc/notify/env';
+import { getMailConnection, type MailConnectionRecord } from '@grc/repos/mailConnection';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
+const canWrite = grc.isPlatformOwner || can(Astro.locals, 'update', 'CONFIG');
+
+const url = Astro.url;
+const connectedBanner = url.searchParams.get('connected');
+const sentBanner = url.searchParams.get('sent');
+const error = url.searchParams.get('error');
+
+const delivery = getGrcDeliveryEnv();
+const configured = delivery.graph != null;
+const sender = delivery.graph?.sender ?? '';
+
+// Loaded inside the guard closure; TypeScript cannot see the assignment, so
+// the copy below widens the control-flow-narrowed type back to the union.
+let connection: MailConnectionRecord | null = null;
+let loadError = false;
+if (allowed) {
+  loadError = !(await guardPageLoad('settings.email', async () => {
+    connection = await getMailConnection(await getDb(getGrcEnv()));
+  }));
+}
+const record = connection as MailConnectionRecord | null;
+
+const isConnected = record != null && record.status === 'ok';
+const isStale = record != null && record.status === 'stale';
+const addressMismatch = isConnected && sender !== '' && record != null && record.address !== sender;
+const connectedSince = record?.connectedAt ? record.connectedAt.slice(0, 10) : '';
+---
+
+<GrcLayout title="Email settings">
+  <div class="grc-page-head">
+    <div>
+      <h1>Email</h1>
+      <p class="grc-lead">The Outlook mailbox notifications send from, through Microsoft Graph.</p>
+    </div>
+    <a class="grc-btn grc-btn--secondary" href="/settings">Back to settings</a>
+  </div>
+
+  {
+    connectedBanner && (
+      <p class="grc-notice" role="status">
+        Outlook connected as {connectedBanner}.
+      </p>
+    )
+  }
+  {
+    sentBanner && (
+      <p class="grc-notice" role="status">
+        {sentBanner}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert">
+        {error}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Settings are managed by administrators.
+      </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="Email settings" />
+    ) : (
+      <div class="grc-card grc-form">
+        <div class="grc-field">
+          <p class="grc-card__label">Connection</p>
+          {isConnected && record ? (
+            <p class="grc-notice" role="status">
+              Connected as {record.address}
+              {connectedSince ? ` since ${connectedSince}` : ''}. Queued notifications and reminders
+              send through this mailbox.
+            </p>
+          ) : isStale && record ? (
+            <p class="grc-error" role="alert">
+              Not connected. The saved sign-in for {record.address || 'the mailbox'} stopped working
+              ({record.staleReason || 'authorisation was refused'}). Connect Outlook again to resume
+              sending.
+            </p>
+          ) : (
+            <p class="grc-field__hint">
+              Not connected. Connect the {sender || 'Outlook'} mailbox once and every queued
+              notification sends through it.
+            </p>
+          )}
+          {addressMismatch && record && (
+            <p class="grc-error" role="alert">
+              The connected mailbox ({record.address}) is not the configured sender ({sender}).
+              Reconnect with the right account.
+            </p>
+          )}
+        </div>
+
+        {!configured && (
+          <div class="grc-field">
+            <p class="grc-error" role="alert">
+              The Microsoft Graph app credentials are not configured. Set GRAPH_CLIENT_ID,
+              GRAPH_CLIENT_SECRET and GRC_MAIL_SENDER as Worker secrets, then return here (see
+              grc/docs/outlook-email-setup.md).
+            </p>
+          </div>
+        )}
+
+        {delivery.mode !== 'production' && (
+          <div class="grc-field">
+            <p class="grc-field__hint">
+              Queued notifications are held outside production (GRC_ENV). The test email below still
+              sends, so the connection can be verified.
+            </p>
+          </div>
+        )}
+
+        {canWrite && (
+          <div class="grc-actions">
+            {configured && (
+              <a class="grc-btn grc-btn--primary" href="/api/admin/outlook/connect">
+                {isConnected ? 'Reconnect Outlook' : 'Connect Outlook'}
+              </a>
+            )}
+            {isConnected && (
+              <form method="post" action="/api/admin/outlook/test">
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Send test email
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+</GrcLayout>

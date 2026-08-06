@@ -1,15 +1,21 @@
 /**
  * The send loop, the port of the source send queue on the Engineering Rhythm
- * scan-and-drain pattern with an injectable clock and a production gate. It reads
- * due PENDING rows (urgent first, oldest first, across organisations within a
- * bounded batch), sends urgent items promptly and batches normal items per
- * recipient into one digest email, all through Microsoft Graph.
+ * scan-and-drain pattern with an injectable clock and a production gate. It
+ * reads due PENDING rows (urgent first, oldest first, across organisations
+ * within a bounded batch), sends urgent items promptly and batches normal
+ * items per recipient into one digest email, all through the delegated
+ * Microsoft Graph mailer (sendMail.ts), as the Outlook mailbox an admin
+ * connected on Settings -> Email.
  *
- * On send the row goes SENT with sent_at; on failure attempts is incremented and
- * error_message recorded, with an exponential backoff before the next try; when
- * attempts reach max_attempts the row is recorded in notification_dead_letter.
- * When Graph is not configured (or outside production) nothing is sent and the
- * rows are left PENDING, so a preview or local run never contacts a provider.
+ * On send the row goes SENT with sent_at; on failure attempts is incremented
+ * and error_message recorded, with an exponential backoff before the next try;
+ * when attempts reach max_attempts the row is recorded in
+ * notification_dead_letter. When the production gate is off nothing is sent
+ * and the rows are left PENDING, so a preview or local run never contacts a
+ * provider. When the Outlook connection is missing or stale, or goes stale
+ * mid-drain, the remaining rows are also left PENDING untouched: a lapsed
+ * connection is an operator problem surfaced on the Email screen, not a
+ * failure of the queued messages, so it never burns their attempts.
  *
  * Column names come from the typed schema layer. The queue has no updated_at:
  * the backoff is held in `scheduled_for` (the not-before time the next attempt
@@ -20,7 +26,7 @@ import type { Client, InArgs } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
 import type { Clock } from '@engr/time';
 import { canSend, type GrcDeliveryEnv } from './env';
-import { sendViaGraph } from './graph';
+import { prepareMailer, type Mailer } from './sendMail';
 import { buildDigest, type DigestItem } from './render';
 
 export interface DispatchOptions {
@@ -32,6 +38,8 @@ export interface DispatchSummary {
   failed: number;
   deadLettered: number;
   heldDryRun: number;
+  /** Rows left PENDING because the Outlook connection is missing or stale. */
+  heldConnection: number;
 }
 
 interface QueueRow {
@@ -157,6 +165,7 @@ function digestItem(row: QueueRow): DigestItem {
 export async function runGrcDispatch(
   db: Client,
   delivery: GrcDeliveryEnv,
+  sessionSecret: string,
   clock: Clock,
   opts: DispatchOptions,
 ): Promise<DispatchSummary> {
@@ -169,30 +178,47 @@ export async function runGrcDispatch(
     failed: 0,
     deadLettered: 0,
     heldDryRun: 0,
+    heldConnection: 0,
   };
+  if (rows.length === 0) return summary;
 
-  // Outside production, or without Graph credentials, drain nothing: leave PENDING.
-  if (!canSend(delivery) || !delivery.outlook) {
+  // Outside production, or without the Graph app credentials, drain nothing:
+  // leave PENDING.
+  if (!canSend(delivery)) {
     summary.heldDryRun = rows.length;
     return summary;
   }
-  const cfg = delivery.outlook;
+
+  const prepared = await prepareMailer(db, delivery, sessionSecret, now.getTime());
+  if (!prepared.ok) {
+    console.error('[grc.mail] queue held:', prepared.held);
+    summary.heldConnection = rows.length;
+    return summary;
+  }
+  const mailer: Mailer = prepared.mailer;
 
   const urgent = rows.filter((r) => r.priority === 'urgent');
   const normal = rows.filter((r) => r.priority !== 'urgent');
 
+  // The connection went stale mid-drain: everything not yet attempted stays
+  // PENDING with its attempts untouched, and the drain stops.
+  let stale = false;
+
   // Urgent: one email per row.
   for (const row of urgent) {
-    const res = await sendViaGraph(
-      cfg,
-      { to: row.recipientEmail, subject: row.subject, html: row.body },
-      now.getTime(),
-    );
+    if (stale) {
+      summary.heldConnection += 1;
+      continue;
+    }
+    const res = await mailer.send({ to: row.recipientEmail, subject: row.subject, html: row.body });
     if (res.ok) {
       await markSent(db, [row.id], nowIso);
       summary.sent += 1;
+    } else if (res.auth) {
+      stale = true;
+      summary.heldConnection += 1;
     } else {
-      const dead = await recordFailure(db, row, res.error ?? 'send failed', nowIso);
+      const dead = await recordFailure(db, row, res.reason, nowIso);
       summary.failed += 1;
       if (dead) summary.deadLettered += 1;
     }
@@ -206,12 +232,12 @@ export async function runGrcDispatch(
     byRecipient.set(row.recipientEmail, list);
   }
   for (const [email, group] of byRecipient) {
+    if (stale) {
+      summary.heldConnection += group.length;
+      continue;
+    }
     const digest = buildDigest(group.map(digestItem));
-    const res = await sendViaGraph(
-      cfg,
-      { to: email, subject: digest.subject, html: digest.body },
-      now.getTime(),
-    );
+    const res = await mailer.send({ to: email, subject: digest.subject, html: digest.body });
     if (res.ok) {
       await markSent(
         db,
@@ -219,9 +245,12 @@ export async function runGrcDispatch(
         nowIso,
       );
       summary.sent += group.length;
+    } else if (res.auth) {
+      stale = true;
+      summary.heldConnection += group.length;
     } else {
       for (const row of group) {
-        const dead = await recordFailure(db, row, res.error ?? 'send failed', nowIso);
+        const dead = await recordFailure(db, row, res.reason, nowIso);
         summary.failed += 1;
         if (dead) summary.deadLettered += 1;
       }

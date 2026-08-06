@@ -507,6 +507,40 @@ const MUTATION_STEPS: MutationStep[] = [
     path: () => '/api/setup/settings',
   },
   {
+    // Without the Graph app credentials the connect action must visibly
+    // refuse (an error banner on the Email screen), never a silent bounce.
+    endpoint: 'admin/outlook/connect.ts',
+    title: 'the Outlook connect action refuses without Graph credentials',
+    expect: 'refusal',
+    method: 'GET',
+    path: () => '/api/admin/outlook/connect',
+  },
+  {
+    // A bare callback (no code, no state) is a forged or broken sign-in
+    // response and must refuse without a 500.
+    endpoint: 'admin/outlook/callback.ts',
+    title: 'the Outlook callback refuses an incomplete sign-in response',
+    expect: 'refusal',
+    method: 'GET',
+    path: () => '/api/admin/outlook/callback',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = 'GLOBAL' AND config_key = 'MAIL_OUTLOOK_CONNECTION'`,
+        )
+        .get() as { v?: string } | undefined;
+      assert.equal(r, undefined, 'a refused callback must not store a connection');
+    },
+  },
+  {
+    endpoint: 'admin/outlook/test.ts',
+    title: 'the test email refuses while Outlook is not connected',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/admin/outlook/test',
+  },
+  {
     endpoint: 'dropdowns.ts',
     title: 'save the control dropdowns',
     expect: 'success',

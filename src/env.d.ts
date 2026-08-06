@@ -48,17 +48,20 @@ declare namespace Cloudflare {
     TURSO_CMS_AUTH_TOKEN?: string;
     CMS_SESSION_SECRET?: string;
 
-    // GRC notification delivery via Microsoft Graph (Outlook). All optional: the
-    // dispatcher's production gate keeps sends off unless GRC_ENV is 'production'
-    // and these are present, so a preview or local run drains as a dry-run and a
-    // queued row is left PENDING. Set as Worker secrets or in .dev.vars; never
-    // committed.
-    GRC_ENV?: string; // 'production' enables real sends; anything else is dry-run
-    OUTLOOK_CLIENT_ID?: string;
-    OUTLOOK_CLIENT_SECRET?: string;
-    OUTLOOK_REFRESH_TOKEN?: string;
-    OUTLOOK_SENDER_EMAIL?: string;
-    OUTLOOK_TENANT?: string; // optional AAD tenant; defaults to 'common'
+    // GRC notification delivery via Microsoft Graph (Outlook), sent as the
+    // delegated mailbox an admin connects once on Settings -> Email. All
+    // optional: the dispatcher's production gate keeps automated queue sends
+    // off unless GRC_ENV is 'production' and the Graph app credentials are
+    // present, so a preview or local run drains as a dry-run and a queued row
+    // is left PENDING. The refresh token normally lives sealed in the database
+    // (minted by the connect flow); GRAPH_REFRESH_TOKEN is an optional
+    // operator-provided seed. Set as Worker secrets or in .dev.vars per
+    // grc/docs/outlook-email-setup.md; never committed.
+    GRC_ENV?: string; // 'production' enables real queue sends; anything else is dry-run
+    GRAPH_CLIENT_ID?: string;
+    GRAPH_CLIENT_SECRET?: string;
+    GRAPH_REFRESH_TOKEN?: string;
+    GRC_MAIL_SENDER?: string; // the connected mailbox, hassaudit@outlook.com
 
     // GRC AI assistance provider API keys. Held only as Worker secrets, never in
     // the database; the config module shows only a masked tail. Absent keys leave

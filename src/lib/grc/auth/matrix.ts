@@ -90,6 +90,7 @@ export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
   'settings/dropdowns': [{ module: 'CONFIG', action: 'read' }],
   'settings/access-control': [{ module: 'CONFIG', action: 'read' }],
   'settings/ai': [{ module: 'CONFIG', action: 'read' }],
+  'settings/email': [{ module: 'CONFIG', action: 'read' }],
   'settings/users': [{ module: 'USER', action: 'read' }],
 };
 
