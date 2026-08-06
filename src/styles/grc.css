@@ -63,6 +63,7 @@
   --grc-shadow: 0 1px 2px rgba(11, 23, 51, 0.06);
   --grc-shadow-pop: 0 2px 8px rgba(11, 23, 51, 0.1);
   --grc-sidebar-w: 15rem;
+  --grc-rail-w: 3.75rem;
 
   margin: 0;
   min-height: 100vh;
@@ -151,10 +152,25 @@
   height: 100vh;
   overflow-y: auto;
 }
+/* Narrow screens: the sidebar becomes an off-canvas drawer (Build Prompt 31),
+   opened from the top bar, instead of a static block above the content. */
 @media (max-width: 60rem) {
   .grc-sidebar {
-    position: static;
-    height: auto;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(18rem, 85vw);
+    height: 100dvh;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: none;
+  }
+  :root.grc-drawer-open .grc-sidebar {
+    transform: translateX(0);
+    box-shadow: var(--grc-shadow-pop);
+  }
+  :root.grc-drawer-open {
+    overflow: hidden;
   }
 }
 .grc-brand {
@@ -365,6 +381,199 @@
 }
 .grc-signout:hover {
   background: rgba(242, 244, 250, 0.08);
+}
+
+/* ---- Auto-collapsing sidebar (Build Prompt 31) ----------------------------- */
+
+/* The sidebar head: the brand beside the pin control, and the chevron handle
+   that hints "expand" on the folded rail. */
+.grc-sidebar__head {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s1);
+}
+.grc-sidebar__head .grc-brand {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.grc-pinbtn,
+.grc-railbtn {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border: 0;
+  border-radius: var(--grc-radius-sm);
+  background: transparent;
+  color: var(--grc-on-navy-dim);
+  cursor: pointer;
+  padding: 0;
+}
+.grc-pinbtn:hover,
+.grc-railbtn:hover {
+  background: rgba(242, 244, 250, 0.1);
+  color: var(--grc-on-navy);
+}
+.grc-pinbtn[aria-pressed='true'] {
+  background: rgba(201, 162, 39, 0.2);
+  color: var(--grc-gold);
+}
+/* The handle only exists on the folded rail; the pin only when there is room
+   for it (open or pinned). Both fall out of the narrow drawer entirely. */
+.grc-railbtn {
+  display: none;
+}
+
+/* Icons must never shrink: on the folded rail the nowrap labels would
+   otherwise squeeze them to zero width. */
+.grc-navgroup__summary > svg,
+.grc-bell__summary > svg,
+.grc-account__id > svg,
+.grc-signout > svg,
+.grc-brand > .grc-brand__badge {
+  flex: 0 0 auto;
+}
+
+/* The top bar and scrim exist for the narrow tap-to-open drawer only. */
+.grc-topbar {
+  display: none;
+}
+.grc-scrim {
+  display: none;
+}
+
+@media (min-width: 60.0625rem) {
+  /* Unpinned: the shell keeps a narrow rail column; the sidebar element
+     itself widens over the content on reveal, so the workspace never
+     reflows as it opens and closes. */
+  :root:not(.grc-pin) .grc-shell {
+    grid-template-columns: var(--grc-rail-w) 1fr;
+  }
+  :root:not(.grc-pin) .grc-sidebar {
+    width: var(--grc-rail-w);
+    z-index: 40;
+    overflow-x: hidden;
+    transition: width 0.18s ease;
+    white-space: nowrap;
+  }
+  :root:not(.grc-pin) .grc-sidebar.is-open {
+    width: var(--grc-sidebar-w);
+    box-shadow: var(--grc-shadow-pop);
+    border-right: 1px solid rgba(242, 244, 250, 0.12);
+  }
+
+  /* The folded rail: the icon column keeps exactly the geometry it has when
+     open, so the reveal only fades labels in, never shifts an icon. Text
+     fades out; boxed sections that cannot fold to an icon are hidden. */
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-brand > span:last-child,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__label,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__chevron,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink > span:not(.grc-navcount),
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary > span:not(.grc-navcount),
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-account__id > span,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-signout > span {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .grc-sidebar .grc-brand > span:last-child,
+  .grc-sidebar .grc-navgroup__label,
+  .grc-sidebar .grc-navgroup__chevron,
+  .grc-sidebar .grc-navlink > span:not(.grc-navcount),
+  .grc-sidebar .grc-bell__summary > span:not(.grc-navcount),
+  .grc-sidebar .grc-account__id > span,
+  .grc-sidebar .grc-signout > span {
+    transition: opacity 0.12s ease 0.06s;
+  }
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-orgline,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-switcher,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__panel,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-pinbtn {
+    display: none;
+  }
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-railbtn {
+    display: grid;
+  }
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-sidebar__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--grc-s2);
+  }
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-signout {
+    border-color: transparent;
+  }
+
+  /* Counts stay visible on the rail as small badges beside the icon. */
+  .grc-navlink,
+  .grc-bell__summary {
+    position: relative;
+  }
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink .grc-navcount,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary .grc-navcount {
+    position: absolute;
+    left: 1.7rem;
+    top: 0;
+    transform: scale(0.85);
+  }
+}
+
+/* Narrow screens: a fixed top bar carries the brand and the drawer button. */
+@media (max-width: 60rem) {
+  .grc-topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--grc-s3);
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--grc-navy);
+    color: var(--grc-on-navy);
+    padding: var(--grc-s2) var(--grc-s4);
+  }
+  .grc-topbar__menu {
+    display: grid;
+    place-items: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border: 0;
+    border-radius: var(--grc-radius-sm);
+    background: transparent;
+    color: var(--grc-on-navy);
+    cursor: pointer;
+    padding: 0;
+  }
+  .grc-topbar__menu:hover {
+    background: rgba(242, 244, 250, 0.1);
+  }
+  .grc-topbar__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--grc-s2);
+    color: var(--grc-on-navy);
+    text-decoration: none;
+    font-weight: 700;
+  }
+  :root.grc-drawer-open .grc-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(11, 23, 51, 0.45);
+    border: 0;
+    padding: 0;
+  }
+  /* No hover states on the drawer: pin and handle are desktop affordances. */
+  .grc-pinbtn,
+  .grc-railbtn {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grc-sidebar,
+  .grc-sidebar * {
+    transition: none !important;
+  }
 }
 
 /* ---- Content primitives --------------------------------------------------- */
@@ -1489,6 +1698,8 @@
 /* Print: only the report, edge to edge, colours preserved. */
 @media print {
   .grc-sidebar,
+  .grc-topbar,
+  .grc-scrim,
   .grc-report-filters,
   .grc-report-pane__bar,
   .grc-page-head,
