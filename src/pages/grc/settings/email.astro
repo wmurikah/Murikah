@@ -15,7 +15,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { guardPageLoad } from '@grc/pageGuard';
 import { can } from '@grc/auth/rbac';
-import { getGrcDeliveryEnv } from '@grc/notify/env';
+import { canSend, getGrcDeliveryEnv } from '@grc/notify/env';
 import { getMailConnection, type MailConnectionRecord } from '@grc/repos/mailConnection';
 
 const grc = Astro.locals.grc;
@@ -47,6 +47,16 @@ const isConnected = record != null && record.status === 'ok';
 const isStale = record != null && record.status === 'stale';
 const addressMismatch = isConnected && sender !== '' && record != null && record.address !== sender;
 const connectedSince = record?.connectedAt ? record.connectedAt.slice(0, 10) : '';
+
+// The connection states are mutually exclusive, in precedence order: a stored
+// connection (ok or stale) wins over the raw-secret check, because a live
+// connection is proof the credentials were present; the "set the secrets"
+// banner shows only when the credentials are missing and nothing was ever
+// connected. Whether the queue actually sends is answered by canSend, the same
+// gate the queue drain applies (notify/dispatch.ts), so the note and the drain
+// never disagree.
+const showSetupBanner = !configured && record == null;
+const queueSending = canSend(delivery) && isConnected;
 ---
 
 <GrcLayout title="Email settings">
@@ -94,8 +104,7 @@ const connectedSince = record?.connectedAt ? record.connectedAt.slice(0, 10) : '
           {isConnected && record ? (
             <p class="grc-notice" role="status">
               Connected as {record.address}
-              {connectedSince ? ` since ${connectedSince}` : ''}. Queued notifications and reminders
-              send through this mailbox.
+              {connectedSince ? ` since ${connectedSince}` : ''}.
             </p>
           ) : isStale && record ? (
             <p class="grc-error" role="alert">
@@ -103,9 +112,15 @@ const connectedSince = record?.connectedAt ? record.connectedAt.slice(0, 10) : '
               ({record.staleReason || 'authorisation was refused'}). Connect Outlook again to resume
               sending.
             </p>
+          ) : showSetupBanner ? (
+            <p class="grc-error" role="alert">
+              The Microsoft Graph app credentials are not configured. Set GRAPH_CLIENT_ID,
+              GRAPH_CLIENT_SECRET and GRC_MAIL_SENDER as Worker secrets, then return here (see
+              grc/docs/outlook-email-setup.md).
+            </p>
           ) : (
             <p class="grc-field__hint">
-              Not connected. Connect the {sender || 'Outlook'} mailbox once and every queued
+              Not connected yet. Connect the {sender || 'Outlook'} mailbox once and every queued
               notification sends through it.
             </p>
           )}
@@ -117,24 +132,21 @@ const connectedSince = record?.connectedAt ? record.connectedAt.slice(0, 10) : '
           )}
         </div>
 
-        {!configured && (
-          <div class="grc-field">
-            <p class="grc-error" role="alert">
-              The Microsoft Graph app credentials are not configured. Set GRAPH_CLIENT_ID,
-              GRAPH_CLIENT_SECRET and GRC_MAIL_SENDER as Worker secrets, then return here (see
-              grc/docs/outlook-email-setup.md).
-            </p>
-          </div>
-        )}
-
-        {delivery.mode !== 'production' && (
+        {delivery.mode !== 'production' ? (
           <div class="grc-field">
             <p class="grc-field__hint">
               Queued notifications are held outside production (GRC_ENV). The test email below still
               sends, so the connection can be verified.
             </p>
           </div>
-        )}
+        ) : queueSending ? (
+          <div class="grc-field">
+            <p class="grc-field__hint">
+              GRC_ENV is production: queued notifications and reminders are sending through the
+              connected mailbox.
+            </p>
+          </div>
+        ) : null}
 
         {canWrite && (
           <div class="grc-actions">
