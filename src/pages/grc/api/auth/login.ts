@@ -23,11 +23,9 @@ import { verifyPassword } from '@grc/auth/password';
 import { resolveUserByEmail, touchLastLogin } from '@grc/repos/login';
 import { createSession } from '@grc/repos/session';
 import { createSessionCookie } from '@grc/auth/session';
-import { defaultLandingPath, isAuditeeRole } from '@grc/dashboard/roleNav';
-import { hasMyOverdue } from '@grc/repos/dashboard';
 import { throttleDecision } from '@grc/auth/loginThrottle';
 import { failureStreaks, recordLoginAttempt, recordSecurityEvent } from '@grc/repos/loginAttempts';
-import { getMfaRecord } from '@grc/repos/mfa';
+import { ensureMfaRecord } from '@grc/repos/mfa';
 import { getGrcDeliveryEnv } from '@grc/notify/env';
 import { issueEmailOtp } from '@grc/notify/otpMail';
 import { GRC_MFA_PATH } from '@grc/routing';
@@ -181,59 +179,47 @@ export const POST: APIRoute = async ({ request }) => {
 
     const secure = new URL(request.url).protocol === 'https:';
 
-    // A user with a confirmed second factor gets a half-authorised session:
-    // the cookie carries mfa=pending, and only the verification step accepts
-    // it. When the method is email, the sign-in code is issued and sent now
-    // (cooldown-limited); a failed send still lands on the step, which offers
-    // a resend and takes a backup code.
-    const mfaRecord = await getMfaRecord(db, user.organizationId, user.userId);
-    if (mfaRecord?.confirmed) {
-      let stepQuery = '';
-      if (mfaRecord.method === 'email') {
-        const issued = await issueEmailOtp(
-          db,
-          getGrcDeliveryEnv(),
-          env.sessionSecret,
-          {
-            organizationId: user.organizationId,
-            userId: user.userId,
-            email: emailNorm,
-            ip,
-          },
-          mfaRecord,
-        );
-        if (issued.ok) {
-          stepQuery = '?sent=1';
-        } else if (!issued.cooldown) {
-          console.error(`${TAG} sign-in code send failed:`, issued.reason);
-          stepQuery = '?senderror=1';
-        }
-      }
-      const pendingCookie = await createSessionCookie(
-        sessionId,
+    // Two-step verification is universal (Build Prompt 37): every sign-in
+    // gets a half-authorised session (cookie mfa=pending) that only the
+    // verification step accepts; no role is exempt, the platform owner
+    // included. Email codes are the automatic default, so the record is
+    // provisioned here on first sign-in with no enrolment step; an admin who
+    // switched to the authenticator app verifies with the app instead. When
+    // the method is email the sign-in code is issued and sent now
+    // (cooldown-limited); a failed send still lands on the step, which
+    // offers a resend and takes a backup code. The role-based landing
+    // happens after verification (mfa/verify.ts).
+    const mfaRecord = await ensureMfaRecord(db, user.organizationId, user.userId);
+    let stepQuery = '';
+    if (mfaRecord.method === 'email') {
+      const issued = await issueEmailOtp(
+        db,
+        getGrcDeliveryEnv(),
         env.sessionSecret,
-        secure,
-        'pending',
+        {
+          organizationId: user.organizationId,
+          userId: user.userId,
+          email: emailNorm,
+          ip,
+        },
+        mfaRecord,
       );
-      return new Response(null, {
-        status: 303,
-        headers: { location: `${GRC_MFA_PATH}${stepQuery}`, 'set-cookie': pendingCookie },
-      });
+      if (issued.ok) {
+        stepQuery = '?sent=1';
+      } else if (!issued.cooldown) {
+        console.error(`${TAG} sign-in code send failed:`, issued.reason);
+        stepQuery = '?senderror=1';
+      }
     }
-
-    const cookie = await createSessionCookie(sessionId, env.sessionSecret, secure);
-
-    // Role-based default landing: an auditee lands on their overdue action plans
-    // (or their findings), everyone else on the dashboard.
-    let hasOverdue = false;
-    if (!user.isPlatformOwner && isAuditeeRole(user.roleCode)) {
-      hasOverdue = await hasMyOverdue(db, user.organizationId, user.userId);
-    }
-    const location = defaultLandingPath(user.roleCode, user.isPlatformOwner, hasOverdue);
-
+    const pendingCookie = await createSessionCookie(
+      sessionId,
+      env.sessionSecret,
+      secure,
+      'pending',
+    );
     return new Response(null, {
       status: 303,
-      headers: { location, 'set-cookie': cookie },
+      headers: { location: `${GRC_MFA_PATH}${stepQuery}`, 'set-cookie': pendingCookie },
     });
   } catch (err) {
     const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
