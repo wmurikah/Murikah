@@ -10,6 +10,12 @@
  * schema (grc/docs/schema-assumptions.md).
  */
 import type { Client, InArgs } from '@libsql/client/web';
+import {
+  restrictToOwnFindings,
+  seesForeignDrafts,
+  type WorkPaperViewer,
+} from './workPaperVisibility';
+import { WP_STATUS } from '../workflow/workPaperActions';
 
 export interface WorkPaperListRow {
   id: string;
@@ -134,15 +140,34 @@ export function parseWorkPaperInput(form: FormData): WorkPaperInput {
  * List work papers for the organisation, newest first, with optional filters and
  * a full-text search. Labels for affiliate, audit area and auditor are joined so
  * the dense list needs no second round trip.
+ *
+ * Row scope follows the viewer (workPaperVisibility.ts): auditee-side viewers
+ * see only findings they are assigned to or named responsible for, and Draft
+ * rows show only to their authors, mirroring the action-plan list.
  */
 export async function listWorkPapers(
   db: Client,
   organizationId: string,
+  viewer: WorkPaperViewer,
   filters: WorkPaperFilters = {},
 ): Promise<WorkPaperListRow[]> {
   const args: InArgs = [organizationId];
   let where = 'wp.organization_id = ?';
   let ftsJoin = '';
+
+  if (restrictToOwnFindings(viewer)) {
+    where +=
+      ' AND (wp.assigned_auditor_id = ? OR EXISTS (SELECT 1 FROM work_paper_responsibles r' +
+      ' WHERE r.work_paper_id = wp.work_paper_id AND r.user_id = ?))';
+    args.push(viewer.userId, viewer.userId);
+  }
+  if (!seesForeignDrafts(viewer)) {
+    where +=
+      ' AND (wp.status <> ? OR wp.created_by = ? OR wp.prepared_by_id = ?' +
+      ' OR wp.assigned_auditor_id = ?)';
+    args.push(WP_STATUS.DRAFT, viewer.userId, viewer.userId, viewer.userId);
+  }
+
   if (filters.q && filters.q.trim() !== '') {
     ftsJoin = 'JOIN work_papers_fts fts ON fts.rowid = wp.rowid';
     where += ' AND work_papers_fts MATCH ?';

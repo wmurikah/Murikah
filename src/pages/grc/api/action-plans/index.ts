@@ -11,10 +11,15 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { createActionPlan, parseActionPlanInput } from '@grc/repos/actionPlans';
+import {
+  createActionPlan,
+  parseActionPlanInput,
+  checkActionPlanInput,
+} from '@grc/repos/actionPlans';
 import { resolveOwners, setOwners } from '@grc/repos/actionPlanOwners';
 import { enqueueNotification } from '@grc/repos/notify';
 import { writeAuditLog } from '@grc/repos/audit';
+import { bindDraftAttachments } from '@grc/repos/evidence';
 import { getWorkPaper } from '@grc/repos/workPapers';
 import { loadAiConfig } from '@grc/ai/config';
 import { evaluateAuditeeResponse } from '@grc/ai/features';
@@ -36,10 +41,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const form = await request.formData();
   const input = parseActionPlanInput(form);
-  if (!input.actionDescription) {
+  const inputError = checkActionPlanInput(input);
+  if (inputError) {
     return new Response(null, {
       status: 303,
-      headers: { location: '/action-plans/new?error=invalid' },
+      headers: { location: `/action-plans/new?error=${encodeURIComponent(inputError)}` },
     });
   }
   const ownerIds = form
@@ -48,6 +54,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .filter(Boolean);
 
   const db = await getDb(getGrcEnv());
+
+  // The parent must be a real finding in the acting organisation; a stray or
+  // crafted id is refused with the same field error, not stored.
+  const parent = input.workPaperId
+    ? await getWorkPaper(db, grc.organizationId, input.workPaperId)
+    : null;
+  if (!parent) {
+    return new Response(null, {
+      status: 303,
+      headers: {
+        location: `/action-plans/new?error=${encodeURIComponent('Every action plan must be linked to a parent finding. Choose the work paper it remediates.')}`,
+      },
+    });
+  }
 
   // Auditee auto-evaluation hook: when the plan's AI feature and evaluation are
   // enabled, evaluate an auditee-proposed plan against the finding, and if it
@@ -89,6 +109,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const id = await createActionPlan(db, grc.organizationId, grc.userId, input, auditeeProposed);
+
+  // Evidence staged on the create form becomes this plan's evidence.
+  const draftToken = String(form.get('draft_token') ?? '').trim();
+  if (draftToken !== '') {
+    try {
+      await bindDraftAttachments(
+        db,
+        grc.organizationId,
+        grc.userId,
+        'action_plan_draft',
+        draftToken,
+        'action_plan',
+        id,
+      );
+    } catch (err) {
+      console.error('[grc.evidence.bind] draft binding failed', err);
+    }
+  }
 
   if (ownerIds.length > 0) {
     const owners = await resolveOwners(db, grc.organizationId, ownerIds);

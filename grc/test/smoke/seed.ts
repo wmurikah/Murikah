@@ -20,6 +20,7 @@ export const SMOKE = {
   userId: 'USR-WM',
   auditorId: 'USR-AUD',
   auditeeId: 'USR-OWN',
+  lockoutUserId: 'USR-LOCK',
   affiliateCode: 'HKL',
   auditAreaId: 'AA-FIN',
   subAreaId: 'SA-TREAS',
@@ -27,6 +28,7 @@ export const SMOKE = {
   sentWorkPaperId: 'WP-SENT-1',
   requirementId: 'REQ-1',
   actionPlanId: 'AP-PROG-1',
+  orphanPlanId: 'AP-ORPHAN-1',
   verifyActionPlanId: 'AP-VERIFY-1',
   responseId: 'RESP-1',
   notificationId: 'NQ-1',
@@ -197,11 +199,30 @@ export function seedDatabase(db: DatabaseSync): void {
       });
     }
   }
+  // The auditee role: read findings (the list is row-scoped to their own),
+  // respond, and read their action plans. No CONFIG or USER grant, so the
+  // central page map keeps them out of settings and the send queue.
+  for (const [module, action] of [
+    ['WORK_PAPER', 'read'],
+    ['ACTION_PLAN', 'read'],
+    ['AUDITEE_RESPONSE', 'read'],
+    ['AUDITEE_RESPONSE', 'create'],
+  ] as const) {
+    insert(db, 'role_permissions', {
+      role_code: 'UNIT_MANAGER',
+      module_code: module,
+      action_code: action,
+      is_allowed: 1,
+    });
+  }
 
   const users: [string, string, string, string, number][] = [
     [SMOKE.userId, SMOKE.email, 'Wilberforce Murikah', 'SUPER_ADMIN', 1],
     [SMOKE.auditorId, 'auditor@hasspetroleum.com', 'Amina Auditor', 'AUDITOR', 0],
     [SMOKE.auditeeId, 'owner@hasspetroleum.com', 'Otieno Owner', 'UNIT_MANAGER', 0],
+    // Exists only for the lockout check: the smoke test burns its failure
+    // budget and proves the right password is then refused too.
+    [SMOKE.lockoutUserId, 'lockout@hasspetroleum.com', 'Larry Lockout', 'AUDITOR', 0],
   ];
   for (const [id, email, name, role, isOwner] of users) {
     insert(db, 'users', {
@@ -216,6 +237,18 @@ export function seedDatabase(db: DatabaseSync): void {
       must_change_password: 0,
       is_platform_owner: isOwner,
       created_at: now,
+    });
+  }
+
+  // MFA is not required by role in the smoke organisation (the default rule
+  // would lock the seeded SUPER_ADMIN to enrolment and break every page
+  // check); the voluntary enrolment round trip covers the flow instead.
+  for (const orgId of [SMOKE.orgId, SMOKE.otherOrgId]) {
+    insert(db, 'config', {
+      organization_id: orgId,
+      config_key: 'MFA_REQUIRED_ROLES',
+      config_value: 'NONE',
+      updated_at: now,
     });
   }
 
@@ -429,6 +462,27 @@ export function seedDatabase(db: DatabaseSync): void {
       action_date: now,
     });
   }
+
+  // A stray from before the parent rule: no work_paper_id and no owners, so
+  // only the orphan panel and its relink path see it.
+  insert(db, 'action_plans', {
+    action_plan_id: SMOKE.orphanPlanId,
+    organization_id: SMOKE.orgId,
+    work_paper_id: null,
+    affiliate_code: SMOKE.affiliateCode,
+    action_ref: 'AP/2026/009',
+    action_number: 9,
+    action_description: 'Legacy stray plan with no parent finding.',
+    priority: 'Low',
+    status: 'Pending',
+    target_date: today,
+    due_date: today,
+    created_by: SMOKE.userId,
+    created_by_role: 'SUPER_ADMIN',
+    days_overdue: 0,
+    created_at: now,
+    updated_at: now,
+  });
 
   insert(db, 'auditee_responses', {
     response_id: SMOKE.responseId,

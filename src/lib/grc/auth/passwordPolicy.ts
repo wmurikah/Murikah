@@ -35,3 +35,20 @@ export function checkNewPassword(current: string, next: string, confirm: string)
   }
   return { ok: true };
 }
+
+/**
+ * Validate a password set through the reset flow, where there is no current
+ * plaintext to compare against: the length rule and the confirmation only.
+ */
+export function checkResetPassword(next: string, confirm: string): PasswordCheck {
+  if (next.length < MIN_PASSWORD_LENGTH) {
+    return {
+      ok: false,
+      error: `The new password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+    };
+  }
+  if (next !== confirm) {
+    return { ok: false, error: 'The new password and its confirmation do not match.' };
+  }
+  return { ok: true };
+}

@@ -10,6 +10,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { createWorkPaper, parseWorkPaperInput } from '@grc/repos/workPapers';
 import { writeAuditLog } from '@grc/repos/audit';
+import { bindDraftAttachments } from '@grc/repos/evidence';
 import { WP_STATUS } from '@grc/workflow/workPaperActions';
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -34,6 +35,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const env = getGrcEnv();
   const db = await getDb(env);
   const id = await createWorkPaper(db, grc.organizationId, grc.userId, WP_STATUS.DRAFT, input);
+
+  // Evidence staged on the create form (against the draft token) becomes this
+  // finding's evidence. Best-effort: a failed bind never loses the finding.
+  const draftToken = String(form.get('draft_token') ?? '').trim();
+  if (draftToken !== '') {
+    try {
+      await bindDraftAttachments(
+        db,
+        grc.organizationId,
+        grc.userId,
+        'work_paper_draft',
+        draftToken,
+        'work_paper',
+        id,
+      );
+    } catch (err) {
+      console.error('[grc.evidence.bind] draft binding failed', err);
+    }
+  }
   try {
     await writeAuditLog(db, {
       organizationId: grc.organizationId,

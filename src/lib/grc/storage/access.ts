@@ -57,11 +57,30 @@ async function isLinkedToEntity(
 }
 
 function viewPermission(entityType: string): string {
-  return entityType === 'action_plan' ? 'ACTION_PLANS.view' : 'WORK_PAPERS.view';
+  return entityType.startsWith('action_plan') ? 'ACTION_PLANS.view' : 'WORK_PAPERS.view';
 }
 
 function editPermission(entityType: string): string {
-  return entityType === 'action_plan' ? 'ACTION_PLANS.edit' : 'WORK_PAPERS.edit';
+  return entityType.startsWith('action_plan') ? 'ACTION_PLANS.edit' : 'WORK_PAPERS.edit';
+}
+
+/**
+ * A draft entity stages evidence for a record that does not exist yet: the
+ * create form uploads against a random draft token, and saving the record
+ * rebinds the staged attachments to the real id (repos/evidence.ts). Staging
+ * is gated on the matching create permission (an auditee proposing a plan
+ * stages under their respond permission).
+ */
+export function isDraftEntity(entityType: string): boolean {
+  return entityType === 'work_paper_draft' || entityType === 'action_plan_draft';
+}
+
+function canStage(actor: EvidenceActor, entityType: string): boolean {
+  if (actor.isPlatformOwner) return true;
+  if (entityType === 'action_plan_draft') {
+    return actor.perms.includes('ACTION_PLANS.create') || actor.perms.includes('AUDITEE.respond');
+  }
+  return actor.perms.includes('WORK_PAPERS.create');
 }
 
 /** Whether the actor may see (and download) evidence on the entity. */
@@ -72,6 +91,7 @@ export async function canViewEvidence(
   entityId: string,
 ): Promise<boolean> {
   if (actor.isPlatformOwner) return true;
+  if (isDraftEntity(entityType)) return canStage(actor, entityType);
   if (actor.perms.includes(viewPermission(entityType))) return true;
   return isLinkedToEntity(db, actor.organizationId, actor.userId, entityType, entityId);
 }
@@ -84,6 +104,7 @@ export async function canUploadEvidence(
   entityId: string,
 ): Promise<boolean> {
   if (actor.isPlatformOwner) return true;
+  if (isDraftEntity(entityType)) return canStage(actor, entityType);
   if (actor.perms.includes(editPermission(entityType))) return true;
   return isLinkedToEntity(db, actor.organizationId, actor.userId, entityType, entityId);
 }
