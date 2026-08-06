@@ -15,14 +15,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, relative, sep } from 'node:path';
 import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
 // The same RFC 6238 implementation the worker verifies against, so the round
 // trip computes real codes for the enrolled secret.
 import { totpAt } from '../../src/lib/cms/auth/totp.ts';
-// The same recogniser the worker names evidence with (Build Prompt 32).
-import { isDeterministicName } from '../../src/lib/grc/storage/derived.ts';
+// The same challenge shape the worker stores, so the email-code round trip
+// plants known challenges (the smoke run has no Graph mailer to deliver one).
+import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';
+import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -881,6 +884,15 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ code: '000000' }),
   },
   {
+    // The admin's dry-run enrolment above is the authenticator method, so
+    // there is no email code to send; the endpoint must say so, not 500.
+    endpoint: 'auth/mfa/send.ts',
+    title: 'a code send without an email enrolment is refused, not 500',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/auth/mfa/send',
+  },
+  {
     endpoint: 'auth/forgot-password.ts',
     title: 'a reset request for an unknown email answers neutrally',
     expect: 'success',
@@ -1461,6 +1473,180 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.ok(
         String(again.headers.location ?? '').includes('error='),
         'a used backup code must be refused',
+      );
+    });
+
+    // The email MFA method (Build Prompt 34): switching methods, the emailed
+    // code at sign-in, single use, expiry, the lock, and backup codes. The
+    // smoke run has no Graph mailer, so sends visibly fail (which itself
+    // proves the send path is wired) and known challenges are planted through
+    // the database handle.
+    const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
+    const readAdminMfa = (db: SmokeDb): MfaRecord => {
+      const row = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = ? AND config_key = 'MFA_TOTP::${SMOKE.userId}'`,
+        )
+        .get(SMOKE.orgId) as { v?: string } | undefined;
+      return JSON.parse(String(row?.v ?? 'null')) as MfaRecord;
+    };
+    const writeAdminMfa = (db: SmokeDb, record: MfaRecord): void => {
+      db.prepare(
+        `UPDATE config SET config_value = ?
+          WHERE organization_id = ? AND config_key = 'MFA_TOTP::${SMOKE.userId}'`,
+      ).run(JSON.stringify(record), SMOKE.orgId);
+    };
+    let emailBackup: string[] = [];
+
+    await t.test(
+      'switching to email codes keeps the app factor active until confirmed',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+        // The previous block ends on a pending session (its last action was a
+        // refused backup-code reuse), so complete a fresh sign-in first: the
+        // switch is a fully signed-in action.
+        server.clearCookies();
+        await server.request('POST', '/api/auth/login', {
+          email: SMOKE.email,
+          password: SMOKE.password,
+        });
+        const totp = await server.request('POST', '/api/auth/mfa/verify', {
+          code: await totpAt(mfaSecret, Math.floor(Date.now() / 1000)),
+        });
+        assert.equal(String(totp.headers.location ?? ''), '/', 'the app code signs the admin in');
+        const start = await server.request('POST', '/api/auth/mfa/enrol', { method: 'email' });
+        assert.equal(start.status, 303, `enrol answered ${start.status}`);
+        assert.ok(
+          String(start.headers.location ?? '').includes('error='),
+          'without the Graph mailer the enrolment code email visibly fails',
+        );
+        const record = readAdminMfa(db);
+        assert.equal(record.confirmed, true, 'the active factor must stand during the switch');
+        assert.equal(record.method, 'totp', 'the active method is still the app');
+        assert.equal(record.pendingMethod, 'email', 'the email enrolment is pending');
+        const page = await server.get('/mfa/setup');
+        assert.equal(page.status, 200, `setup screen answered ${page.status}`);
+        assert.ok(page.body.includes('Check your email'), 'the email panel is shown');
+        emailBackup = [...page.body.matchAll(/<code>([A-Z2-9]{10})<\/code>/g)].map((m) => m[1]);
+        assert.equal(emailBackup.length, 8, 'fresh backup codes are shown once');
+      },
+    );
+
+    await t.test('confirming the emailed code activates the email method', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const record = readAdminMfa(db);
+      writeAdminMfa(db, {
+        ...record,
+        challenge: newChallenge(sha256('654321'), Date.now() - 120_000),
+      });
+      const wrong = await server.request('POST', '/api/auth/mfa/confirm', { code: '111111' });
+      assert.ok(String(wrong.headers.location ?? '').includes('error='), 'a wrong code refuses');
+      assert.equal(
+        readAdminMfa(db).challenge?.attempts,
+        1,
+        'a wrong guess counts against the challenge',
+      );
+      const ok = await server.request('POST', '/api/auth/mfa/confirm', { code: '654321' });
+      assert.ok(
+        String(ok.headers.location ?? '').includes('done=1'),
+        `confirm redirected to ${ok.headers.location}`,
+      );
+      const after = readAdminMfa(db);
+      assert.equal(after.method, 'email', 'the email method is now active');
+      assert.equal(after.confirmed, true);
+      assert.equal(after.pendingMethod, undefined, 'nothing stays pending');
+      assert.equal(after.backup.length, 8, 'the backup-code hashes are stored');
+    });
+
+    await t.test('an email-method sign-in demands the emailed code', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      server.clearCookies();
+      const login = await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const loc = String(login.headers.location ?? '');
+      assert.ok(loc.startsWith('/mfa'), 'an email-method account must be sent to the step');
+      assert.ok(
+        loc.includes('senderror=1'),
+        'without the Graph mailer the sign-in send visibly fails',
+      );
+      const step = await server.get('/mfa');
+      assert.equal(step.status, 200, `step screen answered ${step.status}`);
+      assert.ok(step.body.includes('emailed'), 'the step shows the email copy');
+      const resend = await server.request('POST', '/api/auth/mfa/send');
+      assert.ok(
+        String(resend.headers.location ?? '').includes('error='),
+        'a resend inside the cooldown is refused',
+      );
+      writeAdminMfa(db, {
+        ...readAdminMfa(db),
+        challenge: newChallenge(sha256('271828'), Date.now() - 90_000),
+      });
+      const wrong = await server.request('POST', '/api/auth/mfa/verify', { code: '000001' });
+      assert.ok(String(wrong.headers.location ?? '').includes('error=1'), 'a wrong code refuses');
+      assert.equal(readAdminMfa(db).challenge?.attempts, 1, 'the wrong guess is counted');
+      const ok = await server.request('POST', '/api/auth/mfa/verify', { code: '271828' });
+      assert.equal(
+        String(ok.headers.location ?? ''),
+        '/',
+        'the right emailed code promotes the session',
+      );
+      assert.equal(readAdminMfa(db).challenge?.used, true, 'the challenge is spent on use');
+      const home = await server.get('/work-papers');
+      assert.equal(home.status, 200, 'the promoted session reaches the app');
+    });
+
+    await t.test('a used, expired or locked code refuses; a backup code still works', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const base = readAdminMfa(db);
+      writeAdminMfa(db, {
+        ...base,
+        challenge: { ...newChallenge(sha256('314159'), Date.now() - 90_000), used: true },
+      });
+      const used = await server.request('POST', '/api/auth/mfa/verify', { code: '314159' });
+      assert.ok(
+        String(used.headers.location ?? '').includes('error=1'),
+        'a spent code never passes again',
+      );
+      writeAdminMfa(db, {
+        ...base,
+        challenge: newChallenge(sha256('314159'), Date.now() - 11 * 60_000),
+      });
+      const expired = await server.request('POST', '/api/auth/mfa/verify', { code: '314159' });
+      assert.ok(
+        String(expired.headers.location ?? '').includes('error=1'),
+        'an expired code is refused',
+      );
+      writeAdminMfa(db, {
+        ...base,
+        challenge: {
+          ...newChallenge(sha256('314159'), Date.now() - 90_000),
+          attempts: OTP_MAX_ATTEMPTS,
+        },
+      });
+      const locked = await server.request('POST', '/api/auth/mfa/verify', { code: '314159' });
+      assert.ok(
+        String(locked.headers.location ?? '').includes('error=1'),
+        'a locked challenge refuses even the right code',
+      );
+      const backup = await server.request('POST', '/api/auth/mfa/verify', {
+        backup_code: emailBackup[0],
+      });
+      assert.equal(
+        String(backup.headers.location ?? ''),
+        '/',
+        'a backup code passes for the email method',
       );
     });
 
