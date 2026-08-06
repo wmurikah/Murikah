@@ -1,24 +1,26 @@
 export const prerender = false;
 
 /**
- * Start MFA enrolment for the chosen method (Build Prompt 34). The
- * authenticator app path generates a fresh base32 secret and eight backup
- * codes, seals both (auth/secretBox.ts) and stores the pending record; the
- * email path stores a pending email enrolment with sealed backup codes and
- * emails a first 6-digit code through the Graph mailer. A user with a
- * confirmed factor may start a switch to the other method (the active factor
- * keeps working until the new one confirms); replacing the same method's
- * factor stays an administrative reset. Tagged [grc.auth.mfa]; never a blank
- * 500.
+ * Change the sign-in verification method (Build Prompt 37). The
+ * authenticator app is an admin-only alternative: only roles allowed by
+ * MFA_AUTHENTICATOR_ROLES (the platform owner always qualifies) may start
+ * the TOTP enrolment, which generates a fresh sealed secret and eight sealed
+ * backup codes and stores the pending record; the active factor keeps
+ * working until a first app code confirms it. Switching back to email codes
+ * is immediate: email is the universal, enrolment-free default, so the
+ * record flips straight over, keeping the unused backup codes. Replacing the
+ * same method's factor stays an administrative reset. Tagged [grc.auth.mfa];
+ * never a blank 500.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { generateSecret } from '@grc/auth/totp';
 import { seal } from '@grc/auth/secretBox';
-import { startEnrolment, getMfaRecord, generateBackupCodes, type MfaMethod } from '@grc/repos/mfa';
-import { getGrcDeliveryEnv } from '@grc/notify/env';
-import { issueEmailOtp } from '@grc/notify/otpMail';
+import { startEnrolment, switchToEmail, generateBackupCodes, type MfaMethod } from '@grc/repos/mfa';
+import { authenticatorAllowedForRole, MFA_AUTHENTICATOR_ROLES_KEY } from '@grc/auth/mfaPolicy';
+import { getConfigValues } from '@grc/repos/orgConfig';
+import { recordSecurityEvent } from '@grc/repos/loginAttempts';
 
 const TAG = '[grc.auth.mfa]';
 const PAGE = '/mfa/setup';
@@ -35,14 +37,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const form = await request.formData().catch(() => new FormData());
     const rawMethod = String(form.get('method') ?? 'totp');
     const method: MfaMethod = rawMethod === 'email' ? 'email' : 'totp';
+    const ip = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for');
 
-    if (method === 'email' && !grc.userEmail) {
-      return fail('Your account has no email address, so email codes cannot be used.');
+    if (method === 'email') {
+      await switchToEmail(db, grc.homeOrganizationId, grc.userId);
+      await recordSecurityEvent(db, {
+        eventType: 'MFA_METHOD_CHANGED',
+        severity: 'info',
+        userId: grc.userId,
+        actorEmail: grc.userEmail ?? null,
+        ip,
+        details: 'Sign-in verification switched to email codes.',
+      }).catch(() => undefined);
+      return back('email=1');
+    }
+
+    const rule = await getConfigValues(db, grc.homeOrganizationId, [MFA_AUTHENTICATOR_ROLES_KEY]);
+    const allowed =
+      grc.isPlatformOwner ||
+      authenticatorAllowedForRole(grc.roleCode, rule.get(MFA_AUTHENTICATOR_ROLES_KEY));
+    if (!allowed) {
+      return fail(
+        'The authenticator app is available to administrator roles only. Your account signs in with email codes.',
+      );
     }
 
     const codes = generateBackupCodes();
     const sealedCodes = await seal(env.sessionSecret, JSON.stringify(codes));
-    const sealedSecret = method === 'totp' ? await seal(env.sessionSecret, generateSecret()) : '';
+    const sealedSecret = await seal(env.sessionSecret, generateSecret());
 
     const started = await startEnrolment(
       db,
@@ -54,38 +76,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
     if (!started) {
       return fail(
-        'This method is already active. You can switch to the other method here; replacing the active one needs an administrator reset.',
+        'The authenticator app is already your method. Replacing it needs an administrator reset.',
       );
     }
-
-    // The email method proves the mailbox by confirming an emailed code, so
-    // send the first one now. A failed send keeps the pending enrolment; the
-    // setup screen offers a resend.
-    if (method === 'email') {
-      const record = await getMfaRecord(db, grc.homeOrganizationId, grc.userId);
-      if (!record) return fail('The enrolment could not be read. Start it again.');
-      const issued = await issueEmailOtp(
-        db,
-        getGrcDeliveryEnv(),
-        env.sessionSecret,
-        {
-          organizationId: grc.homeOrganizationId,
-          userId: grc.userId,
-          email: grc.userEmail ?? '',
-          ip: request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for'),
-        },
-        record,
-      );
-      if (!issued.ok) {
-        console.error(`${TAG} enrolment code send failed:`, issued.reason);
-        return fail(`The code could not be emailed: ${issued.reason}`);
-      }
-      return back('sent=1');
-    }
-
     return new Response(null, { status: 303, headers: { location: PAGE } });
   } catch (err) {
     console.error(TAG, err instanceof Error ? (err.stack ?? err.message) : String(err));
-    return fail('Enrolment could not be started just now. Please try again.');
+    return fail('The change could not be started just now. Please try again.');
   }
 };

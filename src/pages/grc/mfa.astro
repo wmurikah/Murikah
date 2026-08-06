@@ -2,15 +2,21 @@
 export const prerender = false;
 
 /**
- * The second-factor step. Reached with a half-authorised session (cookie
- * mfa=pending) after the password step; /api/auth/mfa/verify checks the code
- * (or a backup code) and promotes the session. The copy follows the user's
- * method: a code from the authenticator app, or the 6-digit code emailed at
- * sign-in, with a cooldown-limited resend. The middleware admits only this
- * screen, its endpoints and sign-out while pending; a fully authorised
- * visitor is sent home. Resolving the method needs the pending session read
- * directly (locals.grc exists only for full sessions); any failure falls back
- * to the authenticator copy, keeping the step usable.
+ * The second-factor step, universal for every sign-in (Build Prompt 37).
+ * Reached with a half-authorised session (cookie mfa=pending) after the
+ * password step; /api/auth/mfa/verify checks the code (or a backup code) and
+ * promotes the session. Email codes are the automatic default, so the
+ * default face is a single focused code bar for the code emailed at sign-in,
+ * with a cooldown-limited resend and a backup-code field; the authenticator
+ * copy shows only when the user's active method is the app. An admin allowed
+ * an authenticator (MFA_AUTHENTICATOR_ROLES; the platform owner always
+ * qualifies) gets a minimised "use an authenticator app instead" link, which
+ * routes them into the app setup right after this sign-in verifies; the
+ * enrolment itself never runs on a pending session. The middleware admits
+ * only this screen, its endpoints and sign-out while pending; a fully
+ * authorised visitor is sent home. Resolving the method needs the pending
+ * session read directly (locals.grc exists only for full sessions); any
+ * failure falls back to the email copy, the universal default.
  */
 import GrcAuthLayout from '@/layouts/GrcAuthLayout.astro';
 import { getGrcEnv } from '@grc/env';
@@ -18,6 +24,10 @@ import { getDb } from '@grc/db';
 import { readGrcSessionCookie } from '@grc/auth/session';
 import { resolveSession } from '@grc/repos/session';
 import { getMfaRecord, type MfaMethod } from '@grc/repos/mfa';
+import { withEmailDefault } from '@grc/auth/mfaRecord';
+import { authenticatorAllowedForRole, MFA_AUTHENTICATOR_ROLES_KEY } from '@grc/auth/mfaPolicy';
+import { getConfigValues } from '@grc/repos/orgConfig';
+import { GRC_MFA_SETUP_PATH } from '@grc/routing';
 
 if (Astro.locals.grc) return Astro.redirect('/');
 
@@ -26,9 +36,12 @@ const failed = errorParam === '1';
 const errorText = errorParam && errorParam !== '1' ? errorParam : '';
 const sent = Astro.url.searchParams.get('sent') === '1';
 const sendError = Astro.url.searchParams.get('senderror') === '1';
+const setupIntent = Astro.url.searchParams.get('setup') === '1';
 
-let method: MfaMethod = 'totp';
+let method: MfaMethod = 'email';
 let maskedEmail = '';
+let hasEmail = true;
+let appAllowed = false;
 try {
   const env = getGrcEnv();
   const cookie = await readGrcSessionCookie(Astro.request, env.sessionSecret);
@@ -36,11 +49,20 @@ try {
   const db = await getDb(env);
   const identity = await resolveSession(db, cookie.sessionId);
   if (identity) {
-    const record = await getMfaRecord(db, identity.homeOrganizationId, identity.userId);
-    if (record?.confirmed) method = record.method;
+    const record = withEmailDefault(
+      await getMfaRecord(db, identity.homeOrganizationId, identity.userId),
+    );
+    method = record.method;
     const email = identity.userEmail ?? '';
+    hasEmail = email !== '';
     const at = email.indexOf('@');
     maskedEmail = at > 0 ? `${email[0]}***${email.slice(at)}` : '';
+    const rule = await getConfigValues(db, identity.homeOrganizationId, [
+      MFA_AUTHENTICATOR_ROLES_KEY,
+    ]);
+    appAllowed =
+      identity.isPlatformOwner ||
+      authenticatorAllowedForRole(identity.roleCode, rule.get(MFA_AUTHENTICATOR_ROLES_KEY));
   }
 } catch (err) {
   console.error('[grc.auth.mfa] step screen could not resolve the method', err);
@@ -52,11 +74,19 @@ try {
   <p class="grc-authcard__lead">
     {
       method === 'email'
-        ? `Enter the 6-digit code we emailed to ${maskedEmail || 'your address'}.`
+        ? `Enter the code we emailed to ${maskedEmail || 'your address'}.`
         : 'Enter the 6-digit code from your authenticator app.'
     }
   </p>
 
+  {
+    method === 'email' && !hasEmail && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        Your account has no email address, so a sign-in code cannot be emailed. Sign in with a
+        backup code below, and ask an administrator to add an email address to your account.
+      </p>
+    )
+  }
   {
     failed && (
       <p class="grc-error" role="alert" style="margin-bottom:1rem">
@@ -81,12 +111,20 @@ try {
   {
     sendError && (
       <p class="grc-error" role="alert" style="margin-bottom:1rem">
-        The code could not be emailed just now. Request a new one below, or use a backup code.
+        The code could not be emailed just now. Resend it below, or use a backup code.
+      </p>
+    )
+  }
+  {
+    setupIntent && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        Verify this sign-in first; you will land in the authenticator app setup.
       </p>
     )
   }
 
   <form method="post" action="/api/auth/mfa/verify">
+    {setupIntent && <input type="hidden" name="next" value={GRC_MFA_SETUP_PATH} />}
     <div class="grc-field">
       <label for="code">Verification code</label>
       <input
@@ -119,9 +157,17 @@ try {
     method === 'email' && (
       <form method="post" action="/api/auth/mfa/send" style="margin-top:1rem">
         <button type="submit" class="grc-btn grc-btn--secondary">
-          Send a new code
+          Resend code
         </button>
       </form>
+    )
+  }
+
+  {
+    method === 'email' && appAllowed && !setupIntent && (
+      <p class="grc-field__hint" style="margin-top:1rem">
+        <a href="/mfa?setup=1">Use an authenticator app instead</a>
+      </p>
     )
   }
 

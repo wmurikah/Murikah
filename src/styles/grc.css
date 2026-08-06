@@ -2423,6 +2423,22 @@ a.grc-notifrow__title:hover {
   font-size: var(--grc-fs-caption);
 }
 
+/* A form action rendered as a minimised text link (not a prominent button):
+   the secondary "use an authenticator app instead" affordance. */
+.grc-btn--link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-navy-2);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.grc-btn--link:hover {
+  color: var(--grc-navy);
+}
+
 /* ---- Affordances (Build Prompt 19) -----------------------------------------
    Users must be able to tell what is interactive: destructive actions read as
    destructive, icon buttons and rows show a pointer and a hover state, drag
