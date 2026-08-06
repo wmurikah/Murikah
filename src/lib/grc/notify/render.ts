@@ -200,6 +200,22 @@ export function renderNotification(
   return renderInline(type, data);
 }
 
+/**
+ * The test email the Settings -> Email screen sends to prove the connection:
+ * a small branded message with a plain-text fallback beside the HTML body.
+ */
+export function buildTestEmail(mailbox: string): { subject: string; body: string; text: string } {
+  const intro = `This is a test message from the Internal Audit System, sent as ${mailbox} through Microsoft Graph. If it reached you, the Outlook connection works.`;
+  const body = [
+    `<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">`,
+    `<div style="background:${NAVY};color:#fff;padding:18px 24px;font-size:16px;font-weight:700">${escapeHtml(HEADER)}</div>`,
+    `<div style="padding:24px"><p style="color:#111827;font-size:14px;margin:0">${escapeHtml(intro)}</p></div>`,
+    `<div style="padding:16px 24px;background:#f8f4ea;color:#687080;font-size:12px;border-top:1px solid #e5e7eb">${escapeHtml(FOOTER)}</div>`,
+    `</div>`,
+  ].join('');
+  return { subject: 'Email connection test - Internal Audit System', body, text: intro };
+}
+
 export interface DigestItem {
   subject: string;
   intro: string;
