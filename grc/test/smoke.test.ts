@@ -1049,6 +1049,60 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
     }
 
+    // Mutually exclusive Email connection states (Build Prompt 36): without a
+    // stored connection the settings page shows the credentials setup banner;
+    // with one it shows the connected panel and never the banner alongside it.
+    await t.test('a connected mailbox hides the email setup banner', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable');
+      // The logout dry-run above ended the admin session, so sign back in.
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
+      });
+      const before = await server.get('/settings/email');
+      assert.equal(before.status, 200, `/settings/email answered ${before.status}`);
+      assert.ok(
+        before.body.includes('credentials are not configured'),
+        'the setup banner shows while nothing is connected and no secrets are set',
+      );
+      assert.ok(!before.body.includes('Connected as'), 'no connected panel without a connection');
+      const connectedAt = '2026-01-05T09:00:00.000Z';
+      db.prepare(
+        `INSERT INTO config (organization_id, config_key, config_value, updated_at)
+          VALUES ('GLOBAL', 'MAIL_OUTLOOK_CONNECTION', ?, ?)`,
+      ).run(
+        JSON.stringify({
+          sealedToken: 'smoke-sealed-token',
+          address: 'hassaudit@outlook.com',
+          connectedAt,
+          status: 'ok',
+          updatedAt: connectedAt,
+        }),
+        connectedAt,
+      );
+      try {
+        const res = await server.get('/settings/email');
+        assert.equal(res.status, 200, `/settings/email answered ${res.status}`);
+        assert.ok(
+          res.body.includes('Connected as hassaudit@outlook.com'),
+          'the connected panel shows the mailbox address',
+        );
+        assert.ok(
+          !res.body.includes('credentials are not configured'),
+          'the setup banner must not show while a connection exists',
+        );
+      } finally {
+        // Later steps (the test-email refusal already ran, but the auditee and
+        // auth flows have not) expect the seeded not-connected state back.
+        db.prepare(
+          `DELETE FROM config
+            WHERE organization_id = 'GLOBAL' AND config_key = 'MAIL_OUTLOOK_CONNECTION'`,
+        ).run();
+      }
+    });
+
     // Work paper as parent (Build Prompt 27): an action plan cannot exist
     // without a finding, and the one seeded stray is surfaced and relinkable.
     // The admin session signed out above, so sign back in.
