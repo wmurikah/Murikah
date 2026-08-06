@@ -9,10 +9,16 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { finaliseUpload } from '@grc/storage';
-import { buildObjectKey, keyBelongsToOrg } from '@grc/storage/keys';
+import { finaliseUpload, openObject, putObject } from '@grc/storage';
+import { buildObjectKey, keyBelongsToOrg, optimisedKey } from '@grc/storage/keys';
+import {
+  isOptimisableText,
+  normalisePreviewText,
+  TEXT_PREVIEW_MAX_BYTES,
+} from '@grc/storage/derived';
 import { canUploadEvidence, isDraftEntity, type EvidenceActor } from '@grc/storage/access';
-import { recordAttachment } from '@grc/repos/evidence';
+import { recordAttachment, ensureDeterministicNames } from '@grc/repos/evidence';
+import { mirrorFileSoon } from '@grc/storage/mirror';
 import { writeAuditLog } from '@grc/repos/audit';
 
 const ENTITY_TYPES = new Set([
@@ -82,6 +88,43 @@ export const POST: APIRoute = async ({ request, locals }) => {
     contentHash: finalised.hash,
     contentHashAlgo: finalised.algo,
   });
+
+  // Text-like documents get a formatting-stripped preview at the derived
+  // optimised key (images upload their own resized copy from the browser).
+  // Best-effort: the original in R2 is the record either way.
+  if (isOptimisableText(contentType)) {
+    try {
+      const optKey = optimisedKey(key, grc.organizationId);
+      if (optKey) {
+        const bytes = await new Response(await openObject(ref)).arrayBuffer();
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(
+          bytes.slice(0, TEXT_PREVIEW_MAX_BYTES * 2),
+        );
+        await putObject({
+          key: optKey,
+          contentType: 'text/plain; charset=utf-8',
+          body: new TextEncoder().encode(normalisePreviewText(text)),
+        });
+      }
+    } catch (err) {
+      console.error('[grc.evidence] preview generation failed', err);
+    }
+  }
+
+  // A direct upload to an existing record gets its deterministic display name
+  // now; draft-staged files are named when the create-form save binds them.
+  if (!isDraftEntity(entityType) && (entityType === 'work_paper' || entityType === 'action_plan')) {
+    await ensureDeterministicNames(db, grc.organizationId, entityType, entityId).catch((err) =>
+      console.error('[grc.evidence] naming failed', err),
+    );
+    // Queue the Drive mirror without blocking the response; the cron sweep
+    // retries anything this attempt does not land.
+    try {
+      locals.cfContext?.waitUntil(mirrorFileSoon(db, fileId));
+    } catch {
+      // No execution context (tests): the cron sweep covers it.
+    }
+  }
 
   try {
     await writeAuditLog(db, {

@@ -11,14 +11,14 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { planDownload, type StoredObjectRef } from '@grc/storage';
-import { keyBelongsToOrg, safeFilename } from '@grc/storage/keys';
+import { planDownload, objectExists, type StoredObjectRef } from '@grc/storage';
+import { keyBelongsToOrg, safeFilename, optimisedKey } from '@grc/storage/keys';
 import { getAttachmentForAccess } from '@grc/repos/evidence';
 import { canViewEvidence, type EvidenceActor } from '@grc/storage/access';
 
 const DOWNLOAD_TTL_SECONDS = 120;
 
-export const GET: APIRoute = async ({ params, locals }) => {
+export const GET: APIRoute = async ({ params, locals, url }) => {
   const grc = locals.grc;
   if (!grc) return new Response('Unauthorised', { status: 401 });
 
@@ -39,11 +39,24 @@ export const GET: APIRoute = async ({ params, locals }) => {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const key = att.backend === 'drive' ? att.driveFileId : att.storageKey;
+  let key = att.backend === 'drive' ? att.driveFileId : att.storageKey;
   if (!key) return new Response('Not found', { status: 404 });
   // Defensive: an R2 object must sit inside the acting tenant's prefix.
   if (att.backend !== 'drive' && !keyBelongsToOrg(key, grc.organizationId)) {
     return new Response('Forbidden', { status: 403 });
+  }
+
+  // The optimised copy serves by default for speed (Build Prompt 32); the
+  // immutable original is always a ?original=1 away. The optimised key is
+  // derived from the recorded original key, inside the same tenant prefix,
+  // so every guard above covers it too.
+  if (att.backend === 'r2' && url.searchParams.get('original') !== '1') {
+    const opt = optimisedKey(key, grc.organizationId);
+    try {
+      if (opt && (await objectExists({ backend: 'r2', key: opt }))) key = opt;
+    } catch {
+      // The original serves when the head fails.
+    }
   }
 
   const ref: StoredObjectRef = { backend: att.backend, key };

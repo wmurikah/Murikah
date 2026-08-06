@@ -1,0 +1,204 @@
+---
+/**
+ * The evidence list and uploader for an existing record (Build Prompt 32),
+ * shared by the work paper detail and edit views and the action plan detail
+ * (management updates). Files upload straight to R2 with a presigned PUT;
+ * images are resized and re-encoded in the browser and the optimised copy
+ * uploads beside the immutable original, so previews load fast while the
+ * original stays available (the "original" link). The server enforces access
+ * on every call; the flags here only decide what to render.
+ */
+import type { Attachment } from '@grc/repos/evidence';
+
+interface Props {
+  /** The real entity the evidence binds to. */
+  entityType: 'work_paper' | 'action_plan';
+  entityId: string;
+  items: Attachment[];
+  canUpload: boolean;
+  canDelete: boolean;
+}
+const { entityType, entityId, items, canUpload, canDelete } = Astro.props;
+const inputId = `evidence-file-${entityType}`;
+---
+
+{
+  items.length === 0 ? (
+    <p class="grc-lead" style="margin:0">
+      No evidence attached.
+    </p>
+  ) : (
+    <ul class="grc-evidence">
+      {items.map((e) => (
+        <li class="grc-evidence__item">
+          <a
+            href={`/api/evidence/${e.attachmentId}/download`}
+            class="grc-evidence__name"
+            rel="nofollow"
+          >
+            {e.fileName}
+          </a>
+          <a
+            href={`/api/evidence/${e.attachmentId}/download?original=1`}
+            class="grc-lead"
+            rel="nofollow"
+            style="font-size:0.78rem"
+          >
+            original
+          </a>
+          <span class="grc-pill">{e.backend ?? 'stored'}</span>
+          {canDelete && (
+            <form
+              method="post"
+              action={`/api/evidence/${e.attachmentId}/delete`}
+              class="grc-evidence__del"
+            >
+              <button type="submit" class="grc-btn grc-btn--secondary grc-btn--tiny">
+                Request deletion
+              </button>
+            </form>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+{
+  canUpload && (
+    <div
+      class="grc-evidence__upload"
+      data-evidence-panel
+      data-entity-type={entityType}
+      data-entity-id={entityId}
+    >
+      <label for={inputId}>Add evidence</label>
+      <div class="grc-actionbar" style="margin:0.25rem 0 0">
+        <input type="file" id={inputId} class="grc-input" />
+        <button type="button" class="grc-btn grc-btn--secondary" data-evidence-upload>
+          Upload
+        </button>
+      </div>
+      <p class="grc-field__hint">
+        The file uploads directly to secure storage; a content hash is recorded for integrity and
+        images get a fast-loading optimised copy. Deletion is governed by retention and any legal
+        hold.
+      </p>
+      <span class="grc-lead" role="status" aria-live="polite" data-evidence-status />
+    </div>
+  )
+}
+
+<script>
+  // Upload: request presigned URLs, PUT the original straight to storage
+  // (never through the worker), PUT the browser-optimised image copy beside
+  // it when offered, then record the metadata and reload so the new item
+  // lists with its links.
+  interface Presigned {
+    fileId?: string;
+    url?: string;
+    optimisedUrl?: string | null;
+    optimisedMaxEdge?: number;
+    error?: string;
+  }
+
+  async function optimisedImage(file: File, maxEdge: number): Promise<Blob | null> {
+    if (!file.type.startsWith('image/')) return null;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      return await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.82),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  for (const wrap of document.querySelectorAll<HTMLElement>('[data-evidence-panel]')) {
+    const btn = wrap.querySelector<HTMLButtonElement>('[data-evidence-upload]');
+    const input = wrap.querySelector<HTMLInputElement>('input[type="file"]');
+    const status = wrap.querySelector<HTMLElement>('[data-evidence-status]');
+    if (!btn || !input || !status) continue;
+
+    btn.addEventListener('click', async () => {
+      const file = input.files?.[0];
+      if (!file) {
+        status.textContent = 'Choose a file first.';
+        return;
+      }
+      const entityType = wrap.getAttribute('data-entity-type') ?? '';
+      const entityId = wrap.getAttribute('data-entity-id') ?? '';
+      const contentType = file.type || 'application/octet-stream';
+      btn.disabled = true;
+      status.textContent = 'Preparing upload...';
+      try {
+        const presignRes = await fetch('/api/evidence/upload-url', {
+          method: 'POST',
+          body: new URLSearchParams({
+            entity_type: entityType,
+            entity_id: entityId,
+            file_name: file.name,
+            content_type: contentType,
+            size_bytes: String(file.size),
+          }),
+        });
+        const presign = (await presignRes.json()) as Presigned;
+        if (!presignRes.ok || !presign.url || !presign.fileId) {
+          status.textContent = presign.error || 'Could not start the upload.';
+          return;
+        }
+        status.textContent = 'Uploading...';
+        const put = await fetch(presign.url, {
+          method: 'PUT',
+          headers: { 'content-type': contentType },
+          body: file,
+        });
+        if (!put.ok) {
+          status.textContent = 'The upload failed.';
+          return;
+        }
+        // The optimised copy is best-effort: its failure never loses the file.
+        if (presign.optimisedUrl) {
+          const copy = await optimisedImage(file, presign.optimisedMaxEdge ?? 1600);
+          if (copy) {
+            await fetch(presign.optimisedUrl, {
+              method: 'PUT',
+              headers: { 'content-type': 'image/jpeg' },
+              body: copy,
+            }).catch(() => undefined);
+          }
+        }
+        const completeRes = await fetch('/api/evidence/complete', {
+          method: 'POST',
+          body: new URLSearchParams({
+            entity_type: entityType,
+            entity_id: entityId,
+            file_id: presign.fileId,
+            file_name: file.name,
+            content_type: contentType,
+          }),
+        });
+        if (!completeRes.ok) {
+          const err = (await completeRes.json().catch(() => ({}))) as { error?: string };
+          status.textContent = err.error || 'The upload could not be recorded.';
+          return;
+        }
+        status.textContent = 'Uploaded.';
+        location.reload();
+      } catch {
+        status.textContent = 'The upload failed. Please try again.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+</script>

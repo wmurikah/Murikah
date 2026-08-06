@@ -1186,8 +1186,22 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         .get() as { entity_type?: string; entity_id?: string };
       assert.equal(String(bound.entity_type), 'work_paper', 'the staged attachment rebinds');
       assert.equal(String(bound.entity_id), m[1], 'the staged attachment binds to the new id');
+      // Binding also gives the file its deterministic display name (Build
+      // Prompt 32): affiliate, parent reference, kind, date, sequence, hash.
+      const named = db
+        .prepare(`SELECT file_name AS n FROM files WHERE file_id = 'FILE-STAGED'`)
+        .get() as { n?: string } | undefined;
+      assert.ok(
+        isDeterministicName(String(named?.n)),
+        `the bound file is renamed deterministically, got ${String(named?.n)}`,
+      );
+      assert.ok(
+        String(named?.n).startsWith(`${SMOKE.affiliateCode}_`) &&
+          String(named?.n).includes('_evidence_'),
+        'the name says what the file belongs to',
+      );
       const page = await server.get(`/work-papers/${m[1]}`);
-      assert.ok(page.body.includes('staged.pdf'), 'the bound evidence shows on the detail');
+      assert.ok(page.body.includes(String(named?.n)), 'the bound evidence shows on the detail');
     });
 
     await t.test('a draft upload refuses cleanly while storage is unconfigured', async () => {

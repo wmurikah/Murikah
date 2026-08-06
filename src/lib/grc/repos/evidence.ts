@@ -14,6 +14,7 @@
 import type { Client } from '@libsql/client/web';
 import type { StoredObjectRef } from '@grc/storage';
 import { C, cols } from '@grc/schema/columns';
+import { buildEvidenceName, isDeterministicName, type EvidenceKind } from '@grc/storage/derived';
 
 const F = cols(C.files);
 const FA = cols(C.file_attachments);
@@ -180,6 +181,104 @@ export async function getAttachmentForAccess(
     entityType: String(r.entity_type ?? ''),
     entityId: String(r.entity_id ?? ''),
   };
+}
+
+interface NamingParent {
+  affiliate: string;
+  workPaperRef: string;
+  kind: EvidenceKind;
+}
+
+/** The affiliate and work paper reference the deterministic name is built from. */
+async function namingParent(
+  db: Client,
+  organizationId: string,
+  entityType: 'work_paper' | 'action_plan',
+  entityId: string,
+): Promise<NamingParent | null> {
+  if (entityType === 'work_paper') {
+    const res = await db.execute({
+      sql: `SELECT work_paper_ref AS ref, affiliate_code AS affiliate FROM work_papers
+             WHERE organization_id = ? AND work_paper_id = ? LIMIT 1`,
+      args: [organizationId, entityId],
+    });
+    const r = res.rows[0];
+    if (!r) return null;
+    return {
+      affiliate: String(r.affiliate ?? ''),
+      workPaperRef: String(r.ref ?? ''),
+      kind: 'evidence',
+    };
+  }
+  const res = await db.execute({
+    sql: `SELECT ap.affiliate_code AS affiliate, ap.action_ref AS action_ref,
+                 wp.work_paper_ref AS wp_ref
+            FROM action_plans ap
+            LEFT JOIN work_papers wp ON wp.work_paper_id = ap.work_paper_id
+           WHERE ap.organization_id = ? AND ap.action_plan_id = ? LIMIT 1`,
+    args: [organizationId, entityId],
+  });
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    affiliate: String(r.affiliate ?? ''),
+    // The name leads with the parent finding's reference; an orphan plan
+    // (surfaced by the orphans panel) falls back to its own action_ref.
+    workPaperRef: String(r.wp_ref ?? r.action_ref ?? ''),
+    kind: 'update',
+  };
+}
+
+/**
+ * Give every file attached to the entity its distinct, deterministic display
+ * name, {affiliate}_{work_paper_ref}_{kind}_{yyyymmdd}_{seq}_{shorthash}.{ext}
+ * (storage/derived.ts). Called after a direct upload completes and after a
+ * create-form save binds its staged draft evidence, so the name always exists
+ * before the Drive mirror runs. The sequence is the file's stable position in
+ * the entity's attachment order; files already carrying the pattern are left
+ * exactly as they are, so a name never changes once given. Best-effort by
+ * design: the caller never fails a save over a rename.
+ */
+export async function ensureDeterministicNames(
+  db: Client,
+  organizationId: string,
+  entityType: 'work_paper' | 'action_plan',
+  entityId: string,
+): Promise<number> {
+  const parent = await namingParent(db, organizationId, entityType, entityId);
+  if (!parent) return 0;
+  const res = await db.execute({
+    sql: `SELECT f.${F.file_id} AS file_id, f.${F.file_name} AS file_name,
+                 f.${F.content_hash} AS content_hash, f.${F.created_at} AS created_at
+            FROM file_attachments fa
+            JOIN files f ON f.${F.file_id} = fa.${FA.file_id}
+           WHERE f.${F.organization_id} = ? AND f.${F.deleted_at} IS NULL
+             AND fa.${FA.entity_type} = ? AND fa.${FA.entity_id} = ?
+        ORDER BY fa.${FA.attached_at} ASC, f.${F.created_at} ASC, f.${F.file_id} ASC`,
+    args: [organizationId, entityType, entityId],
+  });
+  let renamed = 0;
+  for (let i = 0; i < res.rows.length; i++) {
+    const r = res.rows[i];
+    const current = String(r.file_name ?? '');
+    if (isDeterministicName(current)) continue;
+    const name = buildEvidenceName({
+      affiliate: parent.affiliate,
+      workPaperRef: parent.workPaperRef,
+      kind: parent.kind,
+      dateIso: String(r.created_at ?? ''),
+      seq: i + 1,
+      contentHash: String(r.content_hash ?? ''),
+      originalName: current,
+    });
+    await db.execute({
+      sql: `UPDATE files SET ${F.file_name} = ?
+             WHERE ${F.file_id} = ? AND ${F.organization_id} = ?`,
+      args: [name, String(r.file_id), organizationId],
+    });
+    renamed += 1;
+  }
+  return renamed;
 }
 
 /**
