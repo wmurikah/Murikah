@@ -47,6 +47,19 @@ export interface Statement {
   args: (string | number)[];
 }
 
+/** A short organisation code from the name, suffixed with the id so it cannot collide. */
+export function deriveOrgCode(organizationName: string, organizationId: string): string {
+  const slug =
+    organizationName
+      .replace(/[^A-Za-z0-9]/g, '')
+      .toUpperCase()
+      .slice(0, 8) || 'ORG';
+  return `${slug}-${organizationId
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, 4)
+    .toUpperCase()}`;
+}
+
 /**
  * The full set of insert statements to provision an organisation: the org, a
  * first SUPER_ADMIN, a trial subscription, the Phase 1 config, and the injected
@@ -60,9 +73,19 @@ export function buildProvisioningStatements(
   const now = input.now.toISOString();
   const statements: Statement[] = [
     {
-      sql: `INSERT INTO organizations (organization_id, name, status, created_at)
-            VALUES (?, ?, 'ACTIVE', ?)`,
-      args: [ids.organizationId, input.organizationName, now],
+      // The live organizations shape: org_code and org_name (there is no
+      // `name` or `status` column), an is_active flag, and the house country
+      // and timezone defaults. The earlier column list failed every
+      // provisioning batch silently behind the endpoint's catch.
+      sql: `INSERT INTO organizations
+              (organization_id, org_code, org_name, country, timezone, is_active, created_at)
+            VALUES (?, ?, ?, 'KE', 'Africa/Nairobi', 1, ?)`,
+      args: [
+        ids.organizationId,
+        deriveOrgCode(input.organizationName, ids.organizationId),
+        input.organizationName,
+        now,
+      ],
     },
     {
       sql: `INSERT INTO users
@@ -79,9 +102,11 @@ export function buildProvisioningStatements(
       ],
     },
     {
-      sql: `INSERT INTO subscriptions (organization_id, plan_code, status, created_at)
-            VALUES (?, ?, ?, ?)`,
-      args: [ids.organizationId, TRIAL_PLAN_CODE, TRIAL_STATUS, now],
+      // The live subscriptions shape keys rows by subscription_id; derive it
+      // from the organisation id so the builder stays deterministic and pure.
+      sql: `INSERT INTO subscriptions (subscription_id, organization_id, plan_code, status, created_at)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [`SUB-${ids.organizationId}`, ids.organizationId, TRIAL_PLAN_CODE, TRIAL_STATUS, now],
     },
   ];
   const config: [string, string][] = [
@@ -90,7 +115,8 @@ export function buildProvisioningStatements(
   ];
   for (const [key, value] of config) {
     statements.push({
-      sql: `INSERT INTO config (scope, config_key, config_value, updated_at) VALUES (?, ?, ?, ?)`,
+      // The live config table scopes by organization_id (there is no `scope`).
+      sql: `INSERT INTO config (organization_id, config_key, config_value, updated_at) VALUES (?, ?, ?, ?)`,
       args: [ids.organizationId, key, value, now],
     });
   }

@@ -1,0 +1,111 @@
+---
+/**
+ * The narrative editor: a textarea carrying the constrained Markdown subset
+ * (richtext.ts), fronted by a formatting toolbar and a live preview. The
+ * textarea stays the form field and the source of truth, so the form works
+ * without JavaScript, the AI drafting buttons keep writing into it, and what
+ * is stored is always inert Markdown text, never HTML. The preview renders
+ * through the same parser the detail pages and the board pack use, so what
+ * you see is what exports.
+ */
+interface Props {
+  id: string;
+  name: string;
+  value?: string | null;
+  rows?: number;
+  maxlength?: number;
+  required?: boolean;
+}
+const { id, name, value = '', rows = 5, maxlength, required = false } = Astro.props;
+---
+
+<div class="grc-richtext" data-grc-richtext>
+  <div class="grc-richtext__bar" role="toolbar" aria-label="Formatting" hidden>
+    <button type="button" class="grc-btn grc-btn--secondary" data-rt="bold" title="Bold">
+      <strong>B</strong>
+    </button>
+    <button type="button" class="grc-btn grc-btn--secondary" data-rt="italic" title="Italic">
+      <em>I</em>
+    </button>
+    <button type="button" class="grc-btn grc-btn--secondary" data-rt="h2" title="Heading">
+      H
+    </button>
+    <button type="button" class="grc-btn grc-btn--secondary" data-rt="h3" title="Subheading">
+      h
+    </button>
+    <button type="button" class="grc-btn grc-btn--secondary" data-rt="bullet" title="Bullet list">
+      &bull;
+    </button>
+    <button type="button" class="grc-btn grc-btn--secondary" data-rt="number" title="Numbered list">
+      1.
+    </button>
+    <button type="button" class="grc-btn grc-btn--secondary" data-rt="preview" aria-pressed="false">
+      Preview
+    </button>
+  </div>
+  <textarea
+    id={id}
+    name={name}
+    class="grc-textarea"
+    rows={rows}
+    maxlength={maxlength}
+    required={required}>{value ?? ''}</textarea
+  >
+  <div class="grc-richtext__preview grc-richbody" hidden></div>
+  <p class="grc-field__hint">
+    Formatting: **bold**, *italic*, ## heading, - bullet list, 1. numbered list.
+  </p>
+</div>
+
+<script>
+  import { renderRichHtml } from '@grc/richtext';
+
+  /** Prefix each selected line, numbering when a starting index is given. */
+  function prefixLines(text: string, start: number, end: number, mark: string): string {
+    const from = text.lastIndexOf('\n', start - 1) + 1;
+    let to = text.indexOf('\n', end);
+    if (to === -1) to = text.length;
+    const lines = text.slice(from, to).split('\n');
+    const prefixed = lines
+      .map((l, i) => (mark === '1.' ? `${i + 1}. ${l}` : `${mark} ${l}`))
+      .join('\n');
+    return text.slice(0, from) + prefixed + text.slice(to);
+  }
+
+  for (const wrap of document.querySelectorAll('[data-grc-richtext]')) {
+    const area = wrap.querySelector('textarea');
+    const bar = wrap.querySelector('.grc-richtext__bar') as HTMLElement | null;
+    const preview = wrap.querySelector('.grc-richtext__preview') as HTMLElement | null;
+    if (!area || !bar || !preview) continue;
+    bar.hidden = false;
+
+    const wrapSelection = (mark: string): void => {
+      const { selectionStart: s, selectionEnd: e, value } = area;
+      const inner = value.slice(s, e) || 'text';
+      area.value = value.slice(0, s) + mark + inner + mark + value.slice(e);
+      area.focus();
+      area.setSelectionRange(s + mark.length, s + mark.length + inner.length);
+    };
+
+    bar.addEventListener('click', (ev) => {
+      const btn = (ev.target as HTMLElement).closest('[data-rt]');
+      if (!btn) return;
+      const action = btn.getAttribute('data-rt');
+      if (action === 'bold') wrapSelection('**');
+      else if (action === 'italic') wrapSelection('*');
+      else if (action === 'h2' || action === 'h3' || action === 'bullet' || action === 'number') {
+        const mark =
+          action === 'h2' ? '##' : action === 'h3' ? '###' : action === 'bullet' ? '-' : '1.';
+        const { selectionStart: s, selectionEnd: e } = area;
+        area.value = prefixLines(area.value, s, e, mark);
+        area.focus();
+      } else if (action === 'preview') {
+        const showing = !preview.hidden;
+        preview.hidden = showing;
+        area.hidden = !showing;
+        btn.setAttribute('aria-pressed', String(!showing));
+        if (!showing) preview.innerHTML = renderRichHtml(area.value);
+      }
+    });
+  }
+</script>

@@ -11,11 +11,19 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { finaliseUpload } from '@grc/storage';
 import { buildObjectKey, keyBelongsToOrg } from '@grc/storage/keys';
-import { canUploadEvidence, type EvidenceActor } from '@grc/storage/access';
+import { canUploadEvidence, isDraftEntity, type EvidenceActor } from '@grc/storage/access';
 import { recordAttachment } from '@grc/repos/evidence';
 import { writeAuditLog } from '@grc/repos/audit';
 
-const ENTITY_TYPES = new Set(['work_paper', 'action_plan']);
+const ENTITY_TYPES = new Set([
+  'work_paper',
+  'action_plan',
+  'work_paper_draft',
+  'action_plan_draft',
+]);
+// A draft token is client-generated; keep it to a UUID-like shape so it can
+// never smuggle path segments into the object key.
+const DRAFT_TOKEN_RE = /^[0-9a-fA-F-]{16,64}$/;
 
 const json = (body: unknown, status: number): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -32,6 +40,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const contentType = String(form.get('content_type') ?? 'application/octet-stream').trim();
 
   if (!ENTITY_TYPES.has(entityType) || !entityId || !fileId || !fileName) {
+    return json({ error: 'invalid request' }, 400);
+  }
+  if (isDraftEntity(entityType) && !DRAFT_TOKEN_RE.test(entityId)) {
     return json({ error: 'invalid request' }, 400);
   }
 

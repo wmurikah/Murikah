@@ -2395,3 +2395,46 @@ a.grc-notifrow__title:hover {
   padding: var(--grc-s4);
   margin-bottom: var(--grc-s4);
 }
+
+/* Rich-text editor (GrcRichText) and rendered narrative bodies. */
+.grc-richtext__bar {
+  display: flex;
+  gap: var(--grc-s1);
+  flex-wrap: wrap;
+  margin-bottom: var(--grc-s1);
+}
+.grc-richtext__bar .grc-btn {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.grc-richtext__preview {
+  border: 1px solid var(--grc-line);
+  border-radius: 8px;
+  padding: var(--grc-s3);
+  background: var(--grc-paper, #faf7f0);
+  min-height: 4rem;
+}
+.grc-richbody p {
+  margin: 0 0 0.5rem;
+}
+.grc-richbody p:last-child {
+  margin-bottom: 0;
+}
+.grc-richbody h4,
+.grc-richbody h5 {
+  margin: 0.75rem 0 0.25rem;
+  color: var(--grc-navy, #1a365d);
+}
+.grc-richbody h4:first-child,
+.grc-richbody h5:first-child {
+  margin-top: 0;
+}
+.grc-richbody ul,
+.grc-richbody ol {
+  margin: 0 0 0.5rem;
+  padding-left: 1.4rem;
+}
+.grc-richbody li {
+  margin-bottom: 0.15rem;
+}

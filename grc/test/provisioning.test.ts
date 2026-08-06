@@ -45,6 +45,16 @@ test('provisioning seeds the org, a SUPER_ADMIN, a trial and the config', () => 
   const subStmt = statements.find((s) => s.sql.includes('INTO subscriptions'));
   assert.ok(subStmt && subStmt.args.includes(TRIAL_PLAN_CODE));
 
+  // The statements target the live shapes: organizations carries org_code and
+  // org_name (no `name` or `status` column), subscriptions is keyed by
+  // subscription_id, and config scopes by organization_id (no `scope`).
+  const orgStmt = statements.find((s) => s.sql.includes('INTO organizations'));
+  assert.ok(orgStmt && orgStmt.sql.includes('org_code') && orgStmt.sql.includes('org_name'));
+  assert.ok(orgStmt && !/[( ]name[,)]/.test(orgStmt.sql));
+  assert.ok(subStmt && subStmt.sql.includes('subscription_id'));
+  const cfgStmt = statements.find((s) => s.sql.includes('INTO config'));
+  assert.ok(cfgStmt && cfgStmt.sql.includes('organization_id') && !cfgStmt.sql.includes('scope'));
+
   // The org id threads through every row.
   assert.ok(statements.every((s) => s.args.includes('ORG1')));
 });

@@ -1,7 +1,8 @@
 export const prerender = false;
 
 /**
- * Save the managed control-field dropdowns, SUPER_ADMIN only. Writes the four
+ * Save the managed control-field dropdowns, gated on the matrix (CONFIG
+ * update), platform owner always. Writes the four
  * value lists to the organisation's config (one value per line from the form),
  * invalidates the dropdown cache and records the change in audit_log. Scoped to
  * the acting organisation.
@@ -11,6 +12,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { saveDropdown, invalidateDropdownCache, DROPDOWN_KEYS } from '@grc/repos/dropdowns';
 import { writeAuditLog } from '@grc/repos/audit';
+import { can } from '@grc/auth/rbac';
 
 function redirect(location: string): Response {
   return new Response(null, { status: 303, headers: { location } });
@@ -26,7 +28,7 @@ function lines(form: FormData, field: string): string[] {
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
   if (!grc) return redirect('/login');
-  if (!grc.isPlatformOwner && grc.roleCode !== 'SUPER_ADMIN') {
+  if (!grc.isPlatformOwner && !can(locals, 'update', 'CONFIG')) {
     return new Response('Forbidden', { status: 403 });
   }
 

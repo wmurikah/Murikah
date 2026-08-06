@@ -3,7 +3,8 @@ export const prerender = false;
 
 /**
  * General organisation settings: the workflow deadlines and notification defaults
- * held in the config table. SUPER_ADMIN or platform owner only. The form posts to
+ * held in the config table. Gated on the CONFIG grant (platform owner always).
+ * The form posts to
  * /api/setup/settings and returns with a saved or error banner. The control-field
  * vocabularies are on the Dropdowns page; the AI defaults on the AI settings page.
  */
@@ -17,8 +18,8 @@ import { getConfigValues, SETTINGS_FIELDS, SETTINGS_KEYS } from '@grc/repos/orgC
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
-const allowed = can(Astro.locals, 'read', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
-const canWrite = can(Astro.locals, 'update', 'CONFIG') || grc.roleCode === 'SUPER_ADMIN';
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
+const canWrite = grc.isPlatformOwner || can(Astro.locals, 'update', 'CONFIG');
 
 const url = Astro.url;
 const saved = url.searchParams.get('saved');

@@ -49,6 +49,23 @@ export function parseActionPlanInput(form: FormData): ActionPlanInput {
 }
 
 /**
+ * Validate a parsed input. The work paper is the parent of everything: a plan
+ * with no parent finding is an orphan invisible to every drill-down and to
+ * observation-level reporting, so the linkage is required on create and edit
+ * alike (there is deliberately no ad hoc, unlinked plan type). Returns a
+ * single user-facing reason, or null when the input is acceptable.
+ */
+export function checkActionPlanInput(input: ActionPlanInput): string | null {
+  if (!input.actionDescription) {
+    return 'The action description is required.';
+  }
+  if (!input.workPaperId) {
+    return 'Every action plan must be linked to a parent finding. Choose the work paper it remediates.';
+  }
+  return null;
+}
+
+/**
  * The page a mutation returns to: the submitted one when it is a safe
  * root-relative path under `prefix`, else the given fallback. A dropped Kanban
  * card sends the board it came from this way, so the guard keeps an attacker
