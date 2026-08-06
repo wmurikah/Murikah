@@ -2,16 +2,17 @@
 export const prerender = false;
 
 /**
- * MFA enrolment (Build Prompt 34: two methods). Any signed-in user can enrol
- * voluntarily; a user whose role requires a second factor is locked to this
- * screen by the middleware until they confirm. The user picks a method:
- * Authenticator app (a sealed secret shown as a QR rendered in-worker, plus
- * the manual key) or Email code (a 6-digit code emailed through the Graph
- * sender). Both show the backup codes once while pending, and confirming a
- * first code at /api/auth/mfa/confirm activates the factor, keeping only the
- * backup-code hashes. A confirmed user may switch to the other method; the
- * active factor keeps working until the new one confirms. Replacing the same
- * method's factor is an administrative reset, not self-service.
+ * Account security (Build Prompt 37). Two-step verification is universal and
+ * email codes are the automatic default, so there is nothing to set up and
+ * no wall: this screen shows how the account verifies, manages the backup
+ * codes (viewable as a remaining count, regenerable, shown once on
+ * generation), and, for roles allowed by MFA_AUTHENTICATOR_ROLES (the
+ * platform owner always qualifies), carries the minimised "use an
+ * authenticator app instead" link into the existing TOTP enrolment: a sealed
+ * secret shown as a QR rendered in-worker plus the manual key, fresh backup
+ * codes shown once, and a first app code confirmed at /api/auth/mfa/confirm.
+ * The active method keeps working until the pending one confirms; switching
+ * back to email codes is immediate.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import { renderSVG } from 'uqr';
@@ -20,6 +21,9 @@ import { getDb } from '@grc/db';
 import { guardPageLoad } from '@grc/pageGuard';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getMfaRecord, type MfaRecord } from '@grc/repos/mfa';
+import { withEmailDefault } from '@grc/auth/mfaRecord';
+import { authenticatorAllowedForRole, MFA_AUTHENTICATOR_ROLES_KEY } from '@grc/auth/mfaPolicy';
+import { getConfigValues } from '@grc/repos/orgConfig';
 import { open } from '@grc/auth/secretBox';
 import { otpauthUrl } from '@grc/auth/totp';
 
@@ -27,54 +31,56 @@ const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 
 const done = Astro.url.searchParams.get('done') === '1';
-const sent = Astro.url.searchParams.get('sent') === '1';
+const emailSwitched = Astro.url.searchParams.get('email') === '1';
+const codesShown = Astro.url.searchParams.get('codes') === '1';
 const error = Astro.url.searchParams.get('error');
 
 let loaded = null as MfaRecord | null;
 let secret = null as string | null;
 let backupCodes: string[] = [];
 let qrSvg = '';
+let appAllowed = false;
 let loadError = false;
 
 loadError = !(await guardPageLoad('mfa.setup', async () => {
   const env = getGrcEnv();
   const db = await getDb(env);
   loaded = await getMfaRecord(db, grc.homeOrganizationId, grc.userId);
-  if (loaded?.pendingMethod) {
-    if (loaded.backupPlain) {
-      const plain = await open(env.sessionSecret, loaded.backupPlain);
-      if (plain) backupCodes = JSON.parse(plain) as string[];
-    }
-    if (loaded.pendingMethod === 'totp' && loaded.pendingSecret) {
-      secret = await open(env.sessionSecret, loaded.pendingSecret);
-      if (secret) {
-        qrSvg = renderSVG(otpauthUrl(grc.userEmail ?? grc.userId, secret), {
-          pixelSize: 4,
-        });
-      }
+  const rule = await getConfigValues(db, grc.homeOrganizationId, [MFA_AUTHENTICATOR_ROLES_KEY]);
+  appAllowed =
+    grc.isPlatformOwner ||
+    authenticatorAllowedForRole(grc.roleCode, rule.get(MFA_AUTHENTICATOR_ROLES_KEY));
+  if (loaded?.backupPlain) {
+    const plain = await open(env.sessionSecret, loaded.backupPlain);
+    if (plain) backupCodes = JSON.parse(plain) as string[];
+  }
+  if (loaded?.pendingMethod === 'totp' && loaded.pendingSecret) {
+    secret = await open(env.sessionSecret, loaded.pendingSecret);
+    if (secret) {
+      qrSvg = renderSVG(otpauthUrl(grc.userEmail ?? grc.userId, secret), {
+        pixelSize: 4,
+      });
     }
   }
 }));
 
-const record = loaded as MfaRecord | null;
-const confirmed = record?.confirmed === true;
-const pendingMethod = record?.pendingMethod;
-const pendingTotp = pendingMethod === 'totp' && secret != null;
-const pendingEmail = pendingMethod === 'email';
-const activeMethod = confirmed ? (record?.method ?? 'totp') : null;
+const record = withEmailDefault(loaded as MfaRecord | null);
+const pendingTotp = record.pendingMethod === 'totp' && secret != null;
 const grouped = secret ? (secret.match(/.{1,4}/g) ?? []).join(' ') : '';
+const remaining = record.backup.length;
 
 const email = grc.userEmail ?? '';
 const at = email.indexOf('@');
 const maskedEmail = at > 0 ? `${email[0]}***${email.slice(at)}` : 'your address';
 ---
 
-<GrcLayout title="Two-step verification">
+<GrcLayout title="Account security">
   <div class="grc-page-head">
     <div>
-      <h1>Two-step verification</h1>
+      <h1>Account security</h1>
       <p class="grc-lead">
-        Protect your account with an authenticator app or a code emailed at sign-in.
+        Every sign-in asks for a 6-digit code on top of your password. Email codes work
+        automatically; backup codes cover you when your usual method is unavailable.
       </p>
     </div>
   </div>
@@ -82,14 +88,16 @@ const maskedEmail = at > 0 ? `${email[0]}***${email.slice(at)}` : 'your address'
   {
     done && (
       <p class="grc-notice" role="status" style="margin-bottom:1rem">
-        Two-step verification is now active. You will be asked for a code at your next sign-in.
+        The authenticator app is now your sign-in method. You will be asked for an app code at your
+        next sign-in.
       </p>
     )
   }
   {
-    sent && (
+    emailSwitched && (
       <p class="grc-notice" role="status" style="margin-bottom:1rem">
-        A code has been emailed to {maskedEmail}. It works once and expires in ten minutes.
+        Sign-in verification now uses email codes. A code is emailed to you automatically at each
+        sign-in.
       </p>
     )
   }
@@ -103,41 +111,89 @@ const maskedEmail = at > 0 ? `${email[0]}***${email.slice(at)}` : 'your address'
 
   {
     loadError ? (
-      <GrcErrorCard subject="The enrolment state" />
+      <GrcErrorCard subject="Account security" />
     ) : (
       <>
-        {confirmed && (
-          <div class="grc-panel">
-            <h2>Active</h2>
+        <div class="grc-panel">
+          <h2>Sign-in verification</h2>
+          {record.method === 'email' ? (
             <p>
-              {activeMethod === 'email'
-                ? 'Two-step verification is enabled with email codes: sign-in emails a 6-digit code to your address.'
-                : 'Two-step verification is enabled with your authenticator app: sign-in asks for a code from the app.'}{' '}
-              A backup code works when the method is unavailable, once each. If you lose both,
-              contact your administrator to reset the factor.
+              A 6-digit code is emailed to {maskedEmail} automatically at each sign-in. There is
+              nothing to set up.
             </p>
-            {!pendingMethod && (
-              <form method="post" action="/api/auth/mfa/enrol" style="margin-top:0.75rem">
-                <input
-                  type="hidden"
-                  name="method"
-                  value={activeMethod === 'email' ? 'totp' : 'email'}
-                />
+          ) : (
+            <p>
+              Sign-in asks for a 6-digit code from your authenticator app. If you lose the app, a
+              backup code works instead.
+            </p>
+          )}
+          {record.pendingMethod === 'totp' && (
+            <p class="grc-field__hint">
+              An authenticator app setup is in progress below. Email codes keep working until you
+              confirm it.
+            </p>
+          )}
+          {record.method === 'totp' && !record.pendingMethod && (
+            <form method="post" action="/api/auth/mfa/enrol" style="margin-top:0.75rem">
+              <input type="hidden" name="method" value="email" />
+              <button type="submit" class="grc-btn grc-btn--secondary">
+                Switch back to email codes
+              </button>
+            </form>
+          )}
+          {record.method === 'email' && !record.pendingMethod && appAllowed && (
+            <form method="post" action="/api/auth/mfa/enrol" style="margin-top:0.75rem">
+              <input type="hidden" name="method" value="totp" />
+              <button type="submit" class="grc-btn--link">
+                Use an authenticator app instead
+              </button>
+            </form>
+          )}
+        </div>
+
+        <div class="grc-panel">
+          <h2>Backup codes</h2>
+          <p>
+            Each backup code passes the sign-in step once, when your usual method is unavailable.
+            You have {remaining} unused {remaining === 1 ? 'code' : 'codes'}.
+          </p>
+          {!record.pendingMethod && backupCodes.length > 0 && (
+            <>
+              {codesShown && (
+                <p class="grc-notice" role="status">
+                  Your new backup codes are ready. They are shown only now; store them somewhere
+                  safe.
+                </p>
+              )}
+              <ul>
+                {backupCodes.map((c) => (
+                  <li>
+                    <code>{c}</code>
+                  </li>
+                ))}
+              </ul>
+              <form method="post" action="/api/auth/mfa/backup">
+                <input type="hidden" name="op" value="hide" />
                 <button type="submit" class="grc-btn grc-btn--secondary">
-                  {activeMethod === 'email'
-                    ? 'Switch to an authenticator app'
-                    : 'Switch to email codes'}
+                  I have saved these codes
                 </button>
               </form>
-            )}
-            {pendingMethod && (
-              <p class="grc-field__hint" style="margin-top:0.75rem">
-                A switch to {pendingMethod === 'email' ? 'email codes' : 'an authenticator app'} is
-                in progress below. Your current method keeps working until you confirm it.
-              </p>
-            )}
-          </div>
-        )}
+            </>
+          )}
+          {!record.pendingMethod && backupCodes.length === 0 && (
+            <form method="post" action="/api/auth/mfa/backup" style="margin-top:0.75rem">
+              <button type="submit" class="grc-btn grc-btn--primary">
+                Generate new backup codes
+              </button>
+            </form>
+          )}
+          {record.pendingMethod === 'totp' && (
+            <p class="grc-field__hint">
+              Fresh backup codes come with the authenticator app setup below and replace these when
+              you confirm it.
+            </p>
+          )}
+        </div>
 
         {pendingTotp && (
           <>
@@ -184,88 +240,17 @@ const maskedEmail = at > 0 ? `${email[0]}***${email.slice(at)}` : 'your address'
                   />
                 </div>
                 <button type="submit" class="grc-btn grc-btn--primary">
-                  Activate two-step verification
+                  Activate the authenticator app
                 </button>
               </form>
-            </div>
-          </>
-        )}
-
-        {pendingEmail && (
-          <>
-            <div class="grc-panel">
-              <h2>1. Check your email</h2>
-              <p>
-                We emailed a 6-digit code to {maskedEmail}. It works once and expires in ten
-                minutes.
-              </p>
-              <form method="post" action="/api/auth/mfa/send">
-                <button type="submit" class="grc-btn grc-btn--secondary">
-                  Send a new code
-                </button>
-              </form>
-            </div>
-            <div class="grc-panel">
-              <h2>2. Save your backup codes</h2>
-              <p>
-                Each code works once, when your email is unavailable. They are shown only now; store
-                them somewhere safe.
-              </p>
-              <ul>
-                {backupCodes.map((c) => (
-                  <li>
-                    <code>{c}</code>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div class="grc-panel">
-              <h2>3. Confirm the code</h2>
-              <form method="post" action="/api/auth/mfa/confirm">
-                <div class="grc-field" style="max-width:14rem">
-                  <label for="code">Code from the email</label>
-                  <input
-                    type="text"
-                    id="code"
-                    name="code"
-                    class="grc-input"
-                    inputmode="numeric"
-                    autocomplete="one-time-code"
-                    pattern="[0-9]{6}"
-                    maxlength="6"
-                    required
-                  />
-                </div>
-                <button type="submit" class="grc-btn grc-btn--primary">
-                  Activate two-step verification
-                </button>
-              </form>
-            </div>
-          </>
-        )}
-
-        {!confirmed && !pendingMethod && (
-          <div class="grc-panel">
-            <h2>Choose a method</h2>
-            <p>
-              Two-step verification asks for a 6-digit code at sign-in, on top of your password.
-              Pick how you want to receive it; you can switch later.
-            </p>
-            <div class="grc-actions" style="margin-top:0.75rem">
-              <form method="post" action="/api/auth/mfa/enrol">
-                <input type="hidden" name="method" value="totp" />
-                <button type="submit" class="grc-btn grc-btn--primary">
-                  Use an authenticator app
-                </button>
-              </form>
-              <form method="post" action="/api/auth/mfa/enrol">
+              <form method="post" action="/api/auth/mfa/enrol" style="margin-top:0.75rem">
                 <input type="hidden" name="method" value="email" />
-                <button type="submit" class="grc-btn grc-btn--secondary">
-                  Use email codes
+                <button type="submit" class="grc-btn--link">
+                  Cancel and stay on email codes
                 </button>
               </form>
             </div>
-          </div>
+          </>
         )}
       </>
     )

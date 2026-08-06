@@ -24,6 +24,8 @@ import {
   canStartEnrolment,
   startPendingRecord,
   promoteRecord,
+  withEmailDefault,
+  switchToEmailRecord,
   type MfaMethod,
   type MfaRecord,
 } from '@grc/auth/mfaRecord';
@@ -54,6 +56,67 @@ async function writeRecord(
   record: MfaRecord,
 ): Promise<void> {
   await setConfigValue(db, organizationId, mfaConfigKey(userId), JSON.stringify(record));
+}
+
+/**
+ * The user's record under universal verification (Build Prompt 37): the
+ * stored one, or the automatic email default. A missing or unconfirmed
+ * record is persisted in its email-default form, so the account verifies by
+ * email the moment it exists, with no enrolment step.
+ */
+export async function ensureMfaRecord(
+  db: Client,
+  organizationId: string,
+  userId: string,
+): Promise<MfaRecord> {
+  const existing = await getMfaRecord(db, organizationId, userId);
+  const effective = withEmailDefault(existing);
+  if (!existing?.confirmed) await writeRecord(db, organizationId, userId, effective);
+  return effective;
+}
+
+/** Switch the active factor back to email codes: immediate, backup codes kept. */
+export async function switchToEmail(
+  db: Client,
+  organizationId: string,
+  userId: string,
+): Promise<void> {
+  const existing = await getMfaRecord(db, organizationId, userId);
+  await writeRecord(db, organizationId, userId, switchToEmailRecord(existing));
+}
+
+/**
+ * Replace the backup codes on the active record: the hashes for verification
+ * and the sealed plaintext so the security screen can show them once. Refused
+ * while an enrolment is pending, because that flow owns backupPlain and
+ * confirms its own fresh set.
+ */
+export async function replaceBackupCodes(
+  db: Client,
+  organizationId: string,
+  userId: string,
+  hashes: string[],
+  sealedPlain: string,
+): Promise<boolean> {
+  const existing = withEmailDefault(await getMfaRecord(db, organizationId, userId));
+  if (existing.pendingMethod) return false;
+  await writeRecord(db, organizationId, userId, {
+    ...existing,
+    backup: hashes,
+    backupPlain: sealedPlain,
+  });
+  return true;
+}
+
+/** Drop the sealed shown-once plaintext after the user has saved the codes. */
+export async function hideBackupCodes(
+  db: Client,
+  organizationId: string,
+  userId: string,
+): Promise<void> {
+  const existing = await getMfaRecord(db, organizationId, userId);
+  if (!existing?.backupPlain || existing.pendingMethod) return;
+  await writeRecord(db, organizationId, userId, { ...existing, backupPlain: undefined });
 }
 
 /**

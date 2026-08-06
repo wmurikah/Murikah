@@ -48,10 +48,10 @@ export const SETTINGS_FIELDS: SettingField[] = [
     hint: 'The weekday the overdue action-plan reminder runs, e.g. Monday.',
   },
   {
-    key: 'MFA_REQUIRED_ROLES',
-    label: 'Roles requiring two-step verification',
+    key: 'MFA_AUTHENTICATOR_ROLES',
+    label: 'Roles allowed an authenticator app',
     kind: 'text',
-    hint: 'SUPER_ADMIN when blank; ALL for every role; NONE to disable; or a comma-separated list of role codes.',
+    hint: 'Two-step verification itself is universal (email codes). SUPER_ADMIN when blank; ALL for every role; NONE for email codes only; or a comma-separated list of role codes. The platform owner always qualifies.',
   },
   {
     key: 'NOTIFY_SENDER_EMAIL',
