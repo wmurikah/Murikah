@@ -19,7 +19,7 @@ import {
 import { resolveOwners, setOwners } from '@grc/repos/actionPlanOwners';
 import { enqueueNotification } from '@grc/repos/notify';
 import { writeAuditLog } from '@grc/repos/audit';
-import { bindDraftAttachments } from '@grc/repos/evidence';
+import { bindDraftAttachments, ensureDeterministicNames } from '@grc/repos/evidence';
 import { getWorkPaper } from '@grc/repos/workPapers';
 import { loadAiConfig } from '@grc/ai/config';
 import { evaluateAuditeeResponse } from '@grc/ai/features';
@@ -123,6 +123,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         'action_plan',
         id,
       );
+      // The bound files get their deterministic display names now that the
+      // parent exists; the cron sweep mirrors them to Drive.
+      await ensureDeterministicNames(db, grc.organizationId, 'action_plan', id);
     } catch (err) {
       console.error('[grc.evidence.bind] draft binding failed', err);
     }

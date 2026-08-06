@@ -75,6 +75,22 @@ export function keyBelongsToOrg(key: string, organizationId: string): boolean {
   return typeof key === 'string' && key.startsWith(orgPrefix(organizationId));
 }
 
+/**
+ * The deterministic key of a file's optimised copy (Build Prompt 32): the
+ * original key with `opt/` inserted directly after the tenant prefix, so the
+ * copy stays inside the same tenant namespace and every presign guard applies
+ * to it unchanged. The live files table records the original key; the
+ * optimised key is always derived from it by this one function, never stored,
+ * so the pair can never disagree. Null when the key is not tenant-scoped.
+ */
+export function optimisedKey(key: string, organizationId: string): string | null {
+  const prefix = orgPrefix(organizationId);
+  if (!key.startsWith(prefix)) return null;
+  const rest = key.slice(prefix.length);
+  if (rest.startsWith('opt/')) return null;
+  return `${prefix}opt/${rest}`;
+}
+
 /** The lower-case hex sha256 of the given bytes, for files.content_hash. */
 export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string> {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);

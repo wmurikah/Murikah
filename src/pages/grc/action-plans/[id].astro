@@ -20,6 +20,8 @@ import { getActionPlan, type ActionPlanDetail } from '@grc/repos/actionPlans';
 import { listHistory, type HistoryRow } from '@grc/repos/actionPlanHistory';
 import { isOwner, resolveOwners } from '@grc/repos/actionPlanOwners';
 import { listAttachments, type Attachment } from '@grc/repos/evidence';
+import { storageConfigured } from '@grc/storage';
+import GrcEvidencePanel from '@/components/grc/GrcEvidencePanel.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import {
@@ -127,6 +129,10 @@ const canEdit = p
   : false;
 const canDelete = p ? can(Astro.locals, 'update', 'ACTION_PLAN') && isDeletable(p.status) : false;
 const canDelegate = ownerViewer && nonTerminal;
+// Management (a current owner) and auditors may attach files to their updates;
+// the server enforces the same rule on every upload call.
+const canAttach =
+  storageConfigured() && (ownerViewer || can(Astro.locals, 'update', 'ACTION_PLAN'));
 const delegationPending = has('delegated_date') && !has('delegation_accepted_date');
 const canDecideDelegation =
   delegationPending && ownerViewer && String(p?.delegated_by_id ?? '') !== grc.userId;
@@ -434,25 +440,24 @@ const commentLabel = (effect: string): string =>
 
         <div class="grc-panel">
           <h2>Evidence</h2>
-          {evidence.length === 0 ? (
-            <p class="grc-lead" style="margin:0">
-              No evidence attached.
+          <GrcEvidencePanel
+            entityType="action_plan"
+            entityId={id ?? ''}
+            items={evidence}
+            canUpload={canAttach}
+            canDelete={can(Astro.locals, 'update', 'ACTION_PLAN')}
+          />
+          {!storageConfigured() && (
+            <p class="grc-field__hint" style="margin-top:0.5rem">
+              Evidence storage is not configured on this environment yet.
             </p>
-          ) : (
-            <ul class="grc-tags" style="flex-direction:column;align-items:stretch">
-              {evidence.map((e) => (
-                <li class="grc-tag" style="justify-content:space-between">
-                  <span>{e.fileName}</span>
-                  <span class="grc-lead">{e.backend ?? 'stored'}</span>
-                </li>
-              ))}
-            </ul>
           )}
-          <p class="grc-field__hint" style="margin-top:0.5rem">
-            Uploading evidence is pending the storage-backend decision (Google Drive or Cloudflare
-            R2); see the evidence-storage note. Metadata is recorded through files and
-            file_attachments.
-          </p>
+          {canAttach && (
+            <p class="grc-field__hint" style="margin-top:0.5rem">
+              Files attached here save with your implementation updates and responses on this plan,
+              under its parent finding.
+            </p>
+          )}
         </div>
 
         {canDelegate && (

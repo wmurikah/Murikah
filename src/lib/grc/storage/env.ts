@@ -35,6 +35,36 @@ export function getR2PresignConfig(): R2PresignConfig | null {
   return null;
 }
 
+export interface DriveMirrorConfig {
+  /** The service account's email (the folder must be shared to it). */
+  clientEmail: string;
+  /** The service account's PKCS#8 private key, PEM as issued by Google. */
+  privateKeyPem: string;
+  /** The Drive folder the optimised copies are mirrored into. */
+  folderId: string;
+}
+
+/**
+ * The Drive mirror credential (Build Prompt 32): a service-account key JSON in
+ * GDRIVE_SERVICE_ACCOUNT_JSON plus the target folder in
+ * GDRIVE_EVIDENCE_FOLDER_ID. Null when either is missing or the JSON is not a
+ * service-account key, which simply leaves the mirror off.
+ */
+export function getDriveMirrorConfig(): DriveMirrorConfig | null {
+  const raw = nonEmpty(env.GDRIVE_SERVICE_ACCOUNT_JSON);
+  const folderId = nonEmpty(env.GDRIVE_EVIDENCE_FOLDER_ID);
+  if (!raw || !folderId) return null;
+  try {
+    const parsed = JSON.parse(raw) as { client_email?: unknown; private_key?: unknown };
+    const clientEmail = nonEmpty(parsed.client_email);
+    const privateKeyPem = nonEmpty(parsed.private_key);
+    if (!clientEmail || !privateKeyPem) return null;
+    return { clientEmail, privateKeyPem, folderId };
+  } catch {
+    return null;
+  }
+}
+
 export interface DriveConfig {
   clientId: string;
   clientSecret: string;

@@ -10,7 +10,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { createWorkPaper, parseWorkPaperInput } from '@grc/repos/workPapers';
 import { writeAuditLog } from '@grc/repos/audit';
-import { bindDraftAttachments } from '@grc/repos/evidence';
+import { bindDraftAttachments, ensureDeterministicNames } from '@grc/repos/evidence';
 import { WP_STATUS } from '@grc/workflow/workPaperActions';
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -50,6 +50,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         'work_paper',
         id,
       );
+      // The bound files get their deterministic display names now that the
+      // parent exists; the cron sweep mirrors them to Drive.
+      await ensureDeterministicNames(db, grc.organizationId, 'work_paper', id);
     } catch (err) {
       console.error('[grc.evidence.bind] draft binding failed', err);
     }

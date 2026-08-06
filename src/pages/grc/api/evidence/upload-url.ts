@@ -12,7 +12,8 @@ import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { storageConfigured, presignUpload } from '@grc/storage';
-import { buildObjectKey, keyBelongsToOrg } from '@grc/storage/keys';
+import { buildObjectKey, keyBelongsToOrg, optimisedKey } from '@grc/storage/keys';
+import { isOptimisableImage, OPTIMISED_IMAGE_MAX_EDGE } from '@grc/storage/derived';
 import { canUploadEvidence, isDraftEntity, type EvidenceActor } from '@grc/storage/access';
 
 const ENTITY_TYPES = new Set([
@@ -77,7 +78,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     const url = await presignUpload(key, UPLOAD_TTL_SECONDS);
-    return json({ fileId, backend: 'r2', method: 'PUT', url, contentType }, 200);
+    // Images also get a presigned PUT for their optimised copy (Build Prompt
+    // 32): the browser resizes to the constant maximum edge and re-encodes,
+    // and uploads both. The original in R2 stays the immutable record; a
+    // client that cannot produce the copy simply skips it.
+    let optimisedUrl: string | null = null;
+    if (isOptimisableImage(contentType)) {
+      const optKey = optimisedKey(key, grc.organizationId);
+      if (optKey) optimisedUrl = await presignUpload(optKey, UPLOAD_TTL_SECONDS);
+    }
+    return json(
+      {
+        fileId,
+        backend: 'r2',
+        method: 'PUT',
+        url,
+        contentType,
+        optimisedUrl,
+        optimisedMaxEdge: OPTIMISED_IMAGE_MAX_EDGE,
+      },
+      200,
+    );
   } catch {
     return json({ error: 'Could not prepare the upload.' }, 502);
   }

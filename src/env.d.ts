@@ -91,6 +91,14 @@ declare namespace Cloudflare {
     GDRIVE_CLIENT_SECRET?: string;
     GDRIVE_REFRESH_TOKEN?: string;
 
+    // The Drive browse mirror (Build Prompt 32): a Google service-account key
+    // (the whole JSON) and the folder the optimised evidence copies are
+    // mirrored into for human browsing. R2 stays the system of record; absent
+    // values simply leave the mirror off. Setup: grc/docs/drive-mirror.md.
+    // Worker secrets only, never committed.
+    GDRIVE_SERVICE_ACCOUNT_JSON?: string;
+    GDRIVE_EVIDENCE_FOLDER_ID?: string;
+
     // Engineering Rhythm notification dispatcher. All optional: absent or a
     // non-production ENGR_ENV keeps the dispatcher in dry-run and never contacts
     // a provider. Secrets are set as Worker secrets or in .dev.vars.

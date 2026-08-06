@@ -98,6 +98,11 @@ export async function openObject(ref: StoredObjectRef): Promise<ReadableStream> 
   return backendFor(ref).get(ref);
 }
 
+/** Whether an object exists (used to pick the optimised copy when serving). */
+export async function objectExists(ref: StoredObjectRef): Promise<boolean> {
+  return (await backendFor(ref).head(ref)) != null;
+}
+
 /** Write bytes to R2 at a tenant-scoped key (used server-side by migration). */
 export async function putObject(input: PutInput): Promise<StoredObjectRef> {
   return getStorageBackend().put(input);

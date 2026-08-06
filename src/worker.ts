@@ -58,6 +58,7 @@ import {
   runDueSoonReminders,
 } from './lib/grc/notify/reminders';
 import { runEvidenceMigration } from './lib/grc/storage/migrate';
+import { runDriveMirror } from './lib/grc/storage/mirror';
 
 const DAILY_PM_CRON = '0 3 * * *';
 
@@ -267,6 +268,10 @@ export default {
           await runGrcDispatch(grcDb, getGrcDeliveryEnv(), grcEnv.sessionSecret, systemClock, {
             limit: 200,
           });
+          // Sweep unmirrored evidence into the Drive browse folder (Build
+          // Prompt 32). A no-op until the service-account secret and folder
+          // id are set; failed rows simply retry on the next run.
+          await runDriveMirror(grcDb, 25);
           if (controller.cron === DAILY_PM_CRON) {
             await updateOverdueStatuses(grcDb);
             await runStaleReminders(grcDb, systemClock);
