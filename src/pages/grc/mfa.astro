@@ -2,27 +2,86 @@
 export const prerender = false;
 
 /**
- * The TOTP step. Reached with a half-authorised session (cookie mfa=pending)
- * after the password step; /api/auth/mfa/verify checks the code (or a backup
- * code) and promotes the session. The middleware admits only this screen, its
- * endpoint and sign-out while pending; a fully authorised visitor is sent
- * home.
+ * The second-factor step. Reached with a half-authorised session (cookie
+ * mfa=pending) after the password step; /api/auth/mfa/verify checks the code
+ * (or a backup code) and promotes the session. The copy follows the user's
+ * method: a code from the authenticator app, or the 6-digit code emailed at
+ * sign-in, with a cooldown-limited resend. The middleware admits only this
+ * screen, its endpoints and sign-out while pending; a fully authorised
+ * visitor is sent home. Resolving the method needs the pending session read
+ * directly (locals.grc exists only for full sessions); any failure falls back
+ * to the authenticator copy, keeping the step usable.
  */
 import GrcAuthLayout from '@/layouts/GrcAuthLayout.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { readGrcSessionCookie } from '@grc/auth/session';
+import { resolveSession } from '@grc/repos/session';
+import { getMfaRecord, type MfaMethod } from '@grc/repos/mfa';
 
 if (Astro.locals.grc) return Astro.redirect('/');
 
-const failed = Astro.url.searchParams.get('error') === '1';
+const errorParam = Astro.url.searchParams.get('error');
+const failed = errorParam === '1';
+const errorText = errorParam && errorParam !== '1' ? errorParam : '';
+const sent = Astro.url.searchParams.get('sent') === '1';
+const sendError = Astro.url.searchParams.get('senderror') === '1';
+
+let method: MfaMethod = 'totp';
+let maskedEmail = '';
+try {
+  const env = getGrcEnv();
+  const cookie = await readGrcSessionCookie(Astro.request, env.sessionSecret);
+  if (!cookie) return Astro.redirect('/login');
+  const db = await getDb(env);
+  const identity = await resolveSession(db, cookie.sessionId);
+  if (identity) {
+    const record = await getMfaRecord(db, identity.homeOrganizationId, identity.userId);
+    if (record?.confirmed) method = record.method;
+    const email = identity.userEmail ?? '';
+    const at = email.indexOf('@');
+    maskedEmail = at > 0 ? `${email[0]}***${email.slice(at)}` : '';
+  }
+} catch (err) {
+  console.error('[grc.auth.mfa] step screen could not resolve the method', err);
+}
 ---
 
 <GrcAuthLayout title="Two-step verification">
   <h1>Two-step verification</h1>
-  <p class="grc-authcard__lead">Enter the 6-digit code from your authenticator app.</p>
+  <p class="grc-authcard__lead">
+    {
+      method === 'email'
+        ? `Enter the 6-digit code we emailed to ${maskedEmail || 'your address'}.`
+        : 'Enter the 6-digit code from your authenticator app.'
+    }
+  </p>
 
   {
     failed && (
       <p class="grc-error" role="alert" style="margin-bottom:1rem">
         That code was not valid. Please try again.
+      </p>
+    )
+  }
+  {
+    errorText && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {errorText}
+      </p>
+    )
+  }
+  {
+    sent && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        A code has been emailed to you. It works once and expires in ten minutes.
+      </p>
+    )
+  }
+  {
+    sendError && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        The code could not be emailed just now. Request a new one below, or use a backup code.
       </p>
     )
   }
@@ -55,6 +114,16 @@ const failed = Astro.url.searchParams.get('error') === '1';
     </div>
     <button type="submit" class="grc-btn grc-btn--primary">Verify</button>
   </form>
+
+  {
+    method === 'email' && (
+      <form method="post" action="/api/auth/mfa/send" style="margin-top:1rem">
+        <button type="submit" class="grc-btn grc-btn--secondary">
+          Send a new code
+        </button>
+      </form>
+    )
+  }
 
   <form method="post" action="/api/auth/logout" style="margin-top:1rem">
     <button type="submit" class="grc-btn grc-btn--secondary">Cancel and sign out</button>
