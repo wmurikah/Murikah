@@ -57,7 +57,12 @@ export const POST: APIRoute = async ({ request }) => {
 
     // Verification is universal (Build Prompt 37): a user with no stored
     // factor verifies against the automatic email default.
-    const record = await ensureMfaRecord(db, identity.homeOrganizationId, identity.userId);
+    const record = await ensureMfaRecord(
+      db,
+      identity.homeOrganizationId,
+      identity.userId,
+      env.sessionSecret,
+    );
 
     let verified = false;
     if (backupCode !== '') {
