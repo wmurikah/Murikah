@@ -26,6 +26,9 @@ import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 // plants known challenges (the smoke run has no Graph mailer to deliver one).
 import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';
 import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
+// The same recogniser the worker names evidence with (Build Prompt 32); its
+// import was dropped when the merge resolved this block, restored here.
+import { isDeterministicName } from '../../src/lib/grc/storage/derived.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
