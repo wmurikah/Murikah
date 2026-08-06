@@ -1,8 +1,9 @@
 /**
- * The pure pieces of Build Prompt 25: the throttle decision, the MFA role
- * rule, the session liveness rules, the sealed box and the otpauth URI. All
- * import-free (secretBox and totp use only the WebCrypto global), so node
- * strips types and runs them directly.
+ * The pure pieces of Build Prompt 25 (as reshaped by Build Prompt 37): the
+ * throttle decision, the authenticator-app role rule (verification itself is
+ * universal and no longer a rule), the session liveness rules, the sealed
+ * box and the otpauth URI. All import-free (secretBox and totp use only the
+ * WebCrypto global), so node strips types and runs them directly.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +14,7 @@ import {
   IP_MAX_FAILURES,
   THROTTLE_WINDOW_MINUTES,
 } from '../../src/lib/grc/auth/loginThrottle.ts';
-import { mfaRequiredForRole } from '../../src/lib/grc/auth/mfaPolicy.ts';
+import { authenticatorAllowedForRole } from '../../src/lib/grc/auth/mfaPolicy.ts';
 import {
   sessionLiveness,
   SESSION_IDLE_SECONDS,
@@ -34,15 +35,15 @@ test('the throttle locks on the email streak first, then the IP streak', () => {
   assert.equal(1_000_000_000_000 - start, THROTTLE_WINDOW_MINUTES * 60 * 1000);
 });
 
-test('the MFA rule defaults to SUPER_ADMIN and honours ALL, NONE and lists', () => {
-  assert.equal(mfaRequiredForRole('SUPER_ADMIN', undefined), true);
-  assert.equal(mfaRequiredForRole('AUDITOR', undefined), false);
-  assert.equal(mfaRequiredForRole('AUDITOR', ''), false);
-  assert.equal(mfaRequiredForRole('JUNIOR_STAFF', 'ALL'), true);
-  assert.equal(mfaRequiredForRole('SUPER_ADMIN', 'NONE'), false);
-  assert.equal(mfaRequiredForRole('HEAD_OF_AUDIT', 'SUPER_ADMIN, HEAD_OF_AUDIT'), true);
-  assert.equal(mfaRequiredForRole('AUDITOR', 'SUPER_ADMIN, HEAD_OF_AUDIT'), false);
-  assert.equal(mfaRequiredForRole('auditor', 'AUDITOR'), true); // case-insensitive
+test('the authenticator rule defaults to SUPER_ADMIN and honours ALL, NONE and lists', () => {
+  assert.equal(authenticatorAllowedForRole('SUPER_ADMIN', undefined), true);
+  assert.equal(authenticatorAllowedForRole('AUDITOR', undefined), false);
+  assert.equal(authenticatorAllowedForRole('AUDITOR', ''), false);
+  assert.equal(authenticatorAllowedForRole('JUNIOR_STAFF', 'ALL'), true);
+  assert.equal(authenticatorAllowedForRole('SUPER_ADMIN', 'NONE'), false);
+  assert.equal(authenticatorAllowedForRole('HEAD_OF_AUDIT', 'SUPER_ADMIN, HEAD_OF_AUDIT'), true);
+  assert.equal(authenticatorAllowedForRole('AUDITOR', 'SUPER_ADMIN, HEAD_OF_AUDIT'), false);
+  assert.equal(authenticatorAllowedForRole('auditor', 'AUDITOR'), true); // case-insensitive
 });
 
 test('session liveness: absolute expiry, idle window, and the touch throttle', () => {

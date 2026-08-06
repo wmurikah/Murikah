@@ -1,8 +1,10 @@
 /**
  * The GRC smoke test: the safety net every module merges behind (Build Prompt
  * 22). It boots the built worker against a seeded throwaway database, signs in
- * as the seeded user, GETs every reachable page and dry-runs every mutation
- * endpoint, and fails on any 500. Routes are enumerated from the filesystem
+ * as the seeded user (two-step verification is universal since Build Prompt
+ * 37, so every sign-in completes the email-code step by planting a known
+ * challenge through the database handle), GETs every reachable page and
+ * dry-runs every mutation endpoint, and fails on any 500. Routes are enumerated from the filesystem
  * router (src/pages/grc/**), so a new page is covered automatically and a new
  * API endpoint fails the test until a dry-run step is added to MUTATION_STEPS
  * below. That is deliberate: "every page and every mutation is in the smoke
@@ -486,16 +488,16 @@ const MUTATION_STEPS: MutationStep[] = [
     endpoint: 'setup/settings.ts',
     title: 'save general settings',
     expect: 'success',
-    // A real browser posts the whole pre-filled form; an empty post would
-    // blank MFA_REQUIRED_ROLES, whose blank falls back to the default rule
-    // (SUPER_ADMIN must enrol) and would lock the admin out of the rest of
-    // the run - which is exactly what the field is for.
+    // A real browser posts the whole pre-filled form. MFA_AUTHENTICATOR_ROLES
+    // only gates the authenticator-app alternative (Build Prompt 37):
+    // verification itself is universal, so no value here can lock anyone out,
+    // and the platform owner always qualifies for the app regardless.
     form: () => ({
       RESPONSE_DEADLINE_DAYS: '14',
       MAX_RESPONSE_ROUNDS: '3',
       STALE_REMINDER_DAYS: '3',
       OVERDUE_REMINDER_DAY: 'Monday',
-      MFA_REQUIRED_ROLES: 'NONE',
+      MFA_AUTHENTICATOR_ROLES: 'SUPER_ADMIN',
       NOTIFY_SENDER_EMAIL: 'audit@hasspetroleum.com',
       NOTIFY_REPLY_TO: 'audit@hasspetroleum.com',
     }),
@@ -503,10 +505,10 @@ const MUTATION_STEPS: MutationStep[] = [
       const r = db
         .prepare(
           `SELECT config_value AS v FROM config
-            WHERE organization_id = ? AND config_key = 'MFA_REQUIRED_ROLES'`,
+            WHERE organization_id = ? AND config_key = 'MFA_AUTHENTICATOR_ROLES'`,
         )
         .get(SMOKE.orgId) as { v?: string } | undefined;
-      assert.equal(String(r?.v), 'NONE', 'the saved settings must persist');
+      assert.equal(String(r?.v), 'SUPER_ADMIN', 'the saved settings must persist');
     },
     method: 'POST',
     path: () => '/api/setup/settings',
@@ -864,10 +866,53 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    // No setup wall (Build Prompt 37): backup codes are generated from
+    // account security, hashes stored for verification, sealed plaintext
+    // kept to show once.
+    endpoint: 'auth/mfa/backup.ts',
+    title: 'the signed-in admin generates backup codes from account security',
+    expect: 'success',
+    verify: (db) => {
+      const row = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = ? AND config_key = 'MFA_TOTP::${SMOKE.userId}'`,
+        )
+        .get(SMOKE.orgId) as { v?: string } | undefined;
+      const record = JSON.parse(String(row?.v ?? 'null')) as {
+        backup?: string[];
+        backupPlain?: string;
+      } | null;
+      assert.equal(record?.backup?.length, 8, 'eight backup-code hashes must be stored');
+      assert.ok(record?.backupPlain, 'the sealed shown-once plaintext must be stored');
+    },
+    method: 'POST',
+    path: () => '/api/auth/mfa/backup',
+  },
+  {
+    // Email codes need no enrolment, so the method endpoint's email path is
+    // an immediate switch; the authenticator path is dry-run in the MFA
+    // life-cycle block below.
     endpoint: 'auth/mfa/enrol.ts',
-    title: 'MFA enrolment starts for the signed-in admin',
+    title: 'the method endpoint answers the signed-in admin (email switch)',
+    expect: 'success',
+    verify: (db) => {
+      const row = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = ? AND config_key = 'MFA_TOTP::${SMOKE.userId}'`,
+        )
+        .get(SMOKE.orgId) as { v?: string } | undefined;
+      const record = JSON.parse(String(row?.v ?? 'null')) as {
+        method?: string;
+        pendingMethod?: string;
+      } | null;
+      assert.equal(record?.method, 'email', 'the switch back to email codes is immediate');
+      assert.equal(record?.pendingMethod, undefined, 'nothing stays pending');
+    },
     method: 'POST',
     path: () => '/api/auth/mfa/enrol',
+    form: () => ({ method: 'email' }),
   },
   {
     endpoint: 'auth/mfa/confirm.ts',
@@ -884,10 +929,10 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ code: '000000' }),
   },
   {
-    // The admin's dry-run enrolment above is the authenticator method, so
-    // there is no email code to send; the endpoint must say so, not 500.
+    // A fully signed-in session has no sign-in code to send; the endpoint
+    // must say so, not 500.
     endpoint: 'auth/mfa/send.ts',
-    title: 'a code send without an email enrolment is refused, not 500',
+    title: 'a code send outside the sign-in step is refused, not 500',
     expect: 'refusal',
     method: 'POST',
     path: () => '/api/auth/mfa/send',
@@ -948,15 +993,91 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
   await server.start();
   const captured = new Map<string, string>();
 
+  // Universal two-step verification (Build Prompt 37): every sign-in lands on
+  // the email-code step. The smoke run has no Graph mailer, so the automatic
+  // sends visibly fail (which itself proves the send path is wired) and known
+  // challenges are planted through the database handle before verifying.
+  const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
+  const readMfa = (db: SmokeDb, userId: string): MfaRecord => {
+    const row = db
+      .prepare(
+        `SELECT config_value AS v FROM config
+          WHERE organization_id = ? AND config_key = ?`,
+      )
+      .get(SMOKE.orgId, `MFA_TOTP::${userId}`) as { v?: string } | undefined;
+    assert.ok(row?.v, `an MFA record must exist for ${userId}`);
+    return JSON.parse(String(row.v)) as MfaRecord;
+  };
+  const writeMfa = (db: SmokeDb, userId: string, record: MfaRecord): void => {
+    db.prepare(
+      `UPDATE config SET config_value = ?
+        WHERE organization_id = ? AND config_key = ?`,
+    ).run(JSON.stringify(record), SMOKE.orgId, `MFA_TOTP::${userId}`);
+  };
+  const plantOtp = (userId: string, code: string): void => {
+    const db = server.database;
+    assert.ok(db, 'the fake database is reachable to plant a code');
+    writeMfa(db, userId, {
+      ...readMfa(db, userId),
+      challenge: newChallenge(sha256(code), Date.now() - 90_000),
+    });
+  };
+  /** The full universal sign-in: the password step, then the planted emailed code. */
+  const signInWithEmailCode = async (
+    email: string,
+    password: string,
+    userId: string,
+  ): Promise<void> => {
+    server.clearCookies();
+    const login = await server.request('POST', '/api/auth/login', { email, password });
+    assert.equal(login.status, 303, `login answered ${login.status}: ${login.body.slice(0, 300)}`);
+    const location = String(login.headers.location ?? '');
+    assert.ok(location.startsWith('/mfa'), `every sign-in must land on the step, got ${location}`);
+    plantOtp(userId, '424242');
+    const verified = await server.request('POST', '/api/auth/mfa/verify', { code: '424242' });
+    const landed = String(verified.headers.location ?? '');
+    assert.ok(!landed.includes('error'), `verification failed, redirected to ${landed}`);
+  };
+
   try {
-    await t.test('sign in as the seeded user', async () => {
+    await t.test('sign in as the seeded user: the second factor is universal', async () => {
+      server.clearCookies();
       const res = await server.request('POST', '/api/auth/login', {
         email: SMOKE.email,
         password: SMOKE.password,
       });
       assert.equal(res.status, 303, `login answered ${res.status}: ${res.body.slice(0, 300)}`);
       const location = String(res.headers.location ?? '');
-      assert.ok(!location.includes('error'), `login redirected to ${location}`);
+      assert.ok(
+        location.startsWith('/mfa'),
+        `no role is exempt; login must land on the step, got ${location}`,
+      );
+      assert.ok(
+        location.includes('senderror=1'),
+        'without the Graph mailer the automatic sign-in send visibly fails',
+      );
+      const blocked = await server.get('/work-papers');
+      assert.equal(
+        blocked.hops[blocked.hops.length - 1],
+        '/mfa',
+        'a pending session must not reach the app',
+      );
+      const step = await server.get('/mfa');
+      assert.equal(step.status, 200, `step screen answered ${step.status}`);
+      assert.ok(step.body.includes('code we emailed'), 'the step defaults to the email copy');
+      assert.ok(step.body.includes('Or a backup code'), 'the step takes a backup code');
+      assert.ok(step.body.includes('Resend code'), 'the step offers a resend');
+      assert.ok(
+        step.body.includes('Use an authenticator app instead'),
+        'the admin sees the minimised authenticator link on the step',
+      );
+      plantOtp(SMOKE.userId, '424242');
+      const wrong = await server.request('POST', '/api/auth/mfa/verify', { code: '000001' });
+      assert.ok(String(wrong.headers.location ?? '').includes('error=1'), 'a wrong code refuses');
+      const ok = await server.request('POST', '/api/auth/mfa/verify', { code: '424242' });
+      assert.equal(String(ok.headers.location ?? ''), '/', 'the emailed code promotes the session');
+      const home = await server.get('/work-papers');
+      assert.equal(home.status, 200, 'the promoted session reaches the app');
     });
 
     for (const route of routes) {
@@ -1056,11 +1177,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const db = server.database;
       assert.ok(db, 'the fake database is reachable');
       // The logout dry-run above ended the admin session, so sign back in.
-      server.clearCookies();
-      await server.request('POST', '/api/auth/login', {
-        email: SMOKE.email,
-        password: SMOKE.password,
-      });
+      await signInWithEmailCode(SMOKE.email, SMOKE.password, SMOKE.userId);
       const before = await server.get('/settings/email');
       assert.equal(before.status, 200, `/settings/email answered ${before.status}`);
       assert.ok(
@@ -1105,13 +1222,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
 
     // Work paper as parent (Build Prompt 27): an action plan cannot exist
     // without a finding, and the one seeded stray is surfaced and relinkable.
-    // The admin session signed out above, so sign back in.
     await t.test('an action plan cannot be created or unlinked from its parent', async () => {
-      server.clearCookies();
-      await server.request('POST', '/api/auth/login', {
-        email: SMOKE.email,
-        password: SMOKE.password,
-      });
       const res = await server.request('POST', '/api/action-plans', {
         action_description: 'Orphan attempt from the smoke test',
         target_date: today,
@@ -1260,15 +1371,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     // 26). The admin session signed out above, so sign in as the seeded
     // UNIT_MANAGER, whose role holds WORK_PAPER read but no CONFIG or USER
     // grant and none of the auditor-side actions.
-    await t.test('sign in as the seeded auditee', async () => {
-      server.clearCookies();
-      const res = await server.request('POST', '/api/auth/login', {
-        email: 'owner@hasspetroleum.com',
-        password: SMOKE.password,
-      });
-      assert.equal(res.status, 303, `auditee login answered ${res.status}`);
-      const location = String(res.headers.location ?? '');
-      assert.ok(!location.includes('error'), `auditee login redirected to ${location}`);
+    await t.test('sign in as the seeded auditee (universal email step included)', async () => {
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
     });
 
     await t.test('the auditee list shows their finding and hides the foreign draft', async () => {
@@ -1337,12 +1441,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     });
 
     await t.test('an idle session dies before its absolute expiry', async () => {
-      server.clearCookies();
-      const login = await server.request('POST', '/api/auth/login', {
-        email: 'auditor@hasspetroleum.com',
-        password: SMOKE.password,
-      });
-      assert.ok(!String(login.headers.location ?? '').includes('error'), 'auditor must sign in');
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
       const alive = await server.get('/work-papers');
       assert.equal(alive.status, 200);
       assert.ok(!alive.hops[alive.hops.length - 1].startsWith('/login'));
@@ -1414,8 +1513,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
       assert.equal(res.status, 303, `login answered ${res.status}`);
       assert.ok(
-        !String(res.headers.location ?? '').includes('error'),
-        'the reset password must sign in',
+        String(res.headers.location ?? '').startsWith('/mfa'),
+        `the reset password must pass the password step, got ${res.headers.location}`,
       );
       const again = await server.request('POST', '/api/auth/reset-password', {
         token: resetToken,
@@ -1428,20 +1527,31 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
     });
 
-    // The full MFA life cycle (Build Prompt 25), last because enrolment
-    // changes how the admin signs in.
+    // The authenticator app as the admin-only alternative (Build Prompt 37
+    // over 25 and 34): the minimised link on account security, the existing
+    // TOTP enrolment (QR, manual key, backup codes), app-code sign-ins,
+    // backup codes, and the immediate switch back to email codes.
     let mfaSecret = '';
     let mfaBackup: string[] = [];
 
-    await t.test('MFA enrolment shows the key, the QR and the backup codes', async () => {
-      server.clearCookies();
-      const login = await server.request('POST', '/api/auth/login', {
-        email: SMOKE.email,
-        password: SMOKE.password,
-      });
-      assert.equal(login.status, 303);
-      const enrol = await server.request('POST', '/api/auth/mfa/enrol');
+    await t.test('the admin starts the authenticator enrolment, minimised link shown', async () => {
+      await signInWithEmailCode(SMOKE.email, SMOKE.password, SMOKE.userId);
+      const security = await server.get('/mfa/setup');
+      assert.equal(security.status, 200, `account security answered ${security.status}`);
+      assert.ok(
+        security.body.includes('Use an authenticator app instead'),
+        'the admin sees the minimised authenticator link in account security',
+      );
+      assert.ok(
+        security.body.includes('nothing to set up'),
+        'the email default presents with no setup wall',
+      );
+      const enrol = await server.request('POST', '/api/auth/mfa/enrol', { method: 'totp' });
       assert.equal(enrol.status, 303, `enrol answered ${enrol.status}`);
+      assert.ok(
+        !String(enrol.headers.location ?? '').includes('error='),
+        `the admin may enrol the app, got ${enrol.headers.location}`,
+      );
       const page = await server.get('/mfa/setup');
       assert.equal(page.status, 200, `setup screen answered ${page.status}`);
       const key = /Manual key: <code>([A-Z2-7 ]+)<\/code>/.exec(page.body);
@@ -1470,7 +1580,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.equal(
         String(login.headers.location ?? ''),
         '/mfa',
-        'an enrolled account must be sent to the TOTP step',
+        'an app-method account must be sent to the step, with no email send',
       );
       const blocked = await server.get('/work-papers');
       assert.equal(
@@ -1516,89 +1626,33 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
     });
 
-    // The email MFA method (Build Prompt 34): switching methods, the emailed
-    // code at sign-in, single use, expiry, the lock, and backup codes. The
-    // smoke run has no Graph mailer, so sends visibly fail (which itself
-    // proves the send path is wired) and known challenges are planted through
-    // the database handle.
-    const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
-    const readAdminMfa = (db: SmokeDb): MfaRecord => {
-      const row = db
-        .prepare(
-          `SELECT config_value AS v FROM config
-            WHERE organization_id = ? AND config_key = 'MFA_TOTP::${SMOKE.userId}'`,
-        )
-        .get(SMOKE.orgId) as { v?: string } | undefined;
-      return JSON.parse(String(row?.v ?? 'null')) as MfaRecord;
-    };
-    const writeAdminMfa = (db: SmokeDb, record: MfaRecord): void => {
-      db.prepare(
-        `UPDATE config SET config_value = ?
-          WHERE organization_id = ? AND config_key = 'MFA_TOTP::${SMOKE.userId}'`,
-      ).run(JSON.stringify(record), SMOKE.orgId);
-    };
-    let emailBackup: string[] = [];
-
-    await t.test(
-      'switching to email codes keeps the app factor active until confirmed',
-      async () => {
-        const db = server.database;
-        assert.ok(db, 'the fake database is reachable for verification');
-        // The previous block ends on a pending session (its last action was a
-        // refused backup-code reuse), so complete a fresh sign-in first: the
-        // switch is a fully signed-in action.
-        server.clearCookies();
-        await server.request('POST', '/api/auth/login', {
-          email: SMOKE.email,
-          password: SMOKE.password,
-        });
-        const totp = await server.request('POST', '/api/auth/mfa/verify', {
-          code: await totpAt(mfaSecret, Math.floor(Date.now() / 1000)),
-        });
-        assert.equal(String(totp.headers.location ?? ''), '/', 'the app code signs the admin in');
-        const start = await server.request('POST', '/api/auth/mfa/enrol', { method: 'email' });
-        assert.equal(start.status, 303, `enrol answered ${start.status}`);
-        assert.ok(
-          String(start.headers.location ?? '').includes('error='),
-          'without the Graph mailer the enrolment code email visibly fails',
-        );
-        const record = readAdminMfa(db);
-        assert.equal(record.confirmed, true, 'the active factor must stand during the switch');
-        assert.equal(record.method, 'totp', 'the active method is still the app');
-        assert.equal(record.pendingMethod, 'email', 'the email enrolment is pending');
-        const page = await server.get('/mfa/setup');
-        assert.equal(page.status, 200, `setup screen answered ${page.status}`);
-        assert.ok(page.body.includes('Check your email'), 'the email panel is shown');
-        emailBackup = [...page.body.matchAll(/<code>([A-Z2-9]{10})<\/code>/g)].map((m) => m[1]);
-        assert.equal(emailBackup.length, 8, 'fresh backup codes are shown once');
-      },
-    );
-
-    await t.test('confirming the emailed code activates the email method', async () => {
+    await t.test('switching back to email codes is immediate, backup codes kept', async () => {
       const db = server.database;
       assert.ok(db, 'the fake database is reachable for verification');
-      const record = readAdminMfa(db);
-      writeAdminMfa(db, {
-        ...record,
-        challenge: newChallenge(sha256('654321'), Date.now() - 120_000),
+      // The previous block ends on a pending session (its last action was a
+      // refused backup-code reuse), so complete a fresh sign-in first: the
+      // switch is a fully signed-in action.
+      server.clearCookies();
+      await server.request('POST', '/api/auth/login', {
+        email: SMOKE.email,
+        password: SMOKE.password,
       });
-      const wrong = await server.request('POST', '/api/auth/mfa/confirm', { code: '111111' });
-      assert.ok(String(wrong.headers.location ?? '').includes('error='), 'a wrong code refuses');
-      assert.equal(
-        readAdminMfa(db).challenge?.attempts,
-        1,
-        'a wrong guess counts against the challenge',
-      );
-      const ok = await server.request('POST', '/api/auth/mfa/confirm', { code: '654321' });
+      const totp = await server.request('POST', '/api/auth/mfa/verify', {
+        code: await totpAt(mfaSecret, Math.floor(Date.now() / 1000)),
+      });
+      assert.equal(String(totp.headers.location ?? ''), '/', 'the app code signs the admin in');
+      const before = readMfa(db, SMOKE.userId);
+      const switchBack = await server.request('POST', '/api/auth/mfa/enrol', { method: 'email' });
       assert.ok(
-        String(ok.headers.location ?? '').includes('done=1'),
-        `confirm redirected to ${ok.headers.location}`,
+        String(switchBack.headers.location ?? '').includes('email=1'),
+        `email needs no enrolment; the switch must confirm at once, got ${switchBack.headers.location}`,
       );
-      const after = readAdminMfa(db);
-      assert.equal(after.method, 'email', 'the email method is now active');
+      const after = readMfa(db, SMOKE.userId);
+      assert.equal(after.method, 'email', 'email codes are active again');
       assert.equal(after.confirmed, true);
       assert.equal(after.pendingMethod, undefined, 'nothing stays pending');
-      assert.equal(after.backup.length, 8, 'the backup-code hashes are stored');
+      assert.deepEqual(after.backup, before.backup, 'the unused backup codes survive the switch');
+      assert.equal(after.secret, '', 'the TOTP secret is dropped');
     });
 
     await t.test('an email-method sign-in demands the emailed code', async () => {
@@ -1623,20 +1677,24 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         String(resend.headers.location ?? '').includes('error='),
         'a resend inside the cooldown is refused',
       );
-      writeAdminMfa(db, {
-        ...readAdminMfa(db),
+      writeMfa(db, SMOKE.userId, {
+        ...readMfa(db, SMOKE.userId),
         challenge: newChallenge(sha256('271828'), Date.now() - 90_000),
       });
       const wrong = await server.request('POST', '/api/auth/mfa/verify', { code: '000001' });
       assert.ok(String(wrong.headers.location ?? '').includes('error=1'), 'a wrong code refuses');
-      assert.equal(readAdminMfa(db).challenge?.attempts, 1, 'the wrong guess is counted');
+      assert.equal(readMfa(db, SMOKE.userId).challenge?.attempts, 1, 'the wrong guess is counted');
       const ok = await server.request('POST', '/api/auth/mfa/verify', { code: '271828' });
       assert.equal(
         String(ok.headers.location ?? ''),
         '/',
         'the right emailed code promotes the session',
       );
-      assert.equal(readAdminMfa(db).challenge?.used, true, 'the challenge is spent on use');
+      assert.equal(
+        readMfa(db, SMOKE.userId).challenge?.used,
+        true,
+        'the challenge is spent on use',
+      );
       const home = await server.get('/work-papers');
       assert.equal(home.status, 200, 'the promoted session reaches the app');
     });
@@ -1649,8 +1707,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         email: SMOKE.email,
         password: SMOKE.password,
       });
-      const base = readAdminMfa(db);
-      writeAdminMfa(db, {
+      const base = readMfa(db, SMOKE.userId);
+      writeMfa(db, SMOKE.userId, {
         ...base,
         challenge: { ...newChallenge(sha256('314159'), Date.now() - 90_000), used: true },
       });
@@ -1659,7 +1717,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         String(used.headers.location ?? '').includes('error=1'),
         'a spent code never passes again',
       );
-      writeAdminMfa(db, {
+      writeMfa(db, SMOKE.userId, {
         ...base,
         challenge: newChallenge(sha256('314159'), Date.now() - 11 * 60_000),
       });
@@ -1668,7 +1726,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         String(expired.headers.location ?? '').includes('error=1'),
         'an expired code is refused',
       );
-      writeAdminMfa(db, {
+      writeMfa(db, SMOKE.userId, {
         ...base,
         challenge: {
           ...newChallenge(sha256('314159'), Date.now() - 90_000),
@@ -1681,7 +1739,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         'a locked challenge refuses even the right code',
       );
       const backup = await server.request('POST', '/api/auth/mfa/verify', {
-        backup_code: emailBackup[0],
+        backup_code: mfaBackup[1],
       });
       assert.equal(
         String(backup.headers.location ?? ''),
@@ -1690,29 +1748,28 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
     });
 
-    await t.test('an unenrolled user under a required rule is locked to enrolment', async () => {
+    await t.test('a non-admin is email-only: no authenticator link, no enrolment', async () => {
       const db = server.database;
       assert.ok(db, 'the fake database is reachable for verification');
-      db.prepare(
-        `UPDATE config SET config_value = 'ALL'
-          WHERE organization_id = ? AND config_key = 'MFA_REQUIRED_ROLES'`,
-      ).run(SMOKE.orgId);
-      server.clearCookies();
-      const login = await server.request('POST', '/api/auth/login', {
-        email: 'owner@hasspetroleum.com',
-        password: SMOKE.password,
-      });
-      assert.ok(!String(login.headers.location ?? '').includes('error'), 'the auditee signs in');
-      const res = await server.get('/work-papers');
-      assert.equal(
-        res.hops[res.hops.length - 1],
-        '/mfa/setup',
-        `an unenrolled user must be locked to enrolment (via ${res.hops.join(' -> ')})`,
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const step = await server.get('/mfa/setup');
+      assert.equal(step.status, 200, `account security answered ${step.status}`);
+      assert.ok(
+        !step.body.includes('Use an authenticator app instead'),
+        'a non-admin must not see the authenticator link',
       );
-      db.prepare(
-        `UPDATE config SET config_value = 'NONE'
-          WHERE organization_id = ? AND config_key = 'MFA_REQUIRED_ROLES'`,
-      ).run(SMOKE.orgId);
+      assert.ok(
+        step.body.includes('nothing to set up'),
+        'the auditee reaches account security with no wall',
+      );
+      const enrol = await server.request('POST', '/api/auth/mfa/enrol', { method: 'totp' });
+      assert.ok(
+        String(enrol.headers.location ?? '').includes('error='),
+        `a non-admin cannot enrol an authenticator, got ${enrol.headers.location}`,
+      );
+      const record = readMfa(db, SMOKE.auditeeId);
+      assert.equal(record.method, 'email', 'the auditee stays on email codes');
+      assert.equal(record.pendingMethod, undefined, 'no enrolment was started');
     });
   } catch (err) {
     // Surface the worker's own tagged logs alongside the failure.

@@ -90,7 +90,9 @@ export const GRC_CHANGE_PASSWORD_PATH = '/change-password';
 
 // The only paths a half-authorised (MFA pending) session may reach: the
 // verification step, its endpoint, the code resend, and sign-out. Everything
-// else redirects to the step.
+// else redirects to the step. Verification is universal (Build Prompt 37):
+// every sign-in passes through this confinement, and there is no enrolment
+// wall any more, because email codes are the automatic default.
 const MFA_PENDING_ALLOWED = new Set([
   '/mfa',
   '/api/auth/mfa/verify',
@@ -102,27 +104,10 @@ export function isGrcMfaPendingAllowed(appPath: string): boolean {
   return MFA_PENDING_ALLOWED.has(appPath);
 }
 
-// The only paths a user whose role requires MFA may reach before enrolling:
-// the enrolment screen and its endpoints, sign-out, and the change-password
-// flow (a forced password change may precede enrolment).
-const MFA_ENROL_EXEMPT = new Set([
-  '/mfa/setup',
-  '/api/auth/mfa/enrol',
-  '/api/auth/mfa/confirm',
-  '/api/auth/mfa/send',
-  '/api/auth/logout',
-  '/change-password',
-  '/api/auth/change-password',
-]);
-
-export function isGrcMfaEnrolExempt(appPath: string): boolean {
-  return MFA_ENROL_EXEMPT.has(appPath);
-}
-
-/** The TOTP verification step, in root-relative form. */
+/** The verification step, in root-relative form. */
 export const GRC_MFA_PATH = '/mfa';
 
-/** The enrolment screen, in root-relative form. */
+/** The account security screen (backup codes and the authenticator setup). */
 export const GRC_MFA_SETUP_PATH = '/mfa/setup';
 
 /**

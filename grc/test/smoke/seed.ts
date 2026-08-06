@@ -240,17 +240,11 @@ export function seedDatabase(db: DatabaseSync): void {
     });
   }
 
-  // MFA is not required by role in the smoke organisation (the default rule
-  // would lock the seeded SUPER_ADMIN to enrolment and break every page
-  // check); the voluntary enrolment round trip covers the flow instead.
-  for (const orgId of [SMOKE.orgId, SMOKE.otherOrgId]) {
-    insert(db, 'config', {
-      organization_id: orgId,
-      config_key: 'MFA_REQUIRED_ROLES',
-      config_value: 'NONE',
-      updated_at: now,
-    });
-  }
+  // Two-step verification is universal (Build Prompt 37): every sign-in in
+  // the smoke run completes the email-code step by planting a known
+  // challenge through the database handle, so no per-organisation MFA rule
+  // is seeded. MFA_AUTHENTICATOR_ROLES stays unset (its default allows the
+  // seeded SUPER_ADMIN the authenticator app).
 
   for (const [i, value] of WP_STATUSES.entries()) {
     insert(db, 'enum_values', {
