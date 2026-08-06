@@ -262,8 +262,11 @@ export default {
         // organisation's config (the reminder runners read them), so the cron
         // simply runs daily and each tenant keeps its own schedule.
         try {
-          const grcDb = await getGrcDb(getGrcEnv());
-          await runGrcDispatch(grcDb, getGrcDeliveryEnv(), systemClock, { limit: 200 });
+          const grcEnv = getGrcEnv();
+          const grcDb = await getGrcDb(grcEnv);
+          await runGrcDispatch(grcDb, getGrcDeliveryEnv(), grcEnv.sessionSecret, systemClock, {
+            limit: 200,
+          });
           if (controller.cron === DAILY_PM_CRON) {
             await updateOverdueStatuses(grcDb);
             await runStaleReminders(grcDb, systemClock);
