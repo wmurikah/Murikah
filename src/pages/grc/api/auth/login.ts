@@ -28,6 +28,8 @@ import { hasMyOverdue } from '@grc/repos/dashboard';
 import { throttleDecision } from '@grc/auth/loginThrottle';
 import { failureStreaks, recordLoginAttempt, recordSecurityEvent } from '@grc/repos/loginAttempts';
 import { getMfaRecord } from '@grc/repos/mfa';
+import { getGrcDeliveryEnv } from '@grc/notify/env';
+import { issueEmailOtp } from '@grc/notify/otpMail';
 import { GRC_MFA_PATH } from '@grc/routing';
 
 const TAG = '[grc.auth.login]';
@@ -180,9 +182,33 @@ export const POST: APIRoute = async ({ request }) => {
     const secure = new URL(request.url).protocol === 'https:';
 
     // A user with a confirmed second factor gets a half-authorised session:
-    // the cookie carries mfa=pending, and only the TOTP step accepts it.
+    // the cookie carries mfa=pending, and only the verification step accepts
+    // it. When the method is email, the sign-in code is issued and sent now
+    // (cooldown-limited); a failed send still lands on the step, which offers
+    // a resend and takes a backup code.
     const mfaRecord = await getMfaRecord(db, user.organizationId, user.userId);
     if (mfaRecord?.confirmed) {
+      let stepQuery = '';
+      if (mfaRecord.method === 'email') {
+        const issued = await issueEmailOtp(
+          db,
+          getGrcDeliveryEnv(),
+          env.sessionSecret,
+          {
+            organizationId: user.organizationId,
+            userId: user.userId,
+            email: emailNorm,
+            ip,
+          },
+          mfaRecord,
+        );
+        if (issued.ok) {
+          stepQuery = '?sent=1';
+        } else if (!issued.cooldown) {
+          console.error(`${TAG} sign-in code send failed:`, issued.reason);
+          stepQuery = '?senderror=1';
+        }
+      }
       const pendingCookie = await createSessionCookie(
         sessionId,
         env.sessionSecret,
@@ -191,7 +217,7 @@ export const POST: APIRoute = async ({ request }) => {
       );
       return new Response(null, {
         status: 303,
-        headers: { location: GRC_MFA_PATH, 'set-cookie': pendingCookie },
+        headers: { location: `${GRC_MFA_PATH}${stepQuery}`, 'set-cookie': pendingCookie },
       });
     }
 
