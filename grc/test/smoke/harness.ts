@@ -176,6 +176,11 @@ export class SmokeServer {
           });
         },
       );
+      // A wedged worker must fail the step, not hang the whole run: without
+      // this, a dev-proxy socket that accepts but never answers blocks forever.
+      req.setTimeout(30_000, () => {
+        req.destroy(new Error(`no response within 30s for ${method} ${path}`));
+      });
       req.on('error', reject);
       if (body !== undefined) req.write(body);
       req.end();
