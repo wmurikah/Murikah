@@ -1,20 +1,20 @@
 export const prerender = false;
 
 /**
- * Send (or resend) an email one-time sign-in code, behind the cooldown. Two
- * contexts share it: a half-authorised (mfa=pending) session on the sign-in
- * step whose active method is email, and a signed-in user confirming an
- * email enrolment on the setup screen. The context comes from the cookie's
- * mfa state, so a pending session can never trigger enrolment sends and vice
- * versa. Cooldown-limited (auth/emailOtp.ts); sends are recorded in
- * security_events by the issuer. Tagged [grc.auth.mfa]; never a blank 500.
+ * Send (or resend) an email one-time sign-in code, behind the cooldown. Only
+ * a half-authorised (mfa=pending) session on the sign-in step may ask, and
+ * only when its active method is email: email codes need no enrolment (Build
+ * Prompt 37), so there is no enrolment-confirmation send any more, and a
+ * fully signed-in session has nothing to send. Cooldown-limited
+ * (auth/emailOtp.ts); sends are recorded in security_events by the issuer.
+ * Tagged [grc.auth.mfa]; never a blank 500.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { readGrcSessionCookie } from '@grc/auth/session';
 import { resolveSession } from '@grc/repos/session';
-import { getMfaRecord } from '@grc/repos/mfa';
+import { ensureMfaRecord } from '@grc/repos/mfa';
 import { getGrcDeliveryEnv } from '@grc/notify/env';
 import { issueEmailOtp } from '@grc/notify/otpMail';
 
@@ -35,15 +35,19 @@ export const POST: APIRoute = async ({ request }) => {
     if (!identity) return new Response(null, { status: 303, headers: { location: '/login' } });
     const email = identity.userEmail ?? '';
     if (email === '') {
-      return back(page, `error=${encodeURIComponent('Your account has no email address.')}`);
+      return back(
+        page,
+        `error=${encodeURIComponent(
+          'Your account has no email address. Ask an administrator to add one, or sign in with a backup code.',
+        )}`,
+      );
     }
 
-    const record = await getMfaRecord(db, identity.homeOrganizationId, identity.userId);
-    const eligible =
+    const record =
       cookie.mfa === 'pending'
-        ? record?.confirmed === true && record.method === 'email'
-        : record?.pendingMethod === 'email';
-    if (!record || !eligible) {
+        ? await ensureMfaRecord(db, identity.homeOrganizationId, identity.userId)
+        : null;
+    if (!record || record.method !== 'email') {
       return back(page, `error=${encodeURIComponent('There is no email code to send here.')}`);
     }
 

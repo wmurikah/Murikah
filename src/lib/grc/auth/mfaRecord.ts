@@ -1,14 +1,17 @@
 /**
- * The pure shape of a user's MFA record and its transitions (Build Prompt 34
- * extends Build Prompt 25). A record carries the active factor (its method,
- * the sealed TOTP secret when the method is the authenticator app, and the
- * backup-code hashes), an optional pending enrolment (the initial one, or a
- * method switch that keeps the active factor working until the new one
- * confirms), and the email one-time-code challenge. Older records, written
- * before methods existed, parse as the authenticator method; an older
- * unconfirmed record parses as a pending TOTP enrolment. Imports only the
- * import-free challenge module, so node strips types and unit-tests this
- * directly; the DB reads and writes live in repos/mfa.ts.
+ * The pure shape of a user's MFA record and its transitions (Build Prompt 37
+ * extends 34 and 25). A record carries the active factor (its method, the
+ * sealed TOTP secret when the method is the authenticator app, and the
+ * backup-code hashes), an optional pending authenticator enrolment (which
+ * keeps the active factor working until it confirms), and the email
+ * one-time-code challenge. Verification is universal and email codes are the
+ * automatic default: a user with no record (or an unconfirmed one) verifies
+ * by email with no enrolment step, via withEmailDefault. The method stays an
+ * enum so a future phone/sms method slots in without reworking the flow.
+ * Older records, written before methods existed, parse as the authenticator
+ * method; an older unconfirmed record parses as a pending TOTP enrolment.
+ * Imports only the import-free challenge module, so node strips types and
+ * unit-tests this directly; the DB reads and writes live in repos/mfa.ts.
  */
 // The relative import carries its extension so the module also resolves under
 // plain node (the unit tests), like reports/docx/wordml.ts.
@@ -68,6 +71,33 @@ export function parseMfaRecord(raw: string | undefined): MfaRecord | null {
   } catch {
     return null;
   }
+}
+
+/** The automatic default: email codes to the account address, no enrolment needed. */
+export function defaultEmailRecord(): MfaRecord {
+  return { method: 'email', secret: '', confirmed: true, backup: [] };
+}
+
+/**
+ * The record as universal verification sees it (Build Prompt 37): a missing
+ * record becomes the confirmed email default, and an unconfirmed one keeps
+ * its pending enrolment while email codes carry the sign-in until the
+ * pending method confirms. A confirmed record stands as it is.
+ */
+export function withEmailDefault(record: MfaRecord | null): MfaRecord {
+  if (!record) return defaultEmailRecord();
+  if (record.confirmed) return record;
+  return { ...record, method: 'email', secret: '', confirmed: true };
+}
+
+/**
+ * The record after switching back to email codes. Email is the enrolment-free
+ * default, so the switch is immediate: no pending state, no confirmation
+ * code. The unused backup codes survive the switch; the TOTP secret and any
+ * pending enrolment are dropped.
+ */
+export function switchToEmailRecord(record: MfaRecord | null): MfaRecord {
+  return { method: 'email', secret: '', confirmed: true, backup: record?.backup ?? [] };
 }
 
 /**

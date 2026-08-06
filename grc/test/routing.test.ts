@@ -17,7 +17,6 @@ import {
   isGrcChangePasswordExempt,
   grcMarketingRedirect,
   isGrcMfaPendingAllowed,
-  isGrcMfaEnrolExempt,
 } from '../../src/lib/grc/routing.ts';
 
 test('isGrcHost matches the apex, sub-labels and local equivalents only', () => {
@@ -68,17 +67,10 @@ test('a pending MFA session reaches only the step, its endpoints and sign-out', 
   assert.equal(isGrcMfaPendingAllowed('/'), false);
   assert.equal(isGrcMfaPendingAllowed('/work-papers'), false);
   assert.equal(isGrcMfaPendingAllowed('/mfa/setup'), false);
-});
-
-test('the enrolment lock exempts setup, its endpoints, sign-out and change-password', () => {
-  assert.equal(isGrcMfaEnrolExempt('/mfa/setup'), true);
-  assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/enrol'), true);
-  assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/confirm'), true);
-  assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/send'), true);
-  assert.equal(isGrcMfaEnrolExempt('/api/auth/logout'), true);
-  assert.equal(isGrcMfaEnrolExempt('/change-password'), true);
-  assert.equal(isGrcMfaEnrolExempt('/'), false);
-  assert.equal(isGrcMfaEnrolExempt('/work-papers'), false);
+  // Universal verification (Build Prompt 37): the backup-code management
+  // endpoint is a fully signed-in action, never reachable while pending.
+  assert.equal(isGrcMfaPendingAllowed('/api/auth/mfa/backup'), false);
+  assert.equal(isGrcMfaPendingAllowed('/api/auth/mfa/enrol'), false);
 });
 
 test('change-password exemption covers only the screen, its endpoint and sign-out', () => {

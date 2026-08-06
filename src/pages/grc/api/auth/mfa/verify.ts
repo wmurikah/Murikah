@@ -7,7 +7,9 @@ export const prerender = false;
  * against the stored hashed challenge (single-use, ten-minute expiry, locked
  * after repeated wrong guesses). A backup code works for either method and is
  * consumed on use, recorded in security_events. Success re-issues the cookie
- * fully authorised for the same session row. Failures are recorded in
+ * fully authorised for the same session row and applies the role-based
+ * landing (or the authenticator setup, when the admin chose that on the
+ * step). Failures are recorded in
  * login_attempts (so the ordinary throttle also bounds code guessing) and
  * return to the step with the generic message. Tagged [grc.auth.mfa]; never a
  * blank 500.
@@ -17,7 +19,10 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { readGrcSessionCookie, createSessionCookie, hashToken } from '@grc/auth/session';
 import { resolveSession } from '@grc/repos/session';
-import { getMfaRecord, consumeBackupCode, saveMfaChallenge } from '@grc/repos/mfa';
+import { ensureMfaRecord, consumeBackupCode, saveMfaChallenge } from '@grc/repos/mfa';
+import { defaultLandingPath, isAuditeeRole } from '@grc/dashboard/roleNav';
+import { hasMyOverdue } from '@grc/repos/dashboard';
+import { GRC_MFA_SETUP_PATH } from '@grc/routing';
 import { verifyTotp } from '@grc/auth/totp';
 import { open } from '@grc/auth/secretBox';
 import { checkOtpAttempt, OTP_MAX_ATTEMPTS } from '@grc/auth/emailOtp';
@@ -50,8 +55,9 @@ export const POST: APIRoute = async ({ request }) => {
     const code = String(form.get('code') ?? '').trim();
     const backupCode = String(form.get('backup_code') ?? '').trim();
 
-    const record = await getMfaRecord(db, identity.homeOrganizationId, identity.userId);
-    if (!record?.confirmed) return back();
+    // Verification is universal (Build Prompt 37): a user with no stored
+    // factor verifies against the automatic email default.
+    const record = await ensureMfaRecord(db, identity.homeOrganizationId, identity.userId);
 
     let verified = false;
     if (backupCode !== '') {
@@ -121,9 +127,24 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const promoted = await createSessionCookie(cookie.sessionId, env.sessionSecret, secure, 'ok');
+
+    // The role-based landing runs here, after the second factor clears. An
+    // admin who chose "use an authenticator app instead" on the step lands in
+    // the enrolment instead; the target is a fixed whitelist, never an open
+    // redirect.
+    let location: string;
+    if (String(form.get('next') ?? '') === GRC_MFA_SETUP_PATH) {
+      location = GRC_MFA_SETUP_PATH;
+    } else {
+      let hasOverdue = false;
+      if (!identity.isPlatformOwner && isAuditeeRole(identity.roleCode)) {
+        hasOverdue = await hasMyOverdue(db, identity.homeOrganizationId, identity.userId);
+      }
+      location = defaultLandingPath(identity.roleCode, identity.isPlatformOwner, hasOverdue);
+    }
     return new Response(null, {
       status: 303,
-      headers: { location: '/', 'set-cookie': promoted },
+      headers: { location, 'set-cookie': promoted },
     });
   } catch (err) {
     console.error(TAG, err instanceof Error ? (err.stack ?? err.message) : String(err));

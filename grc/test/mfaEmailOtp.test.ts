@@ -23,6 +23,9 @@ import {
   canStartEnrolment,
   startPendingRecord,
   promoteRecord,
+  defaultEmailRecord,
+  withEmailDefault,
+  switchToEmailRecord,
   type MfaRecord,
 } from '../../src/lib/grc/auth/mfaRecord.ts';
 import { buildOtpEmail } from '../../src/lib/grc/notify/render.ts';
@@ -130,6 +133,48 @@ test('a switch keeps the active factor until the new method confirms', () => {
   assert.equal(promoted.backupPlain, undefined);
 
   assert.equal(promoteRecord(promoted, ['x']), null, 'nothing pending, nothing to promote');
+});
+
+test('universal verification defaults every user to email codes, no enrolment', () => {
+  const fresh = withEmailDefault(null);
+  assert.deepEqual(fresh, defaultEmailRecord());
+  assert.equal(fresh.method, 'email');
+  assert.equal(fresh.confirmed, true, 'the default is ready to verify with no setup');
+  assert.deepEqual(fresh.backup, [], 'no backup codes until the user generates them');
+
+  // An unconfirmed pending enrolment keeps pending while email carries sign-in.
+  const pending = startPendingRecord(null, 'totp', 'sealed', 'codes');
+  const carried = withEmailDefault(pending);
+  assert.equal(carried.confirmed, true);
+  assert.equal(carried.method, 'email');
+  assert.equal(carried.secret, '', 'the email default holds no TOTP secret');
+  assert.equal(carried.pendingMethod, 'totp', 'the pending enrolment survives');
+
+  // A confirmed record stands untouched, whatever its method.
+  const activeTotp: MfaRecord = { method: 'totp', secret: 's', confirmed: true, backup: ['h1'] };
+  assert.equal(withEmailDefault(activeTotp), activeTotp);
+});
+
+test('switching back to email codes is immediate and keeps the backup codes', () => {
+  const activeTotp: MfaRecord = {
+    method: 'totp',
+    secret: 'sealed-totp',
+    confirmed: true,
+    backup: ['h1', 'h2'],
+    pendingMethod: 'totp',
+    pendingSecret: 'sealed-new',
+    backupPlain: 'sealed-codes',
+  };
+  const switched = switchToEmailRecord(activeTotp);
+  assert.equal(switched.method, 'email');
+  assert.equal(switched.confirmed, true, 'no pending state: email needs no enrolment');
+  assert.equal(switched.secret, '', 'the TOTP secret is dropped');
+  assert.deepEqual(switched.backup, ['h1', 'h2'], 'unused backup codes survive the switch');
+  assert.equal(switched.pendingMethod, undefined, 'a pending enrolment is cancelled');
+  assert.equal(switched.backupPlain, undefined);
+  assert.equal(switched.challenge, undefined);
+
+  assert.deepEqual(switchToEmailRecord(null), defaultEmailRecord());
 });
 
 test('the code email carries the code in HTML and text with the expiry copy', () => {
