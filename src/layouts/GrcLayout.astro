@@ -80,18 +80,68 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
     <title>{pageTitle}</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script is:inline>
+      // Apply the remembered sidebar preference before first paint, so a
+      // pinned sidebar never flashes folded (Build Prompt 31).
+      try {
+        if (localStorage.getItem('grc.sidebar') === 'pinned') {
+          document.documentElement.classList.add('grc-pin');
+        }
+      } catch {
+        /* storage unavailable: the folded default stands */
+      }
+    </script>
   </head>
   <body class="grc">
     <a href="#grc-main" class="grc-skip">Skip to content</a>
+
+    <header class="grc-topbar">
+      <button
+        type="button"
+        class="grc-topbar__menu"
+        id="grc-menu"
+        aria-expanded="false"
+        aria-controls="grc-sidebar"
+        aria-label="Open the navigation"
+      >
+        <GrcIcon name="menu" size={20} />
+      </button>
+      <a href="/" class="grc-topbar__brand">
+        <span class="grc-brand__badge" aria-hidden="true">M</span>
+        <span>Assurance OS</span>
+      </a>
+    </header>
+
     <div class="grc-shell">
-      <nav class="grc-sidebar" aria-label="Primary">
-        <a href="/" class="grc-brand">
-          <span class="grc-brand__badge" aria-hidden="true">M</span>
-          <span>
-            <span class="grc-brand__name">Assurance OS</span>
-            <span class="grc-brand__sub">Internal audit</span>
-          </span>
-        </a>
+      <nav class="grc-sidebar" id="grc-sidebar" aria-label="Primary">
+        <div class="grc-sidebar__head">
+          <a href="/" class="grc-brand">
+            <span class="grc-brand__badge" aria-hidden="true">M</span>
+            <span>
+              <span class="grc-brand__name">Assurance OS</span>
+              <span class="grc-brand__sub">Internal audit</span>
+            </span>
+          </a>
+          <button
+            type="button"
+            class="grc-pinbtn"
+            id="grc-pin"
+            aria-pressed="false"
+            aria-label="Keep the sidebar open"
+          >
+            <GrcIcon name="pin" size={15} />
+          </button>
+          <button
+            type="button"
+            class="grc-railbtn"
+            id="grc-rail-expand"
+            aria-expanded="false"
+            aria-controls="grc-sidebar"
+            aria-label="Expand the sidebar"
+          >
+            <GrcIcon name="chevron" size={14} />
+          </button>
+        </div>
 
         <div class="grc-orgline">
           <p class="grc-orgline__label">Organisation</p>
@@ -101,7 +151,7 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
         {
           grc && (
             <details class="grc-bell">
-              <summary class="grc-bell__summary">
+              <summary class="grc-bell__summary" data-tip="Notifications">
                 <GrcIcon name="bell" size={16} />
                 <span>Notifications</span>
                 {unread > 0 && <span class="grc-navcount grc-navcount--alert">{unread}</span>}
@@ -160,7 +210,7 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
           {
             groups.map((group) => (
               <details class="grc-navgroup" open={groupActive(group) || undefined}>
-                <summary class="grc-navgroup__summary">
+                <summary class="grc-navgroup__summary" data-tip={group.label}>
                   <GrcIcon name={group.icon} size={15} />
                   <span class="grc-navgroup__label">{group.label}</span>
                   <span class="grc-navgroup__chevron" aria-hidden="true" />
@@ -171,6 +221,7 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
                       <a
                         class="grc-navlink"
                         href={item.href}
+                        data-tip={item.label}
                         aria-current={isActive(item.href) ? 'page' : undefined}
                       >
                         <GrcIcon name={item.icon} size={16} class="grc-navlink__icon" />
@@ -205,18 +256,20 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
               </span>
             </span>
           </div>
-          <a href="/change-password" class="grc-signout">
+          <a href="/change-password" class="grc-signout" data-tip="Change password">
             <GrcIcon name="key" size={16} />
             <span>Change password</span>
           </a>
           <form method="post" action="/api/auth/logout">
-            <button type="submit" class="grc-signout">
+            <button type="submit" class="grc-signout" data-tip="Sign out">
               <GrcIcon name="signout" size={16} />
               <span>Sign out</span>
             </button>
           </form>
         </div>
       </nav>
+
+      <div class="grc-scrim" id="grc-scrim"></div>
 
       <main id="grc-main" class="grc-main">
         <slot />
@@ -249,6 +302,127 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') void refresh();
       });
+
+      // ---- Auto-collapsing sidebar (Build Prompt 31) ----------------------
+      // Unpinned and wide, the sidebar is a folded icon rail that expands as
+      // an overlay: on hover after a short intent delay (so a passing pointer
+      // never flickers it), on keyboard focus immediately, or from the rail's
+      // chevron (the touch fallback on wide screens). Pinning locks it open,
+      // remembered in localStorage and applied before paint by the head
+      // script. Narrow screens use the top bar's tap-to-open drawer instead.
+      const root = document.documentElement;
+      const sidebar = document.getElementById('grc-sidebar');
+      const pinBtn = document.getElementById('grc-pin');
+      const railBtn = document.getElementById('grc-rail-expand');
+      const menuBtn = document.getElementById('grc-menu');
+      const scrim = document.getElementById('grc-scrim');
+      const narrow = window.matchMedia('(max-width: 60rem)');
+      const hoverable = window.matchMedia('(hover: hover)');
+      const OPEN_DELAY = 150;
+      const CLOSE_DELAY = 300;
+
+      if (sidebar && pinBtn && railBtn && menuBtn && scrim) {
+        let openTimer = 0;
+        let closeTimer = 0;
+        const pinned = (): boolean => root.classList.contains('grc-pin');
+        const isOpen = (): boolean => sidebar.classList.contains('is-open');
+
+        // On the folded rail the labels are invisible, so mirror each item's
+        // label into a title tooltip; drop the titles as soon as labels show.
+        const syncTips = (): void => {
+          const railNow = !pinned() && !isOpen() && !narrow.matches;
+          sidebar.querySelectorAll<HTMLElement>('[data-tip]').forEach((el) => {
+            if (railNow) el.setAttribute('title', el.getAttribute('data-tip') ?? '');
+            else el.removeAttribute('title');
+          });
+        };
+
+        const setOpen = (open: boolean): void => {
+          window.clearTimeout(openTimer);
+          window.clearTimeout(closeTimer);
+          sidebar.classList.toggle('is-open', open);
+          railBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          syncTips();
+        };
+
+        // Hover intent, pointer devices only: touch taps navigate directly.
+        sidebar.addEventListener('pointerenter', () => {
+          if (!hoverable.matches || pinned() || narrow.matches) return;
+          window.clearTimeout(closeTimer);
+          openTimer = window.setTimeout(() => setOpen(true), OPEN_DELAY);
+        });
+        sidebar.addEventListener('pointerleave', () => {
+          if (!hoverable.matches || pinned() || narrow.matches) return;
+          window.clearTimeout(openTimer);
+          closeTimer = window.setTimeout(() => setOpen(false), CLOSE_DELAY);
+        });
+
+        // Keyboard reach: focusing anything in the sidebar expands it.
+        sidebar.addEventListener('focusin', () => {
+          if (!pinned() && !narrow.matches) setOpen(true);
+        });
+        sidebar.addEventListener('focusout', (e) => {
+          const next = e.relatedTarget;
+          if (next instanceof Node && sidebar.contains(next)) return;
+          if (!pinned() && !narrow.matches) setOpen(false);
+        });
+
+        // The rail chevron: the visible affordance, and the wide-screen touch
+        // fallback. Clicking it holds the sidebar open until dismissed.
+        railBtn.addEventListener('click', () => setOpen(!isOpen()));
+        document.addEventListener('pointerdown', (e) => {
+          if (narrow.matches || pinned() || !isOpen()) return;
+          if (e.target instanceof Node && !sidebar.contains(e.target)) setOpen(false);
+        });
+
+        // Pin: lock open (in flow, the content makes room) or let it fold.
+        const paintPin = (): void => {
+          pinBtn.setAttribute('aria-pressed', pinned() ? 'true' : 'false');
+          pinBtn.setAttribute(
+            'aria-label',
+            pinned() ? 'Let the sidebar fold away' : 'Keep the sidebar open',
+          );
+        };
+        pinBtn.addEventListener('click', () => {
+          const next = !pinned();
+          root.classList.toggle('grc-pin', next);
+          try {
+            localStorage.setItem('grc.sidebar', next ? 'pinned' : 'folded');
+          } catch {
+            /* storage unavailable: the choice lasts this page only */
+          }
+          if (next) sidebar.classList.remove('is-open');
+          else setOpen(true); // still under the pointer or focus: no jarring snap
+          paintPin();
+          syncTips();
+        });
+
+        // Narrow screens: the top bar's tap-to-open drawer with a scrim.
+        const setDrawer = (open: boolean): void => {
+          root.classList.toggle('grc-drawer-open', open);
+          menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          menuBtn.setAttribute('aria-label', open ? 'Close the navigation' : 'Open the navigation');
+          if (!open) menuBtn.focus({ preventScroll: true });
+        };
+        menuBtn.addEventListener('click', () => {
+          setDrawer(!root.classList.contains('grc-drawer-open'));
+        });
+        scrim.addEventListener('click', () => setDrawer(false));
+        document.addEventListener('keydown', (e) => {
+          if (e.key !== 'Escape') return;
+          if (root.classList.contains('grc-drawer-open')) setDrawer(false);
+          else if (!pinned() && isOpen() && !narrow.matches) setOpen(false);
+        });
+        narrow.addEventListener('change', () => {
+          setOpen(false);
+          root.classList.remove('grc-drawer-open');
+          menuBtn.setAttribute('aria-expanded', 'false');
+          syncTips();
+        });
+
+        paintPin();
+        syncTips();
+      }
     </script>
   </body>
 </html>

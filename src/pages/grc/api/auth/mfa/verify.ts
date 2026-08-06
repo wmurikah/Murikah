@@ -1,23 +1,26 @@
 export const prerender = false;
 
 /**
- * The TOTP step's endpoint. A half-authorised (mfa=pending) session posts a
- * 6-digit code, or a backup code, here. The code is verified against the
- * user's sealed secret (RFC 6238, +/- one step of skew); a backup code is
- * consumed on use and its use recorded in security_events. Success re-issues
- * the cookie fully authorised for the same session row. Failures are recorded
- * in login_attempts (so the ordinary throttle also bounds code guessing) and
+ * The second-factor step's endpoint. A half-authorised (mfa=pending) session
+ * posts a 6-digit code here: from the authenticator app (RFC 6238 against the
+ * sealed secret, +/- one step of skew) or from the sign-in email, judged
+ * against the stored hashed challenge (single-use, ten-minute expiry, locked
+ * after repeated wrong guesses). A backup code works for either method and is
+ * consumed on use, recorded in security_events. Success re-issues the cookie
+ * fully authorised for the same session row. Failures are recorded in
+ * login_attempts (so the ordinary throttle also bounds code guessing) and
  * return to the step with the generic message. Tagged [grc.auth.mfa]; never a
  * blank 500.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { readGrcSessionCookie, createSessionCookie } from '@grc/auth/session';
+import { readGrcSessionCookie, createSessionCookie, hashToken } from '@grc/auth/session';
 import { resolveSession } from '@grc/repos/session';
-import { getMfaRecord, consumeBackupCode } from '@grc/repos/mfa';
+import { getMfaRecord, consumeBackupCode, saveMfaChallenge } from '@grc/repos/mfa';
 import { verifyTotp } from '@grc/auth/totp';
 import { open } from '@grc/auth/secretBox';
+import { checkOtpAttempt, OTP_MAX_ATTEMPTS } from '@grc/auth/emailOtp';
 import { throttleDecision } from '@grc/auth/loginThrottle';
 import { failureStreaks, recordLoginAttempt, recordSecurityEvent } from '@grc/repos/loginAttempts';
 
@@ -67,6 +70,33 @@ export const POST: APIRoute = async ({ request }) => {
           ip,
           details: 'A backup code was used to pass the second factor.',
         });
+      }
+    } else if (code !== '' && record.method === 'email') {
+      const check = checkOtpAttempt(record.challenge, await hashToken(code), Date.now());
+      if (check === 'ok' && record.challenge) {
+        // Single-use: the challenge is marked used before the session is
+        // promoted, so the same code can never pass twice.
+        await saveMfaChallenge(db, identity.homeOrganizationId, identity.userId, {
+          ...record.challenge,
+          used: true,
+        });
+        verified = true;
+      } else if (check === 'wrong' && record.challenge) {
+        const attempts = record.challenge.attempts + 1;
+        await saveMfaChallenge(db, identity.homeOrganizationId, identity.userId, {
+          ...record.challenge,
+          attempts,
+        });
+        if (attempts >= OTP_MAX_ATTEMPTS) {
+          await recordSecurityEvent(db, {
+            eventType: 'MFA_OTP_LOCKED',
+            severity: 'warning',
+            userId: identity.userId,
+            actorEmail: email,
+            ip,
+            details: 'The sign-in code was locked after repeated wrong guesses.',
+          }).catch(() => undefined);
+        }
       }
     } else if (code !== '') {
       const secret = await open(env.sessionSecret, record.secret);

@@ -88,9 +88,15 @@ export function isGrcChangePasswordExempt(appPath: string): boolean {
 /** The change-password screen, in root-relative form. */
 export const GRC_CHANGE_PASSWORD_PATH = '/change-password';
 
-// The only paths a half-authorised (MFA pending) session may reach: the TOTP
-// step, its endpoint, and sign-out. Everything else redirects to the step.
-const MFA_PENDING_ALLOWED = new Set(['/mfa', '/api/auth/mfa/verify', '/api/auth/logout']);
+// The only paths a half-authorised (MFA pending) session may reach: the
+// verification step, its endpoint, the code resend, and sign-out. Everything
+// else redirects to the step.
+const MFA_PENDING_ALLOWED = new Set([
+  '/mfa',
+  '/api/auth/mfa/verify',
+  '/api/auth/mfa/send',
+  '/api/auth/logout',
+]);
 
 export function isGrcMfaPendingAllowed(appPath: string): boolean {
   return MFA_PENDING_ALLOWED.has(appPath);
@@ -103,6 +109,7 @@ const MFA_ENROL_EXEMPT = new Set([
   '/mfa/setup',
   '/api/auth/mfa/enrol',
   '/api/auth/mfa/confirm',
+  '/api/auth/mfa/send',
   '/api/auth/logout',
   '/change-password',
   '/api/auth/change-password',

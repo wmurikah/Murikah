@@ -200,6 +200,49 @@ export function renderNotification(
   return renderInline(type, data);
 }
 
+/**
+ * The dedicated sign-in code email (the email MFA method, Build Prompt 34): a
+ * small branded message carrying the 6-digit code, with a plain-text
+ * fallback. Sent directly through the Graph mailer, never queued, because a
+ * sign-in cannot wait for the cron drain.
+ */
+export function buildOtpEmail(code: string): { subject: string; body: string; text: string } {
+  const intro = 'Use this code to finish signing in. It works once and expires in ten minutes.';
+  const warning = 'If you did not try to sign in, you can ignore this email.';
+  const body = [
+    `<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">`,
+    `<div style="background:${NAVY};color:#fff;padding:18px 24px;font-size:16px;font-weight:700">${escapeHtml(HEADER)}</div>`,
+    `<div style="padding:24px">`,
+    `<p style="color:#111827;font-size:14px;margin:0 0 12px">${escapeHtml(intro)}</p>`,
+    `<p style="font-size:28px;font-weight:700;letter-spacing:0.3em;color:${NAVY};margin:0 0 12px">${escapeHtml(code)}</p>`,
+    `<p style="color:#687080;font-size:13px;margin:0">${escapeHtml(warning)}</p>`,
+    `</div>`,
+    `<div style="padding:16px 24px;background:#f8f4ea;color:#687080;font-size:12px;border-top:1px solid #e5e7eb">${escapeHtml(FOOTER)}</div>`,
+    `</div>`,
+  ].join('');
+  return {
+    subject: 'Your sign-in code - Internal Audit System',
+    body,
+    text: `${intro} Your code: ${code}. ${warning}`,
+  };
+}
+
+/**
+ * The test email the Settings -> Email screen sends to prove the connection:
+ * a small branded message with a plain-text fallback beside the HTML body.
+ */
+export function buildTestEmail(mailbox: string): { subject: string; body: string; text: string } {
+  const intro = `This is a test message from the Internal Audit System, sent as ${mailbox} through Microsoft Graph. If it reached you, the Outlook connection works.`;
+  const body = [
+    `<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">`,
+    `<div style="background:${NAVY};color:#fff;padding:18px 24px;font-size:16px;font-weight:700">${escapeHtml(HEADER)}</div>`,
+    `<div style="padding:24px"><p style="color:#111827;font-size:14px;margin:0">${escapeHtml(intro)}</p></div>`,
+    `<div style="padding:16px 24px;background:#f8f4ea;color:#687080;font-size:12px;border-top:1px solid #e5e7eb">${escapeHtml(FOOTER)}</div>`,
+    `</div>`,
+  ].join('');
+  return { subject: 'Email connection test - Internal Audit System', body, text: intro };
+}
+
 export interface DigestItem {
   subject: string;
   intro: string;

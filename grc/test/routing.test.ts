@@ -60,9 +60,10 @@ test('public grc paths cover sign-in and the forgotten-password flow only', () =
   assert.equal(isGrcApiPath('/work-papers'), false);
 });
 
-test('a pending MFA session reaches only the step, its endpoint and sign-out', () => {
+test('a pending MFA session reaches only the step, its endpoints and sign-out', () => {
   assert.equal(isGrcMfaPendingAllowed('/mfa'), true);
   assert.equal(isGrcMfaPendingAllowed('/api/auth/mfa/verify'), true);
+  assert.equal(isGrcMfaPendingAllowed('/api/auth/mfa/send'), true);
   assert.equal(isGrcMfaPendingAllowed('/api/auth/logout'), true);
   assert.equal(isGrcMfaPendingAllowed('/'), false);
   assert.equal(isGrcMfaPendingAllowed('/work-papers'), false);
@@ -73,6 +74,7 @@ test('the enrolment lock exempts setup, its endpoints, sign-out and change-passw
   assert.equal(isGrcMfaEnrolExempt('/mfa/setup'), true);
   assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/enrol'), true);
   assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/confirm'), true);
+  assert.equal(isGrcMfaEnrolExempt('/api/auth/mfa/send'), true);
   assert.equal(isGrcMfaEnrolExempt('/api/auth/logout'), true);
   assert.equal(isGrcMfaEnrolExempt('/change-password'), true);
   assert.equal(isGrcMfaEnrolExempt('/'), false);

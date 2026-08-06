@@ -104,3 +104,58 @@ export async function setConfigValue(
     });
   }
 }
+
+/**
+ * Platform-wide config rows hang off the fixed GLOBAL organization_id sentinel
+ * (the same convention as the AI settings in ai/config.ts), because the live
+ * config table has no scope column and these values belong to the platform,
+ * not a tenant.
+ */
+export const GLOBAL_CONFIG_ORG = 'GLOBAL';
+
+/** Read one platform-wide config value, or null when absent. */
+export async function getGlobalConfigValue(db: Client, key: string): Promise<string | null> {
+  const values = await getConfigValues(db, GLOBAL_CONFIG_ORG, [key]);
+  const v = values.get(key);
+  return v === undefined ? null : v;
+}
+
+/**
+ * Create the inactive GLOBAL sentinel organisation row, for a schema that
+ * enforces the config.organization_id foreign key. Inactive (is_active 0), so
+ * it never appears in organisation lists or the switcher.
+ */
+async function ensureGlobalSentinel(db: Client): Promise<void> {
+  const org = cols(C.organizations);
+  const existing = await db.execute({
+    sql: `SELECT ${org.organization_id} FROM organizations WHERE ${org.organization_id} = ? LIMIT 1`,
+    args: [GLOBAL_CONFIG_ORG],
+  });
+  if (existing.rows.length > 0) return;
+  await db.execute({
+    sql: `INSERT INTO organizations
+            (${org.organization_id}, ${org.org_code}, ${org.org_name}, ${org.is_active}, ${org.created_at})
+          VALUES (?, ?, ?, 0, ?)`,
+    args: [
+      GLOBAL_CONFIG_ORG,
+      GLOBAL_CONFIG_ORG,
+      'Platform (global configuration)',
+      new Date().toISOString(),
+    ],
+  });
+}
+
+/**
+ * Upsert one platform-wide config value. When the first write is refused (a
+ * foreign key on config.organization_id with no sentinel row yet) it creates
+ * the sentinel and retries once, mirroring the AI config self-heal.
+ */
+export async function setGlobalConfigValue(db: Client, key: string, value: string): Promise<void> {
+  try {
+    await setConfigValue(db, GLOBAL_CONFIG_ORG, key, value);
+  } catch (err) {
+    console.error('[grc.config] global write refused, creating the GLOBAL sentinel', err);
+    await ensureGlobalSentinel(db);
+    await setConfigValue(db, GLOBAL_CONFIG_ORG, key, value);
+  }
+}
