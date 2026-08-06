@@ -45,7 +45,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     const record =
       cookie.mfa === 'pending'
-        ? await ensureMfaRecord(db, identity.homeOrganizationId, identity.userId)
+        ? await ensureMfaRecord(db, identity.homeOrganizationId, identity.userId, env.sessionSecret)
         : null;
     if (!record || record.method !== 'email') {
       return back(page, `error=${encodeURIComponent('There is no email code to send here.')}`);

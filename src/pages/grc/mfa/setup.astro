@@ -5,8 +5,9 @@ export const prerender = false;
  * Account security (Build Prompt 37). Two-step verification is universal and
  * email codes are the automatic default, so there is nothing to set up and
  * no wall: this screen shows how the account verifies, manages the backup
- * codes (viewable as a remaining count, regenerable, shown once on
- * generation), and, for roles allowed by MFA_AUTHENTICATOR_ROLES (the
+ * codes (minted with the account at first sign-in, viewable as a remaining
+ * count, regenerable, shown once), and, for roles allowed by
+ * MFA_AUTHENTICATOR_ROLES (the
  * platform owner always qualifies), carries the minimised "use an
  * authenticator app instead" link into the existing TOTP enrolment: a sealed
  * secret shown as a QR rendered in-worker plus the manual key, fresh backup
@@ -159,12 +160,11 @@ const maskedEmail = at > 0 ? `${email[0]}***${email.slice(at)}` : 'your address'
           </p>
           {!record.pendingMethod && backupCodes.length > 0 && (
             <>
-              {codesShown && (
-                <p class="grc-notice" role="status">
-                  Your new backup codes are ready. They are shown only now; store them somewhere
-                  safe.
-                </p>
-              )}
+              <p class="grc-notice" role="status">
+                {codesShown
+                  ? 'Your new backup codes are ready. They are shown only now; store them somewhere safe.'
+                  : 'These codes are shown only until you confirm you have saved them; store them somewhere safe.'}
+              </p>
               <ul>
                 {backupCodes.map((c) => (
                   <li>

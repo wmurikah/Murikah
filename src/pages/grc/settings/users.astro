@@ -4,10 +4,14 @@ export const prerender = false;
 /**
  * Users Setup: manage the organisation's users. Gated on the matrix (USER
  * read; the mutations gate per action on /api/setup/users), platform owner
- * always. Create (with an initial password and a forced change), edit name, role,
- * affiliate and phone, reset the password, and activate or deactivate. A
- * platform-owner account is shown but never edited here. Every mutation posts to
- * /api/setup/users and returns with a saved or error banner.
+ * always. Create (with an initial password and a forced change), edit email,
+ * name, role, affiliate and phone, reset the password, and activate or
+ * deactivate. Every account requires a valid email: it is the sign-in identity
+ * and the address the universal second-factor code goes to (Build Prompt 37),
+ * so both forms mark it required and the endpoint refuses a missing, malformed
+ * or duplicate one. A platform-owner account is shown but never edited here.
+ * Every mutation posts to /api/setup/users and returns with a saved or error
+ * banner.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcIcon from '@/components/grc/GrcIcon.astro';
@@ -97,6 +101,10 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
               <div class="grc-field">
                 <label for="n-email">Email</label>
                 <input id="n-email" name="email" type="email" class="grc-input" required />
+                <p class="grc-field__hint">
+                  Used to sign in and to receive the two-step verification code, so every account
+                  needs one.
+                </p>
               </div>
               <div class="grc-field">
                 <label for="n-role">Role</label>
@@ -155,6 +163,23 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
                   maxlength="160"
                   value={editing.fullName ?? ''}
                 />
+              </div>
+              <div class="grc-field">
+                <label for="e-email">Email</label>
+                <input
+                  id="e-email"
+                  name="email"
+                  type="email"
+                  class="grc-input"
+                  required
+                  value={editing.email}
+                  aria-invalid={editing.email === '' ? 'true' : undefined}
+                />
+                <p class="grc-field__hint">
+                  {editing.email === ''
+                    ? 'This account has no email, so it cannot receive a sign-in code. Add one to fix it.'
+                    : 'Used to sign in and to receive the two-step verification code.'}
+                </p>
               </div>
               <div class="grc-field">
                 <label for="e-role">Role</label>
