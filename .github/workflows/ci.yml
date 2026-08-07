@@ -18,10 +18,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # No `version` here: package.json's `packageManager` field pins the exact
+      # pnpm the lockfile was written with, and action-setup errors out when
+      # both are specified rather than picking one.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node
         uses: actions/setup-node@v4
