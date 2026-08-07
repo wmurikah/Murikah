@@ -87,22 +87,56 @@ export function parseSchema(schemaMdPath: string): Map<string, string[]> {
   return tables;
 }
 
-/** Creates every dictionary table (untyped columns; SQLite is typeless) plus the FTS index. */
+/**
+ * The key constraints the smoke database enforces.
+ *
+ * The dictionary (grc/db/schema.md) records column names only, so a table built
+ * from it alone accepts anything and no foreign-key, NOT NULL or CHECK violation
+ * can be caught before deploy. That is exactly how a role save that failed on
+ * every attempt in production passed the smoke test for weeks (Build Prompt 40,
+ * finding AC-06). These are the constraints the live schema is believed to
+ * enforce, declared so the smoke run exercises them.
+ *
+ * Add an entry when a table's integrity matters to a test. Keep it to keys:
+ * this is a net for the mistakes the typed column layer cannot catch, not a
+ * second copy of the schema. A referenced parent column must be declared unique
+ * or a primary key, or SQLite cannot resolve the reference.
+ */
+const COLUMN_CONSTRAINTS: Record<string, Record<string, string>> = {
+  // The platform-wide GLOBAL config sentinel is refused by this reference,
+  // which is what the self-healing config write path exists for.
+  organizations: { organization_id: 'PRIMARY KEY' },
+  config: { organization_id: 'REFERENCES organizations(organization_id)' },
+  // The permission model. role_permissions references both lookup tables, which
+  // is the constraint the drifted module list violated on every role save.
+  roles: { role_code: 'PRIMARY KEY' },
+  permission_modules: { module_code: 'PRIMARY KEY' },
+  permission_actions: { action_code: 'PRIMARY KEY' },
+  role_permissions: {
+    role_code: 'NOT NULL REFERENCES roles(role_code)',
+    module_code: 'NOT NULL REFERENCES permission_modules(module_code)',
+    action_code: 'NOT NULL REFERENCES permission_actions(action_code)',
+  },
+  // The tables the smoke run writes through the app, keyed so a duplicate or a
+  // missing parent fails the test rather than the user's screen.
+  users: {
+    user_id: 'PRIMARY KEY',
+    organization_id: 'NOT NULL REFERENCES organizations(organization_id)',
+  },
+  work_papers: { work_paper_id: 'PRIMARY KEY' },
+  action_plans: { action_plan_id: 'PRIMARY KEY' },
+  affiliates: { affiliate_code: 'PRIMARY KEY' },
+  audit_areas: { audit_area_id: 'PRIMARY KEY' },
+  files: { file_id: 'PRIMARY KEY' },
+  file_attachments: { attachment_id: 'PRIMARY KEY' },
+  sessions: { session_id: 'PRIMARY KEY' },
+};
+
+/** Creates every dictionary table (columns from the dictionary, keys from above). */
 export function createTables(db: DatabaseSync, tables: Map<string, string[]>): void {
   for (const [name, columns] of tables) {
-    const defs = columns.map((c) => {
-      // The live schema is believed to enforce this reference, which is what
-      // refuses the platform-wide GLOBAL config sentinel; declaring it here
-      // makes the smoke test exercise the self-healing save path. SQLite needs
-      // the parent column unique for the reference to resolve.
-      if (name === 'organizations' && c === 'organization_id') {
-        return 'organization_id PRIMARY KEY';
-      }
-      if (name === 'config' && c === 'organization_id') {
-        return 'organization_id REFERENCES organizations(organization_id)';
-      }
-      return c;
-    });
+    const constraints = COLUMN_CONSTRAINTS[name] ?? {};
+    const defs = columns.map((c) => (constraints[c] ? `${c} ${constraints[c]}` : c));
     db.exec(`CREATE TABLE ${name} (${defs.join(', ')})`);
   }
   // The external-content full-text index over work papers, maintained by the
@@ -112,6 +146,10 @@ export function createTables(db: DatabaseSync, tables: Map<string, string[]>): v
        observation_title, observation_description, recommendation,
        content='work_papers')`,
   );
+  // The worker turns foreign keys on for every connection (src/lib/grc/db.ts);
+  // node:sqlite leaves them off, so without this the references declared above
+  // would be documentation rather than a test.
+  db.exec('PRAGMA foreign_keys = ON');
 }
 
 function toSqliteArg(v: HranaValue): null | number | bigint | string | Uint8Array {

@@ -28,6 +28,9 @@ import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 // plants known challenges (the smoke run has no Graph mailer to deliver one).
 import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';
 import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
+// The single source for what the matrix can express (Build Prompt 43), so this
+// test cannot drift from the endpoint the way the seed once did.
+import { MODULES as MODULE_CODES, ACTIONS as ACTION_CODES } from '../../src/lib/grc/auth/matrix.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -717,16 +720,41 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'access-control.ts',
-    title: 'save the auditor permission matrix',
+    title: 'save the auditor permission matrix, in full and atomically',
     expect: 'success',
     verify: (db) => {
-      const granted = db
+      // The save replaces the role's whole matrix in one batch, so every cell
+      // the screen can express must be present afterwards and must match what
+      // was submitted. The old sequential loop half-applied and this step, which
+      // checked a single granted cell, could not see it (Build Prompt 40, AC-03).
+      const rows = db
         .prepare(
-          `SELECT is_allowed AS a FROM role_permissions
-            WHERE role_code = 'AUDITOR' AND module_code = 'WORK_PAPER' AND action_code = 'read'`,
+          `SELECT module_code AS m, action_code AS a, is_allowed AS v
+             FROM role_permissions WHERE role_code = 'AUDITOR'`,
         )
-        .get() as { a?: number | bigint } | undefined;
-      assert.equal(Number(granted?.a ?? 0), 1, 'a granted cell must be stored as allowed');
+        .all() as { m: string; a: string; v: number | bigint }[];
+      const cells = new Map(rows.map((r) => [`${r.m}.${r.a}`, Number(r.v)]));
+      assert.equal(
+        cells.size,
+        MODULE_CODES.length * ACTION_CODES.length,
+        'every module and action pair must be stored',
+      );
+      const ticked = new Set([
+        'WORK_PAPER.read',
+        'WORK_PAPER.create',
+        'ACTION_PLAN.read',
+        'REPORT.read',
+      ]);
+      for (const module of MODULE_CODES) {
+        for (const action of ACTION_CODES) {
+          const key = `${module}.${action}`;
+          assert.equal(
+            cells.get(key),
+            ticked.has(key) ? 1 : 0,
+            `${key} must match the submitted matrix`,
+          );
+        }
+      }
     },
     method: 'POST',
     path: () => '/api/access-control',
@@ -1365,6 +1393,68 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
 
       // Back inside Hass for the page crawl and the mutation steps below.
       await enterInstance();
+    });
+
+    // An access change must reach a session that is already open, on its very
+    // next request (Build Prompt 40, finding AC-04). The matrix is cached, so
+    // this holds two signed-in actors at once: the auditor keeps their session
+    // while the administrator changes the matrix underneath it.
+    await t.test('a permission change reaches an open session immediately', async () => {
+      const adminJar = server.exportCookies();
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const auditorJar = server.exportCookies();
+      const before = await server.get('/work-papers');
+      assert.equal(before.status, 200, 'the auditor starts with the work-paper grant');
+      assert.ok(
+        !before.hops[before.hops.length - 1].startsWith('/login'),
+        'the auditor is signed in',
+      );
+
+      // The administrator takes WORK_PAPER away, without the auditor doing
+      // anything: no sign-out, no reload, no new session.
+      server.importCookies(adminJar);
+      const saved = await server.request('POST', '/api/access-control', {
+        role_code: 'AUDITOR',
+        grant_ACTION_PLAN_read: '1',
+      });
+      assert.ok(
+        !/[?&]error=/.test(String(saved.headers.location ?? '')),
+        `the save must succeed, got ${saved.headers.location}`,
+      );
+
+      // The auditor's very next request on the same session is refused: the
+      // central page map denies the section the matrix no longer unlocks.
+      server.importCookies(auditorJar);
+      const after = await server.get('/work-papers');
+      assert.equal(
+        after.hops[after.hops.length - 1],
+        '/',
+        `the revoked grant must apply at once, went ${after.hops.join(' -> ')}`,
+      );
+
+      // Put it back, so the steps after this see the seeded grants.
+      server.importCookies(adminJar);
+      const restored = await server.request('POST', '/api/access-control', {
+        role_code: 'AUDITOR',
+        grant_WORK_PAPER_read: '1',
+        grant_WORK_PAPER_create: '1',
+        grant_WORK_PAPER_update: '1',
+        grant_ACTION_PLAN_read: '1',
+        grant_ACTION_PLAN_create: '1',
+        grant_ACTION_PLAN_update: '1',
+        grant_AUDITEE_RESPONSE_read: '1',
+        grant_AUDIT_WORKBENCH_read: '1',
+        grant_REPORT_read: '1',
+      });
+      assert.ok(
+        !/[?&]error=/.test(String(restored.headers.location ?? '')),
+        'the restoring save must succeed',
+      );
+      server.importCookies(auditorJar);
+      const back = await server.get('/work-papers');
+      assert.equal(back.status, 200, 'the restored grant applies at once too');
+      server.importCookies(adminJar);
     });
 
     await t.test('the instance admin is pinned to their organisation', async () => {

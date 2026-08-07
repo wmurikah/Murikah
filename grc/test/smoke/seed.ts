@@ -12,6 +12,10 @@
  */
 import { pbkdf2Sync, randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+// The modules and actions come from the code's single source (Build Prompt 43),
+// so the seeded reference data and what the save writes cannot drift apart
+// again. They drifted before, and every role save failed on the foreign key.
+import { PERMISSION_MODULES, PERMISSION_ACTIONS } from '../../../src/lib/grc/auth/matrix.ts';
 
 export const SMOKE = {
   orgId: 'ORG-HASS',
@@ -115,19 +119,9 @@ const ROLES: [string, string][] = [
   ['JUNIOR_STAFF', 'Junior Staff'],
 ];
 
-const MODULES = [
-  'WORK_PAPER',
-  'ACTION_PLAN',
-  'AUDITEE_RESPONSE',
-  'AUDIT_WORKBENCH',
-  'REPORT',
-  'AI_ASSIST',
-  'NOTIFICATION',
-  'SETUP',
-  'USER',
-];
+const MODULES = PERMISSION_MODULES.map((m) => m.code);
 
-const ACTIONS = ['read', 'create', 'update', 'delete', 'approve', 'export'];
+const ACTIONS = PERMISSION_ACTIONS.map((a) => a.code);
 
 /** A stored hash in the exact seeded format (pbkdf2$iterations$salt$hash). */
 export function seedPasswordHash(plain: string): string {
@@ -188,11 +182,15 @@ export function seedDatabase(db: DatabaseSync): void {
   for (const [code, name] of ROLES) {
     insert(db, 'roles', { role_code: code, role_name: name, is_system: 1, created_at: now });
   }
-  for (const module of MODULES) {
-    insert(db, 'permission_modules', { module_code: module, module_name: module });
+  for (const m of PERMISSION_MODULES) {
+    insert(db, 'permission_modules', {
+      module_code: m.code,
+      module_name: m.name,
+      description: m.description,
+    });
   }
-  for (const action of ACTIONS) {
-    insert(db, 'permission_actions', { action_code: action, action_name: action });
+  for (const a of PERMISSION_ACTIONS) {
+    insert(db, 'permission_actions', { action_code: a.code, action_name: a.name });
   }
   // A full grant for the admin role and a read-heavy grant for auditors, so the
   // access-control screen has a real matrix to render and save.
