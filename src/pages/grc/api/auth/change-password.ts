@@ -45,8 +45,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const env = getGrcEnv();
     const db = await getDb(env);
 
-    // The current credential, scoped to the acting organisation.
-    const state = await getPasswordState(db, grc.userId, grc.organizationId);
+    // The credential is the account's, so it is scoped to the user's own home
+    // organisation, not to whichever instance is being acted inside. That is
+    // what makes this reachable for a platform owner who has entered none, and
+    // it matches how the rest of the account flows (MFA, backup codes) scope.
+    const state = await getPasswordState(db, grc.userId, grc.homeOrganizationId);
     if (!state || !state.passwordHash) {
       console.error(`${TAG} no password on file for the acting user`);
       return back('Your account could not be verified. Please try again.');
@@ -65,7 +68,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const newHash = await hashPassword(next);
     await applyPasswordChange(db, {
       userId: grc.userId,
-      organizationId: grc.organizationId,
+      organizationId: grc.homeOrganizationId,
       previousHash: state.passwordHash,
       newHash,
     });

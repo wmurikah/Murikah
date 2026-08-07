@@ -2,11 +2,17 @@
 /**
  * The authenticated GRC shell: a persistent left sidebar of grouped destinations
  * beside the content, in the Murikah house style. The sidebar carries the brand,
- * the acting organisation label, a platform-owner switcher (only for a platform
- * owner with somewhere to switch), the grouped navigation with icons and
- * collapsible groups, and the account and sign-out at the foot. The active item
- * and its group are marked from the visitor-facing path the middleware captured.
- * The Murikah mark is on the tab. Modules render their pages into the slot.
+ * the acting organisation label, a platform-owner instance switcher (only for a
+ * platform owner, who is the only user with more than one instance to be in),
+ * the grouped navigation with icons and collapsible groups, and the account and
+ * sign-out at the foot. The active item and its group are marked from the
+ * visitor-facing path the middleware captured. The Murikah mark is on the tab.
+ * Modules render their pages into the slot.
+ *
+ * The organisation line tells the two kinds of user apart (Build Prompt 38). An
+ * instance admin is pinned, so it always names their organisation. A platform
+ * owner is pinned to nothing, so it reads "All organisations" until they enter
+ * an instance, and that instance's name once they have.
  */
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
@@ -28,20 +34,27 @@ const pageTitle = `${title} - Assurance OS`;
 const grc = Astro.locals.grc;
 const path = Astro.locals.grcPath ?? '/';
 
+// True only for a platform owner who has entered no instance: there is no acting
+// organisation, so nothing organisation-scoped renders in the shell.
+const inInstance = grc?.instanceSelected !== false;
+
 // The navigation is filtered to the signed-in role and permissions.
 const groups = buildNav({
   roleCode: grc?.roleCode ?? '',
   perms: grc?.perms ?? [],
   isPlatformOwner: grc?.isPlatformOwner ?? false,
   hasAi: grc ? aiEnabled((f) => grc.hasFeature(f)) : false,
+  instanceSelected: inInstance,
 });
 
 // Sidebar badge counts, server-rendered on every navigation and refreshed by a
 // light client poll. Best-effort: a count failure never breaks the app shell.
+// They count an organisation's queues, so with no instance selected there is
+// nothing to count and no query is made.
 let counts: SidebarCounts | null = null;
 let unread = 0;
 let bellItems: InAppItem[] = [];
-if (grc) {
+if (grc && inInstance) {
   try {
     const db = await getDb(getGrcEnv());
     [counts, unread, bellItems] = await Promise.all([
@@ -67,7 +80,11 @@ const isActive = (href: string): boolean =>
 const groupActive = (g: NavGroupDef): boolean => g.items.some((i: NavItemDef) => isActive(i.href));
 
 const orgName = grc?.organizationName ?? 'Organisation';
+const orgLabel = inInstance ? 'Organisation' : 'Platform';
 const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
+// The switcher belongs to the platform owner alone, and stays available inside
+// an instance so they can move straight to another one. An instance admin never
+// has it: there is nowhere for them to switch to.
 const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ?? 0) > 0;
 ---
 
@@ -144,12 +161,12 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
         </div>
 
         <div class="grc-orgline">
-          <p class="grc-orgline__label">Organisation</p>
+          <p class="grc-orgline__label">{orgLabel}</p>
           <p class="grc-orgline__name">{orgName}</p>
         </div>
 
         {
-          grc && (
+          grc && inInstance && (
             <details class="grc-bell">
               <summary class="grc-bell__summary" data-tip="Notifications">
                 <GrcIcon name="bell" size={16} />
@@ -186,23 +203,41 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
 
         {
           showSwitcher && (
-            <form method="post" action="/api/org/switch" class="grc-switcher">
-              <label class="grc-vh" for="grc-switch">
-                Switch organisation
-              </label>
-              <div class="grc-switcher__row">
-                <select id="grc-switch" name="organization_id" class="grc-switcher__select">
-                  {grc!.switchable.map((o) => (
-                    <option value={o.id} selected={o.id === grc!.organizationId}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" class="grc-switcher__go">
-                  Go
-                </button>
-              </div>
-            </form>
+            <div class="grc-switcher">
+              <form method="post" action="/api/org/switch" class="grc-switcher__form">
+                <label class="grc-vh" for="grc-switch">
+                  {inInstance ? 'Switch to another organisation' : 'Enter an organisation'}
+                </label>
+                <div class="grc-switcher__row">
+                  <select id="grc-switch" name="organization_id" class="grc-switcher__select">
+                    {!inInstance && (
+                      <option value="" selected>
+                        Select an organisation
+                      </option>
+                    )}
+                    {grc!.switchable.map((o) => (
+                      <option value={o.id} selected={inInstance && o.id === grc!.organizationId}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" class="grc-switcher__go">
+                    Go
+                  </button>
+                </div>
+              </form>
+              {inInstance ? (
+                <form method="post" action="/api/org/leave" class="grc-switcher__form">
+                  <button type="submit" class="grc-switcher__leave">
+                    Leave this organisation
+                  </button>
+                </form>
+              ) : (
+                <a href="/platform" class="grc-switcher__leave">
+                  See all organisations
+                </a>
+              )}
+            </div>
           )
         }
 

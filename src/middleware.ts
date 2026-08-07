@@ -39,8 +39,10 @@ import {
   isGrcApiPath,
   isGrcChangePasswordExempt,
   isGrcMfaPendingAllowed,
+  isGrcInstanceFreePath,
   GRC_CHANGE_PASSWORD_PATH,
   GRC_MFA_PATH,
+  GRC_PLATFORM_PATH,
 } from '@grc/routing';
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { getCmsEnv } from '@cms/env';
@@ -115,28 +117,33 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
       }
 
-      // The acting organisation defaults to home. Only a platform owner may act
-      // elsewhere, resolved and validated from the database; every other user is
-      // fixed to their home organisation, so a crafted acting cookie is never read.
+      // An instance admin, and every other ordinary role, is pinned to their home
+      // organisation: no cookie is read and no switch is possible. A platform
+      // owner is pinned to nothing, so their acting organisation is whichever
+      // instance they have entered, resolved and validated from the database, and
+      // null until they choose one. It never falls back to their home
+      // organisation: being an owner of the platform is not membership of a
+      // customer's instance.
       let organizationId = identity.homeOrganizationId;
       let organizationName = identity.homeOrganizationName;
       let switchable: GrcSwitchOrg[] = [];
+      let instanceSelected = true;
       if (identity.isPlatformOwner) {
-        try {
-          const requested = await readGrcActingOrg(context.request, env.sessionSecret);
-          const acting = await resolveGrcActingContext(
-            db,
-            identity.homeOrganizationId,
-            identity.homeOrganizationName,
-            true,
-            requested,
-          );
-          organizationId = acting.actingOrganizationId;
-          organizationName = acting.actingName;
-          switchable = acting.switchable;
-        } catch {
-          organizationId = identity.homeOrganizationId;
-        }
+        const requested = await readGrcActingOrg(context.request, env.sessionSecret);
+        const acting = await resolveGrcActingContext(
+          db,
+          identity.homeOrganizationId,
+          identity.homeOrganizationName,
+          true,
+          requested,
+        );
+        instanceSelected = acting.actingOrganizationId !== null;
+        // With no instance selected the acting organisation id is empty: it
+        // matches no row, so even a query that slipped past the gate below reads
+        // nothing rather than another organisation's data.
+        organizationId = acting.actingOrganizationId ?? '';
+        organizationName = acting.actingName ?? 'All organisations';
+        switchable = acting.switchable;
       }
 
       // The permission matrix from role_permissions drives every gate. A SUPER_ADMIN
@@ -148,14 +155,18 @@ export const onRequest = defineMiddleware(async (context, next) => {
           ? fullMatrix()
           : await getPermissionMatrix(db, identity.roleCode);
       const perms = deriveLegacyPerms(matrix);
-      const subscription = await loadSubscription(db, organizationId);
-      const features = subscription.features;
+      // With no instance selected there is no subscription to read: the plan
+      // belongs to the instance, not to the platform owner browsing above it.
+      const features = instanceSelected
+        ? (await loadSubscription(db, organizationId)).features
+        : {};
 
       context.locals.grc = {
         userId: identity.userId,
         organizationId,
         homeOrganizationId: identity.homeOrganizationId,
         organizationName,
+        instanceSelected,
         roleCode: identity.roleCode,
         userName: identity.userName,
         userEmail: identity.userEmail,
@@ -179,6 +190,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return isApi
           ? jsonResponse({ error: 'password_change_required' }, 403)
           : context.redirect(GRC_CHANGE_PASSWORD_PATH);
+      }
+
+      // The instance gate (Build Prompt 38). A platform owner with no instance
+      // selected has no acting organisation, so every module path is sent to the
+      // all-instances view to pick one rather than erroring or being defaulted
+      // into an organisation they did not choose. Only the owner is ever in this
+      // state; an instance admin is pinned and passes straight through. The
+      // mirror case keeps the all-instances view to the owner: nobody else has
+      // one, so it is not a page they can reach.
+      if (identity.isPlatformOwner) {
+        if (!instanceSelected && !isGrcInstanceFreePath(appPath)) {
+          return isApi
+            ? jsonResponse({ error: 'instance_required' }, 409)
+            : context.redirect(GRC_PLATFORM_PATH);
+        }
+      } else if (appPath === GRC_PLATFORM_PATH) {
+        return isApi ? jsonResponse({ error: 'forbidden' }, 403) : context.redirect('/');
       }
 
       // Central page-map enforcement (PAGE_PERMISSION_MAP): a page section the
