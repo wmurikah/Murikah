@@ -7,23 +7,83 @@
  *
  * A user has one role (users.role_code); there is no user_roles junction. The
  * grants live in role_permissions(role_code, module_code, action_code, is_allowed).
+ *
+ * This module is the single source for the modules and actions the matrix can
+ * express (Build Prompt 43). `role_permissions.module_code` and `.action_code`
+ * reference the `permission_modules` and `permission_actions` lookup tables, and
+ * foreign keys are on (src/lib/grc/db.ts), so writing a grant for a module the
+ * lookup table does not hold fails the whole save. The two lists had drifted
+ * from the seeded reference data, which is what broke every role save; the seed
+ * (grc/test/smoke/seed.ts) and the save's lookup reconciliation
+ * (repos/permissionsAdmin.ts) now both read PERMISSION_MODULES and
+ * PERMISSION_ACTIONS from here, so there is one list and it cannot drift again.
  */
 
 export type PermissionMatrix = Record<string, Record<string, boolean>>;
 
-export const MODULES = [
-  'WORK_PAPER',
-  'ACTION_PLAN',
-  'AUDITEE_RESPONSE',
-  'AUDIT_WORKBENCH',
-  'REPORT',
-  'AI_ASSIST',
-  'USER',
-  'CONFIG',
-  'AUDIT_LOG',
+export interface PermissionModule {
+  code: string;
+  name: string;
+  description: string;
+}
+
+/**
+ * Every module the matrix can express, with the label its `permission_modules`
+ * row carries. Each one is read by a real gate:
+ *
+ *   WORK_PAPER, ACTION_PLAN, AUDITEE_RESPONSE  the module CRUD and workflow
+ *   AUDIT_WORKBENCH                            the dashboard (DASHBOARD.view)
+ *   REPORT                                     reports, exports and analytics
+ *   AI_ASSIST                                  the AI drafting and validation
+ *   USER                                       the Users screen and its endpoint
+ *   CONFIG                                     every Setup surface and the queue
+ *   AUDIT_LOG                                  the activity trail
+ *
+ * The seeded reference data also carried NOTIFICATION and SETUP, which no gate
+ * has ever read: notifications are user-scoped and self-gating, and the Setup
+ * surfaces gate on CONFIG. They are deliberately not listed here, so the matrix
+ * neither shows nor writes them. Rows for them in a live lookup table are left
+ * alone rather than deleted: reference data that predates this build is not this
+ * endpoint's to remove, and an unread lookup row grants nothing.
+ */
+export const PERMISSION_MODULES: readonly PermissionModule[] = [
+  { code: 'WORK_PAPER', name: 'Work papers', description: 'Audit findings and their workflow' },
+  {
+    code: 'ACTION_PLAN',
+    name: 'Action plans',
+    description: 'Remediation plans and their workflow',
+  },
+  {
+    code: 'AUDITEE_RESPONSE',
+    name: 'Auditee responses',
+    description: 'Management responses to findings',
+  },
+  { code: 'AUDIT_WORKBENCH', name: 'Audit workbench', description: 'The dashboard and its queues' },
+  { code: 'REPORT', name: 'Reports', description: 'Board reporting, exports and analytics' },
+  { code: 'AI_ASSIST', name: 'AI assistance', description: 'AI drafting and validation' },
+  { code: 'USER', name: 'Users', description: 'User administration' },
+  { code: 'CONFIG', name: 'Configuration', description: 'Setup, settings and the send queue' },
+  { code: 'AUDIT_LOG', name: 'Audit log', description: 'The activity and audit trail' },
 ] as const;
 
-export const ACTIONS = ['read', 'create', 'update', 'delete', 'approve', 'export'] as const;
+export interface PermissionAction {
+  code: string;
+  name: string;
+}
+
+/** Every action the matrix can express, with its `permission_actions` label. */
+export const PERMISSION_ACTIONS: readonly PermissionAction[] = [
+  { code: 'read', name: 'Read' },
+  { code: 'create', name: 'Create' },
+  { code: 'update', name: 'Update' },
+  { code: 'delete', name: 'Delete' },
+  { code: 'approve', name: 'Approve' },
+  { code: 'export', name: 'Export' },
+] as const;
+
+export const MODULES: readonly string[] = PERMISSION_MODULES.map((m) => m.code);
+
+export const ACTIONS: readonly string[] = PERMISSION_ACTIONS.map((a) => a.code);
 
 // The two source aliases, applied before lookup: action `view` maps to `read`,
 // and module `WORK_PAPERS` maps to `WORK_PAPER`.
