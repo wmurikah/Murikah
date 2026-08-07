@@ -1,0 +1,138 @@
+---
+export const prerender = false;
+
+/**
+ * The all-instances view (Build Prompt 38): where the platform owner lands and
+ * where they come back to. Murikah Labs owns the platform but is not a customer
+ * of it, so this screen shows every instance rather than any one organisation's
+ * data, and nothing here is scoped to an organisation. Entering an instance from
+ * here sets the acting organisation, after which every page is scoped to it
+ * exactly as its own admin sees it; leaving returns here.
+ *
+ * Platform owner only: the middleware sends every other user home, and this
+ * screen refuses independently so the gate does not live in one place alone.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcIcon from '@/components/grc/GrcIcon.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import { listInstances, type SwitchOrg } from '@grc/repos/orgContext';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner;
+
+const error = Astro.url.searchParams.get('error');
+
+// The switchable set already rides on locals for the sidebar switcher; re-read
+// it here only when it is somehow absent, so the view is never empty because the
+// shell happened not to need it.
+let instances: SwitchOrg[] = grc.switchable;
+let loaded = true;
+if (allowed && instances.length === 0) {
+  loaded = await guardPageLoad('platform', async () => {
+    instances = await listInstances(await getDb(getGrcEnv()));
+  });
+}
+
+const current = grc.instanceSelected ? grc.organizationId : null;
+---
+
+<GrcLayout title="All organisations">
+  <div class="grc-page-head">
+    <div>
+      <h1>All organisations</h1>
+      <p class="grc-lead">
+        Every instance on the platform. Choose one to enter it; everything you then see is scoped to
+        that organisation.
+      </p>
+    </div>
+    {
+      allowed && current && (
+        <form method="post" action="/api/org/leave" style="margin:0">
+          <button type="submit" class="grc-btn grc-btn--secondary">
+            Leave {grc.organizationName}
+          </button>
+        </form>
+      )
+    }
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        The all-instances view is restricted to the platform owner.
+      </p>
+    ) : !loaded ? (
+      <GrcErrorCard subject="The organisation list" />
+    ) : (
+      <>
+        {error && (
+          <p class="grc-error" role="alert" style="margin-bottom:1rem">
+            {decodeURIComponent(error)}
+          </p>
+        )}
+        {current ? (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            You are inside <strong>{grc.organizationName}</strong>. Enter another instance below, or
+            leave to come back here.
+          </p>
+        ) : (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            No instance is selected, so no organisation's data is in view. Choose one to begin.
+          </p>
+        )}
+
+        {instances.length === 0 ? (
+          <div class="grc-empty">
+            <p>
+              <strong>No organisations yet.</strong>
+            </p>
+            <p>Provision the first one to get started.</p>
+            <a href="/settings/provision" class="grc-btn grc-btn--primary">
+              Provision organisation
+            </a>
+          </div>
+        ) : (
+          <ul class="grc-instances">
+            {instances.map((o) => (
+              <li class:list={['grc-instance', { 'is-current': o.id === current }]}>
+                <div class="grc-instance__id">
+                  <span class="grc-instance__badge" aria-hidden="true">
+                    {o.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div style="min-width:0">
+                    <p class="grc-instance__name">{o.name}</p>
+                    <p class="grc-instance__meta">
+                      {o.id === current ? 'Currently inside' : 'Instance'}
+                    </p>
+                  </div>
+                </div>
+                <form method="post" action="/api/org/switch" style="margin:0">
+                  <input type="hidden" name="organization_id" value={o.id} />
+                  <button
+                    type="submit"
+                    class:list={[
+                      'grc-btn',
+                      o.id === current ? 'grc-btn--secondary' : 'grc-btn--primary',
+                    ]}
+                  >
+                    <GrcIcon name="chevron" size={14} />
+                    <span>{o.id === current ? 'Re-enter' : 'Enter'}</span>
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p class="grc-field__hint" style="margin-top:1rem">
+          Need another customer on the platform?
+          <a href="/settings/provision">Provision an organisation</a>.
+        </p>
+      </>
+    )
+  }
+</GrcLayout>

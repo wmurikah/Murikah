@@ -158,11 +158,21 @@ declare namespace App {
      */
     grc?: {
       userId: string;
-      /** The acting organisation (organization_id). A platform owner may switch; every query scopes by this. */
+      /**
+       * The acting organisation (organization_id); every query scopes by this.
+       * An instance admin is pinned to their home organisation. A platform owner
+       * is pinned to none: this is the instance they have entered, and the empty
+       * string (matching no row) until they choose one. Guard with
+       * `instanceSelected` rather than testing for the empty string; the
+       * middleware keeps every instance-requiring path out of that state.
+       */
       organizationId: string;
       /** The user's home organisation. Equals organizationId unless a platform owner is acting elsewhere. */
       homeOrganizationId: string;
+      /** The acting organisation's name, or 'All organisations' while a platform owner has selected no instance. */
       organizationName: string;
+      /** False only for a platform owner who has selected no instance; always true for everyone else. */
+      instanceSelected: boolean;
       /** The user's single role code, e.g. SENIOR_AUDITOR. */
       roleCode: string;
       userName?: string;

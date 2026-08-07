@@ -223,10 +223,36 @@
   margin: 0;
 }
 
-/* Platform-owner switcher. */
+/* Platform-owner instance switcher. */
 .grc-switcher {
   display: grid;
   gap: var(--grc-s2);
+}
+.grc-switcher__form {
+  display: grid;
+  gap: var(--grc-s2);
+  margin: 0;
+}
+.grc-switcher__leave {
+  display: block;
+  width: 100%;
+  border: 1px solid rgba(242, 244, 250, 0.22);
+  border-radius: var(--grc-radius-sm);
+  background: transparent;
+  color: var(--grc-on-navy-dim);
+  font-size: var(--grc-fs-small);
+  font-weight: 600;
+  min-height: 2.1rem;
+  line-height: 2rem;
+  padding: 0 0.5rem;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.grc-switcher__leave:hover,
+.grc-switcher__leave:focus-visible {
+  color: var(--grc-on-navy);
+  border-color: rgba(242, 244, 250, 0.4);
 }
 .grc-switcher__row {
   display: flex;
@@ -2664,4 +2690,58 @@ a.grc-notifrow__title:hover {
 }
 .grc-richbody li {
   margin-bottom: 0.15rem;
+}
+
+/* The all-instances view: every instance on the platform, one enterable row
+   each, with the one currently entered marked in gold. */
+.grc-instances {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--grc-s3);
+}
+.grc-instance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--grc-s3);
+  background: var(--grc-surface);
+  border: 1px solid var(--grc-line);
+  border-left: 3px solid transparent;
+  border-radius: var(--grc-radius);
+  box-shadow: var(--grc-shadow);
+  padding: var(--grc-s4);
+}
+.grc-instance.is-current {
+  border-left-color: var(--grc-gold);
+}
+.grc-instance__id {
+  display: flex;
+  align-items: center;
+  gap: var(--grc-s3);
+  min-width: 0;
+}
+.grc-instance__badge {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-navy);
+  color: var(--grc-on-navy);
+  font-weight: 700;
+}
+.grc-instance__name {
+  margin: 0;
+  font-weight: 600;
+  color: var(--grc-ink);
+  overflow-wrap: anywhere;
+}
+.grc-instance__meta {
+  margin: 0.1rem 0 0;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
 }
