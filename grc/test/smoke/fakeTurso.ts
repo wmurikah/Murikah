@@ -87,21 +87,63 @@ export function parseSchema(schemaMdPath: string): Map<string, string[]> {
   return tables;
 }
 
+/**
+ * The constraints the generated smoke schema carries.
+ *
+ * `grc/db/schema.md` is a column dictionary and records no keys, so every smoke
+ * table used to be created with bare untyped columns. That is why a foreign-key
+ * violation on the role save passed the smoke test and shipped (audit finding
+ * AC-06): a database that enforces nothing cannot refuse anything. These three
+ * tables declare what the live schema is known to enforce, so the same write the
+ * live database refuses is refused here too.
+ *
+ * The set is deliberately narrow rather than a guess at the whole live schema:
+ * an invented constraint would fail the smoke test on a write the live database
+ * accepts, which is a worse failure than the one being fixed. Add to it only
+ * where the live schema is known, not where it is assumed.
+ *
+ * `node:sqlite` enforces foreign keys by default, and the worker's connection
+ * runs `PRAGMA foreign_keys = ON` besides (`src/lib/grc/db.ts`), so a declared
+ * reference bites in both directions: from the seed and from the worker.
+ */
+
+/** Parent columns a reference resolves against. SQLite needs them unique. */
+const PRIMARY_KEYS: Record<string, string> = {
+  organizations: 'organization_id',
+  roles: 'role_code',
+  permission_modules: 'module_code',
+  permission_actions: 'action_code',
+};
+
+/** `table.column` to the `parent(column)` it references. */
+const FOREIGN_KEYS: Record<string, Record<string, string>> = {
+  config: { organization_id: 'organizations(organization_id)' },
+  // The permission model's three references: this is the constraint the role
+  // save violated for every role, every time.
+  role_permissions: {
+    role_code: 'roles(role_code)',
+    module_code: 'permission_modules(module_code)',
+    action_code: 'permission_actions(action_code)',
+  },
+};
+
+/** Columns a row cannot be written without. */
+const NOT_NULL: Record<string, string[]> = {
+  role_permissions: ['role_code', 'module_code', 'action_code', 'is_allowed'],
+  permission_modules: ['module_code'],
+  permission_actions: ['action_code'],
+};
+
 /** Creates every dictionary table (untyped columns; SQLite is typeless) plus the FTS index. */
 export function createTables(db: DatabaseSync, tables: Map<string, string[]>): void {
   for (const [name, columns] of tables) {
     const defs = columns.map((c) => {
-      // The live schema is believed to enforce this reference, which is what
-      // refuses the platform-wide GLOBAL config sentinel; declaring it here
-      // makes the smoke test exercise the self-healing save path. SQLite needs
-      // the parent column unique for the reference to resolve.
-      if (name === 'organizations' && c === 'organization_id') {
-        return 'organization_id PRIMARY KEY';
-      }
-      if (name === 'config' && c === 'organization_id') {
-        return 'organization_id REFERENCES organizations(organization_id)';
-      }
-      return c;
+      let def = c;
+      if (PRIMARY_KEYS[name] === c) def += ' PRIMARY KEY';
+      else if (NOT_NULL[name]?.includes(c)) def += ' NOT NULL';
+      const reference = FOREIGN_KEYS[name]?.[c];
+      if (reference) def += ` REFERENCES ${reference}`;
+      return def;
     });
     db.exec(`CREATE TABLE ${name} (${defs.join(', ')})`);
   }
