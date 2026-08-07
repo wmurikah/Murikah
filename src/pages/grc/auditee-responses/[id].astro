@@ -54,7 +54,7 @@ if (id && (canReview || canRespondPerm)) {
   loadError = !(await guardPageLoad('auditee-responses.thread', async () => {
     const db = await getDb(getGrcEnv());
     const [detail, thread, isAssigned, config] = await Promise.all([
-      getWorkPaper(db, grc.organizationId, id),
+      getWorkPaper(db, grc.organizationId, id, grc.affiliateScope),
       listRounds(db, grc.organizationId, id),
       isAssignedAuditee(db, grc.organizationId, id, grc.userId),
       getConfigValues(db, grc.organizationId, ['RESPONSE_DEADLINE_DAYS', 'MAX_RESPONSE_ROUNDS']),
@@ -77,6 +77,7 @@ if (id && (canReview || canRespondPerm)) {
             roleCode: grc.roleCode,
             perms: grc.perms,
             isPlatformOwner: grc.isPlatformOwner,
+            affiliateScope: grc.affiliateScope,
           },
           {},
         ).then((all) => all.filter((p) => p.workPaperId === id))

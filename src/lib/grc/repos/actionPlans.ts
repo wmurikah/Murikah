@@ -30,6 +30,12 @@ export {
   type ActionPlanInput,
 } from '@grc/repos/actionPlanInput';
 import type { ActionPlanInput } from '@grc/repos/actionPlanInput';
+import {
+  affiliatePredicate,
+  affiliateVisible,
+  UNCONFINED,
+  type AffiliateScope,
+} from '@grc/auth/affiliateScope';
 
 export interface ActionPlanListRow {
   id: string;
@@ -70,6 +76,8 @@ export interface Viewer {
   roleCode: string;
   perms: string[];
   isPlatformOwner: boolean;
+  /** The affiliate confinement in force, from locals.grc.affiliateScope. */
+  affiliateScope: AffiliateScope;
 }
 
 const s = (v: unknown): string | null => (v == null ? null : String(v));
@@ -137,6 +145,11 @@ export async function listActionPlans(
     where += ` AND ap.${AP.affiliate_code} = ?`;
     args.push(filters.affiliateCode);
   }
+  // Affiliate confinement (Build Prompt 45): a boundary on top of the filter
+  // above, so a confined viewer who filters elsewhere simply sees nothing.
+  const confine = affiliatePredicate(viewer.affiliateScope, `ap.${AP.affiliate_code}`);
+  where += confine.clause;
+  args.push(...confine.args);
   if (filters.priority) {
     where += ` AND ap.${AP.priority} = ?`;
     args.push(filters.priority);
@@ -195,16 +208,19 @@ export interface OrphanActionPlan {
 export async function listOrphanActionPlans(
   db: Client,
   organizationId: string,
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<OrphanActionPlan[]> {
+  // Strays are still records, so confinement applies to them like any other.
+  const confine = affiliatePredicate(scope, AP.affiliate_code);
   const res = await db.execute({
     sql: `SELECT ${AP.action_plan_id} AS id, ${AP.action_number} AS action_number,
                  ${AP.action_description} AS description, ${AP.status} AS status
             FROM action_plans
            WHERE ${AP.organization_id} = ? AND ${AP.deleted_at} IS NULL
-             AND (${AP.work_paper_id} IS NULL OR ${AP.work_paper_id} = '')
+             AND (${AP.work_paper_id} IS NULL OR ${AP.work_paper_id} = '')${confine.clause}
         ORDER BY ${AP.action_number} ASC
            LIMIT 100`,
-    args: [organizationId],
+    args: [organizationId, ...confine.args],
   });
   return res.rows.map((r) => ({
     id: String(r.id),
@@ -247,14 +263,25 @@ export type ActionPlanDetail = Record<string, unknown> & {
   ownerIds: string | null;
 };
 
+/**
+ * One action plan, or null when not found. `scope` confines it to the viewer's
+ * affiliate (Build Prompt 45): the detail route takes an id from the URL, so
+ * without this a confined viewer could open any plan in the organisation.
+ * Outside their affiliate reads as "not found", never as a distinguishable
+ * refusal that would confirm the plan exists.
+ */
 export async function getActionPlan(
   db: Client,
   organizationId: string,
   id: string,
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<ActionPlanDetail | null> {
   const res = await db.execute({
     sql: `SELECT ap.*, wp.work_paper_ref AS wp_reference, wp.risk_rating AS risk_rating,
                  wp.observation_title AS observation_title, wp.affiliate_code AS affiliate_code,
+                 -- The plan's own affiliate, aliased apart because the finding's
+                 -- shadows it above and it is the plan's that bounds access.
+                 ap.${AP.affiliate_code} AS plan_affiliate_code,
                  wp.observation_description AS observation_description
             FROM action_plans ap
             LEFT JOIN work_papers wp ON wp.work_paper_id = ap.work_paper_id
@@ -265,6 +292,8 @@ export async function getActionPlan(
   });
   const row = res.rows[0];
   if (!row) return null;
+  // The plan's own affiliate is the authority; the joined finding's is display only.
+  if (!affiliateVisible(scope, s(row.plan_affiliate_code))) return null;
   const detail = { ...row } as Record<string, unknown>;
   detail.id = String(row.action_plan_id);
   detail.actionNumber = String(row.action_number ?? row.action_plan_id);

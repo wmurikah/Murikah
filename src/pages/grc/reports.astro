@@ -14,6 +14,7 @@ export const prerender = false;
  * the document away; they are separate grants.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
 import ReportPreview from '@/components/grc/ReportPreview.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
@@ -85,6 +86,7 @@ if (allowed) {
         { userId: grc.userId, roleCode: grc.roleCode, isPlatformOwner: grc.isPlatformOwner },
         filters,
         forcedAffiliate,
+        grc.affiliateScope,
       ),
       loadEnumLabels(db, 'WORK_PAPER_STATUS'),
       loadEnumLabels(db, 'ACTION_PLAN_STATUS'),
@@ -148,6 +150,8 @@ const visibleStatuses = STATUS_OPTIONS.filter(
       <p class="grc-lead">Board and BARC reporting for {grc.organizationName}.</p>
     </div>
   </div>
+
+  <GrcAffiliateNotice subject="reported findings" />
 
   {
     !allowed ? (

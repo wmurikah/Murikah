@@ -22,6 +22,8 @@ import { resolveSession } from '@grc/repos/session';
 import { ensureMfaRecord, consumeBackupCode, saveMfaChallenge } from '@grc/repos/mfa';
 import { defaultLandingPath, isAuditeeRole } from '@grc/dashboard/roleNav';
 import { hasMyOverdue } from '@grc/repos/dashboard';
+import { getScopedRoleMatrix } from '@grc/auth/rbac';
+import { resolveAffiliateScope } from '@grc/auth/affiliateScope';
 import { GRC_MFA_SETUP_PATH } from '@grc/routing';
 import { verifyTotp } from '@grc/auth/totp';
 import { open } from '@grc/auth/secretBox';
@@ -143,7 +145,21 @@ export const POST: APIRoute = async ({ request }) => {
     } else {
       let hasOverdue = false;
       if (!identity.isPlatformOwner && isAuditeeRole(identity.roleCode)) {
-        hasOverdue = await hasMyOverdue(db, identity.homeOrganizationId, identity.userId);
+        // The landing choice runs before locals.grc exists, so the confinement
+        // is resolved here rather than inherited. It matters: "you have an
+        // overdue plan" must not be said about a plan the viewer's affiliate
+        // confinement means they cannot open (Build Prompt 45).
+        const access = await getScopedRoleMatrix(
+          db,
+          identity.roleCode,
+          identity.homeOrganizationId,
+        );
+        const scope = resolveAffiliateScope(
+          access.scopeToAffiliate,
+          identity.affiliateCode,
+          identity.isPlatformOwner,
+        );
+        hasOverdue = await hasMyOverdue(db, identity.homeOrganizationId, identity.userId, scope);
       }
       location = defaultLandingPath(identity.roleCode, identity.isPlatformOwner, hasOverdue);
     }

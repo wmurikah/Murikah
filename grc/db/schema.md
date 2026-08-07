@@ -59,7 +59,7 @@ never their internal columns.
 - **reminders**: reminder_id, reminder_type, related_entity_type, related_entity_id, target_user_id, scheduled_for, sent_at, cancelled_at, cancel_reason, escalation_level
 - **restore_runs**: restore_id, backup_id, target, started_at, completed_at, status, requested_by, approved_by, rows_restored, verification_status, error_message, notes
 - **retention_policies**: policy_id, entity_type, retention_days, archive_target, last_run_at, rows_pruned, is_active, legal_hold, description
-- **role_permissions**: organization_id, role_code, module_code, action_code, is_allowed
+- **role_permissions**: organization_id, role_code, module_code, action_code, is_allowed, scope_to_affiliate
 - **roles**: role_code, role_name, description, is_system, created_at
 - **saved_reports**: report_id, organization_id, owner_user_id, name, description, report_type, query_definition, schedule_cron, last_generated_at, is_shared, created_at, updated_at
 - **scheduled_jobs**: job_id, job_name, cron_expression, is_enabled, last_run_at, last_run_status, last_run_duration_ms, last_error, next_run_at, created_at, updated_at

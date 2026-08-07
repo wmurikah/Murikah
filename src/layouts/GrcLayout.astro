@@ -58,7 +58,7 @@ if (grc && inInstance) {
   try {
     const db = await getDb(getGrcEnv());
     [counts, unread, bellItems] = await Promise.all([
-      getSidebarCounts(db, grc.organizationId, grc.userId),
+      getSidebarCounts(db, grc.organizationId, grc.userId, grc.affiliateScope),
       unreadCount(db, grc.userId),
       listInApp(db, grc.userId, 6),
     ]);

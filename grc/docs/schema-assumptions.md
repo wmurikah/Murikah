@@ -645,3 +645,64 @@ Who may write what:
   than a live fallback, so the first administrator sees a real editable set and a
   later change to the defaults cannot move an existing customer's access
   underneath them.
+
+## Affiliate confinement (Build Prompt 45)
+
+`role_permissions` carries `scope_to_affiliate`. When set for a role in an
+organisation, a user holding that role sees only records whose `affiliate_code`
+matches their own `users.affiliate_code`, on top of the module and action grants
+they already hold. Applied by
+`grc/db/migrations/002-role-permissions-affiliate-scope.sql`.
+
+**Why the flag is on `role_permissions` and not on `roles`.** `roles` is a
+platform-wide table with no `organization_id`, so a flag there would confine that
+role for every customer at once: the cross-tenant defect migration 001 removed
+from the matrix (AC-01). `role_permissions` is tenant-scoped, so the flag
+inherits that scoping for free.
+
+The cost is that the flag is stored once per grant row rather than once per role.
+That is safe because `saveRoleMatrix` rewrites a role's whole row set in one
+atomic batch, so the rows cannot disagree, and the read takes "any row set" so a
+hand-edited database fails closed rather than open.
+
+**How it is enforced.** `auth/affiliateScope.ts` is the pure core: three states,
+and a predicate builder.
+
+| State                           | Predicate appended             |
+| ------------------------------- | ------------------------------ |
+| Not confined                    | nothing                        |
+| Confined, user has an affiliate | `AND <col>.affiliate_code = ?` |
+| Confined, user has none         | `AND 1 = 0`                    |
+
+The third row is the one that matters. A missing affiliate closes the door: an
+empty predicate there would show a user in a confined role the entire
+organisation, which is the exact failure the feature exists to prevent. The
+screens then say so (`components/grc/GrcAffiliateNotice.astro`), because a clean
+empty list would read as "your organisation has no findings" when the truth is
+"your account is not finished".
+
+It is a boundary, not the user-chosen affiliate filter that already existed on
+the list screens. Both may apply at once; a confined viewer who filters to
+another affiliate simply sees nothing.
+
+Where it is applied: `repos/workPapers.ts`, `actionPlans.ts`,
+`auditeeResponses.ts`, `dashboard.ts`, `analytics.ts` and `reportData.ts`. The
+detail reads (`getWorkPaper`, `getActionPlan`) take the scope too and return
+null outside it, because those routes take an id from the URL and a list
+predicate alone would leave a guessed link open. Outside the affiliate reads as
+"not found" rather than a distinguishable refusal, which would confirm the record
+exists.
+
+Two things it deliberately does not change:
+
+- A platform owner and a SUPER_ADMIN hold a synthesised matrix, so no role row
+  carries the flag for them and they are never confined.
+- The hard-coded UNIT_MANAGER affiliate scope in `reportData.ts` stays as a
+  floor beneath the flag rather than being replaced by it. It is role-based
+  defence in depth that predates the flag and holds whether or not an
+  administrator has ticked it; removing it would quietly widen a unit manager's
+  report the day this ships.
+
+The confinement is part of every dashboard and analytics cache key
+(`affiliateScopeKey`), so two viewers with different confinement never share an
+aggregation.

@@ -82,9 +82,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const scopeName =
     targetOrg === PLATFORM_DEFAULT_ORG ? 'the platform defaults' : grc.organizationName;
 
+  // Affiliate confinement (Build Prompt 45), the second dimension beside the
+  // grants: a role marked confined sees only its user's own affiliate.
+  const scopeToAffiliate = form.get('scope_to_affiliate') === '1';
+
   const db = await getDb(getGrcEnv());
   try {
-    await saveRoleMatrix(db, targetOrg, roleCode, grants);
+    await saveRoleMatrix(db, targetOrg, roleCode, grants, scopeToAffiliate);
   } catch (err) {
     console.error(`${TAG} the permissions for ${roleCode} in ${targetOrg} could not be saved`, err);
     return back(
@@ -99,7 +103,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       organizationId: targetOrg,
       userId: grc.userId,
       action: 'ACCESS_CONTROL.update',
-      details: `${roleCode} in ${targetOrg}`,
+      details: `${roleCode} in ${targetOrg}${scopeToAffiliate ? ' (confined to affiliate)' : ''}`,
     });
   } catch {
     // best-effort audit

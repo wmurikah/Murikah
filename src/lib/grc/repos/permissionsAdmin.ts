@@ -21,7 +21,7 @@
  * caller gets a real error to show.
  */
 import type { Client, InStatement } from '@libsql/client/web';
-import { getScopedRoleMatrix, type PermissionMatrix } from '@grc/auth/rbac';
+import { getScopedRoleMatrix, type ResolvedRoleAccess } from '@grc/auth/rbac';
 import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
@@ -63,7 +63,7 @@ export async function getRoleMatrixForOrg(
   db: Client,
   roleCode: string,
   organizationId: string,
-): Promise<{ matrix: PermissionMatrix; inherited: boolean }> {
+): Promise<ResolvedRoleAccess> {
   return getScopedRoleMatrix(db, roleCode, organizationId);
 }
 
@@ -142,6 +142,7 @@ export async function saveRoleMatrix(
   organizationId: string,
   roleCode: string,
   grants: readonly RoleGrant[],
+  scopeToAffiliate: boolean,
 ): Promise<void> {
   const statements: InStatement[] = referenceRowStatements();
   // role_permissions.organization_id references organizations, so writing the
@@ -157,9 +158,19 @@ export async function saveRoleMatrix(
     statements.push({
       sql: `INSERT INTO role_permissions
               (${RP.organization_id}, ${RP.role_code}, ${RP.module_code}, ${RP.action_code},
-               ${RP.is_allowed})
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [organizationId, roleCode, grant.moduleCode, grant.actionCode, grant.isAllowed ? 1 : 0],
+               ${RP.is_allowed}, ${RP.scope_to_affiliate})
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        organizationId,
+        roleCode,
+        grant.moduleCode,
+        grant.actionCode,
+        grant.isAllowed ? 1 : 0,
+        // The role-level flag, written onto every row of the role. See the
+        // migration for why it lives on the tenant-scoped table rather than on
+        // `roles`, and why writing the whole set atomically keeps it consistent.
+        scopeToAffiliate ? 1 : 0,
+      ],
     });
   }
   await db.batch(statements, 'write');
@@ -176,8 +187,9 @@ export function inheritPlatformDefaultsStatement(organizationId: string): InStat
   return {
     sql: `INSERT INTO role_permissions
             (${RP.organization_id}, ${RP.role_code}, ${RP.module_code}, ${RP.action_code},
-             ${RP.is_allowed})
-          SELECT ?, ${RP.role_code}, ${RP.module_code}, ${RP.action_code}, ${RP.is_allowed}
+             ${RP.is_allowed}, ${RP.scope_to_affiliate})
+          SELECT ?, ${RP.role_code}, ${RP.module_code}, ${RP.action_code}, ${RP.is_allowed},
+                 ${RP.scope_to_affiliate}
             FROM role_permissions
            WHERE ${RP.organization_id} = ?`,
     args: [organizationId, PLATFORM_DEFAULT_ORG],

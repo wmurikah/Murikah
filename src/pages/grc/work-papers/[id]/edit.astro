@@ -51,7 +51,7 @@ let loadError = false;
 if (allowed && id) {
   loadError = !(await guardPageLoad('work-papers.edit', async () => {
     const db = await getDb(getGrcEnv());
-    wp = await getWorkPaper(db, grc.organizationId, id);
+    wp = await getWorkPaper(db, grc.organizationId, id, grc.affiliateScope);
     // The lookups are only needed when the paper is editable; the redirect for
     // a locked state happens outside the boundary.
     if (wp && isEditable(wp.status)) {

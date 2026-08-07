@@ -19,6 +19,7 @@ import type {
   ReportFilters,
 } from '@grc/reports/reportTypes';
 import { isUnitManagerScope } from '@grc/reports/reportModel';
+import { affiliatePredicate, UNCONFINED, type AffiliateScope } from '@grc/auth/affiliateScope';
 
 export interface ReportViewer {
   userId: string;
@@ -89,6 +90,14 @@ function workPaperFilters(filters: ReportFilters): { clause: string; args: (stri
 /**
  * The scoped dataset for the report. `unitAffiliate` is the UNIT_MANAGER's own
  * affiliate (from resolveUserAffiliate); it is ignored for other roles.
+ *
+ * `scope` is the role's affiliate confinement (Build Prompt 45), which applies
+ * to any confined role rather than to UNIT_MANAGER alone. It is added to the
+ * hard-coded unit-manager rule below rather than replacing it: that rule is
+ * role-based defence in depth that predates the flag and holds whether or not an
+ * administrator has ticked it, and removing it would quietly widen a unit
+ * manager's report the day this ships. Both narrow, neither widens, so the
+ * tighter of the two wins wherever they differ.
  */
 export async function getComprehensiveReportData(
   db: Client,
@@ -96,8 +105,11 @@ export async function getComprehensiveReportData(
   viewer: ReportViewer,
   filters: ReportFilters,
   unitAffiliate: string | null,
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<ReportDataset> {
   const unitScope = isUnitManagerScope(viewer.roleCode, viewer.isPlatformOwner);
+  // Both datasets below select through the `wp` alias, so one predicate serves.
+  const confine = affiliatePredicate(scope, 'wp.affiliate_code');
   const wp = workPaperFilters(filters);
 
   // ---- Observations ----
@@ -113,6 +125,8 @@ export async function getComprehensiveReportData(
       obsArgs.push(unitAffiliate);
     }
   }
+  obsWhere += confine.clause;
+  obsArgs.push(...confine.args);
 
   const obsRes = await db.execute({
     sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference, wp.risk_rating AS risk_rating,
@@ -173,6 +187,8 @@ export async function getComprehensiveReportData(
       apArgs.push(unitAffiliate);
     }
   }
+  apWhere += confine.clause;
+  apArgs.push(...confine.args);
 
   const apRes = await db.execute({
     sql: `SELECT ap.action_plan_id AS id, ap.action_number AS action_number,
