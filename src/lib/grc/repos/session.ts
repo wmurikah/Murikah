@@ -33,6 +33,13 @@ export interface SessionIdentity {
   userEmail?: string;
   /** True when users.must_change_password is set, forcing the change-password flow. */
   mustChangePassword: boolean;
+  /**
+   * The user's own `users.affiliate_code`, or null when they have none. Read on
+   * every request because it is a security scope, not a preference: a role
+   * confined to its affiliate (Build Prompt 45) is bounded by this value, so it
+   * must be as fresh as the identity it belongs to.
+   */
+  affiliateCode: string | null;
 }
 
 export interface SessionMeta {
@@ -87,6 +94,7 @@ export async function resolveSession(
                  ${U.user_id} AS user_id, ${U.full_name} AS full_name, ${U.email} AS email,
                  ${U.role_code} AS role_code, ${U.is_platform_owner} AS is_platform_owner,
                  ${U.must_change_password} AS must_change_password,
+                 ${U.affiliate_code} AS affiliate_code,
                  ${O.organization_id} AS organization_id, ${O.org_name} AS org_name
             FROM sessions s
             JOIN users u ON ${U.user_id} = ${S.user_id}
@@ -128,6 +136,10 @@ export async function resolveSession(
     homeOrganizationName: String(row.org_name),
     userName: row.full_name == null ? undefined : String(row.full_name),
     userEmail: row.email == null ? undefined : String(row.email),
+    affiliateCode:
+      row.affiliate_code == null || String(row.affiliate_code) === ''
+        ? null
+        : String(row.affiliate_code),
     mustChangePassword: Number(row.must_change_password ?? 0) === 1,
   };
 }

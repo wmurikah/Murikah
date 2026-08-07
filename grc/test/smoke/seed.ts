@@ -43,6 +43,19 @@ export const SMOKE = {
   otherOrgUserEmail: 'coast.admin@coastenergy.example',
   otherOrgUserId: 'USR-COAST',
   affiliateCode: 'HKL',
+  // A second affiliate, and a finding inside it, so affiliate confinement has
+  // something real to exclude (Build Prompt 45). Without a second affiliate a
+  // confined viewer would see everything anyway and the test would prove nothing.
+  otherAffiliateCode: 'HPL',
+  otherAffiliateWorkPaperId: 'WP-HPL-1',
+  // A role confined to its user's affiliate, and two users in it: one with an
+  // affiliate, one with none. The second is the state that must refuse rather
+  // than quietly show an empty list.
+  confinedRole: 'AFFILIATE_LEAD',
+  confinedUserId: 'USR-AFF-LEAD',
+  confinedUserEmail: 'lead.hkl@hasspetroleum.com',
+  unassignedUserId: 'USR-AFF-NONE',
+  unassignedUserEmail: 'lead.none@hasspetroleum.com',
   auditAreaId: 'AA-FIN',
   subAreaId: 'SA-TREAS',
   draftWorkPaperId: 'WP-DRAFT-1',
@@ -121,6 +134,7 @@ const ROLES: [string, string][] = [
   ['SENIOR_MGMT', 'Senior Management'],
   ['UNIT_MANAGER', 'Unit Manager'],
   ['JUNIOR_STAFF', 'Junior Staff'],
+  ['AFFILIATE_LEAD', 'Affiliate Lead'],
 ];
 
 const MODULES = PERMISSION_MODULES.map((m) => m.code);
@@ -220,6 +234,7 @@ export function seedDatabase(db: DatabaseSync): void {
         module_code: module,
         action_code: action,
         is_allowed: 1,
+        scope_to_affiliate: 0,
       });
       insert(db, 'role_permissions', {
         organization_id: PLATFORM_DEFAULT_ORG,
@@ -227,6 +242,7 @@ export function seedDatabase(db: DatabaseSync): void {
         module_code: module,
         action_code: action,
         is_allowed: action === 'read' || action === 'create' || action === 'update' ? 1 : 0,
+        scope_to_affiliate: 0,
       });
     }
   }
@@ -245,7 +261,30 @@ export function seedDatabase(db: DatabaseSync): void {
       module_code: module,
       action_code: action,
       is_allowed: 1,
+      scope_to_affiliate: 0,
     });
+  }
+  // Hass's own grants for the confined role (Build Prompt 45). Auditor-side
+  // permissions deliberately, so the row-level visibility rules would show them
+  // the whole organisation and the affiliate confinement is the only thing
+  // narrowing what they see. That is what makes the assertions about it mean
+  // something.
+  for (const module of MODULES) {
+    for (const action of ACTIONS) {
+      insert(db, 'role_permissions', {
+        organization_id: SMOKE.orgId,
+        role_code: SMOKE.confinedRole,
+        module_code: module,
+        action_code: action,
+        is_allowed:
+          module === 'WORK_PAPER' || module === 'ACTION_PLAN' || module === 'REPORT'
+            ? action === 'read' || action === 'create' || action === 'update'
+              ? 1
+              : 0
+            : 0,
+        scope_to_affiliate: 1,
+      });
+    }
   }
   // The other organisation holds its OWN auditor grants, deliberately narrower
   // than the defaults. This is the control for the tenant-scoping fix: when the
@@ -259,6 +298,7 @@ export function seedDatabase(db: DatabaseSync): void {
         module_code: module,
         action_code: action,
         is_allowed: action === 'read' ? 1 : 0,
+        scope_to_affiliate: 0,
       });
     }
   }
@@ -287,6 +327,26 @@ export function seedDatabase(db: DatabaseSync): void {
       status: 'ACTIVE',
       must_change_password: 0,
       is_platform_owner: isOwner,
+      created_at: now,
+    });
+  }
+
+  // The confined pair: one with an affiliate, one without.
+  for (const [id, email, name, affiliate] of [
+    [SMOKE.confinedUserId, SMOKE.confinedUserEmail, 'Kamau Lead', SMOKE.affiliateCode],
+    [SMOKE.unassignedUserId, SMOKE.unassignedUserEmail, 'Njeri Unassigned', null],
+  ] as const) {
+    insert(db, 'users', {
+      user_id: id,
+      organization_id: SMOKE.orgId,
+      email,
+      full_name: name,
+      password_hash: seedPasswordHash(SMOKE.password),
+      role_code: SMOKE.confinedRole,
+      affiliate_code: affiliate,
+      status: 'ACTIVE',
+      must_change_password: 0,
+      is_platform_owner: 0,
       created_at: now,
     });
   }
@@ -372,6 +432,15 @@ export function seedDatabase(db: DatabaseSync): void {
     is_active: 1,
     created_at: now,
   });
+  insert(db, 'affiliates', {
+    affiliate_code: SMOKE.otherAffiliateCode,
+    organization_id: SMOKE.orgId,
+    affiliate_name: 'Hass Pipeline Limited',
+    country: 'Kenya',
+    region: 'Mombasa',
+    is_active: 1,
+    created_at: now,
+  });
   insert(db, 'audit_areas', {
     audit_area_id: SMOKE.auditAreaId,
     organization_id: SMOKE.orgId,
@@ -434,12 +503,55 @@ export function seedDatabase(db: DatabaseSync): void {
       updated_at: now,
     });
   }
+  // A finding in the second affiliate. Everything else the seed creates is in
+  // HKL, so this is the row a confined HKL viewer must never see, and the row an
+  // unconfined viewer must still see.
+  insert(db, 'work_papers', {
+    work_paper_id: SMOKE.otherAffiliateWorkPaperId,
+    organization_id: SMOKE.orgId,
+    work_paper_ref: 'WP/2026/HPL',
+    created_by: SMOKE.userId,
+    year: 2026,
+    affiliate_code: SMOKE.otherAffiliateCode,
+    audit_area_id: SMOKE.auditAreaId,
+    sub_area_id: SMOKE.subAreaId,
+    work_paper_date: today,
+    observation_title: 'Pipeline stock counts not reconciled (WP/2026/HPL)',
+    observation_description: 'Depot stock counts were not reconciled to the system.',
+    risk_rating: 'High',
+    recommendation: 'Reconcile depot counts monthly.',
+    assigned_auditor_id: SMOKE.auditorId,
+    assigned_auditor_name: 'Amina Auditor',
+    status: 'Approved',
+    revision_count: 0,
+    prepared_by_id: SMOKE.userId,
+    prepared_by_name: 'Wilberforce Murikah',
+    created_at: now,
+    updated_at: now,
+  });
+  insert(db, 'action_plans', {
+    action_plan_id: 'AP-HPL-1',
+    organization_id: SMOKE.orgId,
+    work_paper_id: SMOKE.otherAffiliateWorkPaperId,
+    affiliate_code: SMOKE.otherAffiliateCode,
+    action_number: 'AP/2026/HPL',
+    action_description: 'Introduce weekly depot reconciliations.',
+    status: 'In Progress',
+    due_date: today,
+    owner_ids: `,${SMOKE.auditeeId},`,
+    owner_names: 'Otieno Owner',
+    created_by: SMOKE.userId,
+    created_at: now,
+    updated_at: now,
+  });
+
   const ftsInsert = db.prepare(
     `INSERT INTO work_papers_fts (rowid, observation_title, observation_description, recommendation)
       SELECT rowid, observation_title, observation_description, recommendation
         FROM work_papers WHERE work_paper_id = ?`,
   );
   for (const [id] of workPapers) ftsInsert.run(id);
+  ftsInsert.run(SMOKE.otherAffiliateWorkPaperId);
 
   insert(db, 'work_paper_requirements', {
     requirement_id: SMOKE.requirementId,

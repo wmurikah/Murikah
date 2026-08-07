@@ -22,6 +22,15 @@ import {
   type WorkPaperViewer,
 } from './workPaperVisibility';
 import { WP_STATUS } from '../workflow/workPaperActions';
+import {
+  affiliatePredicate,
+  affiliateVisible,
+  UNCONFINED,
+  type AffiliateScope,
+} from '@grc/auth/affiliateScope';
+import { C, cols } from '@grc/schema/columns';
+
+const WPC = cols(C.work_papers);
 
 export interface WorkPaperListRow {
   id: string;
@@ -204,6 +213,13 @@ export async function listWorkPapers(
     args.push(filters.riskRating);
   }
 
+  // Affiliate confinement (Build Prompt 45). This is a boundary, not the
+  // user-chosen affiliate filter above it: both may apply at once, and a
+  // confined viewer who filters to another affiliate simply sees nothing.
+  const confine = affiliatePredicate(viewer.affiliateScope, `wp.${WPC.affiliate_code}`);
+  where += confine.clause;
+  args.push(...confine.args);
+
   const res = await db.execute({
     sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference,
                  wp.observation_title AS observation_title, wp.affiliate_code AS affiliate_code,
@@ -246,11 +262,21 @@ export type WorkPaperDetail = Record<string, unknown> & {
   revisionCount: number;
 };
 
-/** The full work paper, scoped to the organisation, or null when not found. */
+/**
+ * The full work paper, scoped to the organisation, or null when not found.
+ *
+ * `scope` confines it to the viewer's affiliate when their role is confined
+ * (Build Prompt 45). A list predicate alone would not be a boundary: the detail
+ * route takes an id from the URL, so without this a confined viewer could open
+ * any finding in the organisation by guessing or being sent a link. Absent
+ * scope means unconfined, which is what every internal caller that has no viewer
+ * (the workflow engine, the notification builders) legitimately needs.
+ */
 export async function getWorkPaper(
   db: Client,
   organizationId: string,
   id: string,
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<WorkPaperDetail | null> {
   const res = await db.execute({
     sql: `SELECT wp.*, aff.affiliate_name AS affiliate_name, aa.area_name AS audit_area_name,
@@ -267,6 +293,11 @@ export async function getWorkPaper(
   });
   const row = res.rows[0];
   if (!row) return null;
+  // Outside the viewer's affiliate reads as "not found", never as "forbidden":
+  // a distinguishable refusal would confirm the finding exists.
+  if (!affiliateVisible(scope, row.affiliate_code == null ? null : String(row.affiliate_code))) {
+    return null;
+  }
   const detail = { ...row } as Record<string, unknown>;
   detail.id = String(row.work_paper_id);
   detail.reference = String(row.work_paper_ref ?? row.work_paper_id);

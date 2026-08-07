@@ -20,6 +20,7 @@ import {
   PERMISSION_ACTIONS,
   PLATFORM_DEFAULT_ORG,
   selectScopedRows,
+  type ScopedMatrixRow,
 } from '../../src/lib/grc/auth/matrix.ts';
 
 const auditor = buildMatrix([
@@ -120,19 +121,27 @@ test('the module and action lists come from the one catalogue', () => {
   }
 });
 
+const row = (
+  organizationId: string,
+  actionCode: string,
+  isAllowed: boolean,
+  scopeToAffiliate = false,
+): ScopedMatrixRow => ({
+  organizationId,
+  moduleCode: 'WORK_PAPER',
+  actionCode,
+  isAllowed,
+  scopeToAffiliate,
+});
+
 test('selectScopedRows prefers the organisation own grants over the defaults', () => {
   // Build Prompt 44, AC-01. The matrix is tenant data: an organisation resolves
   // its own rows when it has any, and the platform defaults otherwise.
   const rows = [
-    { organizationId: 'GLOBAL', moduleCode: 'WORK_PAPER', actionCode: 'read', isAllowed: true },
-    { organizationId: 'GLOBAL', moduleCode: 'WORK_PAPER', actionCode: 'delete', isAllowed: true },
-    { organizationId: 'ORG-HASS', moduleCode: 'WORK_PAPER', actionCode: 'read', isAllowed: true },
-    {
-      organizationId: 'ORG-HASS',
-      moduleCode: 'WORK_PAPER',
-      actionCode: 'delete',
-      isAllowed: false,
-    },
+    row('GLOBAL', 'read', true),
+    row('GLOBAL', 'delete', true),
+    row('ORG-HASS', 'read', true),
+    row('ORG-HASS', 'delete', false),
   ];
 
   const hass = selectScopedRows(rows, 'ORG-HASS', 'GLOBAL');
@@ -147,9 +156,9 @@ test('selectScopedRows prefers the organisation own grants over the defaults', (
   // The fallback is all-or-nothing per role, never a cell-by-cell merge: an
   // administrator who unticks a cell must be able to trust that it is revoked,
   // not quietly re-granted by a default underneath it.
-  const partial = [
-    { organizationId: 'GLOBAL', moduleCode: 'REPORT', actionCode: 'export', isAllowed: true },
-    { organizationId: 'ORG-HASS', moduleCode: 'WORK_PAPER', actionCode: 'read', isAllowed: true },
+  const partial: ScopedMatrixRow[] = [
+    { ...row('GLOBAL', 'export', true), moduleCode: 'REPORT' },
+    row('ORG-HASS', 'read', true),
   ];
   const own = selectScopedRows(partial, 'ORG-HASS', 'GLOBAL');
   assert.equal(own.rows.length, 1, 'the defaults must not be merged in');
@@ -165,6 +174,36 @@ test('selectScopedRows prefers the organisation own grants over the defaults', (
   const empty = selectScopedRows([], 'ORG-HASS', 'GLOBAL');
   assert.deepEqual(empty.rows, []);
   assert.equal(canMatrix(buildMatrix(empty.rows), 'read', 'WORK_PAPER'), false);
+});
+
+test('selectScopedRows carries the affiliate confinement with the grants', () => {
+  // Build Prompt 45. The flag is stored on every grant row for the role, so it
+  // is read as "any row set": the save writes the whole set atomically and
+  // cannot leave them disagreeing, and a hand-edited database fails closed.
+  const confined = selectScopedRows(
+    [row('ORG-HASS', 'read', true, true), row('ORG-HASS', 'delete', false, true)],
+    'ORG-HASS',
+    'GLOBAL',
+  );
+  assert.equal(confined.scopeToAffiliate, true);
+
+  const open = selectScopedRows([row('ORG-HASS', 'read', true)], 'ORG-HASS', 'GLOBAL');
+  assert.equal(open.scopeToAffiliate, false);
+
+  // Fail closed: a single set row confines the role.
+  const mixed = selectScopedRows(
+    [row('ORG-HASS', 'read', true), row('ORG-HASS', 'delete', false, true)],
+    'ORG-HASS',
+    'GLOBAL',
+  );
+  assert.equal(mixed.scopeToAffiliate, true);
+
+  // The confinement travels with the rows that were chosen, so an organisation
+  // inheriting the defaults inherits their confinement, and one with its own
+  // grants is never confined by a default it does not use.
+  const rows = [row('GLOBAL', 'read', true, true), row('ORG-HASS', 'read', true, false)];
+  assert.equal(selectScopedRows(rows, 'ORG-COAST', 'GLOBAL').scopeToAffiliate, true);
+  assert.equal(selectScopedRows(rows, 'ORG-HASS', 'GLOBAL').scopeToAffiliate, false);
 });
 
 test('the platform default sentinel is the shared GLOBAL organisation', () => {

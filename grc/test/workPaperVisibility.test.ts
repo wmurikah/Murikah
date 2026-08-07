@@ -12,12 +12,14 @@ import {
   seesForeignDrafts,
   type WorkPaperViewer,
 } from '../../src/lib/grc/repos/workPaperVisibility.ts';
+import { UNCONFINED } from '../../src/lib/grc/auth/affiliateScope.ts';
 
 const viewer = (over: Partial<WorkPaperViewer>): WorkPaperViewer => ({
   userId: 'U1',
   roleCode: 'AUDITOR',
   perms: [],
   isPlatformOwner: false,
+  affiliateScope: UNCONFINED,
   ...over,
 });
 

@@ -129,9 +129,28 @@ const FOREIGN_KEYS: Record<string, Record<string, string>> = {
   },
 };
 
+/**
+ * Column defaults, where the live schema declares one. A NOT NULL column with a
+ * default must carry it here too, or the smoke database is stricter than the
+ * live one and refuses an insert the live database accepts: a false failure is
+ * worse than the one the constraints were added to catch.
+ */
+const DEFAULTS: Record<string, Record<string, string>> = {
+  // Migration 002: added with a default, so existing rows and any insert that
+  // omits it mean "not confined".
+  role_permissions: { scope_to_affiliate: '0' },
+};
+
 /** Columns a row cannot be written without. */
 const NOT_NULL: Record<string, string[]> = {
-  role_permissions: ['organization_id', 'role_code', 'module_code', 'action_code', 'is_allowed'],
+  role_permissions: [
+    'organization_id',
+    'role_code',
+    'module_code',
+    'action_code',
+    'is_allowed',
+    'scope_to_affiliate',
+  ],
   permission_modules: ['module_code'],
   permission_actions: ['action_code'],
 };
@@ -143,6 +162,8 @@ export function createTables(db: DatabaseSync, tables: Map<string, string[]>): v
       let def = c;
       if (PRIMARY_KEYS[name] === c) def += ' PRIMARY KEY';
       else if (NOT_NULL[name]?.includes(c)) def += ' NOT NULL';
+      const fallback = DEFAULTS[name]?.[c];
+      if (fallback !== undefined) def += ` DEFAULT ${fallback}`;
       const reference = FOREIGN_KEYS[name]?.[c];
       if (reference) def += ` REFERENCES ${reference}`;
       return def;

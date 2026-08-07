@@ -40,6 +40,7 @@ export const POST: APIRoute = async ({ locals }) => {
     grc.organizationId,
     new Map([...wpLabels, ...apLabels]),
     new Date(),
+    grc.affiliateScope,
   );
   const result = await analyticsInsights(
     db,
