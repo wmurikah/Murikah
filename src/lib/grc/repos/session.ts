@@ -4,6 +4,13 @@
  * session id; this module creates, resolves and deletes the row behind it, and
  * resolves the signed-in user's identity and home organisation. Column names
  * follow the hassaudit conventions (documented in grc/docs/schema-assumptions.md).
+ *
+ * Nothing in this module is cached, deliberately and permanently (Build Prompt
+ * 42). Session validity, revocation and the user's identity, role and home
+ * organisation are resolved from the database on every single request. A revoked
+ * session must stop working at once, and a cached copy of an identity is a cached
+ * copy of an authorisation decision. If a future change makes this path hot, the
+ * answer is a better query, not a cache entry.
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';

@@ -5,9 +5,17 @@
  * from the typed schema layer. Areas and sub-areas soft-delete via deleted_at,
  * and deletion is guarded: an area with sub-areas or referencing work papers, and
  * a sub-area referenced by a work paper, cannot be deleted (deactivate instead).
+ *
+ * The two list reads are cache-aside (Build Prompt 42): hot, read-mostly and
+ * namespaced under the acting organisation, so no tenant can reach another's
+ * entry. Every mutation below invalidates the organisation's audit-universe
+ * entries before it returns, so the setup screen shows the edit that was just
+ * made rather than a cached copy of what it replaced.
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
+import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
+import { invalidateAuditUniverse } from '@grc/cache/invalidate';
 
 const AA = cols(C.audit_areas);
 const SA = cols(C.sub_areas);
@@ -52,8 +60,9 @@ export interface SubAreaInput {
 // ---- Audit areas -----------------------------------------------------------
 
 export async function listAuditAreas(db: Client, organizationId: string): Promise<AuditArea[]> {
-  const res = await db.execute({
-    sql: `SELECT aa.${C.audit_areas.audit_area_id} AS id, aa.${C.audit_areas.area_code} AS code,
+  return cached(db, cacheKeys.auditAreas(organizationId), CACHE_TTL.reference, async () => {
+    const res = await db.execute({
+      sql: `SELECT aa.${C.audit_areas.audit_area_id} AS id, aa.${C.audit_areas.area_code} AS code,
                  aa.${C.audit_areas.area_name} AS name, aa.${C.audit_areas.description} AS description,
                  aa.${C.audit_areas.is_active} AS is_active,
                  (SELECT COUNT(*) FROM sub_areas sa
@@ -62,16 +71,17 @@ export async function listAuditAreas(db: Client, organizationId: string): Promis
             FROM audit_areas aa
            WHERE aa.${C.audit_areas.organization_id} = ? AND aa.${C.audit_areas.deleted_at} IS NULL
         ORDER BY aa.${C.audit_areas.is_active} DESC, aa.${C.audit_areas.area_name}`,
-    args: [organizationId],
+      args: [organizationId],
+    });
+    return res.rows.map((r) => ({
+      id: String(r.id),
+      code: s(r.code),
+      name: String(r.name ?? r.id),
+      description: s(r.description),
+      isActive: Number(r.is_active ?? 0) === 1,
+      subAreaCount: Number(r.sub_count ?? 0),
+    }));
   });
-  return res.rows.map((r) => ({
-    id: String(r.id),
-    code: s(r.code),
-    name: String(r.name ?? r.id),
-    description: s(r.description),
-    isActive: Number(r.is_active ?? 0) === 1,
-    subAreaCount: Number(r.sub_count ?? 0),
-  }));
 }
 
 export async function createAuditArea(
@@ -88,6 +98,7 @@ export async function createAuditArea(
           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
     args: [id, organizationId, input.code, input.name, input.description, now, now],
   });
+  await invalidateAuditUniverse(db, organizationId);
   return id;
 }
 
@@ -103,6 +114,7 @@ export async function updateAuditArea(
            WHERE ${AA.organization_id} = ? AND ${AA.audit_area_id} = ?`,
     args: [input.code, input.name, input.description, new Date().toISOString(), organizationId, id],
   });
+  await invalidateAuditUniverse(db, organizationId);
 }
 
 export async function setAuditAreaActive(
@@ -116,6 +128,7 @@ export async function setAuditAreaActive(
            WHERE ${AA.organization_id} = ? AND ${AA.audit_area_id} = ?`,
     args: [active ? 1 : 0, new Date().toISOString(), organizationId, id],
   });
+  await invalidateAuditUniverse(db, organizationId);
 }
 
 /** Whether an area still has sub-areas, or is referenced by a work paper. */
@@ -150,6 +163,7 @@ export async function deleteAuditArea(
            WHERE ${AA.organization_id} = ? AND ${AA.audit_area_id} = ?`,
     args: [now, now, organizationId, id],
   });
+  await invalidateAuditUniverse(db, organizationId);
 }
 
 // ---- Sub-areas -------------------------------------------------------------
@@ -159,26 +173,33 @@ export async function listSubAreas(
   organizationId: string,
   auditAreaId: string,
 ): Promise<SubArea[]> {
-  const res = await db.execute({
-    sql: `SELECT ${SA.sub_area_id} AS id, ${SA.audit_area_id} AS audit_area_id,
+  return cached(
+    db,
+    cacheKeys.subAreas(organizationId, auditAreaId),
+    CACHE_TTL.reference,
+    async () => {
+      const res = await db.execute({
+        sql: `SELECT ${SA.sub_area_id} AS id, ${SA.audit_area_id} AS audit_area_id,
                  ${SA.sub_area_name} AS name, ${SA.control_objectives} AS control_objectives,
                  ${SA.risk_description} AS risk_description, ${SA.test_objective} AS test_objective,
                  ${SA.testing_steps} AS testing_steps, ${SA.is_active} AS is_active
             FROM sub_areas
            WHERE ${SA.organization_id} = ? AND ${SA.audit_area_id} = ? AND ${SA.deleted_at} IS NULL
         ORDER BY ${SA.is_active} DESC, ${SA.sub_area_name}`,
-    args: [organizationId, auditAreaId],
-  });
-  return res.rows.map((r) => ({
-    id: String(r.id),
-    auditAreaId: String(r.audit_area_id),
-    name: String(r.name ?? r.id),
-    controlObjectives: s(r.control_objectives),
-    riskDescription: s(r.risk_description),
-    testObjective: s(r.test_objective),
-    testingSteps: s(r.testing_steps),
-    isActive: Number(r.is_active ?? 0) === 1,
-  }));
+        args: [organizationId, auditAreaId],
+      });
+      return res.rows.map((r) => ({
+        id: String(r.id),
+        auditAreaId: String(r.audit_area_id),
+        name: String(r.name ?? r.id),
+        controlObjectives: s(r.control_objectives),
+        riskDescription: s(r.risk_description),
+        testObjective: s(r.test_objective),
+        testingSteps: s(r.testing_steps),
+        isActive: Number(r.is_active ?? 0) === 1,
+      }));
+    },
+  );
 }
 
 export async function createSubArea(
@@ -208,6 +229,7 @@ export async function createSubArea(
       now,
     ],
   });
+  await invalidateAuditUniverse(db, organizationId);
   return id;
 }
 
@@ -233,6 +255,7 @@ export async function updateSubArea(
       id,
     ],
   });
+  await invalidateAuditUniverse(db, organizationId);
 }
 
 export async function setSubAreaActive(
@@ -246,6 +269,7 @@ export async function setSubAreaActive(
            WHERE ${SA.organization_id} = ? AND ${SA.sub_area_id} = ?`,
     args: [active ? 1 : 0, new Date().toISOString(), organizationId, id],
   });
+  await invalidateAuditUniverse(db, organizationId);
 }
 
 export async function subAreaInUse(
@@ -268,4 +292,5 @@ export async function deleteSubArea(db: Client, organizationId: string, id: stri
            WHERE ${SA.organization_id} = ? AND ${SA.sub_area_id} = ?`,
     args: [now, now, organizationId, id],
   });
+  await invalidateAuditUniverse(db, organizationId);
 }

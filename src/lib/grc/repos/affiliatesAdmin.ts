@@ -6,9 +6,15 @@
  * is immutable once created; deletion is blocked while any work paper or action
  * plan references the affiliate (deactivate instead), and is otherwise a
  * soft-delete via deleted_at.
+ *
+ * The list read is cache-aside (Build Prompt 42), namespaced under the acting
+ * organisation, and every mutation invalidates that namespace before returning,
+ * so the setup screen never shows a stale roster.
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
+import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
+import { invalidateAffiliates } from '@grc/cache/invalidate';
 
 const AFF = cols(C.affiliates);
 const WP = cols(C.work_papers);
@@ -32,21 +38,23 @@ const s = (v: unknown): string | null => (v == null ? null : String(v));
 
 /** All non-deleted affiliates for the organisation, active first then by name. */
 export async function listAffiliates(db: Client, organizationId: string): Promise<Affiliate[]> {
-  const res = await db.execute({
-    sql: `SELECT ${AFF.affiliate_code} AS code, ${AFF.affiliate_name} AS name,
+  return cached(db, cacheKeys.affiliates(organizationId), CACHE_TTL.reference, async () => {
+    const res = await db.execute({
+      sql: `SELECT ${AFF.affiliate_code} AS code, ${AFF.affiliate_name} AS name,
                  ${AFF.country} AS country, ${AFF.region} AS region, ${AFF.is_active} AS is_active
             FROM affiliates
            WHERE ${AFF.organization_id} = ? AND ${AFF.deleted_at} IS NULL
         ORDER BY ${AFF.is_active} DESC, ${AFF.affiliate_name}`,
-    args: [organizationId],
+      args: [organizationId],
+    });
+    return res.rows.map((r) => ({
+      code: String(r.code),
+      name: String(r.name ?? r.code),
+      country: s(r.country),
+      region: s(r.region),
+      isActive: Number(r.is_active ?? 0) === 1,
+    }));
   });
-  return res.rows.map((r) => ({
-    code: String(r.code),
-    name: String(r.name ?? r.code),
-    country: s(r.country),
-    region: s(r.region),
-    isActive: Number(r.is_active ?? 0) === 1,
-  }));
 }
 
 /** Whether an affiliate code already exists (any state) for the organisation. */
@@ -78,6 +86,7 @@ export async function createAffiliate(
           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
     args: [code, organizationId, input.name, input.country, input.region, now, now],
   });
+  await invalidateAffiliates(db, organizationId);
 }
 
 /** Update an affiliate's editable fields (the code is immutable). */
@@ -93,6 +102,7 @@ export async function updateAffiliate(
            WHERE ${AFF.organization_id} = ? AND ${AFF.affiliate_code} = ?`,
     args: [input.name, input.country, input.region, new Date().toISOString(), organizationId, code],
   });
+  await invalidateAffiliates(db, organizationId);
 }
 
 /** Activate or deactivate an affiliate. */
@@ -107,6 +117,7 @@ export async function setAffiliateActive(
            WHERE ${AFF.organization_id} = ? AND ${AFF.affiliate_code} = ?`,
     args: [active ? 1 : 0, new Date().toISOString(), organizationId, code],
   });
+  await invalidateAffiliates(db, organizationId);
 }
 
 /** Whether any work paper or action plan in the organisation references the code. */
@@ -138,4 +149,5 @@ export async function deleteAffiliate(
            WHERE ${AFF.organization_id} = ? AND ${AFF.affiliate_code} = ?`,
     args: [new Date().toISOString(), new Date().toISOString(), organizationId, code],
   });
+  await invalidateAffiliates(db, organizationId);
 }
