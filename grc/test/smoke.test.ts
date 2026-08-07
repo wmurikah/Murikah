@@ -28,6 +28,9 @@ import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 // plants known challenges (the smoke run has no Graph mailer to deliver one).
 import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';
 import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
+// The single source for the grantable modules and actions, so the role-save
+// assertion below covers the whole matrix the endpoint writes (Build Prompt 43).
+import { ACTION_CODES, MODULE_CODES } from '../../src/lib/grc/auth/permissionCatalogue.ts';
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -87,6 +90,26 @@ interface MutationStep {
 }
 
 const today = new Date().toISOString().slice(0, 10);
+
+// The matrix the role-save step submits, and the expectation it is checked
+// against. Built from the same catalogue the endpoint writes and the seed's
+// `permission_modules` rows come from (Build Prompt 43), so a module added to
+// the product is covered here without touching this file. A ticked cell is '1';
+// an unticked cell is simply absent from the form, exactly as a browser sends it.
+const AUDITOR_GRANTS: Record<string, string> = {
+  role_code: 'AUDITOR',
+  grant_WORK_PAPER_read: '1',
+  grant_WORK_PAPER_create: '1',
+  grant_WORK_PAPER_update: '1',
+  grant_ACTION_PLAN_read: '1',
+  grant_AUDIT_WORKBENCH_read: '1',
+  grant_REPORT_read: '1',
+  grant_REPORT_export: '1',
+  // Deliberately included so the save is proved to write the modules whose
+  // absence from `permission_modules` used to make every save fail (AC-05).
+  grant_CONFIG_read: '1',
+  grant_AUDIT_LOG_read: '1',
+};
 
 // The dry-run of every mutation endpoint, in dependency order, against the
 // throwaway seeded database (so "rollback" is simply discarding the database).
@@ -716,27 +739,54 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    // Build Prompt 43 (AC-03, AC-05, AC-06). The save used to be a 54-iteration
+    // UPDATE-then-INSERT loop that died on the first module the live
+    // `permission_modules` did not hold, leaving three quarters of the change
+    // applied. Checking one granted cell could not see that, because the cells
+    // it half-applied came first. This asserts the whole matrix: every ticked
+    // cell allowed, every unticked cell denied or absent, and no cell missing.
+    // With the permission foreign keys now declared in the smoke schema, a
+    // module the lookup table lacks fails here rather than in production.
     endpoint: 'access-control.ts',
-    title: 'save the auditor permission matrix',
+    title: 'save the auditor permission matrix, whole and atomically',
     expect: 'success',
     verify: (db) => {
-      const granted = db
+      const rows = db
         .prepare(
-          `SELECT is_allowed AS a FROM role_permissions
-            WHERE role_code = 'AUDITOR' AND module_code = 'WORK_PAPER' AND action_code = 'read'`,
+          `SELECT module_code AS m, action_code AS a, is_allowed AS allowed
+             FROM role_permissions WHERE role_code = 'AUDITOR'`,
         )
-        .get() as { a?: number | bigint } | undefined;
-      assert.equal(Number(granted?.a ?? 0), 1, 'a granted cell must be stored as allowed');
+        .all() as { m: string; a: string; allowed: number | bigint }[];
+      const stored = new Map(rows.map((r) => [`${r.m}_${r.a}`, Number(r.allowed)]));
+
+      // Every module and action the code can grant must be present, so a
+      // half-applied save is a failure rather than a smaller matrix.
+      const expected = new Map<string, number>();
+      for (const module of MODULE_CODES) {
+        for (const action of ACTION_CODES) {
+          expected.set(`${module}_${action}`, AUDITOR_GRANTS[`grant_${module}_${action}`] ? 1 : 0);
+        }
+      }
+      assert.equal(
+        stored.size,
+        expected.size,
+        `the whole matrix must be stored: expected ${expected.size} cells, found ${stored.size}`,
+      );
+      for (const [cell, want] of expected) {
+        assert.equal(stored.get(cell), want, `${cell} must be stored as ${want}`);
+      }
+      // And the modules written must be exactly the catalogue, which is what the
+      // lookup tables hold: a drift between the two is what AC-05 was.
+      const writtenModules = [...new Set(rows.map((r) => r.m))].sort();
+      assert.deepEqual(
+        writtenModules,
+        [...MODULE_CODES].sort(),
+        'the saved modules must match the permission catalogue exactly',
+      );
     },
     method: 'POST',
     path: () => '/api/access-control',
-    form: () => ({
-      role_code: 'AUDITOR',
-      grant_WORK_PAPER_read: '1',
-      grant_WORK_PAPER_create: '1',
-      grant_ACTION_PLAN_read: '1',
-      grant_REPORT_read: '1',
-    }),
+    form: () => AUDITOR_GRANTS,
   },
   {
     // Build Prompt 42: the platform owner's cache recovery lever. Flushing an

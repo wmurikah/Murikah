@@ -85,19 +85,26 @@ test('no acting organisation yields no key at all, so nothing is cached', () => 
 });
 
 test('platform reference data sits outside every tenant namespace', () => {
-  const matrix = cacheKeys.roleMatrix('AUDITOR');
-  assert.ok(matrix.startsWith(namespaceFor(PLATFORM_NAMESPACE)));
-  assert.ok(!matrix.startsWith(namespaceFor(HASS)));
-  assert.ok(cacheKeys.enumLabels('WORK_PAPER_STATUS').startsWith(namespaceFor(PLATFORM_NAMESPACE)));
-  // A role's matrix is keyed by role alone: no organisation can pollute another's.
-  assert.notEqual(cacheKeys.roleMatrix('AUDITOR'), cacheKeys.roleMatrix('SUPER_ADMIN'));
-  assert.ok(cacheKeys.roleMatrix('AUDITOR').startsWith(cacheKeys.roleMatrixPrefix()));
+  const labels = cacheKeys.enumLabels('WORK_PAPER_STATUS');
+  assert.ok(labels.startsWith(namespaceFor(PLATFORM_NAMESPACE)));
+  assert.ok(!labels.startsWith(namespaceFor(HASS)));
+  assert.notEqual(labels, cacheKeys.enumLabels('ACTION_PLAN_STATUS'));
 });
 
-test('the permission matrix lifetime is capped at ten seconds', () => {
-  // The prompt's rule: where immediate cross-edge invalidation cannot be
-  // guaranteed, an access change must still land within five to ten seconds.
-  assert.ok(CACHE_TTL.roleMatrix >= 5 && CACHE_TTL.roleMatrix <= 10);
+test('there is no cache key for the permission matrix at all', () => {
+  // Build Prompt 43 (AC-04): the matrix is read fresh from role_permissions on
+  // every request, so an access change is in force everywhere on the very next
+  // one. This asserts the absence, because the failure mode being prevented is
+  // somebody reintroducing a cache for it without reading the audit.
+  const keyNames = Object.keys(cacheKeys);
+  assert.ok(
+    !keyNames.some((k) => k.toLowerCase().includes('matrix')),
+    `no cache key may name the permission matrix, found: ${keyNames.join(', ')}`,
+  );
+  assert.ok(!('roleMatrix' in CACHE_TTL), 'no lifetime may be declared for the permission matrix');
+});
+
+test('the declared lifetimes match what each entry tolerates', () => {
   assert.ok(CACHE_TTL.dashboard >= 30 && CACHE_TTL.dashboard <= 60);
   assert.ok(CACHE_TTL.reference > CACHE_TTL.dashboard);
 });
@@ -232,16 +239,16 @@ test('an entry expires on its own lifetime even if the backend holds it longer',
   // sixty second floor approximates.
   const forever = new MemoryCache(() => 0);
   const loader = counted('first');
-  const key = cacheKeys.roleMatrix('AUDITOR');
+  const key = cacheKeys.dashboard(HASS, 'stats', 'org');
 
-  await cacheAsideWith(forever, null, key, CACHE_TTL.roleMatrix, loader.load, clock.now);
-  clock.advance(CACHE_TTL.roleMatrix * 1000 + 1);
+  await cacheAsideWith(forever, null, key, CACHE_TTL.dashboard, loader.load, clock.now);
+  clock.advance(CACHE_TTL.dashboard * 1000 + 1);
   const after = counted('second');
   const value = await cacheAsideWith(
     forever,
     null,
     key,
-    CACHE_TTL.roleMatrix,
+    CACHE_TTL.dashboard,
     after.load,
     clock.now,
   );
@@ -327,53 +334,37 @@ test('flushing an organisation removes only that organisation', async () => {
   assert.ok(await cache.get(cacheKeys.affiliates(OTHER)), 'the other tenant survives the flush');
 });
 
-// ---- The immediacy requirement ---------------------------------------------
+// ---- Invalidation is immediate within a request ----------------------------
 
-test('a role_permissions change is reflected on the very next read', async () => {
+test('a write invalidates the entry a later read in the same request would see', async () => {
+  // The general immediacy property the cache-aside layer owes every write path:
+  // a mutation clears the shared entry and this request's memo together, so the
+  // next read anywhere sees the new value with no clock advance at all.
   const clock = fakeClock();
   const cache = new MemoryCache(clock.now);
-  const key = cacheKeys.roleMatrix('AUDITOR');
+  const key = cacheKeys.affiliates(HASS);
+  const request = {};
 
-  // The grant as it stands: an auditor may read work papers but not delete them.
-  let grants = { WORK_PAPER: { read: true, delete: false } };
-  const readMatrix = (): Promise<typeof grants> => Promise.resolve(grants);
+  let rows = ['HASS-KE'];
+  const read = (): Promise<string[]> => Promise.resolve(rows);
 
-  // Request one warms the cache.
-  const first = await cacheAsideWith(cache, {}, key, CACHE_TTL.roleMatrix, readMatrix, clock.now);
-  assert.equal(first.WORK_PAPER.delete, false);
+  const before = await cacheAsideWith(cache, request, key, CACHE_TTL.reference, read, clock.now);
+  assert.deepEqual(before, ['HASS-KE']);
 
-  // An administrator revokes read and grants delete, and the write invalidates.
-  grants = { WORK_PAPER: { read: false, delete: true } };
-  await invalidateKeysWith(cache, null, [key]);
+  rows = ['HASS-KE', 'HASS-UG'];
+  await invalidateKeysWith(cache, request, [key]);
 
-  // The very next request, in a fresh request scope, sees the new matrix. Not
-  // the next sign-in, and with no clock advance at all.
-  const next = await cacheAsideWith(cache, {}, key, CACHE_TTL.roleMatrix, readMatrix, clock.now);
-  assert.equal(next.WORK_PAPER.read, false, 'a revoked grant must be gone at once');
-  assert.equal(next.WORK_PAPER.delete, true, 'a new grant must apply at once');
-});
-
-test('without invalidation the matrix still expires within the cap', async () => {
-  // The backstop for an edge a delete has not reached: even with no
-  // invalidation at all, the stale matrix cannot outlive CACHE_TTL.roleMatrix.
-  const clock = fakeClock();
-  const cache = new MemoryCache(clock.now);
-  const key = cacheKeys.roleMatrix('AUDITOR');
-  let grants = { CONFIG: { update: false } };
-
-  await cacheAsideWith(cache, {}, key, CACHE_TTL.roleMatrix, async () => grants, clock.now);
-  grants = { CONFIG: { update: true } };
-
-  clock.advance(CACHE_TTL.roleMatrix * 1000 + 1);
-  const after = await cacheAsideWith(
+  const sameRequest = await cacheAsideWith(
     cache,
-    {},
+    request,
     key,
-    CACHE_TTL.roleMatrix,
-    async () => grants,
+    CACHE_TTL.reference,
+    read,
     clock.now,
   );
-  assert.equal(after.CONFIG.update, true);
+  assert.deepEqual(sameRequest, ['HASS-KE', 'HASS-UG'], 'the writing request sees its own write');
+  const nextRequest = await cacheAsideWith(cache, {}, key, CACHE_TTL.reference, read, clock.now);
+  assert.deepEqual(nextRequest, ['HASS-KE', 'HASS-UG'], 'and so does the very next request');
 });
 
 // ---- The backend is a swap --------------------------------------------------

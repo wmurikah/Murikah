@@ -98,20 +98,9 @@ export async function invalidateDashboard(
   await invalidatePrefixes(owner, [cacheKeys.dashboardPrefix(organizationId)]);
 }
 
-/**
- * A `role_permissions` write. This is the invalidation that makes an access
- * change take effect on the very next request rather than at the next sign-in,
- * so it runs immediately after the grant is stored, before the response is
- * returned. The matrix TTL (CACHE_TTL.roleMatrix) is the backstop for an edge
- * the delete has not yet reached.
- */
-export async function invalidateRoleMatrix(roleCode?: string): Promise<void> {
-  if (roleCode) {
-    await invalidateKeys(null, [cacheKeys.roleMatrix(roleCode)]);
-    return;
-  }
-  await invalidatePrefixes(null, [cacheKeys.roleMatrixPrefix()]);
-}
+// There is deliberately no permission-matrix invalidator (Build Prompt 43,
+// AC-04). The matrix is never cached: it is read fresh from role_permissions on
+// every request, so a grant change needs nothing invalidated to take effect.
 
 /** An enum vocabulary changed (operator-managed reference data). */
 export async function invalidateEnumLabels(enumType: string): Promise<void> {

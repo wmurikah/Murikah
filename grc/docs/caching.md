@@ -2,8 +2,9 @@
 
 Hot reads are served cache-aside so the platform stays fast at scale. Nothing
 here is allowed to cost correctness: no user is ever shown data they could act
-on wrongly, tenancy is untouched, and an access change still takes effect on the
-very next request.
+on wrongly, tenancy is untouched, and an access change takes effect on the very
+next request (which is why the permission matrix is deliberately not cached at
+all; see below).
 
 Code lives in `src/lib/grc/cache/`.
 
@@ -81,9 +82,10 @@ cannot reach another, so only a short lifetime bounds the staleness.
 
 Every value is wrapped as `{ v, e }` where `e` is an absolute expiry, and the
 expiry is enforced on read (`cache/envelope.ts`). Cloudflare KV floors
-`expirationTtl` at 60 seconds, so without this the permission matrix could not
-have a 5 second lifetime at all. The backend TTL becomes an eviction hint; the
-envelope is the truth. A malformed or expired envelope reads as a miss.
+`expirationTtl` at 60 seconds, so without this no entry could ever have a
+lifetime shorter than a minute, whatever it was declared as. The backend TTL
+becomes an eviction hint; the envelope is the truth. A malformed or expired
+envelope reads as a miss.
 
 ## What is cached
 
@@ -97,7 +99,6 @@ envelope is the truth. A malformed or expired envelope reads as a miss.
 | Subscription and plan flags (`repos/features.ts`)              | `subscription`           | 300s |
 | Enum display labels (`repos/enums.ts`)                         | platform `enum-labels:*` | 300s |
 | Dashboard stats, charts, sidebar counts (`repos/dashboard.ts`) | `dashboard:*`            | 60s  |
-| Permission matrix per role (`auth/rbac.ts`)                    | platform `role-matrix:*` | 5s   |
 
 The dashboard aggregations are the expensive ones and are the reason the short
 window exists: a count that is a few seconds behind is not a count anyone acts on
@@ -136,26 +137,35 @@ An empty organisation id (a platform owner who has entered no instance) yields
 the empty key, which the core treats as "not cacheable" and passes straight to
 the database. No instance means no cached entry.
 
-Platform reference data that belongs to no tenant, the role matrix and the enum
-labels, sits under the reserved `GLOBAL` namespace, the same sentinel the config
-table already uses. Nothing tenant-derived is placed there.
+Platform reference data that belongs to no tenant, the enum labels, sits under
+the reserved `GLOBAL` namespace, the same sentinel the config table already uses.
+Nothing tenant-derived is placed there.
 
-## Immediacy of access changes
+## The permission matrix is not cached
 
-The permission matrix is the one place speed comes near access control, and it is
-fenced on both sides:
+Build Prompt 42 cached the matrix per role on a 5 second lifetime with explicit
+invalidation on every `role_permissions` write. Build Prompt 43 removed it
+outright, and that is the settled position.
 
-1. **Explicit invalidation first.** `repos/permissionsAdmin.ts::setGrant`
-   invalidates the role's cached matrix inside the write itself, so no write path
-   can leave a changed grant cached. `/api/access-control` clears it again once
-   the whole submission lands. The change is in force on the very next request,
-   not at the next sign-in.
-2. **A capped TTL as the backstop.** A Cloudflare KV delete is not instantaneous
-   at every edge, so `CACHE_TTL.roleMatrix` is 5 seconds. Even at an edge the
-   delete has not reached, a stale matrix cannot outlive it.
+`getPermissionMatrix` is one indexed SELECT on a small reference table, and the
+request already makes several queries, so reading it fresh on every request costs
+almost nothing and is correct by construction: there is no invalidation to
+propagate, no window at any edge, and nothing that can go stale. A grant change
+is in force everywhere on the very next request. Caching the answer to "may this
+user do this" earns a few milliseconds and risks the one thing this system must
+never get wrong.
 
-A _user's_ role change needs no invalidation at all: `users.role_code` arrives
-with the identity, which is never cached.
+If a future measurement ever justifies caching it, a 30 to 60 second TTL on the
+shared cache is the only acceptable compromise. Never a per-isolate map: that was
+the original defect (AC-04), because only the isolate that served the save could
+clear it, so an access change reached other edges whenever they happened to
+recycle.
+
+A _user's_ role change needs nothing either: `users.role_code` arrives with the
+identity, which is never cached.
+
+`grc/test/cache.test.ts` asserts the absence, so reintroducing a matrix cache
+without reading the audit fails the suite.
 
 ## Invalidation
 
@@ -190,5 +200,6 @@ disturbs them.
 `grc/test/cache.test.ts` covers hit, miss, in-request dedupe, expiry by envelope,
 key tenancy (including the colon-forging case and the no-instance case), key and
 prefix invalidation, the organisation flush, the local-cache clamp, the Upstash
-adapter over a stubbed `fetch`, and that a `role_permissions` change is reflected
-on the very next read, both by explicit invalidation and by the TTL cap alone.
+adapter over a stubbed `fetch`, that a write is visible to the writing request
+and to the next one alike, and that no cache key or lifetime exists for the
+permission matrix.

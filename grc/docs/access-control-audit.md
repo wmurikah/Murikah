@@ -21,6 +21,26 @@ stronger than it is:
 
 ---
 
+## 0. Resolution status (Build Prompt 43)
+
+This report is a point-in-time audit and is kept as written. Four of its
+findings have since been fixed; the rest of the document still describes the
+code as it stood at the audited commit.
+
+| Finding | Status | Where the fix lives                                                                                                                                                                                                                                                                                                                                                |
+| ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AC-03   | Fixed  | `src/pages/grc/api/access-control.ts` and `src/lib/grc/repos/permissionGrants.ts`: one atomic `db.batch(..., 'write')` that replaces the role's matrix, wrapped in try/catch, logged under `[grc.access-control]`, and returned to the screen as a banner.                                                                                                         |
+| AC-04   | Fixed  | `src/lib/grc/auth/rbac.ts`: the matrix cache is gone. `getPermissionMatrix` reads fresh on every request, so a grant change is in force at every edge on the next one. `grc/test/cache.test.ts` asserts no cache key or lifetime exists for it.                                                                                                                    |
+| AC-05   | Fixed  | `src/lib/grc/auth/permissionCatalogue.ts` is now the single source for the modules and actions; `auth/matrix.ts` and `grc/test/smoke/seed.ts` both derive from it, and the save ensures the lookup rows its foreign keys need. The deliberate reconciliation (why `CONFIG` and `AUDIT_LOG` stayed and `SETUP` and `NOTIFICATION` went) is documented in that file. |
+| AC-06   | Fixed  | `grc/test/smoke/constraints.ts`: the smoke schema now declares the permission keys and the key constraints on the tables the smoke test writes, so a foreign-key or duplicate-key violation fails the harness. `grc/test/smoke.test.ts` saves a whole role matrix and asserts every cell.                                                                          |
+
+The two limitations above still stand, and the query in section 2.3 is still the
+one that settles the live schema. The fixes are written not to depend on its
+answer: the save ensures the lookup rows either way, and the smoke constraints
+are declared as beliefs to be reconciled when the live DDL is recovered.
+
+---
+
 ## 1. Executive summary
 
 The per-request tenancy scoping is in good shape. Every user-facing list a

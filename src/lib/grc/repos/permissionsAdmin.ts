@@ -1,15 +1,23 @@
 /**
  * SUPER_ADMIN access-control administration: read the roles and their permission
- * matrix, and write a grant to role_permissions. The permission model is shared
- * reference data (not tenant data), keyed by role_code, module_code and
- * action_code, so this is not organisation-scoped. SUPER_ADMIN is never modified
- * here; it always holds the full matrix. The write itself invalidates the role's
- * cached matrix, so the change takes effect on the next request no matter which
- * path performed it; callers may still invalidate again, which costs nothing.
+ * matrix, and write a role's whole matrix to role_permissions. The permission
+ * model is shared reference data (not tenant data), keyed by role_code,
+ * module_code and action_code, so this is not organisation-scoped. SUPER_ADMIN is
+ * never modified here; it always holds the full matrix.
+ *
+ * The save is one atomic batch, and it replaces rather than patches (Build Prompt
+ * 43). The screen submits the entire matrix, so the honest statement of intent is
+ * "these are the role's grants", not fifty-four independent edits. What it
+ * replaced was a fifty-four iteration UPDATE-then-INSERT loop: up to 108 serial
+ * round trips from a Worker, no transaction, and a partial-write window that left
+ * a role in a state the administrator never chose and could not see (AC-03).
+ *
+ * The statements themselves live in the pure leaf permissionGrants.ts, so their
+ * order and content are unit-tested without a database.
  */
 import type { Client } from '@libsql/client/web';
 import { buildMatrix, type PermissionMatrix, type MatrixRow } from '@grc/auth/rbac';
-import { invalidateRoleMatrix } from '@grc/cache/invalidate';
+import { buildRoleMatrixStatements, type GrantInput } from './permissionGrants';
 
 /** The role codes, from the roles table, falling back to those with grants. */
 export async function listRoleCodes(db: Client): Promise<string[]> {
@@ -30,7 +38,7 @@ export async function listRoleCodes(db: Client): Promise<string[]> {
   return res.rows.map((r) => String(r.role_code)).filter(Boolean);
 }
 
-/** One role's permission matrix, read fresh (not the request cache). */
+/** One role's permission matrix, read fresh from role_permissions. */
 export async function getRoleMatrix(db: Client, roleCode: string): Promise<PermissionMatrix> {
   const res = await db.execute({
     sql: `SELECT module_code, action_code, is_allowed
@@ -45,31 +53,17 @@ export async function getRoleMatrix(db: Client, roleCode: string): Promise<Permi
   return buildMatrix(rows);
 }
 
+export { buildRoleMatrixStatements };
+export type { GrantInput, GrantStatement } from './permissionGrants';
+
 /**
- * Set one grant, updating the row if present or inserting it otherwise, then
- * invalidate that role's cached matrix. The invalidation lives inside the write
- * rather than beside it, so an access change cannot be left cached by a write
- * path that forgot to clear it.
+ * Write a role's whole permission matrix in one atomic batch. Throws on failure,
+ * having changed nothing: the caller reports the cause to the administrator.
  */
-export async function setGrant(
+export async function saveRoleMatrix(
   db: Client,
   roleCode: string,
-  moduleCode: string,
-  actionCode: string,
-  isAllowed: boolean,
+  grants: readonly GrantInput[],
 ): Promise<void> {
-  const flag = isAllowed ? 1 : 0;
-  const upd = await db.execute({
-    sql: `UPDATE role_permissions SET is_allowed = ?
-            WHERE role_code = ? AND module_code = ? AND action_code = ?`,
-    args: [flag, roleCode, moduleCode, actionCode],
-  });
-  if ((upd.rowsAffected ?? 0) === 0) {
-    await db.execute({
-      sql: `INSERT INTO role_permissions (role_code, module_code, action_code, is_allowed)
-            VALUES (?, ?, ?, ?)`,
-      args: [roleCode, moduleCode, actionCode, flag],
-    });
-  }
-  await invalidateRoleMatrix(roleCode);
+  await db.batch(buildRoleMatrixStatements(roleCode, grants), 'write');
 }

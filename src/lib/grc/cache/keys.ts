@@ -18,10 +18,9 @@
  * the empty key, which cache/core.ts treats as "not cacheable" and passes
  * straight through to the database. No instance means no cached entry.
  *
- * Platform reference data that genuinely belongs to no tenant (the role
- * permission matrix, the enum labels) sits under the reserved GLOBAL namespace,
- * matching the `GLOBAL` sentinel the config table already uses. Nothing tenant
- * derived is ever placed there.
+ * Platform reference data that genuinely belongs to no tenant (the enum labels)
+ * sits under the reserved GLOBAL namespace, matching the `GLOBAL` sentinel the
+ * config table already uses. Nothing tenant derived is ever placed there.
  *
  * No imports, so node strips the types and the unit tests run this directly.
  */
@@ -40,16 +39,18 @@ export const PLATFORM_NAMESPACE = 'GLOBAL';
  * `reference` covers the slowly changing, explicitly invalidated entries: the
  * audit universe, affiliates, the dropdown vocabularies, the general settings
  * and the subscription. `dashboard` is the short window the expensive
- * aggregations may lag by. `roleMatrix` is capped hard: a Cloudflare KV delete
- * is not instantaneous at every edge, so the TTL is the backstop that keeps an
- * access change inside a handful of seconds everywhere even if the explicit
- * invalidation has not yet propagated. Explicit invalidation still runs first
- * and is what normally makes the change take effect on the very next request.
+ * aggregations may lag by.
+ *
+ * There is deliberately no entry for the permission matrix (Build Prompt 43,
+ * AC-04). It is read fresh from `role_permissions` on every request, so an
+ * access change is in force at every edge on the very next one, with no
+ * invalidation to propagate and nothing that can go stale. If a measurement ever
+ * justifies caching it, a 30 to 60 second TTL belongs here; never an unbounded
+ * per-isolate map, which is what the audit found.
  */
 export const CACHE_TTL = {
   reference: 300,
   dashboard: 60,
-  roleMatrix: 5,
 } as const;
 
 function segment(raw: string): string {
@@ -77,16 +78,10 @@ function prefix(organizationId: string, ...parts: string[]): string {
   return `${ns}${parts.map(segment).join(':')}:`;
 }
 
-/**
- * The `config` keys that may be cached. An allow-list, not a deny-list, because
- * the live `config` table is also where the per-user MFA records live
- * (`MFA_TOTP::<user_id>`), and authentication state must never be cached beyond
- * the life of one request. A key absent from here reads straight from the
- * database, so a new config key is uncached until someone deliberately adds it.
- */
-export function isCacheableConfigKey(configKey: string, allowed: readonly string[]): boolean {
-  return allowed.includes(configKey);
-}
+// Which `config` keys may be cached at all is decided in repos/orgConfig.ts,
+// next to the settings list it allow-lists against, not here: the live `config`
+// table is also where the per-user MFA records live, and that rule belongs
+// beside the code that reads them.
 
 export const cacheKeys = {
   /** The audit universe: an organisation's audit areas, with their sub-area counts. */
@@ -130,8 +125,4 @@ export const cacheKeys = {
 
   /** Display labels for an enum type. Platform reference data, no tenant content. */
   enumLabels: (enumType: string): string => key(PLATFORM_NAMESPACE, 'enum-labels', enumType),
-
-  /** One role's permission matrix. Platform reference data, keyed by role only. */
-  roleMatrix: (roleCode: string): string => key(PLATFORM_NAMESPACE, 'role-matrix', roleCode),
-  roleMatrixPrefix: (): string => prefix(PLATFORM_NAMESPACE, 'role-matrix'),
 } as const;

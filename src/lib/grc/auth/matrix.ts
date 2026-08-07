@@ -1,29 +1,28 @@
 /**
  * The RBAC permission matrix, ported from PermissionService.gs. The model is a
  * matrix, not a permission-code list: a role grants module and action pairs. This
- * module is the pure core (no imports, so node strips types and unit-tests it):
- * the modules and actions, the two source aliases, the matrix check, the page map
- * and the backward-compatible legacy-code derivation.
+ * module is the pure core (its only import is the equally pure permission
+ * catalogue, so node strips types and unit-tests it): the modules and actions,
+ * the two source aliases, the matrix check, the page map and the
+ * backward-compatible legacy-code derivation.
  *
  * A user has one role (users.role_code); there is no user_roles junction. The
  * grants live in role_permissions(role_code, module_code, action_code, is_allowed).
+ *
+ * MODULES and ACTIONS are re-exported from permissionCatalogue.ts rather than
+ * declared here (Build Prompt 43): they are the same lists the reference rows in
+ * `permission_modules` and `permission_actions` are generated from, and holding
+ * them in one place is what stops the code and the database drifting apart again.
  */
+import { ACTION_CODES, MODULE_CODES } from './permissionCatalogue.ts';
 
 export type PermissionMatrix = Record<string, Record<string, boolean>>;
 
-export const MODULES = [
-  'WORK_PAPER',
-  'ACTION_PLAN',
-  'AUDITEE_RESPONSE',
-  'AUDIT_WORKBENCH',
-  'REPORT',
-  'AI_ASSIST',
-  'USER',
-  'CONFIG',
-  'AUDIT_LOG',
-] as const;
+/** Every grantable module, from the single catalogue. */
+export const MODULES: readonly string[] = MODULE_CODES;
 
-export const ACTIONS = ['read', 'create', 'update', 'delete', 'approve', 'export'] as const;
+/** Every grantable action, from the single catalogue. */
+export const ACTIONS: readonly string[] = ACTION_CODES;
 
 // The two source aliases, applied before lookup: action `view` maps to `read`,
 // and module `WORK_PAPERS` maps to `WORK_PAPER`.

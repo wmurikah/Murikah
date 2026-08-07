@@ -17,6 +17,7 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { tableDefinition } from './constraints.ts';
 
 interface HranaValue {
   type: 'null' | 'integer' | 'float' | 'text' | 'blob';
@@ -87,23 +88,21 @@ export function parseSchema(schemaMdPath: string): Map<string, string[]> {
   return tables;
 }
 
-/** Creates every dictionary table (untyped columns; SQLite is typeless) plus the FTS index. */
+/**
+ * Creates every dictionary table plus the FTS index. Columns are untyped (SQLite
+ * is typeless and the dictionary records no types), but the keys declared in
+ * constraints.ts are applied, so the smoke database refuses a foreign-key, NOT
+ * NULL or duplicate-key violation exactly as the live database does (Build
+ * Prompt 43, AC-06). Without them, the harness could not catch the class of bug
+ * that made every role save fail.
+ */
 export function createTables(db: DatabaseSync, tables: Map<string, string[]>): void {
+  // node:sqlite enables foreign keys by default; asserting it makes the harness
+  // independent of that default, and matches src/lib/grc/db.ts, which turns them
+  // on explicitly because libSQL leaves them off per connection.
+  db.exec('PRAGMA foreign_keys = ON');
   for (const [name, columns] of tables) {
-    const defs = columns.map((c) => {
-      // The live schema is believed to enforce this reference, which is what
-      // refuses the platform-wide GLOBAL config sentinel; declaring it here
-      // makes the smoke test exercise the self-healing save path. SQLite needs
-      // the parent column unique for the reference to resolve.
-      if (name === 'organizations' && c === 'organization_id') {
-        return 'organization_id PRIMARY KEY';
-      }
-      if (name === 'config' && c === 'organization_id') {
-        return 'organization_id REFERENCES organizations(organization_id)';
-      }
-      return c;
-    });
-    db.exec(`CREATE TABLE ${name} (${defs.join(', ')})`);
+    db.exec(`CREATE TABLE ${name} (${tableDefinition(name, columns)})`);
   }
   // The external-content full-text index over work papers, maintained by the
   // work-papers repository on create, edit and delete.

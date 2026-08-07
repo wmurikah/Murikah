@@ -4,45 +4,41 @@
  *
  * A user carries a single `users.role_code` (there is no user_roles junction).
  * The grants live in `role_permissions(role_code, module_code, action_code,
- * is_allowed)`. getPermissionMatrix builds `{ module: { action: boolean } }`,
- * cached per role; the middleware attaches the matrix to locals.grc, and the
- * server-side gate is `can(locals, action, module)` with the source aliases
- * (view to read, WORK_PAPERS to WORK_PAPER). A SUPER_ADMIN and a platform owner
- * hold the full matrix. The pure core lives in matrix.ts.
+ * is_allowed)`. getPermissionMatrix builds `{ module: { action: boolean } }`;
+ * the middleware attaches the matrix to locals.grc, and the server-side gate is
+ * `can(locals, action, module)` with the source aliases (view to read,
+ * WORK_PAPERS to WORK_PAPER). A SUPER_ADMIN and a platform owner hold the full
+ * matrix. The pure core lives in matrix.ts.
  *
- * Caching the matrix is the one place speed is allowed near access control, and
- * it is fenced on both sides (Build Prompt 42). Every `role_permissions` write
- * invalidates that role's entry immediately, so a changed grant applies on the
- * very next request rather than at the next sign-in; and the lifetime is capped
- * at CACHE_TTL.roleMatrix (a few seconds) so an edge a delete has not yet
- * reached still cannot hold an old matrix for long. The matrix is per role and
- * carries no tenant or user data, so it sits in the platform namespace. Note
- * what is not here: the session, its validity and the user's identity are never
- * cached, and are resolved fresh from the database on every request.
+ * The matrix is not cached, at any layer, deliberately (Build Prompt 43, AC-04).
+ * It is one indexed SELECT on a small reference table, and the request already
+ * makes several queries, so reading it fresh is cheap at this scale and correct
+ * by construction: a permission change is in force at every edge on the very
+ * next request, with no invalidation to propagate and nothing to go stale. What
+ * was here before was a module-level Map with no expiry, which only the isolate
+ * that served the save could ever clear, so an access change reached other edges
+ * whenever they happened to recycle. If a measurement ever justifies caching
+ * this, a 30 to 60 second TTL on a shared cache is the only acceptable
+ * compromise; never an unbounded per-isolate map.
  */
 import type { Client } from '@libsql/client/web';
-import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
-import { invalidateRoleMatrix } from '@grc/cache/invalidate';
 import { buildMatrix, canMatrix, type PermissionMatrix, type MatrixRow } from './matrix';
 
 export * from './matrix';
-export { invalidateRoleMatrix };
 
-/** The permission matrix granted to a role, from role_permissions, cached per role. */
+/** The permission matrix granted to a role, read fresh from role_permissions. */
 export async function getPermissionMatrix(db: Client, roleCode: string): Promise<PermissionMatrix> {
-  return cached(db, cacheKeys.roleMatrix(roleCode), CACHE_TTL.roleMatrix, async () => {
-    const res = await db.execute({
-      sql: `SELECT module_code, action_code, is_allowed
-              FROM role_permissions WHERE role_code = ?`,
-      args: [roleCode],
-    });
-    const rows: MatrixRow[] = res.rows.map((r) => ({
-      moduleCode: String(r.module_code ?? ''),
-      actionCode: String(r.action_code ?? ''),
-      isAllowed: Number(r.is_allowed ?? 0) === 1,
-    }));
-    return buildMatrix(rows);
+  const res = await db.execute({
+    sql: `SELECT module_code, action_code, is_allowed
+            FROM role_permissions WHERE role_code = ?`,
+    args: [roleCode],
   });
+  const rows: MatrixRow[] = res.rows.map((r) => ({
+    moduleCode: String(r.module_code ?? ''),
+    actionCode: String(r.action_code ?? ''),
+    isAllowed: Number(r.is_allowed ?? 0) === 1,
+  }));
+  return buildMatrix(rows);
 }
 
 /** True when the session's matrix grants the action on the module (aliases applied). */
