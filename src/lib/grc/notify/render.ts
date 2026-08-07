@@ -227,6 +227,53 @@ export function buildOtpEmail(code: string): { subject: string; body: string; te
   };
 }
 
+export interface AccountReadyEmail {
+  fullName: string;
+  temporaryPassword: string;
+  signInLink: string;
+}
+
+/**
+ * The "your account is ready" email a new user gets when an admin creates them,
+ * and again when an admin resets their password (Build Prompt 39). It carries
+ * the system-generated temporary password and the sign-in link, and says plainly
+ * that the password must be changed on first use. Sent directly through the
+ * Graph mailer, never queued: an account nobody can sign in to is not something
+ * to leave sitting for the cron drain.
+ */
+export function buildAccountReadyEmail(opts: AccountReadyEmail): {
+  subject: string;
+  body: string;
+  text: string;
+} {
+  const greeting = opts.fullName ? `Hello ${opts.fullName},` : 'Hello,';
+  const intro =
+    'An account has been created for you on the Internal Audit System. Sign in with the temporary password below.';
+  const change =
+    'You will be asked to choose your own password the first time you sign in, and a verification code will be emailed to this address as the second step.';
+  const warning =
+    'Keep this password to yourself. If you were not expecting this email, tell the internal audit team.';
+  const body = [
+    `<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">`,
+    `<div style="background:${NAVY};color:#fff;padding:18px 24px;font-size:16px;font-weight:700">${escapeHtml(HEADER)}</div>`,
+    `<div style="padding:24px">`,
+    `<p style="color:#111827;font-size:14px;margin:0 0 12px">${escapeHtml(greeting)}</p>`,
+    `<p style="color:#111827;font-size:14px;margin:0 0 16px">${escapeHtml(intro)}</p>`,
+    `<p style="font-size:22px;font-weight:700;letter-spacing:0.12em;color:${NAVY};margin:0 0 16px">${escapeHtml(opts.temporaryPassword)}</p>`,
+    `<p style="margin:0 0 16px"><a href="${escapeHtml(opts.signInLink)}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;font-weight:600;padding:11px 18px;border-radius:6px">Sign in</a></p>`,
+    `<p style="color:#111827;font-size:13px;margin:0 0 12px">${escapeHtml(change)}</p>`,
+    `<p style="color:#687080;font-size:13px;margin:0">${escapeHtml(warning)}</p>`,
+    `</div>`,
+    `<div style="padding:16px 24px;background:#f8f4ea;color:#687080;font-size:12px;border-top:1px solid #e5e7eb">${escapeHtml(FOOTER)}</div>`,
+    `</div>`,
+  ].join('');
+  return {
+    subject: 'Your account is ready - Internal Audit System',
+    body,
+    text: `${greeting} ${intro} Temporary password: ${opts.temporaryPassword}. Sign in at ${opts.signInLink}. ${change} ${warning}`,
+  };
+}
+
 /**
  * The test email the Settings -> Email screen sends to prove the connection:
  * a small branded message with a plain-text fallback beside the HTML body.
