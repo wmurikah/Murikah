@@ -45,6 +45,7 @@ import {
   GRC_PLATFORM_PATH,
 } from '@grc/routing';
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
+import { scheduleCacheStatsRollUp } from '@grc/cache';
 import { getCmsEnv } from '@cms/env';
 import { getDb as getCmsDb } from '@cms/db';
 import { readSessionCookie } from '@cms/auth/session';
@@ -225,6 +226,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
     } catch (err) {
       logGrcError(appPath, err);
       return grcErrorResponse(isApi);
+    } finally {
+      // Fold this isolate's cache counters into the shared roll-up, after the
+      // response is decided and through waitUntil where the platform offers one,
+      // so the platform owner's diagnostics never sit in a user's critical path.
+      // Throttled internally, so calling it every request costs almost nothing.
+      scheduleCacheStatsRollUp(context.locals.cfContext?.waitUntil.bind(context.locals.cfContext));
     }
   }
 

@@ -63,6 +63,18 @@
   //     src/lib/rate-limit.ts already skips limiting when the binding is absent,
   //     so the endpoints keep working without it. Re-add it (with a real id from
   //     `wrangler kv namespace create CACHE`) when rate limiting must be enforced.
+  //   - kv_namespaces "GRC_CACHE": the default backend for the GRC cache-aside
+  //     layer (Build Prompt 42, grc/docs/caching.md). Absent, src/lib/grc/cache
+  //     falls back to an in-isolate cache and clamps every lifetime to a few
+  //     seconds, so the app is correct either way and simply caches less. Enable
+  //     it in an environment that can create resources:
+  //       wrangler kv namespace create GRC_CACHE
+  //     then add the binding below with the returned id:
+  //       "kv_namespaces": [{ "binding": "GRC_CACHE", "id": "<id>" }],
+  //     To use an external Redis instead, set the two Upstash secrets and leave
+  //     the binding off entirely:
+  //       wrangler secret put GRC_CACHE_REDIS_URL
+  //       wrangler secret put GRC_CACHE_REDIS_TOKEN
   //   - r2_buckets "ASSETS_BUCKET": no code on main references it yet; it returns
   //     with the downloadable Intelligence report.
   //   - triggers.crons: there is no `scheduled` handler on main, so a trigger

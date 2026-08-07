@@ -7,8 +7,15 @@
  * { "ai_assistance": false, "board_reporting": true }. A platform owner is
  * treated as entitled to everything (handled at the locals.grc.hasFeature seam),
  * regardless of the acting organisation's plan.
+ *
+ * The middleware reads this on every authenticated request, and a plan changes
+ * about as often as a contract is signed, so it is cache-aside under the acting
+ * organisation's namespace (Build Prompt 42). Provisioning invalidates it. Note
+ * that this caches the plan, never the identity or the session that asked for
+ * it: those are resolved fresh on every request.
  */
 import type { Client } from '@libsql/client/web';
+import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
 
 export interface Subscription {
   planCode: string | null;
@@ -37,19 +44,21 @@ function parseFeatures(raw: unknown): Record<string, boolean> {
  * so callers never crash on an unsubscribed tenant.
  */
 export async function loadSubscription(db: Client, organizationId: string): Promise<Subscription> {
-  const res = await db.execute({
-    sql: `SELECT s.plan_code AS plan_code, s.status AS status, p.features_json AS features_json
+  return cached(db, cacheKeys.subscription(organizationId), CACHE_TTL.reference, async () => {
+    const res = await db.execute({
+      sql: `SELECT s.plan_code AS plan_code, s.status AS status, p.features_json AS features_json
             FROM subscriptions s
             LEFT JOIN plans p ON p.plan_code = s.plan_code
            WHERE s.organization_id = ?
            LIMIT 1`,
-    args: [organizationId],
+      args: [organizationId],
+    });
+    const row = res.rows[0];
+    if (!row) return { planCode: null, status: null, features: {} };
+    return {
+      planCode: row.plan_code == null ? null : String(row.plan_code),
+      status: row.status == null ? null : String(row.status),
+      features: parseFeatures(row.features_json),
+    };
   });
-  const row = res.rows[0];
-  if (!row) return { planCode: null, status: null, features: {} };
-  return {
-    planCode: row.plan_code == null ? null : String(row.plan_code),
-    status: row.status == null ? null : String(row.status),
-    features: parseFeatures(row.features_json),
-  };
 }

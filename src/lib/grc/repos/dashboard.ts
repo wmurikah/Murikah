@@ -12,9 +12,21 @@
  *
  * Every column name comes from the typed schema layer (@grc/schema/columns), so a
  * name that is not on the live table fails `pnpm build` rather than the dashboard.
+ *
+ * The three expensive aggregations are cache-aside on a short window (Build
+ * Prompt 42): they are the heaviest queries in the product and a count that is a
+ * few seconds behind is not a count anyone acts on wrongly. Every work-paper and
+ * action-plan mutation clears the organisation's dashboard namespace anyway, so
+ * the window only ever matters between two edges.
+ *
+ * The scope is part of the key, not an afterthought. These reads are scoped by
+ * role and by user as well as by organisation, so an entry computed for one
+ * auditee must never be handed to another: scopeKey() carries exactly the inputs
+ * that change the answer.
  */
 import type { Client, InArgs } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
+import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
 import { NOT_OVERDUE_STATUSES } from '@grc/reports/reportModel';
 import { isAuditeeRole } from '@grc/dashboard/roleNav';
 
@@ -46,6 +58,15 @@ function auditeeScoped(scope: DashboardScope): boolean {
   return isAuditeeRole(scope.roleCode) && !scope.isPlatformOwner;
 }
 
+/**
+ * Everything beyond the organisation that changes the answer, as a key segment.
+ * An auditee-scoped read counts only that user's items, so it is keyed to them;
+ * every other role sees the same organisation-wide figures and shares one entry.
+ */
+function scopeKey(scope: DashboardScope): string {
+  return auditeeScoped(scope) ? `user=${scope.userId}` : 'org';
+}
+
 const s = (v: unknown): string | null => (v == null ? null : String(v));
 const num = (v: unknown): number => Number(v ?? 0);
 
@@ -72,6 +93,19 @@ export interface DashboardStats {
 
 /** The four stat cards, role-scoped. */
 export async function getDashboardStats(
+  db: Client,
+  organizationId: string,
+  scope: DashboardScope,
+): Promise<DashboardStats> {
+  return cached(
+    db,
+    cacheKeys.dashboard(organizationId, 'stats', scopeKey(scope)),
+    CACHE_TTL.dashboard,
+    () => readDashboardStats(db, organizationId, scope),
+  );
+}
+
+async function readDashboardStats(
   db: Client,
   organizationId: string,
   scope: DashboardScope,
@@ -549,6 +583,19 @@ export async function getDashboardCharts(
   organizationId: string,
   year: number,
 ): Promise<DashboardCharts> {
+  return cached(
+    db,
+    cacheKeys.dashboard(organizationId, 'charts', `year=${year}`),
+    CACHE_TTL.dashboard,
+    () => readDashboardCharts(db, organizationId, year),
+  );
+}
+
+async function readDashboardCharts(
+  db: Client,
+  organizationId: string,
+  year: number,
+): Promise<DashboardCharts> {
   const [issuesPerArea, riskPerArea, notImplementedHighRisk, actionPlanStatusPerArea] =
     await Promise.all([
       getIssuesPerArea(db, organizationId, year),
@@ -571,6 +618,19 @@ export interface SidebarCounts {
 
 /** The sidebar badge counts (getSidebarCounts): organisation queues, and the signed-in user's own. */
 export async function getSidebarCounts(
+  db: Client,
+  organizationId: string,
+  userId: string,
+): Promise<SidebarCounts> {
+  return cached(
+    db,
+    cacheKeys.dashboard(organizationId, 'sidebar', `user=${userId}`),
+    CACHE_TTL.dashboard,
+    () => readSidebarCounts(db, organizationId, userId),
+  );
+}
+
+async function readSidebarCounts(
   db: Client,
   organizationId: string,
   userId: string,

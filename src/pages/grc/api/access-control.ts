@@ -42,7 +42,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       await setGrant(db, roleCode, module, action, allowed);
     }
   }
-  invalidateRoleMatrix(roleCode);
+  // setGrant already clears the role's cached matrix on every write; this is the
+  // belt-and-braces clear once the whole submission has landed, so the change is
+  // in force on the very next request rather than at the next sign-in.
+  await invalidateRoleMatrix(roleCode);
   try {
     await writeAuditLog(db, {
       organizationId: grc.organizationId,
