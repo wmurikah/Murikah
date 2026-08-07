@@ -118,9 +118,11 @@ const PRIMARY_KEYS: Record<string, string> = {
 /** `table.column` to the `parent(column)` it references. */
 const FOREIGN_KEYS: Record<string, Record<string, string>> = {
   config: { organization_id: 'organizations(organization_id)' },
-  // The permission model's three references: this is the constraint the role
-  // save violated for every role, every time.
+  // The permission model's references: three to its own reference tables (the
+  // constraint the role save violated for every role, every time), and the
+  // organisation the grants belong to since the matrix became tenant data.
   role_permissions: {
+    organization_id: 'organizations(organization_id)',
     role_code: 'roles(role_code)',
     module_code: 'permission_modules(module_code)',
     action_code: 'permission_actions(action_code)',
@@ -129,7 +131,7 @@ const FOREIGN_KEYS: Record<string, Record<string, string>> = {
 
 /** Columns a row cannot be written without. */
 const NOT_NULL: Record<string, string[]> = {
-  role_permissions: ['role_code', 'module_code', 'action_code', 'is_allowed'],
+  role_permissions: ['organization_id', 'role_code', 'module_code', 'action_code', 'is_allowed'],
   permission_modules: ['module_code'],
   permission_actions: ['action_code'],
 };

@@ -18,6 +18,8 @@ import {
   ACTIONS,
   PERMISSION_MODULES,
   PERMISSION_ACTIONS,
+  PLATFORM_DEFAULT_ORG,
+  selectScopedRows,
 } from '../../src/lib/grc/auth/matrix.ts';
 
 const auditor = buildMatrix([
@@ -116,6 +118,59 @@ test('the module and action lists come from the one catalogue', () => {
       assert.ok(ACTIONS.includes(grant.action), `${grant.action} must be a real action`);
     }
   }
+});
+
+test('selectScopedRows prefers the organisation own grants over the defaults', () => {
+  // Build Prompt 44, AC-01. The matrix is tenant data: an organisation resolves
+  // its own rows when it has any, and the platform defaults otherwise.
+  const rows = [
+    { organizationId: 'GLOBAL', moduleCode: 'WORK_PAPER', actionCode: 'read', isAllowed: true },
+    { organizationId: 'GLOBAL', moduleCode: 'WORK_PAPER', actionCode: 'delete', isAllowed: true },
+    { organizationId: 'ORG-HASS', moduleCode: 'WORK_PAPER', actionCode: 'read', isAllowed: true },
+    {
+      organizationId: 'ORG-HASS',
+      moduleCode: 'WORK_PAPER',
+      actionCode: 'delete',
+      isAllowed: false,
+    },
+  ];
+
+  const hass = selectScopedRows(rows, 'ORG-HASS', 'GLOBAL');
+  assert.equal(hass.inherited, false);
+  assert.equal(canMatrix(buildMatrix(hass.rows), 'delete', 'WORK_PAPER'), false);
+
+  // An organisation with no rows of its own falls back whole, and says so.
+  const coast = selectScopedRows(rows, 'ORG-COAST', 'GLOBAL');
+  assert.equal(coast.inherited, true);
+  assert.equal(canMatrix(buildMatrix(coast.rows), 'delete', 'WORK_PAPER'), true);
+
+  // The fallback is all-or-nothing per role, never a cell-by-cell merge: an
+  // administrator who unticks a cell must be able to trust that it is revoked,
+  // not quietly re-granted by a default underneath it.
+  const partial = [
+    { organizationId: 'GLOBAL', moduleCode: 'REPORT', actionCode: 'export', isAllowed: true },
+    { organizationId: 'ORG-HASS', moduleCode: 'WORK_PAPER', actionCode: 'read', isAllowed: true },
+  ];
+  const own = selectScopedRows(partial, 'ORG-HASS', 'GLOBAL');
+  assert.equal(own.rows.length, 1, 'the defaults must not be merged in');
+  assert.equal(canMatrix(buildMatrix(own.rows), 'export', 'REPORT'), false);
+
+  // No acting organisation (a platform owner above the instances) reads the
+  // defaults, which is exactly what they are there to edit.
+  const platform = selectScopedRows(rows, '', 'GLOBAL');
+  assert.equal(platform.inherited, true);
+  assert.equal(canMatrix(buildMatrix(platform.rows), 'delete', 'WORK_PAPER'), true);
+
+  // Nothing seeded at all is an empty matrix, not a crash and not a full grant.
+  const empty = selectScopedRows([], 'ORG-HASS', 'GLOBAL');
+  assert.deepEqual(empty.rows, []);
+  assert.equal(canMatrix(buildMatrix(empty.rows), 'read', 'WORK_PAPER'), false);
+});
+
+test('the platform default sentinel is the shared GLOBAL organisation', () => {
+  // One sentinel row carries everything that belongs to the platform rather than
+  // to a customer: the config rows, and now the default grants.
+  assert.equal(PLATFORM_DEFAULT_ORG, 'GLOBAL');
 });
 
 test('pageSlugForPath maps app paths onto the section slugs', () => {

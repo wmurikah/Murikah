@@ -77,6 +77,12 @@ function profile(form: FormData): UserInput | null {
 }
 
 const PROFILE_REQUIRED = 'A full name, role and valid email address are required.';
+// The uniqueness check spans every organisation on the platform, by design (see
+// usersAdmin.ts::emailInUse), so the refusal must not. Naming the address would
+// tell one customer's administrator that it exists at another customer, which is
+// a cross-tenant disclosure they can probe one address at a time (audit finding
+// AC-09). The address is deliberately absent from the message.
+const EMAIL_UNAVAILABLE = 'That email address cannot be used. Please try another.';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
@@ -132,9 +138,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (op === 'create') {
       const input = profile(form);
       if (!input) return bad(PROFILE_REQUIRED);
-      if (await emailInUse(db, input.email)) {
-        return bad(`${input.email} already belongs to an account.`);
-      }
+      if (await emailInUse(db, input.email)) return bad(EMAIL_UNAVAILABLE);
       const password = generateTemporaryPassword();
       const id = await createUser(db, org, await hashPassword(password), input);
       await audit('USER.create', id);
@@ -151,9 +155,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (op === 'update') {
       const input = profile(form);
       if (!input) return bad(PROFILE_REQUIRED);
-      if (await emailInUse(db, input.email, userId)) {
-        return bad(`${input.email} already belongs to another account.`);
-      }
+      if (await emailInUse(db, input.email, userId)) return bad(EMAIL_UNAVAILABLE);
       await updateUser(db, org, userId, input);
       await audit('USER.update', userId);
       return ok(`${input.fullName} saved.`);
