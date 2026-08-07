@@ -23,6 +23,11 @@ export interface NavContext {
   isPlatformOwner: boolean;
   /** Whether the subscription plan includes the AI feature (gates analytics and AI settings). */
   hasAi: boolean;
+  /**
+   * Whether an instance is being acted inside. False only for a platform owner
+   * who has selected none, whose navigation is the platform's, not a module's.
+   */
+  instanceSelected?: boolean;
 }
 
 export function isAuditeeRole(roleCode: string): boolean {
@@ -81,8 +86,25 @@ export interface NavGroupDef {
  * auditee roles or anyone who responds or reviews; board reports follow the
  * reports permission or the board roles; analytics is AI-gated for auditor
  * roles; setup is admin only, with AI settings when the plan includes AI.
+ *
+ * A platform owner inside no instance sees none of that: every module needs an
+ * acting organisation, so their navigation is the platform's own, the
+ * all-instances view and provisioning, until they enter one.
  */
 export function buildNav(ctx: NavContext): NavGroupDef[] {
+  if (ctx.isPlatformOwner && ctx.instanceSelected === false) {
+    return [
+      {
+        label: 'Platform',
+        icon: 'overview',
+        items: [
+          { label: 'All organisations', href: '/platform', icon: 'affiliates' },
+          { label: 'Provision organisation', href: '/settings/provision', icon: 'setup' },
+        ],
+      },
+    ];
+  }
+
   const show = {
     workPapers: hasPerm(ctx, 'WORK_PAPERS.view'),
     actionPlans: hasPerm(ctx, 'ACTION_PLANS.view'),
@@ -150,15 +172,18 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
 }
 
 /**
- * The default landing page for the role. Auditee roles land on their overdue
- * action plans when they have any, else on their findings; a platform owner and
- * every other role land on the dashboard.
+ * The default landing page for the role. A platform owner is pinned to no
+ * organisation, so they land on the all-instances view and choose an instance to
+ * enter, never inside a customer's dashboard by default. Auditee roles land on
+ * their overdue action plans when they have any, else on their findings; every
+ * other role lands on the dashboard of the organisation they are pinned to.
  */
 export function defaultLandingPath(
   roleCode: string,
   isPlatformOwner: boolean,
   hasOverdue: boolean,
 ): string {
-  if (isPlatformOwner || !isAuditeeRole(roleCode)) return '/';
+  if (isPlatformOwner) return '/platform';
+  if (!isAuditeeRole(roleCode)) return '/';
   return hasOverdue ? '/action-plans?overdue=1' : '/work-papers';
 }
