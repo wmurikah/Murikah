@@ -68,3 +68,56 @@ The `hassaudit` schema is operator-managed and must not be changed from here.
 The column names this foundation depends on are listed in
 `grc/docs/schema-assumptions.md`, which is the single place to reconcile if any
 differ from the live database.
+
+## Migrations the operator runs
+
+The `hassaudit` schema is operator-managed, so a schema change ships as a
+committed SQL file under `grc/db/migrations/` and the operator applies it to
+Turso. Each file carries its own reasoning and its own verification queries at
+the foot; read the file before running it. The application never applies a
+migration itself: nothing in the Worker issues DDL.
+
+Apply one with the Turso shell, from a checkout at the merged commit:
+
+```sh
+turso db shell hassaudit .dump > backup-$(date +%Y%m%d).sql   # always, first
+turso db shell hassaudit < grc/db/migrations/<file>.sql
+```
+
+Then run the verification queries the file lists and confirm the app still
+signs in.
+
+### Migration 001, tenant-scope the permission matrix
+
+`grc/db/migrations/001-role-permissions-tenant-scope.sql` (Build Prompt 44,
+audit finding AC-01). It adds `organization_id` to `role_permissions` so the
+effective key becomes `(organization_id, role_code, module_code, action_code)`.
+Until it runs, one customer's administrator rewrites every customer's roles with
+a single save.
+
+What it does, and what to expect:
+
+- SQLite cannot add a column to a primary key in place, so it is a table
+  rebuild: new table with the four-column key and the foreign keys, copy, drop,
+  rename. It runs inside one transaction with `PRAGMA foreign_key_check` before
+  the commit, so a copy that orphaned anything aborts rather than lands.
+- **No grant is lost.** Every existing row is copied and assigned to the
+  platform-default sentinel organisation `GLOBAL`, which is exactly what those
+  rows already were: the defaults every organisation now inherits. Duplicate
+  rows for the same cell, which the old table had no key to prevent, collapse to
+  the permissive value, so nobody loses access they held.
+- It creates the inactive `GLOBAL` sentinel organisation row if it is not
+  already there (the same row the platform-wide config already uses). Inactive,
+  so it never appears in an organisation list or the instance switcher.
+
+**Order matters:** run this migration before or immediately as the release
+deploys. The code reads `role_permissions.organization_id`, so on the old table
+every matrix read fails and every non-SUPER_ADMIN user loses their grants until
+it is applied. If the deploy lands first, apply the migration straight away and
+the next request recovers, since nothing is cached.
+
+Afterwards, every organisation resolves the platform defaults until an
+administrator saves that organisation's own set on `/settings/access-control`.
+A platform owner inside no instance edits the defaults themselves; inside an
+instance, the same screen edits that instance's grants. New organisations are
+given their own copy of the defaults at provisioning.

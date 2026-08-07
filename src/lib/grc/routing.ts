@@ -132,6 +132,15 @@ const INSTANCE_FREE_PATHS = new Set([
   // reads the hit rate and flushes a tenant's namespace from above them all.
   GRC_CACHE_PATH,
   '/api/platform/cache',
+  // Access control is reachable from above the instances too (Build Prompt 44).
+  // The permission matrix is tenant data now, and the rows an organisation
+  // inherits until it saves its own are the platform defaults: editing those is
+  // something only the owner does, and only while inside no instance. Inside an
+  // instance the same screen edits that instance's own grants. An instance admin
+  // is pinned to their organisation and is never in the instance-free state, so
+  // this widens nothing for them.
+  '/settings/access-control',
+  '/api/access-control',
   '/change-password',
   '/api/auth/change-password',
   '/mfa',

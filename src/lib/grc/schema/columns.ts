@@ -525,6 +525,7 @@ export const C = {
     description: 'description',
   },
   role_permissions: {
+    organization_id: 'organization_id',
     role_code: 'role_code',
     module_code: 'module_code',
     action_code: 'action_code',

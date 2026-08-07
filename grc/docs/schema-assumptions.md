@@ -596,3 +596,52 @@ SELECT action_code FROM permission_actions ORDER BY action_code;
 The first save of any role reconciles the table by itself, so no manual step is
 required; the queries are worth running once to confirm the reference rows
 landed and that nothing else was disturbed.
+
+## The permission matrix is tenant data (Build Prompt 44)
+
+`role_permissions` carries `organization_id`, and the effective key is
+`(organization_id, role_code, module_code, action_code)`. Applied by
+`grc/db/migrations/001-role-permissions-tenant-scope.sql`; see
+`grc/docs/deploy.md`, "Migration 001", for how the operator runs it.
+
+Before this, the table was keyed by role, module and action alone and the
+comment at the head of `repos/permissionsAdmin.ts` called it shared reference
+data. That was defensible for a single-tenant deployment and wrong for a
+platform: any instance admin holding `CONFIG.update` rewrote every customer's
+roles with one save (AC-01, `grc/docs/access-control-audit.md`).
+
+How it resolves, in `auth/rbac.ts` and the pure `selectScopedRows` beside it:
+
+- One query returns the acting organisation's rows and the platform defaults
+  together, keyed `WHERE role_code = ? AND organization_id IN (?, ?)`.
+- If the organisation holds any row for that role, those rows are the answer.
+  Otherwise the platform defaults are.
+- The choice is all-or-nothing per role, never a cell-by-cell merge. An
+  administrator who unticks a cell has to be able to trust it is revoked rather
+  than quietly re-granted by a default underneath, and an access-control screen a
+  reviewer cannot read is worse than a coarse one. The screen says which of the
+  two it is showing.
+
+Where the defaults live: the `GLOBAL` sentinel organisation, the same inactive
+row the platform-wide config already hangs off
+(`repos/orgConfig.ts::GLOBAL_CONFIG_ORG`, and `PLATFORM_DEFAULT_ORG` in
+`auth/permissionModules.ts`). One sentinel for everything that belongs to the
+platform rather than to a customer. `repos/orgConfig.ts::globalSentinelStatement`
+is the single definition of that row, so whichever path creates it, it is
+identical.
+
+Who may write what:
+
+- An instance admin is pinned to their home organisation by the middleware and
+  cannot switch, so a save reaches their own rows and nothing else.
+- A platform owner inside an instance edits that instance's rows, exactly as its
+  own administrator would.
+- A platform owner inside no instance edits the platform defaults. That is why
+  `/settings/access-control` and `/api/access-control` are in
+  `INSTANCE_FREE_PATHS` (`src/lib/grc/routing.ts`); the gate they sit behind only
+  ever applies to a platform owner, so it widens nothing for anybody else.
+- New organisations are given their own copy of the defaults at provisioning
+  (`repos/provisioning.ts`, in the same batch as the organisation row), rather
+  than a live fallback, so the first administrator sees a real editable set and a
+  later change to the defaults cannot move an existing customer's access
+  underneath them.

@@ -99,6 +99,10 @@ test('the instance-free paths are the platform view, its endpoints and the accou
   assert.equal(isGrcInstanceFreePath('/mfa/setup'), true);
   assert.equal(isGrcInstanceFreePath('/api/auth/mfa/backup'), true);
   assert.equal(isGrcInstanceFreePath('/api/auth/logout'), true);
+  // Access control edits the platform-default grants from above the instances,
+  // and an instance's own grants from inside one (Build Prompt 44).
+  assert.equal(isGrcInstanceFreePath('/settings/access-control'), true);
+  assert.equal(isGrcInstanceFreePath('/api/access-control'), true);
 });
 
 test('every module path needs an instance selected', () => {
