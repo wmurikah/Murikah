@@ -3,13 +3,21 @@
  * 11_DropdownService.gs. The risk rating and the control classification, type and
  * frequency are held per organisation as JSON arrays in the `config` table
  * (keyed by organization_id), so a SUPER_ADMIN can manage them. control_standards
- * stays free text. Values are cached per organisation and key, and the cache is
- * invalidated on change. The standard defaults live here, in one place, in step
- * with the seed scripts and the signup provisioning. Column names come from the
- * typed schema layer.
+ * stays free text. The standard defaults live here, in one place, in step with
+ * the seed scripts and the signup provisioning. Column names come from the typed
+ * schema layer.
+ *
+ * Values are cache-aside per organisation and vocabulary (Build Prompt 42), and
+ * saveDropdown invalidates the one it wrote before returning. This replaces the
+ * module-level map that used to sit here: that map lived for the isolate's whole
+ * life and could only ever be cleared in the isolate that happened to serve the
+ * write, so an edit made at one edge stayed invisible at another indefinitely.
+ * The shared cache is cleared for every edge, and the entry expires regardless.
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
+import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
+import { invalidateAllDropdowns, invalidateDropdown } from '@grc/cache/invalidate';
 import {
   DROPDOWN_DEFAULTS,
   DROPDOWN_KEYS,
@@ -23,12 +31,6 @@ export { DROPDOWN_DEFAULTS, DROPDOWN_KEYS };
 export type { ControlDropdowns, DropdownKey };
 
 const cfg = cols(C.config);
-
-const cache = new Map<string, string[]>();
-
-function cacheKey(organizationId: string, key: string): string {
-  return `${organizationId}:${key}`;
-}
 
 function parseArray(raw: string | null, fallback: string[]): string[] {
   if (!raw) return fallback;
@@ -51,23 +53,20 @@ export async function loadDropdown(
   key: DropdownKey,
   fallback: string[],
 ): Promise<string[]> {
-  const ck = cacheKey(organizationId, key);
-  const hit = cache.get(ck);
-  if (hit) return hit;
-  let values = fallback;
-  try {
-    const res = await db.execute({
-      sql: `SELECT ${cfg.config_value} FROM config
+  return cached(db, cacheKeys.dropdown(organizationId, key), CACHE_TTL.reference, async () => {
+    try {
+      const res = await db.execute({
+        sql: `SELECT ${cfg.config_value} FROM config
              WHERE ${cfg.organization_id} = ? AND ${cfg.config_key} = ? LIMIT 1`,
-      args: [organizationId, key],
-    });
-    const raw = res.rows[0]?.config_value;
-    values = parseArray(raw == null ? null : String(raw), fallback);
-  } catch {
-    // no config row: use the default
-  }
-  cache.set(ck, values);
-  return values;
+        args: [organizationId, key],
+      });
+      const raw = res.rows[0]?.config_value;
+      return parseArray(raw == null ? null : String(raw), fallback);
+    } catch {
+      // no config row: use the default
+      return fallback;
+    }
+  });
 }
 
 /** All four control-field dropdowns for the work-paper form. */
@@ -116,17 +115,10 @@ export async function saveDropdown(
       args: [organizationId, key, json, now],
     });
   }
-  cache.delete(cacheKey(organizationId, key));
+  await invalidateDropdown(db, organizationId, key);
 }
 
-/** Invalidate the dropdown cache for an organisation (or all). */
-export function invalidateDropdownCache(organizationId?: string): void {
-  if (!organizationId) {
-    cache.clear();
-    return;
-  }
-  const prefix = `${organizationId}:`;
-  for (const k of [...cache.keys()]) {
-    if (k.startsWith(prefix)) cache.delete(k);
-  }
+/** Invalidate every cached vocabulary for an organisation. */
+export async function invalidateDropdownCache(db: Client, organizationId: string): Promise<void> {
+  await invalidateAllDropdowns(db, organizationId);
 }

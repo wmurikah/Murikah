@@ -110,6 +110,9 @@ export const GRC_MFA_PATH = '/mfa';
 /** The all-instances view: where a platform owner lands and picks an instance. */
 export const GRC_PLATFORM_PATH = '/platform';
 
+/** The platform owner's cache diagnostics: hit rate, backend, and the flush. */
+export const GRC_CACHE_PATH = '/platform/cache';
+
 // A platform owner is pinned to no organisation, so until they select an
 // instance there is no acting organisation to scope a query by. These are the
 // only paths that still work in that state: the all-instances view itself, the
@@ -125,6 +128,10 @@ const INSTANCE_FREE_PATHS = new Set([
   // reachable from the all-instances view.
   '/settings/provision',
   '/api/organizations',
+  // Cache diagnostics belong to the platform, not to an instance: the owner
+  // reads the hit rate and flushes a tenant's namespace from above them all.
+  GRC_CACHE_PATH,
+  '/api/platform/cache',
   '/change-password',
   '/api/auth/change-password',
   '/mfa',

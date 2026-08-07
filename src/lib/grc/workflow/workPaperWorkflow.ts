@@ -24,6 +24,7 @@ import { getWorkPaper } from '@grc/repos/workPapers';
 import { insertRevisionStatement } from '@grc/repos/revisions';
 import { enqueueNotification } from '@grc/repos/notify';
 import { buildAuditStatement } from '@grc/repos/audit';
+import { invalidateDashboard } from '@grc/cache/invalidate';
 
 export interface TransitionActor {
   userId: string;
@@ -172,6 +173,9 @@ export async function executeTransition(
     });
   }
 
+  // A status move changes every dashboard count for the organisation, so the
+  // aggregations are cleared before the caller redirects into them.
+  await invalidateDashboard(db, organizationId);
   return { ok: true, fromStatus, toStatus };
 }
 

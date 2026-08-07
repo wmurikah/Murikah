@@ -6,9 +6,18 @@
  * notification sender and reply-to. The control-field vocabularies live
  * separately (dropdowns.ts); the AI defaults live under the GLOBAL sentinel
  * (ai/config.ts).
+ *
+ * Caching here is on an allow-list, not a deny-list (Build Prompt 42). The live
+ * `config` table is shared storage: as well as these settings it holds the
+ * per-user MFA records (`MFA_TOTP::<user_id>`), and authentication state must
+ * never be cached beyond one request. So only the keys in SETTINGS_KEYS are
+ * cache-aside, and any other key reads straight from the database. A new setting
+ * is uncached until someone deliberately lists it, which is the safe default.
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
+import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
+import { invalidateConfigKey } from '@grc/cache/invalidate';
 
 const cfg = cols(C.config);
 
@@ -67,8 +76,18 @@ export const SETTINGS_FIELDS: SettingField[] = [
 
 export const SETTINGS_KEYS: string[] = SETTINGS_FIELDS.map((f) => f.key);
 
-/** Read the given config keys for an organisation into a map (missing keys absent). */
-export async function getConfigValues(
+/**
+ * The allow-list. Only these config keys are ever cached: the editable general
+ * settings, and the managed DROPDOWN_* vocabularies, which loadDropdown caches
+ * under its own key and which must be cleared if they are written through here.
+ * Everything else, the MFA_TOTP:: records above all, is read fresh every time.
+ */
+function isCacheableKey(key: string): boolean {
+  return SETTINGS_KEYS.includes(key) || key.startsWith('DROPDOWN_');
+}
+
+/** Read the given config keys straight from the database, no cache involved. */
+async function readConfigValues(
   db: Client,
   organizationId: string,
   keys: string[],
@@ -81,6 +100,41 @@ export async function getConfigValues(
     args: [organizationId, ...keys],
   });
   return new Map(res.rows.map((r) => [String(r.k), r.v == null ? '' : String(r.v)]));
+}
+
+/**
+ * Read the given config keys for an organisation into a map (missing keys
+ * absent). The allow-listed keys are served cache-aside as one entry for the
+ * whole requested set, so a miss stays a single batched query rather than one
+ * per key; everything else, the MFA records included, goes straight to the
+ * database on every call. Callers ask for a handful of stable combinations, so
+ * the set of entries this creates is small, and a write clears the
+ * organisation's whole config namespace rather than reasoning about which
+ * combinations contained the key.
+ */
+export async function getConfigValues(
+  db: Client,
+  organizationId: string,
+  keys: string[],
+): Promise<Map<string, string>> {
+  if (keys.length === 0) return new Map();
+  const cacheable = [...new Set(keys.filter(isCacheableKey))].sort();
+  const direct = keys.filter((k) => !isCacheableKey(k));
+
+  const out = await readConfigValues(db, organizationId, direct);
+  if (cacheable.length === 0) return out;
+
+  // A Map is not JSON, so the entries array is what is stored.
+  const entries = await cached(
+    db,
+    cacheKeys.config(organizationId, cacheable.join('+')),
+    CACHE_TTL.reference,
+    async (): Promise<[string, string][]> => [
+      ...(await readConfigValues(db, organizationId, cacheable)),
+    ],
+  );
+  for (const [key, value] of entries) out.set(key, value);
+  return out;
 }
 
 /** Upsert one config value for an organisation. */
@@ -103,6 +157,10 @@ export async function setConfigValue(
       args: [organizationId, key, value, now],
     });
   }
+  // Only a cacheable key can have a cached entry, and the MFA records go through
+  // here on a hot authentication path, so do not spend a round trip clearing
+  // something that was never stored.
+  if (isCacheableKey(key)) await invalidateConfigKey(db, organizationId, key);
 }
 
 /**
