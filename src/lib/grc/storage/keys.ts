@@ -75,6 +75,35 @@ export function keyBelongsToOrg(key: string, organizationId: string): boolean {
   return typeof key === 'string' && key.startsWith(orgPrefix(organizationId));
 }
 
+/**
+ * The longest edge, in pixels, every image preview is reduced to. One constant
+ * for all of them, so a wall of evidence thumbnails is uniform and light
+ * whatever was uploaded. The original is always kept untouched alongside it.
+ */
+export const PREVIEW_MAX_DIMENSION = 480;
+
+/** The preview is always a JPEG, whatever the original image format was. */
+export const PREVIEW_CONTENT_TYPE = 'image/jpeg';
+
+/** The image types a preview is generated for. */
+const PREVIEWABLE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
+
+/** Whether an uploaded file is an image a preview should be made of. */
+export function isPreviewableImage(mimeType: string | null | undefined): boolean {
+  return PREVIEWABLE.has(String(mimeType ?? '').toLowerCase());
+}
+
+/**
+ * The preview object's key, derived from the original's. Deterministic, so
+ * neither side has to store it: the upload writes here and the download reads
+ * here, and an older file with no preview simply misses and falls back to the
+ * original. It stays inside the same tenant prefix by construction, because it
+ * only appends a segment to a key that already sits there.
+ */
+export function previewKeyFor(objectKey: string): string {
+  return `${objectKey}.preview.jpg`;
+}
+
 /** The lower-case hex sha256 of the given bytes, for files.content_hash. */
 export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string> {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
