@@ -8,8 +8,14 @@
  * observation_description and recommendation is maintained here on create, edit
  * and delete, and drives the list search. Column names follow the hassaudit
  * schema (grc/docs/schema-assumptions.md).
+ *
+ * The list reads are not cached: a work paper is exactly the kind of row a user
+ * acts on, and its state must be current. Only the counts derived from it are,
+ * on a short window, so each mutation here clears the organisation's dashboard
+ * aggregations before it returns (Build Prompt 42).
  */
 import type { Client, InArgs } from '@libsql/client/web';
+import { invalidateDashboard } from '@grc/cache/invalidate';
 import {
   restrictToOwnFindings,
   seesForeignDrafts,
@@ -308,6 +314,7 @@ export async function createWorkPaper(
     input.observationDescription,
     input.recommendation,
   );
+  await invalidateDashboard(db, organizationId);
   return id;
 }
 
@@ -334,6 +341,7 @@ export async function updateWorkPaper(
     input.observationDescription,
     input.recommendation,
   );
+  await invalidateDashboard(db, organizationId);
 }
 
 /** Hard-delete a work paper and its FTS row (the caller checks the permission and state). */
@@ -347,6 +355,7 @@ export async function deleteWorkPaper(
     sql: `DELETE FROM work_papers WHERE work_paper_id = ? AND organization_id = ?`,
     args: [id, organizationId],
   });
+  await invalidateDashboard(db, organizationId);
 }
 
 // ---- helpers ---------------------------------------------------------------
