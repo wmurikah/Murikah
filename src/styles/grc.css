@@ -2745,3 +2745,53 @@ a.grc-notifrow__title:hover {
   font-size: var(--grc-fs-caption);
   color: var(--grc-muted);
 }
+
+/* The shown-once temporary password handed back after creating or resetting a
+   user. Gold-edged like a notice, because it is the one chance to read it. */
+.grc-credential {
+  border: 1px solid var(--grc-line);
+  border-left: 3px solid var(--grc-gold);
+  border-radius: var(--grc-radius);
+  background: var(--grc-surface);
+  box-shadow: var(--grc-shadow);
+  padding: var(--grc-s4);
+  margin-bottom: var(--grc-s4);
+}
+.grc-credential__title {
+  margin: 0 0 var(--grc-s2);
+  font-size: var(--grc-fs-small);
+  font-weight: 700;
+  letter-spacing: var(--grc-tracking);
+  text-transform: uppercase;
+  color: var(--grc-muted);
+}
+.grc-credential__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--grc-s3);
+  margin-bottom: var(--grc-s2);
+}
+.grc-credential__value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--grc-navy);
+  background: var(--grc-paper, #faf7f0);
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  padding: 0.4rem 0.7rem;
+  overflow-wrap: anywhere;
+}
+.grc-credential__note {
+  margin: 0 0 var(--grc-s1);
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+}
+.grc-credential__warn {
+  margin: 0 0 var(--grc-s2);
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-danger, #b42318);
+  font-weight: 600;
+}

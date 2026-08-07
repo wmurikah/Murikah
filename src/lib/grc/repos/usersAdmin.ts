@@ -1,13 +1,15 @@
 /**
  * Users administration for the Setup module, SUPER_ADMIN (or platform owner)
- * only. Manages the organisation's users: create with an initial password and
- * must_change_password, edit email, name, role and affiliate, reset the
- * password, and activate or deactivate. Every read and write is scoped to the
- * acting organization_id; column names come from the typed schema layer.
- * Password hashes are produced by the caller (auth/password.ts) and never
- * stored in the clear. Every account carries an email: it is the sign-in
- * identity and the address the universal second-factor code goes to (Build
- * Prompt 37), so create and edit alike require a valid, unique one.
+ * only. Manages the organisation's users: create with a system-generated
+ * temporary password and must_change_password, edit email, name, role,
+ * affiliate and phone, reset the password, and activate or deactivate. Every
+ * read and write is scoped to the acting organization_id; column names come
+ * from the typed schema layer. Password hashes are produced by the caller
+ * (auth/password.ts) from a value minted by auth/temporaryPassword.ts, and the
+ * plaintext is never stored here. Every account carries an email: it is the
+ * sign-in identity and the address the universal second-factor code goes to
+ * (Build Prompt 37), so create and edit alike require a valid one, unique
+ * across the whole platform (Build Prompt 39).
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
@@ -25,6 +27,7 @@ export interface ManagedUser {
   fullName: string | null;
   roleCode: string | null;
   affiliateCode: string | null;
+  phone: string | null;
   status: string;
   isActive: boolean;
   mustChangePassword: boolean;
@@ -49,6 +52,7 @@ export async function listUsers(db: Client, organizationId: string): Promise<Man
   const res = await db.execute({
     sql: `SELECT ${U.user_id} AS user_id, ${U.email} AS email, ${U.full_name} AS full_name,
                  ${U.role_code} AS role_code, ${U.affiliate_code} AS affiliate_code,
+                 ${U.phone} AS phone,
                  ${U.status} AS status, ${U.must_change_password} AS must_change_password,
                  ${U.is_platform_owner} AS is_platform_owner
             FROM users
@@ -64,6 +68,7 @@ export async function listUsers(db: Client, organizationId: string): Promise<Man
       fullName: s(r.full_name),
       roleCode: s(r.role_code),
       affiliateCode: s(r.affiliate_code),
+      phone: s(r.phone),
       status,
       isActive: ACTIVE(status),
       mustChangePassword: Number(r.must_change_password ?? 0) === 1,
@@ -81,6 +86,7 @@ export async function getManagedUser(
   const res = await db.execute({
     sql: `SELECT ${U.user_id} AS user_id, ${U.email} AS email, ${U.full_name} AS full_name,
                  ${U.role_code} AS role_code, ${U.affiliate_code} AS affiliate_code,
+                 ${U.phone} AS phone,
                  ${U.status} AS status, ${U.must_change_password} AS must_change_password,
                  ${U.is_platform_owner} AS is_platform_owner
             FROM users
@@ -97,6 +103,7 @@ export async function getManagedUser(
     fullName: s(r.full_name),
     roleCode: s(r.role_code),
     affiliateCode: s(r.affiliate_code),
+    phone: s(r.phone),
     status,
     isActive: ACTIVE(status),
     mustChangePassword: Number(r.must_change_password ?? 0) === 1,
@@ -105,26 +112,32 @@ export async function getManagedUser(
 }
 
 /**
- * Whether an email is already taken in the organisation (any state). The
- * account being edited is excluded, so saving a user without changing their
- * address is never mistaken for a duplicate.
+ * Whether an email already belongs to an account anywhere on the platform, in
+ * any state. The check is deliberately not scoped to the organisation: sign-in
+ * resolves a user by email alone across every instance (repos/login.ts), so two
+ * organisations holding the same address would make one of those accounts
+ * unreachable. The account being edited is excluded, so saving a user without
+ * changing their address is never mistaken for a duplicate.
  */
-export async function userEmailExists(
+export async function emailInUse(
   db: Client,
-  organizationId: string,
   email: string,
   exceptUserId?: string,
 ): Promise<boolean> {
   const res = await db.execute({
     sql: `SELECT 1 FROM users
-           WHERE ${U.organization_id} = ? AND lower(${U.email}) = ? AND ${U.deleted_at} IS NULL
+           WHERE lower(${U.email}) = ? AND ${U.deleted_at} IS NULL
              AND (? IS NULL OR ${U.user_id} <> ?) LIMIT 1`,
-    args: [organizationId, email.toLowerCase(), exceptUserId ?? null, exceptUserId ?? ''],
+    args: [email.toLowerCase(), exceptUserId ?? null, exceptUserId ?? ''],
   });
   return res.rows.length > 0;
 }
 
-/** Create a user with an initial (already hashed) password and must_change_password. */
+/**
+ * Create a user with a system-generated temporary password (already hashed by
+ * the caller) and must_change_password set, so the first sign-in ends in the
+ * change-password flow.
+ */
 export async function createUser(
   db: Client,
   organizationId: string,
@@ -199,7 +212,10 @@ export async function setUserActive(
   });
 }
 
-/** Reset a user's password to a new (already hashed) value and force a change. */
+/**
+ * Reset a user's password to a new system-generated value (already hashed) and
+ * force a change at the next sign-in.
+ */
 export async function resetUserPassword(
   db: Client,
   organizationId: string,
