@@ -14,6 +14,10 @@ import {
   fullMatrix,
   deriveLegacyPerms,
   PAGE_PERMISSION_MAP,
+  MODULES,
+  ACTIONS,
+  PERMISSION_MODULES,
+  PERMISSION_ACTIONS,
 } from '../../src/lib/grc/auth/matrix.ts';
 
 const auditor = buildMatrix([
@@ -49,7 +53,69 @@ test('pageAccess resolves a page slug through the page map', () => {
   assert.equal(pageAccess(auditeeOnly, 'action-plans'), true);
   assert.equal(pageAccess(auditeeOnly, 'auditee-responses'), true);
   assert.equal(pageAccess(auditeeOnly, 'work-papers'), false);
-  assert.deepEqual(PAGE_PERMISSION_MAP['settings/general'], [{ module: 'CONFIG', action: 'read' }]);
+  assert.deepEqual(PAGE_PERMISSION_MAP['settings/general'], [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ]);
+  // Build Prompt 43 wired the two modules the live permission_modules table held
+  // and nothing read. Each opens its section on its own, and the CONFIG grant
+  // that opened them before still does, so reconciling took no access away.
+  const setupOnly = buildMatrix([{ moduleCode: 'SETUP', actionCode: 'read', isAllowed: true }]);
+  assert.equal(pageAccess(setupOnly, 'settings/general'), true);
+  assert.equal(pageAccess(setupOnly, 'settings/dropdowns'), true);
+  assert.equal(
+    pageAccess(setupOnly, 'settings/access-control'),
+    false,
+    'CONFIG only, deliberately',
+  );
+  const notifyOnly = buildMatrix([
+    { moduleCode: 'NOTIFICATION', actionCode: 'read', isAllowed: true },
+  ]);
+  assert.equal(pageAccess(notifyOnly, 'send-queue'), true);
+  const configOnly = buildMatrix([{ moduleCode: 'CONFIG', actionCode: 'read', isAllowed: true }]);
+  for (const slug of [
+    'send-queue',
+    'settings',
+    'settings/general',
+    'settings/affiliates',
+    'settings/audit-universe',
+    'settings/dropdowns',
+  ]) {
+    assert.equal(pageAccess(configOnly, slug), true, `CONFIG.read must still open ${slug}`);
+  }
+  // settings/users is unchanged: it gates on USER.read, not on CONFIG.
+  assert.equal(pageAccess(configOnly, 'settings/users'), false);
+});
+
+test('the module and action lists come from the one catalogue', () => {
+  // The drift this guards against: the code enforcing a module the live
+  // permission_modules table does not hold makes every role save violate a
+  // foreign key (Build Prompt 43). One source, and the seed reads it too.
+  assert.deepEqual(
+    MODULES,
+    PERMISSION_MODULES.map((m) => m.code),
+  );
+  assert.deepEqual(
+    ACTIONS,
+    PERMISSION_ACTIONS.map((a) => a.code),
+  );
+  assert.equal(new Set(MODULES).size, MODULES.length, 'no duplicate module code');
+  assert.equal(new Set(ACTIONS).size, ACTIONS.length, 'no duplicate action code');
+  // Every row the save creates is complete, not a bare code.
+  for (const module of PERMISSION_MODULES) {
+    assert.ok(module.code && module.name && module.description, module.code);
+  }
+  for (const action of PERMISSION_ACTIONS) {
+    assert.ok(action.code && action.name, action.code);
+  }
+  // Every module the page map gates on must be one the matrix can actually
+  // grant, or a page would be locked behind a permission no screen can give.
+  for (const grants of Object.values(PAGE_PERMISSION_MAP)) {
+    for (const grant of grants) {
+      assert.ok(MODULES.includes(grant.module), `${grant.module} must be a real module`);
+      assert.ok(ACTIONS.includes(grant.action), `${grant.action} must be a real action`);
+    }
+  }
 });
 
 test('pageSlugForPath maps app paths onto the section slugs', () => {

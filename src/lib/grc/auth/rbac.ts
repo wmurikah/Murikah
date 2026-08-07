@@ -10,39 +10,39 @@
  * (view to read, WORK_PAPERS to WORK_PAPER). A SUPER_ADMIN and a platform owner
  * hold the full matrix. The pure core lives in matrix.ts.
  *
- * Caching the matrix is the one place speed is allowed near access control, and
- * it is fenced on both sides (Build Prompt 42). Every `role_permissions` write
- * invalidates that role's entry immediately, so a changed grant applies on the
- * very next request rather than at the next sign-in; and the lifetime is capped
- * at CACHE_TTL.roleMatrix (a few seconds) so an edge a delete has not yet
- * reached still cannot hold an old matrix for long. The matrix is per role and
- * carries no tenant or user data, so it sits in the platform namespace. Note
- * what is not here: the session, its validity and the user's identity are never
- * cached, and are resolved fresh from the database on every request.
+ * The matrix is not cached, anywhere, at any layer (Build Prompt 43). It is one
+ * indexed SELECT on a small table and the request already makes several, so
+ * reading it fresh is cheap at this scale and correct by construction: an
+ * access change takes effect on the very next request, everywhere, with no
+ * invalidation to propagate and no window in which one edge serves a matrix
+ * another edge has already replaced. Should a measurement ever justify caching
+ * it, a short TTL (30 to 60 seconds) is the only acceptable compromise, and a
+ * per-isolate map with no lifetime is never one, because an invalidation cannot
+ * cross isolates and the staleness is then unbounded. This sits beside what was
+ * already true: the session, its validity and the user's identity are never
+ * cached either, and are resolved fresh from the database on every request.
  */
 import type { Client } from '@libsql/client/web';
-import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
-import { invalidateRoleMatrix } from '@grc/cache/invalidate';
+import { C, cols } from '@grc/schema/columns';
 import { buildMatrix, canMatrix, type PermissionMatrix, type MatrixRow } from './matrix';
 
 export * from './matrix';
-export { invalidateRoleMatrix };
 
-/** The permission matrix granted to a role, from role_permissions, cached per role. */
+const RP = cols(C.role_permissions);
+
+/** The permission matrix granted to a role, read fresh from role_permissions. */
 export async function getPermissionMatrix(db: Client, roleCode: string): Promise<PermissionMatrix> {
-  return cached(db, cacheKeys.roleMatrix(roleCode), CACHE_TTL.roleMatrix, async () => {
-    const res = await db.execute({
-      sql: `SELECT module_code, action_code, is_allowed
-              FROM role_permissions WHERE role_code = ?`,
-      args: [roleCode],
-    });
-    const rows: MatrixRow[] = res.rows.map((r) => ({
-      moduleCode: String(r.module_code ?? ''),
-      actionCode: String(r.action_code ?? ''),
-      isAllowed: Number(r.is_allowed ?? 0) === 1,
-    }));
-    return buildMatrix(rows);
+  const res = await db.execute({
+    sql: `SELECT ${RP.module_code}, ${RP.action_code}, ${RP.is_allowed}
+            FROM role_permissions WHERE ${RP.role_code} = ?`,
+    args: [roleCode],
   });
+  const rows: MatrixRow[] = res.rows.map((r) => ({
+    moduleCode: String(r.module_code ?? ''),
+    actionCode: String(r.action_code ?? ''),
+    isAllowed: Number(r.is_allowed ?? 0) === 1,
+  }));
+  return buildMatrix(rows);
 }
 
 /** True when the session's matrix grants the action on the module (aliases applied). */
