@@ -99,7 +99,46 @@ test('default landing: auditee to overdue then findings; everyone else to dashbo
   assert.equal(defaultLandingPath('UNIT_MANAGER', false, true), '/action-plans?overdue=1');
   assert.equal(defaultLandingPath('UNIT_MANAGER', false, false), '/work-papers');
   assert.equal(defaultLandingPath('SENIOR_AUDITOR', false, true), '/');
-  assert.equal(defaultLandingPath('UNIT_MANAGER', true, true), '/'); // platform owner
+});
+
+test('a platform owner lands on the all-instances view, never pinned to an organisation', () => {
+  // Whatever role or overdue state, the owner is not a member of any instance,
+  // so the landing is the platform view rather than a customer's dashboard.
+  assert.equal(defaultLandingPath('SUPER_ADMIN', true, false), '/platform');
+  assert.equal(defaultLandingPath('UNIT_MANAGER', true, true), '/platform');
+});
+
+test('a platform owner inside no instance sees only the platform navigation', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: false }));
+  const paths = hrefs(nav);
+  assert.deepEqual(
+    nav.map((g) => g.label),
+    ['Platform'],
+  );
+  assert.ok(paths.includes('/platform'));
+  assert.ok(paths.includes('/settings/provision'));
+  // Every module needs an acting organisation, so none of them is offered.
+  for (const module of ['/', '/work-papers', '/action-plans', '/reports', '/settings']) {
+    assert.ok(!paths.includes(module), `${module} needs an instance and must not be offered`);
+  }
+});
+
+test('entering an instance gives a platform owner the full module navigation back', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: true }));
+  const paths = hrefs(nav);
+  assert.ok(paths.includes('/'));
+  assert.ok(paths.includes('/work-papers'));
+  assert.ok(paths.includes('/settings/users'));
+});
+
+test('an instance admin is never given the platform navigation', () => {
+  // instanceSelected is meaningless for a pinned user: they always have one.
+  const nav = buildNav(
+    ctx({ roleCode: 'SUPER_ADMIN', perms: ['CONFIG.view', 'WORK_PAPERS.view'] }),
+  );
+  const paths = hrefs(nav);
+  assert.ok(!paths.includes('/platform'));
+  assert.ok(paths.includes('/work-papers'));
 });
 
 test('empty nav groups are dropped', () => {

@@ -1,12 +1,14 @@
 /**
  * The GRC acting-organisation cookie.
  *
- * A platform owner (Wilberforce) can act inside any organisation. The choice is
- * held in a signed, HttpOnly cookie (HS256, GRC_SESSION_SECRET), separate from
- * engr's. The cookie is only ever a hint: the middleware re-validates the acting
- * organisation against the user's entitlement on every request, and only for a
- * platform owner, so a tampered or stale value can never grant access to an
- * ordinary user or outside the set. Confined to the subdomain (Path=/,
+ * A platform owner can enter any instance on the platform. The instance they
+ * have entered is held in a signed, HttpOnly cookie (HS256, GRC_SESSION_SECRET),
+ * separate from engr's. Its absence is meaningful: no cookie means no instance
+ * is selected, and the owner is on the all-instances view rather than inside any
+ * customer's data. The cookie is only ever a hint: the middleware re-validates
+ * the acting organisation against the user's entitlement on every request, and
+ * only for a platform owner, so a tampered or stale value can never grant access
+ * to an ordinary user or outside the set. Confined to the subdomain (Path=/,
  * host-only), Secure gated on the caller.
  */
 import { SignJWT, jwtVerify } from 'jose';
@@ -57,4 +59,14 @@ export async function createActingCookie(
     .sign(keyFromSecret(secret));
   const secureAttr = secure ? '; Secure' : '';
   return `${GRC_ACTING_COOKIE}=${token}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
+}
+
+/**
+ * The Set-Cookie value that clears the acting organisation, returning a platform
+ * owner to the all-instances view. Attributes match the set cookie so the
+ * browser replaces it rather than keeping both.
+ */
+export function clearActingCookie(secure: boolean): string {
+  const secureAttr = secure ? '; Secure' : '';
+  return `${GRC_ACTING_COOKIE}=; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=0`;
 }

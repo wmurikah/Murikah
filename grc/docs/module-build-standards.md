@@ -50,7 +50,11 @@ shows a clean empty state, never an error.
 Every read and write is scoped by the acting `organization_id` (resolved via
 `src/lib/grc/auth/actingOrg.ts`). A SUPER_ADMIN may edit anything within their
 organisation; the platform owner (`users.is_platform_owner = 1`) may act across
-organisations via the switcher. Gate actions with `can(locals, action, module)`
+organisations by entering an instance, and is inside none of them until they do
+(`grc/docs/tenancy.md`). A new page or endpoint that reads or writes an
+organisation's data needs an instance: leave it out of `INSTANCE_FREE_PATHS` in
+`src/lib/grc/routing.ts` and the middleware prompts an owner with none selected
+to pick one. Gate actions with `can(locals, action, module)`
 from `src/lib/grc/auth/rbac.ts` against the seeded `role_permissions` matrix;
 the gate applies the source aliases (`view` to `read`, `WORK_PAPERS` to
 `WORK_PAPER`). Never gate by hard-coded role checks when the matrix can answer.

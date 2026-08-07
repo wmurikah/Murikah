@@ -1,7 +1,9 @@
 /**
  * Demo seed for the smoke database: one active organisation on a full-feature
  * plan, the seeded sign-in user (a platform-owner SUPER_ADMIN, so every screen
- * and workflow action is reachable), a second organisation for the switcher, the
+ * and workflow action is reachable), the instance admin beside them (the same
+ * SUPER_ADMIN role inside Hass, pinned to it, so the smoke run can prove the two
+ * kinds of user apart), a second organisation to enter and leave, the
  * data-driven workflow reference rows (enum_values, status_transitions,
  * workflow_terminal_states), and one of everything the pages drill into: a
  * draft work paper, one sent to the auditee, action plans in mid-lifecycle
@@ -15,9 +17,16 @@ export const SMOKE = {
   orgId: 'ORG-HASS',
   orgName: 'Hass Petroleum Group',
   otherOrgId: 'ORG-COAST',
-  email: 'wilberforce.murikah@hasspetroleum.com',
+  otherOrgName: 'Coast Energy Limited',
+  // The platform owner (Murikah Labs), who is pinned to no organisation and
+  // enters an instance to work inside it.
+  email: 'wmurikah@gmail.com',
   password: 'Grc-Smoke-Harness-2026',
   userId: 'USR-WM',
+  // The Hass instance admin: the same SUPER_ADMIN role, pinned to Hass, with no
+  // platform view and no switcher.
+  instanceAdminEmail: 'wilberforce.murikah@hasspetroleum.com',
+  instanceAdminId: 'USR-HASS-ADMIN',
   auditorId: 'USR-AUD',
   auditeeId: 'USR-OWN',
   lockoutUserId: 'USR-LOCK',
@@ -136,7 +145,7 @@ export function seedDatabase(db: DatabaseSync): void {
 
   for (const [orgId, code, name] of [
     [SMOKE.orgId, 'HASS', SMOKE.orgName],
-    [SMOKE.otherOrgId, 'COAST', 'Coast Energy Limited'],
+    [SMOKE.otherOrgId, 'COAST', SMOKE.otherOrgName],
   ] as const) {
     insert(db, 'organizations', {
       organization_id: orgId,
@@ -218,6 +227,10 @@ export function seedDatabase(db: DatabaseSync): void {
 
   const users: [string, string, string, string, number][] = [
     [SMOKE.userId, SMOKE.email, 'Wilberforce Murikah', 'SUPER_ADMIN', 1],
+    // The instance admin: the same role as the owner, but pinned to Hass. Its
+    // home organisation is the owner's too, which is what makes it the right
+    // control: only the is_platform_owner flag separates the two experiences.
+    [SMOKE.instanceAdminId, SMOKE.instanceAdminEmail, 'Hass Administrator', 'SUPER_ADMIN', 0],
     [SMOKE.auditorId, 'auditor@hasspetroleum.com', 'Amina Auditor', 'AUDITOR', 0],
     [SMOKE.auditeeId, 'owner@hasspetroleum.com', 'Otieno Owner', 'UNIT_MANAGER', 0],
     // Exists only for the lockout check: the smoke test burns its failure
