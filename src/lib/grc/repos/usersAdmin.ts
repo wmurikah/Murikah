@@ -1,10 +1,13 @@
 /**
  * Users administration for the Setup module, SUPER_ADMIN (or platform owner)
  * only. Manages the organisation's users: create with an initial password and
- * must_change_password, edit name, role and affiliate, reset the password, and
- * activate or deactivate. Every read and write is scoped to the acting
- * organization_id; column names come from the typed schema layer. Password hashes
- * are produced by the caller (auth/password.ts) and never stored in the clear.
+ * must_change_password, edit email, name, role and affiliate, reset the
+ * password, and activate or deactivate. Every read and write is scoped to the
+ * acting organization_id; column names come from the typed schema layer.
+ * Password hashes are produced by the caller (auth/password.ts) and never
+ * stored in the clear. Every account carries an email: it is the sign-in
+ * identity and the address the universal second-factor code goes to (Build
+ * Prompt 37), so create and edit alike require a valid, unique one.
  */
 import type { Client } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
@@ -29,6 +32,7 @@ export interface ManagedUser {
 }
 
 export interface UserInput {
+  email: string;
   fullName: string;
   roleCode: string;
   affiliateCode: string | null;
@@ -100,16 +104,22 @@ export async function getManagedUser(
   };
 }
 
-/** Whether an email is already taken in the organisation (any state). */
+/**
+ * Whether an email is already taken in the organisation (any state). The
+ * account being edited is excluded, so saving a user without changing their
+ * address is never mistaken for a duplicate.
+ */
 export async function userEmailExists(
   db: Client,
   organizationId: string,
   email: string,
+  exceptUserId?: string,
 ): Promise<boolean> {
   const res = await db.execute({
     sql: `SELECT 1 FROM users
-           WHERE ${U.organization_id} = ? AND lower(${U.email}) = ? AND ${U.deleted_at} IS NULL LIMIT 1`,
-    args: [organizationId, email.toLowerCase()],
+           WHERE ${U.organization_id} = ? AND lower(${U.email}) = ? AND ${U.deleted_at} IS NULL
+             AND (? IS NULL OR ${U.user_id} <> ?) LIMIT 1`,
+    args: [organizationId, email.toLowerCase(), exceptUserId ?? null, exceptUserId ?? ''],
   });
   return res.rows.length > 0;
 }
@@ -118,7 +128,6 @@ export async function userEmailExists(
 export async function createUser(
   db: Client,
   organizationId: string,
-  email: string,
   passwordHash: string,
   input: UserInput,
 ): Promise<string> {
@@ -133,7 +142,7 @@ export async function createUser(
     args: [
       id,
       organizationId,
-      email,
+      input.email,
       input.fullName,
       passwordHash,
       input.roleCode,
@@ -147,7 +156,12 @@ export async function createUser(
   return id;
 }
 
-/** Edit a user's name, role, affiliate and phone (email is immutable here). */
+/**
+ * Edit a user's email, name, role, affiliate and phone. The email is editable
+ * because every account must have a valid one: it is the sign-in identity and
+ * where the second-factor code goes, so an account that somehow has none is
+ * repaired here.
+ */
 export async function updateUser(
   db: Client,
   organizationId: string,
@@ -156,10 +170,11 @@ export async function updateUser(
 ): Promise<void> {
   await db.execute({
     sql: `UPDATE users
-             SET ${U.full_name} = ?, ${U.role_code} = ?, ${U.affiliate_code} = ?, ${U.phone} = ?,
-                 ${U.updated_at} = ?
+             SET ${U.email} = ?, ${U.full_name} = ?, ${U.role_code} = ?, ${U.affiliate_code} = ?,
+                 ${U.phone} = ?, ${U.updated_at} = ?
            WHERE ${U.organization_id} = ? AND ${U.user_id} = ?`,
     args: [
+      input.email,
       input.fullName,
       input.roleCode,
       input.affiliateCode,

@@ -189,7 +189,12 @@ export const POST: APIRoute = async ({ request }) => {
     // (cooldown-limited); a failed send still lands on the step, which
     // offers a resend and takes a backup code. The role-based landing
     // happens after verification (mfa/verify.ts).
-    const mfaRecord = await ensureMfaRecord(db, user.organizationId, user.userId);
+    const mfaRecord = await ensureMfaRecord(
+      db,
+      user.organizationId,
+      user.userId,
+      env.sessionSecret,
+    );
     let stepQuery = '';
     if (mfaRecord.method === 'email') {
       const issued = await issueEmailOtp(
