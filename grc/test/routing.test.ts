@@ -17,6 +17,8 @@ import {
   isGrcChangePasswordExempt,
   grcMarketingRedirect,
   isGrcMfaPendingAllowed,
+  isGrcInstanceFreePath,
+  GRC_PLATFORM_PATH,
 } from '../../src/lib/grc/routing.ts';
 
 test('isGrcHost matches the apex, sub-labels and local equivalents only', () => {
@@ -80,6 +82,44 @@ test('change-password exemption covers only the screen, its endpoint and sign-ou
   assert.equal(isGrcChangePasswordExempt('/'), false);
   assert.equal(isGrcChangePasswordExempt('/work-papers'), false);
   assert.equal(isGrcChangePasswordExempt('/api/auth/login'), false);
+});
+
+test('the instance-free paths are the platform view, its endpoints and the account flows', () => {
+  // Where a platform owner pinned to no organisation can still go.
+  assert.equal(GRC_PLATFORM_PATH, '/platform');
+  assert.equal(isGrcInstanceFreePath('/platform'), true);
+  assert.equal(isGrcInstanceFreePath('/api/org/switch'), true);
+  assert.equal(isGrcInstanceFreePath('/api/org/leave'), true);
+  // Provisioning creates an instance rather than acting inside one.
+  assert.equal(isGrcInstanceFreePath('/settings/provision'), true);
+  assert.equal(isGrcInstanceFreePath('/api/organizations'), true);
+  // The account flows scope by the user's home organisation, not the acting one.
+  assert.equal(isGrcInstanceFreePath('/change-password'), true);
+  assert.equal(isGrcInstanceFreePath('/api/auth/change-password'), true);
+  assert.equal(isGrcInstanceFreePath('/mfa/setup'), true);
+  assert.equal(isGrcInstanceFreePath('/api/auth/mfa/backup'), true);
+  assert.equal(isGrcInstanceFreePath('/api/auth/logout'), true);
+});
+
+test('every module path needs an instance selected', () => {
+  for (const path of [
+    '/',
+    '/work-papers',
+    '/work-papers/WP-1',
+    '/action-plans',
+    '/auditee-responses',
+    '/reports',
+    '/analytics',
+    '/notifications',
+    '/send-queue',
+    '/settings',
+    '/settings/users',
+    '/api/work-papers',
+    '/api/dropdowns',
+    '/api/sidebar-counts',
+  ]) {
+    assert.equal(isGrcInstanceFreePath(path), false, `${path} must require an instance`);
+  }
 });
 
 test('grcMarketingRedirect sends a /grc path to the subdomain, else null', () => {

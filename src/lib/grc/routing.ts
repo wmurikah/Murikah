@@ -107,6 +107,41 @@ export function isGrcMfaPendingAllowed(appPath: string): boolean {
 /** The verification step, in root-relative form. */
 export const GRC_MFA_PATH = '/mfa';
 
+/** The all-instances view: where a platform owner lands and picks an instance. */
+export const GRC_PLATFORM_PATH = '/platform';
+
+// A platform owner is pinned to no organisation, so until they select an
+// instance there is no acting organisation to scope a query by. These are the
+// only paths that still work in that state: the all-instances view itself, the
+// two endpoints that enter and leave an instance, and the account-level flows,
+// which scope by the user's home organisation rather than the acting one. Every
+// module path needs an instance and is sent to the all-instances view to pick
+// one, never defaulted silently into someone's organisation.
+const INSTANCE_FREE_PATHS = new Set([
+  GRC_PLATFORM_PATH,
+  '/api/org/switch',
+  '/api/org/leave',
+  // Provisioning creates an instance; it does not act inside one, so it is
+  // reachable from the all-instances view.
+  '/settings/provision',
+  '/api/organizations',
+  '/change-password',
+  '/api/auth/change-password',
+  '/mfa',
+  '/mfa/setup',
+  '/api/auth/mfa/send',
+  '/api/auth/mfa/verify',
+  '/api/auth/mfa/enrol',
+  '/api/auth/mfa/confirm',
+  '/api/auth/mfa/backup',
+  '/api/auth/logout',
+]);
+
+/** Whether a root-relative app path works with no instance selected. */
+export function isGrcInstanceFreePath(appPath: string): boolean {
+  return INSTANCE_FREE_PATHS.has(appPath);
+}
+
 /** The account security screen (backup codes and the authenticator setup). */
 export const GRC_MFA_SETUP_PATH = '/mfa/setup';
 
