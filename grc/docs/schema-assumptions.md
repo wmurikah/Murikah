@@ -42,6 +42,23 @@ migration writes, so seeded users verify without re-hashing
 (`src/lib/grc/auth/password.ts`). If the seed uses a different encoding, adjust
 `verifyPassword` there.
 
+Nobody types an initial password (Build Prompt 39). Creating a user, and
+resetting one, mint a value in `auth/temporaryPassword.ts`, hash it with the
+canonical scheme, set `must_change_password = 1` and email it to its owner
+through the connected Graph mailer (`notify/accountMail.ts`). The plaintext is
+never stored and never logged. The admin sees it exactly once, through a sealed
+single-use `config` row (`repos/tempPasswordHandoff.ts`, key
+`USER_TEMP_PW::<user_id>`, read-and-delete, bound to the admin who minted it and
+aged out after fifteen minutes) rather than through the redirect, so a live
+credential never reaches the browser history or an access log. A mail failure
+never undoes the account: the write stands, the admin is told, and they still
+have the password to pass on. Failures log under `[grc.users]`.
+
+`users.email` is unique across the whole platform, not per organisation: sign-in
+resolves a user by email alone across every instance (`repos/login.ts`), so two
+organisations holding one address would make an account unreachable. Enforced in
+`repos/usersAdmin.ts` (`emailInUse`).
+
 ## Status values
 
 Account and organisation status labels are matched leniently at sign-in: a

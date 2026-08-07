@@ -30,6 +30,10 @@ export const SMOKE = {
   auditorId: 'USR-AUD',
   auditeeId: 'USR-OWN',
   lockoutUserId: 'USR-LOCK',
+  // A user in the other organisation, so the smoke run can prove an email is
+  // unique across the whole platform and not merely within one instance.
+  otherOrgUserEmail: 'coast.admin@coastenergy.example',
+  otherOrgUserId: 'USR-COAST',
   affiliateCode: 'HKL',
   auditAreaId: 'AA-FIN',
   subAreaId: 'SA-TREAS',
@@ -252,6 +256,21 @@ export function seedDatabase(db: DatabaseSync): void {
       created_at: now,
     });
   }
+
+  // The Coast administrator. Email identifies a user across the platform at
+  // sign-in, so an address taken here must not be reusable inside Hass.
+  insert(db, 'users', {
+    user_id: SMOKE.otherOrgUserId,
+    organization_id: SMOKE.otherOrgId,
+    email: SMOKE.otherOrgUserEmail,
+    full_name: 'Coast Administrator',
+    password_hash: seedPasswordHash(SMOKE.password),
+    role_code: 'SUPER_ADMIN',
+    status: 'ACTIVE',
+    must_change_password: 0,
+    is_platform_owner: 0,
+    created_at: now,
+  });
 
   // Two-step verification is universal (Build Prompt 37): every sign-in in
   // the smoke run completes the email-code step by planting a known
