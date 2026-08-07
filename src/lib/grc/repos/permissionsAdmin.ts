@@ -3,11 +3,13 @@
  * matrix, and write a grant to role_permissions. The permission model is shared
  * reference data (not tenant data), keyed by role_code, module_code and
  * action_code, so this is not organisation-scoped. SUPER_ADMIN is never modified
- * here; it always holds the full matrix. After a write the caller invalidates the
- * cached matrix so the change takes effect on the next request.
+ * here; it always holds the full matrix. The write itself invalidates the role's
+ * cached matrix, so the change takes effect on the next request no matter which
+ * path performed it; callers may still invalidate again, which costs nothing.
  */
 import type { Client } from '@libsql/client/web';
 import { buildMatrix, type PermissionMatrix, type MatrixRow } from '@grc/auth/rbac';
+import { invalidateRoleMatrix } from '@grc/cache/invalidate';
 
 /** The role codes, from the roles table, falling back to those with grants. */
 export async function listRoleCodes(db: Client): Promise<string[]> {
@@ -43,7 +45,12 @@ export async function getRoleMatrix(db: Client, roleCode: string): Promise<Permi
   return buildMatrix(rows);
 }
 
-/** Set one grant, updating the row if present or inserting it otherwise. */
+/**
+ * Set one grant, updating the row if present or inserting it otherwise, then
+ * invalidate that role's cached matrix. The invalidation lives inside the write
+ * rather than beside it, so an access change cannot be left cached by a write
+ * path that forgot to clear it.
+ */
 export async function setGrant(
   db: Client,
   roleCode: string,
@@ -64,4 +71,5 @@ export async function setGrant(
       args: [roleCode, moduleCode, actionCode, flag],
     });
   }
+  await invalidateRoleMatrix(roleCode);
 }

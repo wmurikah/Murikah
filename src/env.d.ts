@@ -17,6 +17,29 @@ declare namespace Cloudflare {
      */
     CACHE?: KVNamespace;
 
+    /**
+     * KV for the GRC cache-aside layer (Build Prompt 42), and the default
+     * backend for it. Optional and unbound on the preview deploy, exactly like
+     * CACHE above: src/lib/grc/cache falls back to an in-isolate cache with
+     * lifetimes clamped to a few seconds when nothing is bound, so the app is
+     * correct either way and simply does less caching. Create and bind it with
+     *   wrangler kv namespace create GRC_CACHE
+     * then add the binding to wrangler.jsonc. GRC_CACHE is preferred; the
+     * existing CACHE namespace is used when only that one is bound (the key
+     * prefixes never collide with the rate limiter's).
+     */
+    GRC_CACHE?: KVNamespace;
+
+    /**
+     * The documented swap: an external Upstash Redis, reached over HTTP. Set
+     * both and src/lib/grc/cache uses Redis instead of KV, with no call site
+     * change. Runtime secrets, never committed:
+     *   wrangler secret put GRC_CACHE_REDIS_URL
+     *   wrangler secret put GRC_CACHE_REDIS_TOKEN
+     */
+    GRC_CACHE_REDIS_URL?: string;
+    GRC_CACHE_REDIS_TOKEN?: string;
+
     // Secrets (set via `wrangler secret put` in prod; `.dev.vars` locally).
     TURSO_DATABASE_URL: string;
     TURSO_AUTH_TOKEN: string;

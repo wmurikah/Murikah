@@ -1,0 +1,195 @@
+---
+export const prerender = false;
+
+/**
+ * Cache diagnostics, for the platform owner (Build Prompt 42).
+ *
+ * Shows which backend is serving the shared cache, the hit and miss counts
+ * rolled up across every isolate that has reported, and the counters of the
+ * isolate serving this very request. It also carries the recovery lever: flush
+ * one organisation's cached entries, or reset the counters to start a clean
+ * measurement.
+ *
+ * This sits above the instances rather than inside one, so it is reachable with
+ * no instance selected. Platform owner only: the middleware sends every other
+ * user home, and this screen refuses independently so the gate does not live in
+ * one place alone.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import { cacheStatsReport, hitRate, type CacheStatsReport } from '@grc/cache';
+import { listInstances, type SwitchOrg } from '@grc/repos/orgContext';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner;
+
+const done = Astro.url.searchParams.get('done');
+const error = Astro.url.searchParams.get('error');
+
+// The report is held in a one-element box rather than a bare local: it is
+// assigned inside the guard's callback, and TypeScript does not follow an
+// assignment made in a nested function back out to the narrowing here.
+const loadedReport: { value: CacheStatsReport | null } = { value: null };
+let instances: SwitchOrg[] = [];
+let loaded = true;
+if (allowed) {
+  loaded = await guardPageLoad('platform.cache', async () => {
+    loadedReport.value = await cacheStatsReport();
+    instances =
+      grc.switchable.length > 0 ? grc.switchable : await listInstances(await getDb(getGrcEnv()));
+  });
+}
+
+const stats = loadedReport.value;
+const rate = stats ? hitRate(stats.total) : 0;
+---
+
+<GrcLayout title="Cache">
+  <div class="grc-page-head">
+    <div>
+      <h1>Cache</h1>
+      <p class="grc-lead">
+        How the shared read cache is behaving, and how to clear it for one organisation.
+      </p>
+    </div>
+    <a class="grc-btn grc-btn--secondary" href="/platform">All organisations</a>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Cache diagnostics are restricted to the platform owner.
+      </p>
+    ) : !loaded || !stats ? (
+      <GrcErrorCard subject="The cache diagnostics" />
+    ) : (
+      <>
+        {done && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            {decodeURIComponent(done)}
+          </p>
+        )}
+        {error && (
+          <p class="grc-error" role="alert" style="margin-bottom:1rem">
+            {decodeURIComponent(error)}
+          </p>
+        )}
+
+        <div class="grc-stats" role="group" aria-label="Cache summary">
+          <div class="grc-stat grc-stat--done">
+            <span class="grc-stat__n">{rate}%</span>
+            <span class="grc-stat__l">Hit rate</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{stats.total.hits}</span>
+            <span class="grc-stat__l">Hits</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{stats.total.misses}</span>
+            <span class="grc-stat__l">Misses</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{stats.total.memoHits}</span>
+            <span class="grc-stat__l">Deduped in-request</span>
+          </div>
+          <div class="grc-stat grc-stat--overdue">
+            <span class="grc-stat__n">{stats.total.errors}</span>
+            <span class="grc-stat__l">Backend errors</span>
+          </div>
+        </div>
+
+        <p class="grc-lead" style="margin-top:1rem">
+          Backend: <strong>{stats.backend.name}</strong>.{' '}
+          {stats.backend.shared
+            ? 'Entries are shared across edges, so an invalidation reaches every one of them.'
+            : 'Nothing is bound, so entries are held in this isolate only and every lifetime is clamped to a few seconds. Bind a KV namespace to enable the shared cache.'}
+        </p>
+
+        <div class="grc-tablewrap">
+          <table class="grc-table" aria-label="Cache counters">
+            <thead>
+              <tr>
+                <th scope="col">Counter</th>
+                <th scope="col">All isolates</th>
+                <th scope="col">This isolate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Hits</th>
+                <td>{stats.total.hits}</td>
+                <td>{stats.isolate.hits}</td>
+              </tr>
+              <tr>
+                <th scope="row">Misses</th>
+                <td>{stats.total.misses}</td>
+                <td>{stats.isolate.misses}</td>
+              </tr>
+              <tr>
+                <th scope="row">Deduped in-request</th>
+                <td>{stats.total.memoHits}</td>
+                <td>{stats.isolate.memoHits}</td>
+              </tr>
+              <tr>
+                <th scope="row">Entries written</th>
+                <td>{stats.total.sets}</td>
+                <td>{stats.isolate.sets}</td>
+              </tr>
+              <tr>
+                <th scope="row">Invalidations</th>
+                <td>{stats.total.deletes}</td>
+                <td>{stats.isolate.deletes}</td>
+              </tr>
+              <tr>
+                <th scope="row">Not cacheable</th>
+                <td>{stats.total.bypasses}</td>
+                <td>{stats.isolate.bypasses}</td>
+              </tr>
+              <tr>
+                <th scope="row">Backend errors</th>
+                <td>{stats.total.errors}</td>
+                <td>{stats.isolate.errors}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grc-editpanel" style="margin-top:1.5rem">
+          <h2>Flush an organisation</h2>
+          <p class="grc-lead">
+            Removes every cached entry under that organisation's namespace and nobody else's. The
+            next read of each rebuilds from the database.
+          </p>
+          <form method="post" action="/api/platform/cache" class="grc-form grc-formgrid">
+            <input type="hidden" name="op" value="flush" />
+            <div class="grc-field">
+              <label for="flush-org">Organisation</label>
+              <select id="flush-org" name="organization_id" class="grc-select" required>
+                <option value="">Choose an organisation</option>
+                {instances.map((o) => (
+                  <option value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+            <div class="grc-actions">
+              <button type="submit" class="grc-btn grc-btn--primary">
+                Flush namespace
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <form method="post" action="/api/platform/cache" style="margin-top:1rem">
+          <input type="hidden" name="op" value="reset" />
+          <button type="submit" class="grc-btn grc-btn--secondary">
+            Reset counters
+          </button>
+        </form>
+      </>
+    )
+  }
+</GrcLayout>

@@ -739,6 +739,17 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    // Build Prompt 42: the platform owner's cache recovery lever. Flushing an
+    // organisation's namespace is idempotent and touches no database row, so the
+    // step asserts the redirect reports what it removed rather than a row change.
+    endpoint: 'platform/cache.ts',
+    title: "flush an organisation's cached entries",
+    expect: 'success',
+    method: 'POST',
+    path: () => '/api/platform/cache',
+    form: () => ({ op: 'flush', organization_id: SMOKE.orgId }),
+  },
+  {
     endpoint: 'ai/config.ts',
     title: 'save the AI configuration',
     expect: 'success',

@@ -8,6 +8,7 @@
  * Column names come from the typed schema layer (@grc/schema/columns).
  */
 import type { Client, InArgs } from '@libsql/client/web';
+import { invalidateDashboard } from '@grc/cache/invalidate';
 import { C, cols } from '@grc/schema/columns';
 import {
   PENDING_SET,
@@ -348,6 +349,9 @@ export async function createActionPlan(
       now,
     ],
   });
+  // The dashboard counts this plan; clear the organisation's aggregations so the
+  // next dashboard read recomputes rather than serving the pre-create numbers.
+  await invalidateDashboard(db, organizationId);
   return id;
 }
 
@@ -376,6 +380,7 @@ export async function updateActionPlan(
       organizationId,
     ],
   });
+  await invalidateDashboard(db, organizationId);
 }
 
 export async function deleteActionPlan(
@@ -387,4 +392,5 @@ export async function deleteActionPlan(
     sql: `DELETE FROM action_plans WHERE action_plan_id = ? AND organization_id = ?`,
     args: [id, organizationId],
   });
+  await invalidateDashboard(db, organizationId);
 }
