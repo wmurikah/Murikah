@@ -151,6 +151,8 @@ export interface MatrixRow {
 /** A role_permissions row with the organisation it belongs to. */
 export interface ScopedMatrixRow extends MatrixRow {
   organizationId: string;
+  /** `scope_to_affiliate`, the role's affiliate confinement (Build Prompt 45). */
+  scopeToAffiliate: boolean;
 }
 
 /** Which rows a matrix was built from: the organisation's own, or the defaults. */
@@ -158,6 +160,14 @@ export interface ScopedMatrixRows {
   rows: MatrixRow[];
   /** True when the organisation has no rows of its own and inherits the defaults. */
   inherited: boolean;
+  /**
+   * Whether this role is confined to its user's affiliate. The flag is stored on
+   * every grant row for the role, since `role_permissions` is the tenant-scoped
+   * table and `roles` is not, so it is read as "any row set" rather than "all
+   * rows set": the save writes the whole row set atomically and cannot leave
+   * them disagreeing, and a hand-edited database then fails closed.
+   */
+  scopeToAffiliate: boolean;
 }
 
 /**
@@ -182,8 +192,12 @@ export function selectScopedRows(
   platformDefaultOrg: string,
 ): ScopedMatrixRows {
   const own = organizationId === '' ? [] : rows.filter((r) => r.organizationId === organizationId);
-  if (own.length > 0) return { rows: own, inherited: false };
-  return { rows: rows.filter((r) => r.organizationId === platformDefaultOrg), inherited: true };
+  const chosen = own.length > 0 ? own : rows.filter((r) => r.organizationId === platformDefaultOrg);
+  return {
+    rows: chosen,
+    inherited: own.length === 0,
+    scopeToAffiliate: chosen.some((r) => r.scopeToAffiliate),
+  };
 }
 
 /** Build the nested matrix from role_permissions rows. */

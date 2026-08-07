@@ -57,7 +57,8 @@ async function readScopedRows(
   organizationId: string,
 ): Promise<ScopedMatrixRows> {
   const res = await db.execute({
-    sql: `SELECT ${RP.organization_id}, ${RP.module_code}, ${RP.action_code}, ${RP.is_allowed}
+    sql: `SELECT ${RP.organization_id}, ${RP.module_code}, ${RP.action_code}, ${RP.is_allowed},
+                 ${RP.scope_to_affiliate}
             FROM role_permissions
            WHERE ${RP.role_code} = ? AND ${RP.organization_id} IN (?, ?)`,
     args: [roleCode, organizationId, PLATFORM_DEFAULT_ORG],
@@ -67,8 +68,18 @@ async function readScopedRows(
     moduleCode: String(r.module_code ?? ''),
     actionCode: String(r.action_code ?? ''),
     isAllowed: Number(r.is_allowed ?? 0) === 1,
+    scopeToAffiliate: Number(r.scope_to_affiliate ?? 0) === 1,
   }));
   return selectScopedRows(rows, organizationId, PLATFORM_DEFAULT_ORG);
+}
+
+/** A role's resolved access inside an organisation: its grants and its scope. */
+export interface ResolvedRoleAccess {
+  matrix: PermissionMatrix;
+  /** True when the organisation has no grants of its own and inherits the defaults. */
+  inherited: boolean;
+  /** True when the role is confined to its user's affiliate (Build Prompt 45). */
+  scopeToAffiliate: boolean;
 }
 
 /**
@@ -84,14 +95,23 @@ export async function getPermissionMatrix(
   return buildMatrix(scoped.rows);
 }
 
-/** The same read, keeping whether the organisation inherited, for the admin screen. */
+/**
+ * The same read, keeping the whole resolved access: the matrix, whether the
+ * organisation inherited it, and whether the role is confined to its affiliate.
+ * The middleware and the admin screen both take this, so the grants and the
+ * scope always come from one query and cannot disagree.
+ */
 export async function getScopedRoleMatrix(
   db: Client,
   roleCode: string,
   organizationId: string,
-): Promise<{ matrix: PermissionMatrix; inherited: boolean }> {
+): Promise<ResolvedRoleAccess> {
   const scoped = await readScopedRows(db, roleCode, organizationId);
-  return { matrix: buildMatrix(scoped.rows), inherited: scoped.inherited };
+  return {
+    matrix: buildMatrix(scoped.rows),
+    inherited: scoped.inherited,
+    scopeToAffiliate: scoped.scopeToAffiliate,
+  };
 }
 
 /** True when the session's matrix grants the action on the module (aliases applied). */

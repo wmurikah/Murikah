@@ -58,7 +58,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // The parent must be a real finding in the acting organisation; a stray or
   // crafted id is refused with the same field error, not stored.
   const parent = input.workPaperId
-    ? await getWorkPaper(db, grc.organizationId, input.workPaperId)
+    ? await getWorkPaper(db, grc.organizationId, input.workPaperId, grc.affiliateScope)
     : null;
   if (!parent) {
     return new Response(null, {
@@ -77,7 +77,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     try {
       const config = await loadAiConfig(db);
       if (config.evaluationEnabled) {
-        const wp = await getWorkPaper(db, grc.organizationId, input.workPaperId);
+        const wp = await getWorkPaper(
+          db,
+          grc.organizationId,
+          input.workPaperId,
+          grc.affiliateScope,
+        );
         if (wp) {
           const verdict = await evaluateAuditeeResponse(
             db,

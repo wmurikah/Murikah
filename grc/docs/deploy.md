@@ -121,3 +121,26 @@ administrator saves that organisation's own set on `/settings/access-control`.
 A platform owner inside no instance edits the defaults themselves; inside an
 instance, the same screen edits that instance's grants. New organisations are
 given their own copy of the defaults at provisioning.
+
+### Migration 002, confine a role to its affiliate
+
+`grc/db/migrations/002-role-permissions-affiliate-scope.sql` (Build Prompt 45).
+It adds `scope_to_affiliate` to `role_permissions`, so a role can be marked
+confined to its user's affiliate.
+
+- A plain `ADD COLUMN`: no key change, so no table rebuild and no data moves.
+- Existing rows default to `0`, which is exactly the current behaviour, so
+  applying it changes nothing anybody sees until an administrator ticks the box
+  on `/settings/access-control`.
+- Run migration 001 first: this assumes the tenant-scoped table it created.
+  Running this one twice fails harmlessly with "duplicate column name".
+
+Because it is a pure addition with a safe default, the ordering worry that
+applies to migration 001 does not apply here. The code reads the column, so
+apply it before or as the release deploys; if the deploy lands first, the reads
+fail until it is applied.
+
+Before confining a role, check that its users actually carry an affiliate. A
+user in a confined role with no `users.affiliate_code` sees nothing at all until
+one is assigned, which the screens say plainly rather than showing an empty
+list. The migration file carries the query.
