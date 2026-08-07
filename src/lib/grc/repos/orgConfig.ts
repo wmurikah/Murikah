@@ -14,7 +14,7 @@
  * cache-aside, and any other key reads straight from the database. A new setting
  * is uncached until someone deliberately lists it, which is the safe default.
  */
-import type { Client } from '@libsql/client/web';
+import type { Client, InStatement } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
 import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
 import { invalidateConfigKey } from '@grc/cache/invalidate';
@@ -179,28 +179,39 @@ export async function getGlobalConfigValue(db: Client, key: string): Promise<str
 }
 
 /**
- * Create the inactive GLOBAL sentinel organisation row, for a schema that
- * enforces the config.organization_id foreign key. Inactive (is_active 0), so
- * it never appears in organisation lists or the switcher.
+ * Create the inactive GLOBAL sentinel organisation row, as a statement, so a
+ * caller can put it at the head of its own batch rather than spending a separate
+ * round trip. Inactive (is_active 0), so it never appears in organisation lists
+ * or the switcher, and guarded by `WHERE NOT EXISTS` so it is idempotent whether
+ * or not `organization_id` carries a unique index.
+ *
+ * Everything platform-wide hangs off this one row: the AI settings, the Outlook
+ * mail connection, and the platform-default permission grants
+ * (`repos/permissionsAdmin.ts`). One definition, so the row is identical
+ * whichever path creates it.
  */
-async function ensureGlobalSentinel(db: Client): Promise<void> {
+export function globalSentinelStatement(): InStatement {
   const org = cols(C.organizations);
-  const existing = await db.execute({
-    sql: `SELECT ${org.organization_id} FROM organizations WHERE ${org.organization_id} = ? LIMIT 1`,
-    args: [GLOBAL_CONFIG_ORG],
-  });
-  if (existing.rows.length > 0) return;
-  await db.execute({
+  return {
     sql: `INSERT INTO organizations
-            (${org.organization_id}, ${org.org_code}, ${org.org_name}, ${org.is_active}, ${org.created_at})
-          VALUES (?, ?, ?, 0, ?)`,
+            (${org.organization_id}, ${org.org_code}, ${org.org_name}, ${org.is_active},
+             ${org.created_at})
+          SELECT ?, ?, ?, 0, ?
+           WHERE NOT EXISTS (
+                 SELECT 1 FROM organizations WHERE ${org.organization_id} = ?)`,
     args: [
       GLOBAL_CONFIG_ORG,
       GLOBAL_CONFIG_ORG,
       'Platform (global configuration)',
       new Date().toISOString(),
+      GLOBAL_CONFIG_ORG,
     ],
-  });
+  };
+}
+
+/** The same row, for a caller that is not already building a batch. */
+async function ensureGlobalSentinel(db: Client): Promise<void> {
+  await db.execute(globalSentinelStatement());
 }
 
 /**

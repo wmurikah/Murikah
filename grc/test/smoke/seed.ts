@@ -18,6 +18,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
+  PLATFORM_DEFAULT_ORG,
 } from '../../../src/lib/grc/auth/permissionModules.ts';
 
 export const SMOKE = {
@@ -158,6 +159,16 @@ export function seedDatabase(db: DatabaseSync): void {
       created_at: now,
     });
   }
+  // The platform-default sentinel, inactive so it never appears in a list or the
+  // switcher. The platform-default permission grants hang off it, along with the
+  // platform-wide config rows.
+  insert(db, 'organizations', {
+    organization_id: PLATFORM_DEFAULT_ORG,
+    org_code: PLATFORM_DEFAULT_ORG,
+    org_name: 'Platform (global configuration)',
+    is_active: 0,
+    created_at: now,
+  });
 
   insert(db, 'plans', {
     plan_code: 'ENTERPRISE',
@@ -195,17 +206,23 @@ export function seedDatabase(db: DatabaseSync): void {
   for (const action of PERMISSION_ACTIONS) {
     insert(db, 'permission_actions', { action_code: action.code, action_name: action.name });
   }
-  // A full grant for the admin role and a read-heavy grant for auditors, so the
-  // access-control screen has a real matrix to render and save.
+  // The grants are seeded as PLATFORM DEFAULTS, under the sentinel, and Hass is
+  // given none of its own. That is the state a live database is in the moment
+  // after migration 001 runs, so the smoke run exercises the inheritance path on
+  // every page load rather than only the own-rows path: a full grant for the
+  // admin role and a read-heavy grant for auditors, so the access-control screen
+  // has a real matrix to render and save.
   for (const module of MODULES) {
     for (const action of ACTIONS) {
       insert(db, 'role_permissions', {
+        organization_id: PLATFORM_DEFAULT_ORG,
         role_code: 'SUPER_ADMIN',
         module_code: module,
         action_code: action,
         is_allowed: 1,
       });
       insert(db, 'role_permissions', {
+        organization_id: PLATFORM_DEFAULT_ORG,
         role_code: 'AUDITOR',
         module_code: module,
         action_code: action,
@@ -223,11 +240,27 @@ export function seedDatabase(db: DatabaseSync): void {
     ['AUDITEE_RESPONSE', 'create'],
   ] as const) {
     insert(db, 'role_permissions', {
+      organization_id: PLATFORM_DEFAULT_ORG,
       role_code: 'UNIT_MANAGER',
       module_code: module,
       action_code: action,
       is_allowed: 1,
     });
+  }
+  // The other organisation holds its OWN auditor grants, deliberately narrower
+  // than the defaults. This is the control for the tenant-scoping fix: when the
+  // smoke run saves Hass's AUDITOR matrix, these rows must be exactly as they
+  // are here afterwards. Before Build Prompt 44 that same save rewrote them.
+  for (const module of MODULES) {
+    for (const action of ACTIONS) {
+      insert(db, 'role_permissions', {
+        organization_id: SMOKE.otherOrgId,
+        role_code: 'AUDITOR',
+        module_code: module,
+        action_code: action,
+        is_allowed: action === 'read' ? 1 : 0,
+      });
+    }
   }
 
   const users: [string, string, string, string, number][] = [
