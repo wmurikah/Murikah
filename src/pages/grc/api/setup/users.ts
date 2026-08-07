@@ -3,9 +3,12 @@ export const prerender = false;
 /**
  * Users CRUD for the Setup module, SUPER_ADMIN (or platform owner) only, gated on
  * the USER module and scoped to the acting organisation. Create issues an initial
- * password with must_change_password; edit changes name, role, affiliate and
- * phone; reset issues a new initial password; activate and deactivate flip the
- * status. Guards: a platform-owner account is never edited here, and an admin
+ * password with must_change_password; edit changes email, name, role, affiliate
+ * and phone; reset issues a new initial password; activate and deactivate flip
+ * the status. Every account must carry a valid, unique email: it is the sign-in
+ * identity and the address the universal second-factor code goes to (Build
+ * Prompt 37), so create and edit both refuse a missing, malformed or duplicate
+ * one. Guards: a platform-owner account is never edited here, and an admin
  * cannot deactivate their own account (no lock-out). Every write is validated,
  * hashed where relevant, and audited.
  */
@@ -37,17 +40,24 @@ const back = (q: string): Response =>
 const ok = (msg: string): Response => back(`saved=${encodeURIComponent(msg)}`);
 const bad = (msg: string): Response => back(`error=${encodeURIComponent(msg)}`);
 
+/** The posted profile, or null when a required field is missing or malformed. */
 function profile(form: FormData): UserInput | null {
+  const email = String(form.get('email') ?? '')
+    .trim()
+    .toLowerCase();
   const fullName = requireText(String(form.get('full_name') ?? ''), 160);
   const roleCode = requireText(String(form.get('role_code') ?? ''), 60);
-  if (!fullName || !roleCode) return null;
+  if (!fullName || !roleCode || !isValidEmail(email)) return null;
   return {
+    email,
     fullName,
     roleCode,
     affiliateCode: optionalText(String(form.get('affiliate_code') ?? ''), 40),
     phone: optionalText(String(form.get('phone') ?? ''), 40),
   };
 }
+
+const PROFILE_REQUIRED = 'A full name, role and valid email address are required.';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
@@ -72,18 +82,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     if (op === 'create') {
       const input = profile(form);
-      if (!input) return bad('A full name and role are required.');
-      const email = String(form.get('email') ?? '').trim();
-      if (!isValidEmail(email)) return bad('A valid email is required.');
+      if (!input) return bad(PROFILE_REQUIRED);
       const password = String(form.get('password') ?? '');
       if (!isValidInitialPassword(password)) {
         return bad('The initial password must be at least eight characters.');
       }
-      if (await userEmailExists(db, org, email)) return bad(`${email} is already a user.`);
+      if (await userEmailExists(db, org, input.email)) {
+        return bad(`${input.email} is already a user.`);
+      }
       const hash = await hashPassword(password);
-      const id = await createUser(db, org, email, hash, input);
+      const id = await createUser(db, org, hash, input);
       await audit('USER.create', id);
-      return ok(`User ${email} created; they must change their password at first sign-in.`);
+      return ok(`User ${input.email} created; they must change their password at first sign-in.`);
     }
 
     const userId = String(form.get('user_id') ?? '');
@@ -94,7 +104,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (op === 'update') {
       const input = profile(form);
-      if (!input) return bad('A full name and role are required.');
+      if (!input) return bad(PROFILE_REQUIRED);
+      if (await userEmailExists(db, org, input.email, userId)) {
+        return bad(`${input.email} is already another user.`);
+      }
       await updateUser(db, org, userId, input);
       await audit('USER.update', userId);
       return ok(`${input.fullName} saved.`);

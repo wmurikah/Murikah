@@ -19,6 +19,7 @@
 import type { Client } from '@libsql/client/web';
 import { getConfigValues, setConfigValue } from '@grc/repos/orgConfig';
 import { hashToken } from '@grc/auth/session';
+import { seal } from '@grc/auth/secretBox';
 import {
   parseMfaRecord,
   canStartEnrolment,
@@ -62,16 +63,30 @@ async function writeRecord(
  * The user's record under universal verification (Build Prompt 37): the
  * stored one, or the automatic email default. A missing or unconfirmed
  * record is persisted in its email-default form, so the account verifies by
- * email the moment it exists, with no enrolment step.
+ * email the moment it exists, with no enrolment step. Provisioning also mints
+ * the first set of backup codes, so a temporarily unavailable inbox never
+ * locks anyone out; the sealed plaintext rides along for the one showing on
+ * the account security screen. A record already carrying codes, or one whose
+ * pending enrolment owns `backupPlain` and confirms its own set, is left
+ * alone.
  */
 export async function ensureMfaRecord(
   db: Client,
   organizationId: string,
   userId: string,
+  sessionSecret: string,
 ): Promise<MfaRecord> {
   const existing = await getMfaRecord(db, organizationId, userId);
   const effective = withEmailDefault(existing);
-  if (!existing?.confirmed) await writeRecord(db, organizationId, userId, effective);
+  // No unused codes and none waiting to be shown: mint a set. This covers the
+  // first sign-in and the user who has spent every code they had.
+  const mintCodes = effective.backup.length === 0 && effective.backupPlain === undefined;
+  if (mintCodes) {
+    const codes = generateBackupCodes();
+    effective.backup = await hashBackupCodes(codes);
+    effective.backupPlain = await seal(sessionSecret, JSON.stringify(codes));
+  }
+  if (mintCodes || !existing?.confirmed) await writeRecord(db, organizationId, userId, effective);
   return effective;
 }
 
