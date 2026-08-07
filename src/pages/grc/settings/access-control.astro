@@ -23,8 +23,8 @@ import {
   fullMatrix,
   type PermissionMatrix,
 } from '@grc/auth/rbac';
-import { listRoleCodes, getRoleMatrix } from '@grc/repos/permissionsAdmin';
-import { can } from '@grc/auth/rbac';
+import { listRoleCodes, getRoleMatrixForOrg } from '@grc/repos/permissionsAdmin';
+import { can, PLATFORM_DEFAULT_ORG } from '@grc/auth/rbac';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -33,9 +33,17 @@ const done = Astro.url.searchParams.get('done');
 const error = Astro.url.searchParams.get('error');
 const requested = Astro.url.searchParams.get('role') ?? '';
 
+// The scope these grants belong to. The acting organisation is resolved
+// server-side and is never a request parameter, so this is also the only scope
+// the save can reach: an instance admin edits their own organisation, and only a
+// platform owner above the instances reaches the platform defaults.
+const editingDefaults = grc.organizationId === '';
+const scopeName = editingDefaults ? 'the platform defaults' : grc.organizationName;
+
 let roles: string[] = [];
 let selected = '';
 let matrix: PermissionMatrix = {};
+let inherited = false;
 let loadError = false;
 if (allowed) {
   loadError = !(await guardPageLoad('settings.access-control', async () => {
@@ -45,7 +53,19 @@ if (allowed) {
       ? requested
       : (roles.find((r) => r !== 'SUPER_ADMIN') ?? roles[0] ?? '');
     if (selected) {
-      matrix = selected === 'SUPER_ADMIN' ? fullMatrix() : await getRoleMatrix(db, selected);
+      if (selected === 'SUPER_ADMIN') {
+        matrix = fullMatrix();
+      } else {
+        const scoped = await getRoleMatrixForOrg(
+          db,
+          selected,
+          editingDefaults ? PLATFORM_DEFAULT_ORG : grc.organizationId,
+        );
+        matrix = scoped.matrix;
+        // Inheriting the defaults is only worth saying inside an instance: when
+        // editing the defaults themselves, they are not inherited from anywhere.
+        inherited = scoped.inherited && !editingDefaults;
+      }
     }
   }));
 }
@@ -58,7 +78,9 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
   <div class="grc-page-head">
     <div>
       <h1>Access control</h1>
-      <p class="grc-lead">The permission matrix for each role, and the pages it unlocks.</p>
+      <p class="grc-lead">
+        The permission matrix for each role in {scopeName}, and the pages it unlocks.
+      </p>
     </div>
     <a href="/settings" class="grc-btn grc-btn--secondary">Back to settings</a>
   </div>
@@ -101,7 +123,9 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
         {selected && (
           <form method="post" action="/api/access-control" class="grc-panel">
             <div class="grc-actionbar" style="margin:0 0 0.75rem;justify-content:space-between">
-              <h2 style="margin:0">Permissions for {selected}</h2>
+              <h2 style="margin:0">
+                Permissions for {selected} in {scopeName}
+              </h2>
               {!isSuperAdmin && (
                 <button type="submit" class="grc-btn grc-btn--primary">
                   Save permissions
@@ -112,6 +136,25 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
             {isSuperAdmin && (
               <p class="grc-field__hint">
                 SUPER_ADMIN always holds every permission and cannot be changed.
+              </p>
+            )}
+            {editingDefaults && !isSuperAdmin && (
+              <p class="grc-field__hint">
+                These are the platform defaults. Every organisation resolves them until it saves a
+                set of its own, and a newly provisioned organisation is given a copy of them.
+                Changing them here does not alter an organisation that already has its own grants.
+              </p>
+            )}
+            {inherited && !isSuperAdmin && (
+              <p class="grc-field__hint">
+                {scopeName} has no permissions of its own for {selected} yet, so these are the
+                platform defaults it currently inherits. Saving stores them as {scopeName}'s own,
+                and from then on only {scopeName} is affected.
+              </p>
+            )}
+            {!editingDefaults && !inherited && !isSuperAdmin && (
+              <p class="grc-field__hint">
+                These grants belong to {scopeName} alone. Saving changes no other organisation.
               </p>
             )}
             <div class="grc-tablewrap">

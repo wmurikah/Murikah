@@ -33,6 +33,7 @@ import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
 import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
+  PLATFORM_DEFAULT_ORG,
 } from '../../src/lib/grc/auth/permissionModules.ts';
 
 /** The cells the role-save step ticks, and therefore expects stored as allowed. */
@@ -742,34 +743,45 @@ const MUTATION_STEPS: MutationStep[] = [
     // deliberate: those are the two modules whose missing `permission_modules`
     // rows broke every save, and the smoke schema now enforces that reference.
     endpoint: 'access-control.ts',
-    title: 'save the auditor permission matrix, in full',
+    title: 'save the auditor permission matrix, in full, for this organisation alone',
     expect: 'success',
     verify: (db) => {
       const cells = PERMISSION_MODULES.length * PERMISSION_ACTIONS.length;
-      const stored = db
-        .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE role_code = 'AUDITOR'`)
-        .get() as { n: number | bigint };
+      const countFor = (org: string): number => {
+        const r = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM role_permissions
+              WHERE role_code = 'AUDITOR' AND organization_id = ?`,
+          )
+          .get(org) as { n: number | bigint };
+        return Number(r.n);
+      };
       assert.equal(
-        Number(stored.n),
+        countFor(SMOKE.orgId),
         cells,
-        'the whole matrix must be stored, one row per module and action',
+        'the whole matrix must be stored for the acting organisation',
       );
-      const allowed = (module: string, action: string): number => {
+      const allowed = (org: string, module: string, action: string): number => {
         const row = db
           .prepare(
             `SELECT is_allowed AS a FROM role_permissions
-              WHERE role_code = 'AUDITOR' AND module_code = ? AND action_code = ?`,
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = ? AND action_code = ?`,
           )
-          .get(module, action) as { a?: number | bigint } | undefined;
+          .get(org, module, action) as { a?: number | bigint } | undefined;
         return Number(row?.a ?? -1);
       };
       for (const [module, action] of GRANTED_IN_SAVE) {
-        assert.equal(allowed(module, action), 1, `${module}.${action} must be stored as allowed`);
+        assert.equal(
+          allowed(SMOKE.orgId, module, action),
+          1,
+          `${module}.${action} must be stored as allowed`,
+        );
       }
-      // Seeded as allowed, left unticked here: the un-tick has to apply too, or
-      // a half-applied save would pass this step.
+      // Inherited as allowed from the platform defaults, left unticked here: the
+      // un-tick has to apply too, or a half-applied save would pass this step.
       assert.equal(
-        allowed('WORK_PAPER', 'update'),
+        allowed(SMOKE.orgId, 'WORK_PAPER', 'update'),
         0,
         'an unticked cell must be stored as refused, not left as it was',
       );
@@ -777,11 +789,33 @@ const MUTATION_STEPS: MutationStep[] = [
       // live permission_modules table was missing.
       for (const module of PERMISSION_MODULES) {
         assert.notEqual(
-          allowed(module.code, 'read'),
+          allowed(SMOKE.orgId, module.code, 'read'),
           -1,
           `${module.code} must have a stored grant, so the module row exists`,
         );
       }
+
+      // AC-01, the whole point of Build Prompt 44: the save reached this
+      // organisation and nobody else. Before it, this same submission rewrote
+      // the AUDITOR role for every customer on the platform at once.
+      assert.equal(
+        countFor(SMOKE.otherOrgId),
+        cells,
+        "the other organisation's own grants must still be there",
+      );
+      for (const [module, action] of GRANTED_IN_SAVE) {
+        assert.equal(
+          allowed(SMOKE.otherOrgId, module, action),
+          action === 'read' ? 1 : 0,
+          `${module}.${action} must be untouched in the other organisation`,
+        );
+      }
+      // The platform defaults are not this organisation's to change either.
+      assert.equal(
+        allowed(PLATFORM_DEFAULT_ORG, 'WORK_PAPER', 'update'),
+        1,
+        'the platform defaults must survive an organisation saving its own set',
+      );
     },
     method: 'POST',
     path: () => '/api/access-control',
@@ -807,8 +841,11 @@ const MUTATION_STEPS: MutationStep[] = [
       assert.equal(Number(ghost.n), 0, 'a rolled-back save must leave no row behind');
       // The role saved by the previous step is untouched by the failed one.
       const auditor = db
-        .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE role_code = 'AUDITOR'`)
-        .get() as { n: number | bigint };
+        .prepare(
+          `SELECT COUNT(*) AS n FROM role_permissions
+            WHERE role_code = 'AUDITOR' AND organization_id = ?`,
+        )
+        .get(SMOKE.orgId) as { n: number | bigint };
       assert.equal(
         Number(auditor.n),
         PERMISSION_MODULES.length * PERMISSION_ACTIONS.length,
@@ -1474,6 +1511,97 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         stillHome.body.includes(SMOKE.orgName) && !stillHome.body.includes(SMOKE.otherOrgName),
         'a refused switch leaves them in their own organisation',
       );
+
+      // AC-08: the super-label above the organisation name is the platform
+      // owner's, and says nothing to somebody who belongs to one organisation.
+      assert.ok(
+        !stillHome.body.includes('grc-orgline__label'),
+        'a pinned admin sees the organisation name alone, with no super-label',
+      );
+
+      // AC-02: the platform-wide config is not theirs to write. Both of these
+      // sit on the shared GLOBAL sentinel, so a save here would change the model
+      // every tenant's AI runs on, or the mailbox every tenant sends from.
+      const aiSave = await server.request('POST', '/api/ai/config', {
+        active_provider: 'anthropic',
+        model: 'nothing-they-should-be-able-to-set',
+      });
+      assert.equal(aiSave.status, 403, 'an instance admin cannot change the platform AI config');
+      // The exact refusal matters here, not merely that an error came back: the
+      // smoke environment has no Graph credentials, so these endpoints error for
+      // a second reason too, and only the owner-gate message proves the gate.
+      const refusal = (res: { headers: Record<string, string | string[] | undefined> }): string =>
+        decodeURIComponent(String(res.headers.location ?? ''));
+      const mailConnect = await server.request('GET', '/api/admin/outlook/connect');
+      assert.match(
+        refusal(mailConnect),
+        /connected by the platform owner/,
+        'an instance admin cannot start the shared mailbox connect flow',
+      );
+      const mailTest = await server.request('POST', '/api/admin/outlook/test', {});
+      assert.match(
+        refusal(mailTest),
+        /tested by the platform owner/,
+        'an instance admin cannot send through the shared mailbox',
+      );
+      // The screens they can still read must not offer the controls either.
+      const emailScreen = await server.get('/settings/email');
+      assert.ok(
+        emailScreen.body.includes('connected and tested by Murikah Labs'),
+        'the email screen tells a pinned admin the mailbox is not theirs to manage',
+      );
+      assert.ok(
+        !emailScreen.body.includes('/api/admin/outlook/test'),
+        'the email screen offers a pinned admin no test action',
+      );
+
+      // AC-01: they may edit their own organisation's roles, and only those.
+      const saved = await server.request('POST', '/api/access-control', {
+        role_code: 'AUDITOR',
+        grant_WORK_PAPER_read: '1',
+      });
+      assert.ok(
+        !String(saved.headers.location ?? '').includes('error='),
+        'an instance admin may edit their own roles',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const allowedIn = (org: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = 'WORK_PAPER' AND action_code = 'read'`,
+          )
+          .get(org) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      assert.equal(allowedIn(SMOKE.orgId), 1, 'their own organisation took the change');
+      assert.equal(
+        allowedIn(SMOKE.otherOrgId),
+        1,
+        "the other organisation's own grant is as it was seeded",
+      );
+      assert.equal(
+        allowedIn(PLATFORM_DEFAULT_ORG),
+        1,
+        'the platform defaults are not an instance admin to change',
+      );
+      // The revocations they just made reached nobody else: WORK_PAPER.create was
+      // left unticked, so it is refused for them and untouched everywhere else.
+      const createIn = (org: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = 'WORK_PAPER' AND action_code = 'create'`,
+          )
+          .get(org) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      assert.equal(createIn(SMOKE.orgId), 0, 'their own unticked cell is revoked');
+      assert.equal(createIn(PLATFORM_DEFAULT_ORG), 1, 'the platform default keeps it');
+      assert.equal(createIn(SMOKE.otherOrgId), 0, 'the other organisation keeps its own answer');
 
       // Back to the owner inside Hass, the state the rest of the run assumes.
       await signInAsOwnerInsideHass();

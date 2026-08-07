@@ -36,6 +36,25 @@
  * No imports, so node strips the types and the unit tests run this directly.
  */
 
+/**
+ * The organisation id the platform-default grants are stored under.
+ *
+ * `role_permissions` is tenant-scoped as of Build Prompt 44: the effective key
+ * is `(organization_id, role_code, module_code, action_code)`, and an
+ * organisation resolves its own rows if it has any, else these defaults. The
+ * value is the same inactive `GLOBAL` sentinel organisation the platform-wide
+ * config rows already hang off (`repos/orgConfig.ts::GLOBAL_CONFIG_ORG`), on
+ * purpose: one sentinel row for everything that belongs to the platform rather
+ * than to a customer, so there is one thing to create and one thing to exclude
+ * from organisation lists. It is declared here rather than imported from
+ * `orgConfig.ts` only so this file stays free of imports.
+ *
+ * A real organisation can never collide with it: organisation ids are minted as
+ * UUIDs at provisioning, and the sentinel row is `is_active = 0`, so it never
+ * appears in a switcher or an organisation list.
+ */
+export const PLATFORM_DEFAULT_ORG = 'GLOBAL';
+
 export interface PermissionModuleDef {
   /** `permission_modules.module_code`, and the key the matrix is stored under. */
   readonly code: string;
