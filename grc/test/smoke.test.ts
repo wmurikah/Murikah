@@ -464,16 +464,41 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ op: 'area_create', code: 'OPS', name: 'Operations', description: 'Smoke area' }),
   },
   {
+    // No admin types a password any more (Build Prompt 39): the endpoint mints
+    // one, hashes it, forces a change and hands it back through the sealed
+    // single-use row the page reads.
     endpoint: 'setup/users.ts',
-    title: 'create a user',
+    title: 'create a user with a system-generated password',
     expect: 'success',
     verify: (db, captured) => {
       const r = db
-        .prepare(`SELECT user_id AS id FROM users WHERE email = 'smoke.user@hasspetroleum.com'`)
-        .get() as { id?: string } | undefined;
+        .prepare(
+          `SELECT user_id AS id, password_hash AS h, must_change_password AS m
+             FROM users WHERE email = 'smoke.user@hasspetroleum.com'`,
+        )
+        .get() as { id?: string; h?: string; m?: number | bigint } | undefined;
       assert.ok(r?.id, 'the user row must exist');
-      // The edit steps below need the new id, which the redirect does not carry.
+      assert.equal(Number(r.m), 1, 'a generated password always forces a change');
+      assert.ok(
+        String(r.h ?? '').startsWith('pbkdf2$'),
+        'only a canonical PBKDF2 hash is stored, never the plaintext',
+      );
+      // The sealed handoff is what the page reads once; the plaintext must not
+      // be sitting in it readably.
+      const handoff = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = ? AND config_key = ?`,
+        )
+        .get(SMOKE.orgId, `USER_TEMP_PW::${String(r.id)}`) as { v?: string } | undefined;
+      assert.ok(handoff?.v, 'the generated password must be stashed for the admin');
+      const stashed = JSON.parse(String(handoff.v)) as { sealed?: string; actorUserId?: string };
+      assert.ok(stashed.sealed, 'the stash holds a sealed value');
+      assert.equal(stashed.actorUserId, SMOKE.userId, 'bound to the admin who minted it');
+      // The edit steps below need the new id, which the redirect does not carry;
+      // the reset step compares against this hash to prove it really changed.
       captured.set('newUserId', String(r.id));
+      captured.set('createdHash', String(r.h ?? ''));
     },
     method: 'POST',
     path: () => '/api/setup/users',
@@ -483,7 +508,27 @@ const MUTATION_STEPS: MutationStep[] = [
       full_name: 'Smoke User',
       role_code: 'AUDITOR',
       affiliate_code: SMOKE.affiliateCode,
-      password: 'Smoke-User-Password-1',
+    }),
+  },
+  {
+    // Email identifies a user across the platform at sign-in, so an address
+    // already held in another organisation cannot be taken here.
+    endpoint: 'setup/users.ts',
+    title: 'an email already used in another organisation is refused',
+    expect: 'refusal',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM users WHERE email = ?`)
+        .get(SMOKE.otherOrgUserEmail) as { n: number | bigint };
+      assert.equal(Number(r.n), 1, 'no second account may take the address');
+    },
+    method: 'POST',
+    path: () => '/api/setup/users',
+    form: () => ({
+      op: 'create',
+      email: SMOKE.otherOrgUserEmail,
+      full_name: 'Cross Org Clash',
+      role_code: 'AUDITOR',
     }),
   },
   {
@@ -527,6 +572,62 @@ const MUTATION_STEPS: MutationStep[] = [
       email: 'smoke.edited@hasspetroleum.com',
       full_name: 'Smoke User',
       role_code: 'AUDITOR',
+      phone: '+254700000111',
+    }),
+  },
+  {
+    endpoint: 'setup/users.ts',
+    title: "an edit that takes another account's email is refused",
+    expect: 'refusal',
+    verify: (db, captured) => {
+      const r = db
+        .prepare(`SELECT email FROM users WHERE user_id = ?`)
+        .get(captured.get('newUserId') ?? '') as { email?: string } | undefined;
+      assert.equal(r?.email, 'smoke.edited@hasspetroleum.com', 'the refused edit changes nothing');
+    },
+    method: 'POST',
+    path: () => '/api/setup/users',
+    form: (captured) => ({
+      op: 'update',
+      user_id: captured.get('newUserId') ?? '',
+      email: SMOKE.instanceAdminEmail,
+      full_name: 'Smoke User',
+      role_code: 'AUDITOR',
+    }),
+  },
+  {
+    // The reset path is the create path: a fresh generated password, hashed,
+    // forced to change, emailed and stashed. Never one the admin typed.
+    endpoint: 'setup/users.ts',
+    title: 'reset a password to a freshly generated one',
+    expect: 'success',
+    verify: (db, captured) => {
+      const id = captured.get('newUserId') ?? '';
+      const r = db
+        .prepare(
+          `SELECT password_hash AS h, must_change_password AS m FROM users WHERE user_id = ?`,
+        )
+        .get(id) as { h?: string; m?: number | bigint } | undefined;
+      assert.equal(Number(r?.m), 1, 'a reset forces a change at the next sign-in');
+      assert.ok(String(r?.h ?? '').startsWith('pbkdf2$'), 'the new password is stored hashed');
+      assert.notEqual(
+        String(r?.h ?? ''),
+        captured.get('createdHash') ?? '',
+        'the reset must actually change the stored hash',
+      );
+      const handoff = db
+        .prepare(
+          `SELECT config_value AS v FROM config
+            WHERE organization_id = ? AND config_key = ?`,
+        )
+        .get(SMOKE.orgId, `USER_TEMP_PW::${id}`) as { v?: string } | undefined;
+      assert.ok(handoff?.v, 'the reset password is stashed for the admin too');
+    },
+    method: 'POST',
+    path: () => '/api/setup/users',
+    form: (captured) => ({
+      op: 'reset_password',
+      user_id: captured.get('newUserId') ?? '',
     }),
   },
   {
@@ -1429,6 +1530,81 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
 
     // Work paper as parent (Build Prompt 27): an action plan cannot exist
     // without a finding, and the one seeded stray is surfaced and relinkable.
+    // System-generated emailed passwords (Build Prompt 39): the admin never
+    // types one, sees the generated value exactly once, and a mail outage
+    // degrades to "here it is, pass it on" rather than losing the account.
+    await t.test('a generated password is shown once and only once', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable');
+      const created = await server.request('POST', '/api/setup/users', {
+        op: 'create',
+        email: 'shown.once@hasspetroleum.com',
+        full_name: 'Shown Once',
+        role_code: 'AUDITOR',
+      });
+      const location = String(created.headers.location ?? '');
+      assert.ok(location.includes('credential='), `create redirected to ${location}`);
+      // The smoke run has no Graph mailer, so the send visibly fails and the
+      // admin is told: the account still exists and the password is still shown.
+      assert.ok(
+        location.includes('mailerror='),
+        'without a mailer the failure must be surfaced, not swallowed',
+      );
+      const row = db
+        .prepare(`SELECT user_id AS id FROM users WHERE email = 'shown.once@hasspetroleum.com'`)
+        .get() as { id?: string } | undefined;
+      assert.ok(row?.id, 'a failed email must not undo the account');
+
+      // A live credential must never travel in the URL.
+      assert.ok(
+        !/[?&]password=/.test(location),
+        'the generated password must not ride in the query string',
+      );
+
+      const first = await server.get(`/settings/users?${location.split('?')[1]}`);
+      assert.equal(first.status, 200, `the credential panel answered ${first.status}`);
+      assert.ok(first.body.includes('Temporary password'), 'the panel shows the password once');
+      assert.ok(first.body.includes('grc-temp-pw'), 'the value is rendered for copying');
+      assert.ok(
+        first.body.includes('could not be sent'),
+        'the panel says the email did not go out',
+      );
+
+      // The password itself is what was generated, and it is gone from the
+      // database the moment it has been read.
+      const shown = /id="grc-temp-pw"[^>]*>([^<]+)</.exec(first.body);
+      assert.ok(shown, 'the rendered password must be findable');
+      assert.match(shown[1].trim(), /^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/, 'a generated shape');
+      const left = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM config
+            WHERE organization_id = ? AND config_key = ?`,
+        )
+        .get(SMOKE.orgId, `USER_TEMP_PW::${String(row.id)}`) as { n: number | bigint };
+      assert.equal(Number(left.n), 0, 'reading the password clears it');
+
+      const second = await server.get(`/settings/users?${location.split('?')[1]}`);
+      assert.equal(second.status, 200, `the second view answered ${second.status}`);
+      assert.ok(
+        second.body.includes('Password already shown'),
+        'a refresh must not show the password again',
+      );
+      assert.ok(!second.body.includes(shown[1].trim()), 'the password itself must not reappear');
+    });
+
+    await t.test('the admin never types a password on the users screen', async () => {
+      const page = await server.get('/settings/users');
+      assert.equal(page.status, 200, `the users screen answered ${page.status}`);
+      assert.ok(
+        !page.body.includes('name="password"'),
+        'no password input may remain on the create or reset forms',
+      );
+      assert.ok(
+        page.body.includes('A temporary password is generated for you'),
+        'the create form explains what happens instead',
+      );
+    });
+
     await t.test('an action plan cannot be created or unlinked from its parent', async () => {
       const res = await server.request('POST', '/api/action-plans', {
         action_description: 'Orphan attempt from the smoke test',

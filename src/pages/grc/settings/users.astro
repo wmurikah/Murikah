@@ -4,14 +4,21 @@ export const prerender = false;
 /**
  * Users Setup: manage the organisation's users. Gated on the matrix (USER
  * read; the mutations gate per action on /api/setup/users), platform owner
- * always. Create (with an initial password and a forced change), edit email,
- * name, role, affiliate and phone, reset the password, and activate or
- * deactivate. Every account requires a valid email: it is the sign-in identity
- * and the address the universal second-factor code goes to (Build Prompt 37),
- * so both forms mark it required and the endpoint refuses a missing, malformed
- * or duplicate one. A platform-owner account is shown but never edited here.
- * Every mutation posts to /api/setup/users and returns with a saved or error
- * banner.
+ * always. Create, edit email, name, role, affiliate and phone, reset the
+ * password, and activate or deactivate. Every account requires a valid email:
+ * it is the sign-in identity and the address the universal second-factor code
+ * goes to (Build Prompt 37), so both forms mark it required and the endpoint
+ * refuses a missing, malformed or duplicate one.
+ *
+ * Nobody types a password here (Build Prompt 39). Creating a user, and
+ * resetting one, mint a temporary password, email it to its owner and bring it
+ * back to this page once, in the panel below the banners: it is read out of a
+ * sealed, single-use row, so a refresh will not show it again, which is exactly
+ * what the copy promises. When the email could not be sent the panel says so,
+ * and the admin still has the password to pass on themselves.
+ *
+ * A platform-owner account is shown but never edited here. Every mutation posts
+ * to /api/setup/users and returns with a saved, error or credential banner.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcIcon from '@/components/grc/GrcIcon.astro';
@@ -20,6 +27,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { guardPageLoad } from '@grc/pageGuard';
 import { listUsers, type ManagedUser } from '@grc/repos/usersAdmin';
+import { takeTemporaryPassword } from '@grc/repos/tempPasswordHandoff';
 import { listRoleCodes } from '@grc/repos/permissionsAdmin';
 import { listAffiliates, type Affiliate } from '@grc/repos/affiliatesAdmin';
 import { can } from '@grc/auth/rbac';
@@ -32,24 +40,43 @@ const url = Astro.url;
 const saved = url.searchParams.get('saved');
 const error = url.searchParams.get('error');
 const editId = url.searchParams.get('edit');
+// A password was just generated for this account. Reading it clears it, so the
+// panel below shows it exactly once however many times the page is refreshed.
+const credentialFor = url.searchParams.get('credential');
+const mailError = url.searchParams.get('mailerror');
 
 let users: ManagedUser[] = [];
 let roles: string[] = [];
 let affiliates: Affiliate[] = [];
+let temporaryPassword: string | null = null;
 let loadError = false;
 if (allowed) {
   loadError = !(await guardPageLoad('setup.users', async () => {
-    const db = await getDb(getGrcEnv());
+    const env = getGrcEnv();
+    const db = await getDb(env);
     [users, roles, affiliates] = await Promise.all([
       listUsers(db, grc.organizationId),
       listRoleCodes(db),
       listAffiliates(db, grc.organizationId),
     ]);
+    if (credentialFor) {
+      const handoff = await takeTemporaryPassword(
+        db,
+        env.sessionSecret,
+        grc.organizationId,
+        credentialFor,
+        grc.userId,
+      );
+      temporaryPassword = handoff?.password ?? null;
+    }
   }));
 }
 const activeAffiliates = affiliates.filter((a) => a.isActive);
 const editing = editId
   ? (users.find((u) => u.userId === editId && !u.isPlatformOwner) ?? null)
+  : null;
+const credentialUser = credentialFor
+  ? (users.find((u) => u.userId === credentialFor) ?? null)
   : null;
 const roleLabel = (code: string): string => code.replace(/_/g, ' ');
 ---
@@ -75,6 +102,55 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
       <p class="grc-error" role="alert">
         {error}
       </p>
+    )
+  }
+
+  {
+    credentialFor && allowed && !loadError && (
+      <div class="grc-credential" role="status">
+        <h2 class="grc-credential__title">
+          {temporaryPassword ? 'Temporary password' : 'Password already shown'}
+        </h2>
+        {mailError ? (
+          <p class="grc-credential__warn">
+            The account is ready, but the email could not be sent: {decodeURIComponent(mailError)}{' '}
+            Pass the password on yourself.
+          </p>
+        ) : (
+          <p class="grc-credential__note">
+            Emailed to {credentialUser?.email ?? 'the user'} with a sign-in link.
+          </p>
+        )}
+        {temporaryPassword ? (
+          <>
+            <div class="grc-credential__row">
+              <code class="grc-credential__value" id="grc-temp-pw">
+                {temporaryPassword}
+              </code>
+              <button
+                type="button"
+                class="grc-btn grc-btn--secondary"
+                id="grc-temp-copy"
+                data-password={temporaryPassword}
+              >
+                Copy
+              </button>
+            </div>
+            <p class="grc-credential__note">
+              This will not be shown again. {credentialUser?.fullName ?? 'The user'} must change it
+              at their first sign-in.
+            </p>
+          </>
+        ) : (
+          <p class="grc-credential__note">
+            It was shown once already and cannot be retrieved. Reset the password to issue a new
+            one.
+          </p>
+        )}
+        <p class="grc-credential__note">
+          <a href="/settings/users">Dismiss</a>
+        </p>
+      </div>
     )
   }
 
@@ -124,20 +200,13 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
                 </select>
               </div>
               <div class="grc-field">
-                <label for="n-pw">Initial password</label>
-                <input
-                  id="n-pw"
-                  name="password"
-                  type="text"
-                  class="grc-input"
-                  required
-                  minlength="8"
-                  autocomplete="off"
-                />
-                <p class="grc-field__hint">
-                  At least eight characters. The user must change it at first sign-in.
-                </p>
+                <label for="n-phone">Phone</label>
+                <input id="n-phone" name="phone" class="grc-input" maxlength="40" />
               </div>
+              <p class="grc-field__hint" style="grid-column:1/-1">
+                A temporary password is generated for you, emailed to the user with a sign-in link,
+                and shown here once. They choose their own at first sign-in.
+              </p>
               <div class="grc-actions">
                 <button type="submit" class="grc-btn grc-btn--primary">
                   Create user
@@ -206,7 +275,13 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
               </div>
               <div class="grc-field">
                 <label for="e-phone">Phone</label>
-                <input id="e-phone" name="phone" class="grc-input" maxlength="40" />
+                <input
+                  id="e-phone"
+                  name="phone"
+                  class="grc-input"
+                  maxlength="40"
+                  value={editing.phone ?? ''}
+                />
               </div>
               <div class="grc-actions">
                 <button type="submit" class="grc-btn grc-btn--primary">
@@ -218,26 +293,13 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
               </div>
             </form>
 
-            <form
-              method="post"
-              action="/api/setup/users"
-              class="grc-form grc-formgrid"
-              style="margin-top:1rem"
-            >
+            <form method="post" action="/api/setup/users" class="grc-form" style="margin-top:1rem">
               <input type="hidden" name="op" value="reset_password" />
               <input type="hidden" name="user_id" value={editing.userId} />
               <div class="grc-field">
-                <label for="e-pw">Reset password</label>
-                <input
-                  id="e-pw"
-                  name="password"
-                  type="text"
-                  class="grc-input"
-                  minlength="8"
-                  autocomplete="off"
-                />
                 <p class="grc-field__hint">
-                  Sets a new initial password; the user must change it at next sign-in.
+                  Generates a new temporary password, emails it to {editing.email} with a sign-in
+                  link, and shows it here once. They must change it at their next sign-in.
                 </p>
               </div>
               <div class="grc-actions">
@@ -334,3 +396,36 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
     )
   }
 </GrcLayout>
+
+<script>
+  // Copy the shown-once temporary password. The value rides on the button's
+  // data attribute rather than being read back out of the DOM text, so the
+  // exact string generated is what reaches the clipboard, separators and all.
+  const copy = document.getElementById('grc-temp-copy');
+  if (copy instanceof HTMLButtonElement) {
+    const original = copy.textContent ?? 'Copy';
+    copy.addEventListener('click', () => {
+      const value = copy.dataset.password ?? '';
+      const done = (label: string): void => {
+        copy.textContent = label;
+        window.setTimeout(() => (copy.textContent = original), 2000);
+      };
+      // The clipboard API needs a secure context; fall back to selecting the
+      // value so the admin can copy it by hand rather than being stuck.
+      navigator.clipboard?.writeText(value).then(
+        () => done('Copied'),
+        () => {
+          const el = document.getElementById('grc-temp-pw');
+          if (el) {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }
+          done('Select and copy');
+        },
+      );
+    });
+  }
+</script>
