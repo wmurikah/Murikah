@@ -40,8 +40,3 @@ export function optionalText(raw: string | null | undefined, max: number): strin
   if (t === '') return null;
   return t.slice(0, max);
 }
-
-/** A password meets the minimum: at least eight characters. */
-export function isValidInitialPassword(pw: string): boolean {
-  return pw.length >= 8;
-}
