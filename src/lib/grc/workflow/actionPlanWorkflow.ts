@@ -29,6 +29,7 @@ import { isOwner, parseOwnerIds, setOwners, type OwnerRef } from '@grc/repos/act
 import { insertHistoryStatement } from '@grc/repos/actionPlanHistory';
 import { enqueueNotification } from '@grc/repos/notify';
 import { buildAuditStatement } from '@grc/repos/audit';
+import { invalidateDashboard } from '@grc/cache/invalidate';
 
 export interface Actor {
   userId: string;
@@ -155,6 +156,8 @@ export async function executeTransition(
       actorUserId: actor.userId,
     });
   }
+  // A status move changes every dashboard count for the organisation.
+  await invalidateDashboard(db, organizationId);
   return { ok: true, from, to: toStatus };
 }
 
@@ -215,6 +218,7 @@ export async function delegate(
     entityId: id,
     actorUserId: actor.userId,
   });
+  await invalidateDashboard(db, organizationId);
   return { ok: true, from, to: from };
 }
 
@@ -283,6 +287,7 @@ export async function decideDelegation(
     ],
     'write',
   );
+  await invalidateDashboard(db, organizationId);
   return { ok: true, from, to: from };
 }
 

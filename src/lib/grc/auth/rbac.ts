@@ -9,38 +9,40 @@
  * server-side gate is `can(locals, action, module)` with the source aliases
  * (view to read, WORK_PAPERS to WORK_PAPER). A SUPER_ADMIN and a platform owner
  * hold the full matrix. The pure core lives in matrix.ts.
+ *
+ * Caching the matrix is the one place speed is allowed near access control, and
+ * it is fenced on both sides (Build Prompt 42). Every `role_permissions` write
+ * invalidates that role's entry immediately, so a changed grant applies on the
+ * very next request rather than at the next sign-in; and the lifetime is capped
+ * at CACHE_TTL.roleMatrix (a few seconds) so an edge a delete has not yet
+ * reached still cannot hold an old matrix for long. The matrix is per role and
+ * carries no tenant or user data, so it sits in the platform namespace. Note
+ * what is not here: the session, its validity and the user's identity are never
+ * cached, and are resolved fresh from the database on every request.
  */
 import type { Client } from '@libsql/client/web';
+import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
+import { invalidateRoleMatrix } from '@grc/cache/invalidate';
 import { buildMatrix, canMatrix, type PermissionMatrix, type MatrixRow } from './matrix';
 
 export * from './matrix';
-
-// The matrix is cached per role for the isolate; a grant change invalidates it.
-const matrixCache = new Map<string, PermissionMatrix>();
+export { invalidateRoleMatrix };
 
 /** The permission matrix granted to a role, from role_permissions, cached per role. */
 export async function getPermissionMatrix(db: Client, roleCode: string): Promise<PermissionMatrix> {
-  const cached = matrixCache.get(roleCode);
-  if (cached) return cached;
-  const res = await db.execute({
-    sql: `SELECT module_code, action_code, is_allowed
-            FROM role_permissions WHERE role_code = ?`,
-    args: [roleCode],
+  return cached(db, cacheKeys.roleMatrix(roleCode), CACHE_TTL.roleMatrix, async () => {
+    const res = await db.execute({
+      sql: `SELECT module_code, action_code, is_allowed
+              FROM role_permissions WHERE role_code = ?`,
+      args: [roleCode],
+    });
+    const rows: MatrixRow[] = res.rows.map((r) => ({
+      moduleCode: String(r.module_code ?? ''),
+      actionCode: String(r.action_code ?? ''),
+      isAllowed: Number(r.is_allowed ?? 0) === 1,
+    }));
+    return buildMatrix(rows);
   });
-  const rows: MatrixRow[] = res.rows.map((r) => ({
-    moduleCode: String(r.module_code ?? ''),
-    actionCode: String(r.action_code ?? ''),
-    isAllowed: Number(r.is_allowed ?? 0) === 1,
-  }));
-  const matrix = buildMatrix(rows);
-  matrixCache.set(roleCode, matrix);
-  return matrix;
-}
-
-/** Invalidate the cached matrix for a role (or all roles), after a grant change. */
-export function invalidateRoleMatrix(roleCode?: string): void {
-  if (roleCode) matrixCache.delete(roleCode);
-  else matrixCache.clear();
 }
 
 /** True when the session's matrix grants the action on the module (aliases applied). */

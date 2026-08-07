@@ -7,6 +7,7 @@
  * dropdowns, a first SUPER_ADMIN user and a trial subscription.
  */
 import type { Client } from '@libsql/client/web';
+import { flushOrganisation } from '@grc/cache/invalidate';
 import { DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from './dropdowns';
 import {
   buildProvisioningStatements,
@@ -47,5 +48,9 @@ export async function provisionOrganization(
     adminUserId: crypto.randomUUID(),
   };
   await db.batch(buildProvisioningStatements(ids, input, dropdownEntries()), 'write');
+  // A brand new organisation should never inherit anything, and an id that was
+  // provisioned, removed and provisioned again must not find an old entry
+  // waiting. Clearing the namespace costs one call and removes the question.
+  await flushOrganisation(db, ids.organizationId);
   return ids;
 }

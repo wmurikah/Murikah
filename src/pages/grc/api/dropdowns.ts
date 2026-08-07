@@ -40,7 +40,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await saveDropdown(db, org, DROPDOWN_KEYS.classification, lines(form, 'classification'));
   await saveDropdown(db, org, DROPDOWN_KEYS.controlType, lines(form, 'control_type'));
   await saveDropdown(db, org, DROPDOWN_KEYS.controlFrequency, lines(form, 'control_frequency'));
-  invalidateDropdownCache(org);
+  // saveDropdown clears the vocabulary it wrote; this sweeps the organisation's
+  // whole dropdown namespace once, so nothing derived from the old lists lingers.
+  await invalidateDropdownCache(db, org);
   try {
     await writeAuditLog(db, {
       organizationId: org,
