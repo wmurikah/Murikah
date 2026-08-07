@@ -30,6 +30,8 @@ import {
   type ControlDropdowns,
 } from '@grc/repos/dropdowns';
 import { isEditable } from '@grc/workflow/workPaperActions';
+import { storageConfigured } from '@grc/storage';
+import { listAttachments, type Attachment } from '@grc/repos/evidence';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -44,6 +46,7 @@ let affiliates: Option[] = [];
 let auditors: Option[] = [];
 let subAreas: SubAreaTemplate[] = [];
 let dropdowns: ControlDropdowns = DROPDOWN_DEFAULTS;
+let evidence: Attachment[] = [];
 let loadError = false;
 if (allowed && id) {
   loadError = !(await guardPageLoad('work-papers.edit', async () => {
@@ -52,12 +55,13 @@ if (allowed && id) {
     // The lookups are only needed when the paper is editable; the redirect for
     // a locked state happens outside the boundary.
     if (wp && isEditable(wp.status)) {
-      [areas, affiliates, auditors, subAreas, dropdowns] = await Promise.all([
+      [areas, affiliates, auditors, subAreas, dropdowns, evidence] = await Promise.all([
         listAuditAreas(db, grc.organizationId),
         listAffiliates(db, grc.organizationId),
         listAuditors(db, grc.organizationId),
         listSubAreas(db, grc.organizationId),
         loadControlDropdowns(db, grc.organizationId),
+        listAttachments(db, grc.organizationId, 'work_paper', id),
       ]);
     }
   }));
@@ -102,6 +106,13 @@ if (allowed && !loadError && !wp) Astro.response.status = 404;
         dropdowns={dropdowns}
         values={wp}
         hasAi={hasAi}
+        evidence={{
+          entityType: 'work_paper',
+          entityId: id ?? '',
+          items: evidence,
+          canDelete: true,
+          storageReady: storageConfigured(),
+        }}
       />
     )
   }

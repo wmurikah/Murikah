@@ -25,6 +25,7 @@ import {
 } from '@grc/repos/responsibles';
 import { listRevisions, type Revision } from '@grc/repos/revisions';
 import { listAttachments, type Attachment } from '@grc/repos/evidence';
+import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { WORK_PAPER_ENUM_TYPE, isEditable } from '@grc/workflow/workPaperActions';
@@ -463,61 +464,14 @@ const rich = (key: string): string => {
           )}
         </div>
 
-        <div class="grc-panel">
-          <h2>Evidence</h2>
-          {evidence.length === 0 ? (
-            <p class="grc-lead" style="margin:0">
-              No evidence attached.
-            </p>
-          ) : (
-            <ul class="grc-evidence">
-              {evidence.map((e) => (
-                <li class="grc-evidence__item">
-                  <a
-                    href={`/api/evidence/${e.attachmentId}/download`}
-                    class="grc-evidence__name"
-                    rel="nofollow"
-                  >
-                    {e.fileName}
-                  </a>
-                  <span class="grc-pill">{e.backend ?? 'stored'}</span>
-                  {canEdit && (
-                    <form
-                      method="post"
-                      action={`/api/evidence/${e.attachmentId}/delete`}
-                      class="grc-evidence__del"
-                    >
-                      <button type="submit" class="grc-btn grc-btn--secondary grc-btn--tiny">
-                        Request deletion
-                      </button>
-                    </form>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {canUpload ? (
-            <div class="grc-evidence__upload" data-entity-type="work_paper" data-entity-id={id}>
-              <label for="evidence-file">Add evidence</label>
-              <div class="grc-actionbar" style="margin:0.25rem 0 0">
-                <input type="file" id="evidence-file" class="grc-input" />
-                <button type="button" id="evidence-upload-btn" class="grc-btn grc-btn--secondary">
-                  Upload
-                </button>
-              </div>
-              <p class="grc-field__hint">
-                The file uploads directly to secure storage; a content hash is recorded for
-                integrity. Deletion is governed by retention and any legal hold.
-              </p>
-              <span id="evidence-upload-status" class="grc-lead" role="status" aria-live="polite" />
-            </div>
-          ) : canEdit ? (
-            <p class="grc-field__hint" style="margin-top:0.5rem">
-              Evidence storage is not configured on this environment yet.
-            </p>
-          ) : null}
-        </div>
+        <GrcEvidence
+          entityType="work_paper"
+          entityId={id!}
+          items={evidence}
+          canUpload={canUpload}
+          canDelete={canEdit}
+          storageReady={storageConfigured()}
+        />
 
         <div class="grc-panel">
           <h2>Revision history</h2>
@@ -573,83 +527,6 @@ const rich = (key: string): string => {
       status.textContent = 'The request failed. Try again.';
     } finally {
       btn.removeAttribute('disabled');
-    }
-  });
-</script>
-
-<script>
-  // Evidence upload: request a presigned URL, PUT the bytes straight to storage
-  // (never through the worker), then record the metadata. On success reload so the
-  // new item appears with its download link.
-  const wrap = document.querySelector<HTMLElement>('.grc-evidence__upload');
-  const upBtn = document.getElementById('evidence-upload-btn');
-  const fileInput = document.getElementById('evidence-file') as HTMLInputElement | null;
-  const upStatus = document.getElementById('evidence-upload-status');
-  interface Presigned {
-    fileId?: string;
-    url?: string;
-    error?: string;
-  }
-  upBtn?.addEventListener('click', async () => {
-    if (!wrap || !fileInput || !upStatus) return;
-    const file = fileInput.files?.[0];
-    if (!file) {
-      upStatus.textContent = 'Choose a file first.';
-      return;
-    }
-    const entityType = wrap.getAttribute('data-entity-type') ?? '';
-    const entityId = wrap.getAttribute('data-entity-id') ?? '';
-    const contentType = file.type || 'application/octet-stream';
-    upBtn.setAttribute('disabled', 'true');
-    upStatus.textContent = 'Preparing upload...';
-    try {
-      const presignRes = await fetch('/api/evidence/upload-url', {
-        method: 'POST',
-        body: new URLSearchParams({
-          entity_type: entityType,
-          entity_id: entityId,
-          file_name: file.name,
-          content_type: contentType,
-          size_bytes: String(file.size),
-        }),
-      });
-      const presign = (await presignRes.json()) as Presigned;
-      if (!presignRes.ok || !presign.url || !presign.fileId) {
-        upStatus.textContent = presign.error || 'Could not start the upload.';
-        return;
-      }
-      upStatus.textContent = 'Uploading...';
-      const put = await fetch(presign.url, {
-        method: 'PUT',
-        headers: { 'content-type': contentType },
-        body: file,
-      });
-      if (!put.ok) {
-        upStatus.textContent = 'The upload failed.';
-        return;
-      }
-      upStatus.textContent = 'Finalising...';
-      const completeRes = await fetch('/api/evidence/complete', {
-        method: 'POST',
-        body: new URLSearchParams({
-          entity_type: entityType,
-          entity_id: entityId,
-          file_id: presign.fileId,
-          file_name: file.name,
-          content_type: contentType,
-        }),
-      });
-      if (!completeRes.ok) {
-        const err = (await completeRes.json().catch(() => ({}))) as { error?: string };
-        upStatus.textContent = err.error || 'Could not record the evidence.';
-        return;
-      }
-      upStatus.textContent = 'Uploaded.';
-      location.reload();
-    } catch {
-      upStatus.textContent = 'The upload failed. Try again.';
-    } finally {
-      upBtn.removeAttribute('disabled');
     }
   });
 </script>
