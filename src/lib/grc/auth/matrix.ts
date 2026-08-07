@@ -1,29 +1,29 @@
 /**
  * The RBAC permission matrix, ported from PermissionService.gs. The model is a
  * matrix, not a permission-code list: a role grants module and action pairs. This
- * module is the pure core (no imports, so node strips types and unit-tests it):
- * the modules and actions, the two source aliases, the matrix check, the page map
- * and the backward-compatible legacy-code derivation.
+ * module is the pure core (its only import is the module catalogue beside it, so
+ * node strips types and unit-tests it): the modules and actions, the two source
+ * aliases, the matrix check, the page map and the backward-compatible legacy-code
+ * derivation.
  *
  * A user has one role (users.role_code); there is no user_roles junction. The
  * grants live in role_permissions(role_code, module_code, action_code, is_allowed).
+ *
+ * The module and action lists are derived from `permissionModules.ts` rather
+ * than restated here, so the code's list, the reference rows the save creates
+ * and the smoke seed all come from one place and cannot drift apart again.
  */
+import { PERMISSION_ACTIONS, PERMISSION_MODULES } from './permissionModules.ts';
+
+export * from './permissionModules.ts';
 
 export type PermissionMatrix = Record<string, Record<string, boolean>>;
 
-export const MODULES = [
-  'WORK_PAPER',
-  'ACTION_PLAN',
-  'AUDITEE_RESPONSE',
-  'AUDIT_WORKBENCH',
-  'REPORT',
-  'AI_ASSIST',
-  'USER',
-  'CONFIG',
-  'AUDIT_LOG',
-] as const;
+/** Every module code, in display order, from the single module catalogue. */
+export const MODULES: readonly string[] = PERMISSION_MODULES.map((m) => m.code);
 
-export const ACTIONS = ['read', 'create', 'update', 'delete', 'approve', 'export'] as const;
+/** Every action code, in display order, from the same catalogue. */
+export const ACTIONS: readonly string[] = PERMISSION_ACTIONS.map((a) => a.code);
 
 // The two source aliases, applied before lookup: action `view` maps to `read`,
 // and module `WORK_PAPERS` maps to `WORK_PAPER`.
@@ -60,6 +60,13 @@ export interface PagePermission {
  * Sections with only identity- or row-scoped access carry no entry and pass:
  * the dashboard (self-gates in the shell), notifications (user-scoped),
  * change-password, and settings/provision (platform owner, not a role grant).
+ *
+ * `NOTIFICATION` and `SETUP` are wired here (Build Prompt 43). Both are held by
+ * the live `permission_modules` table and were read by nothing, so reconciling
+ * the code's list to the database left two modules an administrator could grant
+ * to no effect. They are added as alternatives beside the `CONFIG.read` that
+ * already opened those sections, never in place of it, so a role that could
+ * reach a screen before can still reach it.
  */
 export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
   'work-papers': [{ module: 'WORK_PAPER', action: 'read' }],
@@ -79,15 +86,34 @@ export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
     { module: 'WORK_PAPER', action: 'read' },
     { module: 'REPORT', action: 'read' },
   ],
-  'send-queue': [{ module: 'CONFIG', action: 'read' }],
+  // The send queue is the notification queue, so the notification grant opens it.
+  'send-queue': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'NOTIFICATION', action: 'read' },
+  ],
   settings: [
     { module: 'CONFIG', action: 'read' },
     { module: 'USER', action: 'read' },
+    { module: 'SETUP', action: 'read' },
   ],
-  'settings/general': [{ module: 'CONFIG', action: 'read' }],
-  'settings/affiliates': [{ module: 'CONFIG', action: 'read' }],
-  'settings/audit-universe': [{ module: 'CONFIG', action: 'read' }],
-  'settings/dropdowns': [{ module: 'CONFIG', action: 'read' }],
+  // The four organisation-level setup screens: the SETUP grant is what names
+  // them, and CONFIG.read still opens them as it always did.
+  'settings/general': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
+  'settings/affiliates': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
+  'settings/audit-universe': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
+  'settings/dropdowns': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
   'settings/access-control': [{ module: 'CONFIG', action: 'read' }],
   'settings/ai': [{ module: 'CONFIG', action: 'read' }],
   'settings/email': [{ module: 'CONFIG', action: 'read' }],
