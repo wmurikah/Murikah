@@ -4,6 +4,18 @@ A read-only audit of the access-control, RBAC and tenancy-scoping subsystem of
 the GRC product (Assurance OS). No application code, schema or config was
 changed by this audit; this report is the only file it adds.
 
+> **Status note (Build Prompt 43).** AC-03, AC-04, AC-05 and AC-06 have since
+> been fixed and are recorded here as history, not as open findings. The role
+> save is one atomic `db.batch` with its own error handling; the module list and
+> the seed both read `PERMISSION_MODULES` from `src/lib/grc/auth/matrix.ts`, and
+> the save reconciles the `permission_modules` and `permission_actions` lookup
+> rows in the same batch, so it is self-healing on any database; the matrix cache
+> became a shared, explicitly invalidated store with a five second cap in Build
+> Prompt 42, and the smoke run now proves an access change reaches an already
+> open session on its next request; and the smoke database enforces the
+> permission keys, so the foreign-key violation that shipped now fails the test.
+> AC-01, AC-02, AC-07, AC-08, AC-09 and AC-10 remain open.
+
 Audited at commit `8e659d5` (merge of Build Prompt 39). Conventions are those in
 `grc/docs/module-build-standards.md`: the `role_permissions` matrix,
 `can(locals, action, module)`, `PAGE_PERMISSION_MAP`, the acting-organisation
