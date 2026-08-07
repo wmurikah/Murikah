@@ -80,7 +80,12 @@ const isActive = (href: string): boolean =>
 const groupActive = (g: NavGroupDef): boolean => g.items.some((i: NavItemDef) => isActive(i.href));
 
 const orgName = grc?.organizationName ?? 'Organisation';
-const orgLabel = inInstance ? 'Organisation' : 'Platform';
+// The super-label distinguishes "you are above the customers" from "you are
+// inside one", which is real information for a platform owner and none at all
+// for anybody else: an instance admin belongs to exactly one organisation,
+// cannot switch, and has no second context to tell it apart from. So they see
+// the name alone, and the line costs them nothing (audit finding AC-08).
+const orgLabel = grc?.isPlatformOwner === true ? (inInstance ? 'Organisation' : 'Platform') : null;
 const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
 // The switcher belongs to the platform owner alone, and stays available inside
 // an instance so they can move straight to another one. An instance admin never
@@ -161,7 +166,7 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
         </div>
 
         <div class="grc-orgline">
-          <p class="grc-orgline__label">{orgLabel}</p>
+          {orgLabel && <p class="grc-orgline__label">{orgLabel}</p>}
           <p class="grc-orgline__name">{orgName}</p>
         </div>
 

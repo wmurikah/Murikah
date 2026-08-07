@@ -148,6 +148,44 @@ export interface MatrixRow {
   isAllowed: boolean;
 }
 
+/** A role_permissions row with the organisation it belongs to. */
+export interface ScopedMatrixRow extends MatrixRow {
+  organizationId: string;
+}
+
+/** Which rows a matrix was built from: the organisation's own, or the defaults. */
+export interface ScopedMatrixRows {
+  rows: MatrixRow[];
+  /** True when the organisation has no rows of its own and inherits the defaults. */
+  inherited: boolean;
+}
+
+/**
+ * Choose between an organisation's own grants and the platform defaults
+ * (Build Prompt 44).
+ *
+ * The rule is all-or-nothing per role, deliberately: if the organisation holds
+ * any row for this role, those rows are the answer and the defaults are ignored
+ * entirely. The alternative, merging cell by cell, would mean an administrator
+ * who unticks a cell cannot tell whether they have revoked it or merely fallen
+ * back to a default that grants it, and an access-control screen a reviewer
+ * cannot read is worse than a coarse one. Falling back whole keeps the screen
+ * answerable: either these are your organisation's grants, or these are the
+ * platform's, and the screen says which.
+ *
+ * An empty `organizationId` (a platform owner inside no instance) resolves the
+ * defaults, which is what they are looking at from above the customers.
+ */
+export function selectScopedRows(
+  rows: ScopedMatrixRow[],
+  organizationId: string,
+  platformDefaultOrg: string,
+): ScopedMatrixRows {
+  const own = organizationId === '' ? [] : rows.filter((r) => r.organizationId === organizationId);
+  if (own.length > 0) return { rows: own, inherited: false };
+  return { rows: rows.filter((r) => r.organizationId === platformDefaultOrg), inherited: true };
+}
+
 /** Build the nested matrix from role_permissions rows. */
 export function buildMatrix(rows: MatrixRow[]): PermissionMatrix {
   const matrix: PermissionMatrix = {};

@@ -7,8 +7,9 @@ export const prerender = false;
  * system prompt, evaluation toggle and rejection threshold in the GLOBAL config;
  * the API keys are Worker secrets and only a masked tail is shown here. Each
  * provider's connection can be tested. Gated behind the plan's AI feature and
- * the matrix (CONFIG read; the save and test endpoints need CONFIG update),
- * platform owner always.
+ * the matrix (CONFIG read) to view. Saving is the platform owner's alone: these
+ * are one row on the GLOBAL sentinel, shared by every customer on the platform
+ * (Build Prompt 44, audit finding AC-02).
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
@@ -25,6 +26,11 @@ const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const allowed = hasAi && (grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG'));
+// The AI settings are one platform-wide row on the GLOBAL sentinel, shared by
+// every customer, so only the platform owner may change them (Build Prompt 44,
+// AC-02). An instance admin still reads them, which is what tells them which
+// model their assistance runs on.
+const canWrite = grc.isPlatformOwner;
 const done = Astro.url.searchParams.get('done');
 
 let config = null as AiConfig | null;
@@ -212,9 +218,16 @@ const c = config;
           </label>
 
           <div class="grc-actionbar" style="margin-top:0.75rem">
-            <button type="submit" class="grc-btn grc-btn--primary">
-              Save settings
-            </button>
+            {canWrite ? (
+              <button type="submit" class="grc-btn grc-btn--primary">
+                Save settings
+              </button>
+            ) : (
+              <p class="grc-field__hint" style="margin:0">
+                These settings are shared by every organisation on the platform, so they are changed
+                by Murikah Labs. Contact us if the provider or model needs to change.
+              </p>
+            )}
           </div>
         </form>
       </>
