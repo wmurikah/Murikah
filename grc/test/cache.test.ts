@@ -4,8 +4,8 @@
  * These cover the whole of the layer that can be reasoned about without a
  * Worker: the key naming and its tenancy properties, the envelope that carries
  * the logical expiry, the two-layer read (per-request memo in front of a shared
- * cache), invalidation, and the fact that a `role_permissions` change is
- * reflected on the very next read.
+ * cache), invalidation, and the fact that nothing an access decision rests on is
+ * cacheable at all (Build Prompt 43).
  *
  * Everything imported here is free of Cloudflare bindings by design: the backend
  * resolution lives in cache/index.ts and the cache-aside core in cache/core.ts,
@@ -85,19 +85,15 @@ test('no acting organisation yields no key at all, so nothing is cached', () => 
 });
 
 test('platform reference data sits outside every tenant namespace', () => {
-  const matrix = cacheKeys.roleMatrix('AUDITOR');
-  assert.ok(matrix.startsWith(namespaceFor(PLATFORM_NAMESPACE)));
-  assert.ok(!matrix.startsWith(namespaceFor(HASS)));
-  assert.ok(cacheKeys.enumLabels('WORK_PAPER_STATUS').startsWith(namespaceFor(PLATFORM_NAMESPACE)));
-  // A role's matrix is keyed by role alone: no organisation can pollute another's.
-  assert.notEqual(cacheKeys.roleMatrix('AUDITOR'), cacheKeys.roleMatrix('SUPER_ADMIN'));
-  assert.ok(cacheKeys.roleMatrix('AUDITOR').startsWith(cacheKeys.roleMatrixPrefix()));
+  const labels = cacheKeys.enumLabels('WORK_PAPER_STATUS');
+  assert.ok(labels.startsWith(namespaceFor(PLATFORM_NAMESPACE)));
+  assert.ok(!labels.startsWith(namespaceFor(HASS)));
+  // Keyed by enum type alone: no organisation can pollute another's.
+  assert.notEqual(labels, cacheKeys.enumLabels('ACTION_PLAN_STATUS'));
+  assert.ok(labels.startsWith(cacheKeys.enumLabelsPrefix()));
 });
 
-test('the permission matrix lifetime is capped at ten seconds', () => {
-  // The prompt's rule: where immediate cross-edge invalidation cannot be
-  // guaranteed, an access change must still land within five to ten seconds.
-  assert.ok(CACHE_TTL.roleMatrix >= 5 && CACHE_TTL.roleMatrix <= 10);
+test('the lifetimes are the two the catalogue declares', () => {
   assert.ok(CACHE_TTL.dashboard >= 30 && CACHE_TTL.dashboard <= 60);
   assert.ok(CACHE_TTL.reference > CACHE_TTL.dashboard);
 });
@@ -232,16 +228,16 @@ test('an entry expires on its own lifetime even if the backend holds it longer',
   // sixty second floor approximates.
   const forever = new MemoryCache(() => 0);
   const loader = counted('first');
-  const key = cacheKeys.roleMatrix('AUDITOR');
+  const key = cacheKeys.enumLabels('WORK_PAPER_STATUS');
 
-  await cacheAsideWith(forever, null, key, CACHE_TTL.roleMatrix, loader.load, clock.now);
-  clock.advance(CACHE_TTL.roleMatrix * 1000 + 1);
+  await cacheAsideWith(forever, null, key, CACHE_TTL.dashboard, loader.load, clock.now);
+  clock.advance(CACHE_TTL.dashboard * 1000 + 1);
   const after = counted('second');
   const value = await cacheAsideWith(
     forever,
     null,
     key,
-    CACHE_TTL.roleMatrix,
+    CACHE_TTL.dashboard,
     after.load,
     clock.now,
   );
@@ -329,51 +325,52 @@ test('flushing an organisation removes only that organisation', async () => {
 
 // ---- The immediacy requirement ---------------------------------------------
 
-test('a role_permissions change is reflected on the very next read', async () => {
-  const clock = fakeClock();
-  const cache = new MemoryCache(clock.now);
-  const key = cacheKeys.roleMatrix('AUDITOR');
-
-  // The grant as it stands: an auditor may read work papers but not delete them.
-  let grants = { WORK_PAPER: { read: true, delete: false } };
-  const readMatrix = (): Promise<typeof grants> => Promise.resolve(grants);
-
-  // Request one warms the cache.
-  const first = await cacheAsideWith(cache, {}, key, CACHE_TTL.roleMatrix, readMatrix, clock.now);
-  assert.equal(first.WORK_PAPER.delete, false);
-
-  // An administrator revokes read and grants delete, and the write invalidates.
-  grants = { WORK_PAPER: { read: false, delete: true } };
-  await invalidateKeysWith(cache, null, [key]);
-
-  // The very next request, in a fresh request scope, sees the new matrix. Not
-  // the next sign-in, and with no clock advance at all.
-  const next = await cacheAsideWith(cache, {}, key, CACHE_TTL.roleMatrix, readMatrix, clock.now);
-  assert.equal(next.WORK_PAPER.read, false, 'a revoked grant must be gone at once');
-  assert.equal(next.WORK_PAPER.delete, true, 'a new grant must apply at once');
+test('the permission matrix has no cache key and no lifetime (Build Prompt 43)', () => {
+  // The strongest guarantee available: an access change cannot be served stale
+  // by an entry that does not exist. The matrix is read fresh from the database
+  // on every request (src/lib/grc/auth/rbac.ts), so there is nothing here to
+  // invalidate and nothing to expire. A key reappearing in the catalogue is the
+  // regression this test exists to catch.
+  assert.equal('roleMatrix' in cacheKeys, false, 'the matrix must not be cacheable');
+  assert.equal('roleMatrixPrefix' in cacheKeys, false);
+  assert.equal('roleMatrix' in CACHE_TTL, false, 'no authorisation lifetime belongs here');
+  // Nothing else in the catalogue may name a permission entry by another name.
+  for (const [name, build] of Object.entries(cacheKeys)) {
+    const key = (build as (...args: string[]) => string)(HASS, 'x', 'y');
+    assert.ok(
+      !/permission|role|grant|matrix/i.test(key),
+      `${name} must not key an access decision`,
+    );
+  }
 });
 
-test('without invalidation the matrix still expires within the cap', async () => {
-  // The backstop for an edge a delete has not reached: even with no
-  // invalidation at all, the stale matrix cannot outlive CACHE_TTL.roleMatrix.
+test('an invalidated reference entry is reflected on the very next read', async () => {
   const clock = fakeClock();
   const cache = new MemoryCache(clock.now);
-  const key = cacheKeys.roleMatrix('AUDITOR');
-  let grants = { CONFIG: { update: false } };
+  const key = cacheKeys.affiliates(HASS);
 
-  await cacheAsideWith(cache, {}, key, CACHE_TTL.roleMatrix, async () => grants, clock.now);
-  grants = { CONFIG: { update: true } };
+  let rows = ['HKL'];
+  const readAffiliates = (): Promise<string[]> => Promise.resolve(rows);
 
-  clock.advance(CACHE_TTL.roleMatrix * 1000 + 1);
-  const after = await cacheAsideWith(
+  // Request one warms the cache.
+  const first = await cacheAsideWith(
     cache,
     {},
     key,
-    CACHE_TTL.roleMatrix,
-    async () => grants,
+    CACHE_TTL.reference,
+    readAffiliates,
     clock.now,
   );
-  assert.equal(after.CONFIG.update, true);
+  assert.deepEqual(first, ['HKL']);
+
+  // An administrator adds one, and the write invalidates.
+  rows = ['HKL', 'HPL'];
+  await invalidateKeysWith(cache, null, [key]);
+
+  // The very next request, in a fresh request scope, sees it, with no clock
+  // advance at all.
+  const next = await cacheAsideWith(cache, {}, key, CACHE_TTL.reference, readAffiliates, clock.now);
+  assert.deepEqual(next, ['HKL', 'HPL'], 'the new row must be there at once');
 });
 
 // ---- The backend is a swap --------------------------------------------------
