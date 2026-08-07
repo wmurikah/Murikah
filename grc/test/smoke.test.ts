@@ -1674,6 +1674,66 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
     });
 
+    // Evidence is a first-class section wherever a finding is written or read
+    // (Build Prompt 41): a heading, a visible attach area that takes several
+    // files at once, and uniform tiles with an image thumbnail.
+    await t.test('every work paper view carries a clear evidence section', async () => {
+      for (const path of [
+        '/work-papers/new',
+        `/work-papers/${SMOKE.draftWorkPaperId}`,
+        `/work-papers/${SMOKE.draftWorkPaperId}/edit`,
+      ]) {
+        const res = await server.get(path);
+        assert.equal(res.status, 200, `${path} answered ${res.status}`);
+        assert.ok(
+          res.body.includes('grc-evidence-panel'),
+          `${path} must show the evidence section`,
+        );
+        assert.ok(
+          res.body.includes('Supporting documents and images'),
+          `${path} must say what the section is for`,
+        );
+      }
+    });
+
+    await t.test('the evidence list shows a thumbnail for an image', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable');
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO files (file_id, organization_id, file_name, mime_type, size_bytes,
+                            uploaded_by, created_at, storage_backend, storage_key)
+         VALUES ('FILE-IMG', ?, 'ledger-photo.png', 'image/png', 2048, ?, ?, 'r2', 'k-img')`,
+      ).run(SMOKE.orgId, SMOKE.userId, now);
+      db.prepare(
+        `INSERT INTO file_attachments (attachment_id, file_id, entity_type, entity_id,
+                                       file_category, attached_by, attached_at)
+         VALUES ('ATT-IMG', 'FILE-IMG', 'work_paper', ?, 'EVIDENCE', ?, ?)`,
+      ).run(SMOKE.draftWorkPaperId, SMOKE.userId, now);
+
+      const res = await server.get(`/work-papers/${SMOKE.draftWorkPaperId}`);
+      assert.equal(res.status, 200, `the detail answered ${res.status}`);
+      // The image is served from the reduced copy, so a wall of evidence stays
+      // uniform and light; a document shows its extension instead.
+      assert.ok(
+        res.body.includes('/api/evidence/ATT-IMG/download?variant=preview'),
+        'an image tile must load the preview variant',
+      );
+      assert.ok(res.body.includes('grc-evidence-tile__thumb'), 'the tile carries a thumbnail box');
+      assert.ok(
+        res.body.includes('grc-evidence-tile__thumb--doc'),
+        'a document tile carries the document mark',
+      );
+    });
+
+    await t.test('the preview variant falls back rather than breaking', async () => {
+      // Nothing is in storage in the smoke environment, so the preview request
+      // degrades exactly as an older file with no preview would: a deliberate
+      // JSON 503, never a 500 and never a broken image contract.
+      const res = await server.request('GET', '/api/evidence/ATT-IMG/download?variant=preview');
+      assert.ok(res.status < 500 || res.status === 503, `preview answered ${res.status}`);
+    });
+
     // Rich text and staged evidence (Build Prompt 28), on the admin session.
     await t.test('narrative Markdown renders as marks, never raw or unescaped', async () => {
       const res = await server.request('POST', '/api/work-papers', {

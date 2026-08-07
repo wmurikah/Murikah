@@ -7,12 +7,26 @@ export const prerender = false;
  * nothing yet. The client keeps the returned file_id and calls /complete once the
  * PUT succeeds. Gate: upload rights on the target entity (auditor edit permission,
  * platform owner, or an auditee on their own finding or plan).
+ *
+ * For an image the response also carries a second presigned URL for the preview
+ * object: a copy reduced to one constant dimension (storage/keys.ts) that the
+ * evidence lists show as a thumbnail, so a wall of them is uniform and light
+ * while the original stays untouched. The preview key is derived from the
+ * original's, so nothing has to be stored to find it again. The client is
+ * trusted only with the bytes, never with the key: both keys are computed here.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { storageConfigured, presignUpload } from '@grc/storage';
-import { buildObjectKey, keyBelongsToOrg } from '@grc/storage/keys';
+import {
+  buildObjectKey,
+  keyBelongsToOrg,
+  previewKeyFor,
+  isPreviewableImage,
+  PREVIEW_MAX_DIMENSION,
+  PREVIEW_CONTENT_TYPE,
+} from '@grc/storage/keys';
 import { canUploadEvidence, isDraftEntity, type EvidenceActor } from '@grc/storage/access';
 
 const ENTITY_TYPES = new Set([
@@ -77,7 +91,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     const url = await presignUpload(key, UPLOAD_TTL_SECONDS);
-    return json({ fileId, backend: 'r2', method: 'PUT', url, contentType }, 200);
+    // Only for an image, and only ever alongside the original: a preview URL is
+    // useless on its own, because /complete records the original's key.
+    const previewUrl = isPreviewableImage(contentType)
+      ? await presignUpload(previewKeyFor(key), UPLOAD_TTL_SECONDS)
+      : null;
+    return json(
+      {
+        fileId,
+        backend: 'r2',
+        method: 'PUT',
+        url,
+        contentType,
+        previewUrl,
+        previewContentType: PREVIEW_CONTENT_TYPE,
+        previewMaxDimension: PREVIEW_MAX_DIMENSION,
+      },
+      200,
+    );
   } catch {
     return json({ error: 'Could not prepare the upload.' }, 502);
   }

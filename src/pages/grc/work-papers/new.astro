@@ -92,7 +92,14 @@ if (allowed) {
           dropdowns={dropdowns}
           values={null}
           hasAi={hasAi}
-          draftToken={draftToken}
+          evidence={{
+            entityType: 'work_paper_draft',
+            entityId: draftToken ?? '',
+            items: [],
+            canDelete: true,
+            draftToken,
+            storageReady: draftToken !== null,
+          }}
         />
       </>
     )
