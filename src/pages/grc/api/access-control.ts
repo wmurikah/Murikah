@@ -1,11 +1,20 @@
 export const prerender = false;
 
 /**
- * Save a role's permission matrix, gated on the matrix itself (CONFIG update),
- * platform owner always. Reads every module and action grant off the submitted
- * checkboxes and writes the role's whole matrix in one atomic batch, never
- * touching SUPER_ADMIN (which always holds the full matrix), and records the
- * change in audit_log.
+ * Save a role's permission matrix for one organisation, gated on the matrix
+ * itself (CONFIG update), platform owner always. Reads every module and action
+ * grant off the submitted checkboxes and writes the role's whole matrix in one
+ * atomic batch, never touching SUPER_ADMIN (which always holds the full matrix),
+ * and records the change in audit_log.
+ *
+ * The organisation written is the acting one, resolved server-side from the
+ * session in `src/middleware.ts` and never taken from the request (Build Prompt
+ * 44). An instance admin is pinned to their own organisation and cannot switch,
+ * so a save by one customer's administrator can only reach that customer's rows.
+ * A platform owner inside an instance edits that instance, exactly as its own
+ * administrator would; a platform owner inside no instance edits the platform
+ * defaults, which is the one path that writes the sentinel organisation and is
+ * why this endpoint is instance-free (`src/lib/grc/routing.ts`).
  *
  * The write is wrapped, and the wrapping is the point: an unhandled throw here
  * used to escape into the middleware's last-resort boundary and reach the
@@ -18,7 +27,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { MODULES, ACTIONS, can } from '@grc/auth/rbac';
+import { MODULES, ACTIONS, can, PLATFORM_DEFAULT_ORG } from '@grc/auth/rbac';
 import { saveRoleMatrix, type RoleGrant } from '@grc/repos/permissionsAdmin';
 import { writeAuditLog } from '@grc/repos/audit';
 
@@ -63,11 +72,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
   }
 
+  // The one organisation this save may reach. An acting organisation is always
+  // present for anybody but a platform owner above the instances, and only that
+  // owner can therefore reach the platform defaults.
+  const targetOrg = grc.organizationId === '' ? PLATFORM_DEFAULT_ORG : grc.organizationId;
+  if (targetOrg === PLATFORM_DEFAULT_ORG && !grc.isPlatformOwner) {
+    return back(roleCode, 'error', 'Only the platform owner can change the platform defaults.');
+  }
+  const scopeName =
+    targetOrg === PLATFORM_DEFAULT_ORG ? 'the platform defaults' : grc.organizationName;
+
   const db = await getDb(getGrcEnv());
   try {
-    await saveRoleMatrix(db, roleCode, grants);
+    await saveRoleMatrix(db, targetOrg, roleCode, grants);
   } catch (err) {
-    console.error(`${TAG} the permissions for ${roleCode} could not be saved`, err);
+    console.error(`${TAG} the permissions for ${roleCode} in ${targetOrg} could not be saved`, err);
     return back(
       roleCode,
       'error',
@@ -77,14 +96,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     await writeAuditLog(db, {
-      organizationId: grc.organizationId,
+      organizationId: targetOrg,
       userId: grc.userId,
       action: 'ACCESS_CONTROL.update',
-      details: roleCode,
+      details: `${roleCode} in ${targetOrg}`,
     });
   } catch {
     // best-effort audit
   }
 
-  return back(roleCode, 'done', 'Permissions saved.');
+  return back(roleCode, 'done', `Permissions for ${roleCode} saved for ${scopeName}.`);
 };

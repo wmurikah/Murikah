@@ -5,9 +5,12 @@ export const prerender = false;
  * Email settings: the Outlook mailbox notifications send from, through
  * Microsoft Graph. Shows the connection state (Connected as ... / Not
  * connected / stale), the one-time Connect Outlook action and a test-email
- * button. Gated on the CONFIG grant (platform owner always); connecting and
- * testing need CONFIG update. The refresh token itself never reaches this
- * page: only the state and the connected address are shown.
+ * button. Gated on the CONFIG grant (platform owner always) to view, so an
+ * instance admin can still see whether their notifications are going out.
+ * Connecting and testing are the platform owner's alone: it is one mailbox
+ * shared by every customer (Build Prompt 44, audit finding AC-02). The refresh
+ * token itself never reaches this page: only the state and the connected
+ * address are shown.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
@@ -21,7 +24,11 @@ import { getMailConnection, type MailConnectionRecord } from '@grc/repos/mailCon
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
-const canWrite = grc.isPlatformOwner || can(Astro.locals, 'update', 'CONFIG');
+// The mailbox is one shared connection on the platform-wide GLOBAL sentinel, so
+// connecting, reconnecting and testing it belong to the platform owner alone
+// (Build Prompt 44, AC-02). An instance admin can still read the state, which is
+// what tells them whether their notifications are going out.
+const canWrite = grc.isPlatformOwner;
 
 const url = Astro.url;
 const connectedBanner = url.searchParams.get('connected');
@@ -148,7 +155,7 @@ const queueSending = canSend(delivery) && isConnected;
           </div>
         ) : null}
 
-        {canWrite && (
+        {canWrite ? (
           <div class="grc-actions">
             {configured && (
               <a class="grc-btn grc-btn--primary" href="/api/admin/outlook/connect">
@@ -162,6 +169,13 @@ const queueSending = canSend(delivery) && isConnected;
                 </button>
               </form>
             )}
+          </div>
+        ) : (
+          <div class="grc-field">
+            <p class="grc-field__hint">
+              Notifications send from a mailbox shared by every organisation on the platform, so it
+              is connected and tested by Murikah Labs. Contact us if it needs reconnecting.
+            </p>
           </div>
         )}
       </div>

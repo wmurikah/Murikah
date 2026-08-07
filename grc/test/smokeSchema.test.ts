@@ -20,14 +20,22 @@ import { createTables, parseSchema } from './smoke/fakeTurso.ts';
 import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
+  PLATFORM_DEFAULT_ORG,
 } from '../../src/lib/grc/auth/permissionModules.ts';
 
 const SCHEMA_MD = join(import.meta.dirname, '..', 'db', 'schema.md');
+
+const ORG = 'ORG-TEST';
 
 /** A smoke-shaped database with the permission reference rows already in it. */
 function permissionDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   createTables(db, parseSchema(SCHEMA_MD));
+  // Grants reference the organisation they belong to since the matrix became
+  // tenant data, so both the sentinel and a real organisation must exist first.
+  for (const org of [PLATFORM_DEFAULT_ORG, ORG]) {
+    db.prepare(`INSERT INTO organizations (organization_id, org_name) VALUES (?, ?)`).run(org, org);
+  }
   db.prepare(`INSERT INTO roles (role_code, role_name) VALUES (?, ?)`).run('AUDITOR', 'Auditor');
   for (const module of PERMISSION_MODULES) {
     db.prepare(`INSERT INTO permission_modules (module_code, module_name) VALUES (?, ?)`).run(
@@ -44,11 +52,17 @@ function permissionDb(): DatabaseSync {
   return db;
 }
 
-function grant(db: DatabaseSync, role: string, module: string, action: string): void {
+function grant(
+  db: DatabaseSync,
+  role: string,
+  module: string,
+  action: string,
+  org: string = ORG,
+): void {
   db.prepare(
-    `INSERT INTO role_permissions (role_code, module_code, action_code, is_allowed)
-     VALUES (?, ?, ?, 1)`,
-  ).run(role, module, action);
+    `INSERT INTO role_permissions (organization_id, role_code, module_code, action_code, is_allowed)
+     VALUES (?, ?, ?, ?, 1)`,
+  ).run(org, role, module, action);
 }
 
 test('the smoke database enforces the permission foreign keys', () => {
@@ -73,6 +87,34 @@ test('the smoke database enforces the permission foreign keys', () => {
     /FOREIGN KEY/i,
     'a grant for an unknown role must be refused',
   );
+  // Tenant scoping is a real reference too (Build Prompt 44): a grant cannot be
+  // written for an organisation that does not exist.
+  assert.throws(
+    () => grant(db, 'AUDITOR', 'ACTION_PLAN', 'read', 'ORG-DOES-NOT-EXIST'),
+    /FOREIGN KEY/i,
+    'a grant for an unknown organisation must be refused',
+  );
+  db.close();
+});
+
+test('the same cell can be granted differently in two organisations', () => {
+  // The shape the tenant-scoped key makes possible, and the reason the primary
+  // key had to be rebuilt: one role, one module, one action, two organisations,
+  // two independent answers.
+  const db = permissionDb();
+  grant(db, 'AUDITOR', 'WORK_PAPER', 'read', ORG);
+  grant(db, 'AUDITOR', 'WORK_PAPER', 'read', PLATFORM_DEFAULT_ORG);
+  const rows = db
+    .prepare(
+      `SELECT organization_id AS o FROM role_permissions
+        WHERE role_code = 'AUDITOR' AND module_code = 'WORK_PAPER' AND action_code = 'read'
+        ORDER BY organization_id`,
+    )
+    .all() as { o: string }[];
+  assert.deepEqual(
+    rows.map((r) => r.o),
+    [PLATFORM_DEFAULT_ORG, ORG].sort(),
+  );
   db.close();
 });
 
@@ -87,8 +129,11 @@ test('every module the code enforces can be granted in the smoke database', () =
     }
   }
   const stored = db
-    .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE role_code = 'AUDITOR'`)
-    .get() as { n: number | bigint };
+    .prepare(
+      `SELECT COUNT(*) AS n FROM role_permissions
+        WHERE role_code = 'AUDITOR' AND organization_id = ?`,
+    )
+    .get(ORG) as { n: number | bigint };
   assert.equal(Number(stored.n), PERMISSION_MODULES.length * PERMISSION_ACTIONS.length);
   db.close();
 });
@@ -99,10 +144,11 @@ test('the smoke database enforces NOT NULL on a grant', () => {
     () =>
       db
         .prepare(
-          `INSERT INTO role_permissions (role_code, module_code, action_code, is_allowed)
-           VALUES (?, ?, ?, ?)`,
+          `INSERT INTO role_permissions
+             (organization_id, role_code, module_code, action_code, is_allowed)
+           VALUES (?, ?, ?, ?, ?)`,
         )
-        .run('AUDITOR', 'WORK_PAPER', 'read', null),
+        .run(ORG, 'AUDITOR', 'WORK_PAPER', 'read', null),
     /NOT NULL/i,
     'a grant with no is_allowed must be refused',
   );

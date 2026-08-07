@@ -148,13 +148,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
       }
 
       // The permission matrix from role_permissions drives every gate. A SUPER_ADMIN
-      // and a platform owner hold the full matrix; every other role holds its grants.
+      // and a platform owner hold the full matrix; every other role holds its grants,
+      // resolved inside the acting organisation (its own rows if it has any, else the
+      // platform defaults), so one customer's grants never answer for another's.
       // The legacy perms list is derived from the matrix, so existing code keeps
       // working, matrix-driven.
       const matrix =
         identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN'
           ? fullMatrix()
-          : await getPermissionMatrix(db, identity.roleCode);
+          : await getPermissionMatrix(db, identity.roleCode, organizationId);
       const perms = deriveLegacyPerms(matrix);
       // With no instance selected there is no subscription to read: the plan
       // belongs to the instance, not to the platform owner browsing above it.
