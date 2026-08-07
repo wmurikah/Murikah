@@ -28,6 +28,24 @@ import { totpAt } from '../../src/lib/cms/auth/totp.ts';
 // plants known challenges (the smoke run has no Graph mailer to deliver one).
 import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';
 import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
+// The one catalogue the matrix, the save and the seed all read, so the role-save
+// step asserts against the real module list rather than a copy of it.
+import {
+  PERMISSION_ACTIONS,
+  PERMISSION_MODULES,
+} from '../../src/lib/grc/auth/permissionModules.ts';
+
+/** The cells the role-save step ticks, and therefore expects stored as allowed. */
+const GRANTED_IN_SAVE: [string, string][] = [
+  ['WORK_PAPER', 'read'],
+  ['WORK_PAPER', 'create'],
+  ['ACTION_PLAN', 'read'],
+  ['REPORT', 'read'],
+  ['NOTIFICATION', 'read'],
+  ['SETUP', 'read'],
+  ['CONFIG', 'read'],
+  ['AUDIT_LOG', 'read'],
+];
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -716,27 +734,90 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    // Build Prompt 43. The save is atomic and covers the whole matrix, so this
+    // step proves all three halves of that: every cell landed (not the three
+    // quarters the old sequential loop managed before a foreign key stopped it),
+    // the ticked cells are allowed, and a cell the seed granted but this
+    // submission left unticked is now refused. Ticking CONFIG and AUDIT_LOG is
+    // deliberate: those are the two modules whose missing `permission_modules`
+    // rows broke every save, and the smoke schema now enforces that reference.
     endpoint: 'access-control.ts',
-    title: 'save the auditor permission matrix',
+    title: 'save the auditor permission matrix, in full',
     expect: 'success',
     verify: (db) => {
-      const granted = db
-        .prepare(
-          `SELECT is_allowed AS a FROM role_permissions
-            WHERE role_code = 'AUDITOR' AND module_code = 'WORK_PAPER' AND action_code = 'read'`,
-        )
-        .get() as { a?: number | bigint } | undefined;
-      assert.equal(Number(granted?.a ?? 0), 1, 'a granted cell must be stored as allowed');
+      const cells = PERMISSION_MODULES.length * PERMISSION_ACTIONS.length;
+      const stored = db
+        .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE role_code = 'AUDITOR'`)
+        .get() as { n: number | bigint };
+      assert.equal(
+        Number(stored.n),
+        cells,
+        'the whole matrix must be stored, one row per module and action',
+      );
+      const allowed = (module: string, action: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE role_code = 'AUDITOR' AND module_code = ? AND action_code = ?`,
+          )
+          .get(module, action) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      for (const [module, action] of GRANTED_IN_SAVE) {
+        assert.equal(allowed(module, action), 1, `${module}.${action} must be stored as allowed`);
+      }
+      // Seeded as allowed, left unticked here: the un-tick has to apply too, or
+      // a half-applied save would pass this step.
+      assert.equal(
+        allowed('WORK_PAPER', 'update'),
+        0,
+        'an unticked cell must be stored as refused, not left as it was',
+      );
+      // Every module in the catalogue is represented, including the ones the
+      // live permission_modules table was missing.
+      for (const module of PERMISSION_MODULES) {
+        assert.notEqual(
+          allowed(module.code, 'read'),
+          -1,
+          `${module.code} must have a stored grant, so the module row exists`,
+        );
+      }
     },
     method: 'POST',
     path: () => '/api/access-control',
     form: () => ({
       role_code: 'AUDITOR',
-      grant_WORK_PAPER_read: '1',
-      grant_WORK_PAPER_create: '1',
-      grant_ACTION_PLAN_read: '1',
-      grant_REPORT_read: '1',
+      ...Object.fromEntries(GRANTED_IN_SAVE.map(([m, a]) => [`grant_${m}_${a}`, '1'])),
     }),
+  },
+  {
+    // The other half of AC-03: a save the database refuses must refuse visibly
+    // and change nothing. A role that does not exist violates the
+    // role_permissions foreign key on the first insert, which is the shape of
+    // the failure that used to escape as {"error":"internal_error"} with three
+    // quarters of the matrix already committed. It must now come back as a
+    // handled error redirect, with the batch rolled back whole.
+    endpoint: 'access-control.ts',
+    title: 'a refused permission save changes nothing and says so',
+    expect: 'refusal',
+    verify: (db) => {
+      const ghost = db
+        .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE role_code = 'GHOST_ROLE'`)
+        .get() as { n: number | bigint };
+      assert.equal(Number(ghost.n), 0, 'a rolled-back save must leave no row behind');
+      // The role saved by the previous step is untouched by the failed one.
+      const auditor = db
+        .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE role_code = 'AUDITOR'`)
+        .get() as { n: number | bigint };
+      assert.equal(
+        Number(auditor.n),
+        PERMISSION_MODULES.length * PERMISSION_ACTIONS.length,
+        'a failed save must not disturb another role',
+      );
+    },
+    method: 'POST',
+    path: () => '/api/access-control',
+    form: () => ({ role_code: 'GHOST_ROLE', grant_WORK_PAPER_read: '1' }),
   },
   {
     // Build Prompt 42: the platform owner's cache recovery lever. Flushing an

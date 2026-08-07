@@ -12,6 +12,13 @@
  */
 import { pbkdf2Sync, randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+// The permission modules and actions come from the one catalogue the product
+// itself enforces, never a hand-kept copy: two lists drifting apart is exactly
+// what made every role save violate a foreign key and fail (Build Prompt 43).
+import {
+  PERMISSION_ACTIONS,
+  PERMISSION_MODULES,
+} from '../../../src/lib/grc/auth/permissionModules.ts';
 
 export const SMOKE = {
   orgId: 'ORG-HASS',
@@ -115,19 +122,9 @@ const ROLES: [string, string][] = [
   ['JUNIOR_STAFF', 'Junior Staff'],
 ];
 
-const MODULES = [
-  'WORK_PAPER',
-  'ACTION_PLAN',
-  'AUDITEE_RESPONSE',
-  'AUDIT_WORKBENCH',
-  'REPORT',
-  'AI_ASSIST',
-  'NOTIFICATION',
-  'SETUP',
-  'USER',
-];
+const MODULES = PERMISSION_MODULES.map((m) => m.code);
 
-const ACTIONS = ['read', 'create', 'update', 'delete', 'approve', 'export'];
+const ACTIONS = PERMISSION_ACTIONS.map((a) => a.code);
 
 /** A stored hash in the exact seeded format (pbkdf2$iterations$salt$hash). */
 export function seedPasswordHash(plain: string): string {
@@ -188,11 +185,15 @@ export function seedDatabase(db: DatabaseSync): void {
   for (const [code, name] of ROLES) {
     insert(db, 'roles', { role_code: code, role_name: name, is_system: 1, created_at: now });
   }
-  for (const module of MODULES) {
-    insert(db, 'permission_modules', { module_code: module, module_name: module });
+  for (const module of PERMISSION_MODULES) {
+    insert(db, 'permission_modules', {
+      module_code: module.code,
+      module_name: module.name,
+      description: module.description,
+    });
   }
-  for (const action of ACTIONS) {
-    insert(db, 'permission_actions', { action_code: action, action_name: action });
+  for (const action of PERMISSION_ACTIONS) {
+    insert(db, 'permission_actions', { action_code: action.code, action_name: action.name });
   }
   // A full grant for the admin role and a read-heavy grant for auditors, so the
   // access-control screen has a real matrix to render and save.

@@ -543,3 +543,56 @@ rewritten blind.
 Errors on the dashboard data load are wrapped and logged with the
 `[grc.dashboard]` tag, showing a notice rather than a blank 500; enum-label reads
 fail soft to the humanised value.
+
+## Permission modules reconciled to one source (Build Prompt 43)
+
+The access-control audit found the code's module list and the live
+`permission_modules` rows had drifted: the code enforced `CONFIG` and
+`AUDIT_LOG`, the recovered seed carried `NOTIFICATION` and `SETUP`, and both
+lists were nine long, which is what let the divergence go unnoticed. With
+`PRAGMA foreign_keys = ON` (`src/lib/grc/db.ts`), the first grant written for a
+module the lookup table did not hold violated the foreign key and killed the
+whole save (AC-05, `grc/docs/access-control-audit.md`).
+
+There is now exactly one list, `src/lib/grc/auth/permissionModules.ts`. The
+matrix screen renders it, `/api/access-control` writes it, `auth/matrix.ts`
+derives `MODULES` and `ACTIONS` from it, and `grc/test/smoke/seed.ts` seeds the
+smoke database from it. Adding a module means editing that file and nothing else.
+
+The list is the union of the two that had drifted, and each half was decided
+rather than merged blindly:
+
+- `CONFIG` and `AUDIT_LOG` stay, because the code enforces them: `CONFIG.read`
+  is the door to every settings screen and `CONFIG.update` gates the role save
+  itself. Dropping them would have taken access away from live roles.
+- `NOTIFICATION` and `SETUP` stay and are now wired, in `PAGE_PERMISSION_MAP`:
+  `NOTIFICATION.read` opens the send queue (which is the notification queue) and
+  `SETUP.read` opens the four organisation-level setup screens. Both are
+  additive alternatives beside the `CONFIG.read` that already opened those
+  sections, so the reconciliation takes no access away either. Deleting the rows
+  was not an option worth taking: a `permission_modules` row cannot be removed
+  while a `role_permissions` row still references it.
+
+**The rows the live database is missing are created by the save itself.** This
+build had no live database access, so it could not introspect
+`permission_modules` and could not apply a migration. Instead
+`repos/permissionsAdmin.ts::saveRoleMatrix` emits an idempotent insert per module
+and per action at the head of the same batch as the grants, guarded by
+`WHERE NOT EXISTS` rather than `INSERT OR IGNORE` (the two are equivalent only
+when the code column carries a unique index, and the dictionary records no
+constraints). A row that already exists is left exactly as the database has it,
+name and description included, so this only ever supplies what is missing and
+can never overwrite live reference data. It is the same self-healing shape as the
+`GLOBAL` config sentinel in `repos/orgConfig.ts`.
+
+To confirm the live state, or to apply the rows ahead of the first save:
+
+```sql
+SELECT sql FROM sqlite_master WHERE name = 'role_permissions';
+SELECT module_code FROM permission_modules ORDER BY module_code;
+SELECT action_code FROM permission_actions ORDER BY action_code;
+```
+
+The first save of any role reconciles the table by itself, so no manual step is
+required; the queries are worth running once to confirm the reference rows
+landed and that nothing else was disturbed.
