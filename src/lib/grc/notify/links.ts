@@ -13,3 +13,8 @@ export function entityLink(entityType: string, id: string): string {
 export function passwordResetLink(token: string): string {
   return `${APP_BASE}/reset-password?token=${encodeURIComponent(token)}`;
 }
+
+/** The absolute sign-in link, for the "your account is ready" email. */
+export function signInLink(): string {
+  return `${APP_BASE}/login`;
+}

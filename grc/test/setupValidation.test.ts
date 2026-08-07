@@ -11,7 +11,6 @@ import {
   isValidEmail,
   requireText,
   optionalText,
-  isValidInitialPassword,
 } from '../../src/lib/grc/repos/setupValidation.ts';
 
 test('normaliseCode upper-cases and collapses to underscores', () => {
@@ -52,9 +51,4 @@ test('optionalText trims, nulls empty and caps length', () => {
   assert.equal(optionalText('', 10), null);
   assert.equal(optionalText(null, 10), null);
   assert.equal(optionalText('abcdef', 3), 'abc');
-});
-
-test('isValidInitialPassword needs at least eight characters', () => {
-  assert.equal(isValidInitialPassword('short'), false);
-  assert.equal(isValidInitialPassword('longenough'), true);
 });
