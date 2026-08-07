@@ -7,18 +7,30 @@ export const prerender = false;
  * object so the bytes flow straight from R2 to the client, or reads a Drive
  * object through the worker. The presigned URL is always scoped to this object's
  * key; it can never reach another tenant's prefix.
+ *
+ * `?variant=preview` serves the reduced image copy instead, for the evidence
+ * thumbnails. It is a hint, not a promise: a non-image, an older file uploaded
+ * before previews existed, or a preview that never made it to storage all fall
+ * back to the original, so a thumbnail is never a broken image. A preview is
+ * inline (it is meant to be rendered); the original is always an attachment.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { planDownload, type StoredObjectRef } from '@grc/storage';
-import { keyBelongsToOrg, safeFilename } from '@grc/storage/keys';
+import {
+  keyBelongsToOrg,
+  safeFilename,
+  previewKeyFor,
+  isPreviewableImage,
+  PREVIEW_CONTENT_TYPE,
+} from '@grc/storage/keys';
 import { getAttachmentForAccess } from '@grc/repos/evidence';
 import { canViewEvidence, type EvidenceActor } from '@grc/storage/access';
 
 const DOWNLOAD_TTL_SECONDS = 120;
 
-export const GET: APIRoute = async ({ params, locals }) => {
+export const GET: APIRoute = async ({ params, request, locals }) => {
   const grc = locals.grc;
   if (!grc) return new Response('Unauthorised', { status: 401 });
 
@@ -46,8 +58,34 @@ export const GET: APIRoute = async ({ params, locals }) => {
     return new Response('Forbidden', { status: 403 });
   }
 
+  // The preview only exists for an R2-backed image; Drive objects and documents
+  // always serve the original.
+  const wantsPreview = new URL(request.url).searchParams.get('variant') === 'preview';
+  const previewable =
+    wantsPreview && att.backend !== 'drive' && isPreviewableImage(att.mimeType ?? '');
+
   const ref: StoredObjectRef = { backend: att.backend, key };
   try {
+    if (previewable) {
+      const previewRef: StoredObjectRef = { backend: att.backend, key: previewKeyFor(key) };
+      try {
+        const preview = await planDownload(previewRef, DOWNLOAD_TTL_SECONDS);
+        if (preview.kind === 'redirect') {
+          return new Response(null, { status: 302, headers: { location: preview.url } });
+        }
+        return new Response(preview.body, {
+          status: 200,
+          headers: {
+            'content-type': PREVIEW_CONTENT_TYPE,
+            'content-disposition': `inline; filename="${safeFilename(att.fileName)}"`,
+          },
+        });
+      } catch {
+        // No preview stored for this file: fall through to the original rather
+        // than showing the viewer a broken thumbnail.
+      }
+    }
+
     const plan = await planDownload(ref, DOWNLOAD_TTL_SECONDS);
     if (plan.kind === 'redirect') {
       return new Response(null, { status: 302, headers: { location: plan.url } });
@@ -56,7 +94,9 @@ export const GET: APIRoute = async ({ params, locals }) => {
       status: 200,
       headers: {
         'content-type': att.mimeType ?? 'application/octet-stream',
-        'content-disposition': `attachment; filename="${safeFilename(att.fileName)}"`,
+        'content-disposition': wantsPreview
+          ? `inline; filename="${safeFilename(att.fileName)}"`
+          : `attachment; filename="${safeFilename(att.fileName)}"`,
       },
     });
   } catch (err) {
