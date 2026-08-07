@@ -1,0 +1,403 @@
+---
+/**
+ * The evidence panel: one component for every place evidence is attached, so
+ * the create form, the detail and the edit view all show the same clearly
+ * labelled section rather than three different half-hidden uploaders.
+ *
+ * An observation is only as good as what supports it, so this is deliberately a
+ * first-class section with its own heading and a visible drop area, not a field
+ * tucked at the foot of a form. Several documents and several images can be
+ * attached in one go, by dropping them or through the file picker.
+ *
+ * Images are listed as thumbnails at one constant size, served from the reduced
+ * copy the upload makes (`?variant=preview`, storage/keys.ts); the original is
+ * kept and is what the tile links to. Documents show their filename against a
+ * file mark. The result is a uniform, light grid whatever was uploaded.
+ *
+ * Two props describe where the panel is standing. `nested` says it sits inside
+ * another <form> (the create and edit pages), so removal is a fetch rather than
+ * a nested form, which HTML does not allow. `draftToken` says the record does
+ * not exist yet: uploads stage against the token and the save binds them, and
+ * the token rides along as a hidden input for that save to find.
+ */
+import GrcIcon from '@/components/grc/GrcIcon.astro';
+import type { Attachment } from '@grc/repos/evidence';
+
+interface Props {
+  /** 'work_paper', 'action_plan', or one of the '_draft' staging types. */
+  entityType: string;
+  /** The record's id, or the draft token when staging on a create form. */
+  entityId: string;
+  items?: Attachment[];
+  canUpload?: boolean;
+  canDelete?: boolean;
+  /** False when the storage backend is unconfigured; the panel says so. */
+  storageReady?: boolean;
+  /** True when the panel sits inside another form (the create and edit pages). */
+  nested?: boolean;
+  /** Set on a create form: uploads stage against this token until the save binds them. */
+  draftToken?: string | null;
+  heading?: string;
+}
+const {
+  entityType,
+  entityId,
+  items = [],
+  canUpload = false,
+  canDelete = false,
+  storageReady = true,
+  nested = false,
+  draftToken = null,
+  heading = 'Evidence',
+} = Astro.props;
+
+const isImage = (mime: string | null): boolean => String(mime ?? '').startsWith('image/');
+/** The extension shown on a document tile, e.g. PDF. Falls back to FILE. */
+const extensionOf = (name: string): string => {
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 ? name.slice(dot + 1) : '';
+  return (ext || 'file').toUpperCase().slice(0, 4);
+};
+const inputId = `grc-evidence-file-${entityType}`;
+const staged = draftToken !== null;
+const count = items.length;
+---
+
+<section
+  class="grc-evidence-panel"
+  data-evidence
+  data-entity-type={entityType}
+  data-entity-id={entityId}
+  data-nested={nested ? '1' : '0'}
+  data-staged={staged ? '1' : '0'}
+  aria-labelledby={`${inputId}-heading`}
+>
+  <div class="grc-evidence-panel__head">
+    <h2 id={`${inputId}-heading`}>{heading}</h2>
+    <p class="grc-lead">Supporting documents and images. Several can be attached at once.</p>
+  </div>
+
+  {staged && <input type="hidden" name="draft_token" value={draftToken} />}
+
+  {
+    !storageReady ? (
+      <p class="grc-notice" role="status">
+        Evidence storage is not configured on this environment yet, so nothing can be attached.
+      </p>
+    ) : (
+      canUpload && (
+        <div class="grc-dropzone" data-evidence-drop>
+          <GrcIcon name="upload" size={22} />
+          <p class="grc-dropzone__lead">
+            <label for={inputId} class="grc-dropzone__pick">
+              Choose files
+            </label>
+            <span> or drop them here</span>
+          </p>
+          <p class="grc-dropzone__hint">
+            Documents and images, several at a time.
+            {staged && ' They attach to the finding when you save it.'}
+          </p>
+          <input
+            type="file"
+            id={inputId}
+            class="grc-vh"
+            multiple
+            data-evidence-input
+            aria-describedby={`${inputId}-status`}
+          />
+        </div>
+      )
+    )
+  }
+
+  <p class="grc-evidence__status" id={`${inputId}-status`} role="status" aria-live="polite"></p>
+
+  <ul
+    class="grc-evidence-grid"
+    data-evidence-list
+    data-empty-text="Nothing attached yet."
+    aria-live="polite"
+  >
+    {
+      items.map((e) => (
+        <li class="grc-evidence-tile" data-attachment-id={e.attachmentId}>
+          <a
+            class="grc-evidence-tile__body"
+            href={`/api/evidence/${e.attachmentId}/download`}
+            title={e.fileName}
+          >
+            {isImage(e.mimeType) ? (
+              <img
+                class="grc-evidence-tile__thumb"
+                src={`/api/evidence/${e.attachmentId}/download?variant=preview`}
+                alt={e.fileName}
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <span
+                class="grc-evidence-tile__thumb grc-evidence-tile__thumb--doc"
+                aria-hidden="true"
+              >
+                {extensionOf(e.fileName)}
+              </span>
+            )}
+            <span class="grc-evidence-tile__name">{e.fileName}</span>
+          </a>
+          {canDelete &&
+            (nested ? (
+              <button
+                type="button"
+                class="grc-evidence-tile__del"
+                data-evidence-remove={e.attachmentId}
+                aria-label={`Remove ${e.fileName}`}
+              >
+                <GrcIcon name="trash" size={14} />
+              </button>
+            ) : (
+              <form method="post" action={`/api/evidence/${e.attachmentId}/delete`}>
+                <button
+                  type="submit"
+                  class="grc-evidence-tile__del"
+                  aria-label={`Remove ${e.fileName}`}
+                  data-confirm-remove
+                >
+                  <GrcIcon name="trash" size={14} />
+                </button>
+              </form>
+            ))}
+        </li>
+      ))
+    }
+  </ul>
+  {
+    count === 0 && (
+      <p class="grc-evidence__empty" data-evidence-empty>
+        Nothing attached yet.
+      </p>
+    )
+  }
+</section>
+
+<script>
+  interface Presigned {
+    fileId?: string;
+    url?: string;
+    previewUrl?: string | null;
+    previewContentType?: string;
+    previewMaxDimension?: number;
+    error?: string;
+  }
+
+  /**
+   * Reduce an image to the constant longest edge the server asked for, as a
+   * JPEG. Returns null when the browser cannot decode it, in which case the
+   * upload simply carries no preview and the list falls back to the original.
+   */
+  const shrink = async (file: File, max: number, type: string): Promise<Blob | null> => {
+    if (typeof createImageBitmap !== 'function') return null;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const longest = Math.max(bitmap.width, bitmap.height);
+      const scale = longest > max ? max / longest : 1;
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      bitmap.close?.();
+      return await new Promise((resolve) => canvas.toBlob(resolve, type, 0.82));
+    } catch {
+      return null;
+    }
+  };
+
+  for (const panel of document.querySelectorAll<HTMLElement>('[data-evidence]')) {
+    const input = panel.querySelector<HTMLInputElement>('[data-evidence-input]');
+    const drop = panel.querySelector<HTMLElement>('[data-evidence-drop]');
+    const list = panel.querySelector<HTMLElement>('[data-evidence-list]');
+    const status = panel.querySelector<HTMLElement>('.grc-evidence__status');
+    if (!list || !status) continue;
+
+    const entityType = panel.dataset.entityType ?? '';
+    const entityId = panel.dataset.entityId ?? '';
+    const staged = panel.dataset.staged === '1';
+
+    const dropEmptyNote = (): void => {
+      panel.querySelector('[data-evidence-empty]')?.remove();
+    };
+
+    const addTile = (attachmentId: string, name: string, isImage: boolean): void => {
+      dropEmptyNote();
+      const li = document.createElement('li');
+      li.className = 'grc-evidence-tile';
+      li.dataset.attachmentId = attachmentId;
+      const a = document.createElement('a');
+      a.className = 'grc-evidence-tile__body';
+      a.href = `/api/evidence/${attachmentId}/download`;
+      a.title = name;
+      if (isImage) {
+        const img = document.createElement('img');
+        img.className = 'grc-evidence-tile__thumb';
+        img.src = `/api/evidence/${attachmentId}/download?variant=preview`;
+        img.alt = name;
+        img.loading = 'lazy';
+        a.appendChild(img);
+      } else {
+        const mark = document.createElement('span');
+        mark.className = 'grc-evidence-tile__thumb grc-evidence-tile__thumb--doc';
+        mark.setAttribute('aria-hidden', 'true');
+        const dot = name.lastIndexOf('.');
+        mark.textContent = (dot > 0 ? name.slice(dot + 1) : 'file').toUpperCase().slice(0, 4);
+        a.appendChild(mark);
+      }
+      const label = document.createElement('span');
+      label.className = 'grc-evidence-tile__name';
+      label.textContent = name;
+      a.appendChild(label);
+      li.appendChild(a);
+      list.appendChild(li);
+    };
+
+    /** Upload one file: presign, PUT the bytes, PUT any preview, then record. */
+    const uploadOne = async (file: File): Promise<boolean> => {
+      const contentType = file.type || 'application/octet-stream';
+      const presignRes = await fetch('/api/evidence/upload-url', {
+        method: 'POST',
+        body: new URLSearchParams({
+          entity_type: entityType,
+          entity_id: entityId,
+          file_name: file.name,
+          content_type: contentType,
+          size_bytes: String(file.size),
+        }),
+      });
+      const presign = (await presignRes.json().catch(() => ({}))) as Presigned;
+      if (!presignRes.ok || !presign.url || !presign.fileId) {
+        status.textContent = presign.error || `Could not start the upload of ${file.name}.`;
+        return false;
+      }
+
+      const put = await fetch(presign.url, {
+        method: 'PUT',
+        headers: { 'content-type': contentType },
+        body: file,
+      });
+      if (!put.ok) {
+        status.textContent = `The upload of ${file.name} failed.`;
+        return false;
+      }
+
+      // Best-effort: a missing preview costs a thumbnail, never the evidence.
+      if (presign.previewUrl && presign.previewMaxDimension) {
+        const type = presign.previewContentType ?? 'image/jpeg';
+        const small = await shrink(file, presign.previewMaxDimension, type);
+        if (small) {
+          await fetch(presign.previewUrl, {
+            method: 'PUT',
+            headers: { 'content-type': type },
+            body: small,
+          }).catch(() => undefined);
+        }
+      }
+
+      const completeRes = await fetch('/api/evidence/complete', {
+        method: 'POST',
+        body: new URLSearchParams({
+          entity_type: entityType,
+          entity_id: entityId,
+          file_id: presign.fileId,
+          file_name: file.name,
+          content_type: contentType,
+        }),
+      });
+      if (!completeRes.ok) {
+        const err = (await completeRes.json().catch(() => ({}))) as { error?: string };
+        status.textContent = err.error || `${file.name} could not be recorded.`;
+        return false;
+      }
+      const done = (await completeRes.json().catch(() => ({}))) as { attachmentId?: string };
+      if (done.attachmentId)
+        addTile(done.attachmentId, file.name, contentType.startsWith('image/'));
+      return true;
+    };
+
+    /** Upload a whole selection in order, reporting progress as it goes. */
+    const uploadAll = async (files: FileList | File[]): Promise<void> => {
+      const chosen = Array.from(files);
+      if (chosen.length === 0) return;
+      drop?.classList.add('is-busy');
+      let done = 0;
+      for (const [i, file] of chosen.entries()) {
+        status.textContent =
+          chosen.length === 1
+            ? `Uploading ${file.name}...`
+            : `Uploading ${i + 1} of ${chosen.length}: ${file.name}...`;
+        // One failure reports itself and the rest still go up.
+        if (await uploadOne(file)) done += 1;
+      }
+      drop?.classList.remove('is-busy');
+      if (done === chosen.length) {
+        status.textContent = staged
+          ? `${done} attached. ${done === 1 ? 'It attaches' : 'They attach'} to the finding when you save.`
+          : `${done} attached.`;
+      } else {
+        status.textContent = `${done} of ${chosen.length} attached; see the message above.`;
+      }
+      if (input) input.value = '';
+    };
+
+    input?.addEventListener('change', () => {
+      if (input.files) void uploadAll(input.files);
+    });
+
+    if (drop) {
+      for (const name of ['dragenter', 'dragover'] as const) {
+        drop.addEventListener(name, (e) => {
+          e.preventDefault();
+          drop.classList.add('is-over');
+        });
+      }
+      for (const name of ['dragleave', 'dragend'] as const) {
+        drop.addEventListener(name, () => drop.classList.remove('is-over'));
+      }
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        drop.classList.remove('is-over');
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) void uploadAll(files);
+      });
+    }
+
+    // Removal inside the create form, where a nested <form> is not allowed.
+    list.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-evidence-remove]');
+      if (!btn) return;
+      const id = btn.dataset.evidenceRemove;
+      if (!id) return;
+      if (!window.confirm('Remove this evidence?')) return;
+      btn.setAttribute('disabled', 'true');
+      void fetch(`/api/evidence/${id}/delete`, { method: 'POST', body: new URLSearchParams() })
+        .then((res) => {
+          if (!res.ok) throw new Error('failed');
+          btn.closest('.grc-evidence-tile')?.remove();
+          status.textContent = 'Removed.';
+        })
+        .catch(() => {
+          btn.removeAttribute('disabled');
+          status.textContent = 'That could not be removed.';
+        });
+    });
+  }
+
+  // A real form post still confirms before it leaves the page.
+  for (const btn of document.querySelectorAll('[data-confirm-remove]')) {
+    btn.addEventListener('click', (e) => {
+      if (!window.confirm('Remove this evidence?')) e.preventDefault();
+    });
+  }
+</script>

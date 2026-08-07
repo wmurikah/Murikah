@@ -10,7 +10,7 @@ export const prerender = false;
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcRichText from '@/components/grc/GrcRichText.astro';
-import GrcDraftEvidence from '@/components/grc/GrcDraftEvidence.astro';
+import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { storageConfigured } from '@grc/storage';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
@@ -149,11 +149,16 @@ if (allowed) {
             </div>
           )}
 
-          {draftToken && (
-            <div class="grc-field">
-              <GrcDraftEvidence entityType="action_plan_draft" draftToken={draftToken} />
-            </div>
-          )}
+          <GrcEvidence
+            entityType="action_plan_draft"
+            entityId={draftToken ?? ''}
+            canUpload={true}
+            canDelete={true}
+            draftToken={draftToken}
+            storageReady={draftToken !== null}
+            nested={true}
+            heading="Supporting evidence"
+          />
 
           <div class="grc-actionbar">
             <button type="submit" class="grc-btn grc-btn--primary">

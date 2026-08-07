@@ -822,8 +822,17 @@
   color: var(--grc-muted);
 }
 
+/* One field is three stacked rows: the label, the control, then any hint. The
+   rows are packed to the top (align-content: start) rather than stretched. A
+   grid container defaults to stretching its auto rows, so a field standing
+   beside a taller neighbour used to have the spare height shared out between
+   its label and its control, pushing the control off the line its neighbours
+   sat on. Packing to the start keeps the control immediately under its label
+   whatever the field beside it is doing. */
 .grc-field {
   display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: start;
   gap: var(--grc-s2);
   margin-bottom: var(--grc-s4);
 }
@@ -962,11 +971,44 @@
 .grc-form {
   max-width: 60rem;
 }
+/* Multi-column form rows. Every field in a row shares the grid's three tracks
+   through subgrid, so the labels sit on one line, the controls on the next and
+   the hints below that. A hint or a label that wraps to two lines therefore
+   grows its row for the whole row rather than shunting one control out of
+   line. The field's own margin is dropped here: the grid gap is the spacing. */
 .grc-formgrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: var(--grc-s4);
+  align-items: start;
 }
+.grc-formgrid > .grc-field {
+  margin-bottom: 0;
+}
+@supports (grid-template-rows: subgrid) {
+  .grc-formgrid > .grc-field {
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    /* The field's own rows sit closer together than the gap between fields. */
+    row-gap: var(--grc-s2);
+  }
+  /* A full-width field still spans every column, and still takes three rows. */
+  .grc-formgrid > .grc-field--wide {
+    grid-column: 1 / -1;
+  }
+}
+/* Without subgrid the controls still line up as long as no label wraps, so
+   reserve a second line on every label in a multi-column row. */
+@supports not (grid-template-rows: subgrid) {
+  .grc-formgrid > .grc-field > label {
+    display: block;
+    min-height: 2.4em;
+  }
+}
+/* Every control is the same height as .grc-input (2.75rem), so a select beside
+   an input sits on the same line rather than half a step above it. The
+   textarea overrides the height below; it is the one control meant to be
+   taller. 2.75rem is also the WCAG 2.2 target-size floor. */
 .grc-select,
 .grc-textarea {
   width: 100%;
@@ -976,7 +1018,7 @@
   color: var(--grc-ink);
   font: inherit;
   padding: 0 var(--grc-s3);
-  min-height: 2.5rem;
+  min-height: 2.75rem;
 }
 .grc-textarea {
   min-height: 5rem;
@@ -1014,6 +1056,15 @@
   gap: var(--grc-s2);
   align-items: center;
   margin-top: var(--grc-s4);
+}
+/* An inline add row (a label and control beside a button) is a form row too.
+   Aligning to the end puts every control, and the button, on one line whatever
+   the labels above them do. */
+.grc-actionbar:has(> .grc-field) {
+  align-items: end;
+}
+.grc-actionbar > .grc-field {
+  margin-bottom: 0;
 }
 
 /* Detail description list. */
@@ -2794,4 +2845,171 @@ a.grc-notifrow__title:hover {
   font-size: var(--grc-fs-caption);
   color: var(--grc-danger, #b42318);
   font-weight: 600;
+}
+
+/* ---- Evidence panel (Build Prompt 41) ------------------------------------
+   Evidence is a first-class section wherever a finding is written or read, so
+   it gets a heading, a visible drop area and a uniform tile grid rather than a
+   file input tucked under the fold. */
+.grc-evidence-panel {
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-surface);
+  box-shadow: var(--grc-shadow);
+  padding: var(--grc-s4);
+  margin: 0 0 var(--grc-s4);
+}
+.grc-evidence-panel__head {
+  margin-bottom: var(--grc-s3);
+}
+.grc-evidence-panel__head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--grc-navy);
+}
+.grc-evidence-panel__head .grc-lead {
+  margin: 0.15rem 0 0;
+}
+
+/* The drop area. A label wired to a visually hidden file input, so the whole
+   thing is keyboard reachable and announced without a custom widget. */
+.grc-dropzone {
+  display: grid;
+  justify-items: center;
+  gap: var(--grc-s1);
+  padding: var(--grc-s5) var(--grc-s4);
+  border: 1.5px dashed var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-paper, #faf7f0);
+  color: var(--grc-muted);
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.grc-dropzone.is-over {
+  border-color: var(--grc-gold-deep);
+  background: color-mix(in srgb, var(--grc-gold) 12%, transparent);
+}
+.grc-dropzone.is-busy {
+  opacity: 0.65;
+}
+.grc-dropzone__lead {
+  margin: 0;
+  color: var(--grc-ink);
+}
+.grc-dropzone__pick {
+  color: var(--grc-navy-2);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.grc-dropzone__pick:hover {
+  color: var(--grc-navy);
+}
+/* The hidden input still takes focus, so mirror the ring onto the drop area. */
+.grc-dropzone:focus-within {
+  outline: 2px solid var(--grc-gold-deep);
+  outline-offset: 2px;
+  border-color: var(--grc-gold-deep);
+}
+.grc-dropzone__hint {
+  margin: 0;
+  font-size: var(--grc-fs-caption);
+}
+
+.grc-evidence__status:empty {
+  display: none;
+}
+.grc-evidence__status {
+  margin: var(--grc-s3) 0 0;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+}
+.grc-evidence__empty {
+  margin: var(--grc-s3) 0 0;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+}
+
+/* The tile grid. Every thumbnail is the same box whatever was uploaded, so the
+   list reads as one wall rather than a ragged column. */
+.grc-evidence-grid {
+  list-style: none;
+  margin: var(--grc-s3) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--grc-s3);
+}
+.grc-evidence-grid:empty {
+  display: none;
+}
+.grc-evidence-tile {
+  position: relative;
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-surface);
+  overflow: hidden;
+}
+.grc-evidence-tile__body {
+  display: grid;
+  gap: var(--grc-s1);
+  padding: var(--grc-s2);
+  text-decoration: none;
+  color: var(--grc-ink);
+}
+.grc-evidence-tile__body:hover .grc-evidence-tile__name {
+  text-decoration: underline;
+}
+/* One constant display box for every thumbnail: the reduced copy is served at a
+   single dimension, and object-fit keeps an odd aspect ratio from breaking the
+   grid. */
+.grc-evidence-tile__thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-stone);
+  object-fit: cover;
+}
+.grc-evidence-tile__thumb--doc {
+  background: var(--grc-navy);
+  color: var(--grc-on-navy, #f2f4fa);
+  font-size: var(--grc-fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--grc-tracking);
+}
+.grc-evidence-tile__name {
+  font-size: var(--grc-fs-caption);
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.grc-evidence-tile__del {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--grc-line);
+  border-radius: 999px;
+  background: var(--grc-surface);
+  color: var(--grc-muted);
+  cursor: pointer;
+}
+.grc-evidence-tile__del:hover {
+  color: var(--grc-danger, #b42318);
+  border-color: currentColor;
+}
+.grc-evidence-tile__del[disabled] {
+  opacity: 0.5;
+  cursor: default;
 }

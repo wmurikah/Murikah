@@ -10,7 +10,8 @@
  */
 import type { Option, SubAreaTemplate } from '@grc/repos/workPaperLookups';
 import GrcRichText from '@/components/grc/GrcRichText.astro';
-import GrcDraftEvidence from '@/components/grc/GrcDraftEvidence.astro';
+import GrcEvidence from '@/components/grc/GrcEvidence.astro';
+import type { Attachment } from '@grc/repos/evidence';
 import type { ControlDropdowns } from '@grc/repos/dropdowns';
 
 interface Props {
@@ -25,11 +26,21 @@ interface Props {
   /** Offers the AI drafting help when the plan includes the AI feature. */
   hasAi?: boolean;
   /**
-   * A random token the create form stages evidence uploads against; the save
-   * binds the staged files to the new finding. Absent on edit (the detail
-   * page uploads directly) and when storage is unconfigured.
+   * The evidence panel this form shows. Evidence belongs with the observation
+   * it supports, so it is part of writing the finding on both create and edit,
+   * not a second visit to the detail page. On create the record does not exist
+   * yet, so uploads stage against `draftToken` and the save binds them; on edit
+   * they attach to the work paper directly. Null when storage is unconfigured.
    */
-  draftToken?: string | null;
+  evidence?: {
+    entityType: string;
+    entityId: string;
+    items: Attachment[];
+    canDelete: boolean;
+    draftToken?: string | null;
+    /** False when the storage backend is unconfigured; the panel says so. */
+    storageReady?: boolean;
+  } | null;
 }
 const {
   action,
@@ -41,7 +52,7 @@ const {
   dropdowns,
   values,
   hasAi,
-  draftToken = null,
+  evidence = null,
 } = Astro.props;
 
 const v = (key: string): string => {
@@ -360,11 +371,17 @@ const templateJson = JSON.stringify(
   </fieldset>
 
   {
-    draftToken && (
-      <fieldset class="grc-fieldset">
-        <legend>Evidence</legend>
-        <GrcDraftEvidence entityType="work_paper_draft" draftToken={draftToken} />
-      </fieldset>
+    evidence && (
+      <GrcEvidence
+        entityType={evidence.entityType}
+        entityId={evidence.entityId}
+        items={evidence.items}
+        canUpload={true}
+        canDelete={evidence.canDelete}
+        draftToken={evidence.draftToken ?? null}
+        storageReady={evidence.storageReady !== false}
+        nested={true}
+      />
     )
   }
 
