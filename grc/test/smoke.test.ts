@@ -860,15 +860,48 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'org/switch.ts',
-    title: 'switch the acting organisation and back',
+    title: 'enter another instance',
     expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_log
+            WHERE action = 'ORG.switch' AND entity_id = ?`,
+        )
+        .get(SMOKE.otherOrgId) as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'entering an instance must be audited');
+    },
     method: 'POST',
     path: () => '/api/org/switch',
     form: () => ({ organization_id: SMOKE.otherOrgId }),
   },
   {
+    endpoint: 'org/leave.ts',
+    title: 'leave the instance, back to the all-instances view',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_log
+            WHERE action = 'ORG.leave' AND entity_id = ?`,
+        )
+        .get(SMOKE.otherOrgId) as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'leaving an instance must be audited');
+    },
+    method: 'POST',
+    path: () => '/api/org/leave',
+  },
+  {
     endpoint: 'org/switch.ts',
-    title: 'switch back to the home organisation',
+    title: 'an instance outside the platform set is refused, not fallen back from',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/org/switch',
+    form: () => ({ organization_id: 'ORG-DOES-NOT-EXIST' }),
+  },
+  {
+    endpoint: 'org/switch.ts',
+    title: 'enter the Hass instance again, for the steps that follow',
     expect: 'success',
     method: 'POST',
     path: () => '/api/org/switch',
@@ -1084,6 +1117,28 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     assert.ok(!landed.includes('error'), `verification failed, redirected to ${landed}`);
   };
 
+  /**
+   * Enter an instance (Build Prompt 38). The platform owner is pinned to no
+   * organisation, so after signing in they must select one before any module
+   * page is reachable; every crawl and mutation below runs inside Hass.
+   */
+  const enterInstance = async (organizationId = SMOKE.orgId): Promise<void> => {
+    const res = await server.request('POST', '/api/org/switch', {
+      organization_id: organizationId,
+    });
+    assert.equal(
+      String(res.headers.location ?? ''),
+      '/',
+      `entering ${organizationId} must land in its dashboard`,
+    );
+  };
+
+  /** Sign in as the platform owner and enter Hass, the state most steps assume. */
+  const signInAsOwnerInsideHass = async (): Promise<void> => {
+    await signInWithEmailCode(SMOKE.email, SMOKE.password, SMOKE.userId);
+    await enterInstance();
+  };
+
   try {
     await t.test('sign in as the seeded user: the second factor is universal', async () => {
       server.clearCookies();
@@ -1130,9 +1185,105 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const wrong = await server.request('POST', '/api/auth/mfa/verify', { code: '000001' });
       assert.ok(String(wrong.headers.location ?? '').includes('error=1'), 'a wrong code refuses');
       const ok = await server.request('POST', '/api/auth/mfa/verify', { code: '424242' });
-      assert.equal(String(ok.headers.location ?? ''), '/', 'the emailed code promotes the session');
-      const home = await server.get('/work-papers');
-      assert.equal(home.status, 200, 'the promoted session reaches the app');
+      // The platform owner is pinned to no organisation (Build Prompt 38), so
+      // the second factor promotes them onto the all-instances view, not into
+      // any customer's dashboard.
+      assert.equal(
+        String(ok.headers.location ?? ''),
+        '/platform',
+        'the platform owner lands on the all-instances view',
+      );
+    });
+
+    await t.test('the platform owner is not pinned to any organisation', async () => {
+      const platform = await server.get('/platform');
+      assert.equal(platform.status, 200, `/platform answered ${platform.status}`);
+      assert.ok(
+        platform.body.includes('class="grc-orgline__name">All organisations'),
+        'the shell reads "All organisations" while no instance is selected',
+      );
+      assert.ok(
+        !platform.body.includes(`class="grc-orgline__name">${SMOKE.orgName}`),
+        'no customer name is shown as the acting organisation',
+      );
+      assert.ok(
+        platform.body.includes(SMOKE.orgName) && platform.body.includes(SMOKE.otherOrgName),
+        'every instance on the platform is listed to enter',
+      );
+
+      // A module page needs an instance: the owner is prompted to pick one
+      // rather than being defaulted into their home organisation.
+      for (const path of ['/', '/work-papers', '/action-plans', '/settings/users']) {
+        const res = await server.get(path);
+        assert.equal(
+          res.hops[res.hops.length - 1],
+          '/platform',
+          `${path} must send an owner with no instance to the all-instances view`,
+        );
+      }
+      // An API path says so rather than answering with another org's data.
+      const api = await server.request('GET', '/api/sidebar-counts');
+      assert.equal(api.status, 409, `the counts endpoint answered ${api.status} with no instance`);
+    });
+
+    await t.test('entering an instance scopes everything to it, and leaving returns', async () => {
+      await enterInstance();
+      const dash = await server.get('/');
+      assert.equal(dash.status, 200, 'the dashboard opens inside the entered instance');
+      assert.ok(
+        dash.body.includes(`class="grc-orgline__name">${SMOKE.orgName}`),
+        'the shell names the instance being acted in',
+      );
+      assert.ok(
+        !dash.body.includes('class="grc-orgline__name">All organisations'),
+        'the organisation line is the instance name, not the platform label',
+      );
+      const wp = await server.get('/work-papers');
+      assert.equal(wp.status, 200, 'the module pages open inside the instance');
+
+      // Leaving clears the instance and puts the owner back above the customers.
+      const left = await server.request('POST', '/api/org/leave');
+      assert.equal(String(left.headers.location ?? ''), '/platform', 'leaving returns to the view');
+      const after = await server.get('/');
+      assert.equal(
+        after.hops[after.hops.length - 1],
+        '/platform',
+        'after leaving, a module page prompts for an instance again',
+      );
+
+      // Back inside Hass for the page crawl and the mutation steps below.
+      await enterInstance();
+    });
+
+    await t.test('the instance admin is pinned to their organisation', async () => {
+      await signInWithEmailCode(SMOKE.instanceAdminEmail, SMOKE.password, SMOKE.instanceAdminId);
+      const home = await server.get('/');
+      assert.equal(home.status, 200, 'the pinned admin lands straight in their dashboard');
+      assert.ok(home.body.includes(SMOKE.orgName), 'the shell always names their organisation');
+      assert.ok(
+        !home.body.includes('All organisations'),
+        'a pinned admin has no all-instances view',
+      );
+      assert.ok(!home.body.includes('grc-switcher'), 'a pinned admin has no instance switcher');
+      // The platform view and its endpoints are not theirs to reach.
+      const platform = await server.get('/platform');
+      assert.equal(
+        platform.hops[platform.hops.length - 1],
+        '/',
+        'the all-instances view sends a pinned admin home',
+      );
+      const switched = await server.request('POST', '/api/org/switch', {
+        organization_id: SMOKE.otherOrgId,
+      });
+      assert.equal(String(switched.headers.location ?? ''), '/', 'switching is refused');
+      const stillHome = await server.get('/');
+      assert.ok(
+        stillHome.body.includes(SMOKE.orgName) && !stillHome.body.includes(SMOKE.otherOrgName),
+        'a refused switch leaves them in their own organisation',
+      );
+
+      // Back to the owner inside Hass, the state the rest of the run assumes.
+      await signInAsOwnerInsideHass();
     });
 
     for (const route of routes) {
@@ -1231,8 +1382,9 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     await t.test('a connected mailbox hides the email setup banner', async () => {
       const db = server.database;
       assert.ok(db, 'the fake database is reachable');
-      // The logout dry-run above ended the admin session, so sign back in.
-      await signInWithEmailCode(SMOKE.email, SMOKE.password, SMOKE.userId);
+      // The logout dry-run above ended the owner's session, so sign back in and
+      // re-enter Hass: settings belong to an instance, not to the platform.
+      await signInAsOwnerInsideHass();
       const before = await server.get('/settings/email');
       assert.equal(before.status, 200, `/settings/email answered ${before.status}`);
       assert.ok(
@@ -1590,7 +1742,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     let mfaBackup: string[] = [];
 
     await t.test('the admin starts the authenticator enrolment, minimised link shown', async () => {
-      await signInWithEmailCode(SMOKE.email, SMOKE.password, SMOKE.userId);
+      await signInAsOwnerInsideHass();
       const security = await server.get('/mfa/setup');
       assert.equal(security.status, 200, `account security answered ${security.status}`);
       assert.ok(
@@ -1648,7 +1800,12 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const wrong = await server.request('POST', '/api/auth/mfa/verify', { code: wrongCode });
       assert.ok(String(wrong.headers.location ?? '').includes('error=1'));
       const ok = await server.request('POST', '/api/auth/mfa/verify', { code });
-      assert.equal(String(ok.headers.location ?? ''), '/', 'a valid code must promote the session');
+      assert.equal(
+        String(ok.headers.location ?? ''),
+        '/platform',
+        'a valid code must promote the owner onto the all-instances view',
+      );
+      await enterInstance();
       const home = await server.get('/work-papers');
       assert.equal(home.status, 200, 'the promoted session reaches the app');
     });
@@ -1664,7 +1821,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
       assert.equal(
         String(first.headers.location ?? ''),
-        '/',
+        '/platform',
         'a backup code must promote the session',
       );
       server.clearCookies();
@@ -1695,7 +1852,11 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const totp = await server.request('POST', '/api/auth/mfa/verify', {
         code: await totpAt(mfaSecret, Math.floor(Date.now() / 1000)),
       });
-      assert.equal(String(totp.headers.location ?? ''), '/', 'the app code signs the admin in');
+      assert.equal(
+        String(totp.headers.location ?? ''),
+        '/platform',
+        'the app code signs the admin in',
+      );
       const before = readMfa(db, SMOKE.userId);
       const switchBack = await server.request('POST', '/api/auth/mfa/enrol', { method: 'email' });
       assert.ok(
@@ -1742,7 +1903,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const ok = await server.request('POST', '/api/auth/mfa/verify', { code: '271828' });
       assert.equal(
         String(ok.headers.location ?? ''),
-        '/',
+        '/platform',
         'the right emailed code promotes the session',
       );
       assert.equal(
@@ -1750,6 +1911,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         true,
         'the challenge is spent on use',
       );
+      await enterInstance();
       const home = await server.get('/work-papers');
       assert.equal(home.status, 200, 'the promoted session reaches the app');
     });
@@ -1798,7 +1960,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
       assert.equal(
         String(backup.headers.location ?? ''),
-        '/',
+        '/platform',
         'a backup code passes for the email method',
       );
     });
