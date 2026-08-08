@@ -69,7 +69,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = await getDb(getGrcEnv());
-  const wp = await getWorkPaper(db, grc.organizationId, workPaperId);
+  const wp = await getWorkPaper(db, grc.organizationId, workPaperId, grc.affiliateScope);
   if (!wp) {
     return back(workPaperId, `error=${encodeURIComponent('That finding was not found.')}`);
   }

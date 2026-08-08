@@ -14,6 +14,7 @@ export const prerender = false;
  * Gate: AUDITEE.respond for the auditee side, WORK_PAPERS.review for the queue.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -53,9 +54,17 @@ if (allowed) {
     const db = await getDb(getGrcEnv());
     const [mine, awaiting, config] = await Promise.all([
       canRespond
-        ? listAuditeeFindings(db, grc.organizationId, grc.userId, AUDITEE_STATUSES)
+        ? listAuditeeFindings(
+            db,
+            grc.organizationId,
+            grc.userId,
+            AUDITEE_STATUSES,
+            grc.affiliateScope,
+          )
         : Promise.resolve([]),
-      canReview ? listReviewQueue(db, grc.organizationId) : Promise.resolve([]),
+      canReview
+        ? listReviewQueue(db, grc.organizationId, 200, grc.affiliateScope)
+        : Promise.resolve([]),
       getConfigValues(db, grc.organizationId, ['RESPONSE_DEADLINE_DAYS']),
     ]);
     findings = mine;
@@ -97,6 +106,8 @@ const failed = Astro.url.searchParams.get('error');
       </p>
     </div>
   </div>
+
+  <GrcAffiliateNotice subject="findings" />
 
   {
     done && (

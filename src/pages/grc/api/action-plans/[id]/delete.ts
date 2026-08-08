@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ params, locals }) => {
   }
 
   const db = await getDb(getGrcEnv());
-  const plan = await getActionPlan(db, grc.organizationId, id);
+  const plan = await getActionPlan(db, grc.organizationId, id, grc.affiliateScope);
   if (!plan) return new Response(null, { status: 303, headers: { location: '/action-plans' } });
   if (!isDeletable(plan.status)) {
     return new Response(null, {

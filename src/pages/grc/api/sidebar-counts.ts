@@ -16,7 +16,7 @@ export const GET: APIRoute = async ({ locals }) => {
   if (!grc) return new Response(JSON.stringify({ error: 'unauthorised' }), { status: 401 });
 
   const db = await getDb(getGrcEnv());
-  const counts = await getSidebarCounts(db, grc.organizationId, grc.userId);
+  const counts = await getSidebarCounts(db, grc.organizationId, grc.userId, grc.affiliateScope);
   return new Response(JSON.stringify(counts), {
     status: 200,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },

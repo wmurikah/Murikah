@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!id) return new Response(JSON.stringify({ error: 'missing work paper' }), { status: 400 });
 
   const db = await getDb(getGrcEnv());
-  const wp = await getWorkPaper(db, grc.organizationId, id);
+  const wp = await getWorkPaper(db, grc.organizationId, id, grc.affiliateScope);
   if (!wp) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
 
   const result = await workPaperInsights(
