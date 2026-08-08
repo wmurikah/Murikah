@@ -44,6 +44,7 @@ let roles: string[] = [];
 let selected = '';
 let matrix: PermissionMatrix = {};
 let inherited = false;
+let confined = false;
 let loadError = false;
 if (allowed) {
   loadError = !(await guardPageLoad('settings.access-control', async () => {
@@ -62,6 +63,7 @@ if (allowed) {
           editingDefaults ? PLATFORM_DEFAULT_ORG : grc.organizationId,
         );
         matrix = scoped.matrix;
+        confined = scoped.scopeToAffiliate;
         // Inheriting the defaults is only worth saying inside an instance: when
         // editing the defaults themselves, they are not inherited from anywhere.
         inherited = scoped.inherited && !editingDefaults;
@@ -155,6 +157,26 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
             {!editingDefaults && !inherited && !isSuperAdmin && (
               <p class="grc-field__hint">
                 These grants belong to {scopeName} alone. Saving changes no other organisation.
+              </p>
+            )}
+            {!isSuperAdmin && (
+              <div class="grc-field" style="margin-top:0.75rem">
+                <label class="grc-checkline">
+                  <input type="checkbox" name="scope_to_affiliate" value="1" checked={confined} />
+                  <span>Confined to their affiliate</span>
+                </label>
+                <p class="grc-field__hint">
+                  When this is on, a user in {selected} sees only findings, action plans, responses,
+                  dashboards and reports whose affiliate matches their own, on top of the grants
+                  ticked below. It narrows access and never widens it. A user in {selected} with no
+                  affiliate assigned sees nothing at all until one is set on their account, so check
+                  Users first.
+                </p>
+              </div>
+            )}
+            {confined && !isSuperAdmin && (
+              <p class="grc-notice" role="status" style="margin:0 0 0.75rem">
+                {selected} is confined to each user's own affiliate in {scopeName}.
               </p>
             )}
             <div class="grc-tablewrap">

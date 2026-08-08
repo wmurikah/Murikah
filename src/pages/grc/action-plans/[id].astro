@@ -52,7 +52,7 @@ if (allowed && id) {
   // card, never a blank 500 or a misleading "not found".
   loadError = !(await guardPageLoad('action-plans.detail', async () => {
     const db = await getDb(getGrcEnv());
-    plan = await getActionPlan(db, grc.organizationId, id);
+    plan = await getActionPlan(db, grc.organizationId, id, grc.affiliateScope);
     if (plan) {
       [history, evidence, users, labels] = await Promise.all([
         listHistory(db, grc.organizationId, id),

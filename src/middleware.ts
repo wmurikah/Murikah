@@ -30,7 +30,8 @@ import {
   resolveActingContext as resolveGrcActingContext,
   type SwitchOrg as GrcSwitchOrg,
 } from '@grc/repos/orgContext';
-import { getPermissionMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
+import { getScopedRoleMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
+import { resolveAffiliateScope } from '@grc/auth/affiliateScope';
 import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
 import { loadSubscription } from '@grc/repos/features';
 import {
@@ -153,10 +154,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // platform defaults), so one customer's grants never answer for another's.
       // The legacy perms list is derived from the matrix, so existing code keeps
       // working, matrix-driven.
-      const matrix =
+      // The second dimension of access beside the grants (Build Prompt 45): a
+      // role can be confined to its user's affiliate. Both come from the one
+      // query, so the grants and the scope can never disagree. A SUPER_ADMIN and
+      // a platform owner hold a synthesised matrix and are never confined.
+      const access =
         identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN'
-          ? fullMatrix()
-          : await getPermissionMatrix(db, identity.roleCode, organizationId);
+          ? { matrix: fullMatrix(), scopeToAffiliate: false }
+          : await getScopedRoleMatrix(db, identity.roleCode, organizationId);
+      const matrix = access.matrix;
+      const affiliateScope = resolveAffiliateScope(
+        access.scopeToAffiliate,
+        identity.affiliateCode,
+        identity.isPlatformOwner,
+      );
       const perms = deriveLegacyPerms(matrix);
       // With no instance selected there is no subscription to read: the plan
       // belongs to the instance, not to the platform owner browsing above it.
@@ -175,6 +186,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         userEmail: identity.userEmail,
         isPlatformOwner: identity.isPlatformOwner,
         mustChangePassword: identity.mustChangePassword,
+        affiliateScope,
         switchable,
         matrix,
         perms,

@@ -39,7 +39,7 @@ let loadError = false;
 if (allowed && id) {
   loadError = !(await guardPageLoad('action-plans.edit', async () => {
     const db = await getDb(getGrcEnv());
-    plan = await getActionPlan(db, grc.organizationId, id);
+    plan = await getActionPlan(db, grc.organizationId, id, grc.affiliateScope);
     if (plan) {
       [workPapers, users] = await Promise.all([
         listWorkPaperOptions(db, grc.organizationId),

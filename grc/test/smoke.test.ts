@@ -1607,6 +1607,76 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       await signInAsOwnerInsideHass();
     });
 
+    await t.test('a role confined to its affiliate sees only its affiliate', async () => {
+      // Build Prompt 45. The seed puts every other record in HKL and exactly one
+      // finding and one action plan in HPL, and gives AFFILIATE_LEAD auditor-side
+      // grants, so the row-level rules would show this viewer the whole
+      // organisation. The confinement is the only thing narrowing them, which is
+      // what makes these assertions mean something.
+      await signInWithEmailCode(SMOKE.confinedUserEmail, SMOKE.password, SMOKE.confinedUserId);
+
+      const list = await server.get('/work-papers');
+      assert.equal(list.status, 200, 'a confined viewer still reaches their list');
+      assert.ok(list.body.includes('WP/2026/002'), 'their own affiliate is listed');
+      assert.ok(
+        !list.body.includes('WP/2026/HPL'),
+        'a finding in another affiliate must not be listed',
+      );
+      assert.ok(
+        list.body.includes(`confined to the ${SMOKE.affiliateCode} affiliate`),
+        'the screen says why the list is narrowed',
+      );
+
+      // The boundary holds on the detail route too, which takes its id from the
+      // URL: a list predicate alone would leave this open to a guessed link.
+      const foreign = await server.get(`/work-papers/${SMOKE.otherAffiliateWorkPaperId}`);
+      assert.ok(
+        foreign.status === 404 || !foreign.body.includes('Pipeline stock counts'),
+        `a finding outside the affiliate must not open, got ${foreign.status}`,
+      );
+      const own = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(own.status, 200, 'their own affiliate still opens');
+
+      // And on the mutation endpoint behind it.
+      const edited = await server.request(
+        'POST',
+        `/api/work-papers/${SMOKE.otherAffiliateWorkPaperId}`,
+        { observation_title: 'Edited across the affiliate boundary', year: '2026' },
+      );
+      assert.ok(edited.status < 500, 'a refused edit is still a handled response');
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const title = db
+        .prepare(`SELECT observation_title AS t FROM work_papers WHERE work_paper_id = ?`)
+        .get(SMOKE.otherAffiliateWorkPaperId) as { t?: string };
+      assert.ok(
+        !String(title.t).includes('across the affiliate boundary'),
+        'an edit outside the affiliate must not persist',
+      );
+
+      // The aggregations narrow too, or the totals would leak what the lists hide.
+      const plans = await server.get('/action-plans');
+      assert.ok(!plans.body.includes('AP/2026/HPL'), 'plans outside the affiliate are excluded');
+    });
+
+    await t.test('a confined user with no affiliate is told, not shown an empty list', async () => {
+      // The state that is easy to get wrong: an ordinary empty state here would
+      // read as "your organisation has no findings" when the truth is "your
+      // account is not finished".
+      await signInWithEmailCode(SMOKE.unassignedUserEmail, SMOKE.password, SMOKE.unassignedUserId);
+      const list = await server.get('/work-papers');
+      assert.equal(list.status, 200, 'the page still renders rather than erroring');
+      assert.ok(
+        list.body.includes('Your account has no affiliate'),
+        'the screen names the configuration problem',
+      );
+      assert.ok(!list.body.includes('WP/2026/002'), 'no findings are shown at all');
+      assert.ok(!list.body.includes('WP/2026/HPL'), 'including the other affiliate');
+
+      // Back to the owner inside Hass, the state the rest of the run assumes.
+      await signInAsOwnerInsideHass();
+    });
+
     for (const route of routes) {
       const concrete = route.replace(/\[[^\]]+\]/g, () => PAGE_PARAMS[route] ?? '');
       await t.test(`GET ${concrete}`, async () => {

@@ -530,6 +530,7 @@ export const C = {
     module_code: 'module_code',
     action_code: 'action_code',
     is_allowed: 'is_allowed',
+    scope_to_affiliate: 'scope_to_affiliate',
   },
   roles: {
     role_code: 'role_code',
