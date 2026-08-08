@@ -64,6 +64,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       { userId: grc.userId, roleCode: grc.roleCode, isPlatformOwner: grc.isPlatformOwner },
       filters,
       forcedAffiliate,
+      grc.affiliateScope,
     ),
     listAffiliates(db, grc.organizationId),
     listAuditAreas(db, grc.organizationId),

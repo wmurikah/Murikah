@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ params, locals }) => {
   }
 
   const db = await getDb(getGrcEnv());
-  const wp = await getWorkPaper(db, grc.organizationId, id);
+  const wp = await getWorkPaper(db, grc.organizationId, id, grc.affiliateScope);
   if (!wp) return new Response(null, { status: 303, headers: { location: '/work-papers' } });
   if (!isEditable(wp.status)) {
     return new Response(null, {

@@ -1,0 +1,43 @@
+---
+/**
+ * The notice a user in an affiliate-confined role sees (Build Prompt 45).
+ *
+ * Two states, and the second is why this component exists. A confined user with
+ * an affiliate is told which one, so nothing on the screen is mysteriously
+ * absent. A confined user with NO affiliate sees nothing at all, and an ordinary
+ * empty state would read as "your organisation has no findings" when the truth
+ * is "your account is not finished". That is a configuration mistake, so it says
+ * so, and names the fix and who can make it.
+ *
+ * Rendered above a list rather than in place of it, so the page keeps its shape
+ * and its own empty state still means what it says.
+ */
+const grc = Astro.locals.grc;
+const scope = grc?.affiliateScope;
+const confined = scope?.confined === true;
+const affiliate = scope?.affiliateCode ?? null;
+
+interface Props {
+  /** What the screen lists, for the sentence: "findings", "action plans". */
+  subject?: string;
+}
+const { subject = 'records' } = Astro.props;
+---
+
+{
+  confined && affiliate === null && (
+    <p class="grc-error" role="alert" style="margin-bottom:1rem">
+      <strong>Your account has no affiliate.</strong> Your role is confined to its user's affiliate,
+      and yours is not set, so no {subject} can be shown. This is an account setting, not an empty
+      list: ask an administrator to assign your affiliate on the Users screen.
+    </p>
+  )
+}
+{
+  confined && affiliate !== null && (
+    <p class="grc-field__hint" style="margin-bottom:1rem">
+      Your role is confined to the {affiliate} affiliate, so these are the {subject} for {affiliate}{' '}
+      only.
+    </p>
+  )
+}

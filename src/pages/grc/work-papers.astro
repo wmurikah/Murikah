@@ -9,6 +9,7 @@ export const prerender = false;
  * detail with the shared affordance cues.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -66,6 +67,7 @@ if (allowed) {
           roleCode: grc.roleCode,
           perms: grc.perms,
           isPlatformOwner: grc.isPlatformOwner,
+          affiliateScope: grc.affiliateScope,
         },
         filters,
       ),
@@ -110,6 +112,8 @@ const done = p.get('done');
       )
     }
   </div>
+
+  <GrcAffiliateNotice subject="findings" />
 
   {
     done && (

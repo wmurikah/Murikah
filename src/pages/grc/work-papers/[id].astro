@@ -62,7 +62,7 @@ if (allowed && id) {
   // card, never a blank 500 or a misleading "not found".
   loadError = !(await guardPageLoad('work-papers.detail', async () => {
     const db = await getDb(getGrcEnv());
-    wp = await getWorkPaper(db, grc.organizationId, id);
+    wp = await getWorkPaper(db, grc.organizationId, id, grc.affiliateScope);
     if (wp) {
       [requirements, responsibles, cc, revisions, evidence, auditors, labels] = await Promise.all([
         listRequirements(db, grc.organizationId, id),

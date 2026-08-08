@@ -214,6 +214,16 @@ declare namespace App {
       matrix: Record<string, Record<string, boolean>>;
       /** Legacy permission codes derived from the matrix, e.g. WORK_PAPERS.view. */
       perms: string[];
+      /**
+       * The affiliate confinement in force for this viewer (Build Prompt 45).
+       * `confined` is the role's `scope_to_affiliate` flag; `affiliateCode` is
+       * the viewer's own `users.affiliate_code`. Together they bound which rows
+       * the viewer may see, on top of the matrix. A platform owner and a
+       * SUPER_ADMIN are never confined. A confined viewer with a null
+       * `affiliateCode` sees nothing until an affiliate is assigned, and the
+       * screens say so rather than showing an ordinary empty state.
+       */
+      affiliateScope: { confined: boolean; affiliateCode: string | null };
       /** Plan feature flags from the subscription's plan features_json. */
       features: Record<string, boolean>;
       /** True when the matrix grants the action on the module (aliases applied). */
