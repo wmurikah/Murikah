@@ -223,7 +223,17 @@ declare namespace App {
        * `affiliateCode` sees nothing until an affiliate is assigned, and the
        * screens say so rather than showing an ordinary empty state.
        */
-      affiliateScope: { confined: boolean; affiliateCode: string | null };
+      affiliateScope: {
+        confined: boolean;
+        affiliateCode: string | null;
+        /**
+         * True when the role is confined but the viewer's affiliate is marked
+         * `affiliates.is_group`, so the confinement does not narrow them
+         * (Build Prompt 48). `confined` is already false in that case; this only
+         * lets the screens say why they see every affiliate.
+         */
+        groupExempt: boolean;
+      };
       /** Plan feature flags from the subscription's plan features_json. */
       features: Record<string, boolean>;
       /** True when the matrix grants the action on the module (aliases applied). */

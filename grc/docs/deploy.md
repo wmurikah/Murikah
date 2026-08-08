@@ -144,3 +144,26 @@ Before confining a role, check that its users actually carry an affiliate. A
 user in a confined role with no `users.affiliate_code` sees nothing at all until
 one is assigned, which the screens say plainly rather than showing an empty
 list. The migration file carries the query.
+
+### Migration 003, the Group affiliate sees all affiliates
+
+`grc/db/migrations/003-affiliate-is-group.sql` (Build Prompt 48). It adds
+`is_group` to `affiliates`. A user posted to an affiliate marked as the Group is
+exempt from affiliate confinement and sees every affiliate's records, within the
+grants their role already holds.
+
+- A plain `ADD COLUMN` with `NOT NULL DEFAULT 0`: no key change, no table
+  rebuild, no data moves. Existing rows default to off, so applying it changes
+  nothing until an administrator ticks the box on `/settings/affiliates`.
+- This is the same change the operator's own `grc-group-affiliate.sql` made. If
+  that has already been applied to the live database, this run fails harmlessly
+  with "duplicate column name" and nothing is altered. It is committed here so
+  the column is reproducible in a fresh database rather than a change only one
+  database happens to carry.
+- Independent of migrations 001 and 002: it touches a different table and can be
+  applied in any order relative to them.
+
+After applying it, mark the Group unit on `/settings/affiliates`. The screen
+lists which affiliates confer all-affiliate access, so the answer to "why can
+this person see every affiliate?" is a row on a page. The migration file carries
+the queries for reading the same thing from the database.
