@@ -32,6 +32,7 @@ import {
 } from '@grc/repos/orgContext';
 import { getScopedRoleMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
 import { resolveAffiliateScope } from '@grc/auth/affiliateScope';
+import { isGroupAffiliate } from '@grc/repos/affiliatesAdmin';
 import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
 import { loadSubscription } from '@grc/repos/features';
 import {
@@ -163,10 +164,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
           ? { matrix: fullMatrix(), scopeToAffiliate: false }
           : await getScopedRoleMatrix(db, identity.roleCode, organizationId);
       const matrix = access.matrix;
+      // The Group exemption (Build Prompt 48): a user posted to an affiliate
+      // marked `affiliates.is_group` sees every affiliate even under a confined
+      // role. Resolved once here, from the user's own affiliate, never per row,
+      // and only asked for when a confinement would otherwise bite: an
+      // unconfined request makes no extra query at all.
+      const onGroupAffiliate =
+        access.scopeToAffiliate && identity.affiliateCode
+          ? await isGroupAffiliate(db, organizationId, identity.affiliateCode)
+          : false;
       const affiliateScope = resolveAffiliateScope(
         access.scopeToAffiliate,
         identity.affiliateCode,
         identity.isPlatformOwner,
+        onGroupAffiliate,
       );
       const perms = deriveLegacyPerms(matrix);
       // With no instance selected there is no subscription to read: the plan

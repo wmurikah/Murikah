@@ -170,7 +170,8 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
                   dashboards and reports whose affiliate matches their own, on top of the grants
                   ticked below. It narrows access and never widens it. A user in {selected} with no
                   affiliate assigned sees nothing at all until one is set on their account, so check
-                  Users first.
+                  Users first. One exception: a user posted to an affiliate marked{' '}
+                  <a href="/settings/affiliates">Group</a> is exempt and still sees every affiliate.
                 </p>
               </div>
             )}

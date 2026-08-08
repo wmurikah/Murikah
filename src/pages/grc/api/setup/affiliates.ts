@@ -57,13 +57,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!name) return bad('An affiliate name is required.');
       if (!isValidCode(code)) return bad('The affiliate code is not valid.');
       if (await affiliateExists(db, org, code)) return bad(`The code ${code} is already in use.`);
+      const isGroup = form.get('is_group') === '1';
       await createAffiliate(db, org, code, {
         name,
         country: optionalText(String(form.get('country') ?? ''), 80),
         region: optionalText(String(form.get('region') ?? ''), 80),
+        isGroup,
       });
-      await audit('AFFILIATE.create', code);
-      return ok(`Affiliate ${code} created.`);
+      // The group flag widens access for everybody posted to the affiliate, so
+      // it is named in the audit trail rather than folded into a bare create.
+      await audit('AFFILIATE.create', code, isGroup ? 'group affiliate' : undefined);
+      return ok(`Affiliate ${code} created${isGroup ? ', seeing all affiliates' : ''}.`);
     }
 
     const code = String(form.get('code') ?? '');
@@ -72,12 +76,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (op === 'update') {
       const name = requireText(String(form.get('name') ?? ''), 120);
       if (!name) return bad('An affiliate name is required.');
+      const isGroup = form.get('is_group') === '1';
       await updateAffiliate(db, org, code, {
         name,
         country: optionalText(String(form.get('country') ?? ''), 80),
         region: optionalText(String(form.get('region') ?? ''), 80),
+        isGroup,
       });
-      await audit('AFFILIATE.update', code);
+      await audit('AFFILIATE.update', code, isGroup ? 'group affiliate' : 'not a group affiliate');
       return ok(`Affiliate ${code} saved.`);
     }
     if (op === 'activate' || op === 'deactivate') {

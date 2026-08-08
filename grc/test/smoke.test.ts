@@ -1659,6 +1659,36 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.ok(!plans.body.includes('AP/2026/HPL'), 'plans outside the affiliate are excluded');
     });
 
+    await t.test('a user on a Group affiliate is exempt from confinement', async () => {
+      // Build Prompt 48. Same role, same grants, same confinement as the viewer
+      // above: the only difference is that their affiliate carries is_group, so
+      // any change in what they see is attributable to that flag and nothing
+      // else. They must see both affiliates, exactly as an unconfined user does.
+      await signInWithEmailCode(SMOKE.groupUserEmail, SMOKE.password, SMOKE.groupUserId);
+
+      const list = await server.get('/work-papers');
+      assert.equal(list.status, 200, 'a group viewer reaches their list');
+      assert.ok(list.body.includes('WP/2026/002'), 'the HKL affiliate is listed');
+      assert.ok(
+        list.body.includes('WP/2026/HPL'),
+        'and so is the HPL affiliate: the Group sees every affiliate',
+      );
+      assert.ok(
+        list.body.includes('Group affiliate'),
+        'the screen says why a confined role is not narrowing them',
+      );
+
+      // The detail route opens across the boundary too, which is the half a
+      // list-only exemption would have missed.
+      const foreign = await server.get(`/work-papers/${SMOKE.otherAffiliateWorkPaperId}`);
+      assert.equal(foreign.status, 200, 'a finding in another affiliate opens');
+      assert.ok(foreign.body.includes('Pipeline stock counts'), 'and renders its content');
+
+      // The aggregations widen with it, or the totals would contradict the lists.
+      const plans = await server.get('/action-plans');
+      assert.ok(plans.body.includes('AP/2026/HPL'), 'plans in every affiliate are counted');
+    });
+
     await t.test('a confined user with no affiliate is told, not shown an empty list', async () => {
       // The state that is easy to get wrong: an ordinary empty state here would
       // read as "your organisation has no findings" when the truth is "your
