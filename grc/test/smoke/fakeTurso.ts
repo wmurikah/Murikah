@@ -139,6 +139,8 @@ const DEFAULTS: Record<string, Record<string, string>> = {
   // Migration 002: added with a default, so existing rows and any insert that
   // omits it mean "not confined".
   role_permissions: { scope_to_affiliate: '0' },
+  // Migration 003: likewise, an affiliate is not the Group unless said to be.
+  affiliates: { is_group: '0' },
 };
 
 /** Columns a row cannot be written without. */
@@ -153,6 +155,7 @@ const NOT_NULL: Record<string, string[]> = {
   ],
   permission_modules: ['module_code'],
   permission_actions: ['action_code'],
+  affiliates: ['is_group'],
 };
 
 /** Creates every dictionary table (untyped columns; SQLite is typeless) plus the FTS index. */

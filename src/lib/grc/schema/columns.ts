@@ -85,6 +85,7 @@ export const C = {
     created_at: 'created_at',
     updated_at: 'updated_at',
     deleted_at: 'deleted_at',
+    is_group: 'is_group',
   },
   ai_invocations: {
     invocation_id: 'invocation_id',

@@ -56,6 +56,12 @@ export const SMOKE = {
   confinedUserEmail: 'lead.hkl@hasspetroleum.com',
   unassignedUserId: 'USR-AFF-NONE',
   unassignedUserEmail: 'lead.none@hasspetroleum.com',
+  // The Group affiliate and a user posted to it. Same confined role as the pair
+  // above, so the only difference between them is affiliates.is_group, which is
+  // what makes the exemption test mean something (Build Prompt 48).
+  groupAffiliateCode: 'GRP',
+  groupUserId: 'USR-AFF-GROUP',
+  groupUserEmail: 'lead.group@hasspetroleum.com',
   auditAreaId: 'AA-FIN',
   subAreaId: 'SA-TREAS',
   draftWorkPaperId: 'WP-DRAFT-1',
@@ -335,6 +341,8 @@ export function seedDatabase(db: DatabaseSync): void {
   for (const [id, email, name, affiliate] of [
     [SMOKE.confinedUserId, SMOKE.confinedUserEmail, 'Kamau Lead', SMOKE.affiliateCode],
     [SMOKE.unassignedUserId, SMOKE.unassignedUserEmail, 'Njeri Unassigned', null],
+    // Same role, same grants, same confinement: only the affiliate differs.
+    [SMOKE.groupUserId, SMOKE.groupUserEmail, 'Wanjiru Group', SMOKE.groupAffiliateCode],
   ] as const) {
     insert(db, 'users', {
       user_id: id,
@@ -430,6 +438,7 @@ export function seedDatabase(db: DatabaseSync): void {
     country: 'Kenya',
     region: 'Nairobi',
     is_active: 1,
+    is_group: 0,
     created_at: now,
   });
   insert(db, 'affiliates', {
@@ -439,6 +448,18 @@ export function seedDatabase(db: DatabaseSync): void {
     country: 'Kenya',
     region: 'Mombasa',
     is_active: 1,
+    is_group: 0,
+    created_at: now,
+  });
+  // The Group unit. A user posted here is exempt from affiliate confinement.
+  insert(db, 'affiliates', {
+    affiliate_code: SMOKE.groupAffiliateCode,
+    organization_id: SMOKE.orgId,
+    affiliate_name: 'Hass Petroleum Group',
+    country: 'Kenya',
+    region: 'Nairobi',
+    is_active: 1,
+    is_group: 1,
     created_at: now,
   });
   insert(db, 'audit_areas', {
