@@ -706,3 +706,50 @@ Two things it deliberately does not change:
 The confinement is part of every dashboard and analytics cache key
 (`affiliateScopeKey`), so two viewers with different confinement never share an
 aggregation.
+
+## The Group affiliate (Build Prompt 48)
+
+`affiliates` carries `is_group`. A user whose own `users.affiliate_code` points
+at an affiliate with `is_group = 1` is exempt from affiliate confinement: a
+confined role does not narrow them, and they see every affiliate's records within
+the module, action and organisation grants they already hold. Applied by
+`grc/db/migrations/003-affiliate-is-group.sql`.
+
+**Why the flag is on `affiliates`.** The exemption is a property of the business
+unit, not of a role and not of a person: "the Group unit sees everything" stays
+true as people move in and out of it. On `roles` it would be a role property; on
+`users` it would have to be re-decided for every joiner, and two people on the
+same unit could disagree. `affiliates` is already organisation-scoped, so the
+flag is tenant data with no further work. It also keeps the exemption out of the
+permission model, so the access-control matrix stays a matrix.
+
+It replaces the obvious alternative of a hard-coded affiliate code in the
+application, which would be right for one customer, wrong for the next, and
+invisible to a reviewer either way.
+
+**How it resolves.** `resolveAffiliateScope` takes the flag as a fourth argument
+and, when it is set, returns a scope with `confined: false` and
+`groupExempt: true`. That is the whole mechanism: because the predicate builders
+read `confined` alone, none of the six repositories that honour confinement
+needed a line changed, and none of them can forget the exemption. `groupExempt`
+is carried only so the screens can say _why_ somebody under a confined role sees
+everything, which would otherwise read as a bug.
+
+The flag is read once per request, in `src/middleware.ts`, and only when a
+confinement would otherwise bite (`repos/affiliatesAdmin.ts::isGroupAffiliate`),
+so an unconfined request makes no extra query at all. It is read **fresh, never
+through the affiliates cache**, for the same reason the permission matrix is not
+cached (Build Prompt 43): it is an access decision, and a cached answer would
+keep a user seeing every affiliate after an administrator un-marked their unit.
+
+Three edges, all deliberate:
+
+- **A deleted affiliate confers nothing.** The lookup excludes `deleted_at`, so
+  a removed unit stops widening access immediately.
+- **A read failure means "not a group".** The confinement stands: fail closed.
+- **No affiliate is not exempt.** A confined user with no `affiliate_code` still
+  sees nothing until one is assigned; there is no unit that could have been
+  marked a group, and the screens name that state as before.
+
+A group-exempt viewer shares the unconfined cache key, because they see exactly
+the same rows and splitting them would only halve the hit rate.

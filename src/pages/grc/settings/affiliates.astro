@@ -34,6 +34,14 @@ if (allowed) {
   }));
 }
 const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null) : null;
+
+// Stated on screen rather than left to the code, so a reviewer can see what a
+// Group affiliate confers without reading a repository (Build Prompt 48).
+const GROUP_HINT =
+  'A role can be confined to its user\u2019s affiliate on Access control. A user posted to a ' +
+  'Group affiliate is exempt from that confinement: they see every affiliate\u2019s records, ' +
+  'within the module and action grants their role already holds.';
+const groupAffiliates = affiliates.filter((a) => a.isGroup);
 ---
 
 <GrcLayout title="Affiliates">
@@ -44,6 +52,17 @@ const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null)
     </div>
     <a class="grc-btn grc-btn--secondary" href="/settings">Back to settings</a>
   </div>
+
+  {
+    allowed && !loadError && (
+      <p class="grc-field__hint" style="margin-bottom:1rem">
+        {GROUP_HINT}{' '}
+        {groupAffiliates.length === 0
+          ? 'No affiliate is marked as the Group at present, so every confined role is narrowed to its own affiliate.'
+          : `Marked as Group: ${groupAffiliates.map((a) => a.code).join(', ')}.`}
+      </p>
+    )
+  }
 
   {
     saved && (
@@ -98,6 +117,13 @@ const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null)
                 <label for="new-region">Region</label>
                 <input id="new-region" name="region" class="grc-input" maxlength="80" />
               </div>
+              <div class="grc-field">
+                <label class="grc-checkline">
+                  <input id="new-group" type="checkbox" name="is_group" value="1" />
+                  <span>Group (sees all affiliates)</span>
+                </label>
+                <p class="grc-field__hint">{GROUP_HINT}</p>
+              </div>
               <div class="grc-actions">
                 <button type="submit" class="grc-btn grc-btn--primary">
                   Create affiliate
@@ -144,6 +170,19 @@ const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null)
                   value={editing.region ?? ''}
                 />
               </div>
+              <div class="grc-field">
+                <label class="grc-checkline">
+                  <input
+                    id="e-group"
+                    type="checkbox"
+                    name="is_group"
+                    value="1"
+                    checked={editing.isGroup}
+                  />
+                  <span>Group (sees all affiliates)</span>
+                </label>
+                <p class="grc-field__hint">{GROUP_HINT}</p>
+              </div>
               <div class="grc-actions">
                 <button type="submit" class="grc-btn grc-btn--primary">
                   Save changes
@@ -167,6 +206,7 @@ const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null)
                   <th>Name</th>
                   <th>Country</th>
                   <th>Region</th>
+                  <th>Access</th>
                   <th>Status</th>
                   {canWrite && (
                     <th>
@@ -184,6 +224,15 @@ const editing = editCode ? (affiliates.find((a) => a.code === editCode) ?? null)
                     <td>{a.name}</td>
                     <td>{a.country ?? '-'}</td>
                     <td>{a.region ?? '-'}</td>
+                    <td>
+                      {a.isGroup ? (
+                        <span class="grc-statuspill grc-statuspill--on" title={GROUP_HINT}>
+                          Group, sees all affiliates
+                        </span>
+                      ) : (
+                        <span class="grc-tone--muted">This affiliate only</span>
+                      )}
+                    </td>
                     <td>
                       <span
                         class={`grc-statuspill ${a.isActive ? 'grc-statuspill--on' : 'grc-statuspill--off'}`}

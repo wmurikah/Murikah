@@ -2,12 +2,17 @@
 /**
  * The notice a user in an affiliate-confined role sees (Build Prompt 45).
  *
- * Two states, and the second is why this component exists. A confined user with
+ * Three states, and the second is why this component exists. A confined user with
  * an affiliate is told which one, so nothing on the screen is mysteriously
  * absent. A confined user with NO affiliate sees nothing at all, and an ordinary
  * empty state would read as "your organisation has no findings" when the truth
  * is "your account is not finished". That is a configuration mistake, so it says
  * so, and names the fix and who can make it.
+ *
+ * The third is the Group exemption (Build Prompt 48): a user on an affiliate
+ * marked `affiliates.is_group` holds a confined role but is not narrowed by it.
+ * They are told, because seeing every affiliate under a role labelled "confined
+ * to their affiliate" is otherwise the sort of thing that reads as a bug.
  *
  * Rendered above a list rather than in place of it, so the page keeps its shape
  * and its own empty state still means what it says.
@@ -15,6 +20,7 @@
 const grc = Astro.locals.grc;
 const scope = grc?.affiliateScope;
 const confined = scope?.confined === true;
+const groupExempt = scope?.groupExempt === true;
 const affiliate = scope?.affiliateCode ?? null;
 
 interface Props {
@@ -38,6 +44,14 @@ const { subject = 'records' } = Astro.props;
     <p class="grc-field__hint" style="margin-bottom:1rem">
       Your role is confined to the {affiliate} affiliate, so these are the {subject} for {affiliate}{' '}
       only.
+    </p>
+  )
+}
+{
+  groupExempt && (
+    <p class="grc-field__hint" style="margin-bottom:1rem">
+      Your role is confined to its user's affiliate, but {affiliate} is a Group affiliate, so you
+      see every affiliate's {subject}.
     </p>
   )
 }
