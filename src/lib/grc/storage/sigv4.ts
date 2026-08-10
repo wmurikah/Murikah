@@ -65,7 +65,12 @@ async function signingKey(secretAccessKey: string, dateStamp: string): Promise<A
 }
 
 export interface R2PresignParams {
-  method: 'GET' | 'PUT';
+  /**
+   * The HTTP method the URL is signed for. SigV4 signs the method, so a URL
+   * signed for PUT cannot be used to DELETE: each verb needs its own signature.
+   * HEAD and DELETE are here for the server-side probe and the governed removal.
+   */
+  method: 'GET' | 'PUT' | 'HEAD' | 'DELETE';
   accountId: string;
   bucket: string;
   /** The object key, already tenant-scoped by the caller. */

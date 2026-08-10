@@ -1029,7 +1029,7 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'evidence/upload-url.ts',
-    title: 'evidence upload refuses cleanly when storage is unconfigured',
+    title: 'evidence upload refuses an entity type it does not recognise',
     expect: 'refusal',
     method: 'POST',
     path: () => '/api/evidence/upload-url',
@@ -1043,7 +1043,7 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'evidence/complete.ts',
-    title: 'evidence completion refuses cleanly when storage is unconfigured',
+    title: 'evidence completion refuses an upload that never landed',
     expect: 'refusal',
     method: 'POST',
     path: () => '/api/evidence/complete',
@@ -1052,6 +1052,24 @@ const MUTATION_STEPS: MutationStep[] = [
       entity_id: SMOKE.sentWorkPaperId,
       file_id: 'FILE-MISSING',
       file_name: 'smoke.pdf',
+      content_type: 'application/pdf',
+    }),
+  },
+  {
+    // The path the providers that cannot sign a URL take (Build Prompt 51).
+    // The harness posts urlencoded forms, so this is the no-file case: it must
+    // refuse in the same JSON contract as every other evidence endpoint rather
+    // than throwing on a body that is not multipart.
+    endpoint: 'evidence/put.ts',
+    title: 'a direct evidence write refuses a request carrying no file',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/evidence/put',
+    form: () => ({
+      entity_type: 'work_paper',
+      entity_id: SMOKE.sentWorkPaperId,
+      file_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff1111',
+      file_name: 'smoke-direct.pdf',
       content_type: 'application/pdf',
     }),
   },
@@ -1105,6 +1123,73 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: () => `/api/evidence/${SMOKE.attachmentId}/delete`,
     form: () => ({ reason: 'smoke' }),
+  },
+  {
+    // Build Prompt 51. The folder is the one part of a connection that can be
+    // changed without disturbing which provider is active, so it is the step
+    // that proves the endpoint writes rather than only answering.
+    endpoint: 'admin/storage/save.ts',
+    title: 'choosing a storage folder is stored against the organisation',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT folder_id, is_active FROM storage_connections
+            WHERE organization_id = ? AND provider = 'r2'`,
+        )
+        .get(SMOKE.orgId) as { folder_id?: string; is_active?: number | bigint };
+      assert.equal(String(r.folder_id), 'smoke-evidence', 'the chosen folder must persist');
+      assert.equal(Number(r.is_active), 1, 'choosing a folder must not deactivate the provider');
+    },
+    method: 'POST',
+    path: () => '/api/admin/storage/save',
+    form: () => ({
+      action: 'folder',
+      provider: 'r2',
+      folder_id: 'smoke-evidence',
+      folder_name: 'smoke-evidence',
+    }),
+  },
+  {
+    endpoint: 'admin/storage/save.ts',
+    title: 'an OAuth provider refuses to be configured by typed-in fields',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/admin/storage/save',
+    form: () => ({ action: 'save', provider: 'dropbox', bucket: 'nope' }),
+  },
+  {
+    // Activation is refused for a provider that has never passed a test, so
+    // evidence never starts depending on a connection nobody has proved.
+    endpoint: 'admin/storage/save.ts',
+    title: 'an unconfigured provider cannot be made the active one',
+    expect: 'refusal',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT provider FROM storage_connections
+            WHERE organization_id = ? AND is_active = 1`,
+        )
+        .get(SMOKE.orgId) as { provider?: string };
+      assert.equal(String(r.provider), 'r2', 'the tested provider stays the active one');
+    },
+    method: 'POST',
+    path: () => '/api/admin/storage/save',
+    form: () => ({ action: 'activate', provider: 'sharepoint' }),
+  },
+  {
+    endpoint: 'admin/storage/[provider]/connect.ts',
+    title: 'connecting a provider this deployment has not registered says so',
+    expect: 'refusal',
+    method: 'GET',
+    path: () => '/api/admin/storage/google_drive/connect',
+  },
+  {
+    endpoint: 'admin/storage/[provider]/callback.ts',
+    title: 'a storage callback with no code and no state is refused, not a 500',
+    expect: 'refusal',
+    method: 'GET',
+    path: () => '/api/admin/storage/dropbox/callback',
   },
   {
     endpoint: 'reports/export.ts',
@@ -1429,7 +1514,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
    * organisation, so after signing in they must select one before any module
    * page is reachable; every crawl and mutation below runs inside Hass.
    */
-  const enterInstance = async (organizationId = SMOKE.orgId): Promise<void> => {
+  const enterInstance = async (organizationId: string = SMOKE.orgId): Promise<void> => {
     const res = await server.request('POST', '/api/org/switch', {
       organization_id: organizationId,
     });
@@ -2177,6 +2262,79 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.ok(res.status < 500 || res.status === 503, `preview answered ${res.status}`);
     });
 
+    // Evidence storage is per organisation (Build Prompt 51). Hass has a tested,
+    // active R2 connection in the seed and Coast deliberately has none, so this
+    // proves both halves of the contract at once: the provider is resolved for
+    // the acting organisation, and an organisation without one is told so
+    // plainly rather than failing at the moment somebody tries to upload.
+    await t.test('the active storage provider is resolved per organisation', async () => {
+      const screen = await server.get('/settings/storage');
+      assert.equal(screen.status, 200, `evidence storage answered ${screen.status}`);
+      assert.ok(
+        screen.body.includes('New evidence is stored in Cloudflare R2'),
+        'Hass must see its own active provider named',
+      );
+      assert.ok(
+        !screen.body.includes('smoke-secret-key'),
+        'no stored credential may ever reach the screen',
+      );
+      assert.ok(
+        screen.body.includes('••••'),
+        'a stored credential is shown masked, so an administrator can tell one is set',
+      );
+
+      const prepared = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'smoke-evidence.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(
+        prepared.status,
+        200,
+        `preparing an upload in Hass answered ${prepared.status}: ${prepared.body.slice(0, 300)}`,
+      );
+      const plan = JSON.parse(prepared.body) as { backend?: string; mode?: string; url?: string };
+      assert.equal(plan.backend, 'r2', "the upload must be prepared against Hass's own provider");
+      assert.equal(plan.mode, 'presigned', 'R2 signs a URL, so the bytes never touch the worker');
+      assert.ok(
+        String(plan.url).includes(SMOKE.storageBucket),
+        "the signed URL must address Hass's own bucket",
+      );
+
+      // The same session, a different organisation, and nothing carries over.
+      await enterInstance(SMOKE.otherOrgId);
+      const coast = await server.get('/settings/storage');
+      assert.equal(coast.status, 200, `Coast's evidence storage answered ${coast.status}`);
+      assert.ok(
+        coast.body.includes('No provider is active yet'),
+        'an organisation with no connection must be told so, never shown a stranger provider',
+      );
+      assert.ok(
+        !coast.body.includes(SMOKE.storageBucket),
+        "Coast must never see Hass's storage settings",
+      );
+      const refused = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'smoke-evidence.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(
+        refused.status,
+        503,
+        `an unconfigured organisation must refuse the upload, got ${refused.status}`,
+      );
+      assert.ok(
+        refused.body.includes('not configured for your organisation'),
+        `the refusal must say why, got ${refused.body.slice(0, 200)}`,
+      );
+
+      await enterInstance();
+    });
+
     // Rich text and staged evidence (Build Prompt 28), on the admin session.
     await t.test('narrative Markdown renders as marks, never raw or unescaped', async () => {
       const res = await server.request('POST', '/api/work-papers', {
@@ -2241,16 +2399,37 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.ok(page.body.includes('staged.pdf'), 'the bound evidence shows on the detail');
     });
 
-    await t.test('a draft upload refuses cleanly while storage is unconfigured', async () => {
+    // Staging against a draft token is prepared exactly as a saved finding is,
+    // through the organisation's own provider (Build Prompt 51). The key is
+    // still built by the worker, so a client cannot smuggle a path of its own
+    // in through the token.
+    await t.test('a draft upload is prepared under the tenant prefix', async () => {
+      const token = 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000';
       const res = await server.request('POST', '/api/evidence/upload-url', {
         entity_type: 'work_paper_draft',
-        entity_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000',
+        entity_id: token,
         file_name: 'x.pdf',
         content_type: 'application/pdf',
         size_bytes: '10',
       });
-      assert.equal(res.status, 503, `draft upload-url answered ${res.status}`);
-      assert.ok(res.body.trimStart().startsWith('{'), 'the refusal is the JSON contract');
+      assert.equal(res.status, 200, `draft upload-url answered ${res.status}`);
+      assert.ok(res.body.trimStart().startsWith('{'), 'the answer is the JSON contract');
+      const plan = JSON.parse(res.body) as { url?: string };
+      assert.ok(
+        String(plan.url).includes(`org/${SMOKE.orgId}/work_paper_draft/${token}/`),
+        `a staged key must sit under the tenant prefix, got ${String(plan.url).slice(0, 200)}`,
+      );
+    });
+
+    await t.test('a draft upload refuses a token that is not a token', async () => {
+      const res = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper_draft',
+        entity_id: '../../other-tenant',
+        file_name: 'x.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '10',
+      });
+      assert.equal(res.status, 400, `a path-like draft token answered ${res.status}`);
     });
 
     // Row scope and matrix gating, seen from the auditee side (Build Prompt

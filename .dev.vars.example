@@ -23,5 +23,18 @@ TURSO_GRC_DATABASE_URL="libsql://hassaudit-your-org.turso.io"
 TURSO_GRC_AUTH_TOKEN="your-hassaudit-auth-token"
 GRC_SESSION_SECRET="base64-encoded-32-byte-secret"
 
+# --- GRC evidence storage connectors, OPTIONAL (grc/docs/storage-setup.md) ---
+# The platform's own OAuth application registrations, the same for every
+# customer. What is per-organisation (the refresh token, or the R2 keys) is
+# sealed in the database, never here. Leave a pair unset and that provider is
+# simply not offered on /settings/storage. Cloudflare R2 needs nothing here:
+# a customer supplies its own account, bucket and keys on the settings screen.
+GDRIVE_CLIENT_ID=""
+GDRIVE_CLIENT_SECRET=""
+SHAREPOINT_CLIENT_ID=""
+SHAREPOINT_CLIENT_SECRET=""
+DROPBOX_CLIENT_ID=""
+DROPBOX_CLIENT_SECRET=""
+
 # --- Public site URL (canonical/OG fallback for non-production environments) ---
 PUBLIC_SITE_URL="http://localhost:4321"
