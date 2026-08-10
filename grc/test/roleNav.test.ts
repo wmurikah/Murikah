@@ -149,3 +149,80 @@ test('empty nav groups are dropped', () => {
     ['Overview'],
   );
 });
+
+// The settings navigation, grouped and de-duplicated (Build Prompt 52). The
+// list had grown to a flat Setup group that repeated four screens the settings
+// grid also listed, with the send queue under the same bell as Notifications.
+test('administration is grouped, and no screen is listed twice', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: true }));
+  assert.deepEqual(
+    nav.map((g) => g.label),
+    ['Overview', 'Audit', 'Organisation', 'Configuration', 'Platform'],
+  );
+
+  // The point of the change: one canonical link per screen, nothing repeated.
+  const paths = hrefs(nav);
+  const seen = new Set<string>();
+  const repeated = paths.filter((p) => (seen.has(p) ? true : (seen.add(p), false)));
+  assert.deepEqual(repeated, [], `every screen is listed once, repeated: ${repeated.join(', ')}`);
+});
+
+test('grouping drops nothing: every destination the flat nav offered is still there', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: true }));
+  const paths = hrefs(nav);
+  // The Setup group as it stood before the regrouping, plus the settings screens
+  // that were reachable only through the grid.
+  for (const href of [
+    '/settings/affiliates',
+    '/settings/audit-universe',
+    '/settings/users',
+    '/settings/access-control',
+    '/send-queue',
+    '/settings',
+    '/settings/ai',
+    '/settings/general',
+    '/settings/dropdowns',
+    '/settings/email',
+    '/settings/storage',
+    '/settings/provision',
+  ]) {
+    assert.ok(paths.includes(href), `${href} must stay reachable from the navigation`);
+  }
+});
+
+test('each administration screen sits in the group it belongs to', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: true }));
+  const group = (label: string): string[] =>
+    nav.find((g) => g.label === label)?.items.map((i) => i.href) ?? [];
+
+  // Who and what the audit covers.
+  assert.deepEqual(group('Organisation'), [
+    '/settings/affiliates',
+    '/settings/audit-universe',
+    '/settings/users',
+    '/settings/access-control',
+  ]);
+  // How the application behaves, evidence storage included (Build Prompt 51).
+  assert.ok(group('Configuration').includes('/settings/storage'));
+  assert.ok(group('Configuration').includes('/settings/email'));
+  assert.ok(group('Configuration').includes('/settings/general'));
+  assert.ok(group('Configuration').includes('/settings/dropdowns'));
+  // What belongs to Murikah Labs, not to the customer.
+  assert.deepEqual(group('Platform'), ['/platform', '/settings/provision']);
+});
+
+test('the send queue is no longer a second bell beside Notifications', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, instanceSelected: true }));
+  const items = nav.flatMap((g) => g.items);
+  const queue = items.find((i) => i.href === '/send-queue');
+  const bell = items.find((i) => i.href === '/notifications');
+  assert.ok(queue && bell, 'both screens are still offered');
+  assert.notEqual(queue.icon, bell.icon, 'two destinations must not read as one');
+});
+
+test('an admin who is not the platform owner gets no platform group', () => {
+  const nav = buildNav(ctx({ roleCode: 'SUPER_ADMIN', perms: ['CONFIG.view'] }));
+  assert.ok(!nav.some((g) => g.label === 'Platform'));
+  // The configuration screens are still theirs.
+  assert.ok(hrefs(nav).includes('/settings/storage'));
+});

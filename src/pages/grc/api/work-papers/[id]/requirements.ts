@@ -1,14 +1,24 @@
 export const prerender = false;
 
 /**
- * Manage a work paper's requirements (add, update status, remove). Gate:
+ * Manage a work paper's requirements (add, edit, mark received, remove). Gate:
  * REQUIREMENTS.manage. Scoped to the acting organisation; every change is
  * audited. Returns to the work paper detail.
+ *
+ * A requirement carries what was asked for and the two dates that say where it
+ * stands (Build Prompt 52). The status is never submitted: it is derived in the
+ * repository from `received_date`, so a row cannot read "Received" with no date
+ * of receipt, whatever a form posts.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { addRequirement, updateRequirement, removeRequirement } from '@grc/repos/requirements';
+import {
+  addRequirement,
+  updateRequirement,
+  removeRequirement,
+  readDate,
+} from '@grc/repos/requirements';
 import { writeAuditLog } from '@grc/repos/audit';
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
@@ -29,16 +39,17 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   const op = String(form.get('op') ?? '');
   const db = await getDb(getGrcEnv());
 
+  const input = {
+    description: String(form.get('description') ?? '').trim(),
+    requestedDate: readDate(form.get('requested_date')),
+    receivedDate: readDate(form.get('received_date')),
+  };
+
   if (op === 'add') {
-    const description = String(form.get('description') ?? '').trim();
-    const status = String(form.get('status') ?? 'OPEN').trim() || 'OPEN';
-    if (description) await addRequirement(db, grc.organizationId, id, description, status);
+    if (input.description) await addRequirement(db, grc.organizationId, id, input);
   } else if (op === 'update') {
     const requirementId = String(form.get('requirement_id') ?? '');
-    const description = String(form.get('description') ?? '').trim();
-    const status = String(form.get('status') ?? '').trim();
-    if (requirementId)
-      await updateRequirement(db, grc.organizationId, requirementId, description, status);
+    if (requirementId) await updateRequirement(db, grc.organizationId, requirementId, input);
   } else if (op === 'remove') {
     const requirementId = String(form.get('requirement_id') ?? '');
     if (requirementId) await removeRequirement(db, grc.organizationId, requirementId);

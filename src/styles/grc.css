@@ -1063,8 +1063,16 @@
 .grc-actionbar:has(> .grc-field) {
   align-items: end;
 }
+/* A field reserves three rows so a form grid can line labels, controls and
+   helper text up across columns (see .grc-formgrid). In an add row there is no
+   helper text, but the empty third track still contributes its gap, which made
+   the field's box end one step below its control and put every Add button that
+   much lower than the input it submits. An add row ends at its control, so the
+   button lands on the control's line rather than under it. Helper text in an
+   add row belongs under the whole bar, not inside a field. */
 .grc-actionbar > .grc-field {
   margin-bottom: 0;
+  grid-template-rows: auto auto;
 }
 
 /* Detail description list. */
@@ -1221,12 +1229,17 @@
   border-color: #e0a9a0;
   color: #7a271a;
 }
-.grc-pill--risk-medium {
+/* Waiting on somebody: an outstanding requirement reads like a medium risk,
+   because that is what it is until the information arrives. */
+.grc-pill--risk-medium,
+.grc-pill--warn {
   background: #fdf3e2;
   border-color: #e6c893;
   color: #7a4f16;
 }
-.grc-pill--risk-low {
+/* Settled: received, complete, nothing owed. */
+.grc-pill--risk-low,
+.grc-pill--ok {
   background: #eaf3ec;
   border-color: #a9ccb2;
   color: #1e4d2b;

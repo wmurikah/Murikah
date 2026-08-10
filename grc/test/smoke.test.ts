@@ -187,17 +187,90 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'work-papers/[id]/requirements.ts',
-    title: 'add a requirement',
+    title: 'add a requirement, with the date it was asked for',
     expect: 'success',
     verify: (db, c) => {
       const r = db
-        .prepare(`SELECT COUNT(*) AS n FROM work_paper_requirements WHERE work_paper_id = ?`)
-        .get(String(c.get('wpId'))) as { n: number | bigint };
-      assert.ok(Number(r.n) >= 1, 'the requirement row must exist');
+        .prepare(
+          `SELECT requested_date, received_date, status FROM work_paper_requirements
+            WHERE work_paper_id = ? AND description = 'Provide the smoke evidence.'`,
+        )
+        .get(String(c.get('wpId'))) as {
+        requested_date?: string;
+        received_date?: string | null;
+        status?: string;
+      };
+      assert.ok(r, 'the requirement row must exist');
+      assert.equal(String(r.requested_date), '2026-02-02', 'the date requested is stored');
+      assert.ok(r.received_date == null, 'nothing has been received yet');
+      // The status is derived from the date, never submitted, so the two cannot
+      // disagree (Build Prompt 52).
+      assert.equal(String(r.status), 'OUTSTANDING', 'an unreceived requirement is outstanding');
     },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/requirements`,
-    form: () => ({ op: 'add', description: 'Provide the smoke evidence.', status: 'OPEN' }),
+    form: () => ({
+      op: 'add',
+      description: 'Provide the smoke evidence.',
+      requested_date: '2026-02-02',
+    }),
+  },
+  {
+    // Clearing the date of receipt reopens the requirement. This is the half of
+    // the derivation a "mark received" flag would never have to answer, and the
+    // half a stored status typed in beside the date gets wrong.
+    endpoint: 'work-papers/[id]/requirements.ts',
+    title: 'clearing the date received puts a requirement back outstanding',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT received_date, status FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(SMOKE.receivedRequirementId) as { received_date?: string | null; status?: string };
+      assert.ok(r.received_date == null, 'the date of receipt is gone');
+      assert.equal(String(r.status), 'OUTSTANDING', 'so the status says outstanding');
+    },
+    method: 'POST',
+    path: () => `/api/work-papers/${SMOKE.sentWorkPaperId}/requirements`,
+    form: () => ({
+      op: 'update',
+      requirement_id: SMOKE.receivedRequirementId,
+      description: 'Provide the approved bank mandate.',
+      requested_date: '2026-01-05',
+      received_date: '',
+    }),
+  },
+  {
+    // And dating it again marks it received, with the status following the date
+    // rather than the form: nothing here submits a status at all.
+    endpoint: 'work-papers/[id]/requirements.ts',
+    title: 'dating a requirement received marks it received',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT received_date, status FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(SMOKE.receivedRequirementId) as { received_date?: string; status?: string };
+      assert.equal(String(r.received_date), '2026-02-09', 'the date received is stored');
+      assert.equal(String(r.status), 'RECEIVED', 'the status follows the date, not the form');
+      // The other seeded requirement was never received and must be untouched,
+      // so the detail page still has one of each state to show.
+      const other = db
+        .prepare(`SELECT received_date FROM work_paper_requirements WHERE requirement_id = ?`)
+        .get(SMOKE.requirementId) as { received_date?: string | null };
+      assert.ok(other.received_date == null, 'the outstanding requirement stays outstanding');
+    },
+    method: 'POST',
+    path: () => `/api/work-papers/${SMOKE.sentWorkPaperId}/requirements`,
+    form: () => ({
+      op: 'update',
+      requirement_id: SMOKE.receivedRequirementId,
+      description: 'Provide the approved bank mandate.',
+      requested_date: '2026-01-05',
+      received_date: '2026-02-09',
+    }),
   },
   {
     endpoint: 'work-papers/[id]/responsibles.ts',
@@ -2333,6 +2406,29 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
 
       await enterInstance();
+    });
+
+    // Requirements are a request for information with two dates on it (Build
+    // Prompt 52): what was asked for, when it was asked for, and when it
+    // arrived. The seeded pair is deliberately one of each state, so a page
+    // that rendered only one label would fail here.
+    await t.test('requirements show both dates, and what is still outstanding', async () => {
+      const res = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(res.status, 200, `the detail answered ${res.status}`);
+      for (const heading of ['Information requested', 'Date requested', 'Date received']) {
+        assert.ok(res.body.includes(heading), `the requirements table must show ${heading}`);
+      }
+      assert.ok(res.body.includes('>Outstanding<'), 'a requirement not yet received reads so');
+      assert.ok(res.body.includes('>Received<'), 'one that has arrived reads so');
+      // The dates themselves are on the page, not only the labels.
+      assert.ok(res.body.includes('2026-01-05'), 'the date requested is shown');
+      assert.ok(res.body.includes('2026-02-09'), 'the date received is shown');
+      // The status is never a form field: it is derived from the date, so there
+      // is nothing on the screen for it to be typed into out of step.
+      assert.ok(
+        !/name="status"/.test(res.body),
+        'a status a person can type beside the date is the bug this replaced',
+      );
     });
 
     // Rich text and staged evidence (Build Prompt 28), on the admin session.
