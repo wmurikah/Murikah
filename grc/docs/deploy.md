@@ -196,6 +196,33 @@ Afterwards, each organisation's administrator configures a provider on
 then make it active. Registering the platform's own OAuth applications is a
 one-time job documented in `grc/docs/storage-setup.md`.
 
+### Migration 005, when information was requested and when it arrived
+
+`grc/db/migrations/005-requirement-dates.sql` (Build Prompt 52). It adds
+`requested_date` and `received_date` to `work_paper_requirements`, so a
+requirement records not only what was asked for but when it was asked for and
+when it arrived.
+
+- Two plain `ADD COLUMN`s: no key change, no table rebuild, no data moves.
+  Existing rows get NULL for both, which reads as "not yet received" and is the
+  honest answer for a row that never recorded either.
+- This is the same change the operator's own `grc-requirements-dates.sql` made.
+  If that has already been applied, this run fails harmlessly with "duplicate
+  column name" and nothing is altered. It is committed here so the columns are
+  reproducible in a fresh database rather than a change only one database
+  happens to carry.
+- Independent of migrations 001 to 004 and applicable in any order relative to
+  them. The code reads both columns, so apply it before or as the release
+  deploys; if the deploy lands first, the Requirements section fails to load
+  until it is applied.
+- `status` keeps its meaning and the application keeps it in step with
+  `received_date`, so a row reading `PENDING` or `OPEN` is still outstanding and
+  nothing that reads the column has to change. The screen labels a requirement
+  from the date rather than the column, so nothing needs back-filling.
+
+The migration file carries the queries for what is still outstanding and for
+turnaround on what has arrived.
+
 ## Storage provider secrets (never committed)
 
 The OAuth providers need the platform's own application registration, which is

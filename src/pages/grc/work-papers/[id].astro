@@ -16,7 +16,12 @@ import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
 import { guardPageLoad } from '@grc/pageGuard';
 import { getWorkPaper, type WorkPaperDetail } from '@grc/repos/workPapers';
-import { listRequirements, type Requirement } from '@grc/repos/requirements';
+import {
+  listRequirements,
+  isReceived,
+  receiptLabel,
+  type Requirement,
+} from '@grc/repos/requirements';
 import {
   listResponsibles,
   listCcRecipients,
@@ -44,6 +49,9 @@ const canManageReq = can(Astro.locals, 'update', 'WORK_PAPER');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const storageReady = await storageConfiguredFor(grc.organizationId);
 const canUpload = canEdit && storageReady;
+// A new requirement defaults to "asked for today", which is what is happening
+// when somebody types one in.
+const today = new Date().toISOString().slice(0, 10);
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 
@@ -383,36 +391,125 @@ const responseFacts: { label: string; value: string }[] = wp
 
         <div class="grc-panel">
           <h2>Requirements</h2>
+          <p class="grc-lead" style="margin:0 0 0.5rem">
+            The information asked for on this finding, when it was asked for, and when it arrived.
+          </p>
           {requirements.length === 0 ? (
             <p class="grc-lead" style="margin:0">
               No requirements recorded.
             </p>
           ) : (
-            <ul class="grc-tags" style="flex-direction:column;align-items:stretch">
-              {requirements.map((r) => (
-                <li class="grc-tag" style="justify-content:space-between">
-                  <span>{r.description}</span>
-                  <span class="grc-pill">{r.status || 'Open'}</span>
-                  {canManageReq && (
-                    <form
-                      method="post"
-                      action={`/api/work-papers/${id}/requirements`}
-                      style="display:inline"
-                    >
-                      <input type="hidden" name="op" value="remove" />
-                      <input type="hidden" name="requirement_id" value={r.id} />
-                      <button
-                        type="submit"
-                        class="grc-btn grc-btn--secondary"
-                        style="min-height:1.9rem;padding:0 0.6rem"
-                      >
-                        Remove
-                      </button>
-                    </form>
+            <div class="grc-tablewrap">
+              <table class="grc-table">
+                <thead>
+                  <tr>
+                    <th>Information requested</th>
+                    <th>Date requested</th>
+                    <th>Date received</th>
+                    <th>Status</th>
+                    {canManageReq && <th>Update</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {requirements.map((r) =>
+                    canManageReq ? (
+                      /* Editable in place: the two dates are the point of the row,
+                         and a separate edit screen for one date and a sentence
+                         would be a worse trade than a row that saves itself. */
+                      <tr>
+                        <td>
+                          <label class="grc-vh" for={`req-desc-${r.id}`}>
+                            Information requested
+                          </label>
+                          <input
+                            form={`req-save-${r.id}`}
+                            type="text"
+                            id={`req-desc-${r.id}`}
+                            name="description"
+                            class="grc-input"
+                            value={r.description}
+                            required
+                            maxlength="300"
+                          />
+                        </td>
+                        <td>
+                          <label class="grc-vh" for={`req-req-${r.id}`}>
+                            Date requested
+                          </label>
+                          <input
+                            form={`req-save-${r.id}`}
+                            type="date"
+                            id={`req-req-${r.id}`}
+                            name="requested_date"
+                            class="grc-input"
+                            value={r.requestedDate ?? ''}
+                          />
+                        </td>
+                        <td>
+                          <label class="grc-vh" for={`req-rec-${r.id}`}>
+                            Date received
+                          </label>
+                          <input
+                            form={`req-save-${r.id}`}
+                            type="date"
+                            id={`req-rec-${r.id}`}
+                            name="received_date"
+                            class="grc-input"
+                            value={r.receivedDate ?? ''}
+                          />
+                        </td>
+                        <td>
+                          <span
+                            class={`grc-pill ${isReceived(r) ? 'grc-pill--ok' : 'grc-pill--warn'}`}
+                          >
+                            {receiptLabel(r)}
+                          </span>
+                        </td>
+                        <td>
+                          <div class="grc-actions">
+                            <form
+                              method="post"
+                              id={`req-save-${r.id}`}
+                              action={`/api/work-papers/${id}/requirements`}
+                            >
+                              <input type="hidden" name="op" value="update" />
+                              <input type="hidden" name="requirement_id" value={r.id} />
+                              <button type="submit" class="grc-btn grc-btn--secondary">
+                                Save
+                              </button>
+                            </form>
+                            <form method="post" action={`/api/work-papers/${id}/requirements`}>
+                              <input type="hidden" name="op" value="remove" />
+                              <input type="hidden" name="requirement_id" value={r.id} />
+                              <button
+                                type="submit"
+                                class="grc-btn grc-btn--secondary"
+                                aria-label={`Remove: ${r.description}`}
+                              >
+                                Remove
+                              </button>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <td>{r.description}</td>
+                        <td>{r.requestedDate ?? 'Not recorded'}</td>
+                        <td>{r.receivedDate ?? 'Not yet'}</td>
+                        <td>
+                          <span
+                            class={`grc-pill ${isReceived(r) ? 'grc-pill--ok' : 'grc-pill--warn'}`}
+                          >
+                            {receiptLabel(r)}
+                          </span>
+                        </td>
+                      </tr>
+                    ),
                   )}
-                </li>
-              ))}
-            </ul>
+                </tbody>
+              </table>
+            </div>
           )}
           {canManageReq && (
             <form
@@ -428,9 +525,24 @@ const responseFacts: { label: string; value: string }[] = wp
                   id="req-desc"
                   name="description"
                   class="grc-input"
+                  placeholder="The information requested"
                   required
                   maxlength="300"
                 />
+              </div>
+              <div class="grc-field" style="margin:0">
+                <label for="req-requested">Date requested</label>
+                <input
+                  type="date"
+                  id="req-requested"
+                  name="requested_date"
+                  class="grc-input"
+                  value={today}
+                />
+              </div>
+              <div class="grc-field" style="margin:0">
+                <label for="req-received">Date received</label>
+                <input type="date" id="req-received" name="received_date" class="grc-input" />
               </div>
               <button type="submit" class="grc-btn grc-btn--secondary">
                 Add
