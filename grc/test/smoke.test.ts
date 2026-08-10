@@ -35,6 +35,12 @@ import {
   PERMISSION_MODULES,
   PLATFORM_DEFAULT_ORG,
 } from '../../src/lib/grc/auth/permissionModules.ts';
+// The same planner the cron drain uses, so the "one digest, never one email per
+// finding" assertion runs the real grouping rather than a copy of it.
+import { planNormalDigests } from '../../src/lib/grc/notify/render.ts';
+import { reviewQueueLink } from '../../src/lib/grc/notify/links.ts';
+
+const REVIEW_QUEUE_LINK = reviewQueueLink();
 
 /** The cells the role-save step ticks, and therefore expects stored as allowed. */
 const GRANTED_IN_SAVE: [string, string][] = [
@@ -287,6 +293,16 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/responsibles`,
     form: () => ({ op: 'add_responsible', user_id: SMOKE.auditeeId, role_in_finding: 'PRIMARY' }),
+  },
+  {
+    // Build Prompt 53. An empty selection is refused in the same shape as any
+    // other bad request, rather than redirecting as though something happened.
+    endpoint: 'work-papers/submit-batch.ts',
+    title: 'a batch release with nothing selected refuses and says so',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/work-papers/submit-batch',
+    form: () => ({}),
   },
   {
     endpoint: 'work-papers/[id]/transition.ts',
@@ -2429,6 +2445,149 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         !/name="status"/.test(res.body),
         'a status a person can type beside the date is the bug this replaced',
       );
+    });
+
+    // Batch release and the head-of-audit digest (Build Prompt 53). An auditor
+    // drafting a week of fieldwork releases it in one action, and the reviewer
+    // gets one email listing everything, never one per finding.
+    await t.test('several drafts release together and become one digest', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // Three real drafts, created through the API so they carry everything a
+      // finding carries: a reference, an area, a risk rating.
+      const created: string[] = [];
+      for (const [i, title] of [
+        'Bank reconciliations not performed',
+        'Supplier master file uncontrolled',
+        'Access reviews overdue',
+      ].entries()) {
+        const res = await server.request('POST', '/api/work-papers', {
+          observation_title: title,
+          observation_description: `Batch release smoke finding ${i + 1}.`,
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          risk_rating: 'High',
+          recommendation: 'Fix it.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
+        assert.ok(m, `create ${i + 1} redirected to ${res.headers.location}`);
+        created.push(m[1]);
+      }
+
+      // The list offers the batch control for drafts the actor may release.
+      const list = await server.get('/work-papers?status=Draft');
+      assert.equal(list.status, 200, `the list answered ${list.status}`);
+      assert.ok(
+        list.body.includes('Submit selected for review'),
+        'the list must offer the batch release',
+      );
+      assert.ok(list.body.includes('name="work_paper_id"'), 'and a checkbox per draft to release');
+
+      const before = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM notification_queue WHERE batch_type = 'WP_SUBMITTED'`,
+            )
+            .get() as { n: number | bigint }
+        ).n,
+      );
+
+      // One action, three findings.
+      const body = new URLSearchParams();
+      for (const id of created) body.append('work_paper_id', id);
+      const released = await server.request('POST', '/api/work-papers/submit-batch', body);
+      assert.ok(released.status < 400, `the batch answered ${released.status}`);
+      const location = String(released.headers.location ?? '');
+      assert.ok(!/[?&]error=/.test(location), `the batch bounced with an error: ${location}`);
+      assert.ok(
+        decodeURIComponent(location).includes('3 findings submitted for review'),
+        `the batch must report what it did, got: ${location}`,
+      );
+
+      // Each one moved through the transition engine, with its own revision row:
+      // a batch is many submissions, not a bulk update that skips the trail.
+      for (const id of created) {
+        const row = db
+          .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+          .get(id) as { status?: string };
+        assert.equal(String(row.status), 'Submitted', `${id} must be submitted`);
+        const revisions = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM work_paper_revisions
+              WHERE work_paper_id = ? AND to_status = 'Submitted'`,
+          )
+          .get(id) as { n: number | bigint };
+        assert.ok(Number(revisions.n) >= 1, `${id} must have its own revision row`);
+      }
+
+      // Every submission queued its own notification...
+      const queued = db
+        .prepare(
+          `SELECT notification_id AS id, batch_type, recipient_email, rendered_subject, payload,
+                  priority, status
+             FROM notification_queue
+            WHERE batch_type = 'WP_SUBMITTED' AND status = 'PENDING'`,
+        )
+        .all() as {
+        id: string;
+        batch_type: string;
+        recipient_email: string;
+        rendered_subject: string;
+        payload: string;
+        priority: string;
+      }[];
+      assert.ok(
+        queued.length >= before + 3,
+        `three submissions must queue three notifications, got ${queued.length - before}`,
+      );
+
+      // ...and the drain turns them into exactly one email per reviewer, with
+      // every finding in one table. This is the real planner the cron uses.
+      const plans = planNormalDigests(
+        queued.map((r) => ({
+          id: r.id,
+          batchType: r.batch_type,
+          recipientEmail: r.recipient_email,
+          subject: r.rendered_subject,
+          payload: r.payload,
+        })),
+        REVIEW_QUEUE_LINK,
+      );
+      const recipients = new Set(queued.map((r) => r.recipient_email));
+      assert.ok(recipients.size >= 1, 'the head of audit must be among the recipients');
+      assert.equal(plans.length, recipients.size, 'one email per reviewer, never one per finding');
+      for (const plan of plans) {
+        const mine = queued.filter((r) => r.recipient_email === plan.email);
+        assert.equal(plan.rowIds.length, mine.length, 'the one email settles all their rows');
+        if (mine.length > 1) {
+          assert.match(
+            plan.subject,
+            /work papers submitted for review$/,
+            `a batch digest names the count, got ${plan.subject}`,
+          );
+        }
+        // The table carries every finding that reviewer was told about.
+        for (const row of mine) {
+          const reference = String(
+            (JSON.parse(row.payload) as { reference?: string }).reference ?? '',
+          );
+          assert.ok(reference, 'the payload carries the reference');
+          assert.ok(
+            plan.body.includes(reference),
+            `${reference} must appear in the digest for ${plan.email}`,
+          );
+        }
+        assert.ok(plan.body.includes('Review the queue'), 'with one button to the review queue');
+        assert.ok(
+          plan.body.includes('/work-papers?status=Submitted'),
+          'pointing at the findings waiting on them',
+        );
+      }
     });
 
     // Rich text and staged evidence (Build Prompt 28), on the admin session.

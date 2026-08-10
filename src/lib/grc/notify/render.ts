@@ -290,39 +290,222 @@ export function buildTestEmail(mailbox: string): { subject: string; body: string
   return { subject: 'Email connection test - Internal Audit System', body, text: intro };
 }
 
+/** One finding in the submissions table of a digest (Build Prompt 53). */
+export interface SubmittedRow {
+  reference: string;
+  title: string;
+  /** Audit area and risk rating, or whatever of them the finding carries. */
+  detail: string;
+  link?: string;
+}
+
 export interface DigestItem {
   subject: string;
   intro: string;
   link?: string;
+  /**
+   * Set for a submitted finding, so the digest can list it as a table row
+   * rather than as a block of its own. This is what turns "seven findings were
+   * submitted" from seven emails, or one email of seven repeated paragraphs,
+   * into one table a reviewer can read in a glance.
+   */
+  submitted?: SubmittedRow;
+}
+
+const TH =
+  'padding:8px 12px;text-align:left;font-size:12px;color:#687080;font-weight:600;border-bottom:1px solid #e5e7eb';
+const TD =
+  'padding:10px 12px;font-size:13px;color:#111827;border-bottom:1px solid #f1f3f7;vertical-align:top';
+
+/**
+ * The table of newly submitted findings.
+ *
+ * Deliberately a plain `<table>` with inline styles, no flexbox and no CSS
+ * classes: Outlook renders through Word, which supports neither, and a layout
+ * that collapses in the one client the head of audit actually uses is not a
+ * layout. `role="presentation"` keeps a screen reader from announcing the
+ * wrapper chrome as data.
+ */
+function submissionsTable(rows: SubmittedRow[]): string {
+  const body = rows
+    .map((r) => {
+      const ref = r.link
+        ? `<a href="${escapeHtml(r.link)}" style="color:${NAVY};text-decoration:none;font-weight:600">${escapeHtml(r.reference)}</a>`
+        : `<span style="font-weight:600">${escapeHtml(r.reference)}</span>`;
+      return (
+        `<tr><td style="${TD};white-space:nowrap">${ref}</td>` +
+        `<td style="${TD}">${escapeHtml(r.title)}</td>` +
+        `<td style="${TD};color:#687080">${escapeHtml(r.detail)}</td></tr>`
+      );
+    })
+    .join('');
+  return (
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ` +
+    `style="border-collapse:collapse;width:100%;margin:12px 0 20px">` +
+    `<thead><tr><th style="${TH}">Reference</th><th style="${TH}">Title</th>` +
+    `<th style="${TH}">Detail</th></tr></thead><tbody>${body}</tbody></table>`
+  );
+}
+
+function reviewButton(link: string): string {
+  return (
+    `<a href="${escapeHtml(link)}" style="display:inline-block;background:${NAVY};color:#fff;` +
+    `text-decoration:none;padding:11px 20px;border-radius:6px;font-weight:600;font-size:14px">` +
+    `Review the queue</a>`
+  );
 }
 
 /**
  * Build one grouped digest email from a recipient's batched normal
- * notifications, so a person gets a single message rather than many (port of the
- * digest builder). A single item keeps its own subject.
+ * notifications, so a person gets a single message rather than many.
+ *
+ * Submitted findings lead, as one table with a single call to action: a head of
+ * audit who released twenty findings this morning wants one list to work
+ * through, not twenty envelopes to open (Build Prompt 53). Anything else the
+ * recipient has waiting follows underneath, so the run still produces exactly
+ * one email per recipient. A single item that is not a submission keeps its own
+ * subject, as before.
  */
-export function buildDigest(items: DigestItem[]): Rendered {
+export function buildDigest(items: DigestItem[], reviewLink?: string): Rendered {
+  const submitted = items.map((i) => i.submitted).filter((r): r is SubmittedRow => r != null);
+  const others = items.filter((i) => i.submitted == null);
+
   const subject =
-    items.length === 1 ? items[0].subject : `Audit updates: ${items.length} notifications`;
-  const blocks = items
-    .map((it) => {
-      const link = it.link
-        ? ` <a href="${escapeHtml(it.link)}" style="color:${NAVY};font-size:13px">Open</a>`
-        : '';
-      return (
-        `<div style="padding:12px 0;border-bottom:1px solid #e5e7eb">` +
-        `<p style="margin:0 0 4px;color:#111827;font-size:14px;font-weight:600">${escapeHtml(it.subject)}</p>` +
-        `<p style="margin:0;color:#687080;font-size:13px">${escapeHtml(it.intro)}${link}</p></div>`
+    submitted.length > 0
+      ? submitted.length === 1
+        ? `Work paper submitted for review: ${submitted[0].reference}`
+        : `${submitted.length} work papers submitted for review`
+      : items.length === 1
+        ? items[0].subject
+        : `Audit updates: ${items.length} notifications`;
+
+  const sections: string[] = [];
+  if (submitted.length > 0) {
+    const lead =
+      submitted.length === 1
+        ? 'A work paper has been submitted for your review. Please log in and review it.'
+        : `${submitted.length} work papers have been submitted for your review. Please log in and review them.`;
+    sections.push(
+      `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(lead)}</p>`,
+      submissionsTable(submitted),
+      `<p style="margin:0 0 8px">${reviewButton(reviewLink ?? '#')}</p>`,
+    );
+  }
+  if (others.length > 0) {
+    if (submitted.length > 0) {
+      sections.push(
+        `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Also waiting</p>`,
       );
-    })
-    .join('');
+    }
+    sections.push(
+      others
+        .map((it) => {
+          const link = it.link
+            ? ` <a href="${escapeHtml(it.link)}" style="color:${NAVY};font-size:13px">Open</a>`
+            : '';
+          return (
+            `<div style="padding:12px 0;border-bottom:1px solid #e5e7eb">` +
+            `<p style="margin:0 0 4px;color:#111827;font-size:14px;font-weight:600">${escapeHtml(it.subject)}</p>` +
+            `<p style="margin:0;color:#687080;font-size:13px">${escapeHtml(it.intro)}${link}</p></div>`
+          );
+        })
+        .join(''),
+    );
+  }
+
   const body = [
     `<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">`,
     `<div style="background:${NAVY};color:#fff;padding:18px 24px;font-size:16px;font-weight:700">${escapeHtml(HEADER)}</div>`,
-    `<div style="padding:8px 24px">${blocks}</div>`,
+    `<div style="padding:16px 24px">${sections.join('')}</div>`,
     `<div style="padding:16px 24px;background:#f8f4ea;color:#687080;font-size:12px;border-top:1px solid #e5e7eb">`,
     `${escapeHtml(FOOTER)}<br>Replies to <a href="mailto:${REPLY_TO}" style="color:${NAVY}">${REPLY_TO}</a>`,
     `</div></div>`,
   ].join('');
   return { subject, body };
+}
+
+/** The notification type whose digest is the submissions table. */
+const SUBMISSION_TYPE = 'WP_SUBMITTED';
+
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** The fields of a queued notification the digest actually reads. */
+export interface DigestSource {
+  id: string;
+  batchType: string;
+  recipientEmail: string;
+  subject: string;
+  payload: string;
+}
+
+/**
+ * One queued row as the digest sees it.
+ *
+ * A submitted work paper becomes a table row rather than a block, so a reviewer
+ * who has had ten findings released at them reads one table instead of ten
+ * repeated paragraphs. The detail column is the audit area and the risk rating,
+ * which is what tells them what they are being asked to look at; a row whose
+ * payload carries neither still lists, with the title doing the work.
+ */
+function digestItem(row: DigestSource): DigestItem {
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = JSON.parse(row.payload) as Record<string, unknown>;
+  } catch {
+    payload = {};
+  }
+  const link = str(payload.link) || undefined;
+  if (row.batchType === SUBMISSION_TYPE) {
+    const detail = [str(payload.auditArea), str(payload.riskRating)].filter(Boolean).join(' - ');
+    return {
+      subject: row.subject,
+      intro: '',
+      link,
+      submitted: {
+        reference: str(payload.reference) || row.subject,
+        title: str(payload.title),
+        detail,
+        link,
+      },
+    };
+  }
+  return { subject: row.subject, intro: '', link };
+}
+
+/** One email the drain will send: its recipient, its content, and the rows it covers. */
+export interface DigestPlan {
+  email: string;
+  subject: string;
+  body: string;
+  /** The queue rows this one email settles. */
+  rowIds: string[];
+}
+
+/**
+ * Group a run's normal-priority rows into one email per recipient.
+ *
+ * This is the function that makes "never one email per submitted finding" true,
+ * so it lives here, pure and exported: a test can hand it the rows a batch
+ * release actually queued and assert that exactly one email comes out, without
+ * a mailbox, a network or a clock (Build Prompt 53). The review link is passed
+ * in rather than imported, which is what keeps this module import-free.
+ */
+export function planNormalDigests(rows: DigestSource[], reviewLink: string): DigestPlan[] {
+  const byRecipient = new Map<string, DigestSource[]>();
+  for (const row of rows) {
+    const list = byRecipient.get(row.recipientEmail) ?? [];
+    list.push(row);
+    byRecipient.set(row.recipientEmail, list);
+  }
+  const plans: DigestPlan[] = [];
+  for (const [email, group] of byRecipient) {
+    const digest = buildDigest(group.map(digestItem), reviewLink);
+    plans.push({
+      email,
+      subject: digest.subject,
+      body: digest.body,
+      rowIds: group.map((g) => g.id),
+    });
+  }
+  return plans;
 }

@@ -190,23 +190,76 @@ export interface OfferedAction {
   requiresComment: boolean;
 }
 
+/**
+ * A move the workflow defines from here that this actor may not make, and the
+ * reason (Build Prompt 53).
+ *
+ * A filtered-out action used to vanish without trace, so "why can I not submit
+ * my own draft?" had no answer on the screen and no answer in the logs either:
+ * the two possible causes, a `status_transitions` row that names a different
+ * role and a permission the actor's matrix does not grant, look identical from
+ * the outside. Naming them is the difference between a support ticket and a
+ * setting somebody can go and change.
+ */
+export interface WithheldAction {
+  toStatus: string;
+  label: string;
+  reason: string;
+}
+
+export interface AvailableActions {
+  offered: OfferedAction[];
+  withheld: WithheldAction[];
+}
+
+/**
+ * The actions offered to this actor from the current status, and the ones the
+ * workflow defines but withholds from them. The detail screen shows the first
+ * as buttons and the second as an explanation.
+ */
+export async function availableActions(
+  db: Client,
+  fromStatus: string,
+  actor: TransitionActor,
+): Promise<AvailableActions> {
+  const [transitions, terminals] = await Promise.all([
+    loadTransitions(db, WORK_PAPER_ENUM_TYPE),
+    loadTerminalStates(db, WORK_PAPER_ENUM_TYPE),
+  ]);
+  if (terminals.includes(fromStatus)) return { offered: [], withheld: [] };
+  const offered: OfferedAction[] = [];
+  const withheld: WithheldAction[] = [];
+  for (const t of transitions) {
+    if (t.fromStatus !== fromStatus) continue;
+    const meta = actionForTarget(t.toStatus);
+    // A target this application has no catalogue entry for is a workflow row
+    // the code cannot act on at all; it is not withheld from this person.
+    if (!meta) continue;
+    if (t.requiredRole && !actor.isPlatformOwner && t.requiredRole !== actor.roleCode) {
+      withheld.push({
+        toStatus: t.toStatus,
+        label: meta.label,
+        reason: `the workflow reserves it for the ${t.requiredRole} role`,
+      });
+      continue;
+    }
+    if (!actor.perms.includes(meta.permission)) {
+      withheld.push({
+        toStatus: t.toStatus,
+        label: meta.label,
+        reason: `your role does not hold ${meta.permission}`,
+      });
+      continue;
+    }
+    offered.push({ toStatus: t.toStatus, label: meta.label, requiresComment: t.requiresComment });
+  }
+  return { offered, withheld };
+}
+
 export async function offeredActions(
   db: Client,
   fromStatus: string,
   actor: TransitionActor,
 ): Promise<OfferedAction[]> {
-  const [transitions, terminals] = await Promise.all([
-    loadTransitions(db, WORK_PAPER_ENUM_TYPE),
-    loadTerminalStates(db, WORK_PAPER_ENUM_TYPE),
-  ]);
-  if (terminals.includes(fromStatus)) return [];
-  const out: OfferedAction[] = [];
-  for (const t of transitions) {
-    if (t.fromStatus !== fromStatus) continue;
-    if (t.requiredRole && !actor.isPlatformOwner && t.requiredRole !== actor.roleCode) continue;
-    const meta = actionForTarget(t.toStatus);
-    if (!meta || !actor.perms.includes(meta.permission)) continue;
-    out.push({ toStatus: t.toStatus, label: meta.label, requiresComment: t.requiresComment });
-  }
-  return out;
+  return (await availableActions(db, fromStatus, actor)).offered;
 }
