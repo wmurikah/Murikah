@@ -13,6 +13,7 @@ import GrcRichText from '@/components/grc/GrcRichText.astro';
 import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import type { Attachment } from '@grc/repos/evidence';
 import type { ControlDropdowns } from '@grc/repos/dropdowns';
+import { columnForFormField } from '@grc/repos/workPapers';
 
 interface Props {
   action: string;
@@ -55,8 +56,15 @@ const {
   evidence = null,
 } = Astro.props;
 
+/**
+ * The stored value for a form control, resolved through the shared field map
+ * (repos/workPapers.ts). A control's name is not always its column: reading
+ * `values[name]` directly returned undefined for classification, standards and
+ * the assigned auditor, so the form prefilled blank and the next save wrote that
+ * blank back over real data (Build Prompt 50).
+ */
 const v = (key: string): string => {
-  const raw = values?.[key];
+  const raw = values?.[columnForFormField(key)];
   return raw == null ? '' : String(raw);
 };
 // Present a stored code (e.g. AD_HOC) as a readable label (Ad hoc).
