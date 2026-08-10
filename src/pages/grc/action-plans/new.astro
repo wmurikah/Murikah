@@ -11,7 +11,7 @@ export const prerender = false;
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcRichText from '@/components/grc/GrcRichText.astro';
 import GrcEvidence from '@/components/grc/GrcEvidence.astro';
-import { storageConfigured } from '@grc/storage';
+import { storageConfiguredFor } from '@grc/storage';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -27,7 +27,7 @@ if (!grc) return Astro.redirect('/login');
 
 const canCreate = can(Astro.locals, 'create', 'ACTION_PLAN');
 const canPropose = can(Astro.locals, 'create', 'AUDITEE_RESPONSE');
-const draftToken = storageConfigured() ? crypto.randomUUID() : null;
+const draftToken = (await storageConfiguredFor(grc.organizationId)) ? crypto.randomUUID() : null;
 const allowed = canCreate || canPropose;
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const failed = Astro.url.searchParams.get('error');

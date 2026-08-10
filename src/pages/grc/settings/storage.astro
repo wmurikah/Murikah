@@ -1,0 +1,322 @@
+---
+export const prerender = false;
+
+/**
+ * Evidence storage settings (Build Prompt 51): where this organisation's
+ * evidence is kept.
+ *
+ * One card per provider. Cloudflare R2 is configured by filling in the
+ * customer's own account, bucket and keys; Google Drive, SharePoint/OneDrive
+ * and Dropbox by a one-time Connect that captures a refresh token. Either way
+ * the credentials are sealed against this organisation and this screen only
+ * ever renders them masked: nothing here can show a stored secret, because
+ * `listConnections` never returns one.
+ *
+ * The order on each card is the order the work happens in: configure, test,
+ * choose the folder, then make it active. Activation is deliberately refused
+ * until a test has passed, because evidence should not start depending on a
+ * connection nobody has proved reachable.
+ *
+ * The folder picker is behind an explicit "List folders" link rather than run
+ * on every page load: it is a live call to the customer's provider, and a slow
+ * or unhappy provider should not be the reason this screen fails to render.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import { can } from '@grc/auth/rbac';
+import { PROVIDER_DEFINITIONS, isProviderCode, type StorageFolder } from '@grc/storage/provider';
+import { listConnections, type StorageConnectionView } from '@grc/repos/storageConnections';
+import { buildProvider, providerAvailable } from '@grc/storage/resolve';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG');
+const canWrite = grc.isPlatformOwner || can(Astro.locals, 'update', 'CONFIG');
+
+const url = Astro.url;
+const doneBanner = url.searchParams.get('done') ?? url.searchParams.get('connected');
+const error = url.searchParams.get('error');
+const foldersFor = url.searchParams.get('folders') ?? '';
+
+let connections: StorageConnectionView[] = [];
+let folders: StorageFolder[] = [];
+let folderError = '';
+let loadError = false;
+
+if (allowed) {
+  loadError = !(await guardPageLoad('settings.storage', async () => {
+    const env = getGrcEnv();
+    const db = await getDb(env);
+    connections = await listConnections(db, env.sessionSecret, grc.organizationId);
+
+    if (isProviderCode(foldersFor)) {
+      const { loadConnection } = await import('@grc/repos/storageConnections');
+      const stored = await loadConnection(db, env.sessionSecret, grc.organizationId, foldersFor);
+      const instance = stored ? buildProvider(foldersFor, stored.config, null) : null;
+      if (!instance) {
+        folderError = 'That provider is not configured yet, so it has no folders to list.';
+      } else {
+        try {
+          folders = await instance.listFolders();
+          if (folders.length === 0) {
+            folderError = 'The connected account has no folders at its root.';
+          }
+        } catch {
+          // A provider that will not answer is reported here, not as a failed
+          // page: the rest of the screen is still useful.
+          folderError = 'The provider could not be reached to list its folders.';
+        }
+      }
+    }
+  }));
+}
+
+const byCode = new Map(connections.map((c) => [c.provider, c]));
+const active = connections.find((c) => c.isActive) ?? null;
+const activeName =
+  PROVIDER_DEFINITIONS.find((d) => d.code === active?.provider)?.name ?? active?.provider ?? '';
+---
+
+<GrcLayout title="Evidence storage">
+  <div class="grc-page-head">
+    <div>
+      <h1>Evidence storage</h1>
+      <p class="grc-lead">Where this organisation's evidence is kept, and the account it uses.</p>
+    </div>
+    <a class="grc-btn grc-btn--secondary" href="/settings">Back to settings</a>
+  </div>
+
+  {
+    doneBanner && (
+      <p class="grc-notice" role="status">
+        {doneBanner}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert">
+        {error}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        Settings are managed by administrators.
+      </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="Evidence storage" />
+    ) : (
+      <>
+        <div class="grc-card">
+          <p class="grc-card__label">Active provider</p>
+          {active ? (
+            <p class="grc-notice" role="status">
+              New evidence is stored in {activeName}
+              {active.folderName ? `, in ${active.folderName}` : ''}.
+            </p>
+          ) : (
+            <p class="grc-field__hint">
+              No provider is active yet, so evidence cannot be attached anywhere in this
+              organisation. Configure one below, test it, then make it active.
+            </p>
+          )}
+        </div>
+
+        {PROVIDER_DEFINITIONS.map((def) => {
+          const conn = byCode.get(def.code) ?? null;
+          const available = providerAvailable(def.code);
+          const listing = foldersFor === def.code;
+          return (
+            <section class="grc-card grc-form" aria-labelledby={`storage-${def.code}`}>
+              <div class="grc-field">
+                <h2 id={`storage-${def.code}`} class="grc-card__label">
+                  {def.name}
+                  {conn?.isActive ? ' — active' : ''}
+                </h2>
+                <p class="grc-field__hint">{def.description}</p>
+              </div>
+
+              {conn ? (
+                conn.status === 'connected' ? (
+                  <p class="grc-notice" role="status">
+                    Tested and reachable
+                    {conn.connectedAt ? ` on ${conn.connectedAt.slice(0, 10)}` : ''}.
+                    {conn.statusDetail ? ` ${conn.statusDetail}` : ''}
+                    {conn.maskedConfig.account ? ` Connected as ${conn.maskedConfig.account}.` : ''}
+                  </p>
+                ) : conn.status === 'error' ? (
+                  <p class="grc-error" role="alert">
+                    The last test failed: {conn.statusDetail ?? 'the provider refused the write.'}
+                  </p>
+                ) : (
+                  <p class="grc-field__hint">
+                    {conn.statusDetail ?? 'Configured but not tested yet.'}
+                    {conn.maskedConfig.account ? ` Connected as ${conn.maskedConfig.account}.` : ''}
+                  </p>
+                )
+              ) : !available ? (
+                <p class="grc-field__hint">
+                  This provider is not registered on this deployment yet. Register the application
+                  and set its Worker secrets first (see {def.setupDoc}).
+                </p>
+              ) : (
+                <p class="grc-field__hint">Not configured.</p>
+              )}
+
+              {def.kind === 'fields' && canWrite && (
+                <form method="post" action="/api/admin/storage/save" class="grc-form">
+                  <input type="hidden" name="action" value="save" />
+                  <input type="hidden" name="provider" value={def.code} />
+                  {def.fields.map((f) => (
+                    <div class="grc-field">
+                      <label for={`${def.code}-${f.name}`}>
+                        {f.label}
+                        {f.optional ? ' (optional)' : ''}
+                      </label>
+                      <input
+                        id={`${def.code}-${f.name}`}
+                        name={f.name}
+                        type="text"
+                        autocomplete="off"
+                        value={f.secret ? '' : (conn?.maskedConfig[f.name] ?? '')}
+                        placeholder={
+                          f.secret
+                            ? (conn?.maskedConfig[f.name] ?? f.placeholder ?? '')
+                            : (f.placeholder ?? '')
+                        }
+                      />
+                      {f.hint && <p class="grc-field__hint">{f.hint}</p>}
+                      {f.secret && conn?.hasCredentials && (
+                        <p class="grc-field__hint">
+                          Stored and sealed. Leave blank to keep it, or paste a new one to rotate
+                          it.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  <div class="grc-actions">
+                    <button type="submit" class="grc-btn grc-btn--primary">
+                      Save {def.name}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {def.kind === 'oauth' && canWrite && available && (
+                <div class="grc-actions">
+                  <a
+                    class="grc-btn grc-btn--primary"
+                    href={`/api/admin/storage/${def.code}/connect`}
+                  >
+                    {conn ? `Reconnect ${def.name}` : `Connect ${def.name}`}
+                  </a>
+                </div>
+              )}
+
+              {conn && canWrite && (
+                <>
+                  <div class="grc-field">
+                    <p class="grc-card__label">{def.folderLabel}</p>
+                    <p class="grc-field__hint">
+                      {conn.folderName
+                        ? `Evidence goes to ${conn.folderName}.`
+                        : 'No folder chosen yet, so evidence goes to the account root.'}
+                    </p>
+                    <p class="grc-field__hint">
+                      <a href={`/settings/storage?folders=${def.code}`}>List folders</a>
+                    </p>
+                  </div>
+
+                  {listing && folderError && (
+                    <p class="grc-error" role="alert">
+                      {folderError}
+                    </p>
+                  )}
+
+                  {listing && folders.length > 0 && (
+                    <form method="post" action="/api/admin/storage/save" class="grc-form">
+                      <input type="hidden" name="action" value="folder" />
+                      <input type="hidden" name="provider" value={def.code} />
+                      <div class="grc-field">
+                        <label for={`${def.code}-folder`}>{def.folderLabel}</label>
+                        <select id={`${def.code}-folder`} name="folder_id">
+                          {folders.map((f) => (
+                            <option value={f.id} selected={f.id === conn.folderId}>
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div class="grc-actions">
+                        <button type="submit" class="grc-btn grc-btn--secondary">
+                          Use this folder
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  <div class="grc-actions">
+                    <form method="post" action="/api/admin/storage/save">
+                      <input type="hidden" name="action" value="test" />
+                      <input type="hidden" name="provider" value={def.code} />
+                      <button type="submit" class="grc-btn grc-btn--secondary">
+                        Test connection
+                      </button>
+                    </form>
+                    {!conn.isActive && (
+                      <form method="post" action="/api/admin/storage/save">
+                        <input type="hidden" name="action" value="activate" />
+                        <input type="hidden" name="provider" value={def.code} />
+                        <button type="submit" class="grc-btn grc-btn--secondary">
+                          Store evidence here
+                        </button>
+                      </form>
+                    )}
+                    <form method="post" action="/api/admin/storage/save">
+                      <input type="hidden" name="action" value="disconnect" />
+                      <input type="hidden" name="provider" value={def.code} />
+                      <button
+                        type="submit"
+                        class="grc-btn grc-btn--secondary"
+                        data-confirm-disconnect
+                      >
+                        Disconnect
+                      </button>
+                    </form>
+                  </div>
+                </>
+              )}
+
+              {!canWrite && (
+                <p class="grc-field__hint">
+                  Evidence storage is configured by an administrator of this organisation.
+                </p>
+              )}
+            </section>
+          );
+        })}
+      </>
+    )
+  }
+</GrcLayout>
+
+<script>
+  // Disconnecting removes a stored credential; a stray click should not.
+  for (const btn of document.querySelectorAll('[data-confirm-disconnect]')) {
+    btn.addEventListener('click', (e) => {
+      if (
+        !window.confirm(
+          'Disconnect this provider? The stored credentials are removed and new evidence cannot be attached until another provider is active.',
+        )
+      ) {
+        e.preventDefault();
+      }
+    });
+  }
+</script>
