@@ -88,17 +88,21 @@ export function buildProvider(
 /**
  * The acting organisation's active provider, or null when it has none.
  *
- * A connection that has never passed a test is deliberately not returned: it is
- * half-configured, and writing evidence into it would be writing into something
- * nobody has proved reachable. The screen tells the administrator to test it.
+ * The screen tells an administrator whose connection is configured but untested
+ * to test it; a successful test is what activates it (Build Prompt 54).
  */
 export async function resolveProvider(
   db: Client,
   secret: string,
   organizationId: string,
 ): Promise<StorageProvider | null> {
+  // "Active and tested" is one predicate inside loadActiveConnection (Build
+  // Prompt 54), so the resolver and the evidence gate cannot answer differently.
+  // A connection that never passed a test is not returned: it is half
+  // configured, and writing evidence into it would be writing into something
+  // nobody has proved reachable.
   const connection = await loadActiveConnection(db, secret, organizationId);
-  if (!connection || connection.status !== 'connected') return null;
+  if (!connection) return null;
   return buildProvider(connection.provider, connection.config, connection.folderId);
 }
 

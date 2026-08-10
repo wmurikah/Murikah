@@ -20,6 +20,14 @@ export const prerender = false;
  * A submitted secret field left blank keeps the stored one, so an administrator
  * can change the bucket without retyping the key they can only see masked.
  *
+ * ACTIVATION IS EARNED, NOT CLICKED (Build Prompt 54). Saving credentials tests
+ * the connection straight away, and a test that passes makes that provider the
+ * organisation's active one, deactivating any other in the same write. A test
+ * that fails leaves it inactive and says why. Before this, a connection could
+ * sit `status = 'connected'` with `is_active = 0` indefinitely: tested, working
+ * and invisible to the evidence gate, a state no administrator could reach the
+ * end of from the screen.
+ *
  * Tagged [grc.storage]; never a blank 500.
  */
 import type { APIRoute } from 'astro';
@@ -73,6 +81,45 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const db = await getDb(env);
     const existing = await loadConnection(db, env.sessionSecret, org, provider);
 
+    /**
+     * Prove the connection and, if it answers, make it the one evidence goes to.
+     *
+     * The two belong in one step because they are one decision: an
+     * administrator who has just proved a provider reachable has finished
+     * configuring it, and asking them to press a second button to make it count
+     * is how a working connection ends up inactive. A failure records why and
+     * changes nothing about which provider is active, so a bad test on a second
+     * provider cannot knock out the one already carrying the evidence.
+     */
+    const testAndActivate = async (
+      config: Record<string, string>,
+      folderId: string | null,
+    ): Promise<{ ok: boolean; message: string }> => {
+      const instance = buildProvider(provider, config, folderId);
+      if (!instance) {
+        await recordTestResult(db, org, provider, false, 'The stored settings are incomplete.');
+        return { ok: false, message: `${name} is not fully configured yet.` };
+      }
+      const result = await instance.testConnection();
+      await recordTestResult(
+        db,
+        org,
+        provider,
+        result.ok,
+        result.ok ? result.detail : result.error,
+      );
+      if (!result.ok) {
+        await audit(db, grc, provider, 'STORAGE.test_failed');
+        return { ok: false, message: `${name} could not be reached: ${result.error}` };
+      }
+      await activateConnection(db, org, provider, grc.userId);
+      await audit(db, grc, provider, 'STORAGE.activate');
+      return {
+        ok: true,
+        message: `${name}: ${result.detail} It is now where new evidence is stored.`,
+      };
+    };
+
     if (action === 'disconnect') {
       await disconnect(db, org, provider);
       await audit(db, grc, provider, 'STORAGE.disconnect');
@@ -106,29 +153,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
         connectedBy: grc.userId,
       });
       await audit(db, grc, provider, 'STORAGE.save');
-      return done(`${name} saved. Test the connection to confirm it works.`);
+      // Saving tests immediately, so the administrator learns now whether the
+      // credentials work rather than after the first upload fails.
+      const proved = await testAndActivate(config, existing?.folderId ?? null);
+      return proved.ok
+        ? done(`${name} saved. ${proved.message}`)
+        : fail(`${name} saved, but it is not active: ${proved.message}`);
     }
 
     if (!existing) return fail(`${name} is not configured yet.`);
 
     if (action === 'test') {
-      const instance = buildProvider(provider, existing.config, existing.folderId);
-      if (!instance) {
-        await recordTestResult(db, org, provider, false, 'The stored settings are incomplete.');
-        return fail(`${name} is not fully configured yet.`);
-      }
-      const result = await instance.testConnection();
-      await recordTestResult(
-        db,
-        org,
-        provider,
-        result.ok,
-        result.ok ? result.detail : result.error,
-      );
-      await audit(db, grc, provider, result.ok ? 'STORAGE.test_ok' : 'STORAGE.test_failed');
-      return result.ok
-        ? done(`${name}: ${result.detail}`)
-        : fail(`${name} could not be reached: ${result.error}`);
+      const proved = await testAndActivate(existing.config, existing.folderId);
+      return proved.ok ? done(proved.message) : fail(proved.message);
     }
 
     if (action === 'folder') {
@@ -136,16 +173,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
       const folderName = String(form.get('folder_name') ?? '').trim() || folderId || 'Root';
       await setFolder(db, org, provider, folderId, folderName);
       await audit(db, grc, provider, 'STORAGE.folder');
-      return done(`${name} will store evidence in ${folderName}. Test it to confirm.`);
+      // A new folder means the last test proved a different place. Re-testing
+      // here keeps "active" honest: the proof and the destination stay one fact
+      // rather than drifting apart the moment a folder changes.
+      const proved = await testAndActivate(existing.config, folderId);
+      return proved.ok
+        ? done(`${name} will store evidence in ${folderName}. ${proved.message}`)
+        : fail(`${name} is set to ${folderName}, but it is not active: ${proved.message}`);
     }
 
-    // activate
-    if (existing.status !== 'connected') {
-      return fail(`Test ${name} first: evidence should not depend on an untested connection.`);
-    }
-    await activateConnection(db, org, provider);
-    await audit(db, grc, provider, 'STORAGE.activate');
-    return done(`${name} is now where new evidence is stored.`);
+    // activate: still offered, for switching back to a provider already
+    // configured. It re-proves rather than trusting an old green tick, because
+    // what is being decided is where evidence goes next, not where it went.
+    const proved = await testAndActivate(existing.config, existing.folderId);
+    return proved.ok ? done(proved.message) : fail(proved.message);
   } catch (err) {
     console.error(TAG, err instanceof Error ? (err.stack ?? err.message) : String(err));
     return fail('That could not be saved just now. Please try again.');

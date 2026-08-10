@@ -76,6 +76,7 @@ export function createR2Provider(
       secretAccessKey: cfg.secretAccessKey,
       expiresInSeconds: ttl,
       now: new Date(),
+      endpoint: cfg.endpoint,
     });
 
   // Server-side operations go over the same signed URL rather than a bucket
