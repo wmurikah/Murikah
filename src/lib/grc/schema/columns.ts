@@ -694,6 +694,8 @@ export const C = {
     status: 'status',
     notes: 'notes',
     due_date: 'due_date',
+    requested_date: 'requested_date',
+    received_date: 'received_date',
     created_at: 'created_at',
     updated_at: 'updated_at',
     deleted_at: 'deleted_at',
