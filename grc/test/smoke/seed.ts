@@ -511,8 +511,14 @@ export function seedDatabase(db: DatabaseSync): void {
       observation_description: 'Monthly bank reconciliations were not performed on time.',
       risk_rating: 'High',
       recommendation: 'Perform reconciliations monthly and review them.',
+      // Deliberately the live shape (Build Prompt 50): the id is set and the
+      // denormalised name column is NOT, so the detail has to resolve the name
+      // through the join. Seeding the copy would have hidden the bug.
       assigned_auditor_id: SMOKE.auditorId,
-      assigned_auditor_name: 'Amina Auditor',
+      // A value from the seeded DROPDOWN_CONTROL_CLASSIFICATION vocabulary, so
+      // the edit form's select can actually hold it selected.
+      control_classification: 'KEY',
+      control_standards: 'ISO 27001, IIA Standards',
       status,
       revision_count: 0,
       prepared_by_id: SMOKE.userId,
