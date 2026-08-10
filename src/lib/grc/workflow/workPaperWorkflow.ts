@@ -19,7 +19,8 @@
  */
 import type { Client, InStatement } from '@libsql/client/web';
 import { checkTransition, loadTransitions, loadTerminalStates } from './transitions';
-import { WORK_PAPER_ENUM_TYPE, WP_STATUS, actionForTarget } from './workPaperActions';
+import { WORK_PAPER_ENUM_TYPE, WP_STATUS, actionForTarget, sameStatus } from './workPaperActions';
+import { canMatrix, type PermissionMatrix } from '@grc/auth/matrix';
 import { getWorkPaper } from '@grc/repos/workPapers';
 import { insertRevisionStatement } from '@grc/repos/revisions';
 import { enqueueNotification } from '@grc/repos/notify';
@@ -31,7 +32,19 @@ export interface TransitionActor {
   userName: string;
   roleCode: string;
   isPlatformOwner: boolean;
+  /**
+   * The permission matrix the administrator edits on the access-control screen.
+   * The workflow asks this directly (Build Prompt 55) rather than the derived
+   * `WORK_PAPERS.*` list: one representation of a grant, so there is nothing to
+   * fall out of step with what a reviewer sees ticked.
+   */
+  matrix: PermissionMatrix;
   perms: string[];
+}
+
+/** Whether the actor holds the matrix grant an action needs. */
+function holdsGrant(actor: TransitionActor, meta: { grant: { module: string; action: string } }) {
+  return canMatrix(actor.matrix, meta.grant.action, meta.grant.module);
 }
 
 export type TransitionResult =
@@ -77,9 +90,9 @@ export async function executeTransition(
   const meta = actionForTarget(toStatus);
   if (!meta) return { ok: false, code: 'unknown_action', message: 'Unknown workflow action.' };
 
-  // The WORK_PAPERS.* permission for this action (a platform owner is not exempt
-  // from it; their permission set carries what they may do).
-  if (!actor.perms.includes(meta.permission)) {
+  // The matrix grant for this action (a platform owner is not exempt from it;
+  // their matrix carries what they may do).
+  if (!holdsGrant(actor, meta)) {
     return { ok: false, code: 'forbidden', message: 'You do not have permission for that action.' };
   }
 
@@ -217,20 +230,51 @@ export interface AvailableActions {
  * workflow defines but withholds from them. The detail screen shows the first
  * as buttons and the second as an explanation.
  */
+/** The finding an action is being offered on: its state and whose work it is. */
+export interface ActionSubject {
+  status: string;
+  /** The auditor the finding is assigned to, when it has one. */
+  assignedAuditorId?: string | null;
+}
+
+/**
+ * Whether an authoring action belongs to this actor.
+ *
+ * Submitting a finding is the auditor's move, not the reviewer's: a head of
+ * audit opening someone's draft should be waiting for it to arrive, not being
+ * invited to release it on their behalf (Build Prompt 55). So an authoring
+ * action is offered to the finding's own auditor, and to anyone who may edit it
+ * while it has no auditor yet, which is the state a finding sits in between
+ * being created and being assigned.
+ *
+ * This governs what is offered, not what is permitted: the batch release on the
+ * work papers list deliberately lets a reviewer send several findings on an
+ * auditor's behalf, and the executor's own gate is the matrix grant.
+ */
+function ownsAuthoring(subject: ActionSubject, actor: TransitionActor): boolean {
+  const assigned = (subject.assignedAuditorId ?? '').trim();
+  return assigned === '' || assigned === actor.userId;
+}
+
 export async function availableActions(
   db: Client,
-  fromStatus: string,
+  subject: ActionSubject,
   actor: TransitionActor,
 ): Promise<AvailableActions> {
   const [transitions, terminals] = await Promise.all([
     loadTransitions(db, WORK_PAPER_ENUM_TYPE),
     loadTerminalStates(db, WORK_PAPER_ENUM_TYPE),
   ]);
-  if (terminals.includes(fromStatus)) return { offered: [], withheld: [] };
+  // Every status comparison here is whitespace and case tolerant. These rows are
+  // operator-managed, and a trailing space in `from_status` is invisible on the
+  // screens that show it while matching nothing at all (Build Prompt 55).
+  if (terminals.some((terminal) => sameStatus(terminal, subject.status))) {
+    return { offered: [], withheld: [] };
+  }
   const offered: OfferedAction[] = [];
   const withheld: WithheldAction[] = [];
   for (const t of transitions) {
-    if (t.fromStatus !== fromStatus) continue;
+    if (!sameStatus(t.fromStatus, subject.status)) continue;
     const meta = actionForTarget(t.toStatus);
     // A target this application has no catalogue entry for is a workflow row
     // the code cannot act on at all; it is not withheld from this person.
@@ -243,14 +287,19 @@ export async function availableActions(
       });
       continue;
     }
-    if (!actor.perms.includes(meta.permission)) {
+    if (!holdsGrant(actor, meta)) {
       withheld.push({
         toStatus: t.toStatus,
         label: meta.label,
-        reason: `your role does not hold ${meta.permission}`,
+        reason: `your role does not hold ${meta.grant.module}.${meta.grant.action}`,
       });
       continue;
     }
+    // An authoring action on somebody else's finding is simply not this
+    // person's move, so it is not listed as withheld either: there is nothing
+    // for a reviewer to fix, and telling them they lack a permission they do
+    // hold would be a lie.
+    if (meta.authoring && !ownsAuthoring(subject, actor)) continue;
     offered.push({ toStatus: t.toStatus, label: meta.label, requiresComment: t.requiresComment });
   }
   return { offered, withheld };
@@ -258,8 +307,8 @@ export async function availableActions(
 
 export async function offeredActions(
   db: Client,
-  fromStatus: string,
+  subject: ActionSubject,
   actor: TransitionActor,
 ): Promise<OfferedAction[]> {
-  return (await availableActions(db, fromStatus, actor)).offered;
+  return (await availableActions(db, subject, actor)).offered;
 }

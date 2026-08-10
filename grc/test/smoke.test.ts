@@ -46,6 +46,10 @@ const REVIEW_QUEUE_LINK = reviewQueueLink();
 const GRANTED_IN_SAVE: [string, string][] = [
   ['WORK_PAPER', 'read'],
   ['WORK_PAPER', 'create'],
+  // An auditor who may write findings but not edit them is not a role anybody
+  // would configure, and leaving it out of the fixture hid the very gap Build
+  // Prompt 55 fixes: submitting follows this grant.
+  ['WORK_PAPER', 'update'],
   ['ACTION_PLAN', 'read'],
   ['REPORT', 'read'],
   ['NOTIFICATION', 'read'],
@@ -946,8 +950,11 @@ const MUTATION_STEPS: MutationStep[] = [
       }
       // Inherited as allowed from the platform defaults, left unticked here: the
       // un-tick has to apply too, or a half-applied save would pass this step.
+      // (WORK_PAPER.update is ticked in this fixture, because an auditor who
+      // cannot edit a finding is not a role anybody configures; ACTION_PLAN
+      // update carries the same proof and is genuinely left off.)
       assert.equal(
-        allowed(SMOKE.orgId, 'WORK_PAPER', 'update'),
+        allowed(SMOKE.orgId, 'ACTION_PLAN', 'update'),
         0,
         'an unticked cell must be stored as refused, not left as it was',
       );
@@ -2740,6 +2747,133 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         .get(SMOKE.orgId) as { status?: string; is_active?: number | bigint };
       assert.equal(Number(restored.is_active), 1, 'the working provider is active again');
       assert.equal(String(restored.status), 'connected', 'and proved');
+    });
+
+    // The auditor's own submit (Build Prompt 55). The action is offered from the
+    // transition table and gated on the matrix grant an administrator can see
+    // ticked, so an auditor holding WORK_PAPER.update releases their own draft
+    // without anyone touching a permission list by hand.
+    await t.test('the assigned auditor can submit their own draft for review', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+
+      // Their own finding, created by them and assigned to them.
+      const created = await server.request('POST', '/api/work-papers', {
+        observation_title: 'Petty cash counts not evidenced',
+        observation_description: 'Raised by the auditor for their own submission.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        sub_area_id: SMOKE.subAreaId,
+        risk_rating: 'Medium',
+        recommendation: 'Evidence every count.',
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+      assert.ok(m, `the auditor must be able to raise a finding, got ${created.headers.location}`);
+      const id = m[1];
+
+      const before = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(id) as { status?: string };
+      assert.equal(String(before.status), 'Draft', 'it starts as a draft');
+
+      // The action is offered, with its label and its form.
+      const detail = await server.get(`/work-papers/${id}`);
+      assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+      assert.ok(
+        detail.body.includes('Submit for review'),
+        'the assigned auditor must see Submit for review on their own draft',
+      );
+      assert.ok(
+        detail.body.includes('name="to_status" value="Submitted"'),
+        'and the form that performs it',
+      );
+      assert.ok(
+        !detail.body.includes('No action is available to you'),
+        'so the panel must not claim there is nothing they can do',
+      );
+
+      const queuedBefore = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM notification_queue WHERE batch_type = 'WP_SUBMITTED'`,
+            )
+            .get() as { n: number | bigint }
+        ).n,
+      );
+
+      // Using it moves the finding and writes a revision, through the engine.
+      const submitted = await server.request('POST', `/api/work-papers/${id}/transition`, {
+        to_status: 'Submitted',
+      });
+      const location = decodeURIComponent(String(submitted.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(location), `the submit must succeed, got ${location}`);
+
+      const after = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(id) as { status?: string };
+      assert.equal(String(after.status), 'Submitted', 'the finding moves to Submitted');
+      const revision = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM work_paper_revisions
+            WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+        )
+        .get(id) as { n: number | bigint };
+      assert.ok(Number(revision.n) >= 1, 'and the move is recorded as a revision');
+
+      // The head of audit is told, rather than being asked to submit it.
+      const notified = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE batch_type = 'WP_SUBMITTED' AND related_entity_id = ?`,
+        )
+        .get(id) as { n: number | bigint };
+      assert.ok(Number(notified.n) >= 1, 'a submission notifies the reviewer');
+      const queuedAfter = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM notification_queue WHERE batch_type = 'WP_SUBMITTED'`,
+            )
+            .get() as { n: number | bigint }
+        ).n,
+      );
+      assert.ok(queuedAfter > queuedBefore, 'the notification is queued by this submission');
+
+      // And the reviewer, opening the same finding, is not invited to submit
+      // somebody else's work: submitting is the auditor's action.
+      await signInAsOwnerInsideHass();
+      const asReviewer = await server.get(`/work-papers/${id}`);
+      assert.equal(asReviewer.status, 200, `the reviewer's view answered ${asReviewer.status}`);
+      assert.ok(
+        !asReviewer.body.includes('name="to_status" value="Submitted"'),
+        "the head of audit is not offered Submit on an auditor's finding",
+      );
+    });
+
+    await t.test('a draft with no auditor yet can still be submitted by its author', async () => {
+      // Between creating a finding and assigning it, somebody still has to be
+      // able to move it on; an unassigned draft is not a locked one.
+      const created = await server.request('POST', '/api/work-papers', {
+        observation_title: 'Unassigned draft finding',
+        observation_description: 'No auditor is on it yet.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        risk_rating: 'Low',
+        recommendation: 'Assign it.',
+      });
+      const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+      assert.ok(m, `create redirected to ${created.headers.location}`);
+      const detail = await server.get(`/work-papers/${m[1]}`);
+      assert.ok(
+        detail.body.includes('name="to_status" value="Submitted"'),
+        'an unassigned draft still offers Submit to whoever may edit it',
+      );
     });
 
     // Rich text and staged evidence (Build Prompt 28), on the admin session.
