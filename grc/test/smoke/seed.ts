@@ -185,7 +185,7 @@ function insert(db: DatabaseSync, table: string, row: Record<string, unknown>): 
   db.prepare(sql).run(...keys.map((k) => row[k] as null | number | string));
 }
 
-export async function seedDatabase(db: DatabaseSync): Promise<void> {
+export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<void> {
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
 
@@ -870,6 +870,10 @@ export async function seedDatabase(db: DatabaseSync): Promise<void> {
         bucket: SMOKE.storageBucket,
         access_key_id: 'smoke-access-key',
         secret_access_key: 'smoke-secret-key',
+        // The endpoint the settings screen has always offered, pointed at the
+        // harness's own S3 stand-in so a connection test can really pass and
+        // really activate the provider (Build Prompt 54).
+        endpoint: s3Origin,
       }),
     ),
     folder_id: SMOKE.storageFolder,
