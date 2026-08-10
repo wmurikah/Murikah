@@ -1,6 +1,9 @@
 /**
- * The work-paper workflow action catalogue, pure and import-free so it can be
- * unit tested and reused.
+ * The work-paper workflow action catalogue, pure so it can be unit tested and
+ * reused. Its one import is the engine's status normaliser beside it, with an
+ * explicit `.ts` specifier so node strips the types and runs this directly; the
+ * comparison rule belongs to the engine, and a second copy of it here is the
+ * kind of drift that lets two modules disagree about what "Draft" means.
  *
  * Validity is NOT decided here: which transitions exist, the `required_role` and
  * the `requires_comment` flag all come from `status_transitions` through the
@@ -18,6 +21,10 @@
  * Submitted, Under Review, Approved, Sent to Auditee, Response Received,
  * Response Reviewed, with a Revision Required loop back to the auditor.
  */
+
+import { normaliseStatus, sameStatus } from './transitionRules.ts';
+
+export { normaliseStatus, sameStatus };
 
 /** The enum_type under which the work-paper statuses and transitions are stored. */
 export const WORK_PAPER_ENUM_TYPE = 'WORK_PAPER_STATUS';
@@ -224,16 +231,25 @@ export function grantForTransition(fromStatus: string, toStatus: string): Grant 
   return actionForTarget(toStatus)?.grant ?? null;
 }
 
-/** A status reduced to what it means, for comparison only, never for storage. */
-export function normaliseStatus(status: string): string {
-  return String(status ?? '')
-    .trim()
-    .toLowerCase();
-}
-
-/** Whether two stored statuses name the same state, whitespace and case aside. */
-export function sameStatus(a: string, b: string): boolean {
-  return normaliseStatus(a) === normaliseStatus(b);
+/**
+ * The catalogue's own spelling of a target status, or null when it names no
+ * action this application performs.
+ *
+ * What a transition row spells is what an operator typed; what the application
+ * stores has to be the one value every query, filter and label already uses. So
+ * a move offered from a row reading `submitted ` is performed as `Submitted`
+ * (Build Prompt 57). Without this, tolerating the row's spelling on the way in
+ * would write it straight into `work_papers.status` on the way out, and a
+ * status nothing else matches is a worse fault than the one being fixed.
+ */
+export function canonicalTarget(target: string): string | null {
+  if (ACTIONS[target]) return target;
+  const wanted = normaliseStatus(target);
+  if (wanted === '') return null;
+  for (const status of Object.keys(ACTIONS)) {
+    if (normaliseStatus(status) === wanted) return status;
+  }
+  return null;
 }
 
 /** The statuses in which the record's fields may be edited; every other status is read-only. */
