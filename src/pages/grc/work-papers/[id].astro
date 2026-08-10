@@ -32,7 +32,7 @@ import { WORK_PAPER_ENUM_TYPE, isEditable } from '@grc/workflow/workPaperActions
 import { offeredActions, type OfferedAction } from '@grc/workflow/workPaperWorkflow';
 import { aiEnabled } from '@grc/ai/gate';
 import { AI_DISCLAIMER } from '@grc/ai/validation';
-import { storageConfigured } from '@grc/storage';
+import { storageConfiguredFor } from '@grc/storage';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -42,7 +42,8 @@ const allowed = can(Astro.locals, 'read', 'WORK_PAPER');
 const canEdit = can(Astro.locals, 'update', 'WORK_PAPER');
 const canManageReq = can(Astro.locals, 'update', 'WORK_PAPER');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
-const canUpload = canEdit && storageConfigured();
+const storageReady = await storageConfiguredFor(grc.organizationId);
+const canUpload = canEdit && storageReady;
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 
@@ -561,7 +562,7 @@ const responseFacts: { label: string; value: string }[] = wp
           items={evidence}
           canUpload={canUpload}
           canDelete={canEdit}
-          storageReady={storageConfigured()}
+          storageReady={storageReady}
         />
 
         <div class="grc-panel">

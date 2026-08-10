@@ -20,6 +20,19 @@ import {
   PERMISSION_MODULES,
   PLATFORM_DEFAULT_ORG,
 } from '../../../src/lib/grc/auth/permissionModules.ts';
+// The same sealed box the worker opens, so the seeded storage connection is a
+// real one the running app can read rather than a shape that only looks right.
+import { seal } from '../../../src/lib/grc/auth/secretBox.ts';
+
+/**
+ * The session secret the harness starts the worker with. It is here rather than
+ * in the harness because the seed has to seal with the very same key the worker
+ * unseals with; two copies of a secret that must match is exactly the drift
+ * worth designing out.
+ */
+export const SMOKE_SESSION_SECRET = Buffer.from('grc-smoke-harness-session-secret').toString(
+  'base64',
+);
 
 export const SMOKE = {
   orgId: 'ORG-HASS',
@@ -43,6 +56,13 @@ export const SMOKE = {
   otherOrgUserEmail: 'coast.admin@coastenergy.example',
   otherOrgUserId: 'USR-COAST',
   affiliateCode: 'HKL',
+  // Hass has an evidence storage connection; Coast deliberately has none, so
+  // the smoke run can prove the provider is resolved per organisation and that
+  // an unconfigured organisation is told so rather than silently failing at the
+  // moment of upload (Build Prompt 51).
+  storageProvider: 'r2',
+  storageBucket: 'hass-evidence',
+  storageFolder: 'audit-evidence',
   // A second affiliate, and a finding inside it, so affiliate confinement has
   // something real to exclude (Build Prompt 45). Without a second affiliate a
   // confined viewer would see everything anyway and the test would prove nothing.
@@ -161,7 +181,7 @@ function insert(db: DatabaseSync, table: string, row: Record<string, unknown>): 
   db.prepare(sql).run(...keys.map((k) => row[k] as null | number | string));
 }
 
-export function seedDatabase(db: DatabaseSync): void {
+export async function seedDatabase(db: DatabaseSync): Promise<void> {
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
 
@@ -815,6 +835,33 @@ export function seedDatabase(db: DatabaseSync): void {
       attached_at: now,
     });
   }
+
+  // Hass's evidence storage connection: R2, tested and active, with its
+  // credentials sealed exactly as the settings screen would have sealed them.
+  // Coast is left with no row at all, which is the unconfigured state.
+  insert(db, 'storage_connections', {
+    connection_id: 'STC-HASS-R2',
+    organization_id: SMOKE.orgId,
+    provider: SMOKE.storageProvider,
+    config_sealed: await seal(
+      SMOKE_SESSION_SECRET,
+      JSON.stringify({
+        account_id: 'smoke-account',
+        bucket: SMOKE.storageBucket,
+        access_key_id: 'smoke-access-key',
+        secret_access_key: 'smoke-secret-key',
+      }),
+    ),
+    folder_id: SMOKE.storageFolder,
+    folder_name: SMOKE.storageFolder,
+    status: 'connected',
+    status_detail: 'Wrote and removed a probe object.',
+    is_active: 1,
+    connected_at: now,
+    connected_by: SMOKE.userId,
+    created_at: now,
+    updated_at: now,
+  });
 
   for (const [i, action] of ['LOGIN', 'WORK_PAPER.create', 'ACTION_PLAN.update'].entries()) {
     insert(db, 'audit_activity', {

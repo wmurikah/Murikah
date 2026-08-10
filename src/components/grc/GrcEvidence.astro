@@ -31,7 +31,7 @@ interface Props {
   items?: Attachment[];
   canUpload?: boolean;
   canDelete?: boolean;
-  /** False when the storage backend is unconfigured; the panel says so. */
+  /** False when the organisation has no storage provider; the panel says so. */
   storageReady?: boolean;
   /** True when the panel sits inside another form (the create and edit pages). */
   nested?: boolean;
@@ -82,7 +82,8 @@ const count = items.length;
   {
     !storageReady ? (
       <p class="grc-notice" role="status">
-        Evidence storage is not configured on this environment yet, so nothing can be attached.
+        Evidence storage is not configured for your organisation yet, so nothing can be attached. An
+        administrator can connect a provider under Settings, Evidence storage.
       </p>
     ) : (
       canUpload && (
@@ -181,8 +182,15 @@ const count = items.length;
 </section>
 
 <script>
-  interface Presigned {
+  /**
+   * What /api/evidence/upload-url answers. `mode` is the only thing the browser
+   * learns about the organisation's storage provider: 'presigned' means PUT the
+   * bytes at the signed URL and then call /complete, 'direct' means post them to
+   * the worker, which stores and records them in one step (Build Prompt 51).
+   */
+  interface Prepared {
     fileId?: string;
+    mode?: 'presigned' | 'direct';
     url?: string;
     previewUrl?: string | null;
     previewContentType?: string;
@@ -263,10 +271,30 @@ const count = items.length;
       list.appendChild(li);
     };
 
-    /** Upload one file: presign, PUT the bytes, PUT any preview, then record. */
+    /** Post the bytes to the worker, for a provider that cannot sign a URL. */
+    const postDirect = async (
+      url: string,
+      fileId: string,
+      name: string,
+      type: string,
+      body: Blob,
+      variant: 'original' | 'preview',
+    ): Promise<Response> => {
+      const payload = new FormData();
+      payload.set('entity_type', entityType);
+      payload.set('entity_id', entityId);
+      payload.set('file_id', fileId);
+      payload.set('file_name', name);
+      payload.set('content_type', type);
+      payload.set('variant', variant);
+      payload.set('file', body, name);
+      return fetch(url, { method: 'POST', body: payload });
+    };
+
+    /** Upload one file: prepare, send the bytes, send any preview, then record. */
     const uploadOne = async (file: File): Promise<boolean> => {
       const contentType = file.type || 'application/octet-stream';
-      const presignRes = await fetch('/api/evidence/upload-url', {
+      const prepareRes = await fetch('/api/evidence/upload-url', {
         method: 'POST',
         body: new URLSearchParams({
           entity_type: entityType,
@@ -276,13 +304,50 @@ const count = items.length;
           size_bytes: String(file.size),
         }),
       });
-      const presign = (await presignRes.json().catch(() => ({}))) as Presigned;
-      if (!presignRes.ok || !presign.url || !presign.fileId) {
-        status.textContent = presign.error || `Could not start the upload of ${file.name}.`;
+      const prep = (await prepareRes.json().catch(() => ({}))) as Prepared;
+      if (!prepareRes.ok || !prep.url || !prep.fileId) {
+        status.textContent = prep.error || `Could not start the upload of ${file.name}.`;
         return false;
       }
+      const fileId = prep.fileId;
 
-      const put = await fetch(presign.url, {
+      /** The reduced copy, when the server asked for one and the browser can make it. */
+      const preview = async (): Promise<{ blob: Blob; type: string } | null> => {
+        if (!prep.previewUrl || !prep.previewMaxDimension) return null;
+        const type = prep.previewContentType ?? 'image/jpeg';
+        const small = await shrink(file, prep.previewMaxDimension, type);
+        return small ? { blob: small, type } : null;
+      };
+
+      if (prep.mode === 'direct') {
+        // One request stores and records the evidence, so there is no window in
+        // which the bytes are up and the record is not.
+        const sent = await postDirect(prep.url, fileId, file.name, contentType, file, 'original');
+        if (!sent.ok) {
+          const err = (await sent.json().catch(() => ({}))) as { error?: string };
+          status.textContent = err.error || `The upload of ${file.name} failed.`;
+          return false;
+        }
+        const recorded = (await sent.json().catch(() => ({}))) as { attachmentId?: string };
+        // Best-effort: a missing preview costs a thumbnail, never the evidence.
+        const small = await preview();
+        if (small && prep.previewUrl) {
+          await postDirect(
+            prep.previewUrl,
+            fileId,
+            file.name,
+            small.type,
+            small.blob,
+            'preview',
+          ).catch(() => undefined);
+        }
+        if (recorded.attachmentId) {
+          addTile(recorded.attachmentId, file.name, contentType.startsWith('image/'));
+        }
+        return true;
+      }
+
+      const put = await fetch(prep.url, {
         method: 'PUT',
         headers: { 'content-type': contentType },
         body: file,
@@ -293,16 +358,13 @@ const count = items.length;
       }
 
       // Best-effort: a missing preview costs a thumbnail, never the evidence.
-      if (presign.previewUrl && presign.previewMaxDimension) {
-        const type = presign.previewContentType ?? 'image/jpeg';
-        const small = await shrink(file, presign.previewMaxDimension, type);
-        if (small) {
-          await fetch(presign.previewUrl, {
-            method: 'PUT',
-            headers: { 'content-type': type },
-            body: small,
-          }).catch(() => undefined);
-        }
+      const small = await preview();
+      if (small && prep.previewUrl) {
+        await fetch(prep.previewUrl, {
+          method: 'PUT',
+          headers: { 'content-type': small.type },
+          body: small.blob,
+        }).catch(() => undefined);
       }
 
       const completeRes = await fetch('/api/evidence/complete', {
@@ -310,7 +372,7 @@ const count = items.length;
         body: new URLSearchParams({
           entity_type: entityType,
           entity_id: entityId,
-          file_id: presign.fileId,
+          file_id: fileId,
           file_name: file.name,
           content_type: contentType,
         }),
