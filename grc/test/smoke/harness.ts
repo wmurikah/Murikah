@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { FakeTursoServer } from './fakeTurso.ts';
 import { seedDatabase, SMOKE_SESSION_SECRET } from './seed.ts';
+import { FakeS3Server } from './fakeS3.ts';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 const WRANGLER_CONFIG = join(REPO_ROOT, 'dist', 'server', 'wrangler.json');
@@ -36,6 +37,9 @@ export interface SmokeResponse {
 
 export class SmokeServer {
   private turso: FakeTursoServer | null = null;
+  private s3: FakeS3Server | null = null;
+  /** The harness's S3 stand-in, so a test can restore a connection it broke. */
+  s3Origin = '';
   private wrangler: ChildProcess | null = null;
   private port = 0;
   private serverLog = '';
@@ -60,7 +64,11 @@ export class SmokeServer {
     }
 
     this.turso = new FakeTursoServer(SCHEMA_MD);
-    await seedDatabase(this.turso.db);
+    // Somewhere the R2 connection test can actually succeed, so the smoke run
+    // can prove that a passing test activates a provider (Build Prompt 54).
+    this.s3 = new FakeS3Server();
+    this.s3Origin = await this.s3.listen();
+    await seedDatabase(this.turso.db, this.s3Origin);
     const dbUrl = await this.turso.listen();
 
     this.port = 20000 + Math.floor(Math.random() * 20000);
@@ -124,6 +132,10 @@ export class SmokeServer {
     if (this.turso) {
       await this.turso.close();
       this.turso = null;
+    }
+    if (this.s3) {
+      await this.s3.close();
+      this.s3 = null;
     }
   }
 

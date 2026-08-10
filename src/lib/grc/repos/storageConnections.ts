@@ -26,6 +26,19 @@ import { maskConfig, type ProviderCode } from '@grc/storage/provider';
 
 const SC = cols(C.storage_connections);
 
+/**
+ * The one condition that means "evidence goes here" (Build Prompt 54).
+ *
+ * Both halves are needed and neither is enough. `is_active = 1` says this is
+ * the organisation's chosen provider; `status = 'connected'` says a test has
+ * proved it reachable. Split across two places they drifted: the row was marked
+ * connected on a successful test but never activated, so a working provider read
+ * as "not configured" and evidence could not be attached without someone
+ * flipping a column by hand. It is one predicate now, in one place, so the
+ * resolver and the evidence gate cannot disagree.
+ */
+const USABLE_CONNECTION = `${SC.is_active} = 1 AND ${SC.status} = 'connected'`;
+
 export type ConnectionStatus = 'pending' | 'connected' | 'error';
 
 /** A connection as the settings screen sees it: config masked, never readable. */
@@ -128,7 +141,7 @@ export async function loadActiveConnection(
   const res = await db.execute({
     sql: `SELECT ${SC.provider}, ${SC.config_sealed}, ${SC.folder_id}, ${SC.folder_name}, ${SC.status}
             FROM storage_connections
-           WHERE ${SC.organization_id} = ? AND ${SC.is_active} = 1
+           WHERE ${SC.organization_id} = ? AND ${USABLE_CONNECTION}
            LIMIT 1`,
     args: [organizationId],
   });
@@ -278,11 +291,16 @@ export async function setFolder(
  * the others first. The partial unique index in migration 004 refuses two active
  * rows outright, so this cannot silently leave an organisation with an ambiguous
  * answer even if a future caller forgets the deactivation.
+ *
+ * Deactivating everything first is what makes switching clean: an organisation
+ * moving from R2 to OneDrive ends with exactly one active row, in one write, so
+ * there is no instant at which two providers both claim the evidence.
  */
 export async function activateConnection(
   db: Client,
   organizationId: string,
   provider: ProviderCode,
+  connectedBy?: string | null,
 ): Promise<void> {
   const now = new Date().toISOString();
   await db.batch(
@@ -293,9 +311,15 @@ export async function activateConnection(
         args: [now, organizationId],
       },
       {
-        sql: `UPDATE storage_connections SET ${SC.is_active} = 1, ${SC.updated_at} = ?
+        // The same statement marks it connected and stamps who proved it and
+        // when, so "active" and "tested" are set together and can never be
+        // half-applied by a caller that forgets one of them.
+        sql: `UPDATE storage_connections
+                 SET ${SC.is_active} = 1, ${SC.status} = 'connected',
+                     ${SC.connected_at} = ?, ${SC.connected_by} = COALESCE(?, ${SC.connected_by}),
+                     ${SC.updated_at} = ?
                WHERE ${SC.organization_id} = ? AND ${SC.provider} = ?`,
-        args: [now, organizationId, provider],
+        args: [now, connectedBy ?? null, now, organizationId, provider],
       },
     ],
     'write',
