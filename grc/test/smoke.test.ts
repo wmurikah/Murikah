@@ -2590,6 +2590,158 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       }
     });
 
+    // Activation on a successful test (Build Prompt 54). A connection could be
+    // written, tested and marked connected while is_active stayed 0, so a
+    // working provider read as "not configured" and evidence could not be
+    // attached without somebody flipping a column by hand. This walks that
+    // exact state and proves the screen alone gets out of it.
+    await t.test('a successful test activates the provider and opens the gate', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      const activeRow = (): {
+        provider?: string;
+        status?: string;
+        is_active?: number | bigint;
+        connected_at?: string | null;
+      } =>
+        db
+          .prepare(
+            `SELECT provider, status, is_active, connected_at FROM storage_connections
+              WHERE organization_id = ? AND provider = 'r2'`,
+          )
+          .get(SMOKE.orgId) as {
+          provider?: string;
+          status?: string;
+          is_active?: number | bigint;
+          connected_at?: string | null;
+        };
+
+      // Put the organisation into the reported state: tested and connected, but
+      // never activated.
+      db.prepare(
+        `UPDATE storage_connections SET is_active = 0 WHERE organization_id = ? AND provider = 'r2'`,
+      ).run(SMOKE.orgId);
+      assert.equal(Number(activeRow().is_active), 0, 'the connection starts inactive');
+
+      // The gate is shut, exactly as an unconfigured organisation's would be.
+      const shut = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'before.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(shut.status, 503, 'a connected-but-inactive provider stores nothing');
+      const screenBefore = await server.get('/settings/storage');
+      assert.ok(
+        screenBefore.body.includes('No provider is active yet'),
+        'and the screen says so rather than showing a green tick',
+      );
+
+      // One press of Test connection.
+      const tested = await server.request('POST', '/api/admin/storage/save', {
+        action: 'test',
+        provider: 'r2',
+      });
+      const location = String(tested.headers.location ?? '');
+      assert.ok(
+        !/[?&]error=/.test(location),
+        `the test must pass against the harness S3, got ${decodeURIComponent(location)}`,
+      );
+
+      // It is now active and connected, with the attribution stamped.
+      const after = activeRow();
+      assert.equal(Number(after.is_active), 1, 'a passing test activates the provider');
+      assert.equal(String(after.status), 'connected', 'and records that it was proved');
+      assert.ok(after.connected_at, 'and when');
+
+      // Exactly one provider is active for the organisation.
+      const actives = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM storage_connections
+            WHERE organization_id = ? AND is_active = 1`,
+        )
+        .get(SMOKE.orgId) as { n: number | bigint };
+      assert.equal(Number(actives.n), 1, 'never two providers claiming the evidence');
+
+      // And the gate is open, with no manual database flip anywhere.
+      const open = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'after.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(open.status, 200, `the gate must open, got ${open.body.slice(0, 200)}`);
+      const screenAfter = await server.get('/settings/storage');
+      assert.ok(
+        screenAfter.body.includes('New evidence is stored in Cloudflare R2'),
+        'and the screen names the active provider',
+      );
+    });
+
+    await t.test('a failed test leaves the provider inactive and says why', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // Point the connection at somewhere that will not answer, and save it.
+      // Saving tests immediately, so this is the "saved but not active" path.
+      const saved = await server.request('POST', '/api/admin/storage/save', {
+        action: 'save',
+        provider: 'r2',
+        account_id: 'smoke-account',
+        bucket: SMOKE.storageBucket,
+        endpoint: 'http://127.0.0.1:1',
+      });
+      const location = decodeURIComponent(String(saved.headers.location ?? ''));
+      assert.match(location, /error=/, 'a save that cannot be proved must not read as success');
+      assert.match(location, /not active/, `it must say it is not active, got ${location}`);
+
+      const row = db
+        .prepare(
+          `SELECT status, is_active FROM storage_connections
+            WHERE organization_id = ? AND provider = 'r2'`,
+        )
+        .get(SMOKE.orgId) as { status?: string; is_active?: number | bigint };
+      assert.equal(Number(row.is_active), 0, 'an unproved connection is never active');
+      assert.equal(String(row.status), 'error', 'and the failure is recorded on the row');
+
+      // The gate is shut again, which is the honest answer while nothing works.
+      const shut = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'nope.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(shut.status, 503, 'nothing is stored through a provider that failed its test');
+
+      // Putting the endpoint back proves the recovery is the same one press:
+      // save, which tests, which activates. No column is touched by hand.
+      const fixed = await server.request('POST', '/api/admin/storage/save', {
+        action: 'save',
+        provider: 'r2',
+        account_id: 'smoke-account',
+        bucket: SMOKE.storageBucket,
+        endpoint: server.s3Origin,
+      });
+      assert.ok(
+        !/[?&]error=/.test(String(fixed.headers.location ?? '')),
+        `correcting the endpoint must re-activate it, got ${decodeURIComponent(
+          String(fixed.headers.location ?? ''),
+        )}`,
+      );
+      const restored = db
+        .prepare(
+          `SELECT status, is_active FROM storage_connections
+            WHERE organization_id = ? AND provider = 'r2'`,
+        )
+        .get(SMOKE.orgId) as { status?: string; is_active?: number | bigint };
+      assert.equal(Number(restored.is_active), 1, 'the working provider is active again');
+      assert.equal(String(restored.status), 'connected', 'and proved');
+    });
+
     // Rich text and staged evidence (Build Prompt 28), on the admin session.
     await t.test('narrative Markdown renders as marks, never raw or unescaped', async () => {
       const res = await server.request('POST', '/api/work-papers', {

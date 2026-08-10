@@ -57,6 +57,11 @@ access. The key prefix on the settings screen is optional and sits in front of
 the tenant-scoped key, which is useful when one bucket serves more than one
 environment.
 
+The Endpoint field is for an S3-compatible store that is not reached at
+`<account>.r2.cloudflarestorage.com`. It is signed, not merely substituted:
+SigV4 signs the host, so a URL signed for one host and sent to another is
+refused. Leave it blank for Cloudflare R2.
+
 R2 is the only provider that can sign a URL, so its evidence bytes move directly
 between the browser and the bucket and never pass through this application. On
 the other three the bytes stream through the Worker, because their APIs
@@ -149,13 +154,21 @@ On `/settings/storage`, in this order:
 2. **Test connection.** The test writes a probe object and removes it again. A
    credential that can read but not write is a connection that fails on the
    first real upload, so a read-only check would report a false green.
+   **A test that passes makes that provider the active one** and deactivates
+   any other, so there is no separate "make it live" step to forget. Saving the
+   R2 fields tests immediately for the same reason. A test that fails leaves the
+   provider inactive and says why, and does not disturb whichever provider is
+   already carrying the evidence.
 3. **Choose the folder.** "List folders" asks the provider what it has. "Open"
    drills into a folder and "Use this folder" records where evidence lands; on
    SharePoint the first list is the sites and libraries themselves, because a
-   folder id there means nothing without the drive it sits in.
-4. **Store evidence here.** Only offered once a test has passed, and refused
-   otherwise: evidence should not start depending on a connection nobody has
-   proved reachable.
+   folder id there means nothing without the drive it sits in. Choosing a folder
+   re-tests, because the previous test proved a different place.
+
+Exactly one provider is active per organisation, enforced by a partial unique
+index as well as by the code. Switching from R2 to SharePoint is therefore one
+action: configure and test the new one, and the old one deactivates in the same
+write.
 
 Rotating a credential is the same journey: paste the new key, or press
 Reconnect, then test. A blank secret field on save keeps the stored one, so the
