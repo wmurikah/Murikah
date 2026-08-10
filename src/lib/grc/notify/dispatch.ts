@@ -7,6 +7,13 @@
  * Microsoft Graph mailer (sendMail.ts), as the Outlook mailbox an admin
  * connected on Settings -> Email.
  *
+ * The per-recipient batching is what makes submissions one email rather than
+ * one per finding (Build Prompt 53): every WP_SUBMITTED row for a reviewer in
+ * this run collapses into a single digest whose submitted findings are one
+ * table with one review button. Releasing twenty findings at once therefore
+ * costs the head of audit one email, and so does twenty auditors submitting
+ * one each within the same five-minute drain.
+ *
  * On send the row goes SENT with sent_at; on failure attempts is incremented
  * and error_message recorded, with an exponential backoff before the next try;
  * when attempts reach max_attempts the row is recorded in
@@ -27,7 +34,8 @@ import { C, cols } from '@grc/schema/columns';
 import type { Clock } from '@engr/time';
 import { canSend, type GrcDeliveryEnv } from './env';
 import { prepareMailer, type Mailer } from './sendMail';
-import { buildDigest, type DigestItem } from './render';
+import { planNormalDigests } from './render';
+import { reviewQueueLink } from './links';
 
 export interface DispatchOptions {
   limit: number;
@@ -150,17 +158,6 @@ async function recordFailure(
   return false;
 }
 
-function digestItem(row: QueueRow): DigestItem {
-  let link: string | undefined;
-  try {
-    const payload = JSON.parse(row.payload) as Record<string, unknown>;
-    if (typeof payload.link === 'string') link = payload.link;
-  } catch {
-    link = undefined;
-  }
-  return { subject: row.subject, intro: '', link };
-}
-
 /** Drain the queue: send urgent items individually and normal items as per-recipient digests. */
 export async function runGrcDispatch(
   db: Client,
@@ -224,32 +221,21 @@ export async function runGrcDispatch(
     }
   }
 
-  // Normal: batch per recipient into one digest.
-  const byRecipient = new Map<string, QueueRow[]>();
-  for (const row of normal) {
-    const list = byRecipient.get(row.recipientEmail) ?? [];
-    list.push(row);
-    byRecipient.set(row.recipientEmail, list);
-  }
-  for (const [email, group] of byRecipient) {
+  // Normal: one digest per recipient, whatever the number of rows.
+  for (const plan of planNormalDigests(normal, reviewQueueLink())) {
     if (stale) {
-      summary.heldConnection += group.length;
+      summary.heldConnection += plan.rowIds.length;
       continue;
     }
-    const digest = buildDigest(group.map(digestItem));
-    const res = await mailer.send({ to: email, subject: digest.subject, html: digest.body });
+    const res = await mailer.send({ to: plan.email, subject: plan.subject, html: plan.body });
     if (res.ok) {
-      await markSent(
-        db,
-        group.map((g) => g.id),
-        nowIso,
-      );
-      summary.sent += group.length;
+      await markSent(db, plan.rowIds, nowIso);
+      summary.sent += plan.rowIds.length;
     } else if (res.auth) {
       stale = true;
-      summary.heldConnection += group.length;
+      summary.heldConnection += plan.rowIds.length;
     } else {
-      for (const row of group) {
+      for (const row of normal.filter((r) => plan.rowIds.includes(r.id))) {
         const dead = await recordFailure(db, row, res.reason, nowIso);
         summary.failed += 1;
         if (dead) summary.deadLettered += 1;

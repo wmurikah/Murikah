@@ -28,7 +28,7 @@ import { failureStreaks, recordLoginAttempt, recordSecurityEvent } from '@grc/re
 import { ensureMfaRecord } from '@grc/repos/mfa';
 import { getGrcDeliveryEnv } from '@grc/notify/env';
 import { issueEmailOtp } from '@grc/notify/otpMail';
-import { GRC_MFA_PATH } from '@grc/routing';
+import { GRC_MFA_PATH, safeNextPath } from '@grc/routing';
 
 const TAG = '[grc.auth.login]';
 const REQUIRED_BINDINGS = [
@@ -40,15 +40,25 @@ const REQUIRED_BINDINGS = [
 interface Credentials {
   email: string;
   password: string;
+  /** Where the visitor was heading before the guard sent them to sign in. */
+  next: string;
 }
 
 async function readCredentials(request: Request, wantsJson: boolean): Promise<Credentials> {
   if (wantsJson) {
     const body = (await request.json()) as Record<string, unknown>;
-    return { email: String(body.email ?? ''), password: String(body.password ?? '') };
+    return {
+      email: String(body.email ?? ''),
+      password: String(body.password ?? ''),
+      next: String(body.next ?? ''),
+    };
   }
   const form = await request.formData();
-  return { email: String(form.get('email') ?? ''), password: String(form.get('password') ?? '') };
+  return {
+    email: String(form.get('email') ?? ''),
+    password: String(form.get('password') ?? ''),
+    next: String(form.get('next') ?? ''),
+  };
 }
 
 /** An authentication failure: a JSON 401 for API callers, a redirect for the form. */
@@ -93,7 +103,8 @@ export const POST: APIRoute = async ({ request }) => {
       return serverError(wantsJson);
     }
 
-    const { email, password } = await readCredentials(request, wantsJson);
+    const credentials = await readCredentials(request, wantsJson);
+    const { email, password } = credentials;
     const emailNorm = email.trim().toLowerCase();
     if (!emailNorm || !password) return invalid(wantsJson);
 
@@ -222,9 +233,15 @@ export const POST: APIRoute = async ({ request }) => {
       secure,
       'pending',
     );
+    // The destination survives the second factor too, so an emailed link lands
+    // where it pointed rather than on the role's default page (Build Prompt 53).
+    const next = safeNextPath(credentials.next);
+    const stepLocation = next
+      ? `${GRC_MFA_PATH}${stepQuery}${stepQuery ? '&' : '?'}next=${encodeURIComponent(next)}`
+      : `${GRC_MFA_PATH}${stepQuery}`;
     return new Response(null, {
       status: 303,
-      headers: { location: `${GRC_MFA_PATH}${stepQuery}`, 'set-cookie': pendingCookie },
+      headers: { location: stepLocation, 'set-cookie': pendingCookie },
     });
   } catch (err) {
     const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
