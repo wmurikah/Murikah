@@ -13,7 +13,7 @@ import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
-import { storageConfigured } from '@grc/storage';
+import { storageConfiguredFor } from '@grc/storage';
 import { guardPageLoad } from '@grc/pageGuard';
 import {
   listAuditAreas,
@@ -37,7 +37,7 @@ const allowed = can(Astro.locals, 'create', 'WORK_PAPER');
 const failed = Astro.url.searchParams.get('error');
 // Evidence staged on this form binds to the finding on save; without storage
 // the section simply does not render.
-const draftToken = storageConfigured() ? crypto.randomUUID() : null;
+const draftToken = (await storageConfiguredFor(grc.organizationId)) ? crypto.randomUUID() : null;
 
 let areas: Option[] = [];
 let affiliates: Option[] = [];

@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { FakeTursoServer } from './fakeTurso.ts';
-import { seedDatabase } from './seed.ts';
+import { seedDatabase, SMOKE_SESSION_SECRET } from './seed.ts';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 const WRANGLER_CONFIG = join(REPO_ROOT, 'dist', 'server', 'wrangler.json');
@@ -54,7 +54,7 @@ export class SmokeServer {
     }
 
     this.turso = new FakeTursoServer(SCHEMA_MD);
-    seedDatabase(this.turso.db);
+    await seedDatabase(this.turso.db);
     const dbUrl = await this.turso.listen();
 
     this.port = 20000 + Math.floor(Math.random() * 20000);
@@ -77,7 +77,8 @@ export class SmokeServer {
         'TURSO_GRC_AUTH_TOKEN:smoke-token',
         '--var',
         // The session signer base64-decodes the secret, so it must be base64.
-        `GRC_SESSION_SECRET:${Buffer.from('grc-smoke-harness-session-secret').toString('base64')}`,
+        // Shared with the seed, which seals the storage connection with it.
+        `GRC_SESSION_SECRET:${SMOKE_SESSION_SECRET}`,
       ],
       {
         cwd: REPO_ROOT,

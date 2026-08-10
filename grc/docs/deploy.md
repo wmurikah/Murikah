@@ -167,3 +167,54 @@ After applying it, mark the Group unit on `/settings/affiliates`. The screen
 lists which affiliates confer all-affiliate access, so the answer to "why can
 this person see every affiliate?" is a row on a page. The migration file carries
 the queries for reading the same thing from the database.
+
+### Migration 004, per-organisation evidence storage connections
+
+`grc/db/migrations/004-storage-connections.sql` (Build Prompt 51). It adds the
+`storage_connections` table, which is how an organisation records where its
+evidence is kept: Cloudflare R2, Google Drive, SharePoint/OneDrive or Dropbox,
+with the credentials for that account sealed against that organisation.
+
+- A plain `CREATE TABLE IF NOT EXISTS` with two indexes: no existing table is
+  touched, nothing is copied, and running it twice changes nothing. It is
+  therefore safe to apply before or after the release lands.
+- Until an organisation configures a provider, evidence cannot be attached and
+  the evidence panel says so. Evidence already stored keeps working: rows
+  recording `backend = 'r2'` fall back to the platform's own bucket and rows
+  recording `backend = 'drive'` to the platform's read-only Drive credential, so
+  nothing that is already attached becomes unreadable by applying this.
+- The credentials rest as one AES-GCM sealed blob in `config_sealed`, keyed off
+  `GRC_SESSION_SECRET`, the same treatment the Outlook refresh token gets.
+  **Rotating `GRC_SESSION_SECRET` makes every stored connection unreadable**, and
+  each organisation must reconnect; that is the same consequence rotation
+  already has for the mailbox.
+- A partial unique index refuses two active connections for one organisation, so
+  "which provider holds new evidence?" can never have two answers.
+
+Afterwards, each organisation's administrator configures a provider on
+`/settings/storage`: fill in the fields or Connect, test it, choose a folder,
+then make it active. Registering the platform's own OAuth applications is a
+one-time job documented in `grc/docs/storage-setup.md`.
+
+## Storage provider secrets (never committed)
+
+The OAuth providers need the platform's own application registration, which is
+the same for every customer and so lives in Worker secrets. What is
+per-organisation, and sealed in the database, is the refresh token naming the
+customer's own account. Each is optional: an absent registration means that
+provider is simply not offered, and `/settings/storage` says so rather than
+showing a Connect button that would fail at the consent screen.
+
+| Secret                     | Purpose                                            |
+| -------------------------- | -------------------------------------------------- |
+| `GDRIVE_CLIENT_ID`         | Google Cloud OAuth client, for the Drive connector |
+| `GDRIVE_CLIENT_SECRET`     | its secret                                         |
+| `SHAREPOINT_CLIENT_ID`     | Microsoft Entra app, for SharePoint/OneDrive       |
+| `SHAREPOINT_CLIENT_SECRET` | its secret (falls back to `GRAPH_CLIENT_*`)        |
+| `DROPBOX_CLIENT_ID`        | Dropbox app, for the Dropbox connector             |
+| `DROPBOX_CLIENT_SECRET`    | its secret                                         |
+
+Cloudflare R2 needs no platform secret at all: an organisation supplies its own
+account id, bucket and S3 keys on the settings screen. See
+`grc/docs/storage-setup.md` for how to register each application and which
+redirect URI to enter.
