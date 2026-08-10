@@ -753,3 +753,35 @@ Three edges, all deliberate:
 
 A group-exempt viewer shares the unconfined cache key, because they see exactly
 the same rows and splitting them would only halve the hit rate.
+
+## Work-paper form fields are not always their column (Build Prompt 50)
+
+Three writable work-paper fields post under a name that is not the column they
+store in:
+
+| Form control       | `work_papers` column     |
+| ------------------ | ------------------------ |
+| `classification`   | `control_classification` |
+| `standards`        | `control_standards`      |
+| `assigned_auditor` | `assigned_auditor_id`    |
+
+Everything else matches one to one. The write always mapped them correctly; the
+two views did not, and read `row['classification']` and `row['standards']`
+straight off the detail row. The consequences were not equal:
+
+- On the **detail** it was a display bug: a dash over stored data.
+- On the **edit form** it was a data-loss bug. The control prefilled blank
+  because the lookup missed, and the next save wrote that blank back over the
+  stored value. Anybody who opened a finding to change its title silently
+  cleared its classification, its standards and its assigned auditor.
+
+`FIELDS` in `repos/workPapers.ts` now carries all three names for each field, and
+`columnForFormField()` derives the lookup from it. The edit form prefills through
+that function rather than guessing, so a third view cannot reintroduce this.
+
+Beside it, `getWorkPaper` aliases the joined auditor as
+`assigned_auditor_full_name` rather than over `wp.*`. The `work_papers` row
+carries its own denormalised `assigned_auditor_name`, and two output columns of
+the same name leave which one survives to the driver. The repository now prefers
+the live joined name and falls back to the stored copy, so "Unassigned" means
+`assigned_auditor_id` really is null.
