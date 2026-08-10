@@ -13,9 +13,11 @@ export const prerender = false;
  * `listConnections` never returns one.
  *
  * The order on each card is the order the work happens in: configure, test,
- * choose the folder, then make it active. Activation is deliberately refused
- * until a test has passed, because evidence should not start depending on a
- * connection nobody has proved reachable.
+ * choose the folder. Activation is not a separate step any more (Build Prompt
+ * 54): a test that passes makes that provider the active one and deactivates
+ * any other, because an administrator who has just proved a provider reachable
+ * has finished configuring it. A test that fails leaves it inactive and says
+ * why, so evidence never starts depending on a connection nobody has proved.
  *
  * The folder picker is behind an explicit "List folders" link rather than run
  * on every page load: it is a live call to the customer's provider, and a slow
@@ -129,7 +131,7 @@ const activeName =
           ) : (
             <p class="grc-field__hint">
               No provider is active yet, so evidence cannot be attached anywhere in this
-              organisation. Configure one below, test it, then make it active.
+              organisation. Configure one below; a test that passes makes it the active one.
             </p>
           )}
         </div>
@@ -149,11 +151,21 @@ const activeName =
               </div>
 
               {conn ? (
-                conn.status === 'connected' ? (
+                conn.status === 'connected' && conn.isActive ? (
                   <p class="grc-notice" role="status">
-                    Tested and reachable
-                    {conn.connectedAt ? ` on ${conn.connectedAt.slice(0, 10)}` : ''}.
+                    Tested and active
+                    {conn.connectedAt ? ` since ${conn.connectedAt.slice(0, 10)}` : ''}. New
+                    evidence is stored here.
                     {conn.statusDetail ? ` ${conn.statusDetail}` : ''}
+                    {conn.maskedConfig.account ? ` Connected as ${conn.maskedConfig.account}.` : ''}
+                  </p>
+                ) : conn.status === 'connected' ? (
+                  /* Tested but not the chosen one: a legacy row, or a provider
+                     the organisation has switched away from. Evidence does not
+                     go here until it is made active (Build Prompt 54). */
+                  <p class="grc-field__hint">
+                    Tested and reachable, but not the active provider, so no evidence is stored
+                    here. Use "Test and store evidence here" to make it the one.
                     {conn.maskedConfig.account ? ` Connected as ${conn.maskedConfig.account}.` : ''}
                   </p>
                 ) : conn.status === 'error' ? (
@@ -162,7 +174,7 @@ const activeName =
                   </p>
                 ) : (
                   <p class="grc-field__hint">
-                    {conn.statusDetail ?? 'Configured but not tested yet.'}
+                    {conn.statusDetail ?? 'Configured but not tested, so it is not active yet.'}
                     {conn.maskedConfig.account ? ` Connected as ${conn.maskedConfig.account}.` : ''}
                   </p>
                 )
@@ -309,7 +321,7 @@ const activeName =
                         <input type="hidden" name="action" value="activate" />
                         <input type="hidden" name="provider" value={def.code} />
                         <button type="submit" class="grc-btn grc-btn--secondary">
-                          Store evidence here
+                          Test and store evidence here
                         </button>
                       </form>
                     )}
