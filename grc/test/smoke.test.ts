@@ -1564,42 +1564,78 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
   // sends visibly fail (which itself proves the send path is wired) and known
   // challenges are planted through the database handle before verifying.
   const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
-  const readMfa = (db: SmokeDb, userId: string): MfaRecord => {
+  // The MFA record is stored under the user's own organisation, so every helper
+  // here takes one: a user outside Hass has their challenge written against
+  // their own instance, and a hard-coded Hass would find nothing to plant.
+  const readMfa = (
+    db: SmokeDb,
+    userId: string,
+    organizationId: string = SMOKE.orgId,
+  ): MfaRecord => {
     const row = db
       .prepare(
         `SELECT config_value AS v FROM config
           WHERE organization_id = ? AND config_key = ?`,
       )
-      .get(SMOKE.orgId, `MFA_TOTP::${userId}`) as { v?: string } | undefined;
+      .get(organizationId, `MFA_TOTP::${userId}`) as { v?: string } | undefined;
     assert.ok(row?.v, `an MFA record must exist for ${userId}`);
     return JSON.parse(String(row.v)) as MfaRecord;
   };
-  const writeMfa = (db: SmokeDb, userId: string, record: MfaRecord): void => {
+  const writeMfa = (
+    db: SmokeDb,
+    userId: string,
+    record: MfaRecord,
+    organizationId: string = SMOKE.orgId,
+  ): void => {
     db.prepare(
       `UPDATE config SET config_value = ?
         WHERE organization_id = ? AND config_key = ?`,
-    ).run(JSON.stringify(record), SMOKE.orgId, `MFA_TOTP::${userId}`);
+    ).run(JSON.stringify(record), organizationId, `MFA_TOTP::${userId}`);
   };
-  const plantOtp = (userId: string, code: string): void => {
+  const plantOtp = (userId: string, code: string, organizationId: string = SMOKE.orgId): void => {
     const db = server.database;
     assert.ok(db, 'the fake database is reachable to plant a code');
-    writeMfa(db, userId, {
-      ...readMfa(db, userId),
-      challenge: newChallenge(sha256(code), Date.now() - 90_000),
-    });
+    writeMfa(
+      db,
+      userId,
+      {
+        ...readMfa(db, userId, organizationId),
+        challenge: newChallenge(sha256(code), Date.now() - 90_000),
+      },
+      organizationId,
+    );
   };
+  /**
+   * The worker's log line matching a needle, waited for rather than read once:
+   * wrangler streams the worker's output, so a line written during a request can
+   * arrive after the response the test is already asserting on.
+   */
+  const waitForLogLine = async (needle: string, timeoutMs = 10_000): Promise<string | null> => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const line = server.log
+        .split('\n')
+        .reverse()
+        .find((l) => l.includes(needle));
+      if (line) return line;
+      if (Date.now() > deadline) return null;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  };
+
   /** The full universal sign-in: the password step, then the planted emailed code. */
   const signInWithEmailCode = async (
     email: string,
     password: string,
     userId: string,
+    organizationId: string = SMOKE.orgId,
   ): Promise<void> => {
     server.clearCookies();
     const login = await server.request('POST', '/api/auth/login', { email, password });
     assert.equal(login.status, 303, `login answered ${login.status}: ${login.body.slice(0, 300)}`);
     const location = String(login.headers.location ?? '');
     assert.ok(location.startsWith('/mfa'), `every sign-in must land on the step, got ${location}`);
-    plantOtp(userId, '424242');
+    plantOtp(userId, '424242', organizationId);
     const verified = await server.request('POST', '/api/auth/mfa/verify', { code: '424242' });
     const landed = String(verified.headers.location ?? '');
     assert.ok(!landed.includes('error'), `verification failed, redirected to ${landed}`);
@@ -2998,6 +3034,209 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         await signInAsOwnerInsideHass();
       },
     );
+
+    // Build Prompt 57. The organisation that has never saved its access control
+    // holds no grants of its own and inherits the platform defaults, which is
+    // where a guard that reads only the acting organisation's rows resolves
+    // every permission as absent. Its auditor must submit exactly as one in an
+    // organisation with its own rows does.
+    await t.test('an inheriting organisation submits on the platform-default grant', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // The premise: no rows of its own, and the default it inherits.
+      const own = Number(
+        (
+          db
+            .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE organization_id = ?`)
+            .get(SMOKE.inheritOrgId) as { n: number | bigint }
+        ).n,
+      );
+      assert.equal(own, 0, 'the organisation must hold no grants of its own');
+      const globalGrant = (module: string, action: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = ? AND action_code = ?`,
+          )
+          .get(PLATFORM_DEFAULT_ORG, module, action) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      assert.equal(globalGrant('WORK_PAPER', 'update'), 1, 'the default grants the auditor update');
+      assert.equal(globalGrant('WORK_PAPER', 'approve'), 0, 'and withholds approve');
+
+      await signInWithEmailCode(
+        SMOKE.inheritAuditorEmail,
+        SMOKE.password,
+        SMOKE.inheritAuditorId,
+        SMOKE.inheritOrgId,
+      );
+
+      const statusOf = (id: string): string =>
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        );
+      const submittedRevisions = (id: string): number =>
+        Number(
+          (
+            db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM work_paper_revisions
+                  WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+              )
+              .get(id) as { n: number | bigint }
+          ).n,
+        );
+
+      const [alone, ...together] = SMOKE.inheritDraftIds;
+      for (const id of SMOKE.inheritDraftIds) {
+        assert.equal(statusOf(id), 'Draft', `${id} starts as a draft`);
+      }
+
+      // Single, from the detail, which must offer the action in the first place.
+      const detail = await server.get(`/work-papers/${alone}`);
+      assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+      assert.ok(
+        detail.body.includes('name="to_status" value="Submitted"'),
+        'an inheriting auditor must be offered Submit on their own draft',
+      );
+      const single = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+        to_status: 'Submitted',
+      });
+      const singleAt = decodeURIComponent(String(single.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(singleAt), `the single submit must succeed, got ${singleAt}`);
+      assert.equal(statusOf(alone), 'Submitted', 'the inherited grant carries the move');
+      assert.equal(submittedRevisions(alone), 1, 'and the move is recorded as a revision');
+
+      // And in batch, through the endpoint that refused before.
+      const list = await server.get('/work-papers?status=Draft');
+      assert.equal(list.status, 200, `the list answered ${list.status}`);
+      assert.ok(
+        list.body.includes('Submit selected for review'),
+        'the batch release is offered on the inherited grant too',
+      );
+      const body = new URLSearchParams();
+      for (const id of together) body.append('work_paper_id', id);
+      const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+      const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
+      assert.ok(
+        batchAt.includes('2 findings submitted for review'),
+        `the batch must report what it did, got ${batchAt}`,
+      );
+      for (const id of together) {
+        assert.equal(statusOf(id), 'Submitted', `${id} must be submitted`);
+        assert.equal(submittedRevisions(id), 1, `${id} must carry its own revision row`);
+      }
+
+      // Inheriting the defaults grants update, not approve: the reviewer move is
+      // still refused, and the refusal says why.
+      const review = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+        to_status: 'Under Review',
+      });
+      const reviewAt = decodeURIComponent(String(review.headers.location ?? ''));
+      assert.ok(
+        reviewAt.includes('You do not have permission for that action.'),
+        `the auditor must still be refused a reviewer move, got ${reviewAt}`,
+      );
+      assert.equal(statusOf(alone), 'Submitted', 'and the finding does not move');
+
+      // The refusal explains itself in the log, naming every input a person
+      // would otherwise have to guess at (Build Prompt 57).
+      const line = await waitForLogLine(
+        `[grc.workpaper.submit] refused {"work_paper_id":"${alone}"`,
+      );
+      assert.ok(
+        line,
+        `a refused transition must log its reason, log tail: ${server.log.slice(-600)}`,
+      );
+      for (const named of [
+        `"work_paper_id":"${alone}"`,
+        '"from_status":"Submitted"',
+        '"to_status":"Under Review"',
+        '"permission":"WORK_PAPER.approve"',
+        `"organization_id":"${SMOKE.inheritOrgId}"`,
+        '"role_code":"AUDITOR"',
+        '"grants_from":"GLOBAL"',
+      ]) {
+        assert.ok(line.includes(named), `the refusal line must name ${named}, got ${line}`);
+      }
+
+      await signInAsOwnerInsideHass();
+    });
+
+    // Build Prompt 57. `status_transitions` is operator-managed reference data,
+    // and the engine compared its rows as raw strings: a trailing space or a
+    // different case in a row nobody can see a fault in refused the move with
+    // "not permitted", which reads as a broken workflow rather than a typo.
+    await t.test('a hand-edited transition row still carries the submit', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      const rewrite = (from: string, to: string): void => {
+        db.prepare(
+          `UPDATE status_transitions SET from_status = ?, to_status = ?
+            WHERE enum_type = 'WORK_PAPER_STATUS' AND TRIM(LOWER(from_status)) = 'draft'
+              AND TRIM(LOWER(to_status)) = 'submitted'`,
+        ).run(from, to);
+      };
+
+      // The row as somebody typed it: a trailing space, and a lower-case target.
+      rewrite(' Draft ', 'submitted ');
+      try {
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          observation_title: 'Raised against a hand-edited workflow row',
+          observation_description: 'The transition row carries stray whitespace.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          risk_rating: 'Low',
+          recommendation: 'Fix the row, but do not refuse the auditor meanwhile.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+        assert.ok(m, `create redirected to ${created.headers.location}`);
+        const id = m[1];
+
+        const detail = await server.get(`/work-papers/${id}`);
+        assert.ok(
+          detail.body.includes('name="to_status" value="Submitted"'),
+          'the button must carry the status the save will store, not the row spelling',
+        );
+
+        const submitted = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Submitted',
+        });
+        const at = decodeURIComponent(String(submitted.headers.location ?? ''));
+        assert.ok(
+          !/[?&]error=/.test(at),
+          `a hand-edited row must not refuse the submit, got ${at}`,
+        );
+
+        // Tolerated on the way in, canonical on the way out: the stored status is
+        // the one every filter, label and count already matches.
+        const row = db
+          .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+          .get(id) as { status?: string };
+        assert.equal(String(row.status), 'Submitted', 'the stored status keeps its own spelling');
+        const revision = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM work_paper_revisions
+              WHERE work_paper_id = ? AND to_status = 'Submitted'`,
+          )
+          .get(id) as { n: number | bigint };
+        assert.equal(Number(revision.n), 1, 'and the revision row records the same spelling');
+      } finally {
+        rewrite('Draft', 'Submitted');
+        await signInAsOwnerInsideHass();
+      }
+    });
 
     await t.test('a draft with no auditor yet can still be submitted by its author', async () => {
       // Between creating a finding and assigning it, somebody still has to be

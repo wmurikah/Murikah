@@ -114,3 +114,46 @@ test('allowedNextStatuses lists only the moves the actor may make', () => {
   // A terminal state offers nothing.
   assert.deepEqual(allowedNextStatuses(RULES, TERMINAL, 'APPROVED', 'SENIOR_AUDITOR'), []);
 });
+
+// Build Prompt 57. The reference rows are operator-managed, and a status typed
+// with a trailing space or in another case is invisible on every screen that
+// shows it. Comparing raw strings refused a move the workflow plainly defines,
+// with the message that says the move is not permitted, which sends everybody
+// looking at permissions instead of at the row.
+const HAND_EDITED: TransitionRule[] = [
+  { fromStatus: 'DRAFT ', toStatus: 'in_review', requiredRole: null, requiresComment: false },
+];
+
+test('a hand-edited transition row still permits its move', () => {
+  const out = evaluateTransition(HAND_EDITED, [], {
+    from: 'Draft',
+    to: 'IN_REVIEW',
+    roleCode: 'AUDITOR',
+  });
+  assert.equal(out.ok, true, 'whitespace and case must not decide a move');
+});
+
+test('a hand-edited status is still refused when no row defines the move', () => {
+  const out = evaluateTransition(HAND_EDITED, [], {
+    from: 'Draft',
+    to: 'APPROVED',
+    roleCode: 'AUDITOR',
+  });
+  assert.equal(out.ok, false, 'tolerance must not invent a transition');
+  assert.equal(out.ok === false && out.code, 'not_allowed');
+});
+
+test('a hand-edited terminal row still freezes its state', () => {
+  const out = evaluateTransition(HAND_EDITED, ['  approved'], {
+    from: 'APPROVED',
+    to: 'DRAFT',
+    roleCode: 'SENIOR_AUDITOR',
+  });
+  assert.equal(out.ok, false);
+  assert.equal(out.ok === false && out.code, 'terminal');
+});
+
+test('the offered next statuses tolerate a hand-edited row too', () => {
+  assert.deepEqual(allowedNextStatuses(HAND_EDITED, [], 'Draft', 'AUDITOR'), ['in_review']);
+  assert.deepEqual(allowedNextStatuses(HAND_EDITED, ['draft '], 'DRAFT', 'AUDITOR'), []);
+});

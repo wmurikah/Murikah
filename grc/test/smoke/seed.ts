@@ -102,6 +102,22 @@ export const SMOKE = {
   heldFileId: 'FILE-HELD',
   freeFileId: 'FILE-FREE',
   driveFileId: 'FILE-DRIVE',
+  // A third organisation whose access control has never been edited: it holds
+  // no `role_permissions` rows of its own, so every grant its roles have is
+  // inherited from the GLOBAL platform default (Build Prompt 57). Hass starts
+  // in that state too, but the access-control save later in the run gives it
+  // rows of its own, so an organisation that stays inheriting to the end is
+  // what proves the submit guard resolves the fallback rather than reading the
+  // acting organisation's rows alone. It is deliberately never saved, never
+  // switched into and never provisioned.
+  inheritOrgId: 'ORG-TANA',
+  inheritOrgName: 'Tana Energy Limited',
+  inheritAffiliateCode: 'TNA',
+  inheritAuditAreaId: 'AA-TANA',
+  inheritAuditorId: 'USR-TANA-AUD',
+  inheritAuditorEmail: 'auditor@tanaenergy.example',
+  // One draft to submit on its own, and two to release together.
+  inheritDraftIds: ['WP-TANA-1', 'WP-TANA-2', 'WP-TANA-3'],
 } as const;
 
 const WP_STATUSES = [
@@ -192,6 +208,7 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
   for (const [orgId, code, name] of [
     [SMOKE.orgId, 'HASS', SMOKE.orgName],
     [SMOKE.otherOrgId, 'COAST', SMOKE.otherOrgName],
+    [SMOKE.inheritOrgId, 'TANA', SMOKE.inheritOrgName],
   ] as const) {
     insert(db, 'organizations', {
       organization_id: orgId,
@@ -227,7 +244,7 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
     is_active: 1,
     created_at: now,
   });
-  for (const orgId of [SMOKE.orgId, SMOKE.otherOrgId]) {
+  for (const orgId of [SMOKE.orgId, SMOKE.otherOrgId, SMOKE.inheritOrgId]) {
     insert(db, 'subscriptions', {
       subscription_id: `SUB-${orgId}`,
       organization_id: orgId,
@@ -596,6 +613,69 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
     updated_at: now,
   });
 
+  // The inheriting organisation (Build Prompt 57): one affiliate, one audit
+  // area, one auditor and three drafts assigned to them. No `role_permissions`
+  // row is written for it anywhere in this seed, deliberately: its auditor holds
+  // WORK_PAPER.update only through the GLOBAL default, which is the state a live
+  // organisation is in until somebody first saves its access control.
+  insert(db, 'affiliates', {
+    affiliate_code: SMOKE.inheritAffiliateCode,
+    organization_id: SMOKE.inheritOrgId,
+    affiliate_name: 'Tana Energy Limited',
+    country: 'Kenya',
+    region: 'Garissa',
+    is_active: 1,
+    is_group: 0,
+    created_at: now,
+  });
+  insert(db, 'audit_areas', {
+    audit_area_id: SMOKE.inheritAuditAreaId,
+    organization_id: SMOKE.inheritOrgId,
+    // Not a code any smoke step creates: the audit-universe case counts its own
+    // area platform-wide, so a seeded duplicate would fail that step instead.
+    area_code: 'DEP',
+    area_name: 'Depot operations',
+    description: 'Depot and distribution controls',
+    is_active: 1,
+    created_at: now,
+  });
+  insert(db, 'users', {
+    user_id: SMOKE.inheritAuditorId,
+    organization_id: SMOKE.inheritOrgId,
+    email: SMOKE.inheritAuditorEmail,
+    full_name: 'Tana Auditor',
+    password_hash: seedPasswordHash(SMOKE.password),
+    role_code: 'AUDITOR',
+    affiliate_code: SMOKE.inheritAffiliateCode,
+    status: 'ACTIVE',
+    must_change_password: 0,
+    is_platform_owner: 0,
+    created_at: now,
+  });
+  for (const [i, id] of SMOKE.inheritDraftIds.entries()) {
+    insert(db, 'work_papers', {
+      work_paper_id: id,
+      organization_id: SMOKE.inheritOrgId,
+      work_paper_ref: `WP/2026/TNA-${i + 1}`,
+      created_by: SMOKE.inheritAuditorId,
+      year: 2026,
+      affiliate_code: SMOKE.inheritAffiliateCode,
+      audit_area_id: SMOKE.inheritAuditAreaId,
+      work_paper_date: today,
+      observation_title: `Depot control weakness ${i + 1}`,
+      observation_description: 'Raised in an organisation that inherits its grants.',
+      risk_rating: 'Medium',
+      recommendation: 'Tighten the control.',
+      assigned_auditor_id: SMOKE.inheritAuditorId,
+      status: 'Draft',
+      revision_count: 0,
+      prepared_by_id: SMOKE.inheritAuditorId,
+      prepared_by_name: 'Tana Auditor',
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
   const ftsInsert = db.prepare(
     `INSERT INTO work_papers_fts (rowid, observation_title, observation_description, recommendation)
       SELECT rowid, observation_title, observation_description, recommendation
@@ -603,6 +683,7 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
   );
   for (const [id] of workPapers) ftsInsert.run(id);
   ftsInsert.run(SMOKE.otherAffiliateWorkPaperId);
+  for (const id of SMOKE.inheritDraftIds) ftsInsert.run(id);
 
   // Still outstanding: asked for, never received. Its status is the free text a
   // row written before Build Prompt 52 carries, so the screen has to label it
