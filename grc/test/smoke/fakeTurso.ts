@@ -113,6 +113,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   roles: 'role_code',
   permission_modules: 'module_code',
   permission_actions: 'action_code',
+  storage_connections: 'connection_id',
 };
 
 /** `table.column` to the `parent(column)` it references. */
@@ -127,6 +128,9 @@ const FOREIGN_KEYS: Record<string, Record<string, string>> = {
     module_code: 'permission_modules(module_code)',
     action_code: 'permission_actions(action_code)',
   },
+  // Build Prompt 51: a storage connection belongs to exactly one organisation,
+  // and the reference is what makes a row for a non-existent tenant impossible.
+  storage_connections: { organization_id: 'organizations(organization_id)' },
 };
 
 /**
@@ -141,6 +145,9 @@ const DEFAULTS: Record<string, Record<string, string>> = {
   role_permissions: { scope_to_affiliate: '0' },
   // Migration 003: likewise, an affiliate is not the Group unless said to be.
   affiliates: { is_group: '0' },
+  // Migration 004: a new connection is inactive and untested until an
+  // administrator tests it and chooses it.
+  storage_connections: { is_active: '0', status: "'pending'" },
 };
 
 /** Columns a row cannot be written without. */
@@ -156,6 +163,7 @@ const NOT_NULL: Record<string, string[]> = {
   permission_modules: ['module_code'],
   permission_actions: ['action_code'],
   affiliates: ['is_group'],
+  storage_connections: ['organization_id', 'provider', 'status', 'is_active'],
 };
 
 /** Creates every dictionary table (untyped columns; SQLite is typeless) plus the FTS index. */
@@ -173,6 +181,18 @@ export function createTables(db: DatabaseSync, tables: Map<string, string[]>): v
     });
     db.exec(`CREATE TABLE ${name} (${defs.join(', ')})`);
   }
+  // Migration 004's two indexes. The partial one is a real constraint, not a
+  // performance hint: it is what makes "the organisation's active storage
+  // provider" a single answer, so the smoke database must carry it or a bug
+  // that leaves two active rows would pass here and fail in production.
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_storage_connections_org_provider
+       ON storage_connections (organization_id, provider)`,
+  );
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_storage_connections_one_active
+       ON storage_connections (organization_id) WHERE is_active = 1`,
+  );
   // The external-content full-text index over work papers, maintained by the
   // work-papers repository on create, edit and delete.
   db.exec(

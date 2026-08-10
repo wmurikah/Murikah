@@ -3,10 +3,15 @@ export const prerender = false;
 /**
  * Download one evidence file. After confirming the user may see the evidence
  * (the entity's view permission, a platform owner, or an auditee on their own
- * finding or plan), the worker issues a short-lived presigned GET for an R2
- * object so the bytes flow straight from R2 to the client, or reads a Drive
- * object through the worker. The presigned URL is always scoped to this object's
- * key; it can never reach another tenant's prefix.
+ * finding or plan), the worker asks the organisation's own storage provider how
+ * to serve it: a provider that can sign a URL (R2) hands one back and the bytes
+ * flow straight to the client, and the token-bearing providers stream through
+ * the worker. A presigned URL is always scoped to this object's key; it can
+ * never reach another tenant's prefix.
+ *
+ * The provider is resolved from the backend the row records, not from whichever
+ * provider is active now (Build Prompt 51), so evidence attached before an
+ * administrator switched providers stays downloadable.
  *
  * `?variant=preview` serves the reduced image copy instead, for the evidence
  * thumbnails. It is a hint, not a promise: a non-image, an older file uploaded
@@ -58,8 +63,8 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     return new Response('Forbidden', { status: 403 });
   }
 
-  // The preview only exists for an R2-backed image; Drive objects and documents
-  // always serve the original.
+  // A preview only ever exists for an image stored through a connector; the
+  // legacy Drive read-through and documents always serve the original.
   const wantsPreview = new URL(request.url).searchParams.get('variant') === 'preview';
   const previewable =
     wantsPreview && att.backend !== 'drive' && isPreviewableImage(att.mimeType ?? '');
@@ -69,7 +74,12 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     if (previewable) {
       const previewRef: StoredObjectRef = { backend: att.backend, key: previewKeyFor(key) };
       try {
-        const preview = await planDownload(previewRef, DOWNLOAD_TTL_SECONDS);
+        const preview = await planDownload(
+          db,
+          grc.organizationId,
+          previewRef,
+          DOWNLOAD_TTL_SECONDS,
+        );
         if (preview.kind === 'redirect') {
           return new Response(null, { status: 302, headers: { location: preview.url } });
         }
@@ -86,7 +96,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       }
     }
 
-    const plan = await planDownload(ref, DOWNLOAD_TTL_SECONDS);
+    const plan = await planDownload(db, grc.organizationId, ref, DOWNLOAD_TTL_SECONDS);
     if (plan.kind === 'redirect') {
       return new Response(null, { status: 302, headers: { location: plan.url } });
     }

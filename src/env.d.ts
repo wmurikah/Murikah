@@ -106,6 +106,19 @@ declare namespace Cloudflare {
     R2_SECRET_ACCESS_KEY?: string;
     R2_BUCKET?: string; // the bucket name used in the S3 presign path
 
+    // Per-organisation evidence storage connectors (Build Prompt 51). These are
+    // the platform's OAuth application registrations, identifying Murikah to each
+    // provider; they are the same for every customer, so they are Worker secrets.
+    // The per-organisation refresh token is sealed in storage_connections, never
+    // here. Absent credentials leave that provider unconnectable and the settings
+    // screen says so. The Microsoft app falls back to the Outlook GRAPH_* pair,
+    // since one Entra registration can carry both scope sets. See
+    // grc/docs/storage-setup.md.
+    SHAREPOINT_CLIENT_ID?: string;
+    SHAREPOINT_CLIENT_SECRET?: string;
+    DROPBOX_CLIENT_ID?: string;
+    DROPBOX_CLIENT_SECRET?: string;
+
     // Read-only Google Drive credential for reading and migrating existing
     // Drive-backed evidence (never writing). OAuth2 refresh-token flow from the
     // Worker, scope drive.readonly. Optional; absent leaves Drive files unreadable
