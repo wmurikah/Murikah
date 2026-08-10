@@ -2855,6 +2855,150 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
     });
 
+    // Build Prompt 56. The grant follows the move rather than one blanket
+    // permission, and both paths ask the same mapping, so an auditor holding
+    // WORK_PAPER.update and no approve releases their drafts one at a time and
+    // together, and is still refused every reviewer move.
+    await t.test(
+      'an auditor with update but not approve submits, singly and in batch',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        // The premise, read from the stored matrix rather than assumed.
+        const granted = (module: string, action: string): number => {
+          const row = db
+            .prepare(
+              `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = ? AND action_code = ?`,
+            )
+            .get(SMOKE.orgId, module, action) as { a?: number | bigint } | undefined;
+          return Number(row?.a ?? -1);
+        };
+        assert.equal(granted('WORK_PAPER', 'update'), 1, 'the auditor may work on a finding');
+        assert.equal(granted('WORK_PAPER', 'approve'), 0, 'and may not approve one');
+
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+
+        const raise = async (title: string): Promise<string> => {
+          const res = await server.request('POST', '/api/work-papers', {
+            observation_title: title,
+            observation_description: 'Raised by the auditor, to be released by the auditor.',
+            year: '2026',
+            affiliate_code: SMOKE.affiliateCode,
+            audit_area_id: SMOKE.auditAreaId,
+            sub_area_id: SMOKE.subAreaId,
+            risk_rating: 'Medium',
+            recommendation: 'Fix it.',
+            assigned_auditor: SMOKE.auditorId,
+          });
+          const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
+          assert.ok(m, `the auditor must be able to raise "${title}", got ${res.headers.location}`);
+          return m[1];
+        };
+        const alone = await raise('Fuel stock counts unsupported');
+        const together = [
+          await raise('Depot keys not logged'),
+          await raise('Fuel card issue register incomplete'),
+        ];
+
+        const statusOf = (id: string): string =>
+          String(
+            (
+              db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+                status?: string;
+              }
+            ).status,
+          );
+        const revisions = (id: string): number =>
+          Number(
+            (
+              db
+                .prepare(
+                  `SELECT COUNT(*) AS n FROM work_paper_revisions
+                  WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+                )
+                .get(id) as { n: number | bigint }
+            ).n,
+          );
+
+        // One at a time, from the detail.
+        const single = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+          to_status: 'Submitted',
+        });
+        const singleAt = decodeURIComponent(String(single.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(singleAt), `the single submit must succeed, got ${singleAt}`);
+        assert.equal(statusOf(alone), 'Submitted', 'the finding moves to Submitted');
+        assert.equal(revisions(alone), 1, 'and the move is recorded as a revision');
+
+        // And together, from the list, which offers the tick boxes because the
+        // same guard says the release would be allowed.
+        const list = await server.get('/work-papers?status=Draft');
+        assert.equal(list.status, 200, `the auditor's list answered ${list.status}`);
+        assert.ok(
+          list.body.includes('Submit selected for review'),
+          'the auditor must be offered the batch release',
+        );
+        for (const id of together) {
+          assert.ok(
+            list.body.includes(`name="work_paper_id" value="${id}"`),
+            `and a tick box for their own draft ${id}`,
+          );
+        }
+        const body = new URLSearchParams();
+        for (const id of together) body.append('work_paper_id', id);
+        const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+        const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
+        assert.ok(
+          batchAt.includes('2 findings submitted for review'),
+          `the batch must report what it did, got ${batchAt}`,
+        );
+        for (const id of together) {
+          assert.equal(statusOf(id), 'Submitted', `${id} must be submitted`);
+          assert.equal(revisions(id), 1, `${id} must carry its own revision row`);
+        }
+
+        // The reviewer moves are untouched: the head of audit opens the review,
+        // and the auditor cannot then approve their own finding.
+        await signInAsOwnerInsideHass();
+        const opened = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+          to_status: 'Under Review',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(opened.headers.location ?? ''))),
+          'the head of audit still starts the review',
+        );
+        assert.equal(statusOf(alone), 'Under Review', 'the finding is under review');
+
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const approved = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+          to_status: 'Approved',
+        });
+        const approvedAt = decodeURIComponent(String(approved.headers.location ?? ''));
+        assert.ok(
+          approvedAt.includes('You do not have permission for that action.'),
+          `the auditor must be refused the approve, got ${approvedAt}`,
+        );
+        assert.equal(statusOf(alone), 'Under Review', 'and the finding does not move');
+
+        // The screen says so too, naming the grant rather than hiding the button.
+        const detail = await server.get(`/work-papers/${alone}`);
+        assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+        assert.ok(
+          !detail.body.includes('name="to_status" value="Approved"'),
+          'the auditor is not offered a reviewer action',
+        );
+        assert.ok(
+          detail.body.includes('WORK_PAPER.approve'),
+          'and is told which grant the reviewer moves need',
+        );
+
+        await signInAsOwnerInsideHass();
+      },
+    );
+
     await t.test('a draft with no auditor yet can still be submitted by its author', async () => {
       // Between creating a finding and assigning it, somebody still has to be
       // able to move it on; an unassigned draft is not a locked one.
