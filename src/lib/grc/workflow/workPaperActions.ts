@@ -51,15 +51,37 @@ export interface Attribution {
   comments?: string;
 }
 
+/** A cell of the permission matrix: the module and the action on it. */
+export interface Grant {
+  module: string;
+  action: string;
+}
+
 export interface WpActionMeta {
-  /** The WORK_PAPERS.* permission the actor must hold, on top of the engine's required_role. */
-  permission: string;
+  /**
+   * The matrix grant the actor must hold, on top of the engine's required_role.
+   *
+   * A matrix cell, not a derived `WORK_PAPERS.*` string (Build Prompt 55). The
+   * derived list is a second representation of the same grant, and a second
+   * representation is a second thing that can be wrong: an auditor holding
+   * `WORK_PAPER.update` could still fail a `perms.includes('WORK_PAPERS.submit')`
+   * check, and nothing on the access-control screen would explain why. The
+   * workflow now asks the matrix the administrator actually edits.
+   */
+  grant: Grant;
   /** The dated attribution field to stamp, if the source stamps one on this move. */
   attribution?: Attribution;
   /** The email_templates code to enqueue a notification for, if this move notifies. */
   notifyTemplate?: string;
   /** A concise action label for the button. */
   label: string;
+  /**
+   * True when the action belongs to the person doing the work rather than the
+   * person reviewing it. An authoring action is offered to the finding's own
+   * auditor; a head of audit who is not its auditor is not asked to submit
+   * somebody else's draft, they are notified that it arrived (Build Prompt 55).
+   */
+  authoring?: boolean;
 }
 
 // Keyed by target status. The permission mapping preserves the source: submit,
@@ -69,17 +91,19 @@ export interface WpActionMeta {
 // template codes are documented assumptions and enqueue best-effort.
 const ACTIONS: Record<string, WpActionMeta> = {
   [WP_STATUS.SUBMITTED]: {
-    permission: 'WORK_PAPERS.submit',
+    // Submitting is an authoring step: whoever may edit the draft may release it.
+    grant: { module: 'WORK_PAPER', action: 'update' },
+    authoring: true,
     attribution: { date: 'submitted_date' },
     notifyTemplate: 'finding_submitted',
     label: 'Submit for review',
   },
   [WP_STATUS.UNDER_REVIEW]: {
-    permission: 'WORK_PAPERS.review',
+    grant: { module: 'WORK_PAPER', action: 'approve' },
     label: 'Start review',
   },
   [WP_STATUS.REVISION_REQUIRED]: {
-    permission: 'WORK_PAPERS.review',
+    grant: { module: 'WORK_PAPER', action: 'approve' },
     attribution: {
       byId: 'reviewed_by_id',
       byName: 'reviewed_by_name',
@@ -89,23 +113,23 @@ const ACTIONS: Record<string, WpActionMeta> = {
     label: 'Request revision',
   },
   [WP_STATUS.APPROVED]: {
-    permission: 'WORK_PAPERS.approve',
+    grant: { module: 'WORK_PAPER', action: 'approve' },
     attribution: { byId: 'approved_by_id', byName: 'approved_by_name', date: 'approved_date' },
     label: 'Approve',
   },
   [WP_STATUS.SENT_TO_AUDITEE]: {
-    permission: 'WORK_PAPERS.send',
+    grant: { module: 'WORK_PAPER', action: 'approve' },
     attribution: { date: 'sent_to_auditee_date' },
     notifyTemplate: 'finding_shared',
     label: 'Send to auditee',
   },
   [WP_STATUS.RESPONSE_RECEIVED]: {
-    permission: 'WORK_PAPERS.review',
+    grant: { module: 'WORK_PAPER', action: 'approve' },
     notifyTemplate: 'response_received',
     label: 'Record response received',
   },
   [WP_STATUS.RESPONSE_REVIEWED]: {
-    permission: 'WORK_PAPERS.review',
+    grant: { module: 'WORK_PAPER', action: 'approve' },
     attribution: {
       byId: 'response_reviewed_by',
       date: 'response_review_date',
@@ -114,14 +138,41 @@ const ACTIONS: Record<string, WpActionMeta> = {
     label: 'Mark response reviewed',
   },
   [WP_STATUS.DRAFT]: {
-    permission: 'WORK_PAPERS.review',
+    grant: { module: 'WORK_PAPER', action: 'approve' },
     label: 'Return to draft',
   },
 };
 
-/** The action metadata for a target status, or null when the target is unknown. */
+/**
+ * The action metadata for a target status, or null when the target is unknown.
+ *
+ * The lookup tolerates the surrounding whitespace and casing a hand-edited
+ * reference row can carry: `status_transitions` is operator-managed data, and a
+ * trailing space in `to_status` is invisible on every screen that displays it
+ * while silently matching nothing here (Build Prompt 55). The stored value is
+ * still what gets written; only the comparison is forgiving.
+ */
 export function actionForTarget(target: string): WpActionMeta | null {
-  return ACTIONS[target] ?? null;
+  const exact = ACTIONS[target];
+  if (exact) return exact;
+  const wanted = normaliseStatus(target);
+  if (wanted === '') return null;
+  for (const [status, meta] of Object.entries(ACTIONS)) {
+    if (normaliseStatus(status) === wanted) return meta;
+  }
+  return null;
+}
+
+/** A status reduced to what it means, for comparison only, never for storage. */
+export function normaliseStatus(status: string): string {
+  return String(status ?? '')
+    .trim()
+    .toLowerCase();
+}
+
+/** Whether two stored statuses name the same state, whitespace and case aside. */
+export function sameStatus(a: string, b: string): boolean {
+  return normaliseStatus(a) === normaliseStatus(b);
 }
 
 /** The statuses in which the record's fields may be edited; every other status is read-only. */

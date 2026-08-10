@@ -62,6 +62,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     userName: grc.userName ?? grc.userEmail ?? grc.userId,
     roleCode: grc.roleCode,
     isPlatformOwner: grc.isPlatformOwner,
+    matrix: grc.matrix,
     perms: grc.perms,
   };
 

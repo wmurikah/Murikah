@@ -87,11 +87,18 @@ if (allowed && id) {
         listAuditors(db, grc.organizationId),
         loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
       ]);
-      const available = await availableActions(db, wp.status, {
+      // The subject, not just the status: submitting is the finding's own
+      // auditor's move, so the offer needs to know whose finding it is.
+      const subject = {
+        status: wp.status,
+        assignedAuditorId: wp.assignedAuditorId as string | null,
+      };
+      const available = await availableActions(db, subject, {
         userId: grc.userId,
         userName: grc.userName ?? grc.userEmail ?? grc.userId,
         roleCode: grc.roleCode,
         isPlatformOwner: grc.isPlatformOwner,
+        matrix: grc.matrix,
         perms: grc.perms,
       });
       actions = available.offered;
