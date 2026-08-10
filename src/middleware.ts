@@ -30,7 +30,7 @@ import {
   resolveActingContext as resolveGrcActingContext,
   type SwitchOrg as GrcSwitchOrg,
 } from '@grc/repos/orgContext';
-import { getScopedRoleMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
+import { resolveRoleAccess, deriveLegacyPerms, canMatrix } from '@grc/auth/rbac';
 import { resolveAffiliateScope } from '@grc/auth/affiliateScope';
 import { isGroupAffiliate } from '@grc/repos/affiliatesAdmin';
 import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
@@ -169,10 +169,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // role can be confined to its user's affiliate. Both come from the one
       // query, so the grants and the scope can never disagree. A SUPER_ADMIN and
       // a platform owner hold a synthesised matrix and are never confined.
-      const access =
-        identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN'
-          ? { matrix: fullMatrix(), scopeToAffiliate: false }
-          : await getScopedRoleMatrix(db, identity.roleCode, organizationId);
+      // Resolved through the shared accessor (Build Prompt 57), which every
+      // other gate in the product also asks, so the session and a save behind it
+      // can never resolve the same role differently.
+      const access = await resolveRoleAccess(
+        db,
+        identity.roleCode,
+        organizationId,
+        identity.isPlatformOwner,
+      );
       const matrix = access.matrix;
       // The Group exemption (Build Prompt 48): a user posted to an affiliate
       // marked `affiliates.is_group` sees every affiliate even under a confined

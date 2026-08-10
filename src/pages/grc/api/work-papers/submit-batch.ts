@@ -30,7 +30,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { executeTransition } from '@grc/workflow/workPaperWorkflow';
+import { executeTransition, resolveTransitionAccess } from '@grc/workflow/workPaperWorkflow';
 import { WP_STATUS } from '@grc/workflow/workPaperActions';
 
 /** More than a working week of fieldwork in one click is a mistake, not a batch. */
@@ -69,6 +69,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     perms: grc.perms,
   };
 
+  // The same access every finding in the batch is decided against, resolved once
+  // through the shared accessor rather than per finding: a batch of a hundred is
+  // one person's permission asked a hundred times, and asking it once is both
+  // cheaper and impossible to answer inconsistently within one batch.
+  const access = await resolveTransitionAccess(db, grc.organizationId, actor);
+
   let submitted = 0;
   const refused: string[] = [];
   for (const id of ids) {
@@ -79,6 +85,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       WP_STATUS.SUBMITTED,
       actor,
       null,
+      access,
     );
     if (result.ok) submitted += 1;
     else refused.push(`${id}: ${result.message}`);

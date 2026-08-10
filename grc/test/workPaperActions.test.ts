@@ -12,6 +12,7 @@ import {
   WP_STATUS,
   WORK_PAPER_ENUM_TYPE,
   actionForTarget,
+  canonicalTarget,
   grantForTransition,
   isEditable,
   editableStatuses,
@@ -76,6 +77,16 @@ test('a hand-edited transition row still resolves its grant', () => {
     module: 'WORK_PAPER',
     action: 'update',
   });
+});
+
+test('a hand-edited target is performed under the catalogue spelling', () => {
+  // Build Prompt 57. The comparison tolerates what an operator typed; the write
+  // must not, or a status nothing else matches lands in work_papers.status.
+  assert.equal(canonicalTarget(' submitted '), WP_STATUS.SUBMITTED);
+  assert.equal(canonicalTarget('SENT TO AUDITEE'), WP_STATUS.SENT_TO_AUDITEE);
+  assert.equal(canonicalTarget(WP_STATUS.APPROVED), WP_STATUS.APPROVED);
+  assert.equal(canonicalTarget('NOT_A_STATUS'), null);
+  assert.equal(canonicalTarget('   '), null);
 });
 
 test('submitting is the only authoring step', () => {

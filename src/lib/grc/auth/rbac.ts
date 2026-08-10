@@ -35,6 +35,7 @@ import { C, cols } from '@grc/schema/columns';
 import {
   buildMatrix,
   canMatrix,
+  fullMatrix,
   selectScopedRows,
   PLATFORM_DEFAULT_ORG,
   type PermissionMatrix,
@@ -112,6 +113,35 @@ export async function getScopedRoleMatrix(
     inherited: scoped.inherited,
     scopeToAffiliate: scoped.scopeToAffiliate,
   };
+}
+
+/**
+ * The one resolution path for what an actor may do inside an organisation
+ * (Build Prompt 57).
+ *
+ * Two rules decide it, and both live here rather than at each call site: a
+ * platform owner and a SUPER_ADMIN hold the full matrix, and everybody else
+ * holds their role's grants resolved as the organisation's own rows if it has
+ * any and the GLOBAL platform defaults otherwise. An organisation that has never
+ * saved its access control has no rows of its own, which is the state every live
+ * instance is in until an administrator first opens that screen, so a caller
+ * that reads the acting organisation alone resolves every grant as absent and
+ * refuses work the role plainly holds.
+ *
+ * The middleware resolves the session with this, and the work-paper transition
+ * executor resolves the write with it, so a screen and the save behind it can
+ * never answer differently.
+ */
+export async function resolveRoleAccess(
+  db: Client,
+  roleCode: string,
+  organizationId: string,
+  isPlatformOwner: boolean,
+): Promise<ResolvedRoleAccess> {
+  if (isPlatformOwner || roleCode === 'SUPER_ADMIN') {
+    return { matrix: fullMatrix(), inherited: false, scopeToAffiliate: false };
+  }
+  return getScopedRoleMatrix(db, roleCode, organizationId);
 }
 
 /** True when the session's matrix grants the action on the module (aliases applied). */
