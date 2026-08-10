@@ -40,6 +40,9 @@ const url = Astro.url;
 const doneBanner = url.searchParams.get('done') ?? url.searchParams.get('connected');
 const error = url.searchParams.get('error');
 const foldersFor = url.searchParams.get('folders') ?? '';
+// Where in the provider's own tree the listing starts. Absent means "the top",
+// which on SharePoint is the list of sites and drives rather than a folder.
+const folderParent = url.searchParams.get('parent') ?? '';
 
 let connections: StorageConnectionView[] = [];
 let folders: StorageFolder[] = [];
@@ -60,9 +63,12 @@ if (allowed) {
         folderError = 'That provider is not configured yet, so it has no folders to list.';
       } else {
         try {
-          folders = await instance.listFolders();
+          folders = await instance.listFolders(folderParent || undefined);
           if (folders.length === 0) {
-            folderError = 'The connected account has no folders at its root.';
+            folderError =
+              folderParent === ''
+                ? 'The connected account has nothing to choose at its top level.'
+                : 'That folder has no folders inside it. Use it as it is, or go back to the top.';
           }
         } catch {
           // A provider that will not answer is reported here, not as a failed
@@ -229,7 +235,9 @@ const activeName =
                         : 'No folder chosen yet, so evidence goes to the account root.'}
                     </p>
                     <p class="grc-field__hint">
-                      <a href={`/settings/storage?folders=${def.code}`}>List folders</a>
+                      <a href={`/settings/storage?folders=${def.code}`}>
+                        {listing ? 'Start again from the top' : 'List folders'}
+                      </a>
                     </p>
                   </div>
 
@@ -239,26 +247,53 @@ const activeName =
                     </p>
                   )}
 
+                  {/*
+                    A row per candidate: choose it, or open it and choose
+                    something inside. Two plain forms rather than a select,
+                    because the name has to travel with the id (a stored id is
+                    unreadable on its own) and because walking down a tree is
+                    what a picker on SharePoint or Drive actually needs.
+                  */}
                   {listing && folders.length > 0 && (
-                    <form method="post" action="/api/admin/storage/save" class="grc-form">
-                      <input type="hidden" name="action" value="folder" />
-                      <input type="hidden" name="provider" value={def.code} />
-                      <div class="grc-field">
-                        <label for={`${def.code}-folder`}>{def.folderLabel}</label>
-                        <select id={`${def.code}-folder`} name="folder_id">
+                    <div class="grc-tablewrap">
+                      <table class="grc-table">
+                        <thead>
+                          <tr>
+                            <th>{def.folderLabel}</th>
+                            <th>Choose</th>
+                          </tr>
+                        </thead>
+                        <tbody>
                           {folders.map((f) => (
-                            <option value={f.id} selected={f.id === conn.folderId}>
-                              {f.name}
-                            </option>
+                            <tr>
+                              <td>
+                                {f.name}
+                                {f.id === conn.folderId ? ' (current)' : ''}
+                              </td>
+                              <td>
+                                <div class="grc-actions">
+                                  <form method="post" action="/api/admin/storage/save">
+                                    <input type="hidden" name="action" value="folder" />
+                                    <input type="hidden" name="provider" value={def.code} />
+                                    <input type="hidden" name="folder_id" value={f.id} />
+                                    <input type="hidden" name="folder_name" value={f.name} />
+                                    <button type="submit" class="grc-btn grc-btn--secondary">
+                                      Use this folder
+                                    </button>
+                                  </form>
+                                  <a
+                                    class="grc-btn grc-btn--secondary"
+                                    href={`/settings/storage?folders=${def.code}&parent=${encodeURIComponent(f.id)}`}
+                                  >
+                                    Open
+                                  </a>
+                                </div>
+                              </td>
+                            </tr>
                           ))}
-                        </select>
-                      </div>
-                      <div class="grc-actions">
-                        <button type="submit" class="grc-btn grc-btn--secondary">
-                          Use this folder
-                        </button>
-                      </div>
-                    </form>
+                        </tbody>
+                      </table>
+                    </div>
                   )}
 
                   <div class="grc-actions">
