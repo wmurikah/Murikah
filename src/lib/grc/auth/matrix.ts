@@ -251,7 +251,15 @@ const LEGACY_MAP: Array<{ code: string; module: string; action: string }> = [
   { code: 'USERS.manage', module: 'USER', action: 'read' },
 ];
 
-/** The legacy permission codes a matrix grants (for perms.includes call sites). */
+/**
+ * The legacy permission codes a matrix grants (for perms.includes call sites).
+ *
+ * It asks the matrix through `canMatrix`, exactly as every other gate does, so
+ * the aliases apply here too (Build Prompt 55). Reading the matrix raw here
+ * while every other caller canonicalised meant the same grant could answer yes
+ * to `can(update, WORK_PAPER)` and no to the derived `WORK_PAPERS.edit`, which
+ * is not a difference any reviewer of a role matrix could have predicted.
+ */
 export function deriveLegacyPerms(matrix: PermissionMatrix): string[] {
-  return LEGACY_MAP.filter((l) => matrix[l.module]?.[l.action] === true).map((l) => l.code);
+  return LEGACY_MAP.filter((l) => canMatrix(matrix, l.action, l.module)).map((l) => l.code);
 }
