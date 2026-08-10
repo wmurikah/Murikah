@@ -95,6 +95,59 @@ const rich = (key: string): string => {
   const raw = wp?.[key];
   return raw == null || String(raw) === '' ? '<p>-</p>' : renderRichHtml(String(raw));
 };
+
+/**
+ * The dated attribution the workflow stamps on each move (workPaperActions.ts),
+ * read back. Every one of these is stored on a real transition and none of them
+ * was rendered anywhere, so the review a finding has actually been through was
+ * invisible on its own page (Build Prompt 50).
+ *
+ * Only the steps that have happened are listed: a Draft finding shows the one
+ * line it has earned rather than a column of dashes claiming it was reviewed.
+ */
+interface TrailStep {
+  label: string;
+  who: string | null;
+  when: string | null;
+  comment: string | null;
+}
+const text = (key: string | undefined): string | null => {
+  const raw = key ? wp?.[key] : null;
+  return raw == null || String(raw) === '' ? null : String(raw);
+};
+const step = (
+  label: string,
+  whoKey: string | undefined,
+  whenKey: string,
+  commentKey?: string,
+): TrailStep => ({
+  label,
+  who: text(whoKey),
+  when: text(whenKey),
+  comment: text(commentKey),
+});
+const trail: TrailStep[] = wp
+  ? [
+      step('Prepared', 'prepared_by_name', 'prepared_date'),
+      step('Submitted', undefined, 'submitted_date'),
+      step('Reviewed', 'reviewed_by_name', 'review_date', 'review_comments'),
+      step('Approved', 'approved_by_name', 'approved_date'),
+      step('Sent to auditee', undefined, 'sent_to_auditee_date'),
+      step('Response submitted', undefined, 'response_submitted_date'),
+      step('Response reviewed', undefined, 'response_review_date', 'response_review_comments'),
+    ].filter((t) => t.who !== null || t.when !== null || t.comment !== null)
+  : [];
+// The response cycle's own state, stored and likewise never shown.
+const responseFacts: { label: string; value: string }[] = wp
+  ? (
+      [
+        { label: 'Response status', value: val('response_status') },
+        { label: 'Response round', value: val('response_round') },
+        { label: 'Response deadline', value: val('response_deadline') },
+        { label: 'Final status', value: val('final_status') },
+      ] as { label: string; value: string }[]
+    ).filter((f) => f.value !== '-')
+  : [];
 ---
 
 <GrcLayout title={wp ? String(wp.reference) : 'Work paper'}>
@@ -206,6 +259,10 @@ const rich = (key: string): string => {
               <dd>{String(wp.sub_area_name ?? '-')}</dd>
             </>
             <>
+              <dt>Work paper date</dt>
+              <dd>{val('work_paper_date')}</dd>
+            </>
+            <>
               <dt>Audit period</dt>
               <dd>
                 {val('audit_period_from')} to {val('audit_period_to')}
@@ -213,11 +270,13 @@ const rich = (key: string): string => {
             </>
             <>
               <dt>Assigned auditor</dt>
-              <dd>{String(wp.assigned_auditor_name ?? '-')}</dd>
+              {/* Resolved from assigned_auditor_id by the repository, falling back
+                  to the denormalised name. "Unassigned" only when genuinely so. */}
+              <dd>{String(wp.assigned_auditor_name ?? 'Unassigned')}</dd>
             </>
             <>
               <dt>Classification</dt>
-              <dd>{val('classification')}</dd>
+              <dd>{val('control_classification')}</dd>
             </>
             <>
               <dt>Control type</dt>
@@ -229,7 +288,7 @@ const rich = (key: string): string => {
             </>
             <>
               <dt>Standards</dt>
-              <dd>{val('standards')}</dd>
+              <dd>{val('control_standards')}</dd>
             </>
             <>
               <dt>Control objectives</dt>
@@ -269,6 +328,38 @@ const rich = (key: string): string => {
             </>
           </dl>
         </div>
+
+        {(trail.length > 0 || responseFacts.length > 0) && (
+          <div class="grc-panel">
+            <h2>Review trail</h2>
+            {trail.length > 0 && (
+              <ol class="grc-revisions">
+                {trail.map((t) => (
+                  <li>
+                    <strong>{t.label}</strong>
+                    {t.who && <span> by {t.who}</span>}
+                    {t.when && (
+                      <div>
+                        <time>{t.when}</time>
+                      </div>
+                    )}
+                    {t.comment && <div>{t.comment}</div>}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {responseFacts.length > 0 && (
+              <dl class="grc-detail">
+                {responseFacts.map((f) => (
+                  <>
+                    <dt>{f.label}</dt>
+                    <dd>{f.value}</dd>
+                  </>
+                ))}
+              </dl>
+            )}
+          </div>
+        )}
 
         {hasAi && (
           <div class="grc-panel">

@@ -230,6 +230,83 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ to_status: 'Submitted', comment: 'Smoke transition' }),
   },
   {
+    // Build Prompt 50, the review chain. Draft to Submitted has just run; these
+    // carry it on to Under Review and Approved, the path the seeded
+    // status_transitions define. Nothing here names a transition the engine does
+    // not already hold: a hard-coded step would pass even if the table were
+    // empty, which is the opposite of what this proves.
+    endpoint: 'work-papers/[id]/transition.ts',
+    title: 'start the review on the submitted work paper',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { status?: string };
+      assert.equal(String(r.status), 'Under Review', 'Submitted moves to Under Review');
+    },
+    method: 'POST',
+    path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
+    form: () => ({ to_status: 'Under Review' }),
+  },
+  {
+    endpoint: 'work-papers/[id]/transition.ts',
+    title: 'a return for revision without the required comment is refused',
+    // The seeded rule sets requires_comment on Under Review to Revision
+    // Required. Omitting it must refuse, or the rule is decorative.
+    expect: 'refusal',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { status?: string };
+      assert.equal(String(r.status), 'Under Review', 'a refused move changes nothing');
+    },
+    method: 'POST',
+    path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
+    form: () => ({ to_status: 'Revision Required' }),
+  },
+  {
+    endpoint: 'work-papers/[id]/transition.ts',
+    title: 'approve the reviewed work paper, and the revisions record the whole chain',
+    expect: 'success',
+    verify: (db, c) => {
+      const id = String(c.get('wpId'));
+      const r = db
+        .prepare(
+          `SELECT status, approved_by_name AS approver, approved_date AS approved
+             FROM work_papers WHERE work_paper_id = ?`,
+        )
+        .get(id) as { status?: string; approver?: string; approved?: string };
+      assert.equal(String(r.status), 'Approved');
+      // The dated attribution the detail's review trail reads back. Before this
+      // build it was stamped and shown nowhere.
+      assert.ok(r.approver, 'the approver is stamped');
+      assert.ok(r.approved, 'and the date with them');
+
+      // One work_paper_revisions row per move, in order, with the actor and the
+      // comment: the iterations a reviewer needs to see.
+      const rows = db
+        .prepare(
+          `SELECT from_status AS f, to_status AS t, user_name AS who, comments AS c
+             FROM work_paper_revisions WHERE work_paper_id = ?
+            ORDER BY revision_number ASC`,
+        )
+        .all(id) as { f: string; t: string; who: string | null; c: string | null }[];
+      assert.deepEqual(
+        rows.map((x) => `${x.f} -> ${x.t}`),
+        ['Draft -> Submitted', 'Submitted -> Under Review', 'Under Review -> Approved'],
+        'every move is recorded, and the refused one is not',
+      );
+      assert.ok(
+        rows.every((x) => x.who),
+        'each revision names who made the move',
+      );
+      assert.equal(rows[0].c, 'Smoke transition', 'the comment is kept with its move');
+    },
+    method: 'POST',
+    path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
+    form: () => ({ to_status: 'Approved' }),
+  },
+  {
     endpoint: 'work-papers/[id]/delete.ts',
     title: 'a submitted work paper refuses deletion',
     expect: 'refusal',
@@ -1605,6 +1682,52 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
 
       // Back to the owner inside Hass, the state the rest of the run assumes.
       await signInAsOwnerInsideHass();
+    });
+
+    await t.test('the work paper detail shows the fields that are stored', async () => {
+      // Build Prompt 50. The seed stores an assigned_auditor_id with no
+      // denormalised name, a control_classification and control_standards, and
+      // the detail rendered a dash over all three: it was reading form-field
+      // names rather than column names, and the auditor alias was shadowed by
+      // wp.*. These assert the stored values reach the page.
+      const detail = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(detail.status, 200);
+      // Asserted as the label-and-value pair, not a bare substring: the words
+      // appear elsewhere on the page (the auditor dropdown, the filters), and a
+      // loose match would pass while the field itself still read a dash.
+      const field = (label: string): string | null => {
+        const m = new RegExp(`<dt>${label}</dt>\\s*<dd[^>]*>([^<]*)</dd>`).exec(detail.body);
+        return m ? m[1].trim() : null;
+      };
+      assert.equal(
+        field('Assigned auditor'),
+        'Amina Auditor',
+        'the assigned auditor resolves from assigned_auditor_id, not a dash',
+      );
+      assert.equal(field('Classification'), 'KEY', 'the stored classification is shown');
+      assert.equal(
+        field('Standards'),
+        'ISO 27001, IIA Standards',
+        'the stored standards are shown',
+      );
+
+      // The edit form prefills from the same values. Before this build it read
+      // the same wrong keys, so it opened blank and saved the blank back over
+      // real data: a display bug on the detail, a data-loss bug here.
+      const edit = await server.get(`/work-papers/${SMOKE.draftWorkPaperId}/edit`);
+      assert.equal(edit.status, 200);
+      assert.ok(
+        edit.body.includes('ISO 27001'),
+        'the edit form prefills the stored standards rather than blanking them',
+      );
+      assert.ok(
+        /<option[^>]*value="KEY"[^>]*selected/.test(edit.body),
+        'and keeps the stored classification selected',
+      );
+      assert.ok(
+        new RegExp(`<option[^>]*value="${SMOKE.auditorId}"[^>]*selected`).test(edit.body),
+        'and the stored assigned auditor selected',
+      );
     });
 
     await t.test('a role confined to its affiliate sees only its affiliate', async () => {
