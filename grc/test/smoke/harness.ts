@@ -22,6 +22,12 @@ const SCHEMA_MD = join(REPO_ROOT, 'grc', 'db', 'schema.md');
 const HOST = 'grc.localhost';
 const BOOT_TIMEOUT_MS = 120_000;
 
+/**
+ * A posted form. A plain object for the common case; URLSearchParams when a key
+ * repeats, as the batch release does with one work_paper_id per selected draft.
+ */
+export type SmokeForm = Record<string, string> | URLSearchParams;
+
 export interface SmokeResponse {
   status: number;
   headers: Record<string, string | string[] | undefined>;
@@ -146,15 +152,20 @@ export class SmokeServer {
   private rawRequest(
     method: string,
     path: string,
-    form?: Record<string, string>,
+    form?: SmokeForm,
     useCookies = true,
   ): Promise<SmokeResponse> {
+    // URLSearchParams as well as a plain object, because a form can legitimately
+    // repeat a key: the batch release posts one work_paper_id per finding
+    // selected (Build Prompt 53), which an object cannot express.
     const body =
       form === undefined
         ? undefined
-        : Object.entries(form)
-            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-            .join('&');
+        : form instanceof URLSearchParams
+          ? form.toString()
+          : Object.entries(form)
+              .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+              .join('&');
     const headers: Record<string, string> = { host: HOST };
     if (useCookies && this.cookies.size > 0) headers.cookie = this.cookieHeader();
     if (method !== 'GET') {
@@ -194,11 +205,7 @@ export class SmokeServer {
    * a connection error or its "worker restarted mid-request" 503; those never
    * reached the app, so they are retried a couple of times before counting.
    */
-  async request(
-    method: 'GET' | 'POST',
-    path: string,
-    form?: Record<string, string>,
-  ): Promise<SmokeResponse> {
+  async request(method: 'GET' | 'POST', path: string, form?: SmokeForm): Promise<SmokeResponse> {
     for (let attempt = 0; ; attempt++) {
       try {
         const res = await this.rawRequest(method, path, form);

@@ -38,6 +38,7 @@ import { loadSubscription } from '@grc/repos/features';
 import {
   toGrcAppPath,
   isGrcPublicPath,
+  safeNextPath,
   isGrcApiPath,
   isGrcChangePasswordExempt,
   isGrcMfaPendingAllowed,
@@ -95,9 +96,18 @@ export const onRequest = defineMiddleware(async (context, next) => {
           : new Response('The GRC platform is not configured.', { status: 503 });
       }
 
+      // Where they were going, carried through sign-in (Build Prompt 53). A
+      // digest email links a reviewer straight at the review queue, and losing
+      // that destination at the guard is what makes an emailed link feel
+      // broken. safeNextPath refuses anything that is not a path inside this
+      // app, so this can never become an open redirect.
+      const intended = safeNextPath(appPath + (context.url.search ?? ''));
+      const toLogin = (): Response =>
+        context.redirect(intended ? `/login?next=${encodeURIComponent(intended)}` : '/login');
+
       const sessionCookie = await readGrcSessionCookie(context.request, env.sessionSecret);
       if (!sessionCookie) {
-        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : toLogin();
       }
       const sessionId = sessionCookie.sessionId;
 
@@ -117,7 +127,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       const db = await getGrcDb(env);
       const identity = await resolveSession(db, sessionId);
       if (!identity) {
-        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : toLogin();
       }
 
       // An instance admin, and every other ordinary role, is pinned to their home
