@@ -59,6 +59,43 @@ export function splitFolderRef(folderId: string | null): {
   return { driveId: raw.slice(0, slash), itemId: raw.slice(slash + 1) || 'root' };
 }
 
+/** How many sites the picker will enumerate drives for, so it always answers. */
+const SITE_LIMIT = 15;
+
+/**
+ * The document libraries this account can write to: its own OneDrive, and the
+ * drives of the SharePoint sites it can see. This is the "site and drive" half
+ * of the picker; a site with no drive the account can reach simply contributes
+ * nothing rather than an entry that would fail on selection.
+ */
+async function listDrives(token: () => Promise<string>): Promise<StorageFolder[]> {
+  const out: StorageFolder[] = [];
+  const mine = await authed(token, `${GRAPH}/me/drive?$select=id,name`);
+  if (mine.ok) {
+    const drive = (await mine.json()) as { id?: string; name?: string };
+    if (drive.id) {
+      out.push({ id: `${drive.id}/root`, name: `OneDrive — ${drive.name ?? 'my files'}` });
+    }
+  }
+  const sites = await authed(token, `${GRAPH}/sites?search=*&$select=id,displayName,name`);
+  if (!sites.ok) return out;
+  const body = (await sites.json()) as {
+    value?: { id?: string; displayName?: string; name?: string }[];
+  };
+  for (const site of (body.value ?? []).slice(0, SITE_LIMIT)) {
+    if (!site.id) continue;
+    const drives = await authed(token, `${GRAPH}/sites/${site.id}/drives?$select=id,name`);
+    if (!drives.ok) continue;
+    const list = (await drives.json()) as { value?: { id?: string; name?: string }[] };
+    const label = site.displayName ?? site.name ?? 'Site';
+    for (const drive of list.value ?? []) {
+      if (drive.id)
+        out.push({ id: `${drive.id}/root`, name: `${label} — ${drive.name ?? 'Documents'}` });
+    }
+  }
+  return out;
+}
+
 export function createSharePointProvider(
   app: OAuthApp,
   config: Record<string, string>,
@@ -102,12 +139,24 @@ export function createSharePointProvider(
       }
     },
 
-    async listFolders(parentItemId?: string): Promise<StorageFolder[]> {
-      const parent = parentItemId ?? itemId;
+    /**
+     * The picker walks site, then drive, then folder.
+     *
+     * Before a drive is chosen there is nothing to list children of, so the
+     * first answer is the document libraries themselves: the connected
+     * account's own OneDrive, and the libraries of the SharePoint sites it can
+     * see, each labelled with its site. Choosing one records the drive; asking
+     * again then drills into that drive's folders. Every entry carries its
+     * drive in the id, so a selection is never ambiguous across drives.
+     */
+    async listFolders(parent?: string): Promise<StorageFolder[]> {
+      const ref = splitFolderRef(parent ?? folderId);
+      if (!ref.driveId) return listDrives(token);
+      const root = `${GRAPH}/drives/${ref.driveId}`;
       const url =
-        parent === 'root'
-          ? `${driveRoot}/root/children?$select=id,name,folder`
-          : `${driveRoot}/items/${parent}/children?$select=id,name,folder`;
+        ref.itemId === 'root'
+          ? `${root}/root/children?$select=id,name,folder`
+          : `${root}/items/${ref.itemId}/children?$select=id,name,folder`;
       const res = await authed(token, url);
       if (!res.ok) return [];
       const body = (await res.json()) as {
@@ -117,7 +166,7 @@ export function createSharePointProvider(
         .filter((v) => v.folder && v.id && v.name)
         .map((v) => ({
           // Carry the drive with the item, so the stored reference stays whole.
-          id: driveId ? `${driveId}/${v.id}` : String(v.id),
+          id: `${ref.driveId}/${v.id}`,
           name: String(v.name),
         }));
     },
