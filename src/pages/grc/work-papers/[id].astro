@@ -34,7 +34,11 @@ import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { WORK_PAPER_ENUM_TYPE, isEditable } from '@grc/workflow/workPaperActions';
-import { offeredActions, type OfferedAction } from '@grc/workflow/workPaperWorkflow';
+import {
+  availableActions,
+  type OfferedAction,
+  type WithheldAction,
+} from '@grc/workflow/workPaperWorkflow';
 import { aiEnabled } from '@grc/ai/gate';
 import { AI_DISCLAIMER } from '@grc/ai/validation';
 import { storageConfiguredFor } from '@grc/storage';
@@ -57,6 +61,7 @@ const done = Astro.url.searchParams.get('done');
 
 let wp = null as WorkPaperDetail | null;
 let requirements: Requirement[] = [];
+let withheld: WithheldAction[] = [];
 let responsibles: Responsible[] = [];
 let cc: CcRecipient[] = [];
 let revisions: Revision[] = [];
@@ -82,13 +87,15 @@ if (allowed && id) {
         listAuditors(db, grc.organizationId),
         loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
       ]);
-      actions = await offeredActions(db, wp.status, {
+      const available = await availableActions(db, wp.status, {
         userId: grc.userId,
         userName: grc.userName ?? grc.userEmail ?? grc.userId,
         roleCode: grc.roleCode,
         isPlatformOwner: grc.isPlatformOwner,
         perms: grc.perms,
       });
+      actions = available.offered;
+      withheld = available.withheld;
     }
   }));
 }
@@ -216,9 +223,17 @@ const responseFacts: { label: string; value: string }[] = wp
           <span class="grc-pill">{statusLabel(labels, wp.status)}</span>
         </p>
 
-        {actions.length > 0 && (
+        {(actions.length > 0 || withheld.length > 0) && (
           <div class="grc-panel">
             <h2>Actions</h2>
+            {actions.length === 0 && (
+              /* The workflow allows a move from here, but not by this person.
+                 Saying which and why is the difference between a setting an
+                 administrator can change and a mystery (Build Prompt 53). */
+              <p class="grc-lead" style="margin:0 0 0.75rem">
+                No action is available to you from {statusLabel(labels, wp.status)}.
+              </p>
+            )}
             <div style="display:grid;gap:0.75rem">
               {actions.map((a) => (
                 <form
@@ -245,6 +260,15 @@ const responseFacts: { label: string; value: string }[] = wp
                 </form>
               ))}
             </div>
+            {withheld.length > 0 && (
+              <ul class="grc-plainlist" style="margin:0.75rem 0 0">
+                {withheld.map((w) => (
+                  <li class="grc-field__hint">
+                    {w.label}: {w.reason}.
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 

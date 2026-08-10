@@ -9,9 +9,14 @@ export const prerender = false;
  * brand; the form posts to the sign-in endpoint.
  */
 import GrcAuthLayout from '@/layouts/GrcAuthLayout.astro';
+import { safeNextPath } from '@grc/routing';
 
 const failed = Astro.url.searchParams.get('error') === '1';
 const reset = Astro.url.searchParams.get('reset') === '1';
+// Where the visitor was heading before the guard sent them here, e.g. the
+// review queue linked from a digest email (Build Prompt 53). Validated on the
+// way in as well as on the way out, so a hostile value never reaches the form.
+const next = safeNextPath(Astro.url.searchParams.get('next'));
 ---
 
 <GrcAuthLayout title="Sign in">
@@ -33,7 +38,16 @@ const reset = Astro.url.searchParams.get('reset') === '1';
     )
   }
 
+  {
+    next && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        Sign in to continue to the page you were opening.
+      </p>
+    )
+  }
+
   <form method="post" action="/api/auth/login">
+    {next && <input type="hidden" name="next" value={next} />}
     <div class="grc-field">
       <label for="email">Email</label>
       <input

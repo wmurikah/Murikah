@@ -67,9 +67,16 @@ async function loadEntityPayload(
         if (r.owner_names != null) base.ownerNames = String(r.owner_names);
       }
     } else {
+      // The audit area comes along for the digest's detail column (Build Prompt
+      // 53): "Treasury, High" tells a reviewer what they are being asked to
+      // look at; a reference alone does not. Left-joined, so a finding with no
+      // area still notifies.
       const res = await db.execute({
-        sql: `SELECT work_paper_ref AS reference, observation_title, status, risk_rating
-                FROM work_papers WHERE work_paper_id = ? AND organization_id = ? LIMIT 1`,
+        sql: `SELECT wp.work_paper_ref AS reference, wp.observation_title, wp.status,
+                     wp.risk_rating, aa.area_name AS audit_area
+                FROM work_papers wp
+                LEFT JOIN audit_areas aa ON aa.audit_area_id = wp.audit_area_id
+               WHERE wp.work_paper_id = ? AND wp.organization_id = ? LIMIT 1`,
         args: [entityId, organizationId],
       });
       const r = res.rows[0];
@@ -78,6 +85,7 @@ async function loadEntityPayload(
         base.title = String(r.observation_title ?? '');
         base.status = String(r.status ?? '');
         if (r.risk_rating != null) base.riskRating = String(r.risk_rating);
+        if (r.audit_area != null) base.auditArea = String(r.audit_area);
       }
     }
   } catch {
