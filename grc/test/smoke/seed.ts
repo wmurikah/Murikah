@@ -87,6 +87,10 @@ export const SMOKE = {
   draftWorkPaperId: 'WP-DRAFT-1',
   sentWorkPaperId: 'WP-SENT-1',
   requirementId: 'REQ-1',
+  // A second requirement, already received, so the smoke run can prove
+  // outstanding and received apart on one screen (Build Prompt 52). One state
+  // alone would pass whatever the page rendered.
+  receivedRequirementId: 'REQ-2',
   actionPlanId: 'AP-PROG-1',
   orphanPlanId: 'AP-ORPHAN-1',
   verifyActionPlanId: 'AP-VERIFY-1',
@@ -600,6 +604,9 @@ export async function seedDatabase(db: DatabaseSync): Promise<void> {
   for (const [id] of workPapers) ftsInsert.run(id);
   ftsInsert.run(SMOKE.otherAffiliateWorkPaperId);
 
+  // Still outstanding: asked for, never received. Its status is the free text a
+  // row written before Build Prompt 52 carries, so the screen has to label it
+  // from received_date rather than from the column.
   insert(db, 'work_paper_requirements', {
     requirement_id: SMOKE.requirementId,
     work_paper_id: SMOKE.sentWorkPaperId,
@@ -608,6 +615,19 @@ export async function seedDatabase(db: DatabaseSync): Promise<void> {
     requirement_type: 'EVIDENCE',
     status: 'PENDING',
     due_date: today,
+    requested_date: '2026-01-05',
+    created_at: now,
+  });
+  insert(db, 'work_paper_requirements', {
+    requirement_id: SMOKE.receivedRequirementId,
+    work_paper_id: SMOKE.sentWorkPaperId,
+    organization_id: SMOKE.orgId,
+    description: 'Provide the approved bank mandate.',
+    requirement_type: 'EVIDENCE',
+    status: 'RECEIVED',
+    due_date: today,
+    requested_date: '2026-01-05',
+    received_date: '2026-01-12',
     created_at: now,
   });
   insert(db, 'work_paper_responsibles', {
