@@ -7,6 +7,12 @@ export const prerender = false;
  * auditor, year and risk rating, with a full-text search over the observation
  * and recommendation. Gate: WORK_PAPERS.view. Each row drills through to the
  * detail with the shared affordance cues.
+ *
+ * An auditor can also release several drafts at once (Build Prompt 53): the
+ * drafts they may submit carry a checkbox and one button submits them all
+ * through the same transition engine the detail's Submit button uses. The
+ * checkbox is offered only where the move would actually be allowed, so the
+ * list never invites an action it will then refuse.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
@@ -28,7 +34,7 @@ import {
 } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { loadEnumValues } from '@grc/workflow/transitions';
-import { WORK_PAPER_ENUM_TYPE } from '@grc/workflow/workPaperActions';
+import { WORK_PAPER_ENUM_TYPE, WP_STATUS } from '@grc/workflow/workPaperActions';
 import { loadDropdown, DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from '@grc/repos/dropdowns';
 
 const grc = Astro.locals.grc;
@@ -36,6 +42,9 @@ if (!grc) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'read', 'WORK_PAPER');
 const canCreate = can(Astro.locals, 'create', 'WORK_PAPER');
+// The permission the batch release needs, the same one the detail's Submit
+// button gates on (workflow/workPaperActions.ts).
+const canSubmit = grc.perms.includes('WORK_PAPERS.submit');
 const p = Astro.url.searchParams;
 const filters: WorkPaperFilters = {
   status: p.get('status') || undefined,
@@ -96,6 +105,22 @@ const riskClass = (r: string | null): string => {
 };
 const fmtDate = (d: string | null): string => (d ? d.slice(0, 10) : '');
 const done = p.get('done');
+const error = p.get('error');
+
+/**
+ * Whether this row may be released in a batch: it must be a draft, and it must
+ * be the acting auditor's own unless they are a reviewer (or the platform
+ * owner), who may release on someone's behalf. The transition engine is still
+ * the authority; this only decides whether to offer the checkbox, so the list
+ * never shows a tick box for something the save would refuse.
+ */
+const canSubmitRow = (r: WorkPaperListRow): boolean =>
+  canSubmit &&
+  r.status === WP_STATUS.DRAFT &&
+  (r.assignedAuditorId === grc.userId ||
+    grc.isPlatformOwner ||
+    grc.perms.includes('WORK_PAPERS.review'));
+const submittable = rows.filter(canSubmitRow);
 ---
 
 <GrcLayout title="Work papers">
@@ -119,6 +144,13 @@ const done = p.get('done');
     done && (
       <p class="grc-notice" role="status" style="margin-bottom:1rem">
         {decodeURIComponent(done)}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {decodeURIComponent(error)}
       </p>
     )
   }
@@ -222,48 +254,101 @@ const done = p.get('done');
             </p>
           </div>
         ) : (
-          <div class="grc-tablewrap">
-            <table class="grc-table" aria-label="Work papers">
-              <thead>
-                <tr>
-                  <th>Reference</th>
-                  <th>Title</th>
-                  <th>Affiliate</th>
-                  <th>Audit area</th>
-                  <th>Risk</th>
-                  <th>Auditor</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
+          <form method="post" action="/api/work-papers/submit-batch" data-batch-submit>
+            {submittable.length > 0 && (
+              <div class="grc-actionbar" style="margin:0 0 0.75rem">
+                <p class="grc-lead" style="margin:0">
+                  Tick the drafts to release, then submit them together. Each one goes through the
+                  same review workflow as submitting it on its own.
+                </p>
+                <button type="submit" class="grc-btn grc-btn--primary" data-batch-button disabled>
+                  Submit selected for review
+                </button>
+              </div>
+            )}
+            <div class="grc-tablewrap">
+              <table class="grc-table" aria-label="Work papers">
+                <thead>
                   <tr>
-                    <td>
-                      <a href={`/work-papers/${r.id}`}>{r.reference}</a>
-                    </td>
-                    <td>{r.observationTitle || 'Untitled'}</td>
-                    <td>{r.affiliateName ?? r.affiliateCode ?? '-'}</td>
-                    <td>{r.auditAreaName ?? '-'}</td>
-                    <td>
-                      {r.riskRating ? (
-                        <span class={riskClass(r.riskRating)}>{r.riskRating}</span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td>{r.assignedAuditorName ?? '-'}</td>
-                    <td>
-                      <span class="grc-pill">{statusLabel(labels, r.status)}</span>
-                    </td>
-                    <td class="grc-num">{fmtDate(r.updatedAt)}</td>
+                    {submittable.length > 0 && (
+                      <th scope="col">
+                        <span class="grc-vh">Select for submission</span>
+                      </th>
+                    )}
+                    <th>Reference</th>
+                    <th>Title</th>
+                    <th>Affiliate</th>
+                    <th>Audit area</th>
+                    <th>Risk</th>
+                    <th>Auditor</th>
+                    <th>Status</th>
+                    <th>Updated</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr>
+                      {submittable.length > 0 && (
+                        <td>
+                          {canSubmitRow(r) ? (
+                            <input
+                              type="checkbox"
+                              name="work_paper_id"
+                              value={r.id}
+                              data-batch-row
+                              aria-label={`Submit ${r.reference} for review`}
+                            />
+                          ) : (
+                            <span class="grc-vh">Not available for batch submission</span>
+                          )}
+                        </td>
+                      )}
+                      <td>
+                        <a href={`/work-papers/${r.id}`}>{r.reference}</a>
+                      </td>
+                      <td>{r.observationTitle || 'Untitled'}</td>
+                      <td>{r.affiliateName ?? r.affiliateCode ?? '-'}</td>
+                      <td>{r.auditAreaName ?? '-'}</td>
+                      <td>
+                        {r.riskRating ? (
+                          <span class={riskClass(r.riskRating)}>{r.riskRating}</span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td>{r.assignedAuditorName ?? '-'}</td>
+                      <td>
+                        <span class="grc-pill">{statusLabel(labels, r.status)}</span>
+                      </td>
+                      <td class="grc-num">{fmtDate(r.updatedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </form>
         )}
       </>
     )
   }
 </GrcLayout>
+
+<script>
+  // The batch button is disabled until something is ticked, so it never poses
+  // as an action with nothing to act on. Progressive: with no JavaScript the
+  // button is simply enabled and the endpoint refuses an empty selection with a
+  // message, which is the same answer arrived at a step later.
+  for (const form of document.querySelectorAll<HTMLFormElement>('[data-batch-submit]')) {
+    const button = form.querySelector<HTMLButtonElement>('[data-batch-button]');
+    if (!button) continue;
+    const boxes = Array.from(form.querySelectorAll<HTMLInputElement>('[data-batch-row]'));
+    const sync = (): void => {
+      const chosen = boxes.filter((b) => b.checked).length;
+      button.disabled = chosen === 0;
+      button.textContent =
+        chosen === 0 ? 'Submit selected for review' : `Submit ${chosen} for review`;
+    };
+    for (const box of boxes) box.addEventListener('change', sync);
+    sync();
+  }
+</script>
