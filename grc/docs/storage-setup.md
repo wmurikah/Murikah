@@ -115,8 +115,10 @@ to the Graph pair. Whichever you use, its redirect URI list must include the
 SharePoint callback above.
 
 The stored folder is a drive and item pair (`driveId/itemId`), because a folder
-id alone is ambiguous across drives. The folder picker on the settings screen
-records both.
+id alone is ambiguous across drives. The picker walks site, then drive, then
+folder: its first list is the document libraries the connected account can
+reach, each labelled with its site, and "Open" drills into the one you choose.
+Selecting a library without opening it stores that library's root.
 
 ## Dropbox
 
@@ -147,8 +149,10 @@ On `/settings/storage`, in this order:
 2. **Test connection.** The test writes a probe object and removes it again. A
    credential that can read but not write is a connection that fails on the
    first real upload, so a read-only check would report a false green.
-3. **Choose the folder.** "List folders" asks the provider what it has; picking
-   one records where evidence lands.
+3. **Choose the folder.** "List folders" asks the provider what it has. "Open"
+   drills into a folder and "Use this folder" records where evidence lands; on
+   SharePoint the first list is the sites and libraries themselves, because a
+   folder id there means nothing without the drive it sits in.
 4. **Store evidence here.** Only offered once a test has passed, and refused
    otherwise: evidence should not start depending on a connection nobody has
    proved reachable.
