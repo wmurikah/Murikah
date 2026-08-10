@@ -12,6 +12,7 @@ import {
   WP_STATUS,
   WORK_PAPER_ENUM_TYPE,
   actionForTarget,
+  grantForTransition,
   isEditable,
   editableStatuses,
 } from '../../src/lib/grc/workflow/workPaperActions.ts';
@@ -41,6 +42,40 @@ test('each action maps to the matrix grant an administrator can see', () => {
     );
   }
   assert.equal(actionForTarget('NOT_A_STATUS'), null);
+});
+
+test('the grant follows the move, not the status it lands on', () => {
+  // Build Prompt 56. Both ways into Submitted are the auditor's own release, so
+  // both ask for the grant an auditor holds; the reviewer's verdict and the
+  // release to the auditee keep approve, which an auditor correctly lacks.
+  const update = { module: 'WORK_PAPER', action: 'update' };
+  const approve = { module: 'WORK_PAPER', action: 'approve' };
+  assert.deepEqual(grantForTransition(WP_STATUS.DRAFT, WP_STATUS.SUBMITTED), update);
+  assert.deepEqual(grantForTransition(WP_STATUS.REVISION_REQUIRED, WP_STATUS.SUBMITTED), update);
+  assert.deepEqual(grantForTransition(WP_STATUS.UNDER_REVIEW, WP_STATUS.APPROVED), approve);
+  assert.deepEqual(
+    grantForTransition(WP_STATUS.UNDER_REVIEW, WP_STATUS.REVISION_REQUIRED),
+    approve,
+  );
+  assert.deepEqual(grantForTransition(WP_STATUS.APPROVED, WP_STATUS.SENT_TO_AUDITEE), approve);
+});
+
+test('a move the mapping does not name falls back to its target', () => {
+  // Starting a review is the reviewer's, through the catalogue entry for the
+  // status it reaches; a target this application cannot act on has no grant at
+  // all, so nothing is silently ungated.
+  assert.deepEqual(grantForTransition(WP_STATUS.SUBMITTED, WP_STATUS.UNDER_REVIEW), {
+    module: 'WORK_PAPER',
+    action: 'approve',
+  });
+  assert.equal(grantForTransition(WP_STATUS.DRAFT, 'NOT_A_STATUS'), null);
+});
+
+test('a hand-edited transition row still resolves its grant', () => {
+  assert.deepEqual(grantForTransition(' draft ', 'SUBMITTED'), {
+    module: 'WORK_PAPER',
+    action: 'update',
+  });
 });
 
 test('submitting is the only authoring step', () => {

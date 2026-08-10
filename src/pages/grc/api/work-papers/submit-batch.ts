@@ -8,12 +8,15 @@ export const prerender = false;
  * papers list and moves each of them Draft to Submitted.
  *
  * It is deliberately a loop over the same `executeTransition` the single Submit
- * button calls, not a bulk UPDATE. Every finding therefore passes the same
- * gates and leaves the same trail: the WORK_PAPERS.submit permission, the
- * `status_transitions` engine (allowed move, required_role, requires_comment,
- * not terminal), its own `work_paper_revisions` row, its own audit line, and
- * its own queued notification. A batch is many submissions, not a different
- * kind of submission, and nothing about being in a batch may weaken a check.
+ * button calls, not a bulk UPDATE, and it holds no permission check of its own:
+ * the grant a `Draft -> Submitted` move requires is decided once, in
+ * `workPaperActions.ts`, and both paths ask it there (Build Prompt 56). Every
+ * finding therefore passes the same gates and leaves the same trail: the move's
+ * matrix grant, the `status_transitions` engine (allowed move, required_role,
+ * requires_comment, not terminal), its own `work_paper_revisions` row, its own
+ * audit line, and its own queued notification. A batch is many submissions, not
+ * a different kind of submission, and nothing about being in a batch may weaken
+ * a check.
  *
  * Each finding stands alone: one that cannot move (already submitted by a
  * colleague, or outside this auditor's rights) is reported and the rest still
