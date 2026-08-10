@@ -2,8 +2,8 @@
  * The work-paper transition executor. Every status change runs through here, so
  * the ported lifecycle is enforced in one place, never hard-coded:
  *
- *  1. the target's WORK_PAPERS.* permission is required (from the action
- *     catalogue), on top of
+ *  1. the move's matrix grant is required (from the action catalogue, per
+ *     `from -> to` pair rather than per target status), on top of
  *  2. the foundation engine's validation of the transition against
  *     status_transitions (from -> to allowed, required_role held, requires_comment
  *     satisfied, not a terminal state);
@@ -15,11 +15,17 @@
  *  5. and a notification is enqueued for submit, send and response events.
  *
  * A platform owner is exempt from the required_role (as in the engine) but the
- * WORK_PAPERS.* permission still applies through their permission set.
+ * grant still applies through their matrix, which carries everything.
  */
 import type { Client, InStatement } from '@libsql/client/web';
 import { checkTransition, loadTransitions, loadTerminalStates } from './transitions';
-import { WORK_PAPER_ENUM_TYPE, WP_STATUS, actionForTarget, sameStatus } from './workPaperActions';
+import {
+  WORK_PAPER_ENUM_TYPE,
+  WP_STATUS,
+  actionForTarget,
+  grantForTransition,
+  sameStatus,
+} from './workPaperActions';
 import { canMatrix, type PermissionMatrix } from '@grc/auth/matrix';
 import { getWorkPaper } from '@grc/repos/workPapers';
 import { insertRevisionStatement } from '@grc/repos/revisions';
@@ -42,9 +48,24 @@ export interface TransitionActor {
   perms: string[];
 }
 
-/** Whether the actor holds the matrix grant an action needs. */
-function holdsGrant(actor: TransitionActor, meta: { grant: { module: string; action: string } }) {
-  return canMatrix(actor.matrix, meta.grant.action, meta.grant.module);
+/**
+ * Whether this matrix holds the grant a `from -> to` move requires
+ * (Build Prompt 56).
+ *
+ * The one guard both paths use. `grantForTransition` decides which grant that
+ * is, per move rather than per target status, so the auditor's submit asks for
+ * `update` and the reviewer's verdict asks for `approve`; nothing here, on the
+ * detail, or on the list restates the mapping. Exported because the work papers
+ * list has to know, before it draws a tick box, whether the batch release it
+ * offers would be allowed.
+ */
+export function holdsTransitionGrant(
+  matrix: PermissionMatrix,
+  fromStatus: string,
+  toStatus: string,
+): boolean {
+  const grant = grantForTransition(fromStatus, toStatus);
+  return grant != null && canMatrix(matrix, grant.action, grant.module);
 }
 
 export type TransitionResult =
@@ -90,9 +111,9 @@ export async function executeTransition(
   const meta = actionForTarget(toStatus);
   if (!meta) return { ok: false, code: 'unknown_action', message: 'Unknown workflow action.' };
 
-  // The matrix grant for this action (a platform owner is not exempt from it;
+  // The matrix grant for this move (a platform owner is not exempt from it;
   // their matrix carries what they may do).
-  if (!holdsGrant(actor, meta)) {
+  if (!holdsTransitionGrant(actor.matrix, fromStatus, toStatus)) {
     return { ok: false, code: 'forbidden', message: 'You do not have permission for that action.' };
   }
 
@@ -287,11 +308,14 @@ export async function availableActions(
       });
       continue;
     }
-    if (!holdsGrant(actor, meta)) {
+    // The grant this move needs, not the one its target usually needs: the same
+    // status is reached by the auditor's work and by the reviewer's.
+    const grant = grantForTransition(t.fromStatus, t.toStatus) ?? meta.grant;
+    if (!canMatrix(actor.matrix, grant.action, grant.module)) {
       withheld.push({
         toStatus: t.toStatus,
         label: meta.label,
-        reason: `your role does not hold ${meta.grant.module}.${meta.grant.action}`,
+        reason: `your role does not hold ${grant.module}.${grant.action}`,
       });
       continue;
     }

@@ -5,10 +5,12 @@
  * Validity is NOT decided here: which transitions exist, the `required_role` and
  * the `requires_comment` flag all come from `status_transitions` through the
  * foundation engine. This catalogue adds, per target status, the three things
- * the engine does not carry but the source's WorkPaperService does: the
- * WORK_PAPERS.* permission the action needs, the dated attribution field to
- * stamp, and the email template to enqueue. Both guards (this permission and the
- * engine's required_role) must pass, as section 5 requires.
+ * the engine does not carry but the source's WorkPaperService does: the matrix
+ * grant the action needs, the dated attribution field to stamp, and the email
+ * template to enqueue. Both guards (this grant and the engine's required_role)
+ * must pass, as section 5 requires. The grant is stated per `from -> to` move
+ * where a status is reached by more than one person's work (`TRANSITION_GRANTS`,
+ * Build Prompt 56), with the target's entry as the fallback.
  *
  * The status values and attribution/template names follow the hassaudit schema
  * and are documented in grc/docs/schema-assumptions.md; they are the single
@@ -59,7 +61,8 @@ export interface Grant {
 
 export interface WpActionMeta {
   /**
-   * The matrix grant the actor must hold, on top of the engine's required_role.
+   * The matrix grant the actor must hold to reach this status, on top of the
+   * engine's required_role, when no move into it says otherwise.
    *
    * A matrix cell, not a derived `WORK_PAPERS.*` string (Build Prompt 55). The
    * derived list is a second representation of the same grant, and a second
@@ -67,6 +70,10 @@ export interface WpActionMeta {
    * `WORK_PAPER.update` could still fail a `perms.includes('WORK_PAPERS.submit')`
    * check, and nothing on the access-control screen would explain why. The
    * workflow now asks the matrix the administrator actually edits.
+   *
+   * A status can be reached by more than one move, and the moves need not belong
+   * to the same person, so `TRANSITION_GRANTS` below states the grant per
+   * `from -> to` pair and this is the fallback for the moves it does not name.
    */
   grant: Grant;
   /** The dated attribution field to stamp, if the source stamps one on this move. */
@@ -84,11 +91,13 @@ export interface WpActionMeta {
   authoring?: boolean;
 }
 
-// Keyed by target status. The permission mapping preserves the source: submit,
-// review (and request revision), approve, send. The response cycle is a reviewer
-// activity here (the auditee portal is a later prompt), so it also gates on
-// review. Only `finding_shared` is a confirmed seeded template; the other
-// template codes are documented assumptions and enqueue best-effort.
+// Keyed by target status, and the grant here is the default for every move into
+// it; `TRANSITION_GRANTS` below overrides it where a move belongs to somebody
+// else. The permission mapping preserves the source: submit, review (and request
+// revision), approve, send. The response cycle is a reviewer activity here (the
+// auditee portal is a later prompt), so it also gates on review. Only
+// `finding_shared` is a confirmed seeded template; the other template codes are
+// documented assumptions and enqueue best-effort.
 const ACTIONS: Record<string, WpActionMeta> = {
   [WP_STATUS.SUBMITTED]: {
     // Submitting is an authoring step: whoever may edit the draft may release it.
@@ -161,6 +170,58 @@ export function actionForTarget(target: string): WpActionMeta | null {
     if (normaliseStatus(status) === wanted) return meta;
   }
   return null;
+}
+
+const UPDATE_GRANT: Grant = { module: 'WORK_PAPER', action: 'update' };
+const APPROVE_GRANT: Grant = { module: 'WORK_PAPER', action: 'approve' };
+
+/**
+ * The matrix grant a single move requires, stated per `from -> to` pair.
+ *
+ * The grant belongs to the move, not to the status it lands on, because the
+ * same status is reached by two different people's work (Build Prompt 56). A
+ * finding arrives at Submitted only by its auditor releasing it, from Draft or
+ * from Revision Required, and an auditor holds `update`, never `approve`;
+ * gating every move on one blanket permission refused the auditor the one
+ * action that is theirs, with the engine's own "not permitted" wording, while
+ * the transition row allowed it all along.
+ *
+ * Only the moves whose grant differs from their target's default are named
+ * here; every other move falls back to the catalogue entry for the status it
+ * reaches, so a workflow row this list does not mention is still gated.
+ */
+const TRANSITION_GRANTS: ReadonlyArray<{ from: string; to: string; grant: Grant }> = [
+  // The auditor's own moves: releasing a draft, and releasing it again after a
+  // reviewer has sent it back.
+  { from: WP_STATUS.DRAFT, to: WP_STATUS.SUBMITTED, grant: UPDATE_GRANT },
+  { from: WP_STATUS.REVISION_REQUIRED, to: WP_STATUS.SUBMITTED, grant: UPDATE_GRANT },
+  // The head of audit's moves: the verdict on a review, and the release to the
+  // auditee.
+  { from: WP_STATUS.UNDER_REVIEW, to: WP_STATUS.APPROVED, grant: APPROVE_GRANT },
+  { from: WP_STATUS.UNDER_REVIEW, to: WP_STATUS.REVISION_REQUIRED, grant: APPROVE_GRANT },
+  { from: WP_STATUS.APPROVED, to: WP_STATUS.SENT_TO_AUDITEE, grant: APPROVE_GRANT },
+];
+
+/**
+ * The matrix grant a move requires, or null when the target is not an action
+ * this application knows how to perform.
+ *
+ * This is the single mapping both paths ask: the detail's offer and its single
+ * Submit, and the list's tick boxes and its batch release. The batch is many
+ * submissions, not a different kind of submission, so it may not hold a second
+ * copy of the answer.
+ *
+ * Comparison is whitespace and case tolerant for the same reason
+ * `actionForTarget` is: `status_transitions` is operator-managed data.
+ */
+export function grantForTransition(fromStatus: string, toStatus: string): Grant | null {
+  const from = normaliseStatus(fromStatus);
+  const to = normaliseStatus(toStatus);
+  const named = TRANSITION_GRANTS.find(
+    (t) => normaliseStatus(t.from) === from && normaliseStatus(t.to) === to,
+  );
+  if (named) return named.grant;
+  return actionForTarget(toStatus)?.grant ?? null;
 }
 
 /** A status reduced to what it means, for comparison only, never for storage. */
