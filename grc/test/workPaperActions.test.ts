@@ -20,12 +20,42 @@ test('the enum type is the work-paper status type', () => {
   assert.equal(WORK_PAPER_ENUM_TYPE, 'WORK_PAPER_STATUS');
 });
 
-test('each action maps to its WORK_PAPERS permission', () => {
-  assert.equal(actionForTarget(WP_STATUS.SUBMITTED)?.permission, 'WORK_PAPERS.submit');
-  assert.equal(actionForTarget(WP_STATUS.REVISION_REQUIRED)?.permission, 'WORK_PAPERS.review');
-  assert.equal(actionForTarget(WP_STATUS.APPROVED)?.permission, 'WORK_PAPERS.approve');
-  assert.equal(actionForTarget(WP_STATUS.SENT_TO_AUDITEE)?.permission, 'WORK_PAPERS.send');
+test('each action maps to the matrix grant an administrator can see', () => {
+  // The grants are matrix cells, not derived WORK_PAPERS.* strings (Build
+  // Prompt 55): submitting follows the authoring grant an auditor holds, and
+  // the reviewer steps follow approve, which auditors correctly lack.
+  assert.deepEqual(actionForTarget(WP_STATUS.SUBMITTED)?.grant, {
+    module: 'WORK_PAPER',
+    action: 'update',
+  });
+  for (const reviewerStep of [
+    WP_STATUS.UNDER_REVIEW,
+    WP_STATUS.REVISION_REQUIRED,
+    WP_STATUS.APPROVED,
+    WP_STATUS.SENT_TO_AUDITEE,
+  ]) {
+    assert.deepEqual(
+      actionForTarget(reviewerStep)?.grant,
+      { module: 'WORK_PAPER', action: 'approve' },
+      `${reviewerStep} is the reviewer's`,
+    );
+  }
   assert.equal(actionForTarget('NOT_A_STATUS'), null);
+});
+
+test('submitting is the only authoring step', () => {
+  assert.equal(actionForTarget(WP_STATUS.SUBMITTED)?.authoring, true);
+  for (const reviewerStep of [WP_STATUS.APPROVED, WP_STATUS.REVISION_REQUIRED]) {
+    assert.ok(!actionForTarget(reviewerStep)?.authoring, `${reviewerStep} is not authoring`);
+  }
+});
+
+test('a hand-edited status still matches its action', () => {
+  // status_transitions is operator-managed, and a trailing space or a different
+  // capitalisation is invisible on every screen that shows it.
+  assert.equal(actionForTarget(' Submitted ')?.label, 'Submit for review');
+  assert.equal(actionForTarget('submitted')?.label, 'Submit for review');
+  assert.equal(actionForTarget('  ')?.label, undefined);
 });
 
 test('submit and send stamp only their dated attribution', () => {
