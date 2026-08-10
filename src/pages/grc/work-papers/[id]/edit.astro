@@ -30,7 +30,7 @@ import {
   type ControlDropdowns,
 } from '@grc/repos/dropdowns';
 import { isEditable } from '@grc/workflow/workPaperActions';
-import { storageConfigured } from '@grc/storage';
+import { storageConfiguredFor } from '@grc/storage';
 import { listAttachments, type Attachment } from '@grc/repos/evidence';
 
 const grc = Astro.locals.grc;
@@ -39,6 +39,7 @@ const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const { id } = Astro.params;
 
 const allowed = can(Astro.locals, 'update', 'WORK_PAPER');
+const storageReady = await storageConfiguredFor(grc.organizationId);
 
 let wp = null as WorkPaperDetail | null;
 let areas: Option[] = [];
@@ -111,7 +112,7 @@ if (allowed && !loadError && !wp) Astro.response.status = 404;
           entityId: id ?? '',
           items: evidence,
           canDelete: true,
-          storageReady: storageConfigured(),
+          storageReady,
         }}
       />
     )

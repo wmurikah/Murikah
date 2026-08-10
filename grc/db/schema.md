@@ -67,6 +67,7 @@ never their internal columns.
 - **security_events**: event_id, occurred_at, event_type, severity, user_id, actor_email, ip_address, details, resolved_at, resolved_by
 - **sessions**: session_id, user_id, token_hash, ip, user_agent, created_at, expires_at, last_seen_at
 - **status_transitions**: enum_type, from_status, to_status, required_role, requires_comment
+- **storage_connections**: connection_id, organization_id, provider, config_sealed, folder_id, folder_name, status, status_detail, is_active, connected_at, connected_by, created_at, updated_at
 - **sub_areas**: sub_area_id, audit_area_id, organization_id, sub_area_name, control_objectives, risk_description, test_objective, testing_steps, is_active, created_at, updated_at, deleted_at
 - **subscriptions**: subscription_id, organization_id, plan_code, status, billing_cycle, seats, trial_ends_at, current_period_start, current_period_end, external_ref, created_at, updated_at
 - **users**: user_id, organization_id, email, full_name, password_hash, role_code, affiliate_code, phone, status, must_change_password, last_login_at, created_at, updated_at, deleted_at, is_platform_owner
