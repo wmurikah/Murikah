@@ -35,6 +35,7 @@ import {
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { loadEnumValues } from '@grc/workflow/transitions';
 import { WORK_PAPER_ENUM_TYPE, WP_STATUS } from '@grc/workflow/workPaperActions';
+import { holdsTransitionGrant } from '@grc/workflow/workPaperWorkflow';
 import { loadDropdown, DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from '@grc/repos/dropdowns';
 
 const grc = Astro.locals.grc;
@@ -42,9 +43,11 @@ if (!grc) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'read', 'WORK_PAPER');
 const canCreate = can(Astro.locals, 'create', 'WORK_PAPER');
-// The permission the batch release needs, the same one the detail's Submit
-// button gates on (workflow/workPaperActions.ts).
-const canSubmit = grc.perms.includes('WORK_PAPERS.submit');
+// The permission the batch release needs, asked of the one guard the detail's
+// Submit button and the batch endpoint both go through (Build Prompt 56). The
+// batch is many submissions, not a different kind of submission, so this page
+// may not carry its own idea of what submitting requires.
+const canSubmit = holdsTransitionGrant(grc.matrix, WP_STATUS.DRAFT, WP_STATUS.SUBMITTED);
 const p = Astro.url.searchParams;
 const filters: WorkPaperFilters = {
   status: p.get('status') || undefined,
