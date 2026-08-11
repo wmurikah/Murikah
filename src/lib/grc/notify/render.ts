@@ -302,26 +302,46 @@ export function buildTestEmail(mailbox: string): { subject: string; body: string
   return { subject: 'Email connection test - Internal Audit System', body, text: intro };
 }
 
-/** One finding in the submissions table of a digest (Build Prompt 53). */
+/** One finding in a digest table (Build Prompt 53). */
 export interface SubmittedRow {
   reference: string;
   title: string;
-  /** Audit area and risk rating, or whatever of them the finding carries. */
+  /** The third column: the audit area and risk rating, or the status. */
   detail: string;
   link?: string;
 }
+
+/**
+ * The tables a digest can carry (Build Prompt 60).
+ *
+ * A reminder used to render as the same bare block as everything else, one line
+ * per work paper reading "Reminder: draft work paper WP-... [Open]", which is
+ * neither a list nor a message: it is the payload with a link stapled to it. It
+ * is now a table of its own, built by the same code as the submissions table, so
+ * the two read alike and there is one place to keep Outlook-safe.
+ */
+export type DigestTable = 'submitted' | 'reminder';
 
 export interface DigestItem {
   subject: string;
   intro: string;
   link?: string;
   /**
-   * Set for a submitted finding, so the digest can list it as a table row
-   * rather than as a block of its own. This is what turns "seven findings were
-   * submitted" from seven emails, or one email of seven repeated paragraphs,
-   * into one table a reviewer can read in a glance.
+   * Set when the item belongs in a table rather than as a block of its own.
+   * This is what turns "seven findings are waiting" from seven emails, or one
+   * email of seven repeated paragraphs, into one table read at a glance.
    */
   submitted?: SubmittedRow;
+  /** Which table it belongs in; submissions when unsaid, as they always were. */
+  table?: DigestTable;
+}
+
+/** Where a digest's call to action points, per table. */
+export interface DigestLinks {
+  /** The findings waiting on a reviewer. */
+  review: string;
+  /** The drafts a reminder is about. */
+  drafts: string;
 }
 
 const TH =
@@ -338,7 +358,7 @@ const TD =
  * layout. `role="presentation"` keeps a screen reader from announcing the
  * wrapper chrome as data.
  */
-function submissionsTable(rows: SubmittedRow[]): string {
+function digestTable(rows: SubmittedRow[], detailHeading: string): string {
   const body = rows
     .map((r) => {
       const ref = r.link
@@ -355,15 +375,15 @@ function submissionsTable(rows: SubmittedRow[]): string {
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ` +
     `style="border-collapse:collapse;width:100%;margin:12px 0 20px">` +
     `<thead><tr><th style="${TH}">Reference</th><th style="${TH}">Title</th>` +
-    `<th style="${TH}">Detail</th></tr></thead><tbody>${body}</tbody></table>`
+    `<th style="${TH}">${escapeHtml(detailHeading)}</th></tr></thead><tbody>${body}</tbody></table>`
   );
 }
 
-function reviewButton(link: string): string {
+function reviewButton(link: string, label: string): string {
   return (
     `<a href="${escapeHtml(link)}" style="display:inline-block;background:${NAVY};color:#fff;` +
     `text-decoration:none;padding:11px 20px;border-radius:6px;font-weight:600;font-size:14px">` +
-    `Review the queue</a>`
+    `${escapeHtml(label)}</a>`
   );
 }
 
@@ -378,8 +398,13 @@ function reviewButton(link: string): string {
  * one email per recipient. A single item that is not a submission keeps its own
  * subject, as before.
  */
-export function buildDigest(items: DigestItem[], reviewLink?: string): Rendered {
-  const submitted = items.map((i) => i.submitted).filter((r): r is SubmittedRow => r != null);
+export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered {
+  const rowsIn = (table: DigestTable): SubmittedRow[] =>
+    items
+      .filter((i) => i.submitted != null && (i.table ?? 'submitted') === table)
+      .map((i) => i.submitted as SubmittedRow);
+  const submitted = rowsIn('submitted');
+  const reminders = rowsIn('reminder');
   const others = items.filter((i) => i.submitted == null);
 
   const subject =
@@ -387,9 +412,13 @@ export function buildDigest(items: DigestItem[], reviewLink?: string): Rendered 
       ? submitted.length === 1
         ? `Work paper submitted for review: ${submitted[0].reference}`
         : `${submitted.length} work papers submitted for review`
-      : items.length === 1
-        ? items[0].subject
-        : `Audit updates: ${items.length} notifications`;
+      : reminders.length > 0
+        ? reminders.length === 1
+          ? `Draft work paper waiting: ${reminders[0].reference}`
+          : `${reminders.length} draft work papers waiting`
+        : items.length === 1
+          ? items[0].subject
+          : `Audit updates: ${items.length} notifications`;
 
   const sections: string[] = [];
   if (submitted.length > 0) {
@@ -399,12 +428,32 @@ export function buildDigest(items: DigestItem[], reviewLink?: string): Rendered 
         : `${submitted.length} work papers have been submitted for your review. Please log in and review them.`;
     sections.push(
       `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(lead)}</p>`,
-      submissionsTable(submitted),
-      `<p style="margin:0 0 8px">${reviewButton(reviewLink ?? '#')}</p>`,
+      digestTable(submitted, 'Detail'),
+      `<p style="margin:0 0 8px">${reviewButton(links?.review ?? '#', 'Review the queue')}</p>`,
+    );
+  }
+  // The reminders, as their own table with their own lead and one button
+  // (Build Prompt 60). Several drafts compile into one table in one email, for
+  // the same reason submissions do: an auditor with six stale drafts wants one
+  // list to work through, not six envelopes.
+  if (reminders.length > 0) {
+    if (submitted.length > 0) {
+      sections.push(
+        `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Still in draft</p>`,
+      );
+    }
+    const lead =
+      reminders.length === 1
+        ? 'A work paper of yours is still in draft. Please review it and submit it when it is ready.'
+        : `${reminders.length} work papers of yours are still in draft. Please review them and submit them when they are ready.`;
+    sections.push(
+      `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(lead)}</p>`,
+      digestTable(reminders, 'Status'),
+      `<p style="margin:0 0 8px">${reviewButton(links?.drafts ?? '#', 'Review the drafts')}</p>`,
     );
   }
   if (others.length > 0) {
-    if (submitted.length > 0) {
+    if (submitted.length > 0 || reminders.length > 0) {
       sections.push(
         `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Also waiting</p>`,
       );
@@ -438,6 +487,9 @@ export function buildDigest(items: DigestItem[], reviewLink?: string): Rendered 
 
 /** The notification type whose digest is the submissions table. */
 const SUBMISSION_TYPE = 'WP_SUBMITTED';
+
+/** The reminder types that compile into the drafts table (Build Prompt 60). */
+const REMINDER_TYPES = new Set(['STALE_REMINDER']);
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -473,10 +525,27 @@ function digestItem(row: DigestSource): DigestItem {
       subject: row.subject,
       intro: '',
       link,
+      table: 'submitted',
       submitted: {
         reference: str(payload.reference) || row.subject,
         title: str(payload.title),
         detail,
+        link,
+      },
+    };
+  }
+  // A reminder is a row in the drafts table, under the status it is in, rather
+  // than a bare line with a link stapled to it (Build Prompt 60).
+  if (REMINDER_TYPES.has(row.batchType)) {
+    return {
+      subject: row.subject,
+      intro: '',
+      link,
+      table: 'reminder',
+      submitted: {
+        reference: str(payload.reference) || row.subject,
+        title: str(payload.title),
+        detail: str(payload.status) || 'Draft',
         link,
       },
     };
@@ -502,7 +571,7 @@ export interface DigestPlan {
  * a mailbox, a network or a clock (Build Prompt 53). The review link is passed
  * in rather than imported, which is what keeps this module import-free.
  */
-export function planNormalDigests(rows: DigestSource[], reviewLink: string): DigestPlan[] {
+export function planNormalDigests(rows: DigestSource[], links: DigestLinks): DigestPlan[] {
   const byRecipient = new Map<string, DigestSource[]>();
   for (const row of rows) {
     const list = byRecipient.get(row.recipientEmail) ?? [];
@@ -511,7 +580,7 @@ export function planNormalDigests(rows: DigestSource[], reviewLink: string): Dig
   }
   const plans: DigestPlan[] = [];
   for (const [email, group] of byRecipient) {
-    const digest = buildDigest(group.map(digestItem), reviewLink);
+    const digest = buildDigest(group.map(digestItem), links);
     plans.push({
       email,
       subject: digest.subject,

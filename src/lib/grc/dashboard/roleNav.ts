@@ -62,7 +62,8 @@ export type CountKey =
   | 'myActionPlans'
   | 'myObservations'
   | 'responsesToReview'
-  | 'approvedQueue';
+  | 'approvedQueue'
+  | 'myRequirements';
 
 export interface NavItemDef {
   label: string;
@@ -70,7 +71,14 @@ export interface NavItemDef {
   icon: string;
   /** The badge count to show on this link, if any. */
   countKey?: CountKey;
-  /** Render the badge in the alert colour (e.g. overdue). */
+  /**
+   * Render the badge in the alert colour.
+   *
+   * Every pending badge is an alert now (Build Prompt 60): the badges replaced
+   * the Notifications entry, and their whole job is to say "something here is
+   * yours to do". A count that has to be interpreted before it is noticed is a
+   * count that gets skipped, so they read the same wherever they appear.
+   */
   alert?: boolean;
 }
 export interface NavGroupDef {
@@ -81,7 +89,7 @@ export interface NavGroupDef {
 
 /**
  * The navigation groups visible to the context, with empty groups dropped. The
- * dashboard and notifications are for everyone; the audit workbench follows the
+ * dashboard is for everyone; the audit workbench follows the
  * work-paper and action-plan permissions; the auditee section shows for the
  * auditee roles or anyone who responds or reviews; board reports follow the
  * reports permission or the board roles; analytics is AI-gated for auditor
@@ -130,6 +138,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
       href: '/work-papers',
       icon: 'workpapers',
       countKey: 'pendingReview',
+      alert: true,
     });
   if (show.actionPlans)
     audit.push({
@@ -145,6 +154,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
       href: '/auditee-responses',
       icon: 'responses',
       countKey: 'responsesToReview',
+      alert: true,
     });
   // Requirements is the one entry an auditee sees for a reason (Build Prompt
   // 58): being asked for a document is not a permission an administrator grants,
@@ -152,7 +162,13 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
   // owns. So it is offered to the audit side and to the auditee side alike, and
   // an owner who holds nothing else still has somewhere to provide it.
   if (show.workPapers || show.auditee)
-    audit.push({ label: 'Requirements', href: '/requirements', icon: 'list' });
+    audit.push({
+      label: 'Requirements',
+      href: '/requirements',
+      icon: 'list',
+      countKey: 'myRequirements',
+      alert: true,
+    });
   if (show.reports) audit.push({ label: 'Reports', href: '/reports', icon: 'reports' });
   if (show.analytics) audit.push({ label: 'Analytics', href: '/analytics', icon: 'analytics' });
 
@@ -190,10 +206,13 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     );
   }
 
-  const overview: NavItemDef[] = [
-    { label: 'Dashboard', href: '/', icon: 'dashboard' },
-    { label: 'Notifications', href: '/notifications', icon: 'bell' },
-  ];
+  // Notifications is not a module and no longer pretends to be one (Build Prompt
+  // 60). It was a destination that listed what every other destination already
+  // knew, so a person checked two places for the same fact and the sidebar
+  // carried an entry that led away from the work. The bell in the sidebar head
+  // still opens the centre for anyone who wants the history; what is waiting
+  // now shows as a count on the module it is waiting in.
+  const overview: NavItemDef[] = [{ label: 'Dashboard', href: '/', icon: 'dashboard' }];
   // What is coming in and what is going out belong together. The send queue used
   // to sit in Setup under the same bell as Notifications, which read as the same
   // destination twice; it is neither a setting nor an inbox, and now says so.
