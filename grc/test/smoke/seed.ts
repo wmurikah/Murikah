@@ -114,6 +114,7 @@ export const SMOKE = {
   inheritOrgName: 'Tana Energy Limited',
   inheritAffiliateCode: 'TNA',
   inheritAuditAreaId: 'AA-TANA',
+  inheritSubAreaId: 'SA-TANA',
   inheritAuditorId: 'USR-TANA-AUD',
   inheritAuditorEmail: 'auditor@tanaenergy.example',
   // One draft to submit on its own, and two to release together.
@@ -639,6 +640,14 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
     is_active: 1,
     created_at: now,
   });
+  insert(db, 'sub_areas', {
+    sub_area_id: SMOKE.inheritSubAreaId,
+    audit_area_id: SMOKE.inheritAuditAreaId,
+    organization_id: SMOKE.inheritOrgId,
+    sub_area_name: 'Depot stock control',
+    is_active: 1,
+    created_at: now,
+  });
   insert(db, 'users', {
     user_id: SMOKE.inheritAuditorId,
     organization_id: SMOKE.inheritOrgId,
@@ -661,7 +670,12 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
       year: 2026,
       affiliate_code: SMOKE.inheritAffiliateCode,
       audit_area_id: SMOKE.inheritAuditAreaId,
+      sub_area_id: SMOKE.inheritSubAreaId,
       work_paper_date: today,
+      // A complete finding: the inheriting-organisation case submits these, and
+      // a submission needs every required field (Build Prompt 59).
+      audit_period_from: '2026-01-01',
+      audit_period_to: '2026-03-31',
       observation_title: `Depot control weakness ${i + 1}`,
       observation_description: 'Raised in an organisation that inherits its grants.',
       risk_rating: 'Medium',
