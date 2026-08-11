@@ -741,14 +741,16 @@ async function readSidebarCounts(
                            WHERE ${RO.requirement_id} = ${R.requirement_id} AND ${RO.user_id} = ?)
                   AND COALESCE((SELECT ${RS.review_status} FROM requirement_submissions sub
                                  WHERE ${RS.requirement_id} = ${R.requirement_id}
-                              ORDER BY ${RS.round_number} DESC LIMIT 1), 'MORE_INFO') = 'MORE_INFO')
+                              ORDER BY COALESCE(${RS.round_number}, 0) DESC,
+                                       ${RS.submitted_at} DESC LIMIT 1), 'MORE_INFO') = 'MORE_INFO')
                  OR
                  (EXISTS (SELECT 1 FROM work_papers wp
                            WHERE wp.work_paper_id = ${R.work_paper_id}
                              AND wp.assigned_auditor_id = ?)
                   AND (SELECT ${RS.review_status} FROM requirement_submissions sub
                         WHERE ${RS.requirement_id} = ${R.requirement_id}
-                     ORDER BY ${RS.round_number} DESC LIMIT 1) = 'PENDING')
+                     ORDER BY COALESCE(${RS.round_number}, 0) DESC,
+                              ${RS.submitted_at} DESC LIMIT 1) = 'PENDING')
                )`,
       args: [organizationId, userId, userId],
     }),

@@ -254,6 +254,51 @@ audit decided on each round, and when the ask ended.
 The migration file carries the queries for what each owner still owes, the trail
 for one requirement, and how long audit is taking to answer.
 
+### Migration 007, the requirement round number
+
+`grc/db/migrations/007-requirement-round-number.sql` (Build Prompt 61). It adds
+`round_number` to `requirement_submissions` and numbers the rows already there,
+per requirement, in submission order.
+
+- **Apply this before or with the release.** Until it is applied, the
+  requirements screens and `/api/sidebar-counts` fail with `no such column:
+sub.round_number`.
+- The operator's own `grc-requirements-workflow.sql` created the table without
+  the column and ordered a requirement's rounds by `submitted_at`; migration 006
+  created it with the column. The former is what was applied, so the two shapes
+  drifted and the code shipped reading the half the database does not have. This
+  reconciles them on the column, because a round is an ordinal quoted in
+  correspondence as "round 2" and must not silently reorder itself when two
+  rounds share a timestamp.
+- One `ADD COLUMN` and one `UPDATE`: no key change, no table rebuild, nothing
+  deleted. Running it twice is safe (the second run fails harmlessly with
+  "duplicate column name", and the backfill is idempotent).
+- The backfill numbers a row by how many rows of the same requirement were
+  submitted no later than it, ties broken by `submission_id` so the numbering is
+  total and repeatable.
+- The reads tolerate a row that is not yet numbered (they fall back to
+  `submitted_at`), so the window between deploying and applying this degrades in
+  order rather than at random.
+
+The migration file carries the verification queries: unnumbered rows, gaps and
+repeats per requirement, and the trail as the screen reads it.
+
+### The workflow enum, and why the smoke seed spells it in lower case
+
+`status_transitions` keys every workflow in the product by `enum_type`, and more
+than one of them defines a `Draft -> Submitted`: the work paper's
+(`work_paper_status`) and the auditee response's (`response_status`). The live
+database spells the work-paper workflow in lower case; the code spelled it in
+upper case, so a case-sensitive lookup matched none of its rows, the engine
+loaded an empty rule set, and every move a finding could make was refused with
+"A move from Draft to Submitted is not permitted" (Build Prompt 61).
+
+No migration is needed. The code now names the workflow as the database spells
+it, every reference read is scoped to one enum and compares it whitespace and
+case tolerantly, and a refused move logs the `enum_type` it searched beside the
+`enum_type`s that do define the move, so the next mismatch of this kind explains
+itself. The smoke seed mirrors the live shape, decoy row included.
+
 ## Storage provider secrets (never committed)
 
 The OAuth providers need the platform's own application registration, which is

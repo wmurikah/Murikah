@@ -13,13 +13,22 @@ import {
   WORK_PAPER_ENUM_TYPE,
   actionForTarget,
   canonicalTarget,
+  enumTypeForEntity,
   grantForTransition,
   isEditable,
   editableStatuses,
 } from '../../src/lib/grc/workflow/workPaperActions.ts';
 
-test('the enum type is the work-paper status type', () => {
-  assert.equal(WORK_PAPER_ENUM_TYPE, 'WORK_PAPER_STATUS');
+test('the enum type names the workflow as the live database spells it', () => {
+  // Build Prompt 61. `status_transitions` keys every workflow by this column and
+  // two of them define a Draft to Submitted, so it is the scope of every lookup
+  // a work paper makes. The live table spells it in lower case; the code spelled
+  // it in upper case, and a case-sensitive lookup matched none of its rows.
+  assert.equal(WORK_PAPER_ENUM_TYPE, 'work_paper_status');
+  assert.equal(enumTypeForEntity('work_paper'), WORK_PAPER_ENUM_TYPE);
+  // The module answers for its own entity and keeps no copy of anybody else's.
+  assert.equal(enumTypeForEntity('action_plan'), null);
+  assert.equal(enumTypeForEntity(''), null);
 });
 
 test('each action maps to the matrix grant an administrator can see', () => {
