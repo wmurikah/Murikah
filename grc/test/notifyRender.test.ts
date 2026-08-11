@@ -22,14 +22,29 @@ import {
   escapeHtml,
 } from '../../src/lib/grc/notify/render.ts';
 
-test('the catalogue has the source types plus due-soon and password-reset', () => {
-  assert.equal(NOTIFICATION_TYPES.length, 20);
+test('the catalogue has the source types plus due-soon, password-reset and the requirements loop', () => {
+  assert.equal(NOTIFICATION_TYPES.length, 23);
   assert.ok(NOTIFICATION_TYPES.includes('DUE_SOON_REMINDER'));
   assert.ok(NOTIFICATION_TYPES.includes('PASSWORD_RESET'));
+  // Build Prompt 58: the three events of the requirements loop. All three are
+  // between the auditor and the owner, so none copies the head of audit, and
+  // all three batch into the ordinary per-recipient digest.
+  for (const t of ['REQUIREMENT_ASSIGNED', 'REQUIREMENT_SUBMITTED', 'REQUIREMENT_MORE_INFO']) {
+    assert.ok(NOTIFICATION_TYPES.includes(t as (typeof NOTIFICATION_TYPES)[number]), t);
+    const m = TYPE_META[t as (typeof NOTIFICATION_TYPES)[number]];
+    assert.equal(m.entity, 'requirement', `${t} is about a requirement`);
+    assert.equal(m.priority, 'normal', `${t} batches into the digest`);
+    assert.equal(m.ccHoa, false, `${t} is not the head of audit's business`);
+  }
   for (const t of NOTIFICATION_TYPES) {
     const m = TYPE_META[t];
     assert.ok(m.priority === 'normal' || m.priority === 'urgent');
-    assert.ok(m.entity === 'work_paper' || m.entity === 'action_plan' || m.entity === 'user');
+    assert.ok(
+      m.entity === 'work_paper' ||
+        m.entity === 'action_plan' ||
+        m.entity === 'requirement' ||
+        m.entity === 'user',
+    );
   }
 });
 

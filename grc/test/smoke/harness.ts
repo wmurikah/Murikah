@@ -29,6 +29,14 @@ const BOOT_TIMEOUT_MS = 120_000;
  */
 export type SmokeForm = Record<string, string> | URLSearchParams;
 
+/** A file part of a multipart post: the bytes, and how they are announced. */
+export interface SmokeUpload {
+  field: string;
+  filename: string;
+  contentType: string;
+  content: string;
+}
+
 export interface SmokeResponse {
   status: number;
   headers: Record<string, string | string[] | undefined>;
@@ -161,23 +169,58 @@ export class SmokeServer {
     return [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
   }
 
+  /**
+   * A multipart post, for the one thing a urlencoded body cannot carry: a file.
+   * An owner fulfilling a requirement uploads the document with the form
+   * (Build Prompt 58), and a smoke run that posted only the note would prove the
+   * half of that path which never touches the evidence store.
+   */
+  async postMultipart(
+    path: string,
+    fields: Record<string, string>,
+    upload?: SmokeUpload,
+  ): Promise<SmokeResponse> {
+    const boundary = `----murikahsmoke${'0'.repeat(8)}`;
+    const parts: string[] = [];
+    for (const [name, value] of Object.entries(fields)) {
+      parts.push(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      );
+    }
+    if (upload) {
+      parts.push(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${upload.field}"; ` +
+          `filename="${upload.filename}"\r\nContent-Type: ${upload.contentType}\r\n\r\n` +
+          `${upload.content}\r\n`,
+      );
+    }
+    parts.push(`--${boundary}--\r\n`);
+    return this.rawRequest('POST', path, undefined, true, {
+      body: parts.join(''),
+      contentType: `multipart/form-data; boundary=${boundary}`,
+    });
+  }
+
   private rawRequest(
     method: string,
     path: string,
     form?: SmokeForm,
     useCookies = true,
+    raw?: { body: string; contentType: string },
   ): Promise<SmokeResponse> {
     // URLSearchParams as well as a plain object, because a form can legitimately
     // repeat a key: the batch release posts one work_paper_id per finding
     // selected (Build Prompt 53), which an object cannot express.
     const body =
-      form === undefined
-        ? undefined
-        : form instanceof URLSearchParams
-          ? form.toString()
-          : Object.entries(form)
-              .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-              .join('&');
+      raw !== undefined
+        ? raw.body
+        : form === undefined
+          ? undefined
+          : form instanceof URLSearchParams
+            ? form.toString()
+            : Object.entries(form)
+                .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+                .join('&');
     const headers: Record<string, string> = { host: HOST };
     if (useCookies && this.cookies.size > 0) headers.cookie = this.cookieHeader();
     if (method !== 'GET') {
@@ -185,7 +228,7 @@ export class SmokeServer {
       headers.origin = `http://${HOST}`;
     }
     if (body !== undefined) {
-      headers['content-type'] = 'application/x-www-form-urlencoded';
+      headers['content-type'] = raw?.contentType ?? 'application/x-www-form-urlencoded';
       headers['content-length'] = String(Buffer.byteLength(body));
     }
     return new Promise((resolve, reject) => {
