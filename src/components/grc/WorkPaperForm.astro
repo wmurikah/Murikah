@@ -17,7 +17,18 @@ import { columnForFormField } from '@grc/repos/workPapers';
 
 interface Props {
   action: string;
+  /** The label on the save action: "Save as draft" on create, "Save changes" on edit. */
   submitLabel: string;
+  /**
+   * Whether to offer Submit for review beside the save (Build Prompt 59).
+   *
+   * The two are one screen and two acts. Saving keeps work in progress and asks
+   * nothing of it; submitting hands the finding to a reviewer and is refused
+   * until it is complete, with the missing fields named. Offered only while the
+   * finding is the actor's to submit, so a reviewer editing somebody's draft is
+   * not invited to release it on their behalf.
+   */
+  offerSubmit?: boolean;
   areas: Option[];
   affiliates: Option[];
   auditors: Option[];
@@ -46,6 +57,7 @@ interface Props {
 const {
   action,
   submitLabel,
+  offerSubmit = false,
   areas,
   affiliates,
   auditors,
@@ -394,8 +406,26 @@ const templateJson = JSON.stringify(
   }
 
   <div class="grc-actionbar">
-    <button type="submit" class="grc-btn grc-btn--primary">{submitLabel}</button>
+    <button type="submit" name="intent" value="draft" class="grc-btn grc-btn--primary">
+      {submitLabel}
+    </button>
+    {
+      offerSubmit && (
+        <button type="submit" name="intent" value="submit" class="grc-btn grc-btn--secondary">
+          Submit for review
+        </button>
+      )
+    }
   </div>
+  {
+    offerSubmit && (
+      <p class="grc-field__hint" style="margin:0.5rem 0 0">
+        Saving keeps an unfinished finding safe as a draft. Submitting for review needs the audit
+        area, sub-area, audit period, observation title and description, risk rating, recommendation
+        and assigned auditor.
+      </p>
+    )
+  }
 </form>
 
 <script>

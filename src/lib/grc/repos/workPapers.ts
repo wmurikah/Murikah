@@ -22,6 +22,7 @@ import {
   type WorkPaperViewer,
 } from './workPaperVisibility';
 import { WP_STATUS } from '../workflow/workPaperActions';
+import type { CompletenessSubject } from '../workflow/workPaperCompleteness';
 import {
   affiliatePredicate,
   affiliateVisible,
@@ -283,6 +284,29 @@ export async function listWorkPapers(
     year: n(r.year),
     updatedAt: s(r.updated_at),
   }));
+}
+
+/**
+ * The completeness view of a stored finding (Build Prompt 59): the same fields
+ * the form posts, read off the row.
+ *
+ * The gate on submission is one rule, and it is checked against what is actually
+ * stored rather than against what a form happened to post, so the answer cannot
+ * differ between the create screen, the edit screen, the detail's Submit and the
+ * batch release.
+ */
+export function completenessOf(row: Record<string, unknown>): CompletenessSubject {
+  return {
+    auditAreaId: s(row.audit_area_id),
+    subAreaId: s(row.sub_area_id),
+    observationTitle: s(row.observation_title),
+    observationDescription: s(row.observation_description),
+    riskRating: s(row.risk_rating),
+    recommendation: s(row.recommendation),
+    assignedAuditorId: s(row.assigned_auditor_id),
+    auditPeriodFrom: s(row.audit_period_from),
+    auditPeriodTo: s(row.audit_period_to),
+  };
 }
 
 export type WorkPaperDetail = Record<string, unknown> & {
