@@ -223,6 +223,37 @@ when it arrived.
 The migration file carries the queries for what is still outstanding and for
 turnaround on what has arrived.
 
+### Migration 006, requirement owners, submissions and the review loop
+
+`grc/db/migrations/006-requirements-workflow.sql` (Build Prompt 58). It creates
+`requirement_owners` and `requirement_submissions`, and adds
+`last_reviewed_date`, `closed_at` and `closed_by` to `work_paper_requirements`,
+so a requirement records who owes it, what they provided in each round, what
+audit decided on each round, and when the ask ended.
+
+- Two `CREATE TABLE IF NOT EXISTS` and three plain `ADD COLUMN`s: no key change,
+  no table rebuild, no data moves. Existing requirements get NULL for all three
+  columns, which reads as "never reviewed, never closed" and is the honest
+  answer for a row that predates the loop.
+- This is the same change the operator's own `grc-requirements-workflow.sql`
+  made. If that has already been applied, this run fails harmlessly with "table
+  already exists" or "duplicate column name" and nothing is altered.
+- Independent of migrations 001 to 005 in any order, except that it assumes 005
+  has added the requirement dates. Apply it before or as the release deploys; if
+  the deploy lands first, the Requirements module fails to load until it is
+  applied. The Requirements section on a work paper is unaffected either way.
+- A requirement received before this existed stays closed: the module derives its
+  status from the close state and the rounds, and treats the older
+  `received_date` as the ask having been answered, so nothing needs back-filling
+  and no finished requirement reappears on an owner's list.
+- Owners' uploads go to the organisation's own evidence store through the
+  connector from migration 004, recorded in `files` and `file_attachments` under
+  the `requirement` entity, so retention, legal hold and deletion already cover
+  them.
+
+The migration file carries the queries for what each owner still owes, the trail
+for one requirement, and how long audit is taking to answer.
+
 ## Storage provider secrets (never committed)
 
 The OAuth providers need the platform's own application registration, which is
