@@ -390,23 +390,29 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.grc-signout {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--grc-s2);
-  border: 1px solid rgba(242, 244, 250, 0.22);
-  border-radius: var(--grc-radius-sm);
+/* The account actions read as the navigation they sit under (Build Prompt 60):
+   the same list, the same icon column, the same hover. `.grc-navlink` carries
+   the look; this only makes the <button> that has to stay a button behave like
+   the anchors beside it. */
+.grc-account__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+.grc-account__list form {
+  margin: 0;
+}
+.grc-navlink--action {
+  width: 100%;
+  border: 0;
   background: transparent;
-  color: var(--grc-on-navy);
-  padding: 0.4rem var(--grc-s3);
   font: inherit;
   font-size: var(--grc-fs-small);
-  font-weight: 600;
+  font-weight: 500;
+  text-align: left;
   cursor: pointer;
-  width: fit-content;
-}
-.grc-signout:hover {
-  background: rgba(242, 244, 250, 0.08);
 }
 
 /* ---- Auto-collapsing sidebar (Build Prompt 31) ----------------------------- */
@@ -456,7 +462,6 @@
 .grc-navgroup__summary > svg,
 .grc-bell__summary > svg,
 .grc-account__id > svg,
-.grc-signout > svg,
 .grc-brand > .grc-brand__badge {
   flex: 0 0 auto;
 }
@@ -497,8 +502,7 @@
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__chevron,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink > span:not(.grc-navcount),
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary > span:not(.grc-navcount),
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-account__id > span,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-signout > span {
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-account__id > span {
     opacity: 0;
     transition: opacity 0.12s ease;
   }
@@ -507,8 +511,7 @@
   .grc-sidebar .grc-navgroup__chevron,
   .grc-sidebar .grc-navlink > span:not(.grc-navcount),
   .grc-sidebar .grc-bell__summary > span:not(.grc-navcount),
-  .grc-sidebar .grc-account__id > span,
-  .grc-sidebar .grc-signout > span {
+  .grc-sidebar .grc-account__id > span {
     transition: opacity 0.12s ease 0.06s;
   }
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-orgline,
@@ -525,10 +528,6 @@
     align-items: flex-start;
     gap: var(--grc-s2);
   }
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-signout {
-    border-color: transparent;
-  }
-
   /* Counts stay visible on the rail as small badges beside the icon. */
   .grc-navlink,
   .grc-bell__summary {

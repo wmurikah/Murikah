@@ -38,9 +38,9 @@ import {
 // The same planner the cron drain uses, so the "one digest, never one email per
 // finding" assertion runs the real grouping rather than a copy of it.
 import { planNormalDigests } from '../../src/lib/grc/notify/render.ts';
-import { reviewQueueLink } from '../../src/lib/grc/notify/links.ts';
+import { digestLinks } from '../../src/lib/grc/notify/links.ts';
 
-const REVIEW_QUEUE_LINK = reviewQueueLink();
+const DIGEST_LINKS = digestLinks();
 
 /** The cells the role-save step ticks, and therefore expects stored as allowed. */
 const GRANTED_IN_SAVE: [string, string][] = [
@@ -2702,7 +2702,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           subject: r.rendered_subject,
           payload: r.payload,
         })),
-        REVIEW_QUEUE_LINK,
+        DIGEST_LINKS,
       );
       const recipients = new Set(queued.map((r) => r.recipient_email));
       assert.ok(recipients.size >= 1, 'the head of audit must be among the recipients');
@@ -2892,6 +2892,123 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     // transition table and gated on the matrix grant an administrator can see
     // ticked, so an auditor holding WORK_PAPER.update releases their own draft
     // without anyone touching a permission list by hand.
+    // The sidebar chrome (Build Prompt 60): no standalone Notifications
+    // destination, pending counts on the modules they belong to, and account
+    // actions that are options rather than bordered pills out of line with the
+    // icons above them.
+    await t.test('the sidebar badges the modules and lists the account actions', async () => {
+      const page = await server.get('/work-papers');
+      assert.equal(page.status, 200, `the page answered ${page.status}`);
+
+      // The nav no longer carries Notifications as a destination of its own.
+      assert.ok(
+        !page.body.includes('class="grc-navlink" href="/notifications"'),
+        'the standalone Notifications entry is gone from the navigation',
+      );
+      // The bell, which is where the history lives, is untouched.
+      assert.ok(page.body.includes('grc-bell__summary'), 'the bell still opens the centre');
+
+      // The modules carry their own pending counts, ready for the live refresh.
+      for (const key of ['pendingReview', 'myRequirements']) {
+        assert.ok(
+          page.body.includes(`data-count-key="${key}"`),
+          `${key} must badge its own module`,
+        );
+      }
+      // A badge with nothing pending is hidden rather than showing a zero.
+      assert.ok(
+        /data-count-key="myRequirements"[^>]*hidden/.test(page.body) ||
+          /hidden[^>]*data-count-key="myRequirements"/.test(page.body),
+        'a module with nothing waiting shows no badge at all',
+      );
+
+      // The account actions are the same list, the same alignment, as the nav.
+      assert.ok(page.body.includes('grc-account__list'), 'the account actions are a list');
+      assert.ok(
+        !page.body.includes('grc-signout'),
+        'and none of them is styled as a button any more',
+      );
+      for (const label of ['Account security', 'Change password', 'Sign out']) {
+        assert.ok(page.body.includes(label), `${label} is still offered`);
+      }
+      // Sign out still posts, so it stays a real button inside its form.
+      assert.ok(
+        page.body.includes('action="/api/auth/logout"'),
+        'signing out is still a form post, not a link',
+      );
+    });
+
+    // Who an organisation's mail reaches (Build Prompt 60). The platform owner's
+    // account carries SUPER_ADMIN and lives inside Hass, so the head-of-audit
+    // lookup resolved them and posted them every copy and reminder the instance
+    // generated. The head of audit for an instance is its own SUPER_ADMIN, and
+    // this is the very resolver the reminders copy through.
+    await t.test(
+      'the head-of-audit copy reaches the instance admin, never the platform owner',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        // The premise: both accounts are SUPER_ADMIN inside Hass, and only one of
+        // them runs the platform.
+        const admins = db
+          .prepare(
+            `SELECT user_id AS id, is_platform_owner AS owner FROM users
+            WHERE organization_id = ? AND role_code = 'SUPER_ADMIN' ORDER BY user_id`,
+          )
+          .all(SMOKE.orgId) as { id: string; owner: number | bigint }[];
+        assert.ok(
+          admins.some((a) => a.id === SMOKE.userId && Number(a.owner) === 1),
+          'the platform owner is a SUPER_ADMIN in this organisation',
+        );
+        assert.ok(
+          admins.some((a) => a.id === SMOKE.instanceAdminId && Number(a.owner) === 0),
+          'and so is the instance head of audit',
+        );
+
+        // A real event that copies the head of audit: the auditor submits their
+        // own finding.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          intent: 'submit',
+          observation_title: 'Tank calibration certificates missing',
+          observation_description: 'The calibration certificates were not produced.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+          risk_rating: 'High',
+          recommendation: 'Obtain and file the certificates.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const at = decodeURIComponent(String(created.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(at), `the submission must succeed, got ${at}`);
+        const m = /\/work-papers\/([^/?]+)/.exec(at);
+        assert.ok(m, `the submission must land on the finding, got ${at}`);
+
+        const copies = db
+          .prepare(
+            `SELECT recipient_user_id AS user_id, recipient_email AS email FROM notification_queue
+            WHERE related_entity_id = ? AND is_cc = 1`,
+          )
+          .all(m[1]) as { user_id: string | null; email: string }[];
+        assert.ok(copies.length >= 1, 'the head of audit is copied on a submission');
+        const ids = copies.map((c) => String(c.user_id ?? ''));
+        assert.ok(
+          !ids.includes(SMOKE.userId) && !copies.some((c) => c.email === SMOKE.email),
+          `the platform owner must never be copied, got ${ids.join(', ')}`,
+        );
+        assert.ok(
+          ids.includes(SMOKE.instanceAdminId),
+          `the instance head of audit must be, got ${ids.join(', ')}`,
+        );
+
+        await signInAsOwnerInsideHass();
+      },
+    );
+
     await t.test('the assigned auditor can submit their own draft for review', async () => {
       const db = server.database;
       assert.ok(db, 'the fake database is reachable for verification');

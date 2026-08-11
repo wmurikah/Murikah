@@ -44,6 +44,10 @@ const RESP = cols(C.work_paper_responsibles, 'r');
 const AFF = cols(C.affiliates, 'aff');
 const USR = cols(C.users, 'u');
 const AA = cols(C.audit_areas, 'aa');
+// The requirements loop, for the sidebar's "waiting on me" badge (Build Prompt 60).
+const R = cols(C.work_paper_requirements, 'r');
+const RO = cols(C.requirement_owners, 'o');
+const RS = cols(C.requirement_submissions, 'sub');
 
 // Seeded action-plan status literals the analytics buckets match. 'Not Implemented'
 // is a seed value distinct from the workflow enum (AP_STATUS); 'Verified' and
@@ -668,6 +672,13 @@ export interface SidebarCounts {
   myObservations: number;
   responsesToReview: number;
   approvedQueue: number;
+  /**
+   * Requirements waiting on this person (Build Prompt 60): the ones they own
+   * and have not answered, plus the answers waiting on them as the finding's
+   * auditor. One badge, because a module has one entry, and both halves are the
+   * same question: is anything here mine to act on?
+   */
+  myRequirements: number;
 }
 
 /** The sidebar badge counts (getSidebarCounts): organisation queues, and the signed-in user's own. */
@@ -694,7 +705,7 @@ async function readSidebarCounts(
   const like = ownerLike(userId);
   const wpConfine = affiliatePredicate(scope, cols(C.work_papers, 'wp').affiliate_code);
   const apConfine = affiliatePredicate(scope, AP.affiliate_code);
-  const [wp, ap] = await Promise.all([
+  const [wp, ap, req] = await Promise.all([
     db.execute({
       sql: `SELECT
               SUM(CASE WHEN ${WPa.status} = 'Submitted' THEN 1 ELSE 0 END) AS pending_review,
@@ -716,6 +727,31 @@ async function readSidebarCounts(
             FROM action_plans WHERE ${AP.organization_id} = ?${apConfine.clause}`,
       args: [like, like, ...NOT_OVERDUE_STATUSES, organizationId, ...apConfine.args],
     }),
+    // Requirements this person still has to act on: an open one they own with
+    // nothing provided or a further question outstanding, or one of their own
+    // findings with a round waiting to be read. A closed requirement is nobody's
+    // move, so it never shows.
+    db.execute({
+      sql: `SELECT COUNT(*) AS mine
+              FROM work_paper_requirements r
+             WHERE ${R.organization_id} = ? AND ${R.deleted_at} IS NULL
+               AND ${R.closed_at} IS NULL
+               AND (
+                 (EXISTS (SELECT 1 FROM requirement_owners o
+                           WHERE ${RO.requirement_id} = ${R.requirement_id} AND ${RO.user_id} = ?)
+                  AND COALESCE((SELECT ${RS.review_status} FROM requirement_submissions sub
+                                 WHERE ${RS.requirement_id} = ${R.requirement_id}
+                              ORDER BY ${RS.round_number} DESC LIMIT 1), 'MORE_INFO') = 'MORE_INFO')
+                 OR
+                 (EXISTS (SELECT 1 FROM work_papers wp
+                           WHERE wp.work_paper_id = ${R.work_paper_id}
+                             AND wp.assigned_auditor_id = ?)
+                  AND (SELECT ${RS.review_status} FROM requirement_submissions sub
+                        WHERE ${RS.requirement_id} = ${R.requirement_id}
+                     ORDER BY ${RS.round_number} DESC LIMIT 1) = 'PENDING')
+               )`,
+      args: [organizationId, userId, userId],
+    }),
   ]);
 
   const w = wp.rows[0] ?? {};
@@ -728,6 +764,7 @@ async function readSidebarCounts(
     approvedQueue: num(w.approved_queue),
     myActionPlans: num(a.my_action_plans),
     myOverdue: num(a.my_overdue),
+    myRequirements: num(req.rows[0]?.mine),
   };
 }
 
