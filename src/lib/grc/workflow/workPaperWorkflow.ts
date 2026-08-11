@@ -26,7 +26,12 @@
  * somebody can go and change.
  */
 import type { Client, InStatement } from '@libsql/client/web';
-import { checkTransition, loadTransitions, loadTerminalStates } from './transitions';
+import {
+  checkTransition,
+  enumTypesWithTransition,
+  loadTransitions,
+  loadTerminalStates,
+} from './transitions';
 import {
   WORK_PAPER_ENUM_TYPE,
   WP_STATUS,
@@ -138,6 +143,15 @@ function logRefusal(fields: {
   inherited: boolean | null;
   code: string;
   message: string;
+  /** The workflow the move was looked up under (Build Prompt 61). */
+  enumType?: string;
+  /**
+   * The workflows that do define this from -> to. When it names one the search
+   * did not, the refusal is an enum-scoping mismatch and says so itself: the row
+   * an operator finds when they go looking is real, it simply belongs to another
+   * workflow.
+   */
+  enumTypesWithMove?: string[];
 }): void {
   console.error(
     `${SUBMIT_TAG} refused`,
@@ -151,6 +165,8 @@ function logRefusal(fields: {
       organization_id: fields.organizationId,
       role_code: fields.roleCode,
       grants_from: fields.inherited === null ? null : fields.inherited ? 'GLOBAL' : 'organization',
+      enum_type: fields.enumType ?? null,
+      enum_types_with_move: fields.enumTypesWithMove ?? null,
       code: fields.code,
       reason: fields.message,
     }),
@@ -196,7 +212,13 @@ export async function executeTransition(
 ): Promise<TransitionResult> {
   const refuse = (
     result: { ok: false; code: string; message: string },
-    context: { from: string | null; to: string; inherited: boolean | null },
+    context: {
+      from: string | null;
+      to: string;
+      inherited: boolean | null;
+      /** The workflows that do define this move, when the engine refused it. */
+      enumTypesWithMove?: string[];
+    },
   ): TransitionResult => {
     logRefusal({
       workPaperId,
@@ -206,6 +228,8 @@ export async function executeTransition(
       to: context.to,
       permission: context.from === null ? null : grantForTransition(context.from, context.to),
       inherited: context.inherited,
+      enumType: WORK_PAPER_ENUM_TYPE,
+      enumTypesWithMove: context.enumTypesWithMove,
       code: result.code,
       message: result.message,
     });
@@ -253,9 +277,17 @@ export async function executeTransition(
     comment,
   });
   if (!outcome.ok) {
+    // When the workflow says the move does not exist, say which workflows it
+    // does exist in. A `Draft -> Submitted` under `response_status` is a real
+    // row that answers nothing here, and that is the one refusal a person
+    // cannot diagnose by looking at the table (Build Prompt 61).
+    const enumTypesWithMove =
+      outcome.code === 'not_allowed'
+        ? await enumTypesWithTransition(db, fromStatus, target)
+        : undefined;
     return refuse(
       { ok: false, code: outcome.code, message: outcome.message },
-      { from: fromStatus, to: target, inherited: resolved.inherited },
+      { from: fromStatus, to: target, inherited: resolved.inherited, enumTypesWithMove },
     );
   }
 
