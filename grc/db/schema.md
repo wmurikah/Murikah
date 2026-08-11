@@ -57,6 +57,8 @@ never their internal columns.
 - **plans**: plan_code, name, features_json, price_minor, currency, is_active, created_at
 - **rate_limit_buckets**: bucket_key, bucket_type, counter, window_start, window_size_seconds, blocked_until
 - **reminders**: reminder_id, reminder_type, related_entity_type, related_entity_id, target_user_id, scheduled_for, sent_at, cancelled_at, cancel_reason, escalation_level
+- **requirement_owners**: requirement_id, user_id, added_at, added_by
+- **requirement_submissions**: submission_id, requirement_id, organization_id, round_number, submitted_by, submitted_by_name, submission_note, file_id, submitted_at, review_status, review_comment, additional_info_request, reviewed_by, reviewed_by_name, reviewed_at
 - **restore_runs**: restore_id, backup_id, target, started_at, completed_at, status, requested_by, approved_by, rows_restored, verification_status, error_message, notes
 - **retention_policies**: policy_id, entity_type, retention_days, archive_target, last_run_at, rows_pruned, is_active, legal_hold, description
 - **role_permissions**: organization_id, role_code, module_code, action_code, is_allowed, scope_to_affiliate
@@ -73,7 +75,7 @@ never their internal columns.
 - **users**: user_id, organization_id, email, full_name, password_hash, role_code, affiliate_code, phone, status, must_change_password, last_login_at, created_at, updated_at, deleted_at, is_platform_owner
 - **webhook_endpoints**: endpoint_id, organization_id, name, target_url, secret, event_filter, is_active, last_success_at, last_failure_at, consecutive_failures, created_at, created_by
 - **work_paper_cc_recipients**: work_paper_id, email, user_id, added_at
-- **work_paper_requirements**: requirement_id, work_paper_id, organization_id, description, requirement_type, status, notes, due_date, requested_date, received_date, created_at, updated_at, deleted_at
+- **work_paper_requirements**: requirement_id, work_paper_id, organization_id, description, requirement_type, status, notes, due_date, requested_date, received_date, created_at, updated_at, deleted_at, last_reviewed_date, closed_at, closed_by
 - **work_paper_responsibles**: work_paper_id, user_id, role_in_finding, added_at, added_by
 - **work_paper_revisions**: revision_id, work_paper_id, revision_number, action, from_status, to_status, comments, changes_summary, user_id, user_name, action_date
 - **work_papers**: work_paper_id, organization_id, work_paper_ref, created_by, year, affiliate_code, audit_area_id, sub_area_id, work_paper_date, audit_period_from, audit_period_to, control_objectives, control_classification, control_type, control_frequency, control_standards, risk_description, test_objective, testing_steps, observation_title, observation_description, risk_rating, risk_summary, recommendation, management_response, assigned_auditor_id, assigned_auditor_name, status, final_status, revision_count, prepared_by_id, prepared_by_name, prepared_date, submitted_date, reviewed_by_id, reviewed_by_name, review_date, review_comments, approved_by_id, approved_by_name, approved_date, sent_to_auditee_date, response_status, response_deadline, response_round, response_submitted_by, response_submitted_date, response_reviewed_by, response_review_date, response_review_comments, evidence_override, created_at, updated_at, deleted_at
