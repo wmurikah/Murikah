@@ -1,4 +1,13 @@
 /**
+ * ROUND ORDER. `round_number` is the ordinal, and every read here orders by it.
+ * It falls back to `submitted_at` for a row that has not been numbered yet
+ * (Build Prompt 61): the live table was created without the column by the
+ * operator's own script, and migration 007 adds and backfills it, so between the
+ * two a row can exist with a null ordinal. A trail that reorders itself is worse
+ * than one that is briefly numbered from its timestamp.
+ */
+
+/**
  * The requirements module: the request for information, the people who owe it,
  * the rounds they provide it in, and audit's decision on each round (Build
  * Prompt 58).
@@ -143,7 +152,8 @@ async function readRequirements(
                    WHERE sub.${RS.requirement_id} = r.${R.requirement_id}) AS rounds,
                  (SELECT sub.${RS.review_status} FROM requirement_submissions sub
                    WHERE sub.${RS.requirement_id} = r.${R.requirement_id}
-                   ORDER BY sub.${RS.round_number} DESC LIMIT 1) AS latest_review,
+                   ORDER BY COALESCE(sub.${RS.round_number}, 0) DESC,
+                            sub.${RS.submitted_at} DESC LIMIT 1) AS latest_review,
                  (SELECT GROUP_CONCAT(u.${U.full_name}, ', ') FROM requirement_owners o
                     JOIN users u ON u.${U.user_id} = o.${RO.user_id}
                    WHERE o.${RO.requirement_id} = r.${R.requirement_id}) AS owner_names,
@@ -346,7 +356,7 @@ export async function listRounds(
               ON f.${F.file_id} = sub.${RS.file_id} AND f.${F.deleted_at} IS NULL
             LEFT JOIN file_attachments fa ON fa.${FA.file_id} = f.${F.file_id}
            WHERE sub.${RS.requirement_id} = ? AND sub.${RS.organization_id} = ?
-        ORDER BY sub.${RS.round_number}`,
+        ORDER BY COALESCE(sub.${RS.round_number}, 0), sub.${RS.submitted_at}`,
     args: [requirementId, organizationId],
   });
   return res.rows.map((r) => ({
@@ -469,7 +479,7 @@ export async function reviewLatestRound(
   const latest = await db.execute({
     sql: `SELECT ${RS.submission_id} AS id FROM requirement_submissions
            WHERE ${RS.requirement_id} = ? AND ${RS.organization_id} = ?
-        ORDER BY ${RS.round_number} DESC LIMIT 1`,
+        ORDER BY COALESCE(${RS.round_number}, 0) DESC, ${RS.submitted_at} DESC LIMIT 1`,
     args: [requirementId, organizationId],
   });
   const submissionId = s(latest.rows[0]?.id);
