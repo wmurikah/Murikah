@@ -47,7 +47,23 @@ export async function resolveActiveRecipient(
   return r ?? null;
 }
 
-/** The Head of Audit recipients: active SUPER_ADMIN users, except the triggering user. */
+/**
+ * The Head of Audit recipients: the organisation's own active SUPER_ADMIN users,
+ * except the triggering user, and never the platform owner (Build Prompt 60).
+ *
+ * The platform owner is a Murikah Labs role, not a member of the customer's
+ * audit function. Their account carries SUPER_ADMIN and sits in an organisation
+ * (they have to be somewhere), so a role-only lookup resolved them as that
+ * organisation's head of audit and posted them every operational reminder and
+ * copy the instance generated: mail addressed to a person who does not run the
+ * audit, about findings that are not theirs, in a tenant they are only
+ * administering. `is_platform_owner` is the line between running the platform
+ * and running an audit, so it is the line drawn here.
+ *
+ * This is a recipient rule, not a permission one: an owner who enters an
+ * instance still sees everything the screens show them. They are simply not
+ * mailed as though the audit were theirs.
+ */
 export async function listHoaRecipients(
   db: Client,
   organizationId: string,
@@ -55,7 +71,8 @@ export async function listHoaRecipients(
 ): Promise<Recipient[]> {
   const res = await db.execute({
     sql: `SELECT user_id, email, full_name FROM users
-           WHERE organization_id = ? AND role_code = 'SUPER_ADMIN' AND email IS NOT NULL AND ${ACTIVE}`,
+           WHERE organization_id = ? AND role_code = 'SUPER_ADMIN' AND email IS NOT NULL
+             AND COALESCE(is_platform_owner, 0) = 0 AND ${ACTIVE}`,
     args: [organizationId],
   });
   return res.rows

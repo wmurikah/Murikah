@@ -35,7 +35,7 @@ import type { Clock } from '@engr/time';
 import { canSend, type GrcDeliveryEnv } from './env';
 import { prepareMailer, type Mailer } from './sendMail';
 import { planNormalDigests } from './render';
-import { reviewQueueLink } from './links';
+import { digestLinks } from './links';
 
 export interface DispatchOptions {
   limit: number;
@@ -222,7 +222,7 @@ export async function runGrcDispatch(
   }
 
   // Normal: one digest per recipient, whatever the number of rows.
-  for (const plan of planNormalDigests(normal, reviewQueueLink())) {
+  for (const plan of planNormalDigests(normal, digestLinks())) {
     if (stale) {
       summary.heldConnection += plan.rowIds.length;
       continue;
