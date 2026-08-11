@@ -23,6 +23,9 @@ export function signInLink(): string {
 /** The work-paper list, filtered to what is waiting to be reviewed. */
 export const REVIEW_QUEUE_PATH = '/work-papers?status=Submitted';
 
+/** The work-paper list, filtered to the drafts a reminder is about. */
+export const DRAFT_QUEUE_PATH = '/work-papers?status=Draft';
+
 /**
  * The review queue a submission digest points the head of audit at (Build
  * Prompt 53): the findings waiting on them, not a dashboard to navigate from.
@@ -35,4 +38,18 @@ export const REVIEW_QUEUE_PATH = '/work-papers?status=Submitted';
  */
 export function reviewQueueLink(): string {
   return `${APP_BASE}${REVIEW_QUEUE_PATH}`;
+}
+
+/**
+ * The drafts a reminder digest points at (Build Prompt 60). A reminder is about
+ * work the reader still owes, so its one button opens that work rather than the
+ * review queue, which holds what somebody else owes them.
+ */
+export function draftQueueLink(): string {
+  return `${APP_BASE}${DRAFT_QUEUE_PATH}`;
+}
+
+/** Both destinations a digest can offer, resolved once for a drain run. */
+export function digestLinks(): { review: string; drafts: string } {
+  return { review: reviewQueueLink(), drafts: draftQueueLink() };
 }
