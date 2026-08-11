@@ -123,6 +123,18 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
     subject: 'Deadline approaching: action plan {{reference}}',
     intro: 'An action plan you own is due within the next few days.',
   },
+  REQUIREMENT_ASSIGNED: {
+    subject: 'Information requested: {{reference}}',
+    intro: 'Internal Audit has asked you to provide information.',
+  },
+  REQUIREMENT_SUBMITTED: {
+    subject: 'Information provided: {{reference}}',
+    intro: 'An owner has provided information for your review.',
+  },
+  REQUIREMENT_MORE_INFO: {
+    subject: 'Further information requested: {{reference}}',
+    intro: 'Internal Audit has reviewed what you sent and asked for more.',
+  },
   PASSWORD_RESET: {
     subject: 'Reset your Internal Audit System password',
     intro:

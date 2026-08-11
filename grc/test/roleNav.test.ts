@@ -73,6 +73,22 @@ test('an auditee sees the auditee section and the dashboard, not setup or report
   assert.ok(!paths.includes('/reports'));
 });
 
+test('requirements show for both sides of the ask', () => {
+  // Build Prompt 58. The auditor raises them and the owner provides them, so the
+  // entry is offered to the audit side and the auditee side alike. Being asked
+  // for a document is a row naming you, not a grant, and the screen scopes
+  // itself to what the reader owns.
+  const auditor = buildNav(ctx({ roleCode: 'AUDITOR', perms: ['WORK_PAPERS.view'] }));
+  assert.ok(hrefs(auditor).includes('/requirements'));
+
+  const auditee = buildNav(ctx({ roleCode: 'UNIT_MANAGER', perms: ['ACTION_PLANS.view'] }));
+  assert.ok(hrefs(auditee).includes('/requirements'), 'an owner needs somewhere to provide it');
+
+  // A board member holds neither side and is offered neither.
+  const board = buildNav(ctx({ roleCode: 'BOARD_MEMBER', perms: [] }));
+  assert.ok(!hrefs(board).includes('/requirements'));
+});
+
 test('board reports show for a board member', () => {
   const nav = buildNav(ctx({ roleCode: 'BOARD_MEMBER', perms: [] }));
   assert.ok(hrefs(nav).includes('/reports'));

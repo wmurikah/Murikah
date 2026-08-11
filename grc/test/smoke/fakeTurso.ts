@@ -114,6 +114,10 @@ const PRIMARY_KEYS: Record<string, string> = {
   permission_modules: 'module_code',
   permission_actions: 'action_code',
   storage_connections: 'connection_id',
+  // Migration 006: a requirement's rounds are keyed by their own id, and the
+  // trail is only ever read for one requirement at a time.
+  requirement_submissions: 'submission_id',
+  work_paper_requirements: 'requirement_id',
 };
 
 /** `table.column` to the `parent(column)` it references. */
@@ -131,6 +135,16 @@ const FOREIGN_KEYS: Record<string, Record<string, string>> = {
   // Build Prompt 51: a storage connection belongs to exactly one organisation,
   // and the reference is what makes a row for a non-existent tenant impossible.
   storage_connections: { organization_id: 'organizations(organization_id)' },
+  // Migration 006: an owner row and a round both belong to a requirement that
+  // exists. An orphan round is a trail that reads as somebody else's, which is
+  // exactly the write the live schema refuses and this must refuse too.
+  requirement_owners: {
+    requirement_id: 'work_paper_requirements(requirement_id)',
+  },
+  requirement_submissions: {
+    requirement_id: 'work_paper_requirements(requirement_id)',
+    organization_id: 'organizations(organization_id)',
+  },
 };
 
 /**
@@ -143,6 +157,8 @@ const DEFAULTS: Record<string, Record<string, string>> = {
   // Migration 002: added with a default, so existing rows and any insert that
   // omits it mean "not confined".
   role_permissions: { scope_to_affiliate: '0' },
+  // Migration 006: the first answer to a requirement is round one.
+  requirement_submissions: { round_number: '1' },
   // Migration 003: likewise, an affiliate is not the Group unless said to be.
   affiliates: { is_group: '0' },
   // Migration 004: a new connection is inactive and untested until an
@@ -164,6 +180,10 @@ const NOT_NULL: Record<string, string[]> = {
   permission_actions: ['action_code'],
   affiliates: ['is_group'],
   storage_connections: ['organization_id', 'provider', 'status', 'is_active'],
+  // Migration 006: a round with no requirement, no organisation or no number is
+  // not a round of anything.
+  requirement_owners: ['requirement_id', 'user_id'],
+  requirement_submissions: ['requirement_id', 'organization_id', 'round_number'],
 };
 
 /** Creates every dictionary table (untyped columns; SQLite is typeless) plus the FTS index. */
