@@ -227,13 +227,30 @@ test('each administration screen sits in the group it belongs to', () => {
   assert.deepEqual(group('Platform'), ['/platform', '/settings/provision']);
 });
 
-test('the send queue is no longer a second bell beside Notifications', () => {
+test('Notifications is not a sidebar destination; the modules carry the counts', () => {
+  // Build Prompt 60. The entry listed what every module already knew, so a
+  // person checked two places for one fact. What is waiting now shows as a
+  // count on the module it is waiting in, and the bell in the sidebar head
+  // still opens the centre for the history.
   const nav = buildNav(ctx({ isPlatformOwner: true, instanceSelected: true }));
   const items = nav.flatMap((g) => g.items);
-  const queue = items.find((i) => i.href === '/send-queue');
-  const bell = items.find((i) => i.href === '/notifications');
-  assert.ok(queue && bell, 'both screens are still offered');
-  assert.notEqual(queue.icon, bell.icon, 'two destinations must not read as one');
+  assert.ok(
+    !items.some((i) => i.href === '/notifications'),
+    'the standalone Notifications entry is gone',
+  );
+  assert.ok(
+    items.some((i) => i.href === '/send-queue'),
+    'the send queue, which is a different thing, stays',
+  );
+
+  const badged = new Map(items.filter((i) => i.countKey).map((i) => [i.href, i]));
+  for (const href of ['/work-papers', '/action-plans', '/requirements', '/auditee-responses']) {
+    const item = badged.get(href);
+    assert.ok(item, `${href} must carry a pending count`);
+    assert.equal(item.alert, true, `${href} shows it as an alert, not as decoration`);
+  }
+  assert.equal(badged.get('/requirements')?.countKey, 'myRequirements');
+  assert.equal(badged.get('/work-papers')?.countKey, 'pendingReview');
 });
 
 test('an admin who is not the platform owner gets no platform group', () => {

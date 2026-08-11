@@ -247,12 +247,22 @@ export default {
   ): Promise<void> {
     ctx.waitUntil(
       (async () => {
-        const db = await getDb(getEngrEnv());
-        const delivery = getDeliveryEnv();
-        if (controller.cron === DAILY_PM_CRON) {
-          await runPmScan(db, delivery, systemClock, { orgLimit: 50, scheduleLimit: 200 });
+        // Engineering Rhythm's half of the cron, in its own boundary (Build
+        // Prompt 60). It used to run unguarded ahead of the GRC half, so an
+        // unconfigured engr binding did not merely skip its own work: it
+        // rejected before the GRC maintenance below was reached, and the
+        // reminders nobody received had no error to point at. The two products
+        // share a schedule, not a fate.
+        try {
+          const db = await getDb(getEngrEnv());
+          const delivery = getDeliveryEnv();
+          if (controller.cron === DAILY_PM_CRON) {
+            await runPmScan(db, delivery, systemClock, { orgLimit: 50, scheduleLimit: 200 });
+          }
+          await runDispatch(db, delivery, systemClock, { limit: 200 });
+        } catch (err) {
+          console.error('[engr.cron] scheduled run failed', err);
         }
-        await runDispatch(db, delivery, systemClock, { limit: 200 });
 
         // GRC maintenance and notification delivery. Wrapped so a missing GRC
         // binding or a schema difference never fails the engr crons. The queue is

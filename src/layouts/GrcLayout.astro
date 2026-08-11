@@ -296,20 +296,39 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
               </span>
             </span>
           </div>
-          <a href="/mfa/setup" class="grc-signout" data-tip="Account security">
-            <GrcIcon name="roles" size={16} />
-            <span>Account security</span>
-          </a>
-          <a href="/change-password" class="grc-signout" data-tip="Change password">
-            <GrcIcon name="key" size={16} />
-            <span>Change password</span>
-          </a>
-          <form method="post" action="/api/auth/logout">
-            <button type="submit" class="grc-signout" data-tip="Sign out">
-              <GrcIcon name="signout" size={16} />
-              <span>Sign out</span>
-            </button>
-          </form>
+          {
+            /*
+            The account actions are options, not buttons (Build Prompt 60). They
+            were bordered pills of their own width, so the footer sat out of line
+            with the icon column above it and read as three controls bolted on
+            rather than the end of the same list. They are now the same list, the
+            same icon column and the same hover as the navigation; sign out stays
+            a real button inside its form, because it posts, and only looks like
+            its neighbours.
+          */
+          }
+          <ul class="grc-account__list">
+            <li>
+              <a href="/mfa/setup" class="grc-navlink" data-tip="Account security">
+                <GrcIcon name="roles" size={16} class="grc-navlink__icon" />
+                <span>Account security</span>
+              </a>
+            </li>
+            <li>
+              <a href="/change-password" class="grc-navlink" data-tip="Change password">
+                <GrcIcon name="key" size={16} class="grc-navlink__icon" />
+                <span>Change password</span>
+              </a>
+            </li>
+            <li>
+              <form method="post" action="/api/auth/logout">
+                <button type="submit" class="grc-navlink grc-navlink--action" data-tip="Sign out">
+                  <GrcIcon name="signout" size={16} class="grc-navlink__icon" />
+                  <span>Sign out</span>
+                </button>
+              </form>
+            </li>
+          </ul>
         </div>
       </nav>
 
