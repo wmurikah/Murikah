@@ -6,6 +6,7 @@ const APP_BASE = 'https://grc.murikah.com';
 
 export function entityLink(entityType: string, id: string): string {
   if (entityType === 'action_plan') return `${APP_BASE}/action-plans/${id}`;
+  if (entityType === 'requirement') return `${APP_BASE}/requirements/${id}`;
   return `${APP_BASE}/work-papers/${id}`;
 }
 

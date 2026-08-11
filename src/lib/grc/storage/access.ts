@@ -38,6 +38,21 @@ async function isLinkedToEntity(
     });
     return res.rows.length > 0;
   }
+  if (entityType === 'requirement') {
+    // The owners named on the requirement, scoped through the requirement to
+    // the organisation (the junction carries no organization_id of its own).
+    // This is the whole of an auditee owner's access: they hold no audit
+    // permission at all, and the row naming them is what lets them upload the
+    // document they were asked for and read it back afterwards.
+    const res = await db.execute({
+      sql: `SELECT 1 FROM requirement_owners o
+              JOIN work_paper_requirements r ON r.requirement_id = o.requirement_id
+                AND r.organization_id = ?
+             WHERE o.requirement_id = ? AND o.user_id = ? LIMIT 1`,
+      args: [organizationId, entityId, userId],
+    });
+    return res.rows.length > 0;
+  }
   if (entityType === 'action_plan') {
     const res = await db.execute({
       // action_plan_owners has no organization_id; scope through the plan and use
@@ -60,8 +75,16 @@ function viewPermission(entityType: string): string {
   return entityType.startsWith('action_plan') ? 'ACTION_PLANS.view' : 'WORK_PAPERS.view';
 }
 
+/**
+ * The permission that lets an auditor put evidence on an entity. A requirement's
+ * evidence is the answer to it, and the people who provide answers are its
+ * owners, so the audit-side permission here is the one that manages requirements
+ * rather than the one that edits findings.
+ */
 function editPermission(entityType: string): string {
-  return entityType.startsWith('action_plan') ? 'ACTION_PLANS.edit' : 'WORK_PAPERS.edit';
+  if (entityType.startsWith('action_plan')) return 'ACTION_PLANS.edit';
+  if (entityType === 'requirement') return 'REQUIREMENTS.manage';
+  return 'WORK_PAPERS.edit';
 }
 
 /**
