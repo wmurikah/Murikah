@@ -18,9 +18,14 @@ export const prerender = false;
  * a different kind of submission, and nothing about being in a batch may weaken
  * a check.
  *
+ * The completeness gate applies here exactly as it does to the single Submit
+ * (Build Prompt 59), through the same shared path: a draft still missing its
+ * risk rating is not releasable because it was ticked in a list rather than
+ * opened, and the refusal names the fields rather than failing opaquely.
+ *
  * Each finding stands alone: one that cannot move (already submitted by a
- * colleague, or outside this auditor's rights) is reported and the rest still
- * go. The redirect says exactly how many moved and names what did not, because
+ * colleague, incomplete, or outside this auditor's rights) is reported and the
+ * rest still go. The redirect says exactly how many moved and names what did not, because
  * "12 of 15 submitted" with no list of the other three is not an answer.
  *
  * The reviewer still gets one email, not one per finding: every submission
@@ -30,8 +35,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { executeTransition, resolveTransitionAccess } from '@grc/workflow/workPaperWorkflow';
-import { WP_STATUS } from '@grc/workflow/workPaperActions';
+import { resolveTransitionAccess, submitForReview } from '@grc/workflow/workPaperWorkflow';
 
 /** More than a working week of fieldwork in one click is a mistake, not a batch. */
 const MAX_BATCH = 100;
@@ -78,15 +82,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   let submitted = 0;
   const refused: string[] = [];
   for (const id of ids) {
-    const result = await executeTransition(
-      db,
-      grc.organizationId,
-      id,
-      WP_STATUS.SUBMITTED,
-      actor,
-      null,
-      access,
-    );
+    const result = await submitForReview(db, grc.organizationId, id, actor, null, access);
     if (result.ok) submitted += 1;
     else refused.push(`${id}: ${result.message}`);
   }

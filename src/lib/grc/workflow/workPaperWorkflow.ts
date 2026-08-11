@@ -38,7 +38,8 @@ import {
 } from './workPaperActions';
 import { canMatrix, type PermissionMatrix } from '@grc/auth/matrix';
 import { resolveRoleAccess } from '@grc/auth/rbac';
-import { getWorkPaper } from '@grc/repos/workPapers';
+import { completenessOf, getWorkPaper } from '@grc/repos/workPapers';
+import { incompleteMessage, missingForSubmission } from './workPaperCompleteness';
 import { insertRevisionStatement } from '@grc/repos/revisions';
 import { enqueueNotification } from '@grc/repos/notify';
 import { buildAuditStatement } from '@grc/repos/audit';
@@ -345,6 +346,54 @@ export async function executeTransition(
   // aggregations are cleared before the caller redirects into them.
   await invalidateDashboard(db, organizationId);
   return { ok: true, fromStatus, toStatus: target };
+}
+
+/**
+ * Submit a finding for review, the one path every Submit runs through (Build
+ * Prompt 59).
+ *
+ * The completeness gate lives here rather than in `executeTransition`, and that
+ * is the point of it being one function: the transition engine is unchanged, and
+ * the same precondition applies whichever button was pressed. Submitting is
+ * offered from three places (the create and edit forms, the detail's own Submit,
+ * and the batch release on the list), and a rule enforced in two of the three is
+ * not a rule, it is a detour.
+ *
+ * It is checked against the stored row rather than against a posted form, so the
+ * answer is the same for a finding saved a minute ago and one saved last week.
+ *
+ * The refusal names every missing field, not the first: an auditor should learn
+ * the whole of what is left in one attempt.
+ */
+export type SubmitResult =
+  | TransitionResult
+  | { ok: false; code: 'incomplete'; message: string; missing: string[] };
+
+export async function submitForReview(
+  db: Client,
+  organizationId: string,
+  workPaperId: string,
+  actor: TransitionActor,
+  /** The note the auditor sent it with, kept on the revision row as any move's is. */
+  comment: string | null = null,
+  access?: TransitionAccess,
+): Promise<SubmitResult> {
+  const wp = await getWorkPaper(db, organizationId, workPaperId);
+  if (!wp) return { ok: false, code: 'not_found', message: 'That work paper was not found.' };
+
+  const missing = missingForSubmission(completenessOf(wp));
+  if (missing.length > 0) {
+    return { ok: false, code: 'incomplete', message: incompleteMessage(missing), missing };
+  }
+  return executeTransition(
+    db,
+    organizationId,
+    workPaperId,
+    WP_STATUS.SUBMITTED,
+    actor,
+    comment,
+    access,
+  );
 }
 
 /**

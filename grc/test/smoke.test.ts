@@ -174,6 +174,10 @@ const MUTATION_STEPS: MutationStep[] = [
       risk_rating: 'High',
       recommendation: 'Do the thing.',
       assigned_auditor: SMOKE.auditorId,
+      // Complete, because the crawl submits it a few steps later and a
+      // submission needs a whole finding (Build Prompt 59).
+      audit_period_from: '2026-01-01',
+      audit_period_to: '2026-03-31',
     }),
     capture: { key: 'wpId', from: /\/work-papers\/([^/?]+)/ },
   },
@@ -189,11 +193,21 @@ const MUTATION_STEPS: MutationStep[] = [
     },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}`,
+    // The form posts every field, so the fixture does too: a partial post is a
+    // partial finding, and the crawl submits this one two steps later
+    // (Build Prompt 59).
     form: () => ({
       observation_title: 'Smoke-created finding (edited)',
+      observation_description: 'Created by the smoke test.',
       year: '2026',
       affiliate_code: SMOKE.affiliateCode,
       audit_area_id: SMOKE.auditAreaId,
+      sub_area_id: SMOKE.subAreaId,
+      risk_rating: 'High',
+      recommendation: 'Do the thing.',
+      assigned_auditor: SMOKE.auditorId,
+      audit_period_from: '2026-01-01',
+      audit_period_to: '2026-03-31',
     }),
   },
   {
@@ -2602,6 +2616,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           risk_rating: 'High',
           recommendation: 'Fix it.',
           assigned_auditor: SMOKE.auditorId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
         });
         const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
         assert.ok(m, `create ${i + 1} redirected to ${res.headers.location}`);
@@ -2893,6 +2909,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         risk_rating: 'Medium',
         recommendation: 'Evidence every count.',
         assigned_auditor: SMOKE.auditorId,
+        audit_period_from: '2026-01-01',
+        audit_period_to: '2026-03-31',
       });
       const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
       assert.ok(m, `the auditor must be able to raise a finding, got ${created.headers.location}`);
@@ -3015,6 +3033,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
             risk_rating: 'Medium',
             recommendation: 'Fix it.',
             assigned_auditor: SMOKE.auditorId,
+            audit_period_from: '2026-01-01',
+            audit_period_to: '2026-03-31',
           });
           const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
           assert.ok(m, `the auditor must be able to raise "${title}", got ${res.headers.location}`);
@@ -3283,9 +3303,12 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           year: '2026',
           affiliate_code: SMOKE.affiliateCode,
           audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
           risk_rating: 'Low',
           recommendation: 'Fix the row, but do not refuse the auditor meanwhile.',
           assigned_auditor: SMOKE.auditorId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
         });
         const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
         assert.ok(m, `create redirected to ${created.headers.location}`);
@@ -3580,6 +3603,113 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         await signInAsOwnerInsideHass();
       },
     );
+
+    // Save as draft and Submit for review, from one screen (Build Prompt 59).
+    // The draft saves with holes in it; the submission is refused until they are
+    // filled, and the refusal names every one of them.
+    await t.test('an incomplete finding saves as a draft and is refused submission', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+
+      // Half a finding: the observation is written, the rest is not. This is the
+      // state an auditor is in halfway through a depot visit, and it must save.
+      const created = await server.request('POST', '/api/work-papers', {
+        intent: 'draft',
+        observation_title: 'Fuel losses at the Nakuru depot',
+        observation_description: 'Losses exceed the tolerance, cause not yet established.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const at = decodeURIComponent(String(created.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(at), `an incomplete draft must save, got ${at}`);
+      const m = /\/work-papers\/([^/?]+)/.exec(at);
+      assert.ok(m, `saving must land on the finding, got ${at}`);
+      const id = m[1];
+      const statusOf = (): string =>
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        );
+      assert.equal(statusOf(), 'Draft', 'and it saves as a draft');
+
+      // The form offers both actions, and says what the second one needs.
+      const form = await server.get(`/work-papers/${id}/edit`);
+      assert.equal(form.status, 200, `the edit form answered ${form.status}`);
+      assert.ok(form.body.includes('name="intent" value="draft"'), 'the save action is offered');
+      assert.ok(
+        form.body.includes('name="intent" value="submit"'),
+        'and Submit for review beside it',
+      );
+
+      // Submitting it now is refused, and the refusal names everything missing
+      // rather than the first thing: one attempt, the whole answer.
+      const refused = await server.request('POST', `/api/work-papers/${id}`, {
+        intent: 'submit',
+        observation_title: 'Fuel losses at the Nakuru depot',
+        observation_description: 'Losses exceed the tolerance, cause not yet established.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const refusedAt = decodeURIComponent(String(refused.headers.location ?? ''));
+      assert.ok(refusedAt.includes('/edit?'), 'the refusal lands where the gaps are filled');
+      for (const named of ['sub-area', 'audit period', 'risk rating', 'recommendation']) {
+        assert.ok(refusedAt.includes(named), `the refusal must name ${named}, got ${refusedAt}`);
+      }
+      assert.ok(
+        refusedAt.includes('Saved as a draft.'),
+        'and must say the work is safe, which is what the auditor fears',
+      );
+      assert.equal(statusOf(), 'Draft', 'the finding does not move');
+
+      // The same finding, ticked in the list, is refused by the batch too, and
+      // for the same stated reason rather than opaquely.
+      const body = new URLSearchParams();
+      body.append('work_paper_id', id);
+      const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+      const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+      assert.ok(
+        batchAt.includes('Nothing was submitted') && batchAt.includes('sub-area'),
+        `the batch must refuse it and say why, got ${batchAt}`,
+      );
+      assert.equal(statusOf(), 'Draft', 'and it still does not move');
+
+      // Completing it and submitting from the same screen works.
+      const completed = await server.request('POST', `/api/work-papers/${id}`, {
+        intent: 'submit',
+        observation_title: 'Fuel losses at the Nakuru depot',
+        observation_description: 'Losses exceed the tolerance, traced to meter drift.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        sub_area_id: SMOKE.subAreaId,
+        audit_period_from: '2026-01-01',
+        audit_period_to: '2026-03-31',
+        risk_rating: 'High',
+        recommendation: 'Calibrate the meters monthly and reconcile the losses.',
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const doneAt = decodeURIComponent(String(completed.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(doneAt), `a complete finding must submit, got ${doneAt}`);
+      assert.equal(statusOf(), 'Submitted', 'and it moves once it is complete');
+      const revision = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM work_paper_revisions
+            WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+        )
+        .get(id) as { n: number | bigint };
+      assert.equal(Number(revision.n), 1, 'through the same transition as every other submit');
+
+      await signInAsOwnerInsideHass();
+    });
 
     await t.test('a draft with no auditor yet can still be submitted by its author', async () => {
       // Between creating a finding and assigning it, somebody still has to be
