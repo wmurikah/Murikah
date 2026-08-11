@@ -146,6 +146,13 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
       icon: 'responses',
       countKey: 'responsesToReview',
     });
+  // Requirements is the one entry an auditee sees for a reason (Build Prompt
+  // 58): being asked for a document is not a permission an administrator grants,
+  // it is a row naming you, and the screen scopes itself to what the reader
+  // owns. So it is offered to the audit side and to the auditee side alike, and
+  // an owner who holds nothing else still has somewhere to provide it.
+  if (show.workPapers || show.auditee)
+    audit.push({ label: 'Requirements', href: '/requirements', icon: 'list' });
   if (show.reports) audit.push({ label: 'Reports', href: '/reports', icon: 'reports' });
   if (show.analytics) audit.push({ label: 'Analytics', href: '/analytics', icon: 'analytics' });
 

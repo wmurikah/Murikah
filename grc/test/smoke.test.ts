@@ -85,6 +85,7 @@ const PAGE_PARAMS: Record<string, string> = {
   '/action-plans/[id]': SMOKE.actionPlanId,
   '/action-plans/[id]/edit': SMOKE.actionPlanId,
   '/auditee-responses/[id]': SMOKE.sentWorkPaperId,
+  '/requirements/[id]': SMOKE.requirementId,
 };
 
 /** The seeded database handle, for the state round-trip assertions. */
@@ -281,6 +282,92 @@ const MUTATION_STEPS: MutationStep[] = [
       requested_date: '2026-01-05',
       received_date: '2026-02-09',
     }),
+  },
+  {
+    // The requirements module (Build Prompt 58). These three steps prove the
+    // endpoints answer and record; the two-round loop, the owner scoping and the
+    // upload are driven end to end in their own case further down.
+    endpoint: 'requirements/index.ts',
+    title: 'raise a requirement against a finding, with an owner',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT requirement_id AS id, status, due_date FROM work_paper_requirements
+            WHERE work_paper_id = ? AND description = 'Provide the smoke module evidence.'`,
+        )
+        .get(String(c.get('wpId'))) as { id?: string; status?: string; due_date?: string };
+      assert.ok(r?.id, 'the requirement must be linked to the finding it was raised against');
+      assert.equal(String(r.status), 'OUTSTANDING', 'a fresh ask is outstanding');
+      assert.equal(String(r.due_date), '2026-03-31', 'the date it is wanted by is stored');
+      const owners = db
+        .prepare(`SELECT COUNT(*) AS n FROM requirement_owners WHERE requirement_id = ?`)
+        .get(String(r.id)) as { n: number | bigint };
+      assert.ok(Number(owners.n) >= 1, 'and it names somebody to provide it');
+    },
+    method: 'POST',
+    path: () => '/api/requirements',
+    form: (c) => ({
+      work_paper_id: String(c.get('wpId')),
+      description: 'Provide the smoke module evidence.',
+      requested_date: '2026-03-01',
+      due_date: '2026-03-31',
+      // The acting session owns it, so the next two steps can act on it as the
+      // owner and as audit without a second sign-in inside the crawl.
+      owner_ids: SMOKE.userId,
+    }),
+    capture: { key: 'reqId', from: /\/requirements\/([^/?]+)/ },
+  },
+  {
+    endpoint: 'requirements/[id]/submit.ts',
+    title: 'an owner provides what was asked for',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT round_number, review_status, submission_note FROM requirement_submissions
+            WHERE requirement_id = ?`,
+        )
+        .get(String(c.get('reqId'))) as {
+        round_number?: number | bigint;
+        review_status?: string;
+        submission_note?: string;
+      };
+      assert.equal(Number(r?.round_number), 1, 'the first answer is round one');
+      assert.equal(String(r.review_status), 'PENDING', 'and it is waiting on audit');
+      const req = db
+        .prepare(`SELECT status FROM work_paper_requirements WHERE requirement_id = ?`)
+        .get(String(c.get('reqId'))) as { status?: string };
+      assert.equal(String(req.status), 'AWAITING_REVIEW', 'the requirement follows the round');
+    },
+    method: 'POST',
+    path: (c) => `/api/requirements/${c.get('reqId')}/submit`,
+    form: () => ({ note: 'The reconciliation, as asked.' }),
+  },
+  {
+    endpoint: 'requirements/[id]/review.ts',
+    title: 'audit accepts it and the requirement closes',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT status, closed_at, closed_by, last_reviewed_date
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(String(c.get('reqId'))) as {
+        status?: string;
+        closed_at?: string;
+        closed_by?: string;
+        last_reviewed_date?: string;
+      };
+      assert.equal(String(r.status), 'CLOSED', 'accepting ends the ask');
+      assert.ok(r.closed_at, 'and stamps when');
+      assert.equal(String(r.closed_by), SMOKE.userId, 'and who');
+      assert.ok(r.last_reviewed_date, 'a reviewed requirement records when it was last read');
+    },
+    method: 'POST',
+    path: (c) => `/api/requirements/${c.get('reqId')}/review`,
+    form: () => ({ decision: 'accept', review_comment: 'Complete, thank you.' }),
   },
   {
     endpoint: 'work-papers/[id]/responsibles.ts',
@@ -3237,6 +3324,262 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         await signInAsOwnerInsideHass();
       }
     });
+
+    // The requirements module, end to end (Build Prompt 58): an auditor asks, an
+    // owner provides with a document, audit asks for more, the owner answers
+    // again, audit accepts, and the whole exchange is on the record. The two
+    // sides are two real sessions, because the scoping is the point: an owner
+    // here is an auditee who holds no audit permission at all.
+    await t.test(
+      'a requirement goes two rounds and closes, and owners see only theirs',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        // The auditor raises a finding of their own, then asks for information on
+        // it. They are its assigned auditor, so they are who the submission tells.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          observation_title: 'Depot fuel reconciliations unsupported',
+          observation_description: 'The supporting schedules were not provided.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          risk_rating: 'High',
+          recommendation: 'Reconcile monthly.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const wp = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+        assert.ok(
+          wp,
+          `the auditor must be able to raise a finding, got ${created.headers.location}`,
+        );
+
+        const raised = await server.request('POST', '/api/requirements', {
+          work_paper_id: wp[1],
+          description: 'The March depot reconciliation, signed by preparer and reviewer.',
+          requested_date: '2026-03-02',
+          due_date: '2026-03-16',
+          owner_ids: SMOKE.auditeeId,
+        });
+        const raisedAt = decodeURIComponent(String(raised.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(raisedAt), `raising must succeed, got ${raisedAt}`);
+        const m = /\/requirements\/([^/?]+)/.exec(raisedAt);
+        assert.ok(m, `raising must land on the requirement, got ${raisedAt}`);
+        const reqId = m[1];
+
+        const statusOf = (id: string): string =>
+          String(
+            (
+              db
+                .prepare(`SELECT status FROM work_paper_requirements WHERE requirement_id = ?`)
+                .get(id) as { status?: string }
+            ).status,
+          );
+        const queued = (type: string): number =>
+          Number(
+            (
+              db
+                .prepare(
+                  `SELECT COUNT(*) AS n FROM notification_queue
+                  WHERE batch_type = ? AND related_entity_id = ?`,
+                )
+                .get(type, reqId) as { n: number | bigint }
+            ).n,
+          );
+        assert.equal(statusOf(reqId), 'OUTSTANDING', 'a fresh ask is outstanding');
+        assert.ok(queued('REQUIREMENT_ASSIGNED') >= 1, 'the owner is told they have been asked');
+
+        // The owner: an auditee, with no audit permission of any kind.
+        await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+        const portal = await server.get('/requirements');
+        assert.equal(portal.status, 200, `the owner portal answered ${portal.status}`);
+        assert.ok(
+          portal.body.includes('The March depot reconciliation'),
+          'an owner must see what they have been asked for',
+        );
+        assert.ok(
+          !portal.body.includes('Provide the December reconciliation file.'),
+          'and must not see a requirement they do not own',
+        );
+        assert.ok(
+          !portal.body.includes('New requirement'),
+          'an owner is not offered the auditor’s raise action',
+        );
+        const notMine = await server.get(`/requirements/${SMOKE.requirementId}`);
+        assert.equal(notMine.status, 404, 'somebody else’s requirement is not found, for them');
+
+        // Round one, with the document, through the organisation's evidence store.
+        const first = await server.postMultipart(
+          `/api/requirements/${reqId}/submit`,
+          { note: 'March reconciliation attached, prepared by the depot accountant.' },
+          {
+            field: 'file',
+            filename: 'march-reconciliation.txt',
+            contentType: 'text/plain',
+            content: 'Depot reconciliation, March 2026.',
+          },
+        );
+        const firstAt = decodeURIComponent(String(first.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(firstAt), `the first round must be accepted, got ${firstAt}`);
+        assert.equal(statusOf(reqId), 'AWAITING_REVIEW', 'and it now waits on audit');
+        const round1 = db
+          .prepare(
+            `SELECT file_id, review_status FROM requirement_submissions
+            WHERE requirement_id = ? AND round_number = 1`,
+          )
+          .get(reqId) as { file_id?: string; review_status?: string };
+        assert.ok(round1.file_id, 'the document is recorded on the round');
+        assert.equal(String(round1.review_status), 'PENDING', 'unreviewed until audit reads it');
+        const stored = db
+          .prepare(
+            `SELECT f.file_name AS name, fa.attachment_id AS attachment_id
+             FROM files f JOIN file_attachments fa ON fa.file_id = f.file_id
+            WHERE f.file_id = ? AND fa.entity_type = 'requirement' AND fa.entity_id = ?`,
+          )
+          .get(String(round1.file_id), reqId) as { name?: string; attachment_id?: string };
+        assert.equal(
+          String(stored?.name),
+          'march-reconciliation.txt',
+          'the bytes went to the evidence store and were recorded like any other evidence',
+        );
+        // And the owner can read back what they provided: the row naming them is
+        // the whole of their access to it.
+        const download = await server.request(
+          'GET',
+          `/api/evidence/${String(stored.attachment_id)}/download`,
+        );
+        assert.ok(
+          download.status < 400,
+          `an owner must be able to download their own document, got ${download.status}`,
+        );
+        assert.ok(
+          queued('REQUIREMENT_SUBMITTED') >= 1,
+          'the auditor is told there is something to read',
+        );
+
+        // Audit reads it and asks for more, naming what is missing.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const refusedBlank = await server.request('POST', `/api/requirements/${reqId}/review`, {
+          decision: 'more_info',
+          review_comment: 'Not complete.',
+        });
+        assert.ok(
+          decodeURIComponent(String(refusedBlank.headers.location ?? '')).includes(
+            'Say what further information is needed.',
+          ),
+          'asking for more without saying what is not a request, it is a dead end',
+        );
+        const more = await server.request('POST', `/api/requirements/${reqId}/review`, {
+          decision: 'more_info',
+          review_comment: 'The reviewer signature is missing.',
+          additional_info_request: 'Send the copy signed by the reviewer.',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(more.headers.location ?? ''))),
+          'audit must be able to ask for more',
+        );
+        assert.equal(statusOf(reqId), 'MORE_INFO', 'and it is the owner’s move again');
+        assert.ok(queued('REQUIREMENT_MORE_INFO') >= 1, 'the owner is told what else is wanted');
+
+        // Round two answers the question that was asked.
+        await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+        const asked = await server.get(`/requirements/${reqId}`);
+        assert.equal(asked.status, 200, `the owner’s detail answered ${asked.status}`);
+        assert.ok(
+          asked.body.includes('Send the copy signed by the reviewer.'),
+          'the outstanding question is on the screen the owner answers it from',
+        );
+        const second = await server.postMultipart(
+          `/api/requirements/${reqId}/submit`,
+          { note: 'Signed copy attached.' },
+          {
+            field: 'file',
+            filename: 'march-reconciliation-signed.txt',
+            contentType: 'text/plain',
+            content: 'Depot reconciliation, March 2026. Signed.',
+          },
+        );
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(second.headers.location ?? ''))),
+          'the second round must be accepted',
+        );
+        assert.equal(statusOf(reqId), 'AWAITING_REVIEW', 'waiting on audit once more');
+
+        // Audit accepts, which ends the ask.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const accepted = await server.request('POST', `/api/requirements/${reqId}/review`, {
+          decision: 'accept',
+          review_comment: 'Signed copy received, thank you.',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(accepted.headers.location ?? ''))),
+          'audit must be able to accept',
+        );
+        const closed = db
+          .prepare(
+            `SELECT status, closed_at, closed_by, last_reviewed_date
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+          )
+          .get(reqId) as {
+          status?: string;
+          closed_at?: string;
+          closed_by?: string;
+          last_reviewed_date?: string;
+        };
+        assert.equal(String(closed.status), 'CLOSED', 'accepting closes the requirement');
+        assert.ok(closed.closed_at, 'with the moment it was closed');
+        assert.equal(String(closed.closed_by), SMOKE.auditorId, 'and who closed it');
+        assert.ok(closed.last_reviewed_date, 'and when audit last read it');
+
+        // The trail: two rounds, in order, each paired with what audit said to it.
+        const trail = db
+          .prepare(
+            `SELECT round_number, submitted_by, review_status, additional_info_request, reviewed_by
+             FROM requirement_submissions WHERE requirement_id = ? ORDER BY round_number`,
+          )
+          .all(reqId) as {
+          round_number: number | bigint;
+          submitted_by?: string;
+          review_status?: string;
+          additional_info_request?: string | null;
+          reviewed_by?: string;
+        }[];
+        assert.equal(
+          trail.length,
+          2,
+          'both rounds are kept; the second does not overwrite the first',
+        );
+        assert.equal(Number(trail[0].round_number), 1);
+        assert.equal(String(trail[0].review_status), 'MORE_INFO', 'round one was sent back');
+        assert.equal(
+          String(trail[0].additional_info_request),
+          'Send the copy signed by the reviewer.',
+          'and the question it was sent back with is still there',
+        );
+        assert.equal(Number(trail[1].round_number), 2);
+        assert.equal(String(trail[1].review_status), 'ACCEPTED', 'round two was accepted');
+        assert.equal(String(trail[1].submitted_by), SMOKE.auditeeId, 'both rounds are the owner’s');
+        assert.equal(
+          String(trail[1].reviewed_by),
+          SMOKE.auditorId,
+          'and both decisions are audit’s',
+        );
+
+        // And the screen shows it as the exchange it was, newest last.
+        const detail = await server.get(`/requirements/${reqId}`);
+        assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+        assert.ok(detail.body.includes('Round 1'), 'the first round is still on the record');
+        assert.ok(detail.body.includes('Round 2'), 'beside the second');
+        assert.ok(
+          detail.body.indexOf('Round 1') < detail.body.indexOf('Round 2'),
+          'oldest first, so the back-and-forth reads in the order it happened',
+        );
+        assert.ok(detail.body.includes('Closed'), 'and the current state reads at a glance');
+
+        await signInAsOwnerInsideHass();
+      },
+    );
 
     await t.test('a draft with no auditor yet can still be submitted by its author', async () => {
       // Between creating a finding and assigning it, somebody still has to be

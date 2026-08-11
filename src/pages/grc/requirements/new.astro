@@ -1,0 +1,141 @@
+---
+export const prerender = false;
+
+/**
+ * Raise a requirement (Build Prompt 58). Gate: REQUIREMENTS.manage.
+ *
+ * The finding is chosen here and cannot be left out: a request for information
+ * belongs to the piece of audit work that needs it, and one that belongs to
+ * nothing cannot be reported on or closed as part of anything. The owners are
+ * chosen the same way action plan owners are, several at a time, because a
+ * single ask routinely spans two departments.
+ *
+ * Arriving from a finding (`?work_paper=`) preselects it, so the auditor reading
+ * a work paper does not have to find it again in a list.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
+import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const allowed = grc.isPlatformOwner || grc.perms.includes('REQUIREMENTS.manage');
+const presetWorkPaper = Astro.url.searchParams.get('work_paper') ?? '';
+const failed = Astro.url.searchParams.get('error');
+const today = new Date().toISOString().slice(0, 10);
+
+let workPapers: WorkPaperOption[] = [];
+let users: Option[] = [];
+let loadError = false;
+if (allowed) {
+  loadError = !(await guardPageLoad('requirements.new', async () => {
+    const db = await getDb(getGrcEnv());
+    [workPapers, users] = await Promise.all([
+      listWorkPaperOptions(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+    ]);
+  }));
+}
+---
+
+<GrcLayout title="New requirement">
+  <div class="grc-page-head">
+    <div>
+      <h1>New requirement</h1>
+      <p class="grc-lead">Ask the business for the information a finding needs.</p>
+    </div>
+    <a href="/requirements" class="grc-btn grc-btn--secondary">Back to requirements</a>
+  </div>
+
+  {
+    failed && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {decodeURIComponent(failed)}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have permission to raise requirements.
+      </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The requirement form" />
+    ) : workPapers.length === 0 ? (
+      <div class="grc-empty">
+        <p>
+          <strong>There is no finding to attach this to.</strong> Raise the work paper first; a
+          requirement belongs to the audit work that needs the information.
+        </p>
+      </div>
+    ) : (
+      <form method="post" action="/api/requirements" class="grc-panel">
+        <div class="grc-field">
+          <label for="work-paper">Work paper (required)</label>
+          <select id="work-paper" name="work_paper_id" class="grc-select" required>
+            <option value="">Choose the finding</option>
+            {workPapers.map((w) => (
+              <option value={w.id} selected={presetWorkPaper === w.id}>
+                {w.label}
+              </option>
+            ))}
+          </select>
+          <p class="grc-field__hint">
+            The finding this information is needed for. It cannot be added later.
+          </p>
+        </div>
+
+        <div class="grc-field">
+          <label for="description">What is required (required)</label>
+          <textarea
+            id="description"
+            name="description"
+            class="grc-textarea"
+            rows="4"
+            maxlength="2000"
+            required
+            placeholder="The bank reconciliation for March, signed by the preparer and the reviewer."
+          />
+        </div>
+
+        <div class="grc-field">
+          <label for="requested">Requested on</label>
+          <input type="date" id="requested" name="requested_date" class="grc-input" value={today} />
+        </div>
+
+        <div class="grc-field">
+          <label for="due">Due by</label>
+          <input type="date" id="due" name="due_date" class="grc-input" />
+        </div>
+
+        <div class="grc-field">
+          <label for="owners">Owners (required)</label>
+          <select id="owners" name="owner_ids" class="grc-select" multiple size="6" required>
+            {users.map((u) => (
+              <option value={u.id}>{u.label}</option>
+            ))}
+          </select>
+          <p class="grc-field__hint">
+            Everyone named here is asked for it and can provide it. Hold Ctrl or Cmd to select more
+            than one.
+          </p>
+        </div>
+
+        <div class="grc-actionbar">
+          <button type="submit" class="grc-btn grc-btn--primary">
+            Raise requirement
+          </button>
+          <a href="/requirements" class="grc-btn grc-btn--secondary">
+            Cancel
+          </a>
+        </div>
+      </form>
+    )
+  }
+</GrcLayout>

@@ -26,11 +26,14 @@ export type NotificationType =
   | 'STALE_REMINDER'
   | 'OVERDUE_REMINDER'
   | 'DUE_SOON_REMINDER'
+  | 'REQUIREMENT_ASSIGNED'
+  | 'REQUIREMENT_SUBMITTED'
+  | 'REQUIREMENT_MORE_INFO'
   | 'PASSWORD_RESET';
 
 export type Priority = 'normal' | 'urgent';
 export type Severity = 'info' | 'warning' | 'urgent';
-export type EntityType = 'work_paper' | 'action_plan' | 'user';
+export type EntityType = 'work_paper' | 'action_plan' | 'requirement' | 'user';
 
 export interface TypeMeta {
   label: string;
@@ -174,6 +177,32 @@ export const TYPE_META: Record<NotificationType, TypeMeta> = {
     severity: 'warning',
     ccHoa: false,
     entity: 'action_plan',
+  },
+  // The requirements loop (Build Prompt 58). An owner being asked for something,
+  // and being asked again, are the events they act on, so both copy the head of
+  // audit for nothing: they are between the auditor and the owner. A submission
+  // is the auditor's cue to review, and it is batched like every other normal
+  // item, so twelve owners answering on a Friday make one digest.
+  REQUIREMENT_ASSIGNED: {
+    label: 'Information requested',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'requirement',
+  },
+  REQUIREMENT_SUBMITTED: {
+    label: 'Information provided',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'requirement',
+  },
+  REQUIREMENT_MORE_INFO: {
+    label: 'Further information requested',
+    priority: 'normal',
+    severity: 'warning',
+    ccHoa: false,
+    entity: 'requirement',
   },
   PASSWORD_RESET: {
     label: 'Password reset link',

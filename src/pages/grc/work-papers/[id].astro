@@ -424,6 +424,8 @@ const responseFacts: { label: string; value: string }[] = wp
           <h2>Requirements</h2>
           <p class="grc-lead" style="margin:0 0 0.5rem">
             The information asked for on this finding, when it was asked for, and when it arrived.
+            To ask an owner for something and run the review rounds on it, use{' '}
+            <a href={`/requirements?work_paper=${id}`}>Requirements</a>.
           </p>
           {requirements.length === 0 ? (
             <p class="grc-lead" style="margin:0">
