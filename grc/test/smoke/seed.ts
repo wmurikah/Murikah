@@ -121,6 +121,18 @@ export const SMOKE = {
   inheritDraftIds: ['WP-TANA-1', 'WP-TANA-2', 'WP-TANA-3'],
 } as const;
 
+/**
+ * The enum_type the live database keys the work-paper workflow by, in the live
+ * spelling (Build Prompt 61).
+ */
+const LIVE_WP_ENUM = 'work_paper_status';
+
+/** The other workflow in the same table that also defines Draft -> Submitted. */
+const RESPONSE_ENUM = 'response_status';
+
+/** The same workflow, spelled as a hand-edited reference row may spell it. */
+const MIXED_CASE_WP_ENUM = 'Work_Paper_Status';
+
 const WP_STATUSES = [
   'Draft',
   'Submitted',
@@ -422,9 +434,16 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
   // is seeded. MFA_AUTHENTICATOR_ROLES stays unset (its default allows the
   // seeded SUPER_ADMIN the authenticator app).
 
+  // The live database spells the work-paper workflow in lower case, and the code
+  // spelled it in upper case, so a case-sensitive lookup matched none of its
+  // rows and every move a work paper could make was refused (Build Prompt 61).
+  // The seed follows the live spelling, exactly as the dictionary rule requires:
+  // the database is the ground truth and the code bends to it. Action plans keep
+  // the upper-case spelling, so the run proves the lookup is tolerant of both
+  // rather than of one.
   for (const [i, value] of WP_STATUSES.entries()) {
     insert(db, 'enum_values', {
-      enum_type: 'WORK_PAPER_STATUS',
+      enum_type: LIVE_WP_ENUM,
       enum_value: value,
       display_label: value,
       display_order: i + 1,
@@ -444,7 +463,12 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
   }
   for (const [from, to] of WP_TRANSITIONS) {
     insert(db, 'status_transitions', {
-      enum_type: 'WORK_PAPER_STATUS',
+      // One row is spelled differently from its neighbours, because these are
+      // hand-maintained reference rows and in a live table they are: the
+      // resubmit after a review is written `Work_Paper_Status` here. It is the
+      // same workflow and must answer as one, which a case-sensitive lookup
+      // would not do (Build Prompt 61).
+      enum_type: from === 'Revision Required' ? MIXED_CASE_WP_ENUM : LIVE_WP_ENUM,
       from_status: from,
       to_status: to,
       required_role: null,
@@ -461,10 +485,29 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
     });
   }
   insert(db, 'workflow_terminal_states', {
-    workflow_name: 'WORK_PAPER_STATUS',
+    workflow_name: LIVE_WP_ENUM,
     terminal_status: 'Response Reviewed',
     created_at: now,
   });
+  // The decoy the live table actually holds: a second workflow, under its own
+  // enum, defining a move of the very same name. A lookup that is not scoped to
+  // the work paper's own workflow matches this and moves a finding by an auditee
+  // response's rules, or misses its own and refuses a move that plainly exists.
+  for (const [from, to] of [
+    ['Draft', 'Submitted'],
+    ['Submitted', 'Approved'],
+  ] as const) {
+    insert(db, 'status_transitions', {
+      enum_type: RESPONSE_ENUM,
+      from_status: from,
+      to_status: to,
+      // Reserved for a role nobody in the smoke run holds, so a work paper that
+      // wrongly matched this row would be refused for the role rather than
+      // passing silently: the decoy has to be able to fail loudly.
+      required_role: 'NOBODY',
+      requires_comment: 1,
+    });
+  }
   for (const status of ['Closed', 'Rejected']) {
     insert(db, 'workflow_terminal_states', {
       workflow_name: 'ACTION_PLAN_STATUS',
