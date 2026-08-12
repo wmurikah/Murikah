@@ -235,6 +235,11 @@ const LEGACY_MAP: Array<{ code: string; module: string; action: string }> = [
   { code: 'WORK_PAPERS.submit', module: 'WORK_PAPER', action: 'update' },
   { code: 'WORK_PAPERS.approve', module: 'WORK_PAPER', action: 'approve' },
   { code: 'WORK_PAPERS.send', module: 'WORK_PAPER', action: 'approve' },
+  // Sending a finding with no evidence attached is a judgement, not a loophole,
+  // so it follows the grant of the person whose act sending is: the head of
+  // audit (Build Prompt 62). It was read by the evidence gate and mapped to
+  // nobody, so the override the refusal offers existed only in its wording.
+  { code: 'WORK_PAPERS.evidence_override', module: 'WORK_PAPER', action: 'approve' },
   { code: 'REQUIREMENTS.manage', module: 'WORK_PAPER', action: 'update' },
   { code: 'ACTION_PLANS.view', module: 'ACTION_PLAN', action: 'read' },
   { code: 'ACTION_PLANS.create', module: 'ACTION_PLAN', action: 'create' },
