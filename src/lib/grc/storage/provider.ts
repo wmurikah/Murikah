@@ -128,6 +128,17 @@ export interface ProviderDefinition {
   folderLabel: string;
   /** Where the one-time app registration is documented. */
   setupDoc: string;
+  /**
+   * Something the administrator must do in their own account for the browser,
+   * as opposed to the Worker, to reach this provider (Build Prompt 66).
+   *
+   * Only R2 has one, because only R2 is uploaded to by the browser. The
+   * connection test runs in the Worker, which is not subject to CORS, so a
+   * bucket with no cross-origin rule tests green and then refuses every upload
+   * an auditor makes. Saying so on the screen that connects it is the only
+   * place an administrator is looking at the time.
+   */
+  browserNote?: string;
 }
 
 /**
@@ -157,6 +168,8 @@ export const PROVIDER_DEFINITIONS: readonly ProviderDefinition[] = [
     ],
     folderLabel: 'Key prefix',
     setupDoc: 'grc/docs/storage-setup.md',
+    browserNote:
+      'The bucket must also allow this site to upload to it. Add a CORS policy on the bucket allowing PUT, GET and HEAD from this address, with content-type among the allowed headers. Without it the connection still tests green here, because that test runs on the server, but every upload an auditor makes is refused by the browser.',
   },
   {
     code: 'google_drive',
