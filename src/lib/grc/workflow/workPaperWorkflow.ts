@@ -494,12 +494,14 @@ export interface OfferedAction {
  * A move the workflow defines from here that this actor may not make, and the
  * reason (Build Prompt 53).
  *
- * A filtered-out action used to vanish without trace, so "why can I not submit
- * my own draft?" had no answer on the screen and no answer in the logs either:
- * the two possible causes, a `status_transitions` row that names a different
- * role and a permission the actor's matrix does not grant, look identical from
- * the outside. Naming them is the difference between a support ticket and a
- * setting somebody can go and change.
+ * DIAGNOSTIC ONLY. NEVER RENDERED (Build Prompt 63). The reason names a
+ * permission code, and a permission code in front of somebody who cannot act on
+ * it explains nothing and reads as a fault: an auditor was being told that Start
+ * review exists and that their role does not hold WORK_PAPER.approve, about an
+ * action that was never theirs to take. The screens show what a person can do
+ * and stay silent about the rest. The reason survives here for diagnosis, and
+ * the refusal log names it if anybody ever posts the move; `offeredActions` is
+ * what a template asks, and it carries no reasons at all.
  */
 export interface WithheldAction {
   toStatus: string;

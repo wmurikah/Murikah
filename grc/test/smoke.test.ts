@@ -2892,6 +2892,92 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     // transition table and gated on the matrix grant an administrator can see
     // ticked, so an auditor holding WORK_PAPER.update releases their own draft
     // without anyone touching a permission list by hand.
+    // What the finding's page shows, and what it must never say (Build Prompt 63).
+    await t.test('the overview names the finding, and never explains a permission', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // A finding of the auditor's own, submitted, so a reviewer action exists
+      // for somebody and it is not this person.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const title = 'Tank dip readings not signed off';
+      const created = await server.request('POST', '/api/work-papers', {
+        intent: 'submit',
+        observation_title: title,
+        observation_description: 'The daily dips were recorded but never signed.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        sub_area_id: SMOKE.subAreaId,
+        audit_period_from: '2026-01-01',
+        audit_period_to: '2026-03-31',
+        risk_rating: 'Medium',
+        recommendation: 'Sign each dip sheet daily.',
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const m = /\/work-papers\/([^/?]+)/.exec(
+        decodeURIComponent(String(created.headers.location ?? '')),
+      );
+      assert.ok(m, `the auditor must be able to submit, got ${created.headers.location}`);
+      const id = m[1];
+      assert.equal(
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        ),
+        'Submitted',
+        'it is with the reviewer, so Start review exists for somebody',
+      );
+
+      const page = await server.get(`/work-papers/${id}`);
+      assert.equal(page.status, 200, `the finding answered ${page.status}`);
+
+      // The stored title is on the page as a field of the finding, not only as
+      // the heading: the panel that describes the finding omitted it entirely.
+      assert.ok(page.body.includes('<dt>Observation title</dt>'), 'the field is labelled');
+      assert.ok(
+        page.body.includes(`<dt>Observation title</dt><dd>${title}</dd>`) ||
+          new RegExp(`Observation title</dt>\\s*<dd>${title}</dd>`).test(page.body),
+        'and carries the stored value',
+      );
+
+      // Nothing on the screen explains a permission, or names one.
+      for (const leak of [
+        'does not hold',
+        'WORK_PAPER.approve',
+        'WORK_PAPER.update',
+        'reserves it for the',
+        'No action is available to you',
+      ]) {
+        assert.ok(!page.body.includes(leak), `the screen must never say "${leak}"`);
+      }
+      // And the reviewer's actions are simply absent, not explained.
+      for (const reviewerAction of ['Start review', 'Approve', 'Send to auditee']) {
+        assert.ok(
+          !page.body.includes(reviewerAction),
+          `an auditor must not be offered ${reviewerAction}`,
+        );
+      }
+
+      // The head of audit, on the same finding, is offered the action that is
+      // theirs: the actions are hidden by permission, not removed from the app.
+      await signInAsOwnerInsideHass();
+      const reviewerView = await server.get(`/work-papers/${id}`);
+      assert.equal(reviewerView.status, 200, `the reviewer's view answered ${reviewerView.status}`);
+      assert.ok(reviewerView.body.includes('Start review'), 'the reviewer still has their action');
+      assert.ok(
+        !reviewerView.body.includes('does not hold'),
+        'and is told no permission reasons either',
+      );
+      assert.ok(
+        reviewerView.body.includes('<dt>Observation title</dt>'),
+        'and sees the finding named',
+      );
+    });
+
     // The badge counts what is this person's to act on, per module (Build Prompt
     // 62). It was the organisation's submitted count, which badged an auditor
     // with a number that was nobody's work but the head of audit's.
@@ -3736,7 +3822,9 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         );
         assert.equal(statusOf(alone), 'Under Review', 'and the finding does not move');
 
-        // The screen says so too, naming the grant rather than hiding the button.
+        // The screen simply does not offer it, and explains nothing: naming the
+        // grant put a permission code in front of somebody who cannot act on it
+        // (Build Prompt 63 revises Build Prompt 55 here).
         const detail = await server.get(`/work-papers/${alone}`);
         assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
         assert.ok(
@@ -3744,8 +3832,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           'the auditor is not offered a reviewer action',
         );
         assert.ok(
-          detail.body.includes('WORK_PAPER.approve'),
-          'and is told which grant the reviewer moves need',
+          !detail.body.includes('WORK_PAPER.approve') && !detail.body.includes('does not hold'),
+          'and is told nothing about the permission they lack',
         );
 
         await signInAsOwnerInsideHass();

@@ -1,0 +1,130 @@
+/**
+ * What the finding's own page must show, and what it must never say
+ * (Build Prompt 63).
+ *
+ * TWO FAULTS OF THE SAME KIND: a screen that renders a subset of what is stored,
+ * and a screen that renders something meant for a log. The observation title was
+ * stored, written into every email, editable on the form, and absent from the
+ * panel that describes the finding, which is exactly how Classification and
+ * Standards went missing before it. And an auditor opening a submitted finding
+ * was shown "Start review: your role does not hold WORK_PAPER.approve", a
+ * permission code in front of somebody who cannot act on it.
+ *
+ * Both checks are mechanical, and both would have caught their fault: the first
+ * compares the writable field map against the template, the second reads the
+ * templates for the reason text and for the API that carries it.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+
+const REPO = join(import.meta.dirname, '..', '..');
+const DETAIL = join(REPO, 'src', 'pages', 'grc', 'work-papers', '[id].astro');
+const REPOSITORY = join(REPO, 'src', 'lib', 'grc', 'repos', 'workPapers.ts');
+
+/**
+ * Fields whose value the detail resolves through a joined name rather than the
+ * stored id, and the name it renders instead. Showing a raw `AA-FIN` where an
+ * audit area belongs would be rendering the field and still not showing it.
+ */
+const SHOWN_AS: Record<string, string> = {
+  audit_area_id: 'audit_area_name',
+  sub_area_id: 'sub_area_name',
+  affiliate_code: 'affiliate_name',
+  assigned_auditor_id: 'assigned_auditor_name',
+};
+
+/** The writable columns, read from the one map create, update and the form share. */
+function writableColumns(): string[] {
+  const source = readFileSync(REPOSITORY, 'utf8');
+  const start = source.indexOf('const FIELDS:');
+  assert.ok(start > 0, 'the writable field map must still be called FIELDS');
+  const block = source.slice(start, source.indexOf('];', start));
+  return [...block.matchAll(/col:\s*'([a-z_]+)'/g)].map((m) => m[1]);
+}
+
+test('the detail shows every field a work paper stores', () => {
+  const columns = writableColumns();
+  assert.ok(columns.length > 15, `only ${columns.length} writable columns were found`);
+
+  const template = readFileSync(DETAIL, 'utf8');
+  const missing = columns.filter((col) => {
+    const shown = SHOWN_AS[col];
+    return !template.includes(`'${col}'`) && !(shown && template.includes(shown));
+  });
+
+  assert.deepEqual(
+    missing,
+    [],
+    `these fields are stored and editable but the detail renders none of them: ${missing.join(', ')}`,
+  );
+});
+
+test('the observation title is on the finding panel, not only in the heading', () => {
+  // The heading always carried it; the panel that describes the finding did not,
+  // which is the fault. A page can name a record and still fail to show the
+  // field, so this asserts the field, labelled, in the panel.
+  const template = readFileSync(DETAIL, 'utf8');
+  assert.ok(
+    /<dt>Observation title<\/dt>\s*<dd>\{val\('observation_title'\)\}<\/dd>/.test(template),
+    'the finding panel must carry the observation title as a labelled field',
+  );
+});
+
+function grcTemplates(): string[] {
+  const roots = [
+    join(REPO, 'src', 'pages', 'grc'),
+    join(REPO, 'src', 'components', 'grc'),
+    join(REPO, 'src', 'layouts'),
+  ];
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.astro')) out.push(full);
+    }
+  };
+  for (const root of roots) walk(root);
+  return out;
+}
+
+test('no screen renders a permission reason', () => {
+  const offenders: string[] = [];
+  for (const file of grcTemplates()) {
+    const source = readFileSync(file, 'utf8');
+    // The reason text itself, and the API that carries it: a template that asks
+    // for the withheld list is a template one line away from rendering it.
+    const rendersReason = /does not hold|reserves it for the/.test(source);
+    const takesWithheld = /availableActions|WithheldAction|\bwithheld\b/.test(
+      source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''),
+    );
+    if (rendersReason || takesWithheld) {
+      offenders.push(relative(REPO, file).split(sep).join('/'));
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `these templates carry permission-reason text or the API that supplies it: ${offenders.join(', ')}`,
+  );
+});
+
+test('the offer API a template uses carries no reasons at all', () => {
+  // `offeredActions` returns what the actor may do and nothing else, so a
+  // template cannot render a reason even by accident.
+  const workflow = readFileSync(
+    join(REPO, 'src', 'lib', 'grc', 'workflow', 'workPaperWorkflow.ts'),
+    'utf8',
+  );
+  const signature = workflow.slice(workflow.indexOf('export async function offeredActions'));
+  assert.ok(
+    signature.startsWith('export async function offeredActions'),
+    'offeredActions must still exist as the template-facing offer',
+  );
+  assert.ok(
+    /Promise<OfferedAction\[\]>/.test(signature.slice(0, 400)),
+    'and must return offered actions alone, never the withheld ones',
+  );
+});
