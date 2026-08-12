@@ -67,6 +67,70 @@ between the browser and the bucket and never pass through this application. On
 the other three the bytes stream through the Worker, because their APIs
 authenticate with a bearer token that must never reach a browser.
 
+### The bucket must allow this site (CORS)
+
+This is not optional, and it is the one step that is easy to miss because
+everything else about the connection tests green without it. The connection test
+runs in the Worker, which is not a browser and is not subject to CORS; the
+upload runs in the browser, which is.
+
+The upload is a `PUT` from `https://grc.murikah.com` to
+`https://<account>.r2.cloudflarestorage.com`, carrying a `content-type` header.
+That header is not one of the three values a browser will send cross-origin
+without asking first, so the browser sends a preflight `OPTIONS` before the
+`PUT`. A bucket with no CORS policy answers that preflight with a refusal, and
+the browser then refuses to make the request at all. There is no HTTP status to
+read: the request never happens. Symptom, before this was handled: the Evidence
+panel sat on "Uploading <file>..." for ever, nothing was attached, and nothing
+was written, because the completion step only runs once the `PUT` has finished.
+The panel now stops, says the store refused the browser and names this policy as
+the cure, and logs `[grc.evidence.upload] blocked` with the status in the
+console.
+
+Set the policy on the evidence bucket: Cloudflare dashboard → R2 → the bucket →
+**Settings** → **CORS policy** → **Add CORS policy**, or with the S3 API
+(`PutBucketCors`). The value:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://grc.murikah.com"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["content-type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+- `AllowedOrigins` must be the exact scheme and host the auditors use, with no
+  trailing slash. Add every origin that reaches the product: a preview
+  deployment on `*.pages.dev` and `http://grc.localhost:4321` for local work are
+  separate entries, not covered by the production one.
+- `AllowedMethods` needs `PUT` for the upload and `GET` for anything the browser
+  fetches straight from the bucket; `HEAD` costs nothing and helps diagnosis.
+- `AllowedHeaders` must include `content-type`, because that header is what
+  causes the preflight in the first place. Omitting it fails in exactly the same
+  way as having no policy.
+- The presigned URL carries its authorisation in the query string, so no
+  `authorization` header is sent and none needs allowing.
+
+To confirm it from a terminal, ask for the preflight the browser would ask for:
+
+```sh
+curl -i -X OPTIONS "https://<account>.r2.cloudflarestorage.com/<bucket>/probe" \
+  -H "Origin: https://grc.murikah.com" \
+  -H "Access-Control-Request-Method: PUT" \
+  -H "Access-Control-Request-Headers: content-type"
+```
+
+A correct policy answers `200` with `access-control-allow-origin` echoing the
+origin and `access-control-allow-methods` including `PUT`. A `403`, or a `200`
+with no `access-control-allow-origin` header, is the failure the auditors see.
+
+The other three providers need nothing of the sort: their bytes are posted to
+this application's own origin, and the Worker talks to the provider itself.
+
 ## Google Drive
 
 1. In the Google Cloud console, create (or pick) a project.
