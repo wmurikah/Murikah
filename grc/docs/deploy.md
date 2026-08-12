@@ -283,6 +283,34 @@ sub.round_number`.
 The migration file carries the verification queries: unnumbered rows, gaps and
 repeats per requirement, and the trail as the screen reads it.
 
+### Migration 008, reattach the orphaned evidence
+
+`grc/db/migrations/008-evidence-attachment-backfill.sql` (Build Prompt 65).
+`file_attachments` was empty across the whole system while `files` filled up, so
+every piece of evidence ever uploaded was orphaned: the bytes are in storage, the
+metadata is in `files`, and nothing tied either to the finding it belonged to.
+
+- The application fault is fixed in the code: the link row is written with the
+  file row as one atomic write, the write is read back before the upload reports
+  success, and a failure is logged under `[grc.evidence.attach]` with the
+  driver's own reason and returned to the caller rather than swallowed.
+- This migration reattaches what is already uploaded, reading the entity type and
+  entity id out of `files.storage_key`, which the application itself wrote as
+  `org/<organization_id>/<entity>/<entity_id>/<file_id>/<filename>`. That is a
+  recorded fact, not an inference.
+- It refuses to guess. A file whose key does not have that shape, or whose parsed
+  record no longer exists, is left exactly as it is and listed by the last
+  verification query in the file for a human to decide about. Nothing is deleted,
+  and nothing already linked is touched.
+- Safe to run twice: every insert is guarded by "no link row exists for this
+  file".
+- `entity_type` is written upper case (`WORK_PAPER`), which is what the live
+  table carries and what the code now writes; the reads match it
+  case-insensitively, so rows in either spelling resolve.
+
+Run it after the release is deployed, so newly attached evidence is already being
+linked correctly while the backlog is reattached.
+
 ### The workflow enum, and why the smoke seed spells it in lower case
 
 `status_transitions` keys every workflow in the product by `enum_type`, and more

@@ -19,6 +19,31 @@ const F = cols(C.files);
 const FA = cols(C.file_attachments);
 
 /**
+ * The value `file_attachments.entity_type` actually carries (Build Prompt 65).
+ *
+ * The link table names the kind of record evidence hangs off, and the live
+ * database spells those in upper case: a work paper's evidence is
+ * `WORK_PAPER`. The application's own token for the same thing is lower case,
+ * because that is what the routes, the access rules and the object keys use, so
+ * this is the one place the two meet. Writing through it and reading through it
+ * means the write and the read cannot disagree about what a work paper's
+ * evidence is called, which is the fault that leaves evidence invisible.
+ */
+export function storedEntityType(entityType: string): string {
+  return String(entityType ?? '')
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * The predicate that matches a stored entity type, whatever case it was written
+ * in. Rows written before this convention was settled carry the lower-case
+ * token, and they are the same evidence; a reader that saw only one spelling
+ * would hide half the audit file.
+ */
+const SAME_ENTITY_TYPE = `TRIM(UPPER(${FA.entity_type})) = ?`;
+
+/**
  * What "attached to this entity" means, written once (Build Prompt 62).
  *
  * The organisation scope lives on `files`, not on the `file_attachments` link
@@ -27,7 +52,13 @@ const FA = cols(C.file_attachments);
  */
 const ATTACHED_TO =
   `f.${F.organization_id} = ? AND f.${F.deleted_at} IS NULL ` +
-  `AND fa.${FA.entity_type} = ? AND fa.${FA.entity_id} = ?`;
+  `AND TRIM(UPPER(fa.${FA.entity_type})) = ? AND fa.${FA.entity_id} = ?`;
+
+/** The evidence category every attachment this module writes carries. */
+export const EVIDENCE_CATEGORY = 'EVIDENCE';
+
+/** The tag an attachment failure is logged under. */
+const ATTACH_TAG = '[grc.evidence.attach]';
 
 export interface Attachment {
   attachmentId: string;
@@ -56,7 +87,7 @@ export async function listAttachments(
             JOIN files f ON f.${F.file_id} = fa.${FA.file_id}
            WHERE ${ATTACHED_TO}
         ORDER BY f.${F.created_at} DESC`,
-    args: [organizationId, entityType, entityId],
+    args: [organizationId, storedEntityType(entityType), entityId],
   });
   return res.rows.map((r) => ({
     attachmentId: String(r.attachment_id),
@@ -92,7 +123,7 @@ export async function countAttachments(
             FROM file_attachments fa
             JOIN files f ON f.${F.file_id} = fa.${FA.file_id}
            WHERE ${ATTACHED_TO}`,
-    args: [organizationId, entityType, entityId],
+    args: [organizationId, storedEntityType(entityType), entityId],
   });
   return Number(res.rows[0]?.n ?? 0);
 }
@@ -126,7 +157,8 @@ export async function recordAttachment(
 ): Promise<string> {
   const attachmentId = crypto.randomUUID();
   const now = new Date().toISOString();
-  await db.batch(
+  const entityType = storedEntityType(input.entityType);
+  const write = db.batch(
     [
       {
         sql: `INSERT INTO files
@@ -156,9 +188,9 @@ export async function recordAttachment(
         args: [
           attachmentId,
           input.fileId,
-          input.entityType,
+          entityType,
           input.entityId,
-          'EVIDENCE',
+          EVIDENCE_CATEGORY,
           input.uploadedBy,
           now,
         ],
@@ -166,6 +198,51 @@ export async function recordAttachment(
     ],
     'write',
   );
+  try {
+    await write;
+  } catch (err) {
+    // The driver's own message, because "the evidence could not be stored" tells
+    // an operator nothing about a column, a constraint or a type that refused.
+    console.error(
+      `${ATTACH_TAG} the write failed`,
+      JSON.stringify({
+        organization_id: organizationId,
+        file_id: input.fileId,
+        entity_type: entityType,
+        entity_id: input.entityId,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    throw err;
+  }
+
+  // The file row and the link row are one write, and the write is not finished
+  // until the link is there (Build Prompt 65). `file_attachments` was empty
+  // system-wide while `files` filled up, so every attachment was orphaned: the
+  // bytes were in storage, the metadata was in the database, and nothing tied
+  // either to the finding they belonged to. The evidence panel showed nothing,
+  // the send-to-auditee gate correctly counted nothing, and the upload said it
+  // had worked. A read-back is one cheap query, and it turns that silence into
+  // a failure at the moment of attach.
+  const linked = await db.execute({
+    sql: `SELECT 1 FROM file_attachments
+           WHERE ${FA.attachment_id} = ? AND ${FA.file_id} = ? AND ${SAME_ENTITY_TYPE}
+             AND ${FA.entity_id} = ? LIMIT 1`,
+    args: [attachmentId, input.fileId, entityType, input.entityId],
+  });
+  if (linked.rows.length === 0) {
+    console.error(
+      `${ATTACH_TAG} the link row was not written`,
+      JSON.stringify({
+        organization_id: organizationId,
+        file_id: input.fileId,
+        entity_type: entityType,
+        entity_id: input.entityId,
+        attachment_id: attachmentId,
+      }),
+    );
+    throw new Error('The evidence was stored but could not be attached to the record.');
+  }
   return attachmentId;
 }
 
@@ -238,10 +315,17 @@ export async function bindDraftAttachments(
   const res = await db.execute({
     sql: `UPDATE file_attachments
              SET ${FA.entity_type} = ?, ${FA.entity_id} = ?
-           WHERE ${FA.entity_type} = ? AND ${FA.entity_id} = ? AND ${FA.attached_by} = ?
+           WHERE ${SAME_ENTITY_TYPE} AND ${FA.entity_id} = ? AND ${FA.attached_by} = ?
              AND ${FA.file_id} IN (SELECT ${F.file_id} FROM files
                                     WHERE ${F.organization_id} = ? AND ${F.deleted_at} IS NULL)`,
-    args: [entityType, entityId, draftEntityType, draftToken.trim(), userId, organizationId],
+    args: [
+      storedEntityType(entityType),
+      entityId,
+      storedEntityType(draftEntityType),
+      draftToken.trim(),
+      userId,
+      organizationId,
+    ],
   });
   return res.rowsAffected ?? 0;
 }
