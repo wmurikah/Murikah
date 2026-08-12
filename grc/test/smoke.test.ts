@@ -3234,13 +3234,23 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           },
         );
         assert.equal(upload.status, 200, `the upload answered ${upload.status}: ${upload.body}`);
+        // Both halves of the upload, asserted separately (Build Prompt 65). The
+        // file row on its own was what the live system had: bytes stored,
+        // metadata recorded, and no link row anywhere, so the evidence belonged
+        // to nothing and the panel and the gate both saw an empty finding.
+        const fileRow = db
+          .prepare(`SELECT COUNT(*) AS n FROM files WHERE file_name = ? AND organization_id = ?`)
+          .get('dispatch-notes-march.txt', SMOKE.orgId) as { n: number | bigint };
+        assert.equal(Number(fileRow.n), 1, 'the file row is written');
         const attached = db
           .prepare(
-            `SELECT COUNT(*) AS n FROM file_attachments
-            WHERE entity_type = 'work_paper' AND entity_id = ?`,
+            `SELECT COUNT(*) AS n FROM file_attachments fa
+               JOIN files f ON f.file_id = fa.file_id
+              WHERE TRIM(UPPER(fa.entity_type)) = 'WORK_PAPER' AND fa.entity_id = ?
+                AND f.file_name = ?`,
           )
-          .get(id) as { n: number | bigint };
-        assert.equal(Number(attached.n), 1, 'the evidence is attached to the work paper');
+          .get(id, 'dispatch-notes-march.txt') as { n: number | bigint };
+        assert.equal(Number(attached.n), 1, 'and the link row that ties it to the work paper');
 
         const sent = await server.request('POST', `/api/work-papers/${id}/transition`, {
           to_status: 'Sent to Auditee',
@@ -4156,7 +4166,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           .prepare(
             `SELECT f.file_name AS name, fa.attachment_id AS attachment_id
              FROM files f JOIN file_attachments fa ON fa.file_id = f.file_id
-            WHERE f.file_id = ? AND fa.entity_type = 'requirement' AND fa.entity_id = ?`,
+            WHERE f.file_id = ? AND TRIM(UPPER(fa.entity_type)) = 'REQUIREMENT'
+              AND fa.entity_id = ?`,
           )
           .get(String(round1.file_id), reqId) as { name?: string; attachment_id?: string };
         assert.equal(
@@ -4488,7 +4499,10 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           `SELECT entity_type, entity_id FROM file_attachments WHERE attachment_id = 'ATT-STAGED'`,
         )
         .get() as { entity_type?: string; entity_id?: string };
-      assert.equal(String(bound.entity_type), 'work_paper', 'the staged attachment rebinds');
+      // The staged row is planted in the old lower-case spelling on purpose: the
+      // bind has to find evidence uploaded before the convention was settled,
+      // and it rewrites it to the spelling the table carries (Build Prompt 65).
+      assert.equal(String(bound.entity_type), 'WORK_PAPER', 'the staged attachment rebinds');
       assert.equal(String(bound.entity_id), m[1], 'the staged attachment binds to the new id');
       const page = await server.get(`/work-papers/${m[1]}`);
       assert.ok(page.body.includes('staged.pdf'), 'the bound evidence shows on the detail');
