@@ -81,18 +81,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const finalised = await finaliseUpload(provider, key);
   if (!finalised) return json({ error: 'The upload did not complete.' }, 409);
 
-  const attachmentId = await recordAttachment(db, grc.organizationId, {
-    fileId,
-    entityType,
-    entityId,
-    fileName,
-    contentType,
-    sizeBytes: finalised.size,
-    uploadedBy: grc.userId,
-    ref,
-    contentHash: finalised.hash,
-    contentHashAlgo: finalised.algo,
-  });
+  // The attach is the point of the upload: bytes in storage with no link row is
+  // evidence nobody can see, so a failure here is reported, never swallowed
+  // (Build Prompt 65). recordAttachment logs the driver's own reason under
+  // [grc.evidence.attach] before it throws.
+  let attachmentId: string;
+  try {
+    attachmentId = await recordAttachment(db, grc.organizationId, {
+      fileId,
+      entityType,
+      entityId,
+      fileName,
+      contentType,
+      sizeBytes: finalised.size,
+      uploadedBy: grc.userId,
+      ref,
+      contentHash: finalised.hash,
+      contentHashAlgo: finalised.algo,
+    });
+  } catch (err) {
+    console.error('[grc.evidence.attach] the attachment was not recorded', err);
+    return json({ error: 'The evidence was stored but could not be attached.' }, 502);
+  }
 
   try {
     await writeAuditLog(db, {
