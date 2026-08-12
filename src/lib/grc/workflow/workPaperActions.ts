@@ -26,8 +26,35 @@ import { normaliseStatus, sameStatus } from './transitionRules.ts';
 
 export { normaliseStatus, sameStatus };
 
-/** The enum_type under which the work-paper statuses and transitions are stored. */
-export const WORK_PAPER_ENUM_TYPE = 'WORK_PAPER_STATUS';
+/**
+ * The enum_type under which the work-paper statuses and transitions are stored.
+ *
+ * `status_transitions` holds every workflow in the product keyed by this column,
+ * and more than one of them defines a `Draft -> Submitted`: this one, and the
+ * auditee response's. So it is the scope of every lookup a work paper makes, and
+ * it is resolved from the entity being moved rather than assumed (see
+ * `enumTypeForEntity`). The live table spells it in lower case; the comparison
+ * is case tolerant (workflow/transitions.ts), so this constant names the
+ * workflow rather than a spelling of it.
+ */
+export const WORK_PAPER_ENUM_TYPE = 'work_paper_status';
+
+/**
+ * The workflow an entity's status belongs to (Build Prompt 61).
+ *
+ * One table, several workflows, and the same status names in more than one of
+ * them: a move is only meaningful inside the workflow of the thing being moved.
+ * Naming that here, rather than letting each caller reach for a constant, is
+ * what stops a second module looking a work paper's move up under an auditee
+ * response's rules.
+ */
+export function enumTypeForEntity(entityType: string): string | null {
+  // Only the entity this module owns. Naming the action plan's workflow here
+  // too would be a second spelling of a constant that already exists
+  // (`actionPlanActions.ts`), which is the very drift being fixed: each workflow
+  // module answers for its own entity and nobody keeps a copy of anybody else's.
+  return entityType === 'work_paper' ? WORK_PAPER_ENUM_TYPE : null;
+}
 
 // Statuses are the human-readable strings the hassaudit schema stores in
 // work_papers.status and keys status_transitions by (Build Prompt 16); they are
