@@ -4523,11 +4523,16 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       });
       assert.equal(res.status, 200, `draft upload-url answered ${res.status}`);
       assert.ok(res.body.trimStart().startsWith('{'), 'the answer is the JSON contract');
-      const plan = JSON.parse(res.body) as { url?: string };
+      const plan = JSON.parse(res.body) as { url?: string; mode?: string; method?: string };
       assert.ok(
         String(plan.url).includes(`org/${SMOKE.orgId}/work_paper_draft/${token}/`),
         `a staged key must sit under the tenant prefix, got ${String(plan.url).slice(0, 200)}`,
       );
+      // The browser is told the verb it must use, and the URL is signed for
+      // that verb: SigV4 signs the method, so a URL signed for one cannot be
+      // used with another (Build Prompt 66).
+      assert.equal(plan.mode, 'presigned', 'a signing provider sends the bytes straight to it');
+      assert.equal(plan.method, 'PUT', 'and the browser is told to PUT them');
     });
 
     await t.test('a draft upload refuses a token that is not a token', async () => {
