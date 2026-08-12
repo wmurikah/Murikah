@@ -7,6 +7,11 @@ export const prerender = false;
  * management response, and, prominently, only the workflow actions valid for the
  * current status and the signed-in role (resolved through the engine). Gate:
  * WORK_PAPERS.view.
+ *
+ * An action this person may not perform is absent, not explained (Build Prompt
+ * 63): the panel shows what they can do, and shows nothing when that is nothing.
+ * The reasons a move is withheld are diagnostic, and diagnostics belong in the
+ * log rather than in front of an auditor who cannot act on them.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import { renderRichHtml } from '@grc/richtext';
@@ -34,11 +39,7 @@ import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { WORK_PAPER_ENUM_TYPE, WP_STATUS, isEditable } from '@grc/workflow/workPaperActions';
-import {
-  availableActions,
-  type OfferedAction,
-  type WithheldAction,
-} from '@grc/workflow/workPaperWorkflow';
+import { offeredActions, type OfferedAction } from '@grc/workflow/workPaperWorkflow';
 import { aiEnabled } from '@grc/ai/gate';
 import { AI_DISCLAIMER } from '@grc/ai/validation';
 import { storageConfiguredFor } from '@grc/storage';
@@ -66,7 +67,6 @@ const done = Astro.url.searchParams.get('done');
 
 let wp = null as WorkPaperDetail | null;
 let requirements: Requirement[] = [];
-let withheld: WithheldAction[] = [];
 let responsibles: Responsible[] = [];
 let cc: CcRecipient[] = [];
 let revisions: Revision[] = [];
@@ -98,7 +98,13 @@ if (allowed && id) {
         status: wp.status,
         assignedAuditorId: wp.assignedAuditorId as string | null,
       };
-      const available = await availableActions(db, subject, {
+      // Only what this person may actually do (Build Prompt 63). A move they
+      // may not make is not shown at all: an auditor is not told that Start
+      // review exists and that their role lacks WORK_PAPER.approve, because
+      // that is a permission code in front of somebody who cannot act on it,
+      // about an action that was never theirs. The reason still exists for
+      // diagnosis, and the refusal log names it if anybody ever posts the move.
+      actions = await offeredActions(db, subject, {
         userId: grc.userId,
         userName: grc.userName ?? grc.userEmail ?? grc.userId,
         roleCode: grc.roleCode,
@@ -106,8 +112,6 @@ if (allowed && id) {
         matrix: grc.matrix,
         perms: grc.perms,
       });
-      actions = available.offered;
-      withheld = available.withheld;
     }
   }));
 }
@@ -235,17 +239,9 @@ const responseFacts: { label: string; value: string }[] = wp
           <span class="grc-pill">{statusLabel(labels, wp.status)}</span>
         </p>
 
-        {(actions.length > 0 || withheld.length > 0) && (
+        {actions.length > 0 && (
           <div class="grc-panel">
             <h2>Actions</h2>
-            {actions.length === 0 && (
-              /* The workflow allows a move from here, but not by this person.
-                 Saying which and why is the difference between a setting an
-                 administrator can change and a mystery (Build Prompt 53). */
-              <p class="grc-lead" style="margin:0 0 0.75rem">
-                No action is available to you from {statusLabel(labels, wp.status)}.
-              </p>
-            )}
             <div style="display:grid;gap:0.75rem">
               {actions.map((a) => (
                 <form
@@ -289,21 +285,22 @@ const responseFacts: { label: string; value: string }[] = wp
                 </form>
               ))}
             </div>
-            {withheld.length > 0 && (
-              <ul class="grc-plainlist" style="margin:0.75rem 0 0">
-                {withheld.map((w) => (
-                  <li class="grc-field__hint">
-                    {w.label}: {w.reason}.
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         )}
 
         <div class="grc-panel">
           <h2>Finding</h2>
           <dl class="grc-detail">
+            <>
+              {/* The observation title is the finding's name. It is stored, it
+                  is what the email and the list call this record, and the panel
+                  that describes the finding omitted it entirely: the same
+                  subset-rendering fault that hid Classification and Standards
+                  (Build Prompt 63). It leads, because a summary that does not
+                  say what the finding is is not a summary. */}
+              <dt>Observation title</dt>
+              <dd>{val('observation_title')}</dd>
+            </>
             <>
               <dt>Year</dt>
               <dd>{val('year')}</dd>
