@@ -112,6 +112,13 @@ const count = items.length;
     )
   }
 
+  {
+    /* One row per file being sent, each with its own real percentage, so a
+      selection of several is legible rather than one line that keeps changing
+      its mind about which file it means (Build Prompt 66). */
+  }
+  <ul class="grc-upload-list" data-upload-list></ul>
+
   <p class="grc-evidence__status" id={`${inputId}-status`} role="status" aria-live="polite"></p>
 
   <ul
@@ -182,6 +189,18 @@ const count = items.length;
 </section>
 
 <script>
+  import {
+    UPLOAD_STALL_MS,
+    UPLOAD_TAG,
+    classifyUploadFailure,
+    formatBytes,
+    isCrossOrigin,
+    uploadFailureMessage,
+    uploadLogLine,
+    uploadPercent,
+    type UploadFailure,
+  } from '@grc/storage/uploadFeedback';
+
   /**
    * What /api/evidence/upload-url answers. `mode` is the only thing the browser
    * learns about the organisation's storage provider: 'presigned' means PUT the
@@ -197,6 +216,110 @@ const count = items.length;
     previewMaxDimension?: number;
     error?: string;
   }
+
+  /** What one transfer came back with. It never rejects: see `send`. */
+  interface SendResult {
+    ok: boolean;
+    status: number;
+    body: string;
+    kind: UploadFailure | null;
+  }
+
+  /**
+   * Send one body and report its outcome, whatever the outcome is.
+   *
+   * This replaced a bare `fetch`, for two reasons that are really one. A
+   * cross-origin PUT the bucket refuses does not answer with a status: it
+   * rejects the promise, and an uncaught rejection left the panel saying
+   * "Uploading..." until the page was closed. And `fetch` cannot report how far
+   * a request body has got, so there was nothing honest to show while it went.
+   * XMLHttpRequest gives both: upload progress events, and every ending routed
+   * through one resolve so the caller cannot forget a case.
+   *
+   * The timeout is armed on each progress event rather than once at the start,
+   * so a legitimately slow transfer keeps itself alive and a silent one dies.
+   */
+  const send = (opts: {
+    url: string;
+    method: 'PUT' | 'POST';
+    body: Blob | FormData;
+    contentType?: string;
+    onProgress?: (loaded: number, total: number) => void;
+  }): Promise<SendResult> =>
+    new Promise<SendResult>((resolve) => {
+      const xhr = new XMLHttpRequest();
+      const crossOrigin = isCrossOrigin(opts.url, window.location.origin);
+      let settled = false;
+      let stall = 0;
+      const finish = (r: SendResult): void => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(stall);
+        resolve(r);
+      };
+      const arm = (): void => {
+        window.clearTimeout(stall);
+        stall = window.setTimeout(() => {
+          // Settle first, then abort: aborting fires its own event, and the
+          // reason this ended is the silence, not the cancellation.
+          finish({ ok: false, status: 0, body: '', kind: 'stalled' });
+          try {
+            xhr.abort();
+          } catch {
+            // already gone
+          }
+        }, UPLOAD_STALL_MS);
+      };
+      const failed = (): SendResult => ({
+        ok: false,
+        status: xhr.status,
+        body: '',
+        kind: classifyUploadFailure({ status: xhr.status, crossOrigin }),
+      });
+      xhr.open(opts.method, opts.url, true);
+      if (opts.contentType) xhr.setRequestHeader('content-type', opts.contentType);
+      xhr.upload.addEventListener('progress', (e) => {
+        arm();
+        opts.onProgress?.(e.loaded, e.lengthComputable ? e.total : 0);
+      });
+      xhr.addEventListener('load', () => {
+        const ok = xhr.status >= 200 && xhr.status < 300;
+        finish(
+          ok
+            ? { ok: true, status: xhr.status, body: xhr.responseText ?? '', kind: null }
+            : failed(),
+        );
+      });
+      xhr.addEventListener('error', () => finish(failed()));
+      xhr.addEventListener('abort', () =>
+        finish({ ok: false, status: 0, body: '', kind: 'aborted' }),
+      );
+      xhr.addEventListener('timeout', () =>
+        finish({ ok: false, status: 0, body: '', kind: 'stalled' }),
+      );
+      arm();
+      xhr.send(opts.body);
+    });
+
+  /** Same-origin JSON call that reports a dead network instead of throwing. */
+  const callJson = async (
+    url: string,
+    body: URLSearchParams,
+  ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> => {
+    try {
+      const res = await fetch(url, { method: 'POST', body });
+      const text = await res.text();
+      let data: Record<string, unknown> = {};
+      try {
+        data = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        // A non-JSON answer is still an answer; the status carries the meaning.
+      }
+      return { ok: res.ok, status: res.status, data };
+    } catch {
+      return { ok: false, status: 0, data: {} };
+    }
+  };
 
   /**
    * Reduce an image to the constant longest edge the server asked for, as a
@@ -271,15 +394,112 @@ const count = items.length;
       list.appendChild(li);
     };
 
-    /** Post the bytes to the worker, for a provider that cannot sign a URL. */
-    const postDirect = async (
-      url: string,
+    const uploads = panel.querySelector<HTMLElement>('[data-upload-list]');
+
+    /**
+     * One row per file, showing its name, its size and how far it has actually
+     * got. The row is the whole of the feedback for that file: it says
+     * "Waiting" while the ones before it go up, a real percentage while it is
+     * going, and either disappears into the attached list or stays behind as a
+     * failure with a Retry button and the reason. Nothing is left to a spinner
+     * that cannot be told apart from a hang (Build Prompt 66).
+     */
+    interface Row {
+      progress: (loaded: number, total: number) => void;
+      note: (text: string) => void;
+      done: () => void;
+      failed: (message: string) => void;
+    }
+
+    const addRow = (file: File, retry: () => void): Row => {
+      const li = document.createElement('li');
+      li.className = 'grc-upload';
+      li.dataset.state = 'waiting';
+
+      const head = document.createElement('div');
+      head.className = 'grc-upload__head';
+      const name = document.createElement('span');
+      name.className = 'grc-upload__name';
+      name.textContent = file.name;
+      const size = document.createElement('span');
+      size.className = 'grc-upload__size';
+      size.textContent = formatBytes(file.size);
+      head.appendChild(name);
+      head.appendChild(size);
+
+      // A real progressbar, not a decoration: the value is the bytes the
+      // browser has acknowledged sending, so a screen reader hears the same
+      // number the bar draws.
+      const bar = document.createElement('div');
+      bar.className = 'grc-upload__bar';
+      bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', '100');
+      bar.setAttribute('aria-valuenow', '0');
+      bar.setAttribute('aria-label', `Uploading ${file.name}`);
+      const fill = document.createElement('span');
+      fill.className = 'grc-upload__fill';
+      fill.style.width = '0%';
+      bar.appendChild(fill);
+
+      const note = document.createElement('p');
+      note.className = 'grc-upload__note';
+      note.textContent = 'Waiting';
+
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.className = 'grc-upload__retry';
+      again.textContent = 'Retry';
+      again.hidden = true;
+      again.addEventListener('click', retry);
+
+      li.appendChild(head);
+      li.appendChild(bar);
+      li.appendChild(note);
+      li.appendChild(again);
+      uploads?.appendChild(li);
+
+      const setPercent = (pct: number): void => {
+        fill.style.width = `${pct}%`;
+        bar.setAttribute('aria-valuenow', String(pct));
+      };
+      return {
+        progress: (loaded, total) => {
+          li.dataset.state = 'active';
+          again.hidden = true;
+          const pct = uploadPercent(loaded, total > 0 ? total : file.size);
+          setPercent(pct);
+          note.textContent = `${pct}%`;
+        },
+        note: (text) => {
+          li.dataset.state = 'active';
+          note.textContent = text;
+        },
+        done: () => {
+          li.dataset.state = 'done';
+          setPercent(100);
+          note.textContent = 'Attached';
+          again.hidden = true;
+          // The file is in the list below now, so the row has said all it has
+          // to say; leaving it would double every attachment on the screen.
+          window.setTimeout(() => li.remove(), 2500);
+        },
+        failed: (message) => {
+          li.dataset.state = 'failed';
+          note.textContent = message;
+          again.hidden = false;
+        },
+      };
+    };
+
+    /** The bytes for the worker to store, for a provider that cannot sign a URL. */
+    const directBody = (
       fileId: string,
       name: string,
       type: string,
       body: Blob,
-      variant: 'original' | 'preview',
-    ): Promise<Response> => {
+      variant: string,
+    ) => {
       const payload = new FormData();
       payload.set('entity_type', entityType);
       payload.set('entity_id', entityId);
@@ -288,28 +508,55 @@ const count = items.length;
       payload.set('content_type', type);
       payload.set('variant', variant);
       payload.set('file', body, name);
-      return fetch(url, { method: 'POST', body: payload });
+      return payload;
+    };
+
+    /** A transfer's answer, when it claims to be JSON and might not be. */
+    const answer = (body: string): Record<string, unknown> => {
+      try {
+        return JSON.parse(body || '{}') as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    };
+
+    /** Report a transfer that did not arrive, on the row and in the console. */
+    const reportFailure = (row: Row, file: File, res: SendResult, url: string): void => {
+      const detail = {
+        kind: res.kind ?? 'refused',
+        status: res.status,
+        fileName: file.name,
+        origin: window.location.origin,
+      };
+      console.error(uploadLogLine({ ...detail, url }));
+      row.failed(uploadFailureMessage(detail));
     };
 
     /** Upload one file: prepare, send the bytes, send any preview, then record. */
-    const uploadOne = async (file: File): Promise<boolean> => {
+    const uploadOne = async (file: File, row: Row): Promise<boolean> => {
       const contentType = file.type || 'application/octet-stream';
-      const prepareRes = await fetch('/api/evidence/upload-url', {
-        method: 'POST',
-        body: new URLSearchParams({
+      row.note('Preparing');
+      const prepared = await callJson(
+        '/api/evidence/upload-url',
+        new URLSearchParams({
           entity_type: entityType,
           entity_id: entityId,
           file_name: file.name,
           content_type: contentType,
           size_bytes: String(file.size),
         }),
-      });
-      const prep = (await prepareRes.json().catch(() => ({}))) as Prepared;
-      if (!prepareRes.ok || !prep.url || !prep.fileId) {
-        status.textContent = prep.error || `Could not start the upload of ${file.name}.`;
+      );
+      const prep = prepared.data as Prepared;
+      if (!prepared.ok || !prep.url || !prep.fileId) {
+        console.error(
+          `${UPLOAD_TAG} the upload could not be prepared ` +
+            JSON.stringify({ file_name: file.name, status: prepared.status }),
+        );
+        row.failed(prep.error || `The upload of ${file.name} could not be started.`);
         return false;
       }
       const fileId = prep.fileId;
+      const onProgress = (loaded: number, total: number): void => row.progress(loaded, total);
 
       /** The reduced copy, when the server asked for one and the browser can make it. */
       const preview = async (): Promise<{ blob: Blob; type: string } | null> => {
@@ -322,95 +569,159 @@ const count = items.length;
       if (prep.mode === 'direct') {
         // One request stores and records the evidence, so there is no window in
         // which the bytes are up and the record is not.
-        const sent = await postDirect(prep.url, fileId, file.name, contentType, file, 'original');
+        const sent = await send({
+          url: prep.url,
+          method: 'POST',
+          body: directBody(fileId, file.name, contentType, file, 'original'),
+          onProgress,
+        });
         if (!sent.ok) {
-          const err = (await sent.json().catch(() => ({}))) as { error?: string };
-          status.textContent = err.error || `The upload of ${file.name} failed.`;
+          const err = answer(sent.body) as { error?: string };
+          if (err.error) row.failed(err.error);
+          else reportFailure(row, file, sent, prep.url);
           return false;
         }
-        const recorded = (await sent.json().catch(() => ({}))) as { attachmentId?: string };
+        row.note('Recording');
+        const recorded = answer(sent.body) as { attachmentId?: string };
         // Best-effort: a missing preview costs a thumbnail, never the evidence.
         const small = await preview();
         if (small && prep.previewUrl) {
-          await postDirect(
-            prep.previewUrl,
-            fileId,
-            file.name,
-            small.type,
-            small.blob,
-            'preview',
-          ).catch(() => undefined);
+          await send({
+            url: prep.previewUrl,
+            method: 'POST',
+            body: directBody(fileId, file.name, small.type, small.blob, 'preview'),
+          });
         }
         if (recorded.attachmentId) {
           addTile(recorded.attachmentId, file.name, contentType.startsWith('image/'));
         }
+        row.done();
         return true;
       }
 
-      const put = await fetch(prep.url, {
+      // The bytes go straight from the browser to the organisation's bucket.
+      // This is the leg that used to hang: the bucket answers a browser it has
+      // no cross-origin rule for by refusing the request outright, with no
+      // status to read, and the panel waited on a promise that never settled.
+      const put = await send({
+        url: prep.url,
         method: 'PUT',
-        headers: { 'content-type': contentType },
         body: file,
+        contentType,
+        onProgress,
       });
       if (!put.ok) {
-        status.textContent = `The upload of ${file.name} failed.`;
+        reportFailure(row, file, put, prep.url);
         return false;
       }
 
       // Best-effort: a missing preview costs a thumbnail, never the evidence.
       const small = await preview();
       if (small && prep.previewUrl) {
-        await fetch(prep.previewUrl, {
+        await send({
+          url: prep.previewUrl,
           method: 'PUT',
-          headers: { 'content-type': small.type },
           body: small.blob,
-        }).catch(() => undefined);
+          contentType: small.type,
+        });
       }
 
-      const completeRes = await fetch('/api/evidence/complete', {
-        method: 'POST',
-        body: new URLSearchParams({
+      // Only now, and only because the PUT actually finished: the file and its
+      // link row are written here (Build Prompt 65), so calling this before the
+      // bytes have landed would record evidence that is not in the bucket.
+      row.note('Recording');
+      const completed = await callJson(
+        '/api/evidence/complete',
+        new URLSearchParams({
           entity_type: entityType,
           entity_id: entityId,
           file_id: fileId,
           file_name: file.name,
           content_type: contentType,
         }),
-      });
-      if (!completeRes.ok) {
-        const err = (await completeRes.json().catch(() => ({}))) as { error?: string };
-        status.textContent = err.error || `${file.name} could not be recorded.`;
+      );
+      if (!completed.ok) {
+        const err = completed.data as { error?: string };
+        console.error(
+          `${UPLOAD_TAG} the upload was not recorded ` +
+            JSON.stringify({ file_name: file.name, file_id: fileId, status: completed.status }),
+        );
+        row.failed(err.error || `${file.name} was uploaded but could not be recorded.`);
         return false;
       }
-      const done = (await completeRes.json().catch(() => ({}))) as { attachmentId?: string };
+      const done = completed.data as { attachmentId?: string };
       if (done.attachmentId)
         addTile(done.attachmentId, file.name, contentType.startsWith('image/'));
+      row.done();
       return true;
     };
 
-    /** Upload a whole selection in order, reporting progress as it goes. */
+    /**
+     * Run one upload and never let it throw. Everything inside reports its own
+     * failure on its own row, but an unforeseen one must not escape either: an
+     * exception escaping the loop is exactly what left the panel saying
+     * "Uploading..." with no way back (Build Prompt 66).
+     */
+    const runOne = async (file: File, row: Row): Promise<boolean> => {
+      try {
+        return await uploadOne(file, row);
+      } catch (err) {
+        console.error(
+          `${UPLOAD_TAG} the upload threw ` +
+            JSON.stringify({
+              file_name: file.name,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+        );
+        row.failed(`${file.name} could not be uploaded. Try again.`);
+        return false;
+      }
+    };
+
+    const attachedText = (n: number): string =>
+      staged
+        ? `${n} attached. ${n === 1 ? 'It attaches' : 'They attach'} to the finding when you save.`
+        : `${n} attached.`;
+
+    /**
+     * Upload a whole selection. Every file gets its row up front, so a person
+     * dropping six documents sees six of them queued rather than one line
+     * counting, and the summary underneath only ever states the total.
+     */
     const uploadAll = async (files: FileList | File[]): Promise<void> => {
       const chosen = Array.from(files);
       if (chosen.length === 0) return;
       drop?.classList.add('is-busy');
+      const rows = chosen.map((file) => {
+        // Retry re-runs this one file, on its own row, without disturbing the
+        // others: a single refused upload should not mean picking all six again.
+        const row: Row = addRow(file, () => {
+          void runOne(file, row).then((ok) => {
+            if (ok) status.textContent = attachedText(1);
+          });
+        });
+        return row;
+      });
       let done = 0;
-      for (const [i, file] of chosen.entries()) {
+      try {
+        for (const [i, file] of chosen.entries()) {
+          status.textContent =
+            chosen.length === 1
+              ? `Uploading ${file.name}`
+              : `Uploading ${i + 1} of ${chosen.length}: ${file.name}`;
+          // One failure reports itself on its own row and the rest still go up.
+          if (await runOne(file, rows[i])) done += 1;
+        }
+      } finally {
+        // Whatever happened, the panel comes back to rest and says where it
+        // got to. There is no path out of here that leaves it uploading.
+        drop?.classList.remove('is-busy');
         status.textContent =
-          chosen.length === 1
-            ? `Uploading ${file.name}...`
-            : `Uploading ${i + 1} of ${chosen.length}: ${file.name}...`;
-        // One failure reports itself and the rest still go up.
-        if (await uploadOne(file)) done += 1;
+          done === chosen.length
+            ? attachedText(done)
+            : `${done} of ${chosen.length} attached. The rest are listed above with what went wrong.`;
+        if (input) input.value = '';
       }
-      drop?.classList.remove('is-busy');
-      if (done === chosen.length) {
-        status.textContent = staged
-          ? `${done} attached. ${done === 1 ? 'It attaches' : 'They attach'} to the finding when you save.`
-          : `${done} attached.`;
-      } else {
-        status.textContent = `${done} of ${chosen.length} attached; see the message above.`;
-      }
-      if (input) input.value = '';
     };
 
     input?.addEventListener('change', () => {
