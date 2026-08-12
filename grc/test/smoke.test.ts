@@ -2892,6 +2892,140 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     // transition table and gated on the matrix grant an administrator can see
     // ticked, so an auditor holding WORK_PAPER.update releases their own draft
     // without anyone touching a permission list by hand.
+    // The workflow a move is looked up in (Build Prompt 61). `status_transitions`
+    // holds every workflow in one table, and two of them define a
+    // `Draft -> Submitted`: the work paper's, and an auditee response's. The
+    // live table spells the work-paper workflow in lower case, which a
+    // case-sensitive lookup matched none of, so the engine loaded an empty rule
+    // set and refused every move a finding could make.
+    await t.test('a work paper moves under its own workflow, not a same-named one', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // The premise: the decoy exists, under its own enum, and the work paper's
+      // own rows are spelled as the live database spells them.
+      const decoy = db
+        .prepare(
+          `SELECT enum_type AS e, required_role AS role FROM status_transitions
+            WHERE from_status = 'Draft' AND to_status = 'Submitted'
+         ORDER BY enum_type`,
+        )
+        .all() as { e: string; role: string | null }[];
+      assert.equal(decoy.length, 2, 'two workflows define this move, as the live table does');
+      assert.deepEqual(
+        decoy.map((d) => d.e),
+        ['response_status', 'work_paper_status'],
+        'one of them is not the work paper’s',
+      );
+      assert.equal(
+        decoy.find((d) => d.e === 'response_status')?.role,
+        'NOBODY',
+        'and the wrong one would refuse loudly if it were ever matched',
+      );
+
+      // The auditor submits a complete draft: it resolves its own workflow.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const raise = async (title: string): Promise<string> => {
+        const res = await server.request('POST', '/api/work-papers', {
+          observation_title: title,
+          observation_description: 'Raised to prove the workflow lookup is scoped.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+          risk_rating: 'Medium',
+          recommendation: 'Fix it.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
+        assert.ok(m, `the auditor must be able to raise "${title}"`);
+        return m[1];
+      };
+      const single = await raise('Meter calibration records not held');
+      const batched = await raise('Depot gate log not maintained');
+
+      const statusOf = (id: string): string =>
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        );
+
+      // Single.
+      const submitted = await server.request('POST', `/api/work-papers/${single}/transition`, {
+        to_status: 'Submitted',
+      });
+      const at = decodeURIComponent(String(submitted.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(at), `the single submit must succeed, got ${at}`);
+      assert.equal(statusOf(single), 'Submitted', 'the finding moves');
+      const revision = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM work_paper_revisions
+            WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+        )
+        .get(single) as { n: number | bigint };
+      assert.equal(Number(revision.n), 1, 'and writes its revision');
+      const notified = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE batch_type = 'WP_SUBMITTED' AND related_entity_id = ?`,
+        )
+        .get(single) as { n: number | bigint };
+      assert.ok(Number(notified.n) >= 1, 'and the reviewer is told');
+
+      // Batch, through the list's own route, which returns to the list.
+      const body = new URLSearchParams();
+      body.append('work_paper_id', batched);
+      const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+      const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
+      assert.ok(batchAt.startsWith('/work-papers?'), 'and returns to the list');
+      assert.equal(statusOf(batched), 'Submitted', 'the batched finding moves too');
+
+      // The comment the decoy would have demanded was never asked for, which is
+      // the proof the other workflow's rules did not decide this move.
+      assert.ok(
+        !batchAt.includes('requires a comment'),
+        'the response workflow’s comment rule must never reach a work paper',
+      );
+
+      // And the same workflow answers as one workflow even where a row is
+      // spelled differently: the resubmit after a review is seeded under
+      // `Work_Paper_Status`, as a hand-edited reference row may well be.
+      await signInAsOwnerInsideHass();
+      for (const [to, comment] of [
+        ['Under Review', ''],
+        ['Revision Required', 'Add the sample selection.'],
+      ] as const) {
+        const moved = await server.request('POST', `/api/work-papers/${single}/transition`, {
+          to_status: to,
+          comment,
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(moved.headers.location ?? ''))),
+          `the reviewer must be able to move it to ${to}`,
+        );
+      }
+      assert.equal(statusOf(single), 'Revision Required', 'it is back with its auditor');
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const resubmitted = await server.request('POST', `/api/work-papers/${single}/transition`, {
+        to_status: 'Submitted',
+      });
+      const resubmittedAt = decodeURIComponent(String(resubmitted.headers.location ?? ''));
+      assert.ok(
+        !/[?&]error=/.test(resubmittedAt),
+        `a row spelled differently is still this workflow, got ${resubmittedAt}`,
+      );
+      assert.equal(statusOf(single), 'Submitted', 'and the resubmission moves it');
+
+      await signInAsOwnerInsideHass();
+    });
+
     // The sidebar chrome (Build Prompt 60): no standalone Notifications
     // destination, pending counts on the modules they belong to, and account
     // actions that are options rather than bordered pills out of line with the
