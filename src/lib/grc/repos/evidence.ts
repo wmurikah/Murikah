@@ -18,6 +18,17 @@ import { C, cols } from '@grc/schema/columns';
 const F = cols(C.files);
 const FA = cols(C.file_attachments);
 
+/**
+ * What "attached to this entity" means, written once (Build Prompt 62).
+ *
+ * The organisation scope lives on `files`, not on the `file_attachments` link
+ * table, which carries no organisation of its own, so it is reached through the
+ * join. Bound in the order: organisation, entity type, entity id.
+ */
+const ATTACHED_TO =
+  `f.${F.organization_id} = ? AND f.${F.deleted_at} IS NULL ` +
+  `AND fa.${FA.entity_type} = ? AND fa.${FA.entity_id} = ?`;
+
 export interface Attachment {
   attachmentId: string;
   fileId: string;
@@ -43,8 +54,7 @@ export async function listAttachments(
                  f.${F.uploaded_by} AS uploaded_by, f.${F.created_at} AS created_at
             FROM file_attachments fa
             JOIN files f ON f.${F.file_id} = fa.${FA.file_id}
-           WHERE f.${F.organization_id} = ? AND f.${F.deleted_at} IS NULL
-             AND fa.${FA.entity_type} = ? AND fa.${FA.entity_id} = ?
+           WHERE ${ATTACHED_TO}
         ORDER BY f.${F.created_at} DESC`,
     args: [organizationId, entityType, entityId],
   });
@@ -58,6 +68,33 @@ export async function listAttachments(
     uploadedBy: r.uploaded_by == null ? null : String(r.uploaded_by),
     createdAt: r.created_at == null ? null : String(r.created_at),
   }));
+}
+
+/**
+ * How many pieces of evidence are attached to an entity: the same records
+ * `listAttachments` lists, counted by the same predicate (Build Prompt 62).
+ *
+ * The send-to-auditee gate asks this. It used to ask a COUNT of its own, written
+ * out again in the workflow module, and a second spelling of a condition is a
+ * second condition: the screen showed the auditor their evidence while the gate
+ * said there was none, which is the one refusal nobody can argue with because
+ * they are looking at the thing it says is missing. One query, one answer, and
+ * the gate and the panel cannot disagree again.
+ */
+export async function countAttachments(
+  db: Client,
+  organizationId: string,
+  entityType: string,
+  entityId: string,
+): Promise<number> {
+  const res = await db.execute({
+    sql: `SELECT COUNT(*) AS n
+            FROM file_attachments fa
+            JOIN files f ON f.${F.file_id} = fa.${FA.file_id}
+           WHERE ${ATTACHED_TO}`,
+    args: [organizationId, entityType, entityId],
+  });
+  return Number(res.rows[0]?.n ?? 0);
 }
 
 export interface RecordAttachmentInput {

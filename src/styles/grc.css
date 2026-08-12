@@ -500,7 +500,7 @@
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-brand > span:last-child,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__label,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__chevron,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink > span:not(.grc-navcount),
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink__label > span,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary > span:not(.grc-navcount),
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-account__id > span {
     opacity: 0;
@@ -509,7 +509,7 @@
   .grc-sidebar .grc-brand > span:last-child,
   .grc-sidebar .grc-navgroup__label,
   .grc-sidebar .grc-navgroup__chevron,
-  .grc-sidebar .grc-navlink > span:not(.grc-navcount),
+  .grc-sidebar .grc-navlink__label > span,
   .grc-sidebar .grc-bell__summary > span:not(.grc-navcount),
   .grc-sidebar .grc-account__id > span {
     transition: opacity 0.12s ease 0.06s;
@@ -2330,26 +2330,40 @@ a.grc-bars__group:hover .grc-bars__bar {
 .grc-navlink {
   position: relative;
 }
+/* The pending count: a small red bubble raised at the end of the label it
+   counts (Build Prompt 62). `sup` already lifts it, so the only work here is
+   making it a bubble and keeping it from stretching the line box. */
+.grc-navlink__label {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+}
 .grc-navcount {
-  margin-left: auto;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  padding: 0 0.3rem;
+  display: inline-block;
+  min-width: 1rem;
+  padding: 0 0.28rem;
   border-radius: 999px;
-  background: var(--grc-gold);
-  color: var(--grc-navy);
-  font-size: var(--grc-fs-micro);
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.62rem;
   font-weight: 700;
-  line-height: 1.15rem;
+  line-height: 1rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  vertical-align: super;
+  /* A superscript must not push the navigation rows apart. */
+  position: relative;
+  top: -0.15rem;
 }
 .grc-navcount[hidden] {
   display: none;
 }
-.grc-navcount--alert {
-  background: #c0392b;
-  color: #fff;
+/* The bell keeps the same bubble, so one unread count reads the same wherever
+   it appears. */
+.grc-bell__summary .grc-navcount {
+  margin-left: auto;
+  top: 0;
 }
 
 /* --- Notifications: bell, centre, send queue ---------------------------- */
