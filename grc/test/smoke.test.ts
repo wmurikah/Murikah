@@ -2892,6 +2892,354 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     // transition table and gated on the matrix grant an administrator can see
     // ticked, so an auditor holding WORK_PAPER.update releases their own draft
     // without anyone touching a permission list by hand.
+    // The badge counts what is this person's to act on, per module (Build Prompt
+    // 62). It was the organisation's submitted count, which badged an auditor
+    // with a number that was nobody's work but the head of audit's.
+    await t.test('the pending badge counts the reader’s own work, per module', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      const countFrom = (body: string, key: string): number => {
+        const m = new RegExp(`data-count-key="${key}"[^>]*>([\\s\\S]*?)</sup>`).exec(body);
+        if (!m) return -1;
+        const digits = m[1].replace(/<[^>]*>/g, '').match(/\d+/);
+        return digits ? Number(digits[0]) : 0;
+      };
+      const hidden = (body: string, key: string): boolean =>
+        new RegExp(`data-count-key="${key}"[^>]*hidden`).test(body) ||
+        new RegExp(`hidden[^>]*data-count-key="${key}"`).test(body);
+
+      // The auditor: their own drafts and anything sent back to them.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const mine = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM work_papers
+                WHERE organization_id = ? AND assigned_auditor_id = ?
+                  AND status IN ('Draft', 'Revision Required')`,
+            )
+            .get(SMOKE.orgId, SMOKE.auditorId) as { n: number | bigint }
+        ).n,
+      );
+      const auditorPage = await server.get('/work-papers');
+      assert.equal(
+        countFrom(auditorPage.body, 'pendingReview'),
+        mine,
+        'an auditor is badged with their own work, not the organisation’s',
+      );
+
+      // The same badge for the head of audit counts what is waiting on them.
+      await signInAsOwnerInsideHass();
+      const waiting = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM work_papers
+                WHERE organization_id = ? AND status IN ('Submitted', 'Under Review')`,
+            )
+            .get(SMOKE.orgId) as { n: number | bigint }
+        ).n,
+      );
+      const reviewerPage = await server.get('/work-papers');
+      const reviewerCount = countFrom(reviewerPage.body, 'pendingReview');
+      assert.ok(
+        reviewerCount >= waiting,
+        `a reviewer is badged with the queue waiting on them, got ${reviewerCount} for ${waiting} waiting`,
+      );
+
+      // And the endpoint the live refresh polls answers the same shape.
+      const json = await server.request('GET', '/api/sidebar-counts');
+      assert.equal(json.status, 200, `the counts endpoint answered ${json.status}`);
+      const counts = JSON.parse(json.body) as Record<string, number>;
+      assert.equal(typeof counts.pendingReview, 'number', 'the badge count is served');
+      assert.equal(typeof counts.myRequirements, 'number', 'and the requirements one beside it');
+
+      // A module with nothing pending shows no bubble at all: the auditee owns
+      // no requirements awaiting them here.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const auditeePage = await server.get('/requirements');
+      assert.equal(auditeePage.status, 200, `the requirements page answered ${auditeePage.status}`);
+      const owned = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM work_paper_requirements r
+                WHERE r.organization_id = ? AND r.closed_at IS NULL AND r.deleted_at IS NULL
+                  AND EXISTS (SELECT 1 FROM requirement_owners o
+                               WHERE o.requirement_id = r.requirement_id AND o.user_id = ?)`,
+            )
+            .get(SMOKE.orgId, SMOKE.auditeeId) as { n: number | bigint }
+        ).n,
+      );
+      if (owned === 0) {
+        assert.ok(
+          hidden(auditeePage.body, 'myRequirements'),
+          'nothing pending means no bubble, not a zero',
+        );
+      } else {
+        assert.ok(
+          !hidden(auditeePage.body, 'myRequirements'),
+          'something pending means the bubble shows',
+        );
+      }
+
+      await signInAsOwnerInsideHass();
+    });
+
+    // The three defects of Build Prompt 62, driven end to end: the evidence gate
+    // that refused with evidence attached, the review rounds that told nobody,
+    // and the badge that counted somebody else's work.
+    await t.test(
+      'the review loop notifies each round, and sends with evidence attached',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          intent: 'submit',
+          observation_title: 'Bulk meter readings unreconciled',
+          observation_description: 'The depot readings were not reconciled to the dispatch notes.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+          risk_rating: 'High',
+          recommendation: 'Reconcile daily.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(
+          decodeURIComponent(String(created.headers.location ?? '')),
+        );
+        assert.ok(m, `the auditor must be able to submit, got ${created.headers.location}`);
+        const id = m[1];
+
+        const statusOf = (): string =>
+          String(
+            (
+              db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+                status?: string;
+              }
+            ).status,
+          );
+        // Who a round is addressed to, which is not everybody it reaches: the
+        // head of audit is copied on the key events and those rows carry is_cc,
+        // so they are counted apart from the person who must act next.
+        const queuedFor = (type: string): { user: string; body: string }[] =>
+          (
+            db
+              .prepare(
+                `SELECT recipient_user_id AS user, rendered_body AS body FROM notification_queue
+                  WHERE batch_type = ? AND related_entity_id = ? AND COALESCE(is_cc, 0) = 0`,
+              )
+              .all(type, id) as { user: string | null; body: string | null }[]
+          ).map((r) => ({ user: String(r.user ?? ''), body: String(r.body ?? '') }));
+
+        assert.equal(statusOf(), 'Submitted', 'it is with the reviewer');
+
+        // The reviewer opens it and sends it back. Every round must reach the
+        // auditor, with the reason it was sent back.
+        await signInAsOwnerInsideHass();
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Under Review',
+        });
+        const returned = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Revision Required',
+          comment: 'The dispatch notes for March are not attached.',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(returned.headers.location ?? ''))),
+          'the reviewer must be able to return it',
+        );
+        assert.equal(statusOf(), 'Revision Required', 'it is back with its auditor');
+
+        const firstReturn = queuedFor('WP_REVISION_REQUIRED');
+        assert.equal(firstReturn.length, 1, 'a return for revision emails exactly one person');
+        assert.equal(firstReturn[0].user, SMOKE.auditorId, 'and that person is its auditor');
+        assert.ok(
+          firstReturn[0].body.includes('The dispatch notes for March are not attached.'),
+          'the reviewer’s reason travels with it, or the email says nothing useful',
+        );
+
+        // Round two: the same loop again. The second return must email too, which
+        // is the half a "notify once" implementation gets wrong.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Submitted',
+        });
+        await signInAsOwnerInsideHass();
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Under Review',
+        });
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Revision Required',
+          comment: 'Still missing the 14 March note.',
+        });
+        assert.equal(
+          queuedFor('WP_REVISION_REQUIRED').length,
+          2,
+          'every round emails the auditor, not just the first',
+        );
+
+        // Round three, through to approval: the approval tells the auditor their
+        // finding passed.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Submitted',
+        });
+        await signInAsOwnerInsideHass();
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Under Review',
+        });
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Approved',
+        });
+        assert.equal(statusOf(), 'Approved', 'it is approved');
+        const approved = queuedFor('WP_APPROVED');
+        assert.equal(
+          approved.length,
+          1,
+          `the approval is addressed to one person, got ${JSON.stringify(
+            db
+              .prepare(
+                `SELECT recipient_user_id AS u, is_cc AS cc FROM notification_queue
+                WHERE batch_type = 'WP_APPROVED' AND related_entity_id = ?`,
+              )
+              .all(id),
+          )}`,
+        );
+        assert.equal(approved[0].user, SMOKE.auditorId, 'the auditor whose finding it is');
+
+        // The evidence gate. With nothing attached it refuses, and says so in the
+        // log with the count it saw.
+        const refused = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Sent to Auditee',
+        });
+        const refusedAt = decodeURIComponent(String(refused.headers.location ?? ''));
+        assert.ok(
+          refusedAt.includes('Attach evidence before sending to the auditee'),
+          `an evidence-free send must refuse, got ${refusedAt}`,
+        );
+        const line = await waitForLogLine(
+          `[grc.workpaper.auditee] refused {"work_paper_id":"${id}"`,
+        );
+        assert.ok(line, 'and the refusal must say what it counted');
+        assert.ok(line.includes('"evidence_count":0'), `naming the count, got ${line}`);
+
+        // Attach evidence exactly as the Evidence panel does, and the same send
+        // now passes: the gate counts what the auditor can see.
+        const upload = await server.postMultipart(
+          '/api/evidence/put',
+          {
+            entity_type: 'work_paper',
+            entity_id: id,
+            file_id: crypto.randomUUID(),
+            file_name: 'dispatch-notes-march.txt',
+            content_type: 'text/plain',
+          },
+          {
+            field: 'file',
+            filename: 'dispatch-notes-march.txt',
+            contentType: 'text/plain',
+            content: 'March dispatch notes.',
+          },
+        );
+        assert.equal(upload.status, 200, `the upload answered ${upload.status}: ${upload.body}`);
+        const attached = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM file_attachments
+            WHERE entity_type = 'work_paper' AND entity_id = ?`,
+          )
+          .get(id) as { n: number | bigint };
+        assert.equal(Number(attached.n), 1, 'the evidence is attached to the work paper');
+
+        const sent = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Sent to Auditee',
+        });
+        const sentAt = decodeURIComponent(String(sent.headers.location ?? ''));
+        assert.ok(
+          !/[?&]error=/.test(sentAt),
+          `evidence is attached, so it must send, got ${sentAt}`,
+        );
+        assert.equal(statusOf(), 'Sent to Auditee', 'and the finding goes to the auditee');
+      },
+    );
+
+    await t.test('the reviewer override sends a finding with no evidence on it', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // A finding approved with nothing attached: the state the override is for.
+      const approvedId = 'WP-NOEVIDENCE-1';
+      db.prepare(
+        `INSERT INTO work_papers (work_paper_id, organization_id, work_paper_ref, created_by,
+             year, affiliate_code, audit_area_id, sub_area_id, audit_period_from, audit_period_to,
+             observation_title, observation_description, risk_rating, recommendation,
+             status, revision_count, assigned_auditor_id, created_at, updated_at)
+           VALUES (?, ?, 'WP/2026/NOEV', ?, 2026, ?, ?, ?, '2026-01-01', '2026-03-31',
+                   'A finding with no attachment', 'Nothing to attach.', 'Low',
+                   'Note it in the file.', 'Approved', 0, ?, ?, ?)`,
+      ).run(
+        approvedId,
+        SMOKE.orgId,
+        SMOKE.auditorId,
+        SMOKE.affiliateCode,
+        SMOKE.auditAreaId,
+        SMOKE.subAreaId,
+        SMOKE.auditorId,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+
+      // The auditor holds update, not approve, so they hold no override either:
+      // the refusal is the same one anybody without the grant gets.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const asAuditor = await server.request('POST', `/api/work-papers/${approvedId}/transition`, {
+        to_status: 'Sent to Auditee',
+      });
+      assert.ok(
+        decodeURIComponent(String(asAuditor.headers.location ?? '')).includes('permission'),
+        'an auditor cannot send at all, override or not',
+      );
+
+      // The head of audit holds the override, but holding it is not using it: an
+      // unticked send is refused exactly as anybody else's is.
+      await signInAsOwnerInsideHass();
+      const unticked = await server.request('POST', `/api/work-papers/${approvedId}/transition`, {
+        to_status: 'Sent to Auditee',
+      });
+      assert.ok(
+        decodeURIComponent(String(unticked.headers.location ?? '')).includes('Attach evidence'),
+        'the gate stands until the override is deliberately used',
+      );
+
+      // Ticked, it sends, and the trail records who decided it.
+      const sent = await server.request('POST', `/api/work-papers/${approvedId}/transition`, {
+        to_status: 'Sent to Auditee',
+        evidence_override: '1',
+      });
+      const at = decodeURIComponent(String(sent.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(at), `the override must let the reviewer send, got ${at}`);
+      const overrideLogged = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_log
+            WHERE action = 'WORK_PAPER.evidence_override' AND entity_id = ?`,
+        )
+        .get(approvedId) as { n: number | bigint };
+      assert.ok(Number(overrideLogged.n) >= 1, 'a finding sent bare says who decided that');
+
+      // And the screen offers the tick only to somebody who holds the grant.
+      const detail = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+      const row = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(approvedId) as { status?: string };
+      assert.equal(String(row.status), 'Sent to Auditee', 'and the finding goes');
+    });
+
     // The workflow a move is looked up in (Build Prompt 61). `status_transitions`
     // holds every workflow in one table, and two of them define a
     // `Draft -> Submitted`: the work paper's, and an auditee response's. The
@@ -3042,13 +3390,24 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       // The bell, which is where the history lives, is untouched.
       assert.ok(page.body.includes('grc-bell__summary'), 'the bell still opens the centre');
 
-      // The modules carry their own pending counts, ready for the live refresh.
+      // The modules carry their own pending counts, ready for the live refresh,
+      // as a superscript bubble on the label rather than a pill at the far edge
+      // (Build Prompt 62).
       for (const key of ['pendingReview', 'myRequirements']) {
         assert.ok(
           page.body.includes(`data-count-key="${key}"`),
           `${key} must badge its own module`,
         );
       }
+      assert.ok(
+        /<sup[^>]*class="grc-navcount"/.test(page.body),
+        'the count is a superscript on the label it counts',
+      );
+      assert.ok(page.body.includes('grc-navlink__label'), 'and rides the label, not the row');
+      assert.ok(
+        page.body.includes('pending</span>'),
+        'a bare digit announces nothing, so the label says what it counts',
+      );
       // A badge with nothing pending is hidden rather than showing a zero.
       assert.ok(
         /data-count-key="myRequirements"[^>]*hidden/.test(page.body) ||

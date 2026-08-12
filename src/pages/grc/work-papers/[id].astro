@@ -33,7 +33,7 @@ import { listAttachments, type Attachment } from '@grc/repos/evidence';
 import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
-import { WORK_PAPER_ENUM_TYPE, isEditable } from '@grc/workflow/workPaperActions';
+import { WORK_PAPER_ENUM_TYPE, WP_STATUS, isEditable } from '@grc/workflow/workPaperActions';
 import {
   availableActions,
   type OfferedAction,
@@ -53,6 +53,11 @@ const canManageReq = can(Astro.locals, 'update', 'WORK_PAPER');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const storageReady = await storageConfiguredFor(grc.organizationId);
 const canUpload = canEdit && storageReady;
+// Whether this reviewer may consciously send a finding out with nothing
+// attached (Build Prompt 62). Holding the grant only puts the tick box on the
+// screen; the gate still stands unless they tick it.
+const canOverrideEvidence =
+  grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.evidence_override');
 // A new requirement defaults to "asked for today", which is what is happening
 // when somebody types one in.
 const today = new Date().toISOString().slice(0, 10);
@@ -250,6 +255,23 @@ const responseFacts: { label: string; value: string }[] = wp
                   style="margin:0;align-items:end"
                 >
                   <input type="hidden" name="to_status" value={a.toStatus} />
+                  {a.toStatus === WP_STATUS.SENT_TO_AUDITEE && canOverrideEvidence && (
+                    /* Sending with nothing attached is a decision, not a
+                       loophole (Build Prompt 62): the reviewer ticks it
+                       deliberately, and the audit trail records that they did.
+                       Without the tick the evidence gate stands. */
+                    <div class="grc-field" style="margin:0;flex:1 1 18rem">
+                      <label class="grc-checkline" for="evidence-override">
+                        <input
+                          type="checkbox"
+                          id="evidence-override"
+                          name="evidence_override"
+                          value="1"
+                        />
+                        <span>Send without evidence (recorded as an override)</span>
+                      </label>
+                    </div>
+                  )}
                   {a.requiresComment && (
                     <div class="grc-field" style="margin:0;flex:1 1 20rem">
                       <label for={`c-${a.toStatus}`}>Comment (required)</label>

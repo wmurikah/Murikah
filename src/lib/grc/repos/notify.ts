@@ -28,10 +28,58 @@ export interface NotifyInput {
   entityId: string;
   /** The user who triggered it. */
   actorUserId: string;
+  /**
+   * The comment the transition carried, when it carried one: the reviewer's
+   * reason for sending a finding back, which the email must repeat rather than
+   * merely announce (Build Prompt 62).
+   */
+  comment?: string | null;
+}
+
+/**
+ * Who a work-paper event is for: the party who must act next, not everybody
+ * attached to the finding (Build Prompt 62).
+ *
+ * A return for revision is the auditor's to answer, and telling the responsibles
+ * instead is how a loop stalls with everyone assuming somebody else was told. A
+ * share with the auditee is the responsibles' and the CC list's. Everything else
+ * keeps the party set it always had: the assigned auditor and the responsibles.
+ */
+async function workPaperRecipientIds(
+  db: Client,
+  organizationId: string,
+  workPaperId: string,
+  type: NotificationType,
+): Promise<string[]> {
+  if (type === 'WP_REVISION_REQUIRED' || type === 'WP_APPROVED') {
+    const auditor = await assignedAuditorId(db, organizationId, workPaperId);
+    return auditor ? [auditor] : [];
+  }
+  return workPaperPartyIds(db, organizationId, workPaperId);
+}
+
+/** The auditor answerable for a finding, or null when it has none. */
+async function assignedAuditorId(
+  db: Client,
+  organizationId: string,
+  workPaperId: string,
+): Promise<string | null> {
+  const res = await db.execute({
+    sql: `SELECT assigned_auditor_id AS auditor FROM work_papers
+           WHERE work_paper_id = ? AND organization_id = ? LIMIT 1`,
+    args: [workPaperId, organizationId],
+  });
+  const auditor = res.rows[0]?.auditor;
+  return auditor == null || String(auditor).trim() === '' ? null : String(auditor).trim();
 }
 
 // The module template codes map to the source NOTIFICATION_TYPES.
 const TEMPLATE_TO_TYPE: Record<string, NotificationType> = {
+  // Every round of the review loop tells the person who now has to act
+  // (Build Prompt 62). Returning a finding used to tell nobody: the reviewer
+  // wrote what was wrong with it and the auditor found out by opening the list.
+  finding_revision_required: 'WP_REVISION_REQUIRED',
+  finding_approved: 'WP_APPROVED',
   action_assigned: 'AP_ASSIGNED',
   action_delegated: 'AP_DELEGATED',
   action_implemented: 'AP_IMPLEMENTED',
@@ -106,13 +154,17 @@ export async function enqueueNotification(db: Client, input: NotifyInput): Promi
     const userIds =
       entity === 'action_plan'
         ? await actionPlanOwnerIds(db, input.organizationId, input.entityId)
-        : await workPaperPartyIds(db, input.organizationId, input.entityId);
+        : await workPaperRecipientIds(db, input.organizationId, input.entityId, type);
     const recipients = (await resolveActiveRecipients(db, input.organizationId, userIds)).filter(
       (r) => r.userId !== input.actorUserId,
     );
 
     const data = await loadEntityPayload(db, input.organizationId, entity, input.entityId);
     if (input.actorUserId) data.actorName = data.actorName ?? '';
+    // The reviewer's words travel with the decision. A return that says only
+    // "revision required" sends the auditor back to the screen to find out what
+    // for, which is the email failing at the one thing it is for.
+    if (input.comment) data.comment = input.comment;
 
     for (const recipient of recipients) {
       await queueNotification(db, input.organizationId, {
