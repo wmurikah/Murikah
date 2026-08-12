@@ -147,6 +147,10 @@ const ACTIONS: Record<string, WpActionMeta> = {
   },
   [WP_STATUS.REVISION_REQUIRED]: {
     grant: { module: 'WORK_PAPER', action: 'approve' },
+    // Every round tells the auditor, with the reviewer's comment (Build Prompt
+    // 62). This move used to notify nobody at all, so a finding returned on a
+    // Friday sat until its auditor happened to open the list.
+    notifyTemplate: 'finding_revision_required',
     attribution: {
       byId: 'reviewed_by_id',
       byName: 'reviewed_by_name',
@@ -157,6 +161,7 @@ const ACTIONS: Record<string, WpActionMeta> = {
   },
   [WP_STATUS.APPROVED]: {
     grant: { module: 'WORK_PAPER', action: 'approve' },
+    notifyTemplate: 'finding_approved',
     attribution: { byId: 'approved_by_id', byName: 'approved_by_name', date: 'approved_date' },
     label: 'Approve',
   },

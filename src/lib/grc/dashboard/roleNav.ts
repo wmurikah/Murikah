@@ -72,12 +72,13 @@ export interface NavItemDef {
   /** The badge count to show on this link, if any. */
   countKey?: CountKey;
   /**
-   * Render the badge in the alert colour.
+   * Kept for callers that still read it; the badge no longer varies by it.
    *
-   * Every pending badge is an alert now (Build Prompt 60): the badges replaced
-   * the Notifications entry, and their whole job is to say "something here is
-   * yours to do". A count that has to be interpreted before it is noticed is a
-   * count that gets skipped, so they read the same wherever they appear.
+   * Every pending badge is the same red bubble (Build Prompt 60 and 62): they
+   * replaced the Notifications entry, and their whole job is to say "something
+   * here is yours to do". A count that has to be interpreted before it is
+   * noticed is a count that gets skipped, so they read the same wherever they
+   * appear.
    */
   alert?: boolean;
 }
