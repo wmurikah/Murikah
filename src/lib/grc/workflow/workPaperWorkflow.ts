@@ -14,7 +14,10 @@
  *  4. then, atomically, the status is set, revision_count incremented, the dated
  *     attribution stamped, an append-only work_paper_revisions row written, and an
  *     audit_log row recorded;
- *  5. and a notification is enqueued for submit, send and response events.
+ *  5. and a notification is enqueued for every round of the review loop: the
+ *     submission, the return for revision (with the reviewer's comment), the
+ *     approval and the share with the auditee, each addressed to the party who
+ *     must act next (Build Prompt 62).
  *
  * A platform owner is exempt from the required_role (as in the engine) but the
  * grant still applies through their matrix, which carries everything.
@@ -44,6 +47,7 @@ import {
 import { canMatrix, type PermissionMatrix } from '@grc/auth/matrix';
 import { resolveRoleAccess } from '@grc/auth/rbac';
 import { completenessOf, getWorkPaper } from '@grc/repos/workPapers';
+import { countAttachments } from '@grc/repos/evidence';
 import { incompleteMessage, missingForSubmission } from './workPaperCompleteness';
 import { insertRevisionStatement } from '@grc/repos/revisions';
 import { enqueueNotification } from '@grc/repos/notify';
@@ -181,25 +185,27 @@ export type TransitionResult =
       message: string;
     };
 
+/**
+ * The grant that lets a reviewer send a finding with no evidence on it.
+ *
+ * It reads from the derived list, and until now the list mapped it to nothing at
+ * all, so the override the refusal message offers existed in the message and
+ * nowhere else (Build Prompt 62). It now follows `WORK_PAPER.approve`: sending
+ * to the auditee is the head of audit's act, and deciding that this particular
+ * finding does not need an attachment is the same person's judgement. An auditor
+ * still cannot make it.
+ *
+ * HOLDING IT IS NOT USING IT. Sending is already gated on `approve`, so a grant
+ * alone would mean everyone who can send can also skip the evidence, and a gate
+ * nobody can fail is not a gate. The override is therefore an act: the sender
+ * ticks it on the send, this honours it only from somebody who holds the grant,
+ * and the audit log records that a finding went out without evidence and who
+ * decided that. The default stays the refusal.
+ */
 const EVIDENCE_OVERRIDE = 'WORK_PAPERS.evidence_override';
 
-// The organisation scope lives on files, not on the file_attachments link table
-// (which has no organization_id of its own), so the count joins through it.
-async function evidenceCount(
-  db: Client,
-  organizationId: string,
-  workPaperId: string,
-): Promise<number> {
-  const res = await db.execute({
-    sql: `SELECT COUNT(*) AS n
-            FROM file_attachments fa
-            JOIN files f ON f.file_id = fa.file_id
-           WHERE f.organization_id = ? AND f.deleted_at IS NULL
-             AND fa.entity_type = 'work_paper' AND fa.entity_id = ?`,
-    args: [organizationId, workPaperId],
-  });
-  return Number(res.rows[0]?.n ?? 0);
-}
+/** The tag a refused send-to-auditee is logged under. */
+const AUDITEE_TAG = '[grc.workpaper.auditee]';
 
 export async function executeTransition(
   db: Client,
@@ -209,6 +215,12 @@ export async function executeTransition(
   actor: TransitionActor,
   comment: string | null,
   access?: TransitionAccess,
+  /**
+   * The sender's deliberate "send this without evidence" (Build Prompt 62).
+   * Honoured only from an actor who holds the override grant, and recorded in
+   * the audit trail when it is used.
+   */
+  overrideEvidence = false,
 ): Promise<TransitionResult> {
   const refuse = (
     result: { ok: false; code: string; message: string },
@@ -295,19 +307,42 @@ export async function executeTransition(
   // guards the first share only: reopening a finding for another response round
   // is not a fresh disclosure, and the evidence it demanded was already attached
   // when the finding first went out.
+  let evidenceOverridden = false;
   const alreadySent = wp.sent_to_auditee_date != null;
   if (target === WP_STATUS.SENT_TO_AUDITEE && !alreadySent) {
+    // Counted through the repository the Evidence panel reads, so the gate sees
+    // exactly what the auditor sees (Build Prompt 62).
+    const attached = await countAttachments(db, organizationId, 'work_paper', workPaperId);
     const mayOverride = actor.perms.includes(EVIDENCE_OVERRIDE);
-    if (!mayOverride && (await evidenceCount(db, organizationId, workPaperId)) === 0) {
+    const overriding = mayOverride && overrideEvidence;
+    if (!overriding && attached === 0) {
+      // A refusal an auditor can contradict by pointing at their screen has to
+      // say what it counted and where it looked.
+      console.error(
+        `${AUDITEE_TAG} refused`,
+        JSON.stringify({
+          work_paper_id: workPaperId,
+          organization_id: organizationId,
+          entity_type: 'work_paper',
+          evidence_count: attached,
+          role_code: actor.roleCode,
+          may_override: mayOverride,
+          override_requested: overrideEvidence,
+          reason: 'no evidence is attached to this work paper',
+        }),
+      );
       return refuse(
         {
           ok: false,
           code: 'evidence_required',
-          message: 'Attach evidence before sending to the auditee, or use an override.',
+          message: mayOverride
+            ? 'Attach evidence before sending to the auditee, or tick the override to send without it.'
+            : 'Attach evidence before sending to the auditee.',
         },
         { from: fromStatus, to: target, inherited: resolved.inherited },
       );
     }
+    evidenceOverridden = overriding && attached === 0;
   }
 
   const now = new Date().toISOString();
@@ -360,6 +395,20 @@ export async function executeTransition(
       details: `${fromStatus} -> ${target}`,
     }),
   ];
+  // Sending with nothing attached is a decision somebody made, so the trail says
+  // who made it rather than leaving a finding that went out bare unexplained.
+  if (evidenceOverridden) {
+    statements.push(
+      buildAuditStatement({
+        organizationId,
+        userId: actor.userId,
+        action: 'WORK_PAPER.evidence_override',
+        entityType: 'work_paper',
+        entityId: workPaperId,
+        details: `${target} with no evidence attached`,
+      }),
+    );
+  }
   await db.batch(statements, 'write');
 
   // Notify on the right events (submit, send, response). Best-effort, so a
@@ -371,6 +420,8 @@ export async function executeTransition(
       entityType: 'work_paper',
       entityId: workPaperId,
       actorUserId: actor.userId,
+      // The reviewer's reason travels with the decision (Build Prompt 62).
+      comment,
     });
   }
 

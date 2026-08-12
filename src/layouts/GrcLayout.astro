@@ -58,7 +58,13 @@ if (grc && inInstance) {
   try {
     const db = await getDb(getGrcEnv());
     [counts, unread, bellItems] = await Promise.all([
-      getSidebarCounts(db, grc.organizationId, grc.userId, grc.affiliateScope),
+      getSidebarCounts(
+        db,
+        grc.organizationId,
+        grc.userId,
+        grc.affiliateScope,
+        grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review'),
+      ),
       unreadCount(db, grc.userId),
       listInApp(db, grc.userId, 6),
     ]);
@@ -176,7 +182,7 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
               <summary class="grc-bell__summary" data-tip="Notifications">
                 <GrcIcon name="bell" size={16} />
                 <span>Notifications</span>
-                {unread > 0 && <span class="grc-navcount grc-navcount--alert">{unread}</span>}
+                {unread > 0 && <span class="grc-navcount">{unread}</span>}
               </summary>
               <div class="grc-bell__panel">
                 {bellItems.length === 0 ? (
@@ -265,17 +271,30 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
                         aria-current={isActive(item.href) ? 'page' : undefined}
                       >
                         <GrcIcon name={item.icon} size={16} class="grc-navlink__icon" />
-                        <span>{item.label}</span>
-                        {item.countKey && (
-                          <span
-                            class:list={['grc-navcount', { 'grc-navcount--alert': item.alert }]}
-                            data-count-key={item.countKey}
-                            aria-label={`${item.label} count`}
-                            hidden={countFor(item.countKey) === 0}
-                          >
-                            {countFor(item.countKey)}
-                          </span>
-                        )}
+                        {/*
+                          The count rides the label as a superscript bubble
+                          rather than sitting off at the far edge of the rail
+                          (Build Prompt 62): it belongs to the word it counts,
+                          the way a footnote marker does, and at the edge it read
+                          as a column of unrelated numbers. `sup` is the element
+                          that means this, so a screen reader and a stylesheet
+                          agree about what it is; the label beside it says what
+                          the number counts, since a bare digit announces nothing.
+                        */}
+                        <span class="grc-navlink__label">
+                          <span>{item.label}</span>
+                          {item.countKey && (
+                            <sup
+                              class="grc-navcount"
+                              data-count-key={item.countKey}
+                              hidden={countFor(item.countKey) === 0}
+                            >
+                              <span class="grc-vh">, </span>
+                              {countFor(item.countKey)}
+                              <span class="grc-vh"> pending</span>
+                            </sup>
+                          )}
+                        </span>
                       </a>
                     </li>
                   ))}
