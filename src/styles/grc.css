@@ -2944,6 +2944,108 @@ a.grc-notifrow__title:hover {
   font-size: var(--grc-fs-caption);
 }
 
+/* The uploading rows (Build Prompt 66). One per file being sent, each with the
+   name, the size and a bar driven by the bytes the browser has acknowledged, so
+   an upload that is slow looks different from one that has stopped. */
+.grc-upload-list {
+  list-style: none;
+  margin: var(--grc-s3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--grc-s2);
+}
+.grc-upload-list:empty {
+  display: none;
+}
+.grc-upload {
+  display: grid;
+  gap: var(--grc-s1);
+  padding: var(--grc-s2) var(--grc-s3);
+  border: 1px solid var(--grc-line);
+  border-left: 3px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-surface);
+}
+.grc-upload[data-state='active'] {
+  border-left-color: var(--grc-navy-2);
+}
+.grc-upload[data-state='done'] {
+  border-left-color: var(--grc-status-impl);
+}
+.grc-upload[data-state='failed'] {
+  border-left-color: var(--grc-risk-high);
+}
+.grc-upload__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--grc-s2);
+}
+.grc-upload__name {
+  font-weight: 600;
+  color: var(--grc-ink);
+  overflow-wrap: anywhere;
+}
+.grc-upload__size {
+  flex: none;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.grc-upload__bar {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--grc-navy) 10%, transparent);
+  overflow: hidden;
+}
+.grc-upload__fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--grc-navy-2);
+  transition: width 0.18s ease;
+}
+.grc-upload[data-state='done'] .grc-upload__fill {
+  background: var(--grc-status-impl);
+}
+.grc-upload[data-state='failed'] .grc-upload__bar {
+  display: none;
+}
+.grc-upload__note {
+  margin: 0;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.grc-upload[data-state='failed'] .grc-upload__note {
+  color: var(--grc-risk-high);
+  font-variant-numeric: normal;
+}
+.grc-upload__retry {
+  justify-self: start;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-paper, #faf7f0);
+  color: var(--grc-navy);
+  font: inherit;
+  font-size: var(--grc-fs-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+.grc-upload__retry:hover {
+  border-color: var(--grc-gold-deep);
+}
+.grc-upload__retry[hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .grc-upload__fill {
+    transition: none;
+  }
+}
+
 .grc-evidence__status:empty {
   display: none;
 }

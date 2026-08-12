@@ -148,6 +148,7 @@ const activeName =
                   {conn?.isActive ? ' — active' : ''}
                 </h2>
                 <p class="grc-field__hint">{def.description}</p>
+                {def.browserNote && <p class="grc-field__hint">{def.browserNote}</p>}
               </div>
 
               {conn ? (
