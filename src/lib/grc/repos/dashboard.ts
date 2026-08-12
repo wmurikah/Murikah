@@ -665,6 +665,13 @@ async function readDashboardCharts(
 }
 
 export interface SidebarCounts {
+  /**
+   * Work papers awaiting this person's action (Build Prompt 62): their own
+   * drafts and the findings sent back to them, plus, for a reviewer, what is
+   * waiting on their review. It was the organisation's submitted count, which
+   * badged an auditor with a number that was nobody's to act on but the head of
+   * audit's.
+   */
   pendingReview: number;
   myOverdue: number;
   myWorkPapers: number;
@@ -687,12 +694,23 @@ export async function getSidebarCounts(
   organizationId: string,
   userId: string,
   scope: AffiliateScope,
+  /**
+   * Whether this person reviews findings. A badge says "this many are yours to
+   * act on", and what is yours depends on which side of the review you are on
+   * (Build Prompt 62): a reviewer's queue is what has been submitted to them, an
+   * auditor's is what has been sent back to them.
+   */
+  reviewer = false,
 ): Promise<SidebarCounts> {
   return cached(
     db,
-    cacheKeys.dashboard(organizationId, 'sidebar', `user=${userId}:${affiliateScopeKey(scope)}`),
+    cacheKeys.dashboard(
+      organizationId,
+      'sidebar',
+      `user=${userId}:${affiliateScopeKey(scope)}:reviewer=${reviewer ? 1 : 0}`,
+    ),
     CACHE_TTL.dashboard,
-    () => readSidebarCounts(db, organizationId, userId, scope),
+    () => readSidebarCounts(db, organizationId, userId, scope, reviewer),
   );
 }
 
@@ -701,6 +719,7 @@ async function readSidebarCounts(
   organizationId: string,
   userId: string,
   scope: AffiliateScope,
+  reviewer: boolean,
 ): Promise<SidebarCounts> {
   const like = ownerLike(userId);
   const wpConfine = affiliatePredicate(scope, cols(C.work_papers, 'wp').affiliate_code);
@@ -708,7 +727,11 @@ async function readSidebarCounts(
   const [wp, ap, req] = await Promise.all([
     db.execute({
       sql: `SELECT
-              SUM(CASE WHEN ${WPa.status} = 'Submitted' THEN 1 ELSE 0 END) AS pending_review,
+              SUM(CASE
+                    WHEN ${WPa.assigned_auditor_id} = ?
+                     AND ${WPa.status} IN ('Draft', 'Revision Required') THEN 1
+                    WHEN ? = 1 AND ${WPa.status} IN ('Submitted', 'Under Review') THEN 1
+                    ELSE 0 END) AS pending_review,
               SUM(CASE WHEN ${WPa.prepared_by_id} = ? THEN 1 ELSE 0 END) AS my_work_papers,
               SUM(CASE WHEN ${WPa.status} = 'Response Received' THEN 1 ELSE 0 END) AS responses_to_review,
               SUM(CASE WHEN ${WPa.status} = 'Sent to Auditee' AND EXISTS (
@@ -718,7 +741,7 @@ async function readSidebarCounts(
                     SELECT 1 FROM work_paper_responsibles r WHERE ${RESP.work_paper_id} = ${WPa.work_paper_id}
                       ) THEN 1 ELSE 0 END) AS approved_queue
             FROM work_papers wp WHERE ${WPa.organization_id} = ?${wpConfine.clause}`,
-      args: [userId, userId, organizationId, ...wpConfine.args],
+      args: [userId, reviewer ? 1 : 0, userId, userId, organizationId, ...wpConfine.args],
     }),
     db.execute({
       sql: `SELECT

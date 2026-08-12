@@ -30,6 +30,9 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   const form = await request.formData();
   const toStatus = String(form.get('to_status') ?? '').trim();
   const comment = String(form.get('comment') ?? '').trim() || null;
+  // The sender's deliberate "send this without evidence" (Build Prompt 62). The
+  // executor honours it only from somebody who holds the override grant.
+  const overrideEvidence = String(form.get('evidence_override') ?? '') === '1';
   if (!toStatus) {
     return new Response(null, { status: 303, headers: { location: `/work-papers/${id}` } });
   }
@@ -45,7 +48,16 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   };
   const result = sameStatus(toStatus, WP_STATUS.SUBMITTED)
     ? await submitForReview(db, grc.organizationId, id, actor, comment)
-    : await executeTransition(db, grc.organizationId, id, toStatus, actor, comment);
+    : await executeTransition(
+        db,
+        grc.organizationId,
+        id,
+        toStatus,
+        actor,
+        comment,
+        undefined,
+        overrideEvidence,
+      );
 
   const location = result.ok
     ? `/work-papers/${id}?done=${encodeURIComponent('Status updated.')}`
