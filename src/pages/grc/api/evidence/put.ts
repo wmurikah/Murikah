@@ -125,20 +125,30 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'The evidence could not be stored.' }, 502);
   }
 
-  const attachmentId = await recordAttachment(db, grc.organizationId, {
-    fileId,
-    entityType,
-    entityId,
-    fileName,
-    contentType,
-    sizeBytes: bytes.byteLength,
-    uploadedBy: grc.userId,
-    // The provider's own reference, not the derived key: Drive and Graph answer
-    // with an id of their own, and that is what a later download must ask for.
-    ref: stored,
-    contentHash: await sha256Hex(bytes),
-    contentHashAlgo: CONTENT_HASH_ALGO,
-  });
+  // The attach is the point of the upload: bytes in storage with no link row is
+  // evidence nobody can see, so a failure here is reported, never swallowed
+  // (Build Prompt 65). recordAttachment logs the driver's own reason under
+  // [grc.evidence.attach] before it throws.
+  let attachmentId: string;
+  try {
+    attachmentId = await recordAttachment(db, grc.organizationId, {
+      fileId,
+      entityType,
+      entityId,
+      fileName,
+      contentType,
+      sizeBytes: bytes.byteLength,
+      uploadedBy: grc.userId,
+      // The provider's own reference, not the derived key: Drive and Graph answer
+      // with an id of their own, and that is what a later download must ask for.
+      ref: stored,
+      contentHash: await sha256Hex(bytes),
+      contentHashAlgo: CONTENT_HASH_ALGO,
+    });
+  } catch (err) {
+    console.error('[grc.evidence.attach] the attachment was not recorded', err);
+    return json({ error: 'The evidence was stored but could not be attached.' }, 502);
+  }
 
   try {
     await writeAuditLog(db, {
