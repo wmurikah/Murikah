@@ -97,7 +97,7 @@ const count = items.length;
           </p>
           <p class="grc-dropzone__hint">
             Documents and images, several at a time.
-            {staged && ' They attach to the finding when you save it.'}
+            {staged && ' They attach to the observation when you save it.'}
           </p>
           <input
             type="file"
@@ -680,7 +680,7 @@ const count = items.length;
 
     const attachedText = (n: number): string =>
       staged
-        ? `${n} attached. ${n === 1 ? 'It attaches' : 'They attach'} to the finding when you save.`
+        ? `${n} attached. ${n === 1 ? 'It attaches' : 'They attach'} to the observation when you save.`
         : `${n} attached.`;
 
     /**

@@ -4,7 +4,7 @@ export const prerender = false;
 /**
  * Create an action plan (Actionplanform, new). Gate: ACTION_PLANS.create, or
  * AUDITEE.respond for an auditee proposing a plan (recorded as auditee_proposed).
- * Captures the finding it remediates, the action, its owners and the due date.
+ * Captures the observation it remediates, the action, its owners and the due date.
  * On submit the endpoint creates the plan, seeds its owners and redirects to the
  * detail.
  */
@@ -54,7 +54,7 @@ if (allowed) {
       <p class="grc-lead">
         {
           canCreate
-            ? 'Raise a remediation action against a finding.'
+            ? 'Raise a remediation action against a observation.'
             : 'Propose a remediation action for review.'
         }
       </p>
@@ -80,9 +80,9 @@ if (allowed) {
         )}
         <form id="ap-form" method="post" action="/api/action-plans" class="grc-form">
           <div class="grc-field">
-            <label for="work-paper">Work paper (finding)</label>
+            <label for="work-paper">Work paper (observation)</label>
             <select id="work-paper" name="work_paper_id" class="grc-select" required>
-              <option value="">Choose the parent finding</option>
+              <option value="">Choose the parent observation</option>
               {workPapers.map((w) => (
                 <option value={w.id} selected={presetWorkPaper === w.id}>
                   {w.label}

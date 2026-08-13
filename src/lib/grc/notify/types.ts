@@ -85,7 +85,7 @@ export const TYPE_META: Record<NotificationType, TypeMeta> = {
     entity: 'work_paper',
   },
   WP_SENT_TO_AUDITEE: {
-    label: 'Finding sent to auditee',
+    label: 'Observation sent to auditee',
     priority: 'urgent',
     severity: 'urgent',
     ccHoa: true,

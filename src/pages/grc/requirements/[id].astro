@@ -73,7 +73,7 @@ loadError = !(await guardPageLoad('requirements.detail', async () => {
       isRequirementRecipient(db, id, grc.userId),
       listRecipients(db, grc.organizationId, id),
     ]);
-    // Only audit is offered the link, so only audit loads the findings.
+    // Only audit is offered the link, so only audit loads the observations.
     if (manages) workPapers = await listWorkPaperOptions(db, grc.organizationId);
   }
 }));
@@ -159,14 +159,14 @@ const error = p.get('error');
               <dt>What is required</dt>
               <dd>{req.description}</dd>
             </>
-            {/* Only audit is shown the finding, and only when there is one
+            {/* Only audit is shown the observation, and only when there is one
                 (Build Prompt 69). An owner is never told which work paper their
                 document supports: it is internal audit structure, it is not a
                 question they can answer, and showing it turns a request for a
                 document into a question about the audit file. */}
             {manages && (
               <>
-                <dt>Linked finding</dt>
+                <dt>Linked observation</dt>
                 <dd>
                   {req.workPaperId ? (
                     <a href={`/work-papers/${req.workPaperId}`}>
@@ -389,20 +389,20 @@ const error = p.get('error');
 
         {/* Linking, which is a different decision from completeness and is
             deliberately its own panel (Build Prompt 69). Information can be
-            everything that was asked for and still belong to no finding, and it
+            everything that was asked for and still belong to no observation, and it
             can be linked while audit is still waiting for more of it, so the
             two are never one control. */}
         {manages && (
           <div class="grc-panel" id="link">
-            <h2>Link to a finding</h2>
+            <h2>Link to a observation</h2>
             <p class="grc-lead">
               {req.workPaperId
-                ? 'Change which finding this information supports, or clear it to leave it unlinked.'
+                ? 'Change which observation this information supports, or clear it to leave it unlinked.'
                 : 'Once it is clear what this information supports, link it. Leaving it unlinked is a legitimate resting state, not an omission.'}
             </p>
             <form method="post" action={`/api/requirements/${req.id}/link`}>
               <div class="grc-field" style="max-width:32rem">
-                <label for="link-wp">Finding</label>
+                <label for="link-wp">Observation</label>
                 <select id="link-wp" name="work_paper_id" class="grc-select">
                   <option value="">Not linked</option>
                   {workPapers.map((w) => (

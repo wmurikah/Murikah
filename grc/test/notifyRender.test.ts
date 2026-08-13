@@ -126,7 +126,7 @@ test('several findings for one auditee compile into one table, not several email
   });
   assert.equal(plans.length, 1, 'one recipient, one email');
   assert.equal(plans[0].rowIds.length, 3, 'settling all three queue rows');
-  assert.match(plans[0].subject, /3 findings need your response/);
+  assert.match(plans[0].subject, /3 observations need your response/);
   for (const reference of ['WP/2026/001', 'WP/2026/002', 'WP/2026/003']) {
     assert.ok(plans[0].body.includes(reference), `${reference} must be in the table`);
   }
@@ -196,6 +196,26 @@ test('everything asked of one owner arrives as one table, not one email each', (
   }
   assert.match(plans[0].body, /Log in and upload/, 'with one button');
   assert.match(plans[0].body, /grc\.murikah\.com\/requirements/, 'pointing at their own list');
+});
+
+test('no email says "finding" where it means an observation', () => {
+  // The same vocabulary rule the screens keep (Build Prompt 70), applied where
+  // it matters most: an email is read by somebody who is not looking at the
+  // product, so a word the product no longer uses has nothing beside it to
+  // explain itself.
+  const offenders: string[] = [];
+  for (const type of NOTIFICATION_TYPES) {
+    const { subject, body } = renderInline(type, {
+      reference: 'WP/2026/002',
+      title: 'Fuel reconciliations are not reviewed',
+      status: 'Sent to Auditee',
+      dueDate: '2026-03-31',
+      link: 'https://grc.murikah.com/work-papers/WP-1',
+    });
+    const text = `${subject} ${body.replace(/<[^>]+>/g, ' ')}`;
+    if (/\b[Ff]indings?\b/.test(text)) offenders.push(type);
+  }
+  assert.deepEqual(offenders, [], `these emails still say finding: ${offenders.join(', ')}`);
 });
 
 test('the password-reset email is urgent, never copies HOA, and carries the link', () => {
