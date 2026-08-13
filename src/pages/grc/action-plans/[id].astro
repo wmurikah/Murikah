@@ -345,8 +345,10 @@ const commentLabel = (effect: string): string =>
               <dt>Observation</dt>
               <dd>{val('observation_title')}</dd>
             </>
+            {/* The same two names the finding itself uses (Build Prompt 67):
+                the observation is the title, the description is the body. */}
             <>
-              <dt>Detail</dt>
+              <dt>Description</dt>
               <dd class="grc-richbody" set:html={rich('observation_description')} />
             </>
           </dl>

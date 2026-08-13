@@ -282,10 +282,18 @@ const templateJson = JSON.stringify(
     </div>
   </fieldset>
 
+  {
+    /* The finding itself, and it sits here on purpose: an auditor writes the
+      observation once they have done the testing, so it follows the testing
+      steps rather than opening the form (Build Prompt 67). The two fields are
+      "Observation" and "Description" on screen and observation_title and
+      observation_description in the database: the labels changed, the columns
+      did not, so nothing stored has moved. */
+  }
   <fieldset class="grc-fieldset">
-    <legend>Observation</legend>
+    <legend>The finding</legend>
     <div class="grc-field">
-      <label for="observation_title">Observation title</label>
+      <label for="observation_title">Observation</label>
       <input
         type="text"
         id="observation_title"
@@ -298,7 +306,7 @@ const templateJson = JSON.stringify(
     </div>
     <div class="grc-field">
       <div class="grc-aihead">
-        <label for="observation_description">Observation description</label>
+        <label for="observation_description">Description</label>
         {
           hasAi && (
             <button
@@ -421,8 +429,8 @@ const templateJson = JSON.stringify(
     offerSubmit && (
       <p class="grc-field__hint" style="margin:0.5rem 0 0">
         Saving keeps an unfinished finding safe as a draft. Submitting for review needs the audit
-        area, sub-area, audit period, observation title and description, risk rating, recommendation
-        and assigned auditor.
+        area, sub-area, audit period, observation, description, risk rating, recommendation and
+        assigned auditor.
       </p>
     )
   }
