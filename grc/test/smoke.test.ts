@@ -2996,11 +2996,17 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       // group, then what management said. The stored title is the field
       // labelled "Observation" inside the Finding card, which is what Build
       // Prompt 63 put on this page and 67 moved into its proper place.
-      assert.ok(page.body.includes('data-finding-cards'), 'the finding is drawn as cards');
-      assert.ok(page.body.includes('<dt>Observation</dt>'), 'the field is labelled');
+      assert.ok(page.body.includes('data-finding-cards'), 'the observation is drawn as cards');
+      // Quiet paper: a small gold section label over the card, and the stored
+      // title set as the card's own title rather than a labelled field
+      // (Build Prompt 71).
       assert.ok(
-        new RegExp(`<dt>Observation</dt>\\s*<dd>${title}</dd>`).test(page.body),
-        'and carries the stored value',
+        /<p class="grc-fcard__label">Observation<\/p>/.test(page.body),
+        'the card carries its gold section label',
+      );
+      assert.ok(
+        new RegExp(`<h3 class="grc-fcard__title">${title}</h3>`).test(page.body),
+        'and the stored title is the card title',
       );
       assert.ok(
         !page.body.includes('Observation title'),
@@ -3056,7 +3062,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         !reviewerView.body.includes('does not hold'),
         'and is told no permission reasons either',
       );
-      assert.ok(reviewerView.body.includes('<dt>Observation</dt>'), 'and sees the finding named');
+      assert.ok(reviewerView.body.includes('grc-fcard__title'), 'and sees the observation named');
       assert.ok(reviewerView.body.includes('data-finding-cards'), 'in the same card arrangement');
       // A card with nothing in it is a quiet line, not a headed empty box: this
       // finding has never been answered, and the reader is told so rather than

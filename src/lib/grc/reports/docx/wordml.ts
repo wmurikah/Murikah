@@ -217,7 +217,13 @@ function findingXml(source: FindingSource): string {
       continue;
     }
     for (const body of card.body) {
-      if (body.kind === 'rich') {
+      // The card's own title: navy and a size up, the paper equivalent of the
+      // screen's `.grc-fcard__title` (Build Prompt 71).
+      if (body.kind === 'title') {
+        if (body.text.trim() !== '') {
+          parts.push(para(run(body.text, { bold: true, size: 22, colour: NAVY }), { after: 60 }));
+        }
+      } else if (body.kind === 'rich') {
         const rich = parseRichText(body.text);
         parts.push(rich.length === 0 ? para('') : rich.map(richBlockXml).join(''));
       } else if (body.kind === 'facts') {
