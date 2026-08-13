@@ -23,15 +23,8 @@
  * what management says back is a separate card because it is a separate voice.
  */
 
-/** How a card's content is rendered. The renderers switch on this. */
+/** How a section's content is rendered. The renderers switch on this. */
 export type CardBody =
-  /**
-   * The card's own title, set in navy above its body (Build Prompt 71). The
-   * observation's title is the name of the thing, not a labelled attribute of
-   * it: "Observation: Fuel reconciliations are not reviewed" reads as a form
-   * field, where the title alone reads as a heading, which is what it is.
-   */
-  | { kind: 'title'; text: string }
   /** Stored markdown, through the narrative pipeline. */
   | { kind: 'rich'; text: string }
   /** A short value that is not a narrative: a date, a name, a rating. */
@@ -118,6 +111,8 @@ export interface FindingHeader {
   affiliate: string;
   auditArea: string;
   subArea: string;
+  /** The audit period the observation covers, as one readable span. */
+  period: string;
   status: string;
   risk: RiskPill;
 }
@@ -132,6 +127,8 @@ export interface FindingSource {
   affiliate: string;
   auditArea: string;
   subArea: string;
+  /** The audit period, already formatted by the caller that holds both dates. */
+  period?: string;
   status: string;
   riskRating: string | null;
   riskSummary: string;
@@ -162,13 +159,26 @@ export function findingHeader(source: FindingSource): FindingHeader {
     affiliate: source.affiliate || '-',
     auditArea: source.auditArea || '-',
     subArea: source.subArea || '-',
+    period: source.period || '-',
     status: source.status || '-',
     risk: riskPill(source.riskRating),
   };
 }
 
 /**
- * The cards, in the order the argument runs.
+ * The context chips under the title: where in the audit this sits.
+ *
+ * Blanks are dropped rather than drawn as "-", because a chip reading "-" is a
+ * box that says nothing and still takes the reader's attention to dismiss.
+ */
+export function contextChips(source: FindingSource): string[] {
+  return [source.affiliate, source.auditArea, source.subArea, source.period ?? '']
+    .map((v) => String(v ?? '').trim())
+    .filter((v) => v !== '' && v !== '-');
+}
+
+/**
+ * The sections, in the order the argument runs.
  *
  * A card whose content is entirely absent is dropped when there is nothing
  * useful to say about the absence, and kept with a quiet line when the absence
@@ -179,16 +189,16 @@ export function findingHeader(source: FindingSource): FindingHeader {
 export function findingCards(source: FindingSource): FindingCard[] {
   const cards: FindingCard[] = [];
 
-  // 1. What we found. The title and its body, adjacent and in that order.
+  // 1. What we found, written out. The title is not here: it is the snapshot's
+  // own anchor at the top of the panel, read before anything else (Build Prompt
+  // 72). Repeating it as the first section would make the reader read the same
+  // sentence twice before reaching anything new.
   cards.push({
-    key: 'finding',
-    heading: 'Observation',
+    key: 'description',
+    heading: 'Description',
     group: 'audit',
-    body: [
-      { kind: 'title', text: source.observationTitle },
-      { kind: 'rich', text: source.observationDescription },
-    ],
-    emptyText: 'No observation has been written yet.',
+    body: [{ kind: 'rich', text: source.observationDescription }],
+    emptyText: 'Not yet written.',
   });
 
   // 2. What it means. The rating is shown only when the finding actually
@@ -206,7 +216,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
       },
       { kind: 'rich', text: source.riskSummary },
     ],
-    emptyText: 'No risk rating or summary has been recorded yet.',
+    emptyText: 'Not yet rated.',
   });
 
   // 3. What to do about it.
@@ -215,7 +225,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
     heading: 'Recommendation',
     group: 'audit',
     body: [{ kind: 'rich', text: source.recommendation }],
-    emptyText: 'No recommendation has been made yet.',
+    emptyText: 'Not yet recommended.',
   });
 
   // 4. What management says back, with what they have agreed to do and who owns
@@ -246,7 +256,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
     body: responseBody,
     // Worth saying: a finding with no response is a finding still waiting on
     // somebody, and the reader should be told that rather than left to infer it.
-    emptyText: 'Management has not responded to this observation yet.',
+    emptyText: 'Awaiting response.',
   });
 
   // 5. What supports it.
@@ -288,7 +298,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
 /** Whether a card holds anything at all, so a renderer knows to draw its empty state. */
 export function cardIsEmpty(card: FindingCard): boolean {
   return card.body.every((b) => {
-    if (b.kind === 'rich' || b.kind === 'title') return blank(b.text);
+    if (b.kind === 'rich') return blank(b.text);
     if (b.kind === 'facts') return b.facts.every((f) => blank(f.value));
     return b.rows.length === 0;
   });

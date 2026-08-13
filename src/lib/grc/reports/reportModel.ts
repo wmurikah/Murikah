@@ -794,9 +794,11 @@ function observationSection(
         affiliate: o.affiliateName ?? o.affiliateCode ?? '',
         auditArea: o.auditAreaName ?? '',
         // The report dataset carries the area but not the sub-area, so the
-        // strip shows the area and leaves the sub-area blank rather than
-        // inventing one.
+        // snapshot shows the area and leaves the sub-area blank rather than
+        // inventing one. The same is true of the period: the dataset holds the
+        // work paper's own date, which is not the span it covered.
         subArea: '',
+        period: '',
         status: humaniseStatus(o.status, labels),
         riskRating: o.riskRating,
         riskSummary: o.implications ?? '',
