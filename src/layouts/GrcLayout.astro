@@ -21,7 +21,6 @@ import GrcIcon from '@/components/grc/GrcIcon.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { getSidebarCounts, type SidebarCounts } from '@grc/repos/dashboard';
-import { unreadCount, listInApp, type InAppItem } from '@grc/repos/inApp';
 import { buildNav, type CountKey, type NavGroupDef, type NavItemDef } from '@grc/dashboard/roleNav';
 import { aiEnabled } from '@grc/ai/gate';
 
@@ -52,22 +51,16 @@ const groups = buildNav({
 // They count an organisation's queues, so with no instance selected there is
 // nothing to count and no query is made.
 let counts: SidebarCounts | null = null;
-let unread = 0;
-let bellItems: InAppItem[] = [];
 if (grc && inInstance) {
   try {
     const db = await getDb(getGrcEnv());
-    [counts, unread, bellItems] = await Promise.all([
-      getSidebarCounts(
-        db,
-        grc.organizationId,
-        grc.userId,
-        grc.affiliateScope,
-        grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review'),
-      ),
-      unreadCount(db, grc.userId),
-      listInApp(db, grc.userId, 6),
-    ]);
+    counts = await getSidebarCounts(
+      db,
+      grc.organizationId,
+      grc.userId,
+      grc.affiliateScope,
+      grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review'),
+    );
   } catch (err) {
     console.error('[grc.layout] sidebar counts failed', err);
     counts = null;
@@ -177,39 +170,13 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
         </div>
 
         {
-          grc && inInstance && (
-            <details class="grc-bell">
-              <summary class="grc-bell__summary" data-tip="Notifications">
-                <GrcIcon name="bell" size={16} />
-                <span>Notifications</span>
-                {unread > 0 && <span class="grc-navcount">{unread}</span>}
-              </summary>
-              <div class="grc-bell__panel">
-                {bellItems.length === 0 ? (
-                  <p class="grc-bell__empty">No notifications.</p>
-                ) : (
-                  <ul class="grc-bell__list">
-                    {bellItems.map((it) => (
-                      <li class:list={['grc-bell__item', { 'is-unread': !it.read }]}>
-                        <a href={it.link ?? '/notifications'}>{it.title}</a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div class="grc-bell__foot">
-                  {unread > 0 && (
-                    <form method="post" action="/api/notifications" style="margin:0">
-                      <input type="hidden" name="all" value="1" />
-                      <button type="submit" class="grc-bell__mark">
-                        Mark all read
-                      </button>
-                    </form>
-                  )}
-                  <a href="/notifications">See all</a>
-                </div>
-              </div>
-            </details>
-          )
+          /* There is no Notifications item in the sidebar (Build Prompt 67).
+            Build Prompt 60 took away the destination and left the bell; the
+            bell was the same thing wearing a different shape, a second place
+            to look that repeated what the modules were already saying. What is
+            waiting for somebody is counted on the module it is waiting in, in
+            red, next to the label they would click anyway. Two of the three
+            queries this shell used to make on every navigation went with it. */
         }
 
         {

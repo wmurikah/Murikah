@@ -2937,11 +2937,27 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
 
       // The stored title is on the page as a field of the finding, not only as
       // the heading: the panel that describes the finding omitted it entirely.
-      assert.ok(page.body.includes('<dt>Observation title</dt>'), 'the field is labelled');
+      // It is labelled "Observation" and its body "Description" (Build Prompt
+      // 67); the columns behind them did not move.
+      assert.ok(page.body.includes('<dt>Observation</dt>'), 'the field is labelled');
       assert.ok(
-        page.body.includes(`<dt>Observation title</dt><dd>${title}</dd>`) ||
-          new RegExp(`Observation title</dt>\\s*<dd>${title}</dd>`).test(page.body),
+        page.body.includes(`<dt>Observation</dt><dd>${title}</dd>`) ||
+          new RegExp(`<dt>Observation</dt>\\s*<dd>${title}</dd>`).test(page.body),
         'and carries the stored value',
+      );
+      assert.ok(page.body.includes('<dt>Description</dt>'), 'its body is labelled Description');
+      assert.ok(
+        !page.body.includes('Observation title'),
+        'and the old label is gone from the screen',
+      );
+      // The finding sits after the testing that found it, not at the top.
+      assert.ok(
+        page.body.indexOf('<dt>Testing steps</dt>') < page.body.indexOf('<dt>Observation</dt>'),
+        'the observation must follow the testing steps',
+      );
+      assert.ok(
+        page.body.indexOf('<dt>Observation</dt>') < page.body.indexOf('<dt>Description</dt>'),
+        'and be immediately followed by its description',
       );
 
       // Nothing on the screen explains a permission, or names one.
@@ -2972,10 +2988,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         !reviewerView.body.includes('does not hold'),
         'and is told no permission reasons either',
       );
-      assert.ok(
-        reviewerView.body.includes('<dt>Observation title</dt>'),
-        'and sees the finding named',
-      );
+      assert.ok(reviewerView.body.includes('<dt>Observation</dt>'), 'and sees the finding named');
     });
 
     // The badge counts what is this person's to act on, per module (Build Prompt
@@ -3478,13 +3491,19 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const page = await server.get('/work-papers');
       assert.equal(page.status, 200, `the page answered ${page.status}`);
 
-      // The nav no longer carries Notifications as a destination of its own.
+      // Nothing in the sidebar is called Notifications any more (Build Prompt
+      // 67). Build Prompt 60 took the destination and left the bell, which was
+      // the same thing in another shape; both are gone, and what is waiting is
+      // counted on the module it is waiting in.
       assert.ok(
         !page.body.includes('class="grc-navlink" href="/notifications"'),
         'the standalone Notifications entry is gone from the navigation',
       );
-      // The bell, which is where the history lives, is untouched.
-      assert.ok(page.body.includes('grc-bell__summary'), 'the bell still opens the centre');
+      assert.ok(!page.body.includes('grc-bell'), 'and the bell that duplicated it is gone too');
+      assert.ok(
+        !page.body.includes('>Notifications<'),
+        'nothing in the shell is labelled Notifications',
+      );
 
       // The modules carry their own pending counts, ready for the live refresh,
       // as a superscript bubble on the label rather than a pill at the far edge

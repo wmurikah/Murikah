@@ -61,14 +61,54 @@ test('the detail shows every field a work paper stores', () => {
   );
 });
 
-test('the observation title is on the finding panel, not only in the heading', () => {
-  // The heading always carried it; the panel that describes the finding did not,
-  // which is the fault. A page can name a record and still fail to show the
-  // field, so this asserts the field, labelled, in the panel.
+test('the finding panel names the observation and its description, in that order', () => {
+  // Build Prompt 63 put the stored title on this panel, because a page can name
+  // a record in its heading and still fail to show the field. Build Prompt 67
+  // renamed the pair and moved them together: the title is "Observation", its
+  // body is "Description", and the two are adjacent, in that order. The columns
+  // behind them are unchanged, which is what the val() calls assert.
   const template = readFileSync(DETAIL, 'utf8');
   assert.ok(
-    /<dt>Observation title<\/dt>\s*<dd>\{val\('observation_title'\)\}<\/dd>/.test(template),
-    'the finding panel must carry the observation title as a labelled field',
+    /<dt>Observation<\/dt>\s*<dd>\{val\('observation_title'\)\}<\/dd>/.test(template),
+    'the panel must carry the stored title, labelled Observation',
+  );
+  assert.ok(
+    /<dt>Description<\/dt>\s*<dd class="grc-richbody" set:html=\{rich\('observation_description'\)\} \/>/.test(
+      template,
+    ),
+    'and the stored body, labelled Description and formatted',
+  );
+  assert.ok(
+    !/<dt>Observation title<\/dt>/.test(template),
+    'the old label must be gone, not merely duplicated',
+  );
+});
+
+test('the finding follows the testing that found it, and precedes the risk it carries', () => {
+  // The order is the argument a finding makes: this is what we tested, this is
+  // what we found, this is what it means, this is what to do. The title used to
+  // sit at the very top, before Year, where it read as a second reference.
+  const template = readFileSync(DETAIL, 'utf8');
+  const at = (label: string): number => {
+    const i = template.indexOf(`<dt>${label}</dt>`);
+    assert.ok(i > 0, `the panel must carry ${label}`);
+    return i;
+  };
+  const steps = at('Testing steps');
+  const observation = at('Observation');
+  const description = at('Description');
+  const rating = at('Risk rating');
+  const recommendation = at('Recommendation');
+  assert.ok(steps < observation, 'the observation follows the testing steps');
+  assert.ok(observation < description, 'the description follows the observation it describes');
+  assert.ok(description < rating, 'the risk rating follows the finding');
+  assert.ok(rating < recommendation, 'and the recommendation comes last of the four');
+  // Nothing may sit between the two: they are one thought.
+  assert.ok(
+    !/<dt>/.test(
+      template.slice(template.indexOf("<dd>{val('observation_title')}</dd>"), description),
+    ),
+    'no field may come between the observation and its description',
   );
 });
 
