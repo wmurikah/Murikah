@@ -20,10 +20,11 @@ import {
   renderNotification,
   buildDigest,
   escapeHtml,
+  planNormalDigests,
 } from '../../src/lib/grc/notify/render.ts';
 
 test('the catalogue has the source types plus due-soon, password-reset and the requirements loop', () => {
-  assert.equal(NOTIFICATION_TYPES.length, 23);
+  assert.equal(NOTIFICATION_TYPES.length, 27);
   assert.ok(NOTIFICATION_TYPES.includes('DUE_SOON_REMINDER'));
   assert.ok(NOTIFICATION_TYPES.includes('PASSWORD_RESET'));
   // Build Prompt 58: the three events of the requirements loop. All three are
@@ -36,6 +37,27 @@ test('the catalogue has the source types plus due-soon, password-reset and the r
     assert.equal(m.priority, 'normal', `${t} batches into the digest`);
     assert.equal(m.ccHoa, false, `${t} is not the head of audit's business`);
   }
+  // Build Prompt 68: the four events of the auditee loop. Every one of them
+  // goes to everybody named on the auditee side, which is the recipient rule
+  // rather than the catalogue's business; what the catalogue must say is that
+  // they are all about a finding, and that a delegation reaches the person it
+  // names promptly rather than in tomorrow's digest.
+  for (const t of [
+    'AUDITEE_DELEGATED',
+    'AUDITEE_RETURNED',
+    'AUDITEE_RELEASED',
+    'AUDITEE_DECIDED',
+  ]) {
+    const key = t as (typeof NOTIFICATION_TYPES)[number];
+    assert.ok(NOTIFICATION_TYPES.includes(key), t);
+    assert.equal(TYPE_META[key].entity, 'work_paper', `${t} is about a finding`);
+  }
+  assert.equal(
+    TYPE_META.AUDITEE_DELEGATED.priority,
+    'urgent',
+    'being handed the drafting is not digest material: it is somebody being given work',
+  );
+
   for (const t of NOTIFICATION_TYPES) {
     const m = TYPE_META[t];
     assert.ok(m.priority === 'normal' || m.priority === 'urgent');
@@ -46,6 +68,70 @@ test('the catalogue has the source types plus due-soon, password-reset and the r
         m.entity === 'user',
     );
   }
+});
+
+test('an auditee reads a finding table and an instruction, not a system grid', () => {
+  // These arrive at people with no audit training and no reason to know the
+  // workflow (Build Prompt 68). "Open Audit System" beside a grid of Reference,
+  // Status, Risk is a system talking about itself.
+  const { subject, body } = renderInline('WP_SENT_TO_AUDITEE', {
+    reference: 'WP/2026/002',
+    title: 'Fuel reconciliations are not reviewed',
+    stage: 'With the auditee',
+    riskRating: 'High',
+    link: 'https://grc.murikah.com/auditee-responses/WP-1',
+  });
+  assert.match(subject, /WP\/2026\/002/, 'the subject names the finding');
+  assert.match(body, /Log in and respond/, 'the button says what to do');
+  assert.ok(!body.includes('Open Audit System'), 'and not what to open');
+  assert.match(body, /<th[^>]*>Reference<\/th>/, 'the finding is a table row');
+  assert.match(body, /Fuel reconciliations are not reviewed/, 'named in it');
+  assert.match(body, /With the auditee/, 'with where it now sits');
+  assert.match(body, /grc\.murikah\.com\/auditee-responses\/WP-1/, 'and the deep link');
+});
+
+test('a delegation email carries the brief and who it went to', () => {
+  const { body } = renderInline('AUDITEE_DELEGATED', {
+    reference: 'WP/2026/002',
+    title: 'Fuel reconciliations are not reviewed',
+    stage: 'With the delegate',
+    delegatedTo: 'Stella Staff',
+    comment: 'Pull the March reconciliations.',
+    link: 'https://grc.murikah.com/auditee-responses/WP-1',
+  });
+  assert.match(body, /Stella Staff/, 'the person it was handed to');
+  assert.match(body, /Pull the March reconciliations/, 'and the brief they were given');
+  assert.match(body, /Log in and respond/);
+});
+
+test('several findings for one auditee compile into one table, not several emails', () => {
+  // The same reason submissions and reminders do: a unit manager copied on nine
+  // findings wants a list to work through, not nine envelopes.
+  const rows = ['WP/2026/001', 'WP/2026/002', 'WP/2026/003'].map((reference, i) => ({
+    id: `N-${i}`,
+    batchType: 'AUDITEE_RELEASED',
+    recipientEmail: 'owner@hasspetroleum.com',
+    subject: `Response released to audit: ${reference}`,
+    payload: JSON.stringify({
+      reference,
+      title: `Finding ${i}`,
+      stage: 'With internal audit',
+      link: `https://grc.murikah.com/auditee-responses/WP-${i}`,
+    }),
+  }));
+  const plans = planNormalDigests(rows, {
+    review: 'https://grc.murikah.com/work-papers?status=Submitted',
+    drafts: 'https://grc.murikah.com/work-papers?status=Draft',
+    respond: 'https://grc.murikah.com/auditee-responses',
+  });
+  assert.equal(plans.length, 1, 'one recipient, one email');
+  assert.equal(plans[0].rowIds.length, 3, 'settling all three queue rows');
+  assert.match(plans[0].subject, /3 findings need your response/);
+  for (const reference of ['WP/2026/001', 'WP/2026/002', 'WP/2026/003']) {
+    assert.ok(plans[0].body.includes(reference), `${reference} must be in the table`);
+  }
+  assert.match(plans[0].body, /Log in and respond/, 'with one button, pointing at their queue');
+  assert.match(plans[0].body, /auditee-responses/);
 });
 
 test('the password-reset email is urgent, never copies HOA, and carries the link', () => {

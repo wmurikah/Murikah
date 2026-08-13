@@ -17,6 +17,7 @@ import {
   resolveActiveRecipients,
   actionPlanOwnerIds,
   workPaperPartyIds,
+  workPaperAuditeeIds,
 } from '@grc/notify/recipients';
 import { entityLink } from '@grc/notify/links';
 
@@ -34,7 +35,28 @@ export interface NotifyInput {
    * merely announce (Build Prompt 62).
    */
   comment?: string | null;
+  /**
+   * Facts about the move that only the caller knows, merged into the payload so
+   * the email says what happened rather than that something did (Build Prompt
+   * 68): the stage the finding is now in, who it was delegated to, the decision
+   * audit reached.
+   */
+  extra?: Record<string, string | null | undefined>;
 }
+
+/**
+ * The auditee loop's own events, which go to everybody named on the auditee
+ * side rather than to whoever acts next (Build Prompt 68).
+ */
+const AUDITEE_LOOP_TYPES = new Set<NotificationType>([
+  'WP_SENT_TO_AUDITEE',
+  'AUDITEE_DELEGATED',
+  'AUDITEE_RETURNED',
+  'AUDITEE_RELEASED',
+  'AUDITEE_DECIDED',
+  'RESPONSE_SUBMITTED',
+  'RESPONSE_REVIEWED',
+]);
 
 /**
  * Who a work-paper event is for: the party who must act next, not everybody
@@ -54,6 +76,17 @@ async function workPaperRecipientIds(
   if (type === 'WP_REVISION_REQUIRED' || type === 'WP_APPROVED') {
     const auditor = await assignedAuditorId(db, organizationId, workPaperId);
     return auditor ? [auditor] : [];
+  }
+  // The auditee loop tells everybody named on the auditee side, every time
+  // (Build Prompt 68). A release also tells the auditor whose finding it is,
+  // because it is the one move in the loop that puts work on the audit side.
+  if (AUDITEE_LOOP_TYPES.has(type)) {
+    const named = await workPaperAuditeeIds(db, organizationId, workPaperId);
+    if (type === 'AUDITEE_RELEASED' || type === 'RESPONSE_SUBMITTED') {
+      const auditor = await assignedAuditorId(db, organizationId, workPaperId);
+      if (auditor) named.push(auditor);
+    }
+    return named;
   }
   return workPaperPartyIds(db, organizationId, workPaperId);
 }
@@ -90,6 +123,11 @@ const TEMPLATE_TO_TYPE: Record<string, NotificationType> = {
   finding_shared: 'WP_SENT_TO_AUDITEE',
   finding_submitted: 'WP_SUBMITTED',
   response_received: 'RESPONSE_SUBMITTED',
+  // The auditee loop (Build Prompt 68).
+  auditee_delegated: 'AUDITEE_DELEGATED',
+  auditee_returned: 'AUDITEE_RETURNED',
+  auditee_released: 'AUDITEE_RELEASED',
+  auditee_decided: 'AUDITEE_DECIDED',
 };
 
 async function loadEntityPayload(
@@ -165,6 +203,9 @@ export async function enqueueNotification(db: Client, input: NotifyInput): Promi
     // "revision required" sends the auditor back to the screen to find out what
     // for, which is the email failing at the one thing it is for.
     if (input.comment) data.comment = input.comment;
+    for (const [key, value] of Object.entries(input.extra ?? {})) {
+      if (value != null && String(value).trim() !== '') data[key] = String(value);
+    }
 
     for (const recipient of recipients) {
       await queueNotification(db, input.organizationId, {
