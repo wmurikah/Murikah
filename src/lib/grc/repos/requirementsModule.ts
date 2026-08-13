@@ -39,21 +39,44 @@ import {
   type RequirementStatus,
   type ReviewDecision,
 } from '@grc/workflow/requirementFlow';
+import { RECIPIENT_ROLE, recipientStatement } from '@grc/repos/requirementRecipients';
 
 const R = cols(C.work_paper_requirements);
 const RO = cols(C.requirement_owners);
+const RC = cols(C.requirement_recipients);
 const RS = cols(C.requirement_submissions);
 const WP = cols(C.work_papers);
 const U = cols(C.users);
 
 const s = (v: unknown): string | null => (v == null || String(v) === '' ? null : String(v));
 
+/**
+ * The finding a requirement belongs to, read once and read tolerantly
+ * (Build Prompt 69).
+ *
+ * `linked_work_paper_id` is the link. `work_paper_id` is the column the module
+ * used before the link could be deferred, and migration 010 backfills the new
+ * from the old, so in a migrated database the COALESCE never reaches its second
+ * arm. It is there because a requirement raised through the older panel on a
+ * finding's own detail still writes only the old column, and a row that screen
+ * created should not read as unlinked on this one.
+ */
+const LINKED = `COALESCE(NULLIF(TRIM(r.${R.linked_work_paper_id}), ''), NULLIF(TRIM(r.${R.work_paper_id}), ''))`;
+
 /** One requirement as the lists show it: the ask, whose it is, and where it stands. */
 export interface RequirementRow {
   id: string;
+  /**
+   * The finding this requirement has been linked to, or '' when it has not
+   * been (Build Prompt 69). Unlinked is a resting state, not a gap: a
+   * requirement may be answered, reviewed and closed without ever belonging to
+   * a finding, and audit links it only once the uploaded information turns out
+   * to be evidence for one.
+   */
   workPaperId: string;
   workPaperRef: string;
   workPaperTitle: string;
+  linkedAt: string | null;
   description: string;
   status: RequirementStatus;
   requestedDate: string | null;
@@ -63,6 +86,12 @@ export interface RequirementRow {
   /** The owners named on it, in the order they were added. */
   ownerNames: string[];
   ownerIds: string[];
+  /**
+   * Whether the person this list was read for owns it, and may therefore upload
+   * against it. False for a copy recipient, who reads the same row and is
+   * offered no control (Build Prompt 69).
+   */
+  canProvide: boolean;
   /** How many rounds have been provided. */
   rounds: number;
 }
@@ -71,6 +100,8 @@ export interface RequirementFilters {
   workPaperId?: string;
   ownerId?: string;
   status?: string;
+  /** true for linked only, false for the ones still waiting to be linked. */
+  linkedOnly?: boolean;
 }
 
 /**
@@ -89,9 +120,11 @@ export async function listOrgRequirements(
   const where = [`r.${R.organization_id} = ?`, `r.${R.deleted_at} IS NULL`];
   const args: (string | number)[] = [organizationId];
   if (filters.workPaperId) {
-    where.push(`r.${R.work_paper_id} = ?`);
+    where.push(`${LINKED} = ?`);
     args.push(filters.workPaperId);
   }
+  if (filters.linkedOnly === false) where.push(`${LINKED} IS NULL`);
+  if (filters.linkedOnly === true) where.push(`${LINKED} IS NOT NULL`);
   if (filters.ownerId) {
     where.push(
       `EXISTS (SELECT 1 FROM requirement_owners o
@@ -104,11 +137,17 @@ export async function listOrgRequirements(
 }
 
 /**
- * The list an owner sees: the requirements naming them, and nothing else.
+ * The list an auditee sees: the requirements naming them, as an owner or as a
+ * copy recipient, and nothing else.
  *
- * Written as its own query rather than as `listOrgRequirements` with an owner
- * filter, because the two answer different questions. This one cannot be made
- * to return somebody else's requirement by dropping a parameter.
+ * Written as its own query rather than as `listOrgRequirements` with a filter,
+ * because the two answer different questions. This one cannot be made to return
+ * somebody else's requirement by dropping a parameter.
+ *
+ * A copy recipient's rows come back marked `canProvide: false` (Build Prompt
+ * 69), so the screen shows them the same table and no upload control. Being
+ * copied is being told, not being asked, and the difference has to survive into
+ * the row rather than being decided again by the page.
  */
 export async function listOwnedRequirements(
   db: Client,
@@ -119,15 +158,18 @@ export async function listOwnedRequirements(
   const where = [
     `r.${R.organization_id} = ?`,
     `r.${R.deleted_at} IS NULL`,
-    `EXISTS (SELECT 1 FROM requirement_owners o
-              WHERE o.${RO.requirement_id} = r.${R.requirement_id} AND o.${RO.user_id} = ?)`,
+    `(EXISTS (SELECT 1 FROM requirement_owners o
+               WHERE o.${RO.requirement_id} = r.${R.requirement_id} AND o.${RO.user_id} = ?)
+      OR EXISTS (SELECT 1 FROM requirement_recipients rr
+                  WHERE rr.${RC.requirement_id} = r.${R.requirement_id}
+                    AND rr.${RC.user_id} = ?))`,
   ];
-  const args: (string | number)[] = [organizationId, userId];
+  const args: (string | number)[] = [organizationId, userId, userId];
   if (filters.workPaperId) {
-    where.push(`r.${R.work_paper_id} = ?`);
+    where.push(`${LINKED} = ?`);
     args.push(filters.workPaperId);
   }
-  const rows = await readRequirements(db, where, args);
+  const rows = await readRequirements(db, where, args, userId);
   return filters.status ? rows.filter((row) => row.status === filters.status) : rows;
 }
 
@@ -140,12 +182,15 @@ async function readRequirements(
   db: Client,
   where: string[],
   args: (string | number)[],
+  /** Set on the auditee's own list, to mark which rows they may upload against. */
+  forUserId?: string,
 ): Promise<RequirementRow[]> {
   const res = await db.execute({
     sql: `SELECT r.${R.requirement_id} AS id, r.${R.work_paper_id} AS work_paper_id,
                  r.${R.description} AS description, r.${R.requested_date} AS requested_date,
                  r.${R.due_date} AS due_date, r.${R.received_date} AS received_date,
                  r.${R.closed_at} AS closed_at, r.${R.last_reviewed_date} AS last_reviewed_date,
+                 ${LINKED} AS linked_work_paper_id, r.${R.linked_at} AS linked_at,
                  wp.${WP.work_paper_ref} AS work_paper_ref,
                  wp.${WP.observation_title} AS work_paper_title,
                  (SELECT COUNT(*) FROM requirement_submissions sub
@@ -158,18 +203,23 @@ async function readRequirements(
                     JOIN users u ON u.${U.user_id} = o.${RO.user_id}
                    WHERE o.${RO.requirement_id} = r.${R.requirement_id}) AS owner_names,
                  (SELECT GROUP_CONCAT(o.${RO.user_id}, ',') FROM requirement_owners o
-                   WHERE o.${RO.requirement_id} = r.${R.requirement_id}) AS owner_ids
+                   WHERE o.${RO.requirement_id} = r.${R.requirement_id}) AS owner_ids,
+                 (SELECT COUNT(*) FROM requirement_owners o
+                   WHERE o.${RO.requirement_id} = r.${R.requirement_id}
+                     AND o.${RO.user_id} = ?) AS mine
             FROM work_paper_requirements r
-            LEFT JOIN work_papers wp ON wp.${WP.work_paper_id} = r.${R.work_paper_id}
+            LEFT JOIN work_papers wp ON wp.${WP.work_paper_id} = ${LINKED}
            WHERE ${where.join(' AND ')}
         ORDER BY r.${R.requested_date} DESC, r.${R.created_at} DESC`,
-    args,
+    // The marker parameter leads, because it sits in the SELECT list.
+    args: [forUserId ?? '', ...args],
   });
   return res.rows.map((row) => {
     const rounds = Number(row.rounds ?? 0);
     return {
       id: String(row.id),
-      workPaperId: String(row.work_paper_id ?? ''),
+      workPaperId: String(row.linked_work_paper_id ?? ''),
+      linkedAt: s(row.linked_at),
       workPaperRef: String(row.work_paper_ref ?? ''),
       workPaperTitle: String(row.work_paper_title ?? ''),
       description: String(row.description ?? ''),
@@ -185,6 +235,7 @@ async function readRequirements(
       lastReviewedDate: s(row.last_reviewed_date),
       ownerNames: splitList(s(row.owner_names), ', '),
       ownerIds: splitList(s(row.owner_ids), ','),
+      canProvide: Number(row.mine ?? 0) > 0,
       rounds,
     };
   });
@@ -237,33 +288,50 @@ export async function requirementOwnerIds(db: Client, requirementId: string): Pr
 }
 
 export interface NewRequirement {
-  workPaperId: string;
+  /**
+   * The finding, when audit already knows it. Null is the ordinary case
+   * (Build Prompt 69): the request goes out, the information arrives, and only
+   * then is it clear whether it is evidence for a finding and which one.
+   */
+  workPaperId: string | null;
   description: string;
   requestedDate: string | null;
   dueDate: string | null;
   ownerIds: string[];
+  /** Copied in: they read it and are told about it, and upload nothing. */
+  ccIds?: string[];
   requestedBy: string;
 }
 
 /**
- * Raise a requirement against a work paper, with its owners.
+ * Raise a requirement, with its owners and its copy list, and optionally
+ * against a finding.
  *
- * The row and its owners are written in one batch: a requirement nobody owns is
- * a request sent to nobody, and it must not be possible to create one by
- * failing halfway. The work paper is verified to belong to the organisation
- * first, so a posted id cannot attach a requirement to another tenant's finding.
+ * The row, its owners and its recipients are written in one batch: a
+ * requirement nobody owns is a request sent to nobody, and it must not be
+ * possible to create one by failing halfway.
+ *
+ * A finding is verified to belong to the organisation before it is stamped, so
+ * a posted id cannot attach a requirement to another tenant's work; a finding
+ * that does not resolve is refused rather than quietly dropped, because
+ * silently unlinking what the auditor asked to link would be worse than saying
+ * no. No finding at all is not a failure and never was one to the business: it
+ * is the normal way a request starts.
  */
 export async function createRequirement(
   db: Client,
   organizationId: string,
   input: NewRequirement,
 ): Promise<string | null> {
-  const owns = await db.execute({
-    sql: `SELECT 1 FROM work_papers
-           WHERE ${WP.work_paper_id} = ? AND ${WP.organization_id} = ? LIMIT 1`,
-    args: [input.workPaperId, organizationId],
-  });
-  if (owns.rows.length === 0) return null;
+  const workPaperId = (input.workPaperId ?? '').trim() || null;
+  if (workPaperId !== null) {
+    const owns = await db.execute({
+      sql: `SELECT 1 FROM work_papers
+             WHERE ${WP.work_paper_id} = ? AND ${WP.organization_id} = ? LIMIT 1`,
+      args: [workPaperId, organizationId],
+    });
+    if (owns.rows.length === 0) return null;
+  }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -271,17 +339,29 @@ export async function createRequirement(
   // more useful than a blank that makes the row look ageless.
   const requested = input.requestedDate ?? now.slice(0, 10);
   const owners = [...new Set(input.ownerIds.map((v) => v.trim()).filter(Boolean))];
+  // Somebody named as both is an owner: the stronger standing wins, and being
+  // told twice about your own request is not a feature.
+  const copies = [...new Set((input.ccIds ?? []).map((v) => v.trim()).filter(Boolean))].filter(
+    (u) => !owners.includes(u),
+  );
 
   const statements: InStatement[] = [
     {
+      // `work_paper_id` is written in step with the link rather than left
+      // behind: two columns that can disagree about whether a requirement
+      // belongs to a finding is a question with two answers.
       sql: `INSERT INTO work_paper_requirements
-              (${R.requirement_id}, ${R.organization_id}, ${R.work_paper_id}, ${R.description},
+              (${R.requirement_id}, ${R.organization_id}, ${R.work_paper_id},
+               ${R.linked_work_paper_id}, ${R.linked_at}, ${R.linked_by}, ${R.description},
                ${R.status}, ${R.requested_date}, ${R.due_date}, ${R.created_at}, ${R.updated_at})
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
         organizationId,
-        input.workPaperId,
+        workPaperId,
+        workPaperId,
+        workPaperId ? now : null,
+        workPaperId ? input.requestedBy : null,
         input.description,
         REQUIREMENT_STATUS.OUTSTANDING,
         requested,
@@ -291,9 +371,64 @@ export async function createRequirement(
       ],
     },
     ...owners.map((userId) => ownerStatement(id, userId, input.requestedBy, now)),
+    ...owners.map((userId) =>
+      recipientStatement(id, userId, RECIPIENT_ROLE.OWNER, input.requestedBy, now),
+    ),
+    ...copies.map((userId) =>
+      recipientStatement(id, userId, RECIPIENT_ROLE.CC, input.requestedBy, now),
+    ),
   ];
   await db.batch(statements, 'write');
   return id;
+}
+
+/**
+ * Link a requirement to the finding its information turned out to support, or
+ * unlink it by passing null (Build Prompt 69).
+ *
+ * This is audit's act and audit's alone, and it is a different decision from
+ * whether the requirement is complete: information can be everything that was
+ * asked for and still belong to no finding, and it can be linked to one while
+ * audit is still waiting for more of it. Keeping them separate is what lets an
+ * auditor defer the link until the evidence exists, which is the whole point.
+ *
+ * Returns false when the finding does not belong to the acting organisation or
+ * the requirement does not, so a posted id cannot reach across tenants.
+ */
+export async function linkRequirement(
+  db: Client,
+  organizationId: string,
+  requirementId: string,
+  workPaperId: string | null,
+  linkedBy: string,
+): Promise<boolean> {
+  const target = (workPaperId ?? '').trim() || null;
+  if (target !== null) {
+    const owns = await db.execute({
+      sql: `SELECT 1 FROM work_papers
+             WHERE ${WP.work_paper_id} = ? AND ${WP.organization_id} = ? LIMIT 1`,
+      args: [target, organizationId],
+    });
+    if (owns.rows.length === 0) return false;
+  }
+  const now = new Date().toISOString();
+  const res = await db.execute({
+    sql: `UPDATE work_paper_requirements
+             SET ${R.linked_work_paper_id} = ?, ${R.work_paper_id} = ?,
+                 ${R.linked_at} = ?, ${R.linked_by} = ?, ${R.updated_at} = ?
+           WHERE ${R.requirement_id} = ? AND ${R.organization_id} = ?
+             AND ${R.deleted_at} IS NULL`,
+    args: [
+      target,
+      target,
+      target ? now : null,
+      target ? linkedBy : null,
+      now,
+      requirementId,
+      organizationId,
+    ],
+  });
+  return (res.rowsAffected ?? 0) > 0;
 }
 
 function ownerStatement(

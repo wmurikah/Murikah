@@ -123,17 +123,20 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
     subject: 'Deadline approaching: action plan {{reference}}',
     intro: 'An action plan you own is due within the next few days.',
   },
+  // Owner-facing, so the subject names what is wanted rather than a work paper
+  // reference the owner has never seen and cannot look up (Build Prompt 69).
   REQUIREMENT_ASSIGNED: {
-    subject: 'Information requested: {{reference}}',
-    intro: 'Internal Audit has asked you to provide information.',
+    subject: 'Internal Audit needs: {{title}}',
+    intro:
+      'Internal Audit has asked you to provide the following. Please log in and upload it by the date shown.',
   },
   REQUIREMENT_SUBMITTED: {
-    subject: 'Information provided: {{reference}}',
+    subject: 'Information provided: {{title}}',
     intro: 'An owner has provided information for your review.',
   },
   REQUIREMENT_MORE_INFO: {
-    subject: 'Further information requested: {{reference}}',
-    intro: 'Internal Audit has reviewed what you sent and asked for more.',
+    subject: 'Internal Audit needs more: {{title}}',
+    intro: 'Internal Audit has read what you sent and needs a little more.',
   },
   // The auditee loop (Build Prompt 68). Each subject names the finding and each
   // intro says who has to do what next, because these arrive at people with no
@@ -232,6 +235,17 @@ const AUDITEE_FACING = new Set<NotificationType>([
   'AUDITEE_DECIDED',
 ]);
 
+/**
+ * The types an owner of a requirement reads (Build Prompt 69). Same treatment,
+ * different table and a different instruction: what is needed, when it is
+ * wanted, where it stands, and a way to upload it. Nothing about a finding
+ * appears, because nothing about a finding is the owner's business.
+ */
+const REQUIREMENT_FACING = new Set<NotificationType>([
+  'REQUIREMENT_ASSIGNED',
+  'REQUIREMENT_MORE_INFO',
+]);
+
 /** The auditee-facing body: the finding as one table row, and one instruction. */
 function auditeeShell(intro: string, data: Payload): string {
   const link = val(data, 'link') || '#';
@@ -271,12 +285,44 @@ function auditeeShell(intro: string, data: Payload): string {
   ].join('');
 }
 
+/** The requirement body: what is needed as one table row, and one instruction. */
+function requirementShell(intro: string, data: Payload): string {
+  const link = val(data, 'link') || '#';
+  const row: SubmittedRow = {
+    reference: val(data, 'dueDate') || 'No date',
+    title: val(data, 'title'),
+    detail: val(data, 'status') || 'Outstanding',
+    link,
+  };
+  const ask = val(data, 'additionalInfoRequest');
+  const more = ask
+    ? `<p style="margin:0 0 16px;color:#111827;font-size:14px"><strong>What is still needed:</strong> ${escapeHtml(ask)}</p>`
+    : '';
+  return [
+    `<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">`,
+    `<div style="background:${NAVY};color:#fff;padding:18px 24px;font-size:16px;font-weight:700">${escapeHtml(HEADER)}</div>`,
+    `<div style="padding:16px 24px">`,
+    `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(intro)}</p>`,
+    digestTable([row], REQUIREMENT_HEADINGS),
+    more,
+    `<p style="margin:0 0 8px">${reviewButton(link, 'Log in and upload')}</p>`,
+    `</div>`,
+    `<div style="padding:16px 24px;background:#f8f4ea;color:#687080;font-size:12px;border-top:1px solid #e5e7eb">`,
+    `${escapeHtml(FOOTER)}<br>Replies to <a href="mailto:${REPLY_TO}" style="color:${NAVY}">${REPLY_TO}</a>`,
+    `</div></div>`,
+  ].join('');
+}
+
 /** The inline branded rendering for a type, from its payload. */
 export function renderInline(type: NotificationType, data: Payload): Rendered {
   const copy = COPY[type];
   const subject = interpolate(copy.subject, data);
   const intro = interpolate(copy.intro, data);
-  const body = AUDITEE_FACING.has(type) ? auditeeShell(intro, data) : shell(HEADER, intro, data);
+  const body = AUDITEE_FACING.has(type)
+    ? auditeeShell(intro, data)
+    : REQUIREMENT_FACING.has(type)
+      ? requirementShell(intro, data)
+      : shell(HEADER, intro, data);
   return { subject, body };
 }
 
@@ -406,7 +452,7 @@ export interface SubmittedRow {
  * is now a table of its own, built by the same code as the submissions table, so
  * the two read alike and there is one place to keep Outlook-safe.
  */
-export type DigestTable = 'submitted' | 'reminder' | 'auditee';
+export type DigestTable = 'submitted' | 'reminder' | 'auditee' | 'requirement';
 
 export interface DigestItem {
   subject: string;
@@ -422,6 +468,17 @@ export interface DigestItem {
   table?: DigestTable;
 }
 
+/**
+ * The requirements table's headings (Build Prompt 69).
+ *
+ * No reference column, and nothing about a finding. An owner asked for the
+ * March reconciliations needs to know what is wanted, when, and where it stands;
+ * which work paper it may eventually support is internal audit structure, and
+ * putting it in front of them is how a request for a document turns into a
+ * question about the audit file.
+ */
+const REQUIREMENT_HEADINGS: [string, string, string] = ['Due', 'What is needed', 'Status'];
+
 /** Where a digest's call to action points, per table. */
 export interface DigestLinks {
   /** The findings waiting on a reviewer. */
@@ -430,6 +487,8 @@ export interface DigestLinks {
   drafts: string;
   /** The auditee's own queue of findings to answer (Build Prompt 68). */
   respond?: string;
+  /** The owner's own list of requirements to upload against (Build Prompt 69). */
+  upload?: string;
 }
 
 const TH =
@@ -446,7 +505,9 @@ const TD =
  * layout. `role="presentation"` keeps a screen reader from announcing the
  * wrapper chrome as data.
  */
-function digestTable(rows: SubmittedRow[], detailHeading: string): string {
+function digestTable(rows: SubmittedRow[], headings: string | [string, string, string]): string {
+  const [first, second, third] =
+    typeof headings === 'string' ? ['Reference', 'Title', headings] : headings;
   const body = rows
     .map((r) => {
       const ref = r.link
@@ -462,8 +523,8 @@ function digestTable(rows: SubmittedRow[], detailHeading: string): string {
   return (
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ` +
     `style="border-collapse:collapse;width:100%;margin:12px 0 20px">` +
-    `<thead><tr><th style="${TH}">Reference</th><th style="${TH}">Title</th>` +
-    `<th style="${TH}">${escapeHtml(detailHeading)}</th></tr></thead><tbody>${body}</tbody></table>`
+    `<thead><tr><th style="${TH}">${escapeHtml(first)}</th><th style="${TH}">${escapeHtml(second)}</th>` +
+    `<th style="${TH}">${escapeHtml(third)}</th></tr></thead><tbody>${body}</tbody></table>`
   );
 }
 
@@ -494,6 +555,7 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
   const submitted = rowsIn('submitted');
   const reminders = rowsIn('reminder');
   const auditee = rowsIn('auditee');
+  const requirements = rowsIn('requirement');
   const others = items.filter((i) => i.submitted == null);
 
   const subject =
@@ -505,11 +567,13 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
         ? reminders.length === 1
           ? `Draft work paper waiting: ${reminders[0].reference}`
           : `${reminders.length} draft work papers waiting`
-        : auditee.length > 1
-          ? `${auditee.length} findings need your response`
-          : items.length === 1
-            ? items[0].subject
-            : `Audit updates: ${items.length} notifications`;
+        : requirements.length > 1
+          ? `Internal Audit has asked you for ${requirements.length} items`
+          : auditee.length > 1
+            ? `${auditee.length} findings need your response`
+            : items.length === 1
+              ? items[0].subject
+              : `Audit updates: ${items.length} notifications`;
 
   const sections: string[] = [];
   if (submitted.length > 0) {
@@ -565,8 +629,32 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
       `<p style="margin:0 0 8px">${reviewButton(links?.respond ?? links?.review ?? '#', 'Log in and respond')}</p>`,
     );
   }
-  if (others.length > 0) {
+  // What the business has been asked for (Build Prompt 69). Raising fifteen
+  // requirements on a Monday sends each owner one email listing what they owe,
+  // not fifteen, and the button takes them to the page they upload from.
+  if (requirements.length > 0) {
     if (submitted.length > 0 || reminders.length > 0 || auditee.length > 0) {
+      sections.push(
+        `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Information requested</p>`,
+      );
+    }
+    const lead =
+      requirements.length === 1
+        ? 'Internal Audit has asked you for the following. Please log in and upload it.'
+        : `Internal Audit has asked you for ${requirements.length} items. Please log in and upload them.`;
+    sections.push(
+      `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(lead)}</p>`,
+      digestTable(requirements, REQUIREMENT_HEADINGS),
+      `<p style="margin:0 0 8px">${reviewButton(links?.upload ?? '#', 'Log in and upload')}</p>`,
+    );
+  }
+  if (others.length > 0) {
+    if (
+      submitted.length > 0 ||
+      reminders.length > 0 ||
+      auditee.length > 0 ||
+      requirements.length > 0
+    ) {
       sections.push(
         `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Also waiting</p>`,
       );
@@ -603,6 +691,9 @@ const SUBMISSION_TYPE = 'WP_SUBMITTED';
 
 /** The reminder types that compile into the drafts table (Build Prompt 60). */
 const REMINDER_TYPES = new Set(['STALE_REMINDER']);
+
+/** The requirement types, which compile into the requirements table (Prompt 69). */
+const REQUIREMENT_TYPES = new Set(['REQUIREMENT_ASSIGNED', 'REQUIREMENT_MORE_INFO']);
 
 /** The auditee loop's types, which compile into the auditee table (Prompt 68). */
 const AUDITEE_TYPES = new Set([
@@ -668,6 +759,22 @@ function digestItem(row: DigestSource): DigestItem {
         reference: str(payload.reference) || row.subject,
         title: str(payload.title),
         detail: str(payload.status) || 'Draft',
+        link,
+      },
+    };
+  }
+  // An item of information the business owes (Build Prompt 69). The due date
+  // leads, because it is the fact that decides what an owner does today.
+  if (REQUIREMENT_TYPES.has(row.batchType)) {
+    return {
+      subject: row.subject,
+      intro: '',
+      link,
+      table: 'requirement',
+      submitted: {
+        reference: str(payload.dueDate) || 'No date',
+        title: str(payload.title) || row.subject,
+        detail: str(payload.status) || 'Outstanding',
         link,
       },
     };
