@@ -113,6 +113,17 @@ const val = (key: string): string => {
   const raw = wp?.[key];
   return raw == null ? '' : String(raw);
 };
+/**
+ * A stored narrative as formatted HTML, the same pipeline the auditor's own
+ * screens use (Build Prompt 67). The auditee reads the finding here and nowhere
+ * else, so reading it with its headings and lists intact is not a nicety: a
+ * recommendation whose numbered steps arrive as one run of asterisks is a
+ * recommendation somebody has to decode before they can answer it.
+ */
+const rich = (key: string): string => {
+  const raw = wp?.[key];
+  return raw == null || String(raw) === '' ? '<p>None recorded.</p>' : renderRichHtml(String(raw));
+};
 const statusLabelFor = (s: string): string => {
   if (s === RESPONSE_STATUS.ACCEPTED) return 'Accepted';
   if (s === RESPONSE_STATUS.CHANGES_REQUESTED) return 'Changes requested';
@@ -187,13 +198,22 @@ const failed = Astro.url.searchParams.get('error');
           </div>
 
           <dl class="grc-deflist">
+            {/* What the auditee is answering, in the two names the rest of
+                the product now uses (Build Prompt 67). This was one row that
+                showed the body and fell back to the title, so whoever had to
+                respond saw one or the other and never both, and saw either as
+                raw text with its markers showing. */}
             <>
               <dt>Observation</dt>
-              <dd>{val('observation_description') || val('observation_title')}</dd>
+              <dd>{val('observation_title') || 'Untitled observation'}</dd>
+            </>
+            <>
+              <dt>Description</dt>
+              <dd class="grc-richbody" set:html={rich('observation_description')} />
             </>
             <>
               <dt>Recommendation</dt>
-              <dd>{val('recommendation') || 'None recorded.'}</dd>
+              <dd class="grc-richbody" set:html={rich('recommendation')} />
             </>
             <>
               <dt>Finding status</dt>
