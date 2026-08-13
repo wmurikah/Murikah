@@ -311,6 +311,36 @@ metadata is in `files`, and nothing tied either to the finding it belonged to.
 Run it after the release is deployed, so newly attached evidence is already being
 linked correctly while the backlog is reattached.
 
+### Migration 009, the auditee response loop
+
+`grc/db/migrations/009-auditee-response-loop.sql` (Build Prompt 68). A finding
+sent to the auditee already had rounds, a responsible list and a copy list. What
+it had no record of was who on the auditee side was holding it, so a unit
+manager who had handed the drafting to a depot supervisor and one who had not
+touched it were the same state: "sent, nothing back yet".
+
+- `work_papers.auditee_stage` says which side of the handover the finding is on:
+  `WITH_AUDITEE`, `DELEGATED`, `WITH_UNIT_MANAGER`, `WITH_AUDIT`, `CLOSED`. It is
+  a sub-state of the finding's own `status`, never a replacement: the status
+  still moves through `status_transitions` exactly as before.
+- `auditee_delegations` records each handover and its return. The row is the
+  delegate's entire standing in the product: staff hold no audit permission and
+  are not meant to, so being named on a live delegation is what lets them draft,
+  attach evidence and hand the draft back, and a returned delegation confers
+  nothing further.
+- The two `UPDATE` statements at the foot put findings that are already out with
+  the auditee into the stage they are actually in. Everything else keeps a null
+  stage, which the code reads as "the loop has not started", so nothing is
+  invented for a finding that never went out.
+- The `CREATE TABLE` is guarded and safe to re-run. The `ALTER TABLE` is not:
+  SQLite has no "ADD COLUMN IF NOT EXISTS", so a second run reports a duplicate
+  column, which is harmless and means the column is already there. Check with
+  `PRAGMA table_info(work_papers);` if in doubt.
+
+Run it before the release is deployed: the code reads `auditee_stage` on the
+response thread, and a missing column is a broken page rather than a degraded
+one.
+
 ### The workflow enum, and why the smoke seed spells it in lower case
 
 `status_transitions` keys every workflow in the product by `enum_type`, and more

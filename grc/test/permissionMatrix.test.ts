@@ -219,6 +219,13 @@ test('pageSlugForPath maps app paths onto the section slugs', () => {
   assert.equal(pageSlugForPath('/settings'), 'settings');
   assert.equal(pageSlugForPath('/settings/users'), 'settings/users');
   assert.equal(pageSlugForPath('/settings/access-control'), 'settings/access-control');
+  // One finding's thread is its own slug and is deliberately unmapped, so a
+  // delegate with no permissions at all can reach the finding they were named
+  // on; the page itself refuses anybody without standing (Build Prompt 68).
+  assert.equal(pageSlugForPath('/auditee-responses'), 'auditee-responses');
+  assert.equal(pageSlugForPath('/auditee-responses/WP-1'), 'auditee-responses/thread');
+  assert.equal(pageAccess({}, 'auditee-responses/thread'), true, 'the thread gates on the page');
+  assert.equal(pageAccess({}, 'auditee-responses'), false, 'the queue still needs a grant');
   // Every mapped slug must be reachable from a real path shape.
   for (const slug of Object.keys(PAGE_PERMISSION_MAP)) {
     assert.equal(pageSlugForPath(`/${slug}`), slug, slug);

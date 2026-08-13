@@ -29,6 +29,10 @@ export type NotificationType =
   | 'REQUIREMENT_ASSIGNED'
   | 'REQUIREMENT_SUBMITTED'
   | 'REQUIREMENT_MORE_INFO'
+  | 'AUDITEE_DELEGATED'
+  | 'AUDITEE_RETURNED'
+  | 'AUDITEE_RELEASED'
+  | 'AUDITEE_DECIDED'
   | 'PASSWORD_RESET';
 
 export type Priority = 'normal' | 'urgent';
@@ -203,6 +207,42 @@ export const TYPE_META: Record<NotificationType, TypeMeta> = {
     severity: 'warning',
     ccHoa: false,
     entity: 'requirement',
+  },
+  // The auditee response loop (Build Prompt 68). Every one of these goes to
+  // every responsible and every CC on the finding, because the loop's whole
+  // failure mode is somebody assuming somebody else was told: a unit manager
+  // who does not know their supervisor handed the draft back, or a copy
+  // recipient who finds out at the closing meeting. None copies the head of
+  // audit through the ccHoa flag: audit is either the actor or already a named
+  // recipient of the release and the decision, and a second copy of a mail you
+  // sent yourself is noise.
+  AUDITEE_DELEGATED: {
+    label: 'Response delegated',
+    priority: 'urgent',
+    severity: 'urgent',
+    ccHoa: false,
+    entity: 'work_paper',
+  },
+  AUDITEE_RETURNED: {
+    label: 'Draft returned to the unit manager',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'work_paper',
+  },
+  AUDITEE_RELEASED: {
+    label: 'Response released to audit',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: true,
+    entity: 'work_paper',
+  },
+  AUDITEE_DECIDED: {
+    label: 'Audit decision on the response',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'work_paper',
   },
   PASSWORD_RESET: {
     label: 'Password reset link',
