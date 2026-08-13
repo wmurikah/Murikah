@@ -50,6 +50,15 @@ export const SMOKE = {
   instanceAdminId: 'USR-HASS-ADMIN',
   auditorId: 'USR-AUD',
   auditeeId: 'USR-OWN',
+  /**
+   * A member of the unit manager's staff, with the JUNIOR_STAFF role, which is
+   * seeded with NO role_permissions rows at all (Build Prompt 68). That is the
+   * point of them: when they draft and return a delegated response, they do it
+   * on the strength of the delegation row and nothing else, so the smoke run
+   * proves staff act by delegation rather than by permission.
+   */
+  staffId: 'USR-STAFF',
+  staffEmail: 'staff@hasspetroleum.com',
   lockoutUserId: 'USR-LOCK',
   // A user in the other organisation, so the smoke run can prove an email is
   // unique across the whole platform and not merely within one instance.
@@ -371,6 +380,9 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
     [SMOKE.instanceAdminId, SMOKE.instanceAdminEmail, 'Hass Administrator', 'SUPER_ADMIN', 0],
     [SMOKE.auditorId, 'auditor@hasspetroleum.com', 'Amina Auditor', 'AUDITOR', 0],
     [SMOKE.auditeeId, 'owner@hasspetroleum.com', 'Otieno Owner', 'UNIT_MANAGER', 0],
+    // Holds no permissions whatsoever: their standing on a finding can only
+    // ever come from a delegation (Build Prompt 68).
+    [SMOKE.staffId, SMOKE.staffEmail, 'Stella Staff', 'JUNIOR_STAFF', 0],
     // Exists only for the lockout check: the smoke test burns its failure
     // budget and proves the right password is then refused too.
     [SMOKE.lockoutUserId, 'lockout@hasspetroleum.com', 'Larry Lockout', 'AUDITOR', 0],

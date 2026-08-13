@@ -698,6 +698,38 @@ const MUTATION_STEPS: MutationStep[] = [
     path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
     form: () => ({ decision: 'accept' }),
   },
+  // The auditee loop's two new endpoints, exercised here as the head of audit,
+  // who is neither a responsible on this finding nor holding a delegation on it
+  // (Build Prompt 68). Both refusals are the substance rather than a formality:
+  // audit does not delegate on a unit's behalf, and audit does not hand back a
+  // draft it was never given. The loop working end to end is a case of its own
+  // further down, signed in as the people it actually belongs to.
+  {
+    endpoint: 'auditee-responses/delegate.ts',
+    title: 'audit cannot delegate a unit is response for it',
+    expect: 'refusal',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM auditee_delegations WHERE work_paper_id = ?`)
+        .get(SMOKE.sentWorkPaperId) as { n: number | bigint };
+      assert.equal(Number(r.n), 0, 'and no delegation row is written by the refusal');
+    },
+    method: 'POST',
+    path: () => '/api/auditee-responses/delegate',
+    form: () => ({
+      work_paper_id: SMOKE.sentWorkPaperId,
+      delegated_to: SMOKE.staffId,
+      instructions: 'Audit should not be able to do this.',
+    }),
+  },
+  {
+    endpoint: 'auditee-responses/return.ts',
+    title: 'nobody can return a delegation they were never given',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/auditee-responses/return',
+    form: () => ({ work_paper_id: SMOKE.sentWorkPaperId, return_note: 'Not mine to return.' }),
+  },
   {
     endpoint: 'setup/affiliates.ts',
     title: 'create an affiliate',
@@ -3481,6 +3513,274 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.equal(statusOf(single), 'Submitted', 'and the resubmission moves it');
 
       await signInAsOwnerInsideHass();
+    });
+
+    // The auditee response loop, end to end, signed in as the people it
+    // belongs to (Build Prompt 68). This is the case that proves staff act by
+    // delegation rather than by permission: Stella holds the JUNIOR_STAFF role,
+    // which is seeded with no role_permissions rows at all, so every door she
+    // walks through is opened by the delegation row and nothing else.
+    await t.test('a delegated response goes out, comes back and is released', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // A finding of its own, so the loop is not read through the state the
+      // other cases have already left the shared one in.
+      const id = 'WP-LOOP-1';
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO work_papers (work_paper_id, organization_id, work_paper_ref, created_by,
+             year, affiliate_code, audit_area_id, sub_area_id, audit_period_from, audit_period_to,
+             observation_title, observation_description, risk_rating, recommendation,
+             status, response_round, revision_count, assigned_auditor_id,
+             sent_to_auditee_date, auditee_stage, created_at, updated_at)
+           VALUES (?, ?, 'WP/2026/LOOP', ?, 2026, ?, ?, ?, '2026-01-01', '2026-03-31',
+                   'Fuel reconciliations are not reviewed', 'Nobody signs them off.', 'High',
+                   'Introduce a monthly review.', 'Sent to Auditee', 1, 1, ?, ?, 'WITH_AUDITEE', ?, ?)`,
+      ).run(
+        id,
+        SMOKE.orgId,
+        SMOKE.userId,
+        SMOKE.affiliateCode,
+        SMOKE.auditAreaId,
+        SMOKE.subAreaId,
+        SMOKE.auditorId,
+        now,
+        now,
+        now,
+      );
+      // The unit manager is responsible, the auditor is copied. Both must hear
+      // about every step of what follows.
+      db.prepare(
+        `INSERT INTO work_paper_responsibles (work_paper_id, user_id, role_in_finding, added_at, added_by)
+           VALUES (?, ?, 'RESPONSIBLE', ?, ?)`,
+      ).run(id, SMOKE.auditeeId, now, SMOKE.userId);
+      db.prepare(
+        `INSERT INTO work_paper_cc_recipients (work_paper_id, email, user_id, added_at)
+           VALUES (?, 'cc@hasspetroleum.com', ?, ?)`,
+      ).run(id, SMOKE.auditorId, now);
+
+      const stageOf = (): string => {
+        const r = db
+          .prepare(`SELECT auditee_stage AS stage FROM work_papers WHERE work_paper_id = ?`)
+          .get(id) as { stage?: string };
+        return String(r?.stage ?? '');
+      };
+      const queuedFor = (): Set<string> => {
+        const rows = db
+          .prepare(
+            `SELECT DISTINCT recipient_user_id AS uid FROM notification_queue
+              WHERE related_entity_id = ? AND recipient_user_id IS NOT NULL`,
+          )
+          .all(id) as { uid?: string }[];
+        return new Set(rows.map((r) => String(r.uid)));
+      };
+
+      // 1. The unit manager delegates the drafting to their staff.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const thread = await server.get(`/auditee-responses/${id}`);
+      assert.equal(thread.status, 200, `the manager's thread answered ${thread.status}`);
+      assert.ok(
+        thread.body.includes('Delegate the response'),
+        'the manager is offered the handover',
+      );
+      assert.ok(thread.body.includes('Release to audit'), 'and can release it themselves');
+
+      const delegated = await server.request('POST', '/api/auditee-responses/delegate', {
+        work_paper_id: id,
+        delegated_to: SMOKE.staffId,
+        instructions: 'Pull the March reconciliations and draft what we will do.',
+      });
+      const delegatedAt = decodeURIComponent(String(delegated.headers.location ?? ''));
+      assert.ok(
+        !/[?&]error=/.test(delegatedAt),
+        `the delegation must be accepted, got ${delegatedAt}`,
+      );
+      assert.equal(stageOf(), 'DELEGATED', 'and the finding says who is holding it');
+      const row = db
+        .prepare(
+          `SELECT delegated_to AS toId, status, instructions FROM auditee_delegations
+            WHERE work_paper_id = ?`,
+        )
+        .get(id) as { toId?: string; status?: string; instructions?: string };
+      assert.equal(String(row?.toId), SMOKE.staffId, 'the delegation names the delegate');
+      assert.equal(String(row?.status), 'ISSUED', 'and is live');
+      assert.match(
+        String(row?.instructions),
+        /March reconciliations/,
+        'with the brief they were given',
+      );
+
+      // The manager cannot release while somebody else is drafting: deciding
+      // the response is finished is not the delegate's call, and it is not the
+      // manager's either until they have it back.
+      const early = await server.request('POST', '/api/auditee-responses/submit', {
+        work_paper_id: id,
+        management_response: 'Releasing over the delegate is head.',
+      });
+      const earlyAt = decodeURIComponent(String(early.headers.location ?? ''));
+      assert.ok(
+        /must return this draft/.test(earlyAt),
+        `releasing past a live delegation must refuse, got ${earlyAt}`,
+      );
+
+      // 2. The delegate, who holds no permissions at all, drafts and returns it.
+      await signInWithEmailCode(SMOKE.staffEmail, SMOKE.password, SMOKE.staffId);
+      const staffView = await server.get(`/auditee-responses/${id}`);
+      assert.equal(staffView.status, 200, `the delegate's thread answered ${staffView.status}`);
+      assert.ok(
+        staffView.body.includes('Return the draft to the unit manager'),
+        'the delegate is offered the one move their delegation entitles them to',
+      );
+      assert.ok(
+        !staffView.body.includes('Release to audit'),
+        'and not the release, which is the manager is',
+      );
+      assert.ok(
+        !staffView.body.includes('Delegate the response'),
+        'nor the power to delegate it onwards',
+      );
+      // A delegate can attach what supports the draft: it is most of what they
+      // were asked to do, and their standing for it is the delegation row.
+      const upload = await server.postMultipart(
+        '/api/evidence/put',
+        {
+          entity_type: 'work_paper',
+          entity_id: id,
+          file_id: crypto.randomUUID(),
+          file_name: 'march-reconciliations.txt',
+          content_type: 'text/plain',
+        },
+        {
+          field: 'file',
+          filename: 'march-reconciliations.txt',
+          contentType: 'text/plain',
+          content: 'March reconciliations, signed.',
+        },
+      );
+      assert.equal(upload.status, 200, `the delegate's upload answered ${upload.status}`);
+
+      const returned = await server.request('POST', '/api/auditee-responses/return', {
+        work_paper_id: id,
+        return_note: 'Drafted and attached the March reconciliations.',
+      });
+      const returnedAt = decodeURIComponent(String(returned.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(returnedAt), `the return must be accepted, got ${returnedAt}`);
+      assert.equal(stageOf(), 'WITH_UNIT_MANAGER', 'and it goes back to the manager');
+
+      // Handed back, the delegate is finished: history is not access.
+      const afterReturn = await server.request('POST', '/api/auditee-responses/return', {
+        work_paper_id: id,
+        return_note: 'Trying again.',
+      });
+      assert.ok(
+        /[?&]error=/.test(decodeURIComponent(String(afterReturn.headers.location ?? ''))),
+        'a returned delegation confers nothing further',
+      );
+
+      // 3. The manager reviews what came back and releases it to audit.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const back = await server.get(`/auditee-responses/${id}`);
+      assert.ok(
+        back.body.includes('Drafted and attached the March reconciliations'),
+        'the manager sees what the delegate said when handing it back',
+      );
+      const released = await server.request('POST', '/api/auditee-responses/submit', {
+        work_paper_id: id,
+        management_response: 'We accept the finding. Monthly review starts in April.',
+      });
+      const releasedAt = decodeURIComponent(String(released.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(releasedAt), `the release must be accepted, got ${releasedAt}`);
+      assert.equal(stageOf(), 'WITH_AUDIT', 'and the finding is with audit');
+      const closed = db
+        .prepare(`SELECT status FROM auditee_delegations WHERE work_paper_id = ?`)
+        .get(id) as { status?: string };
+      assert.equal(
+        String(closed?.status),
+        'CLOSED',
+        'the delegation closes with the release, so no delegate keeps write access',
+      );
+
+      // 4. Audit modifies the wording and accepts, rather than spending a whole
+      // round on a sentence.
+      await signInAsOwnerInsideHass();
+      const auditView = await server.get(`/auditee-responses/${id}`);
+      assert.ok(
+        auditView.body.includes('Modify and accept'),
+        'audit is offered the third decision',
+      );
+      const responseRow = db
+        .prepare(
+          `SELECT response_id AS rid FROM auditee_responses
+            WHERE work_paper_id = ? ORDER BY submitted_date DESC LIMIT 1`,
+        )
+        .get(id) as { rid?: string };
+      assert.ok(responseRow?.rid, 'the released round exists to be decided');
+      const decided = await server.request(
+        'POST',
+        `/api/auditee-responses/${String(responseRow.rid)}/review`,
+        { decision: 'modify', review_comments: 'Reworded the deadline to 30 April.' },
+      );
+      const decidedAt = decodeURIComponent(String(decided.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(decidedAt), `the decision must be accepted, got ${decidedAt}`);
+      assert.equal(stageOf(), 'CLOSED', 'and the loop is finished');
+
+      // 5. Everybody named heard about it, every time. This is the loop's whole
+      // failure mode: the manager not knowing their supervisor handed it back,
+      // or the copy recipient finding out at the closing meeting.
+      const told = queuedFor();
+      for (const [who, uid] of [
+        ['the responsible unit manager', SMOKE.auditeeId],
+        ['the copied auditor', SMOKE.auditorId],
+        ['the delegate who drafted it', SMOKE.staffId],
+      ] as const) {
+        assert.ok(told.has(uid), `${who} must have been notified about this finding`);
+      }
+      // And the fan-out is per move, not one mail for the whole loop.
+      const moves = db
+        .prepare(
+          `SELECT DISTINCT batch_type AS t FROM notification_queue WHERE related_entity_id = ?`,
+        )
+        .all(id) as { t?: string }[];
+      const types = new Set(moves.map((m) => String(m.t)));
+      for (const type of [
+        'AUDITEE_DELEGATED',
+        'AUDITEE_RETURNED',
+        'AUDITEE_RELEASED',
+        'AUDITEE_DECIDED',
+      ]) {
+        assert.ok(types.has(type), `${type} must have been queued, got ${[...types].join(', ')}`);
+      }
+
+      // The trail reads as one story to whoever opens it.
+      const story = await server.get(`/auditee-responses/${id}`);
+      for (const step of [
+        'Delegated to Stella Staff',
+        'Returned to the unit manager',
+        'Round 1 released to audit',
+      ]) {
+        assert.ok(story.body.includes(step), `the trail must show "${step}"`);
+      }
+    });
+
+    // Being copied is not being asked (Build Prompt 68). The auditor is a CC on
+    // the finding above, so they see everything and can act on none of it.
+    await t.test('a copy recipient sees the loop and is offered nothing', async () => {
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const page = await server.get('/auditee-responses/WP-LOOP-1');
+      assert.equal(page.status, 200, `the CC's thread answered ${page.status}`);
+      assert.ok(
+        page.body.includes('Fuel reconciliations are not reviewed'),
+        'they see the finding',
+      );
+      assert.ok(page.body.includes('Delegated to Stella Staff'), 'and the whole trail');
+      for (const control of [
+        'Delegate the response',
+        'Return the draft to the unit manager',
+        'Release to audit',
+      ]) {
+        assert.ok(!page.body.includes(control), `a CC must not be offered "${control}"`);
+      }
     });
 
     // The sidebar chrome (Build Prompt 60): no standalone Notifications

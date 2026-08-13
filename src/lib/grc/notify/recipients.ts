@@ -103,6 +103,51 @@ export async function actionPlanOwnerIds(
         .filter(Boolean);
 }
 
+/**
+ * Everybody named on the auditee side of a finding: its responsibles, its CC
+ * recipients, and anybody it has been delegated to (Build Prompt 68).
+ *
+ * The auditee loop's failure mode is somebody assuming somebody else was told,
+ * so every move in it goes to this whole set rather than to the person who
+ * happens to act next. A CC recipient is on the list precisely because being
+ * copied is what they asked for: they take no action, and they are entitled to
+ * know the finding was delegated, drafted, returned and released without having
+ * to ask.
+ *
+ * Delegates are included by history rather than by live status. A supervisor
+ * who drafted round one and handed it back should still be told what audit made
+ * of the thing they wrote; dropping them the moment they return it is how the
+ * person who did the work is the only one who never hears the outcome.
+ *
+ * The junction tables carry no organisation of their own, so all three are
+ * scoped through the finding.
+ */
+export async function workPaperAuditeeIds(
+  db: Client,
+  organizationId: string,
+  workPaperId: string,
+): Promise<string[]> {
+  const res = await db.execute({
+    sql: `SELECT r.user_id AS user_id FROM work_paper_responsibles r
+            JOIN work_papers wp ON wp.work_paper_id = r.work_paper_id AND wp.organization_id = ?
+           WHERE r.work_paper_id = ?
+           UNION
+          SELECT c.user_id AS user_id FROM work_paper_cc_recipients c
+            JOIN work_papers wp ON wp.work_paper_id = c.work_paper_id AND wp.organization_id = ?
+           WHERE c.work_paper_id = ? AND c.user_id IS NOT NULL
+           UNION
+          SELECT d.delegated_to AS user_id FROM auditee_delegations d
+           WHERE d.organization_id = ? AND d.work_paper_id = ?`,
+    args: [organizationId, workPaperId, organizationId, workPaperId, organizationId, workPaperId],
+  });
+  const ids = new Set<string>();
+  for (const r of res.rows) {
+    const id = r.user_id == null ? '' : String(r.user_id).trim();
+    if (id !== '') ids.add(id);
+  }
+  return [...ids];
+}
+
 /** A work paper's interested parties: the assigned auditor and its responsibles. */
 export async function workPaperPartyIds(
   db: Client,
