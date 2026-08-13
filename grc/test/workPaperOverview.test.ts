@@ -71,8 +71,8 @@ test('the finding panel names the observation and its description, in that order
   const cards = readFileSync(CARDS, 'utf8');
   assert.match(
     cards,
-    /facts: \[\{ label: 'Observation', value: source\.observationTitle \}\]/,
-    'the stored title is the field labelled Observation',
+    /\{ kind: 'title', text: source\.observationTitle \}/,
+    'the stored title is the observation card is own title (Build Prompt 71)',
   );
   assert.match(
     cards,
