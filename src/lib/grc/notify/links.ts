@@ -29,6 +29,9 @@ export const DRAFT_QUEUE_PATH = '/work-papers?status=Draft';
 /** The auditee's own queue of findings to answer (Build Prompt 68). */
 export const RESPOND_QUEUE_PATH = '/auditee-responses';
 
+/** The owner's own list of requirements to upload against (Build Prompt 69). */
+export const UPLOAD_QUEUE_PATH = '/requirements';
+
 /**
  * The review queue a submission digest points the head of audit at (Build
  * Prompt 53): the findings waiting on them, not a dashboard to navigate from.
@@ -61,7 +64,26 @@ export function respondQueueLink(): string {
   return `${APP_BASE}${RESPOND_QUEUE_PATH}`;
 }
 
+/**
+ * The owner's own requirements (Build Prompt 69): the list they upload from,
+ * a line per thing they have been asked for. The one page an auditee owner
+ * needs, and the only one the email points them at.
+ */
+export function uploadQueueLink(): string {
+  return `${APP_BASE}${UPLOAD_QUEUE_PATH}`;
+}
+
 /** Every destination a digest can offer, resolved once for a drain run. */
-export function digestLinks(): { review: string; drafts: string; respond: string } {
-  return { review: reviewQueueLink(), drafts: draftQueueLink(), respond: respondQueueLink() };
+export function digestLinks(): {
+  review: string;
+  drafts: string;
+  respond: string;
+  upload: string;
+} {
+  return {
+    review: reviewQueueLink(),
+    drafts: draftQueueLink(),
+    respond: respondQueueLink(),
+    upload: uploadQueueLink(),
+  };
 }
