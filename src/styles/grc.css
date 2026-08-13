@@ -460,7 +460,6 @@
 /* Icons must never shrink: on the folded rail the nowrap labels would
    otherwise squeeze them to zero width. */
 .grc-navgroup__summary > svg,
-.grc-bell__summary > svg,
 .grc-account__id > svg,
 .grc-brand > .grc-brand__badge {
   flex: 0 0 auto;
@@ -501,7 +500,6 @@
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__label,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__chevron,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink__label > span,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary > span:not(.grc-navcount),
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-account__id > span {
     opacity: 0;
     transition: opacity 0.12s ease;
@@ -510,13 +508,11 @@
   .grc-sidebar .grc-navgroup__label,
   .grc-sidebar .grc-navgroup__chevron,
   .grc-sidebar .grc-navlink__label > span,
-  .grc-sidebar .grc-bell__summary > span:not(.grc-navcount),
   .grc-sidebar .grc-account__id > span {
     transition: opacity 0.12s ease 0.06s;
   }
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-orgline,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-switcher,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__panel,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-pinbtn {
     display: none;
   }
@@ -529,12 +525,10 @@
     gap: var(--grc-s2);
   }
   /* Counts stay visible on the rail as small badges beside the icon. */
-  .grc-navlink,
-  .grc-bell__summary {
+  .grc-navlink {
     position: relative;
   }
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink .grc-navcount,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary .grc-navcount {
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink .grc-navcount {
     position: absolute;
     left: 1.7rem;
     top: 0;
@@ -2359,100 +2353,11 @@ a.grc-bars__group:hover .grc-bars__bar {
 .grc-navcount[hidden] {
   display: none;
 }
-/* The bell keeps the same bubble, so one unread count reads the same wherever
-   it appears. */
-.grc-bell__summary .grc-navcount {
-  margin-left: auto;
-  top: 0;
-}
+/* --- Notifications: the centre and the send queue ------------------------ */
 
-/* --- Notifications: bell, centre, send queue ---------------------------- */
-
-/* The sidebar bell dropdown (in the navy sidebar). */
-.grc-bell {
-  margin: var(--grc-s2) 0;
-}
-.grc-bell__summary {
-  display: flex;
-  align-items: center;
-  gap: var(--grc-s2);
-  padding: var(--grc-s2);
-  border-radius: var(--grc-radius-sm);
-  color: var(--grc-on-navy);
-  font-size: var(--grc-fs-small);
-  cursor: pointer;
-  list-style: none;
-}
-.grc-bell__summary::-webkit-details-marker {
-  display: none;
-}
-.grc-bell__summary:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-.grc-bell__summary .grc-navcount {
-  margin-left: auto;
-}
-.grc-bell__panel {
-  margin-top: var(--grc-s1);
-  background: var(--grc-surface);
-  border: 1px solid var(--grc-line);
-  border-radius: var(--grc-radius-sm);
-  padding: var(--grc-s2);
-  color: var(--grc-ink);
-}
-.grc-bell__empty {
-  margin: 0;
-  padding: var(--grc-s2);
-  font-size: var(--grc-fs-small);
-  color: var(--grc-muted);
-}
-.grc-bell__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 1px;
-}
-.grc-bell__item a {
-  display: block;
-  padding: var(--grc-s2);
-  font-size: var(--grc-fs-small);
-  color: var(--grc-ink);
-  text-decoration: none;
-  border-radius: var(--grc-radius-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.grc-bell__item a:hover {
-  background: var(--grc-paper);
-}
-.grc-bell__item.is-unread a {
-  font-weight: 600;
-}
-.grc-bell__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--grc-s2);
-  margin-top: var(--grc-s1);
-  padding-top: var(--grc-s2);
-  border-top: 1px solid var(--grc-line);
-  font-size: var(--grc-fs-caption);
-}
-.grc-bell__foot a {
-  color: var(--grc-navy-2);
-}
-.grc-bell__mark {
-  background: none;
-  border: none;
-  color: var(--grc-navy-2);
-  font-size: var(--grc-fs-caption);
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-}
-
+/* The sidebar's bell went with the Notifications entry it duplicated (Build
+   Prompt 67); what follows dresses the notification centre itself, which is
+   still reachable at /notifications and is still what the emails link to. */
 /* The notification centre list. */
 .grc-notiflist {
   list-style: none;
@@ -2745,28 +2650,85 @@ a.grc-notifrow__title:hover {
   background: var(--grc-paper, #faf7f0);
   min-height: 4rem;
 }
-.grc-richbody p {
-  margin: 0 0 0.5rem;
+/* A stored narrative, rendered (Build Prompt 67).
+   The markdown these fields have always accepted was parsed and marked up, but
+   dressed so tightly that a finding with headings and a numbered recommendation
+   read as one grey slab: the marks were there and the shape was not. What
+   follows is the shape. It is CSS on server-rendered HTML from the one parser
+   in richtext.ts, so it costs nothing at run time and there is no editor, no
+   framework and no client library involved.
+
+   The scale is deliberately short: body, a subheading and a sub-subheading, one
+   step apart, because a finding is a page and a half and a five-level scale on
+   a page and a half is noise. Vertical rhythm is one measure (0.6rem) with
+   headings taking a larger space above than below, so a heading belongs to what
+   follows it rather than floating between two blocks. */
+.grc-richbody {
+  line-height: 1.55;
 }
-.grc-richbody p:last-child {
+.grc-richbody > :first-child {
+  margin-top: 0;
+}
+.grc-richbody > :last-child {
   margin-bottom: 0;
+}
+.grc-richbody p {
+  margin: 0 0 0.6rem;
+  /* Long enough to read, short enough not to lose the line: the measure most
+     of these fields sit in is already narrow, so this only bites on wide
+     screens where a paragraph would otherwise run the full panel. */
+  max-width: 68ch;
 }
 .grc-richbody h4,
 .grc-richbody h5 {
-  margin: 0.75rem 0 0.25rem;
-  color: var(--grc-navy, #1a365d);
+  margin: 1.1rem 0 0.35rem;
+  color: var(--grc-navy);
+  line-height: 1.3;
+  font-weight: 700;
 }
-.grc-richbody h4:first-child,
-.grc-richbody h5:first-child {
-  margin-top: 0;
+.grc-richbody h4 {
+  font-size: 1.02em;
+  letter-spacing: 0.005em;
+}
+.grc-richbody h5 {
+  font-size: 0.95em;
+  color: var(--grc-navy-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .grc-richbody ul,
 .grc-richbody ol {
-  margin: 0 0 0.5rem;
-  padding-left: 1.4rem;
+  margin: 0 0 0.6rem;
+  padding-left: 1.35rem;
+  max-width: 68ch;
 }
 .grc-richbody li {
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.25rem;
+  padding-left: 0.15rem;
+}
+.grc-richbody li:last-child {
+  margin-bottom: 0;
+}
+.grc-richbody li::marker {
+  color: var(--grc-navy-2);
+}
+/* A list is a step in a procedure, so a nested one steps in rather than
+   restarting the rhythm. */
+.grc-richbody li > ul,
+.grc-richbody li > ol {
+  margin: 0.25rem 0 0;
+}
+.grc-richbody strong {
+  font-weight: 700;
+  color: var(--grc-ink);
+}
+.grc-richbody em {
+  font-style: italic;
+}
+/* Inside a definition list the body sits against its own label, so it carries
+   no leading space of its own. */
+dd.grc-richbody {
+  margin-left: 0;
 }
 
 /* The all-instances view: every instance on the platform, one enterable row

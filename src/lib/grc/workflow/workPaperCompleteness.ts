@@ -18,7 +18,7 @@
  *
  * The required set is deliberately the reviewable minimum rather than the whole
  * form: the audit context (area, sub-area and the period covered), the finding
- * itself (title, description, risk rating, recommendation), and the auditor
+ * itself (observation, description, risk rating, recommendation), and the auditor
  * answerable for it. Everything else on the form is real work, but a reviewer
  * can read the finding without it.
  */
@@ -67,8 +67,12 @@ export const REQUIRED_FOR_SUBMISSION: readonly RequiredField[] = [
     label: 'audit period',
     isFilled: (s) => filled(s.auditPeriodFrom) && filled(s.auditPeriodTo),
   },
-  { label: 'observation title', isFilled: (s) => filled(s.observationTitle) },
-  { label: 'observation description', isFilled: (s) => filled(s.observationDescription) },
+  // Named as the form names them, which changed with Build Prompt 67: the
+  // title field is "Observation" on screen and the body is "Description". A
+  // refusal that names a field the auditor cannot find is a refusal they
+  // cannot act on.
+  { label: 'observation', isFilled: (s) => filled(s.observationTitle) },
+  { label: 'description', isFilled: (s) => filled(s.observationDescription) },
   { label: 'risk rating', isFilled: (s) => filled(s.riskRating) },
   { label: 'recommendation', isFilled: (s) => filled(s.recommendation) },
   { label: 'assigned auditor', isFilled: (s) => filled(s.assignedAuditorId) },
