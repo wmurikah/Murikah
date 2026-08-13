@@ -292,16 +292,6 @@ const responseFacts: { label: string; value: string }[] = wp
           <h2>Finding</h2>
           <dl class="grc-detail">
             <>
-              {/* The observation title is the finding's name. It is stored, it
-                  is what the email and the list call this record, and the panel
-                  that describes the finding omitted it entirely: the same
-                  subset-rendering fault that hid Classification and Standards
-                  (Build Prompt 63). It leads, because a summary that does not
-                  say what the finding is is not a summary. */}
-              <dt>Observation title</dt>
-              <dd>{val('observation_title')}</dd>
-            </>
-            <>
               <dt>Year</dt>
               <dd>{val('year')}</dd>
             </>
@@ -365,8 +355,20 @@ const responseFacts: { label: string; value: string }[] = wp
               <dt>Testing steps</dt>
               <dd class="grc-richbody" set:html={rich('testing_steps')} />
             </>
+            {/* The finding itself, after everything that led to it and before
+                everything that follows from it (Build Prompt 67). The title was
+                added to this panel by Build Prompt 63, which put it at the top
+                where it read as a second reference number; it belongs against
+                its own body, which is the thing it names. "Observation" is the
+                stored observation_title and "Description" the stored
+                observation_description: renamed on screen, unmoved in the
+                database. */}
             <>
               <dt>Observation</dt>
+              <dd>{val('observation_title')}</dd>
+            </>
+            <>
+              <dt>Description</dt>
               <dd class="grc-richbody" set:html={rich('observation_description')} />
             </>
             <>
