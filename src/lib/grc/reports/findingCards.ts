@@ -150,7 +150,7 @@ const blank = (v: string | null | undefined): boolean => String(v ?? '').trim() 
 
 export function findingHeader(source: FindingSource): FindingHeader {
   return {
-    reference: source.reference || 'Finding',
+    reference: source.reference || 'Observation',
     title: source.observationTitle || 'Untitled observation',
     affiliate: source.affiliate || '-',
     auditArea: source.auditArea || '-',
@@ -175,7 +175,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
   // 1. What we found. The title and its body, adjacent and in that order.
   cards.push({
     key: 'finding',
-    heading: 'Finding',
+    heading: 'Observation',
     group: 'audit',
     body: [
       { kind: 'facts', facts: [{ label: 'Observation', value: source.observationTitle }] },
@@ -239,7 +239,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
     body: responseBody,
     // Worth saying: a finding with no response is a finding still waiting on
     // somebody, and the reader should be told that rather than left to infer it.
-    emptyText: 'Management has not responded to this finding yet.',
+    emptyText: 'Management has not responded to this observation yet.',
   });
 
   // 5. What supports it.

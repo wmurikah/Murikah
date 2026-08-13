@@ -861,7 +861,7 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
     affiliate_code: SMOKE.affiliateCode,
     action_ref: 'AP/2026/009',
     action_number: 9,
-    action_description: 'Legacy stray plan with no parent finding.',
+    action_description: 'Legacy stray plan with no parent observation.',
     priority: 'Low',
     status: 'Pending',
     target_date: today,

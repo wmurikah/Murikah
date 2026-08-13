@@ -5,7 +5,7 @@
  * Three states, and the second is why this component exists. A confined user with
  * an affiliate is told which one, so nothing on the screen is mysteriously
  * absent. A confined user with NO affiliate sees nothing at all, and an ordinary
- * empty state would read as "your organisation has no findings" when the truth
+ * empty state would read as "your organisation has no observations" when the truth
  * is "your account is not finished". That is a configuration mistake, so it says
  * so, and names the fix and who can make it.
  *
@@ -24,7 +24,7 @@ const groupExempt = scope?.groupExempt === true;
 const affiliate = scope?.affiliateCode ?? null;
 
 interface Props {
-  /** What the screen lists, for the sentence: "findings", "action plans". */
+  /** What the screen lists, for the sentence: "observations", "action plans". */
   subject?: string;
 }
 const { subject = 'records' } = Astro.props;

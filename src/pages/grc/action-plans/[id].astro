@@ -3,7 +3,7 @@ export const prerender = false;
 
 /**
  * Action plan detail (Actionplanview). Shows the full plan: status and risk, the
- * overdue and auditee-proposed flags, the action and its owners, the finding it
+ * overdue and auditee-proposed flags, the action and its owners, the observation it
  * remediates, any delegation, the implementation and the auditor and Head-of-Audit
  * reviews, the evidence and the full timeline. Prominently, it offers only the
  * workflow actions valid for the current status and the signed-in role (resolved
@@ -331,7 +331,7 @@ const commentLabel = (effect: string): string =>
         </div>
 
         <div class="grc-panel">
-          <h2>Finding</h2>
+          <h2>Observation</h2>
           <dl class="grc-detail">
             <>
               <dt>Work paper</dt>
@@ -345,7 +345,7 @@ const commentLabel = (effect: string): string =>
               <dt>Observation</dt>
               <dd>{val('observation_title')}</dd>
             </>
-            {/* The same two names the finding itself uses (Build Prompt 67):
+            {/* The same two names the observation itself uses (Build Prompt 67):
                 the observation is the title, the description is the body. */}
             <>
               <dt>Description</dt>
