@@ -1,0 +1,178 @@
+---
+/**
+ * A finding drawn as a header strip and a run of cards (Build Prompt 67).
+ *
+ * The arrangement is decided in `reports/findingCards.ts` and this component
+ * draws it, so the work paper's own screen and the report preview show the same
+ * finding in the same order with the same headings, and the print rules apply
+ * to both because there is one set of class names.
+ *
+ * Server-rendered, with no client script of any kind: the cards are markup and
+ * the formatting is the existing markdown parser, so the page costs the same to
+ * render as the definition list it replaces.
+ */
+import { renderRichHtml } from '@grc/richtext';
+import {
+  cardIsEmpty,
+  findingHeader,
+  riskPillClass,
+  visibleCards,
+  type FindingSource,
+} from '@grc/reports/findingCards';
+
+interface Props {
+  finding: FindingSource;
+  /** Set on the print and board views, which want no interactive chrome. */
+  flat?: boolean;
+}
+const { finding, flat = false } = Astro.props;
+
+const header = findingHeader(finding);
+const cards = visibleCards(finding);
+// The three audit cards are drawn as one group, so the reader can see which
+// half of the page is audit's assessment and which is management's answer.
+const auditCards = cards.filter((c) => c.group === 'audit');
+const otherCards = cards.filter((c) => c.group !== 'audit');
+---
+
+<article class:list={['grc-finding', { 'grc-finding--flat': flat }]} data-finding-cards>
+  {
+    /* The header strip, deliberately not a card: it names the record rather than
+      holding a section of it, so it sits above the cards as a masthead. */
+  }
+  <header class="grc-finding__strip">
+    <div class="grc-finding__ident">
+      <p class="grc-finding__ref">{header.reference}</p>
+      <h2 class="grc-finding__title">{header.title}</h2>
+    </div>
+    <dl class="grc-finding__facts">
+      <div>
+        <dt>Affiliate</dt>
+        <dd>{header.affiliate}</dd>
+      </div>
+      <div>
+        <dt>Audit area</dt>
+        <dd>{header.auditArea}</dd>
+      </div>
+      <div>
+        <dt>Sub-area</dt>
+        <dd>{header.subArea}</dd>
+      </div>
+      <div>
+        <dt>Status</dt>
+        <dd>{header.status}</dd>
+      </div>
+    </dl>
+    {
+      /* Colour is never the only signal: the pill carries its own word, and the
+        screen reader is told what the word means. */
+    }
+    <p
+      class:list={['grc-finding__risk', riskPillClass(header.risk.tone)]}
+      data-risk={header.risk.tone ?? 'unrated'}
+    >
+      <span class="grc-vh">{header.risk.srLabel}</span>
+      <span aria-hidden="true">{header.risk.label}</span>
+    </p>
+  </header>
+
+  <div class="grc-finding__group" aria-label="Audit's assessment">
+    {
+      auditCards.map((card) => (
+        <section class="grc-fcard" data-card={card.key}>
+          <h3 class="grc-fcard__h">{card.heading}</h3>
+          {cardIsEmpty(card) ? (
+            <p class="grc-fcard__empty">{card.emptyText}</p>
+          ) : (
+            card.body.map((body) =>
+              body.kind === 'rich' ? (
+                <div class="grc-fcard__body grc-richbody" set:html={renderRichHtml(body.text)} />
+              ) : body.kind === 'facts' ? (
+                <dl class="grc-fcard__facts">
+                  {body.facts
+                    .filter((f) => String(f.value ?? '').trim() !== '')
+                    .map((f) => (
+                      <div>
+                        <dt>{f.label}</dt>
+                        <dd>{f.value}</dd>
+                      </div>
+                    ))}
+                </dl>
+              ) : (
+                <div class="grc-tablewrap">
+                  <table class="grc-fcard__table">
+                    <thead>
+                      <tr>
+                        {body.columns.map((c) => (
+                          <th scope="col">{c}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {body.rows.map((row) => (
+                        <tr>
+                          {row.map((cell) => (
+                            <td>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ),
+            )
+          )}
+        </section>
+      ))
+    }
+  </div>
+
+  {
+    otherCards.map((card) => (
+      <section class="grc-fcard" data-card={card.key}>
+        <h3 class="grc-fcard__h">{card.heading}</h3>
+        {cardIsEmpty(card) ? (
+          <p class="grc-fcard__empty">{card.emptyText}</p>
+        ) : (
+          card.body.map((body) =>
+            body.kind === 'rich' ? (
+              <div class="grc-fcard__body grc-richbody" set:html={renderRichHtml(body.text)} />
+            ) : body.kind === 'facts' ? (
+              <dl class="grc-fcard__facts">
+                {body.facts
+                  .filter((f) => String(f.value ?? '').trim() !== '')
+                  .map((f) => (
+                    <div>
+                      <dt>{f.label}</dt>
+                      <dd>{f.value}</dd>
+                    </div>
+                  ))}
+              </dl>
+            ) : (
+              <div class="grc-tablewrap">
+                <table class="grc-fcard__table">
+                  <thead>
+                    <tr>
+                      {body.columns.map((c) => (
+                        <th scope="col">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {body.rows.map((row) => (
+                      <tr>
+                        {row.map((cell) => (
+                          <td>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ),
+          )
+        )}
+      </section>
+    ))
+  }
+</article>

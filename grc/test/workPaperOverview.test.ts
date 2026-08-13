@@ -22,6 +22,7 @@ import { join, relative, sep } from 'node:path';
 const REPO = join(import.meta.dirname, '..', '..');
 const DETAIL = join(REPO, 'src', 'pages', 'grc', 'work-papers', '[id].astro');
 const REPOSITORY = join(REPO, 'src', 'lib', 'grc', 'repos', 'workPapers.ts');
+const CARDS = join(REPO, 'src', 'lib', 'grc', 'reports', 'findingCards.ts');
 
 /**
  * Fields whose value the detail resolves through a joined name rather than the
@@ -64,52 +65,41 @@ test('the detail shows every field a work paper stores', () => {
 test('the finding panel names the observation and its description, in that order', () => {
   // Build Prompt 63 put the stored title on this panel, because a page can name
   // a record in its heading and still fail to show the field. Build Prompt 67
-  // renamed the pair and moved them together: the title is "Observation", its
-  // body is "Description", and the two are adjacent, in that order. The columns
-  // behind them are unchanged, which is what the val() calls assert.
+  // moved the pair into the shared card arrangement, so the assertion moved
+  // with them: the arrangement is what all three renderers read, and it is
+  // where "Observation, then Description" is now decided.
+  const cards = readFileSync(CARDS, 'utf8');
+  assert.match(
+    cards,
+    /facts: \[\{ label: 'Observation', value: source\.observationTitle \}\]/,
+    'the stored title is the field labelled Observation',
+  );
+  assert.match(
+    cards,
+    /\{ kind: 'rich', text: source\.observationDescription \}/,
+    'and the stored body is the formatted narrative beside it',
+  );
   const template = readFileSync(DETAIL, 'utf8');
-  assert.ok(
-    /<dt>Observation<\/dt>\s*<dd>\{val\('observation_title'\)\}<\/dd>/.test(template),
-    'the panel must carry the stored title, labelled Observation',
-  );
-  assert.ok(
-    /<dt>Description<\/dt>\s*<dd class="grc-richbody" set:html=\{rich\('observation_description'\)\} \/>/.test(
-      template,
-    ),
-    'and the stored body, labelled Description and formatted',
-  );
   assert.ok(
     !/<dt>Observation title<\/dt>/.test(template),
     'the old label must be gone, not merely duplicated',
+  );
+  assert.ok(
+    /GrcFindingCards/.test(template),
+    'and the detail draws the finding through the shared arrangement',
   );
 });
 
 test('the finding follows the testing that found it, and precedes the risk it carries', () => {
   // The order is the argument a finding makes: this is what we tested, this is
-  // what we found, this is what it means, this is what to do. The title used to
-  // sit at the very top, before Year, where it read as a second reference.
+  // what we found, this is what it means, this is what to do. The context list
+  // ends at the testing steps, and the cards pick the story up from there.
   const template = readFileSync(DETAIL, 'utf8');
-  const at = (label: string): number => {
-    const i = template.indexOf(`<dt>${label}</dt>`);
-    assert.ok(i > 0, `the panel must carry ${label}`);
-    return i;
-  };
-  const steps = at('Testing steps');
-  const observation = at('Observation');
-  const description = at('Description');
-  const rating = at('Risk rating');
-  const recommendation = at('Recommendation');
-  assert.ok(steps < observation, 'the observation follows the testing steps');
-  assert.ok(observation < description, 'the description follows the observation it describes');
-  assert.ok(description < rating, 'the risk rating follows the finding');
-  assert.ok(rating < recommendation, 'and the recommendation comes last of the four');
-  // Nothing may sit between the two: they are one thought.
-  assert.ok(
-    !/<dt>/.test(
-      template.slice(template.indexOf("<dd>{val('observation_title')}</dd>"), description),
-    ),
-    'no field may come between the observation and its description',
-  );
+  const steps = template.indexOf('<dt>Testing steps</dt>');
+  const cards = template.indexOf('<GrcFindingCards');
+  assert.ok(steps > 0, 'the context list must still carry the testing steps');
+  assert.ok(cards > steps, 'and the finding cards must follow them');
+  assert.ok(!/<dt>Risk rating<\/dt>/.test(template), "the risk is the card's, not a row above it");
 });
 
 function grcTemplates(): string[] {

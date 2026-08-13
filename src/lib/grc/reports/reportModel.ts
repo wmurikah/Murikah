@@ -761,8 +761,9 @@ function observationSection(
   now: Date,
   labels?: Record<string, string>,
 ): ReportBlock[] {
-  const bucket = normaliseRisk(o.riskRating);
-  const riskLabel = bucket ? RISK_LABELS[bucket] : (o.riskRating ?? 'Unrated');
+  // The risk label and its colour are the card model's business now: it reads
+  // the stored rating itself, so the pack and the screen cannot disagree about
+  // what "High" looks like (Build Prompt 67).
   const overdue = plans.filter((ap) => isPlanOverdue(ap, now)).length;
   const implemented = plans.filter(isImplemented).length;
   const title = o.observationTitle || 'Untitled observation';
@@ -774,52 +775,50 @@ function observationSection(
         `${implemented === 1 ? 'has' : 'have'} been implemented` +
         (overdue > 0 ? ` and ${overdue} ${overdue === 1 ? 'is' : 'are'} overdue.` : '.');
 
+  // The finding as the shared arrangement draws it (Build Prompt 67): the header
+  // strip with its risk pill, audit's three cards as one group, then what
+  // management said and what they agreed to do. The board pack and the work
+  // paper's own screen now render from the same model through the same
+  // component, so a pack cannot quietly disagree with the screen it was
+  // approved from. The narrative that used to open each observation is gone
+  // with it: it was a paragraph assembled out of the same fields the cards now
+  // show properly, and reading both was reading the finding twice.
   const blocks: ReportBlock[] = [
     { kind: 'heading', text: `5.${index} ${title}`, level: 2 },
     {
-      kind: 'narrative',
-      text:
-        `${shorten(o.observationDescription, 600) || title} ` +
-        (o.implications ? `${o.implications} ` : '') +
-        remediation,
+      kind: 'finding',
+      source: {
+        reference: o.reference,
+        observationTitle: title,
+        observationDescription: o.observationDescription ?? '',
+        affiliate: o.affiliateName ?? o.affiliateCode ?? '',
+        auditArea: o.auditAreaName ?? '',
+        // The report dataset carries the area but not the sub-area, so the
+        // strip shows the area and leaves the sub-area blank rather than
+        // inventing one.
+        subArea: '',
+        status: humaniseStatus(o.status, labels),
+        riskRating: o.riskRating,
+        riskSummary: o.implications ?? '',
+        recommendation: o.recommendation ?? '',
+        managementResponse: o.managementResponse ?? '',
+        responsibility: o.responsibility ?? '',
+        actionPlans: plans.map((ap) => ({
+          description: shorten(ap.description, 160),
+          owner: ap.ownerNames ?? 'Unassigned',
+          due: ap.dueDate ?? '-',
+          status: humaniseStatus(ap.status, labels),
+        })),
+      },
     },
-    {
-      kind: 'table',
-      title: 'Evidence',
-      columns: ['Reference', 'Risk', 'Affiliate', 'Audit area', 'Status', 'Response', 'Owner'],
-      rows: [
-        [
-          { text: o.reference },
-          { text: riskLabel, tone: bucket ? riskTone(bucket) : undefined },
-          { text: o.affiliateName ?? o.affiliateCode ?? '-' },
-          { text: o.auditAreaName ?? '-' },
-          { text: humaniseStatus(o.status, labels) },
-          { text: o.responseStatus },
-          { text: o.responsibility ?? 'Unassigned' },
-        ],
-      ],
-    },
+    // The one line the cards cannot carry, because it is arithmetic across the
+    // plans rather than a field on the finding.
+    { kind: 'note', text: remediation },
   ];
 
   const recommendations = splitRecommendations(o.recommendation);
   if (recommendations.length > 0) {
     blocks.push({ kind: 'list', title: 'Recommendations', items: recommendations, ordered: true });
-  }
-  if (plans.length > 0) {
-    blocks.push({
-      kind: 'table',
-      title: 'Agreed actions',
-      columns: ['Action', 'Owner', 'Due', 'Status'],
-      rows: plans.map((ap) => [
-        { text: shorten(ap.description, 120) },
-        { text: ap.ownerNames ?? 'Unassigned' },
-        { text: ap.dueDate ?? '-' },
-        {
-          text: humaniseStatus(ap.status, labels),
-          tone: isPlanOverdue(ap, now) ? ('bad' as const) : undefined,
-        },
-      ]),
-    });
   }
   return blocks;
 }
