@@ -2989,30 +2989,42 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const page = await server.get(`/work-papers/${id}`);
       assert.equal(page.status, 200, `the finding answered ${page.status}`);
 
-      // The stored title is on the page as a field of the finding, not only as
-      // the heading: the panel that describes the finding omitted it entirely.
-      // It is labelled "Observation" and its body "Description" (Build Prompt
-      // 67); the columns behind them did not move.
+      // The finding is drawn as the shared card arrangement (Build Prompt 67):
+      // a header strip with its risk pill, then audit's three cards as one
+      // group, then what management said. The stored title is the field
+      // labelled "Observation" inside the Finding card, which is what Build
+      // Prompt 63 put on this page and 67 moved into its proper place.
+      assert.ok(page.body.includes('data-finding-cards'), 'the finding is drawn as cards');
       assert.ok(page.body.includes('<dt>Observation</dt>'), 'the field is labelled');
       assert.ok(
-        page.body.includes(`<dt>Observation</dt><dd>${title}</dd>`) ||
-          new RegExp(`<dt>Observation</dt>\\s*<dd>${title}</dd>`).test(page.body),
+        new RegExp(`<dt>Observation</dt>\\s*<dd>${title}</dd>`).test(page.body),
         'and carries the stored value',
       );
-      assert.ok(page.body.includes('<dt>Description</dt>'), 'its body is labelled Description');
       assert.ok(
         !page.body.includes('Observation title'),
         'and the old label is gone from the screen',
       );
-      // The finding sits after the testing that found it, not at the top.
+      // The header strip rates the finding in words as well as colour.
+      assert.ok(page.body.includes('grc-pill--risk-'), 'the risk is a colour-coded pill');
+      assert.ok(page.body.includes('Risk rating:'), 'spelled out for a screen reader');
+      // The cards run in the order the argument runs, after the context that
+      // led to them.
+      const at = (needle: string): number => {
+        const i = page.body.indexOf(needle);
+        assert.ok(i > 0, `the page must carry ${needle}`);
+        return i;
+      };
       assert.ok(
-        page.body.indexOf('<dt>Testing steps</dt>') < page.body.indexOf('<dt>Observation</dt>'),
-        'the observation must follow the testing steps',
+        at('<dt>Testing steps</dt>') < at('data-card="finding"'),
+        'the finding follows the testing that found it',
       );
-      assert.ok(
-        page.body.indexOf('<dt>Observation</dt>') < page.body.indexOf('<dt>Description</dt>'),
-        'and be immediately followed by its description',
-      );
+      for (const [before, after] of [
+        ['data-card="finding"', 'data-card="risk"'],
+        ['data-card="risk"', 'data-card="recommendation"'],
+        ['data-card="recommendation"', 'data-card="response"'],
+      ] as const) {
+        assert.ok(at(before) < at(after), `${before} must come before ${after}`);
+      }
 
       // Nothing on the screen explains a permission, or names one.
       for (const leak of [
@@ -3043,6 +3055,33 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         'and is told no permission reasons either',
       );
       assert.ok(reviewerView.body.includes('<dt>Observation</dt>'), 'and sees the finding named');
+      assert.ok(reviewerView.body.includes('data-finding-cards'), 'in the same card arrangement');
+      // A card with nothing in it is a quiet line, not a headed empty box: this
+      // finding has never been answered, and the reader is told so rather than
+      // left to wonder whether the response was omitted.
+      assert.ok(
+        /data-card="response"[\s\S]{0,400}has not responded/.test(reviewerView.body),
+        'an unanswered finding says so in its response card',
+      );
+      // And a card with nothing to say about its own absence is dropped.
+      assert.ok(
+        !reviewerView.body.includes('data-card="trail"') ||
+          reviewerView.body.includes('grc-fcard__table'),
+        'a trail card only exists when there is a trail to show',
+      );
+
+      // The board pack draws the same cards from the same arrangement, so a
+      // pack and the screen it was approved from cannot disagree.
+      const pack = await server.get('/reports?type=observations');
+      assert.equal(pack.status, 200, `the observations report answered ${pack.status}`);
+      assert.ok(pack.body.includes('data-finding-cards'), 'the pack is drawn as the same cards');
+      assert.ok(pack.body.includes('grc-pill--risk-'), 'with the same risk pill');
+      for (const card of ['finding', 'risk', 'recommendation']) {
+        assert.ok(
+          pack.body.includes(`data-card="${card}"`),
+          `the pack must carry the ${card} card`,
+        );
+      }
     });
 
     // The badge counts what is this person's to act on, per module (Build Prompt
