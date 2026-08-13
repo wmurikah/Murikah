@@ -25,11 +25,17 @@ import type { NotificationType } from './types';
 
 export interface RequirementNotice {
   requirementId: string;
-  /** The finding's reference, which is how an owner recognises what this is about. */
+  /**
+   * The linked finding's reference, when there is one. Audit-facing only: an
+   * owner never sees it, and a requirement is routinely linked to nothing
+   * (Build Prompt 69).
+   */
   reference: string;
   /** What was asked for, trimmed to a line an email can carry. */
   description: string;
   dueDate?: string | null;
+  /** Where the ask stands, which is the third column of the owner's table. */
+  status?: string | null;
   /** The further question, on a more-information round. */
   additionalInfoRequest?: string | null;
   /** The person who caused the event, never notified about their own action. */
@@ -45,6 +51,7 @@ function payloadFor(notice: RequirementNotice): Payload {
     link: entityLink('requirement', notice.requirementId),
   };
   if (notice.dueDate) data.dueDate = notice.dueDate;
+  if (notice.status) data.status = notice.status;
   if (notice.additionalInfoRequest) {
     data.additionalInfoRequest = notice.additionalInfoRequest.slice(0, MAX_LINE);
   }
@@ -78,7 +85,11 @@ async function notify(
   }
 }
 
-/** Tell the owners they have been asked for something. */
+/**
+ * Tell the recipients they have been asked for something: the owners who owe it
+ * and the people copied on the request alike (Build Prompt 69). One email, one
+ * table, one button, and nothing in it about a work paper.
+ */
 export async function notifyRequirementAssigned(
   db: Client,
   organizationId: string,

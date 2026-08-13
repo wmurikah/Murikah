@@ -134,6 +134,70 @@ test('several findings for one auditee compile into one table, not several email
   assert.match(plans[0].body, /auditee-responses/);
 });
 
+test('an owner is asked for a thing, not told about a work paper', () => {
+  // The auditee sees "what is needed and upload it" and nothing else (Build
+  // Prompt 69): a work paper reference is internal audit structure they have
+  // never seen and cannot look up.
+  const { subject, body } = renderInline('REQUIREMENT_ASSIGNED', {
+    reference: 'WP/2026/002',
+    title: 'The March fuel reconciliations, signed.',
+    dueDate: '2026-03-31',
+    status: 'Outstanding',
+    link: 'https://grc.murikah.com/requirements/REQ-1',
+  });
+  assert.match(subject, /Internal Audit needs: The March fuel reconciliations/);
+  assert.ok(!subject.includes('WP/2026/002'), 'the subject names no finding');
+  assert.ok(!body.includes('WP/2026/002'), 'and neither does the body');
+  assert.match(body, /<th[^>]*>Due<\/th>/, 'the table leads with when it is wanted');
+  assert.match(body, /<th[^>]*>What is needed<\/th>/);
+  assert.match(body, /2026-03-31/, 'carrying the date');
+  assert.match(body, /Log in and upload/, 'and one instruction');
+  assert.ok(!body.includes('Open Audit System'), 'not a system to open');
+});
+
+test('a request for more information says what is still missing', () => {
+  const { body } = renderInline('REQUIREMENT_MORE_INFO', {
+    title: 'The March fuel reconciliations, signed.',
+    dueDate: '2026-03-31',
+    status: 'More information needed',
+    additionalInfoRequest: 'The reviewer signature is missing from page two.',
+    link: 'https://grc.murikah.com/requirements/REQ-1',
+  });
+  assert.match(body, /reviewer signature is missing/, 'the question the owner answers next');
+  assert.match(body, /Log in and upload/);
+});
+
+test('everything asked of one owner arrives as one table, not one email each', () => {
+  const rows = ['Bank reconciliations', 'Fuel dip readings', 'Depot cash counts'].map(
+    (title, i) => ({
+      id: `N-${i}`,
+      batchType: 'REQUIREMENT_ASSIGNED',
+      recipientEmail: 'owner@hasspetroleum.com',
+      subject: `Internal Audit needs: ${title}`,
+      payload: JSON.stringify({
+        title,
+        dueDate: '2026-03-31',
+        status: 'Outstanding',
+        link: `https://grc.murikah.com/requirements/REQ-${i}`,
+      }),
+    }),
+  );
+  const plans = planNormalDigests(rows, {
+    review: 'https://grc.murikah.com/work-papers?status=Submitted',
+    drafts: 'https://grc.murikah.com/work-papers?status=Draft',
+    respond: 'https://grc.murikah.com/auditee-responses',
+    upload: 'https://grc.murikah.com/requirements',
+  });
+  assert.equal(plans.length, 1, 'one recipient, one email');
+  assert.equal(plans[0].rowIds.length, 3, 'settling all three queue rows');
+  assert.match(plans[0].subject, /asked you for 3 items/);
+  for (const title of ['Bank reconciliations', 'Fuel dip readings', 'Depot cash counts']) {
+    assert.ok(plans[0].body.includes(title), `${title} must be a row in the table`);
+  }
+  assert.match(plans[0].body, /Log in and upload/, 'with one button');
+  assert.match(plans[0].body, /grc\.murikah\.com\/requirements/, 'pointing at their own list');
+});
+
 test('the password-reset email is urgent, never copies HOA, and carries the link', () => {
   assert.equal(priorityOf('PASSWORD_RESET'), 'urgent');
   assert.equal(ccsHoa('PASSWORD_RESET'), false);

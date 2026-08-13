@@ -39,6 +39,13 @@ import {
   openInfoRequest,
   requirementStatusLabel,
 } from '@grc/workflow/requirementFlow';
+import {
+  isRequirementRecipient,
+  listRecipients,
+  RECIPIENT_ROLE,
+  type Recipient,
+} from '@grc/repos/requirementRecipients';
+import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
 import { storageConfiguredFor } from '@grc/storage';
 
 const grc = Astro.locals.grc;
@@ -49,23 +56,32 @@ const manages = grc.isPlatformOwner || grc.perms.includes('REQUIREMENTS.manage')
 
 let requirement: RequirementRow | null = null;
 let rounds: RequirementRound[] = [];
+let workPapers: WorkPaperOption[] = [];
 let isOwner = false;
+// Copied in: they read the request and are told about it, and upload nothing
+// (Build Prompt 69).
+let isCopied = false;
+let recipients: Recipient[] = [];
 let loadError = false;
 loadError = !(await guardPageLoad('requirements.detail', async () => {
   const db = await getDb(getGrcEnv());
   requirement = await getRequirement(db, grc.organizationId, id);
   if (requirement) {
-    [rounds, isOwner] = await Promise.all([
+    [rounds, isOwner, isCopied, recipients] = await Promise.all([
       listRounds(db, grc.organizationId, id),
       isRequirementOwner(db, id, grc.userId),
+      isRequirementRecipient(db, id, grc.userId),
+      listRecipients(db, grc.organizationId, id),
     ]);
+    // Only audit is offered the link, so only audit loads the findings.
+    if (manages) workPapers = await listWorkPaperOptions(db, grc.organizationId);
   }
 }));
 
 // Everything below reads the loaded row through a narrowed local: Astro's
 // checker cannot see that the assignment inside the loader ran.
 const req = requirement as RequirementRow | null;
-const visible = req !== null && (manages || isOwner);
+const visible = req !== null && (manages || isOwner || isCopied);
 if (!loadError && !visible) Astro.response.status = 404;
 
 const latest = rounds.length > 0 ? rounds[rounds.length - 1] : null;
@@ -104,7 +120,7 @@ const error = p.get('error');
       <p class="grc-lead">
         {
           req && visible
-            ? `${req.workPaperRef || 'Finding'}: ${req.workPaperTitle}`
+            ? req.description.slice(0, 120)
             : 'Information requested by Internal Audit.'
         }
       </p>
@@ -143,18 +159,42 @@ const error = p.get('error');
               <dt>What is required</dt>
               <dd>{req.description}</dd>
             </>
-            <>
-              <dt>Work paper</dt>
-              <dd>
-                <a href={`/work-papers/${req.workPaperId}`}>
-                  {req.workPaperRef || req.workPaperId}
-                </a>
-              </dd>
-            </>
+            {/* Only audit is shown the finding, and only when there is one
+                (Build Prompt 69). An owner is never told which work paper their
+                document supports: it is internal audit structure, it is not a
+                question they can answer, and showing it turns a request for a
+                document into a question about the audit file. */}
+            {manages && (
+              <>
+                <dt>Linked finding</dt>
+                <dd>
+                  {req.workPaperId ? (
+                    <a href={`/work-papers/${req.workPaperId}`}>
+                      {req.workPaperRef || req.workPaperId}
+                    </a>
+                  ) : (
+                    <span class="grc-tone--muted">
+                      Not linked yet. Link it once it is clear what this supports.
+                    </span>
+                  )}
+                </dd>
+              </>
+            )}
             <>
               <dt>Owners</dt>
               <dd>{req.ownerNames.join(', ') || 'Unassigned'}</dd>
             </>
+            {manages && recipients.some((r) => r.role === RECIPIENT_ROLE.CC) && (
+              <>
+                <dt>Copied</dt>
+                <dd>
+                  {recipients
+                    .filter((r) => r.role === RECIPIENT_ROLE.CC)
+                    .map((r) => r.name)
+                    .join(', ')}
+                </dd>
+              </>
+            )}
             <>
               <dt>Requested</dt>
               <dd>{dayLabel(req.requestedDate)}</dd>
@@ -344,6 +384,47 @@ const error = p.get('error');
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* Linking, which is a different decision from completeness and is
+            deliberately its own panel (Build Prompt 69). Information can be
+            everything that was asked for and still belong to no finding, and it
+            can be linked while audit is still waiting for more of it, so the
+            two are never one control. */}
+        {manages && (
+          <div class="grc-panel" id="link">
+            <h2>Link to a finding</h2>
+            <p class="grc-lead">
+              {req.workPaperId
+                ? 'Change which finding this information supports, or clear it to leave it unlinked.'
+                : 'Once it is clear what this information supports, link it. Leaving it unlinked is a legitimate resting state, not an omission.'}
+            </p>
+            <form method="post" action={`/api/requirements/${req.id}/link`}>
+              <div class="grc-field" style="max-width:32rem">
+                <label for="link-wp">Finding</label>
+                <select id="link-wp" name="work_paper_id" class="grc-select">
+                  <option value="">Not linked</option>
+                  {workPapers.map((w) => (
+                    <option value={w.id} selected={req.workPaperId === w.id}>
+                      {w.label}
+                    </option>
+                  ))}
+                </select>
+                <p class="grc-field__hint">
+                  The owner is not told and does not see this. Which work paper their document
+                  supports is audit's structure, not theirs.
+                </p>
+              </div>
+              <div class="grc-actionbar">
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Save the link
+                </button>
+              </div>
+            </form>
+            {req.linkedAt && req.workPaperId && (
+              <p class="grc-field__hint">Linked on {dayLabel(req.linkedAt)}.</p>
+            )}
           </div>
         )}
       </>
