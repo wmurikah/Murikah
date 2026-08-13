@@ -2,7 +2,7 @@
 export const prerender = false;
 
 /**
- * The auditee loop for one finding: what was found, who is holding the response
+ * The auditee loop for one observation: what was found, who is holding the response
  * right now, everything that has happened to it, and whichever action this
  * visitor may take (Build Prompt 68).
  *
@@ -75,9 +75,9 @@ let storageReady = false;
 let deadlineDays = DEFAULT_RESPONSE_DEADLINE_DAYS;
 let maxRounds = DEFAULT_MAX_RESPONSE_ROUNDS;
 let loadError = false;
-// Nobody until the finding is loaded and the named lists are read: the default
+// Nobody until the observation is loaded and the named lists are read: the default
 // is no standing at all, so a load that half-fails shows nothing rather than
-// offering an action to somebody who has no business with the finding.
+// offering an action to somebody who has no business with the observation.
 let standing: AuditeeStanding = {
   isResponsible: false,
   isCc: false,
@@ -114,7 +114,7 @@ if (id) {
     maxRounds = configuredNumber(config.get('MAX_RESPONSE_ROUNDS'), DEFAULT_MAX_RESPONSE_ROUNDS);
     if (detail) {
       // The staff this manager may hand the drafting to, and the plans already
-      // raised against the finding so a response can point at them.
+      // raised against the observation so a response can point at them.
       candidates = who.isResponsible
         ? await listDelegateCandidates(
             db,
@@ -158,7 +158,7 @@ const mayReturn = onAuditeeSide && mayMove(standing, stage, 'return_to_manager')
 const mayRelease =
   onAuditeeSide && mayMove(releasing, stage, 'release_to_audit') && !awaitingReview;
 // A delegate drafts into the same evidence panel the manager releases from:
-// what they attach is the support for the response, so it hangs off the finding
+// what they attach is the support for the response, so it hangs off the observation
 // exactly like any other evidence.
 const mayDraft = onAuditeeSide && (standing.isDelegate || standing.isResponsible);
 const canUploadEvidence = mayDraft || standing.isAudit;
@@ -177,7 +177,7 @@ const val = (key: string): string => {
 };
 /**
  * A stored narrative as formatted HTML, the same pipeline the auditor's own
- * screens use (Build Prompt 67). The auditee reads the finding here and nowhere
+ * screens use (Build Prompt 67). The auditee reads the observation here and nowhere
  * else, so reading it with its headings and lists intact is not a nicety: a
  * recommendation whose numbered steps arrive as one run of asterisks is a
  * recommendation somebody has to decode before they can answer it.
@@ -296,12 +296,12 @@ const failed = Astro.url.searchParams.get('error');
     ) : !wp ? (
       <div class="grc-empty">
         <p>
-          <strong>That finding was not found.</strong> It may have been removed.
+          <strong>That observation was not found.</strong> It may have been removed.
         </p>
       </div>
     ) : !mayRead ? (
       <p class="grc-error" role="alert">
-        That finding is not shared with you.
+        That observation is not shared with you.
       </p>
     ) : (
       <>
@@ -320,7 +320,7 @@ const failed = Astro.url.searchParams.get('error');
             </span>
           </div>
 
-          {/* Where the finding is on the auditee side, said plainly. Without
+          {/* Where the observation is on the auditee side, said plainly. Without
               this the unit manager, the delegate and the copy list all saw the
               same "sent to auditee" and had no way to tell whose turn it was
               (Build Prompt 68). */}
@@ -348,7 +348,7 @@ const failed = Astro.url.searchParams.get('error');
               <dd class="grc-richbody" set:html={rich('recommendation')} />
             </>
             <>
-              <dt>Finding status</dt>
+              <dt>Observation status</dt>
               <dd>{status}</dd>
             </>
           </dl>
@@ -362,7 +362,7 @@ const failed = Astro.url.searchParams.get('error');
           {trail.length === 0 ? (
             <div class="grc-empty">
               <p>
-                <strong>Nothing yet.</strong> Once this finding is answered, every step will be
+                <strong>Nothing yet.</strong> Once this observation is answered, every step will be
                 listed here.
               </p>
             </div>
@@ -441,7 +441,7 @@ const failed = Astro.url.searchParams.get('error');
               {roundsUsedUp && (
                 <p class="grc-field__hint">
                   The {maxRounds} response rounds are used up, so a change can no longer be
-                  requested. Resolve the finding directly.
+                  requested. Resolve the observation directly.
                 </p>
               )}
             </form>
@@ -572,12 +572,12 @@ const failed = Astro.url.searchParams.get('error');
           </section>
         )}
 
-        {/* The plans management has proposed against this finding, on the page
+        {/* The plans management has proposed against this observation, on the page
             where they are proposing them: a response that says "we will fix it"
             and a plan that says how belong in the same view. */}
         {myPlans.length > 0 && (
           <section class="grc-section">
-            <h2>Action plans on this finding</h2>
+            <h2>Action plans on this observation</h2>
             <ul class="grc-plainlist">
               {myPlans.map((p) => (
                 <li>
@@ -593,7 +593,7 @@ const failed = Astro.url.searchParams.get('error');
         )}
 
         {/* Evidence, attached by whoever is drafting: the delegate's uploads and
-            the manager's are the same evidence on the same finding, stored
+            the manager's are the same evidence on the same observation, stored
             through the organisation's own connector like any other. */}
         <section class="grc-section">
           <GrcEvidence
@@ -609,7 +609,7 @@ const failed = Astro.url.searchParams.get('error');
 
         {!mayRelease && !mayReturn && !mayDelegate && standing.isCc && !standing.isResponsible && (
           <p class="grc-notice" role="status">
-            You are copied on this finding, so you will be told about every step. The response
+            You are copied on this observation, so you will be told about every step. The response
             itself is the unit manager's to give.
           </p>
         )}
@@ -664,7 +664,7 @@ const failed = Astro.url.searchParams.get('error');
   .grc-deadline__round {
     margin-left: auto;
   }
-  /* Where the finding is on the auditee side. Colour alone never carries it:
+  /* Where the observation is on the auditee side. Colour alone never carries it:
      the stage is spelled out in the badge, so the meaning survives without it. */
   .grc-stage {
     display: flex;

@@ -60,7 +60,7 @@ export function checkActionPlanInput(input: ActionPlanInput): string | null {
     return 'The action description is required.';
   }
   if (!input.workPaperId) {
-    return 'Every action plan must be linked to a parent finding. Choose the work paper it remediates.';
+    return 'Every action plan must be linked to a parent observation. Choose the work paper it remediates.';
   }
   return null;
 }
