@@ -135,6 +135,29 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
     subject: 'Further information requested: {{reference}}',
     intro: 'Internal Audit has reviewed what you sent and asked for more.',
   },
+  // The auditee loop (Build Prompt 68). Each subject names the finding and each
+  // intro says who has to do what next, because these arrive at people with no
+  // audit training and no reason to know the workflow: "a delegation status
+  // changed" is a sentence that leaves the reader to work out whether it is
+  // their turn.
+  AUDITEE_DELEGATED: {
+    subject: 'Response delegated to you: {{reference}}',
+    intro:
+      'The response to this finding has been delegated to you. Draft it, attach what supports it, and return it to your unit manager.',
+  },
+  AUDITEE_RETURNED: {
+    subject: 'Draft response returned: {{reference}}',
+    intro:
+      'The delegated draft has been returned to the unit manager to review and release to internal audit.',
+  },
+  AUDITEE_RELEASED: {
+    subject: 'Response released to audit: {{reference}}',
+    intro: 'The management response to this finding has been released to internal audit.',
+  },
+  AUDITEE_DECIDED: {
+    subject: 'Audit decision on your response: {{reference}}',
+    intro: 'Internal audit has reviewed the response to this finding.',
+  },
   PASSWORD_RESET: {
     subject: 'Reset your Internal Audit System password',
     intro:
@@ -152,6 +175,11 @@ const DETAIL_FIELDS: { key: string; label: string }[] = [
   { key: 'dueDate', label: 'Due date' },
   { key: 'actorName', label: 'By' },
   { key: 'round', label: 'Round' },
+  // The auditee loop's own detail (Build Prompt 68): where the finding now is,
+  // and who was named by the move that caused the mail.
+  { key: 'stage', label: 'Now with' },
+  { key: 'delegatedTo', label: 'Delegated to' },
+  { key: 'decision', label: 'Decision' },
   { key: 'comment', label: 'Comment' },
 ];
 
@@ -186,12 +214,70 @@ function shell(title: string, intro: string, data: Payload): string {
 
 const HEADER = 'Internal Audit System';
 
+/**
+ * The types an auditee reads, which get the finding table and a button that
+ * says what to do rather than the generic details grid (Build Prompt 68).
+ *
+ * These arrive at people with no audit training and no reason to know the
+ * workflow. "Open Audit System" beside a grid of Reference, Status, Risk is a
+ * system talking about itself; a line naming the finding and a button reading
+ * "Log in and respond" is a request somebody can act on. It is deliberately the
+ * same table the digest builds, so one finding and nine read alike.
+ */
+const AUDITEE_FACING = new Set<NotificationType>([
+  'WP_SENT_TO_AUDITEE',
+  'AUDITEE_DELEGATED',
+  'AUDITEE_RETURNED',
+  'AUDITEE_RELEASED',
+  'AUDITEE_DECIDED',
+]);
+
+/** The auditee-facing body: the finding as one table row, and one instruction. */
+function auditeeShell(intro: string, data: Payload): string {
+  const link = val(data, 'link') || '#';
+  const row: SubmittedRow = {
+    reference: val(data, 'reference') || 'This finding',
+    title: val(data, 'title'),
+    detail: [val(data, 'stage'), val(data, 'riskRating')].filter(Boolean).join(' - '),
+    link,
+  };
+  const extra = [
+    ['Delegated to', val(data, 'delegatedTo')],
+    ['Decision', val(data, 'decision')],
+    ['Round', val(data, 'round')],
+    ['Comment', val(data, 'comment')],
+  ].filter(([, v]) => v !== '');
+  const notes = extra.length
+    ? `<table role="presentation" style="border-collapse:collapse;margin:0 0 16px;width:100%">${extra
+        .map(
+          ([label, value]) =>
+            `<tr><td style="padding:6px 12px;color:#687080;font-size:13px">${escapeHtml(label)}</td>` +
+            `<td style="padding:6px 12px;color:#111827;font-size:13px;font-weight:600">${escapeHtml(value)}</td></tr>`,
+        )
+        .join('')}</table>`
+    : '';
+  return [
+    `<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">`,
+    `<div style="background:${NAVY};color:#fff;padding:18px 24px;font-size:16px;font-weight:700">${escapeHtml(HEADER)}</div>`,
+    `<div style="padding:16px 24px">`,
+    `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(intro)}</p>`,
+    digestTable([row], 'Now with'),
+    notes,
+    `<p style="margin:0 0 8px">${reviewButton(link, 'Log in and respond')}</p>`,
+    `</div>`,
+    `<div style="padding:16px 24px;background:#f8f4ea;color:#687080;font-size:12px;border-top:1px solid #e5e7eb">`,
+    `${escapeHtml(FOOTER)}<br>Replies to <a href="mailto:${REPLY_TO}" style="color:${NAVY}">${REPLY_TO}</a>`,
+    `</div></div>`,
+  ].join('');
+}
+
 /** The inline branded rendering for a type, from its payload. */
 export function renderInline(type: NotificationType, data: Payload): Rendered {
   const copy = COPY[type];
   const subject = interpolate(copy.subject, data);
   const intro = interpolate(copy.intro, data);
-  return { subject, body: shell(HEADER, intro, data) };
+  const body = AUDITEE_FACING.has(type) ? auditeeShell(intro, data) : shell(HEADER, intro, data);
+  return { subject, body };
 }
 
 /**
@@ -320,7 +406,7 @@ export interface SubmittedRow {
  * is now a table of its own, built by the same code as the submissions table, so
  * the two read alike and there is one place to keep Outlook-safe.
  */
-export type DigestTable = 'submitted' | 'reminder';
+export type DigestTable = 'submitted' | 'reminder' | 'auditee';
 
 export interface DigestItem {
   subject: string;
@@ -342,6 +428,8 @@ export interface DigestLinks {
   review: string;
   /** The drafts a reminder is about. */
   drafts: string;
+  /** The auditee's own queue of findings to answer (Build Prompt 68). */
+  respond?: string;
 }
 
 const TH =
@@ -405,6 +493,7 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
       .map((i) => i.submitted as SubmittedRow);
   const submitted = rowsIn('submitted');
   const reminders = rowsIn('reminder');
+  const auditee = rowsIn('auditee');
   const others = items.filter((i) => i.submitted == null);
 
   const subject =
@@ -416,9 +505,11 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
         ? reminders.length === 1
           ? `Draft work paper waiting: ${reminders[0].reference}`
           : `${reminders.length} draft work papers waiting`
-        : items.length === 1
-          ? items[0].subject
-          : `Audit updates: ${items.length} notifications`;
+        : auditee.length > 1
+          ? `${auditee.length} findings need your response`
+          : items.length === 1
+            ? items[0].subject
+            : `Audit updates: ${items.length} notifications`;
 
   const sections: string[] = [];
   if (submitted.length > 0) {
@@ -452,8 +543,30 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
       `<p style="margin:0 0 8px">${reviewButton(links?.drafts ?? '#', 'Review the drafts')}</p>`,
     );
   }
-  if (others.length > 0) {
+  // The auditee's own table (Build Prompt 68). A finding arriving, a draft
+  // coming back, a response released and audit's decision are all the same
+  // shape to the person reading them: which finding, what it is called, and
+  // where it now sits. Several at once compile into one table with one button,
+  // because a unit manager copied on nine findings wants a list, not nine
+  // envelopes.
+  if (auditee.length > 0) {
     if (submitted.length > 0 || reminders.length > 0) {
+      sections.push(
+        `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Findings with you</p>`,
+      );
+    }
+    const lead =
+      auditee.length === 1
+        ? 'There is an update on a finding you are named on. Please log in and respond.'
+        : `There are updates on ${auditee.length} findings you are named on. Please log in and respond.`;
+    sections.push(
+      `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(lead)}</p>`,
+      digestTable(auditee, 'Now with'),
+      `<p style="margin:0 0 8px">${reviewButton(links?.respond ?? links?.review ?? '#', 'Log in and respond')}</p>`,
+    );
+  }
+  if (others.length > 0) {
+    if (submitted.length > 0 || reminders.length > 0 || auditee.length > 0) {
       sections.push(
         `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Also waiting</p>`,
       );
@@ -490,6 +603,15 @@ const SUBMISSION_TYPE = 'WP_SUBMITTED';
 
 /** The reminder types that compile into the drafts table (Build Prompt 60). */
 const REMINDER_TYPES = new Set(['STALE_REMINDER']);
+
+/** The auditee loop's types, which compile into the auditee table (Prompt 68). */
+const AUDITEE_TYPES = new Set([
+  'WP_SENT_TO_AUDITEE',
+  'AUDITEE_DELEGATED',
+  'AUDITEE_RETURNED',
+  'AUDITEE_RELEASED',
+  'AUDITEE_DECIDED',
+]);
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -546,6 +668,23 @@ function digestItem(row: DigestSource): DigestItem {
         reference: str(payload.reference) || row.subject,
         title: str(payload.title),
         detail: str(payload.status) || 'Draft',
+        link,
+      },
+    };
+  }
+  // A finding on the auditee's plate, in the same table shape (Build Prompt
+  // 68). The third column is where it now sits, which is the fact a reader
+  // needs to know whether it is their turn.
+  if (AUDITEE_TYPES.has(row.batchType)) {
+    return {
+      subject: row.subject,
+      intro: '',
+      link,
+      table: 'auditee',
+      submitted: {
+        reference: str(payload.reference) || row.subject,
+        title: str(payload.title),
+        detail: [str(payload.stage), str(payload.riskRating)].filter(Boolean).join(' - '),
         link,
       },
     };

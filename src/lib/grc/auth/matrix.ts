@@ -124,11 +124,23 @@ export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
  * The map slug for an app path: the first segment, or the first two under
  * /settings ('/settings/users' stays distinct from the settings home). Returns
  * '' for the root.
+ *
+ * One finding's response thread is its own slug, and deliberately unmapped
+ * (Build Prompt 68). The auditee loop's whole premise is that people act by
+ * being NAMED rather than by holding a grant: a depot supervisor asked to draft
+ * a response holds no audit permission at all, and a central map keyed on
+ * permissions can only ever refuse them. So the thread gates on identity, on
+ * the page: it resolves the reader's standing on that one finding and shows
+ * "not shared with you" to anybody without it, exactly as a requirement's own
+ * page does for its owners. The section index above it keeps its grant, because
+ * a queue of everybody's findings is a different thing from one finding
+ * somebody was named on.
  */
 export function pageSlugForPath(appPath: string): string {
   const segments = appPath.split('/').filter((s) => s !== '');
   if (segments.length === 0) return '';
   if (segments[0] === 'settings' && segments.length > 1) return `settings/${segments[1]}`;
+  if (segments[0] === 'auditee-responses' && segments.length > 1) return 'auditee-responses/thread';
   return segments[0];
 }
 

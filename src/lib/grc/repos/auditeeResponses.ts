@@ -121,6 +121,8 @@ export interface ResponseRow {
   reviewDate: string | null;
   reviewComments: string | null;
   actionPlanIds: string | null;
+  /** The finding's auditee stage, so a decision knows where to leave it. */
+  auditeeStage: string | null;
 }
 
 const RESPONSE_SELECT = `SELECT ar.${AR.response_id} AS response_id, ar.${AR.work_paper_id} AS work_paper_id,
@@ -133,7 +135,8 @@ const RESPONSE_SELECT = `SELECT ar.${AR.response_id} AS response_id, ar.${AR.wor
                  ar.${AR.submitted_date} AS submitted_date,
                  ar.${AR.reviewed_by_name} AS reviewed_by_name, ar.${AR.review_date} AS review_date,
                  ar.${AR.review_comments} AS review_comments,
-                 ar.${AR.action_plan_ids} AS action_plan_ids
+                 ar.${AR.action_plan_ids} AS action_plan_ids,
+                 wp.${WP.auditee_stage} AS auditee_stage
             FROM auditee_responses ar
             JOIN work_papers wp ON wp.${WP.work_paper_id} = ar.${AR.work_paper_id}
                  AND wp.${WP.organization_id} = ar.${AR.organization_id}`;
@@ -157,6 +160,7 @@ function toResponseRow(r: Record<string, unknown>): ResponseRow {
     reviewDate: s(r.review_date),
     reviewComments: s(r.review_comments),
     actionPlanIds: s(r.action_plan_ids),
+    auditeeStage: s(r.auditee_stage),
   };
 }
 
