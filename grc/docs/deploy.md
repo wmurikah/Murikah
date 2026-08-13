@@ -341,6 +341,44 @@ Run it before the release is deployed: the code reads `auditee_stage` on the
 response thread, and a missing column is a broken page rather than a degraded
 one.
 
+### Migration 010, requirements come first and the finding comes later
+
+`grc/db/migrations/010-requirements-first.sql` (Build Prompt 69). A requirement
+could only be raised against a work paper, which assumed audit knows which
+finding a document belongs to before it has seen the document. That produced
+findings raised early as a peg to hang a request on, and requests kept out of
+the system in email.
+
+- `work_paper_requirements.linked_work_paper_id` (nullable) is now the link,
+  with `linked_at` and `linked_by`. NULL means not yet linked, which is a
+  legitimate resting state: a requirement can be answered, reviewed and closed
+  without ever belonging to a finding.
+- The existing `work_paper_id` column is backfilled FROM and left in place, not
+  dropped. The older panel on a finding's own detail still reads it, and the
+  application writes both in step, so the two can never disagree about whether a
+  requirement belongs to a finding.
+- `requirement_recipients` names who the request is sent to and in what
+  capacity, OWNER or CC. `requirement_owners` stays authoritative for who may
+  upload; this table is who is written to, which is a larger set.
+- The backfills put everything already in the system into the state it is in:
+  every requirement with a work paper is recorded as linked to it, dated from
+  its own creation rather than from today, and every existing owner becomes an
+  OWNER recipient.
+
+**Check `work_paper_id` before running it.** The application writes NULL to that
+column for an unlinked requirement, so if the live column was declared NOT NULL,
+raising one fails at creation. The migration does not guess: it carries the
+check and a step-by-step table rebuild in a comment block at the foot, to run
+only if the check says so.
+
+```sh
+turso db shell hassaudit "SELECT name, \"notnull\" FROM pragma_table_info('work_paper_requirements') WHERE name = 'work_paper_id';"
+```
+
+`notnull = 0` means nothing further is needed. Run the migration before the
+release is deployed: the lists read `linked_work_paper_id`, and a missing column
+is a broken page rather than a degraded one.
+
 ### The workflow enum, and why the smoke seed spells it in lower case
 
 `status_transitions` keys every workflow in the product by `enum_type`, and more

@@ -384,6 +384,28 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ decision: 'accept', review_comment: 'Complete, thank you.' }),
   },
   {
+    // Linking is audit's own act and is separate from the completeness decision
+    // above (Build Prompt 69): this requirement is already closed, and it is
+    // linked afterwards, which is exactly the order the module now allows.
+    endpoint: 'requirements/[id]/link.ts',
+    title: 'audit links a requirement to a finding, after the fact',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT linked_work_paper_id AS wp, linked_at, linked_by
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(String(c.get('reqId'))) as { wp?: string; linked_at?: string; linked_by?: string };
+      assert.equal(String(r?.wp), String(c.get('wpId')), 'the link names the finding');
+      assert.ok(r.linked_at, 'and stamps when it was made');
+      assert.equal(String(r.linked_by), SMOKE.userId, 'and who made it');
+    },
+    method: 'POST',
+    path: (c) => `/api/requirements/${c.get('reqId')}/link`,
+    form: (c) => ({ work_paper_id: String(c.get('wpId')) }),
+  },
+  {
     endpoint: 'work-papers/[id]/responsibles.ts',
     title: 'add a responsible',
     expect: 'success',
@@ -4373,6 +4395,242 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         rewrite('Draft', 'Submitted');
         await signInAsOwnerInsideHass();
       }
+    });
+
+    // Requirements come first and the finding comes later (Build Prompt 69):
+    // raised with no work paper at all, sent to an owner and a copy recipient,
+    // uploaded against from the owner's own table, reviewed for completeness,
+    // and only then linked to a finding. The auditee never sees a work paper at
+    // any point, which is the usability claim the rework is for.
+    await t.test('a requirement is raised unlinked, uploaded, reviewed, then linked', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      await signInAsOwnerInsideHass();
+      const raised = await server.request('POST', '/api/requirements', {
+        description: 'The March fuel reconciliations, signed by preparer and reviewer.',
+        requested_date: '2026-03-01',
+        due_date: '2026-03-31',
+        owner_ids: SMOKE.auditeeId,
+        cc_ids: SMOKE.staffId,
+        // No work_paper_id at all: the auditor does not know yet, and that is
+        // the ordinary case rather than an omission.
+      });
+      const raisedAt = decodeURIComponent(String(raised.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(raisedAt), `raising unlinked must be accepted, got ${raisedAt}`);
+      const m = /\/requirements\/([^/?]+)/.exec(raisedAt);
+      assert.ok(m, `raising must land on the requirement, got ${raisedAt}`);
+      const reqId = m[1];
+
+      const row = db
+        .prepare(
+          `SELECT linked_work_paper_id AS linked, work_paper_id AS legacy, status, due_date
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(reqId) as {
+        linked?: string | null;
+        legacy?: string | null;
+        status?: string;
+        due_date?: string;
+      };
+      assert.equal(row?.linked ?? null, null, 'it is raised linked to nothing');
+      assert.equal(row?.legacy ?? null, null, 'and the old column agrees, rather than disagreeing');
+      assert.equal(String(row?.status), 'OUTSTANDING', 'and it is outstanding');
+      assert.equal(String(row?.due_date), '2026-03-31', 'with the date it is wanted by');
+
+      // Owner and copy are both recorded, in their own capacities.
+      const named = db
+        .prepare(
+          `SELECT user_id AS uid, recipient_role AS role FROM requirement_recipients
+            WHERE requirement_id = ? ORDER BY recipient_role`,
+        )
+        .all(reqId) as { uid?: string; role?: string }[];
+      assert.deepEqual(
+        named.map((r) => `${String(r.role)}:${String(r.uid)}`).sort(),
+        [`CC:${SMOKE.staffId}`, `OWNER:${SMOKE.auditeeId}`],
+        'the owner owes it and the copy recipient is told about it',
+      );
+      // Only the owner may provide it: being copied is being told, not asked.
+      const owners = db
+        .prepare(`SELECT user_id AS uid FROM requirement_owners WHERE requirement_id = ?`)
+        .all(reqId) as { uid?: string }[];
+      assert.deepEqual(
+        owners.map((o) => String(o.uid)),
+        [SMOKE.auditeeId],
+        'the copy recipient owns nothing',
+      );
+
+      // Both were written to, with the same message.
+      const told = db
+        .prepare(
+          `SELECT DISTINCT recipient_user_id AS uid, batch_type AS t FROM notification_queue
+            WHERE related_entity_id = ?`,
+        )
+        .all(reqId) as { uid?: string; t?: string }[];
+      const toldIds = new Set(told.map((t) => String(t.uid)));
+      assert.ok(toldIds.has(SMOKE.auditeeId), 'the owner is asked');
+      assert.ok(toldIds.has(SMOKE.staffId), 'and the copy recipient is told');
+      assert.ok(
+        told.some((t) => String(t.t) === 'REQUIREMENT_ASSIGNED'),
+        'as an information request',
+      );
+      // The mail an auditee reads carries no work paper anywhere in it.
+      const mail = db
+        .prepare(
+          `SELECT rendered_subject AS subject, rendered_body AS body FROM notification_queue
+            WHERE related_entity_id = ? AND recipient_user_id = ? LIMIT 1`,
+        )
+        .get(reqId, SMOKE.auditeeId) as { subject?: string; body?: string };
+      assert.match(
+        String(mail?.subject),
+        /Internal Audit needs/,
+        'the subject names what is wanted',
+      );
+      assert.match(String(mail?.body), /Log in and upload/, 'and the button says what to do');
+      for (const leak of ['Work paper', 'work_paper', 'WP/2026']) {
+        assert.ok(
+          !String(mail?.body).includes(leak),
+          `an owner's email must never mention "${leak}"`,
+        );
+      }
+
+      // The owner's own table: a line per thing asked for, with its own upload
+      // control, and nothing about audit's structure.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const ownerList = await server.get('/requirements');
+      assert.equal(ownerList.status, 200, `the owner's list answered ${ownerList.status}`);
+      assert.ok(
+        ownerList.body.includes('The March fuel reconciliations'),
+        'their requirement is listed',
+      );
+      assert.ok(
+        ownerList.body.includes(`/api/requirements/${reqId}/submit`),
+        'with its own upload form on the row',
+      );
+      assert.ok(
+        !ownerList.body.includes('Linked finding'),
+        'and no column for audit structure they cannot see',
+      );
+
+      // Upload against that line, through the organisation's evidence store.
+      const provided = await server.postMultipart(
+        `/api/requirements/${reqId}/submit`,
+        { note: 'March reconciliations, both signatures.' },
+        {
+          field: 'file',
+          filename: 'march-fuel-recs.txt',
+          contentType: 'text/plain',
+          content: 'Signed by preparer and reviewer.',
+        },
+      );
+      const providedAt = decodeURIComponent(String(provided.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(providedAt), `the upload must be accepted, got ${providedAt}`);
+      const round = db
+        .prepare(
+          `SELECT round_number AS n, file_id AS fid, review_status AS rs
+             FROM requirement_submissions WHERE requirement_id = ?`,
+        )
+        .get(reqId) as { n?: number | bigint; fid?: string; rs?: string };
+      assert.equal(Number(round?.n), 1, 'the first answer is round one');
+      assert.ok(round?.fid, 'the document is recorded on it');
+      assert.equal(String(round?.rs), 'PENDING', 'and waits on audit');
+      // Recorded like any other evidence, through the link table.
+      const attached = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM file_attachments fa JOIN files f ON f.file_id = fa.file_id
+            WHERE TRIM(UPPER(fa.entity_type)) = 'REQUIREMENT' AND fa.entity_id = ?`,
+        )
+        .get(reqId) as { n: number | bigint };
+      assert.equal(Number(attached.n), 1, 'stored and linked like any evidence');
+
+      // The copy recipient sees the same line and is offered no control.
+      await signInWithEmailCode(SMOKE.staffEmail, SMOKE.password, SMOKE.staffId);
+      const ccList = await server.get('/requirements');
+      assert.equal(ccList.status, 200, `the copy recipient's list answered ${ccList.status}`);
+      assert.ok(ccList.body.includes('The March fuel reconciliations'), 'they see the request');
+      assert.ok(ccList.body.includes('Copied in'), 'marked as theirs to know, not to answer');
+      assert.ok(
+        !ccList.body.includes(`/api/requirements/${reqId}/submit`),
+        'and are given no way to answer it',
+      );
+
+      // Audit decides completeness, which is one decision.
+      await signInAsOwnerInsideHass();
+      const accepted = await server.request('POST', `/api/requirements/${reqId}/review`, {
+        decision: 'accept',
+        review_comment: 'Complete, both signatures present.',
+      });
+      assert.ok(
+        !/[?&]error=/.test(decodeURIComponent(String(accepted.headers.location ?? ''))),
+        'audit accepts what arrived',
+      );
+      const closed = db
+        .prepare(
+          `SELECT status, linked_work_paper_id AS linked FROM work_paper_requirements
+            WHERE requirement_id = ?`,
+        )
+        .get(reqId) as { status?: string; linked?: string | null };
+      assert.equal(String(closed?.status), 'CLOSED', 'and the ask is closed');
+      assert.equal(
+        closed?.linked ?? null,
+        null,
+        'closed and still unlinked: completeness and linking are different decisions',
+      );
+
+      // And the link, afterwards, which is the other decision.
+      const linked = await server.request('POST', `/api/requirements/${reqId}/link`, {
+        work_paper_id: SMOKE.sentWorkPaperId,
+      });
+      assert.ok(
+        !/[?&]error=/.test(decodeURIComponent(String(linked.headers.location ?? ''))),
+        'audit links it once it is clear what it supports',
+      );
+      const after = db
+        .prepare(
+          `SELECT linked_work_paper_id AS linked, work_paper_id AS legacy, linked_by AS by
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(reqId) as { linked?: string; legacy?: string; by?: string };
+      assert.equal(String(after?.linked), SMOKE.sentWorkPaperId, 'the link names the finding');
+      assert.equal(String(after?.legacy), SMOKE.sentWorkPaperId, 'and the old column keeps step');
+      assert.equal(String(after?.by), SMOKE.userId, 'and records who decided it');
+
+      // The owner is not told, and still sees no work paper: linking is audit's
+      // structure, not theirs.
+      const afterMail = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE related_entity_id = ? AND recipient_user_id = ?`,
+        )
+        .get(reqId, SMOKE.auditeeId) as { n: number | bigint };
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const ownerAfter = await server.get(`/requirements/${reqId}`);
+      assert.equal(ownerAfter.status, 200, `the owner's requirement answered ${ownerAfter.status}`);
+      assert.ok(
+        !ownerAfter.body.includes('Linked finding'),
+        'the owner is never shown which finding their document supports',
+      );
+      assert.ok(
+        !ownerAfter.body.includes('WP/2026/002'),
+        'nor the reference of the finding it was linked to',
+      );
+      const nowMail = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE related_entity_id = ? AND recipient_user_id = ?`,
+        )
+        .get(reqId, SMOKE.auditeeId) as { n: number | bigint };
+      assert.equal(
+        Number(nowMail.n),
+        Number(afterMail.n),
+        'and linking sends them nothing: it is not their decision to hear about',
+      );
+
+      // Audit, on the other hand, sees the link on their own screen.
+      await signInAsOwnerInsideHass();
+      const auditAfter = await server.get(`/requirements/${reqId}`);
+      assert.ok(auditAfter.body.includes('Linked finding'), 'audit sees the link');
+      assert.ok(auditAfter.body.includes('WP/2026/002'), 'and which finding it points at');
     });
 
     // The requirements module, end to end (Build Prompt 58): an auditor asks, an
