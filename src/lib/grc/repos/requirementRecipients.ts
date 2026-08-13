@@ -10,8 +10,17 @@
  * there is no way to copy anybody, and both were the reason requests kept
  * happening in email instead.
  *
- * Every read is scoped through the requirement to the acting organisation: the
- * junction carries no organisation of its own.
+ * ONE SOURCE OF TRUTH FOR AN ADDRESS. The row names a user and a capacity, and
+ * nothing else. The email is resolved by joining `users` at the moment it is
+ * needed, so a person who changes their address is written to at the new one:
+ * a copy of it on the junction would be right on the day it was written and
+ * wrong every day after somebody updated their account. The applied schema
+ * carries no `email` column for exactly that reason, and this module reconciles
+ * to it.
+ *
+ * The junction carries its own `organization_id`, so the writes stamp it and
+ * the reads still scope through the requirement, which is the tenant boundary
+ * the rest of the module uses.
  */
 import type { Client, InStatement } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
@@ -53,9 +62,11 @@ export async function listRecipients(
   requirementId: string,
 ): Promise<Recipient[]> {
   const res = await db.execute({
+    // The address comes from `users`, every time it is read. There is nowhere
+    // else it could come from, and that is the point.
     sql: `SELECT rr.${RR.user_id} AS user_id, rr.${RR.recipient_role} AS role,
-                 COALESCE(u.${U.full_name}, rr.${RR.email}, rr.${RR.user_id}) AS name,
-                 COALESCE(u.${U.email}, rr.${RR.email}) AS email
+                 COALESCE(u.${U.full_name}, u.${U.email}, rr.${RR.user_id}) AS name,
+                 u.${U.email} AS email
             FROM requirement_recipients rr
             JOIN work_paper_requirements r
               ON r.${R.requirement_id} = rr.${RR.requirement_id}
@@ -110,19 +121,25 @@ export async function isRequirementRecipient(
   return res.rows.length > 0;
 }
 
-/** The insert for one recipient, batchable with the requirement it belongs to. */
+/**
+ * The insert for one recipient, batchable with the requirement it belongs to.
+ *
+ * Five columns, which is every column the table has: who, in what capacity,
+ * whose organisation, and when. No address is copied here, because the address
+ * lives on the user and is joined when it is needed.
+ */
 export function recipientStatement(
+  organizationId: string,
   requirementId: string,
   userId: string,
   role: RecipientRole,
-  addedBy: string,
   now: string,
 ): InStatement {
   return {
     sql: `INSERT INTO requirement_recipients
-            (${RR.requirement_id}, ${RR.user_id}, ${RR.email}, ${RR.recipient_role},
-             ${RR.added_at}, ${RR.added_by})
-          VALUES (?, ?, (SELECT ${U.email} FROM users WHERE ${U.user_id} = ?), ?, ?, ?)`,
-    args: [requirementId, userId, userId, role, now, addedBy],
+            (${RR.requirement_id}, ${RR.user_id}, ${RR.recipient_role},
+             ${RR.organization_id}, ${RR.created_at})
+          VALUES (?, ?, ?, ?, ?)`,
+    args: [requirementId, userId, role, organizationId, now],
   };
 }

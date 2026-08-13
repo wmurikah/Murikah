@@ -240,6 +240,88 @@ test('every column a migration adds is recorded in the committed schema', () => 
   );
 });
 
+test('every table a migration creates has the column list the dictionary records', () => {
+  // The half of the migration guard that was missing, and the half that would
+  // have caught the requirement_recipients drift (Build Prompt 69). A migration
+  // that CREATEs a table the dictionary already records, with a different set of
+  // columns, ships one shape to a fresh database and leaves the live one on
+  // another. The ALTER check above only ever saw columns added to a table that
+  // already existed.
+  const schema = parseSchema(SCHEMA_MD);
+  const dir = join(REPO, 'grc', 'db', 'migrations');
+  const findings: Finding[] = [];
+  for (const name of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
+    const sql = readFileSync(join(dir, name), 'utf8').replace(/^\s*--.*$/gm, '');
+    for (const m of sql.matchAll(
+      /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_][a-z0-9_]*)\s*\(([\s\S]*?)\n\s*\);/gi,
+    )) {
+      const table = m[1].toLowerCase();
+      // SQLite cannot relax a column constraint in place, so a migration that
+      // needs to rebuild a table creates a scratch copy, fills it, drops the
+      // original and renames. That copy is never a live table and has no
+      // business in the dictionary.
+      if (/_(new|old|tmp|backup)$/.test(table)) continue;
+      const known = schema.get(table);
+      if (!known) {
+        findings.push({
+          file: `grc/db/migrations/${name}`,
+          what: `${table} (not in the dictionary)`,
+        });
+        continue;
+      }
+      // The leading identifier of each definition line that is not a table
+      // constraint. Enough to compare the column set without parsing SQL.
+      const declared = m[2]
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(
+          (line) => line !== '' && !/^(PRIMARY|FOREIGN|UNIQUE|CHECK|CONSTRAINT)\b/i.test(line),
+        )
+        .map((line) => line.split(/[\s(]/)[0].toLowerCase())
+        .filter((c) => /^[a-z_][a-z0-9_]*$/.test(c));
+      for (const column of declared) {
+        if (known.includes(column)) continue;
+        findings.push({ file: `grc/db/migrations/${name}`, what: `${table}.${column}` });
+      }
+    }
+  }
+  assert.deepEqual(
+    findings,
+    [],
+    `these migrations create a table whose columns the dictionary does not record:\n${findings
+      .map((f) => `  ${f.file}: ${f.what}`)
+      .join('\n')}`,
+  );
+});
+
+test('a recipient is a user and a capacity, and carries no address of its own', () => {
+  // Pinned because it was got wrong once (Build Prompt 69). `grc-auditee-loop-schema.sql`
+  // was applied to the live database with exactly these five columns, and a
+  // migration written afterwards created the same table with an `email` column
+  // and different audit stamps. Two shapes of one table is a fault that only
+  // shows on the path nobody exercises until a customer does.
+  //
+  // The absence of `email` is the design, not an omission: a recipient is a
+  // user_id and a role, and the address is joined from `users` when the mail is
+  // sent, so it has one source of truth and cannot go stale.
+  const schema = parseSchema(SCHEMA_MD);
+  assert.deepEqual(schema.get('requirement_recipients'), [
+    'requirement_id',
+    'user_id',
+    'recipient_role',
+    'organization_id',
+    'created_at',
+  ]);
+  const repo = readFileSync(
+    join(REPO, 'src', 'lib', 'grc', 'repos', 'requirementRecipients.ts'),
+    'utf8',
+  );
+  assert.ok(
+    /u\.\$\{U\.email\}/.test(repo),
+    'the address must be joined from users, never read off the junction',
+  );
+});
+
 test('the workflow enums the code names exist in the seeded reference rows', () => {
   // The enum half of the drift. `status_transitions` keys every workflow in the
   // product by `enum_type`, and the code named the work-paper workflow in a
