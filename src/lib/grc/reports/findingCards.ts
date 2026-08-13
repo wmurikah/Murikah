@@ -25,6 +25,13 @@
 
 /** How a card's content is rendered. The renderers switch on this. */
 export type CardBody =
+  /**
+   * The card's own title, set in navy above its body (Build Prompt 71). The
+   * observation's title is the name of the thing, not a labelled attribute of
+   * it: "Observation: Fuel reconciliations are not reviewed" reads as a form
+   * field, where the title alone reads as a heading, which is what it is.
+   */
+  | { kind: 'title'; text: string }
   /** Stored markdown, through the narrative pipeline. */
   | { kind: 'rich'; text: string }
   /** A short value that is not a narrative: a date, a name, a rating. */
@@ -178,7 +185,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
     heading: 'Observation',
     group: 'audit',
     body: [
-      { kind: 'facts', facts: [{ label: 'Observation', value: source.observationTitle }] },
+      { kind: 'title', text: source.observationTitle },
       { kind: 'rich', text: source.observationDescription },
     ],
     emptyText: 'No observation has been written yet.',
@@ -281,7 +288,7 @@ export function findingCards(source: FindingSource): FindingCard[] {
 /** Whether a card holds anything at all, so a renderer knows to draw its empty state. */
 export function cardIsEmpty(card: FindingCard): boolean {
   return card.body.every((b) => {
-    if (b.kind === 'rich') return blank(b.text);
+    if (b.kind === 'rich' || b.kind === 'title') return blank(b.text);
     if (b.kind === 'facts') return b.facts.every((f) => blank(f.value));
     return b.rows.length === 0;
   });
