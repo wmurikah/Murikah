@@ -1,18 +1,28 @@
 ---
 /**
- * An observation drawn as a header strip and a run of cards (Build Prompt 67).
+ * An observation, drawn snapshot-led (Build Prompt 72).
+ *
+ * HIGH TO LOW. The first thing read is what the observation is: its title,
+ * large, with the risk beside it. Everything else is detail that follows from
+ * that, top to bottom, and administrative metadata never precedes it. A reader
+ * opening this should know within a second what was found and how bad it is;
+ * the year it belongs to and the sub-area it sits in are answers to questions
+ * they have not asked yet.
+ *
+ * DEFERENCE. One panel, hairline rules between sections, no boxes inside boxes
+ * and nothing filled or dark. Whitespace and type carry the hierarchy, so the
+ * only colour on the page is the risk, which therefore means something.
  *
  * The arrangement is decided in `reports/findingCards.ts` and this component
- * draws it, so the work paper's own screen and the report preview show the same
- * observation in the same order with the same headings, and the print rules apply
- * to both because there is one set of class names.
+ * draws it, so this screen, the report preview and the printed pack show the
+ * same observation in the same order under the same labels, and the print rules
+ * apply to all of them because there is one set of class names.
  *
- * Server-rendered, with no client script of any kind: the cards are markup and
- * the formatting is the existing markdown parser, so the page costs the same to
- * render as the definition list it replaces.
+ * Server-rendered, with no client script of any kind.
  */
 import GrcFindingCard from '@/components/grc/GrcFindingCard.astro';
 import {
+  contextChips,
   findingHeader,
   riskPillClass,
   visibleCards,
@@ -27,54 +37,45 @@ interface Props {
 const { finding, flat = false } = Astro.props;
 
 const header = findingHeader(finding);
+const chips = contextChips(finding);
 const cards = visibleCards(finding);
-// The three audit cards are drawn as one group, so the reader can see which
-// half of the page is audit's assessment and which is management's answer.
-const auditCards = cards.filter((c) => c.group === 'audit');
-const otherCards = cards.filter((c) => c.group !== 'audit');
 ---
 
-<article class:list={['grc-finding', { 'grc-finding--flat': flat }]} data-finding-cards>
-  {
-    /* The header strip, deliberately not a card: it names the record rather than
-      holding a section of it, so it sits above the cards as a masthead. */
-  }
-  <header class="grc-finding__strip">
-    <div class="grc-finding__ident">
-      <p class="grc-finding__ref">{header.reference}</p>
-      {
-        /* Where it sits in the audit, as one quiet line. Four labelled facts in
-          a grid made the band as tall as a card and as loud as one; the reader
-          wants to know which depot and which area, not to be handed a form. */
-      }
-      <p class="grc-finding__meta">
-        {[header.affiliate, header.auditArea, header.subArea].filter((v) => v !== '-').join(' · ')}
-      </p>
-    </div>
-    <p class="grc-chip">{header.status}</p>
+<article class:list={['grc-snap', { 'grc-snap--flat': flat }]} data-finding-cards>
+  <header class="grc-snap__head">
     {
-      /* Colour is never the only signal: the pill carries its own word, and the
-        screen reader is told what the word means. */
+      /* The kicker: which record, where it stands, and how bad it is. Small and
+        quiet, because it is the caption to the title rather than the headline. */
     }
-    <p
-      class:list={['grc-finding__risk', riskPillClass(header.risk.tone)]}
-      data-risk={header.risk.tone ?? 'unrated'}
-    >
-      <span class="grc-vh">{header.risk.srLabel}</span>
-      <span aria-hidden="true">{header.risk.label}</span>
-    </p>
+    <div class="grc-snap__kicker">
+      <span class="grc-snap__ref">{header.reference}</span>
+      <span class="grc-chip">{header.status}</span>
+      {
+        /* Colour is never the only signal: the pill carries its own word, and
+          the screen reader is told what the word means. */
+      }
+      <span
+        class:list={['grc-snap__risk', riskPillClass(header.risk.tone)]}
+        data-risk={header.risk.tone ?? 'unrated'}
+      >
+        <span class="grc-vh">{header.risk.srLabel}</span>
+        <span aria-hidden="true">{header.risk.label}</span>
+      </span>
+    </div>
+
+    {/* The anchor. Everything below is read in the light of this. */}
+    <h2 class="grc-snap__title">{header.title}</h2>
+
+    {
+      chips.length > 0 && (
+        <ul class="grc-snap__context">
+          {chips.map((chip) => (
+            <li class="grc-chip grc-chip--quiet">{chip}</li>
+          ))}
+        </ul>
+      )
+    }
   </header>
 
-  {
-    /* Audit's assessment, kept together by spacing alone (Build Prompt 71).
-      It used to be a tinted, gold-edged box around the three cards, which put a
-      card inside a card and made the group heavier than anything in it. The
-      cards sit closer to each other than to what follows, which is enough to
-      say they belong together. */
-  }
-  <div class="grc-finding__group" aria-label="Audit's assessment">
-    {auditCards.map((card) => <GrcFindingCard card={card} />)}
-  </div>
-
-  {otherCards.map((card) => <GrcFindingCard card={card} />)}
+  {cards.map((card) => <GrcFindingCard card={card} />)}
 </article>

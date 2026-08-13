@@ -9,7 +9,13 @@
  */
 import type { Cell, Kpi, ReportBlock, ReportDocument, Tone } from '../reportTypes';
 import { parseRichText, parseInlines, type RichBlock, type RichInline } from '../../richtext.ts';
-import { cardIsEmpty, findingHeader, visibleCards, type FindingSource } from '../findingCards.ts';
+import {
+  cardIsEmpty,
+  contextChips,
+  findingHeader,
+  visibleCards,
+  type FindingSource,
+} from '../findingCards.ts';
 
 const NAVY = '1A365D';
 const GOLD = 'C9A83E';
@@ -169,19 +175,26 @@ function kpiTableXml(items: Kpi[]): string {
 
 /** The colour Word paints a risk rating, matched to the pill on the screen. */
 const RISK_COLOUR: Record<string, string> = {
-  extreme: '6B1610',
-  high: '8A2117',
-  medium: '6B4E12',
-  low: '1C4C31',
+  extreme: '9C261A',
+  high: '9C261A',
+  medium: '8A5410',
+  low: '1A6A45',
 };
 
+/** The gold the section labels take, matched to `--sn-gold` on the screen. */
+const GOLD_LABEL = '917025';
+
 /**
- * A finding as the shared card arrangement, rendered for Word.
+ * An observation, snapshot-led, rendered for Word (Build Prompt 72).
  *
- * The strip is a two-column facts table, each card a bold heading over its
- * body, and the risk rating is coloured to match its pill. A card with nothing
- * in it prints its quiet line rather than a heading over blank paper, exactly
- * as on screen: a board reading a pack should be told the response is
+ * The same order the screen reads in, because it is the same arrangement: the
+ * kicker, the title large, the context, then the sections under their gold
+ * labels. Word has no chip and no hairline, so a chip becomes a short run in
+ * the secondary colour and the rule becomes the space around a heading; the
+ * hierarchy survives because it was never carried by the boxes.
+ *
+ * A section with nothing in it prints its quiet line rather than a label over
+ * blank paper: a board reading a pack should be told the response is
  * outstanding, not left to wonder whether it was omitted.
  */
 function findingXml(source: FindingSource): string {
@@ -189,25 +202,33 @@ function findingXml(source: FindingSource): string {
   const parts: string[] = [];
   parts.push(
     para(
-      run(header.reference, { bold: true, size: 20, colour: TONE_COLOUR.muted }) +
-        run('    ', { size: 20 }) +
+      run(header.reference, { bold: true, size: 18, colour: TONE_COLOUR.muted }) +
+        run('    ', { size: 18 }) +
+        run(header.status, { size: 18, colour: TONE_COLOUR.muted }) +
+        run('    ', { size: 18 }) +
         run(header.risk.srLabel, {
           bold: true,
-          size: 20,
+          size: 18,
           colour: RISK_COLOUR[header.risk.tone ?? ''] ?? TONE_COLOUR.muted,
         }),
-      { after: 40 },
+      { after: 60 },
     ),
   );
-  parts.push(
-    tableXml(
-      ['Affiliate', 'Audit area', 'Status'],
-      [[{ text: header.affiliate }, { text: header.auditArea }, { text: header.status }]],
-    ),
-    para(''),
-  );
+  // The anchor: the largest thing in the section, exactly as on screen.
+  parts.push(para(run(header.title, { bold: true, size: 34, colour: NAVY }), { after: 60 }));
+  const chips = contextChips(source);
+  if (chips.length > 0) {
+    parts.push(
+      para(run(chips.join('  ·  '), { size: 18, colour: TONE_COLOUR.muted }), { after: 160 }),
+    );
+  }
   for (const card of visibleCards(source)) {
-    parts.push(para(run(card.heading, { bold: true, size: 24, colour: NAVY }), { after: 60 }));
+    parts.push(
+      para(run(card.heading.toUpperCase(), { bold: true, size: 17, colour: GOLD_LABEL }), {
+        before: 120,
+        after: 60,
+      }),
+    );
     if (cardIsEmpty(card)) {
       parts.push(
         para(run(card.emptyText ?? '', { italic: true, size: 20, colour: TONE_COLOUR.muted }), {
@@ -217,13 +238,7 @@ function findingXml(source: FindingSource): string {
       continue;
     }
     for (const body of card.body) {
-      // The card's own title: navy and a size up, the paper equivalent of the
-      // screen's `.grc-fcard__title` (Build Prompt 71).
-      if (body.kind === 'title') {
-        if (body.text.trim() !== '') {
-          parts.push(para(run(body.text, { bold: true, size: 22, colour: NAVY }), { after: 60 }));
-        }
-      } else if (body.kind === 'rich') {
+      if (body.kind === 'rich') {
         const rich = parseRichText(body.text);
         parts.push(rich.length === 0 ? para('') : rich.map(richBlockXml).join(''));
       } else if (body.kind === 'facts') {
