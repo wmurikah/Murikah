@@ -1,0 +1,71 @@
+---
+/**
+ * One card of an observation, drawn once (Build Prompt 71).
+ *
+ * The parent used to hold this markup twice, once for audit's group and once
+ * for everything after it, which is two places to keep a card's shape and one
+ * of them will eventually be forgotten. The card is the same card wherever it
+ * sits, so it is written here and used in both.
+ *
+ * The heading is a small gold label rather than a bold navy line: the label
+ * says which section this is, and the content is what the reader is here for,
+ * so the label should not compete with it.
+ */
+import { renderRichHtml } from '@grc/richtext';
+import { cardIsEmpty, type FindingCard } from '@grc/reports/findingCards';
+
+interface Props {
+  card: FindingCard;
+}
+const { card } = Astro.props;
+const filled = (value: string | null | undefined): boolean => String(value ?? '').trim() !== '';
+---
+
+<section class="grc-fcard" data-card={card.key}>
+  <p class="grc-fcard__label">{card.heading}</p>
+  {
+    cardIsEmpty(card) ? (
+      <p class="grc-fcard__empty">{card.emptyText}</p>
+    ) : (
+      card.body.map((body) =>
+        body.kind === 'title' ? (
+          filled(body.text) && <h3 class="grc-fcard__title">{body.text}</h3>
+        ) : body.kind === 'rich' ? (
+          <div class="grc-fcard__body grc-richbody" set:html={renderRichHtml(body.text)} />
+        ) : body.kind === 'facts' ? (
+          <dl class="grc-fcard__facts">
+            {body.facts
+              .filter((f) => filled(f.value))
+              .map((f) => (
+                <div>
+                  <dt>{f.label}</dt>
+                  <dd>{f.value}</dd>
+                </div>
+              ))}
+          </dl>
+        ) : (
+          <div class="grc-tablewrap grc-tablewrap--fit">
+            <table class="grc-fcard__table">
+              <thead>
+                <tr>
+                  {body.columns.map((c) => (
+                    <th scope="col">{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {body.rows.map((row) => (
+                  <tr>
+                    {row.map((cell) => (
+                      <td>{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ),
+      )
+    )
+  }
+</section>

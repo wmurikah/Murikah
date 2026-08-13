@@ -11,9 +11,8 @@
  * the formatting is the existing markdown parser, so the page costs the same to
  * render as the definition list it replaces.
  */
-import { renderRichHtml } from '@grc/richtext';
+import GrcFindingCard from '@/components/grc/GrcFindingCard.astro';
 import {
-  cardIsEmpty,
   findingHeader,
   riskPillClass,
   visibleCards,
@@ -43,26 +42,16 @@ const otherCards = cards.filter((c) => c.group !== 'audit');
   <header class="grc-finding__strip">
     <div class="grc-finding__ident">
       <p class="grc-finding__ref">{header.reference}</p>
-      <h2 class="grc-finding__title">{header.title}</h2>
+      {
+        /* Where it sits in the audit, as one quiet line. Four labelled facts in
+          a grid made the band as tall as a card and as loud as one; the reader
+          wants to know which depot and which area, not to be handed a form. */
+      }
+      <p class="grc-finding__meta">
+        {[header.affiliate, header.auditArea, header.subArea].filter((v) => v !== '-').join(' · ')}
+      </p>
     </div>
-    <dl class="grc-finding__facts">
-      <div>
-        <dt>Affiliate</dt>
-        <dd>{header.affiliate}</dd>
-      </div>
-      <div>
-        <dt>Audit area</dt>
-        <dd>{header.auditArea}</dd>
-      </div>
-      <div>
-        <dt>Sub-area</dt>
-        <dd>{header.subArea}</dd>
-      </div>
-      <div>
-        <dt>Status</dt>
-        <dd>{header.status}</dd>
-      </div>
-    </dl>
+    <p class="grc-chip">{header.status}</p>
     {
       /* Colour is never the only signal: the pill carries its own word, and the
         screen reader is told what the word means. */
@@ -76,103 +65,16 @@ const otherCards = cards.filter((c) => c.group !== 'audit');
     </p>
   </header>
 
+  {
+    /* Audit's assessment, kept together by spacing alone (Build Prompt 71).
+      It used to be a tinted, gold-edged box around the three cards, which put a
+      card inside a card and made the group heavier than anything in it. The
+      cards sit closer to each other than to what follows, which is enough to
+      say they belong together. */
+  }
   <div class="grc-finding__group" aria-label="Audit's assessment">
-    {
-      auditCards.map((card) => (
-        <section class="grc-fcard" data-card={card.key}>
-          <h3 class="grc-fcard__h">{card.heading}</h3>
-          {cardIsEmpty(card) ? (
-            <p class="grc-fcard__empty">{card.emptyText}</p>
-          ) : (
-            card.body.map((body) =>
-              body.kind === 'rich' ? (
-                <div class="grc-fcard__body grc-richbody" set:html={renderRichHtml(body.text)} />
-              ) : body.kind === 'facts' ? (
-                <dl class="grc-fcard__facts">
-                  {body.facts
-                    .filter((f) => String(f.value ?? '').trim() !== '')
-                    .map((f) => (
-                      <div>
-                        <dt>{f.label}</dt>
-                        <dd>{f.value}</dd>
-                      </div>
-                    ))}
-                </dl>
-              ) : (
-                <div class="grc-tablewrap">
-                  <table class="grc-fcard__table">
-                    <thead>
-                      <tr>
-                        {body.columns.map((c) => (
-                          <th scope="col">{c}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {body.rows.map((row) => (
-                        <tr>
-                          {row.map((cell) => (
-                            <td>{cell}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ),
-            )
-          )}
-        </section>
-      ))
-    }
+    {auditCards.map((card) => <GrcFindingCard card={card} />)}
   </div>
 
-  {
-    otherCards.map((card) => (
-      <section class="grc-fcard" data-card={card.key}>
-        <h3 class="grc-fcard__h">{card.heading}</h3>
-        {cardIsEmpty(card) ? (
-          <p class="grc-fcard__empty">{card.emptyText}</p>
-        ) : (
-          card.body.map((body) =>
-            body.kind === 'rich' ? (
-              <div class="grc-fcard__body grc-richbody" set:html={renderRichHtml(body.text)} />
-            ) : body.kind === 'facts' ? (
-              <dl class="grc-fcard__facts">
-                {body.facts
-                  .filter((f) => String(f.value ?? '').trim() !== '')
-                  .map((f) => (
-                    <div>
-                      <dt>{f.label}</dt>
-                      <dd>{f.value}</dd>
-                    </div>
-                  ))}
-              </dl>
-            ) : (
-              <div class="grc-tablewrap">
-                <table class="grc-fcard__table">
-                  <thead>
-                    <tr>
-                      {body.columns.map((c) => (
-                        <th scope="col">{c}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {body.rows.map((row) => (
-                      <tr>
-                        {row.map((cell) => (
-                          <td>{cell}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ),
-          )
-        )}
-      </section>
-    ))
-  }
+  {otherCards.map((card) => <GrcFindingCard card={card} />)}
 </article>
