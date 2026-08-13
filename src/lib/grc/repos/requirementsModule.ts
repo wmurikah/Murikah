@@ -372,10 +372,10 @@ export async function createRequirement(
     },
     ...owners.map((userId) => ownerStatement(id, userId, input.requestedBy, now)),
     ...owners.map((userId) =>
-      recipientStatement(id, userId, RECIPIENT_ROLE.OWNER, input.requestedBy, now),
+      recipientStatement(organizationId, id, userId, RECIPIENT_ROLE.OWNER, now),
     ),
     ...copies.map((userId) =>
-      recipientStatement(id, userId, RECIPIENT_ROLE.CC, input.requestedBy, now),
+      recipientStatement(organizationId, id, userId, RECIPIENT_ROLE.CC, now),
     ),
   ];
   await db.batch(statements, 'write');

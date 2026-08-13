@@ -59,7 +59,7 @@ never their internal columns.
 - **rate_limit_buckets**: bucket_key, bucket_type, counter, window_start, window_size_seconds, blocked_until
 - **reminders**: reminder_id, reminder_type, related_entity_type, related_entity_id, target_user_id, scheduled_for, sent_at, cancelled_at, cancel_reason, escalation_level
 - **requirement_owners**: requirement_id, user_id, added_at, added_by
-- **requirement_recipients**: requirement_id, user_id, email, recipient_role, added_at, added_by
+- **requirement_recipients**: requirement_id, user_id, recipient_role, organization_id, created_at
 - **requirement_submissions**: submission_id, requirement_id, organization_id, round_number, submitted_by, submitted_by_name, submission_note, file_id, submitted_at, review_status, review_comment, additional_info_request, reviewed_by, reviewed_by_name, reviewed_at
 - **restore_runs**: restore_id, backup_id, target, started_at, completed_at, status, requested_by, approved_by, rows_restored, verification_status, error_message, notes
 - **retention_policies**: policy_id, entity_type, retention_days, archive_target, last_run_at, rows_pruned, is_active, legal_hold, description
