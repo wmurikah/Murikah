@@ -35,6 +35,9 @@ import {
 } from '@grc/repos/responsibles';
 import { listRevisions, type Revision } from '@grc/repos/revisions';
 import { listAttachments, type Attachment } from '@grc/repos/evidence';
+import GrcFindingCards from '@/components/grc/GrcFindingCards.astro';
+import { listActionPlans, type ActionPlanListRow } from '@grc/repos/actionPlans';
+import type { FindingSource } from '@grc/reports/findingCards';
 import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
@@ -71,6 +74,7 @@ let responsibles: Responsible[] = [];
 let cc: CcRecipient[] = [];
 let revisions: Revision[] = [];
 let evidence: Attachment[] = [];
+let plans: ActionPlanListRow[] = [];
 let auditors: Option[] = [];
 let labels = new Map<string, string>();
 let actions: OfferedAction[] = [];
@@ -83,15 +87,31 @@ if (allowed && id) {
     const db = await getDb(getGrcEnv());
     wp = await getWorkPaper(db, grc.organizationId, id, grc.affiliateScope);
     if (wp) {
-      [requirements, responsibles, cc, revisions, evidence, auditors, labels] = await Promise.all([
-        listRequirements(db, grc.organizationId, id),
-        listResponsibles(db, grc.organizationId, id),
-        listCcRecipients(db, grc.organizationId, id),
-        listRevisions(db, grc.organizationId, id),
-        listAttachments(db, grc.organizationId, 'work_paper', id),
-        listAuditors(db, grc.organizationId),
-        loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
-      ]);
+      [requirements, responsibles, cc, revisions, evidence, auditors, labels, plans] =
+        await Promise.all([
+          listRequirements(db, grc.organizationId, id),
+          listResponsibles(db, grc.organizationId, id),
+          listCcRecipients(db, grc.organizationId, id),
+          listRevisions(db, grc.organizationId, id),
+          listAttachments(db, grc.organizationId, 'work_paper', id),
+          listAuditors(db, grc.organizationId),
+          loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
+          // The actions agreed against this finding, for the management
+          // response card: a response promising remediation and the remediation
+          // it promises are one answer, read together (Build Prompt 67).
+          listActionPlans(
+            db,
+            grc.organizationId,
+            {
+              userId: grc.userId,
+              roleCode: grc.roleCode,
+              perms: grc.perms,
+              isPlatformOwner: grc.isPlatformOwner,
+              affiliateScope: grc.affiliateScope,
+            },
+            {},
+          ).then((all) => all.filter((p) => p.workPaperId === id)),
+        ]);
       // The subject, not just the status: submitting is the finding's own
       // auditor's move, so the offer needs to know whose finding it is.
       const subject = {
@@ -180,6 +200,50 @@ const responseFacts: { label: string; value: string }[] = wp
       ] as { label: string; value: string }[]
     ).filter((f) => f.value !== '-')
   : [];
+
+/**
+ * The finding as the shared card arrangement sees it (Build Prompt 67).
+ *
+ * The arrangement itself lives in `reports/findingCards.ts` and is drawn by
+ * `GrcFindingCards.astro`, so this screen, the report preview and the printed
+ * pack show the same finding in the same order with the same headings. What
+ * this does is translate the stored row into that shape, once.
+ */
+const findingSource: FindingSource | null = wp
+  ? {
+      reference: String(wp.reference ?? ''),
+      observationTitle: text('observation_title') ?? '',
+      observationDescription: text('observation_description') ?? '',
+      affiliate: String(wp.affiliate_name ?? wp.affiliate_code ?? ''),
+      auditArea: String(wp.audit_area_name ?? ''),
+      subArea: String(wp.sub_area_name ?? ''),
+      status: statusLabel(labels, String(wp.status ?? '')),
+      riskRating: text('risk_rating'),
+      riskSummary: text('risk_summary') ?? '',
+      recommendation: text('recommendation') ?? '',
+      managementResponse: text('management_response') ?? '',
+      responsibility: responsibles.map((r) => r.name ?? r.userId).join(', '),
+      actionPlans: plans.map((p) => ({
+        description: p.description,
+        owner: p.ownerNames ?? 'Unassigned',
+        due: p.dueDate ?? '-',
+        status: p.status,
+      })),
+      evidence: evidence.map((e) => ({
+        name: e.fileName,
+        detail: [e.uploadedBy, e.createdAt ? e.createdAt.slice(0, 10) : '']
+          .filter(Boolean)
+          .join(', '),
+      })),
+      trail: trail.map((t) => ({
+        label: t.label,
+        who: t.who ?? '-',
+        when: t.when ? t.when.slice(0, 10) : '-',
+        comment: t.comment ?? '',
+      })),
+      trailFacts: responseFacts,
+    }
+  : null;
 ---
 
 <GrcLayout title={wp ? String(wp.reference) : 'Work paper'}>
@@ -288,8 +352,12 @@ const responseFacts: { label: string; value: string }[] = wp
           </div>
         )}
 
+        {/* The audit context: the control that was tested and how. It stays a
+            plain list on purpose, because it is reference material an auditor
+            scans rather than the argument a reader follows, and the cards
+            below are that argument (Build Prompt 67). */}
         <div class="grc-panel">
-          <h2>Finding</h2>
+          <h2>Audit context</h2>
           <dl class="grc-detail">
             <>
               <dt>Year</dt>
@@ -355,72 +423,15 @@ const responseFacts: { label: string; value: string }[] = wp
               <dt>Testing steps</dt>
               <dd class="grc-richbody" set:html={rich('testing_steps')} />
             </>
-            {/* The finding itself, after everything that led to it and before
-                everything that follows from it (Build Prompt 67). The title was
-                added to this panel by Build Prompt 63, which put it at the top
-                where it read as a second reference number; it belongs against
-                its own body, which is the thing it names. "Observation" is the
-                stored observation_title and "Description" the stored
-                observation_description: renamed on screen, unmoved in the
-                database. */}
-            <>
-              <dt>Observation</dt>
-              <dd>{val('observation_title')}</dd>
-            </>
-            <>
-              <dt>Description</dt>
-              <dd class="grc-richbody" set:html={rich('observation_description')} />
-            </>
-            <>
-              <dt>Risk rating</dt>
-              <dd>{val('risk_rating')}</dd>
-            </>
-            <>
-              <dt>Risk summary</dt>
-              <dd class="grc-richbody" set:html={rich('risk_summary')} />
-            </>
-            <>
-              <dt>Recommendation</dt>
-              <dd class="grc-richbody" set:html={rich('recommendation')} />
-            </>
-            <>
-              <dt>Management response</dt>
-              <dd class="grc-richbody" set:html={rich('management_response')} />
-            </>
           </dl>
         </div>
 
-        {(trail.length > 0 || responseFacts.length > 0) && (
-          <div class="grc-panel">
-            <h2>Review trail</h2>
-            {trail.length > 0 && (
-              <ol class="grc-revisions">
-                {trail.map((t) => (
-                  <li>
-                    <strong>{t.label}</strong>
-                    {t.who && <span> by {t.who}</span>}
-                    {t.when && (
-                      <div>
-                        <time>{t.when}</time>
-                      </div>
-                    )}
-                    {t.comment && <div>{t.comment}</div>}
-                  </li>
-                ))}
-              </ol>
-            )}
-            {responseFacts.length > 0 && (
-              <dl class="grc-detail">
-                {responseFacts.map((f) => (
-                  <>
-                    <dt>{f.label}</dt>
-                    <dd>{f.value}</dd>
-                  </>
-                ))}
-              </dl>
-            )}
-          </div>
-        )}
+        {/* The finding itself, from the shared arrangement: the header strip
+            with its risk pill, then audit's assessment as one group (Finding,
+            Risk, Recommendation), then management's answer, the evidence and
+            the trail. The same component draws it in the board pack, so the
+            two cannot drift apart. */}
+        {findingSource && <GrcFindingCards finding={findingSource} />}
 
         {hasAi && (
           <div class="grc-panel">

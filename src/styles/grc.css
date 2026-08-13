@@ -1237,6 +1237,28 @@
   border-color: #a9ccb2;
   color: #1e4d2b;
 }
+/* Extreme sits above high rather than beside it (Build Prompt 67): a pack that
+   draws the worst rating in the same red as the one below it has thrown away
+   the distinction the rating exists to make. */
+.grc-pill--risk-extreme {
+  background: #fbdcd8;
+  border-color: #b42318;
+  color: #6b1610;
+}
+/* An unrecognised rating keeps its own words and takes the neutral base:
+   drawing it as low risk would be an invention. */
+.grc-pill--risk-unrated {
+  background: var(--grc-stone);
+  border-color: var(--grc-line);
+  color: var(--grc-ink);
+}
+/* The header strip's pill is the same pill, read at arm's length. */
+.grc-pill--lg {
+  padding: 0.3rem 0.9rem;
+  font-size: var(--grc-fs-small);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 
 .grc-tags {
   display: flex;
@@ -1778,6 +1800,162 @@
   font-weight: 600;
 }
 
+/* --- The finding cards (Build Prompt 67) ---------------------------------
+   One styling system for the finding wherever it is drawn: its own screen, the
+   report preview, and the printed or PDF version of either. The class names are
+   the contract, which is why the print rules below adjust these rather than
+   redrawing the layout: a board pack that does not match the screen it was
+   approved from is a second document nobody reconciled. */
+
+.grc-finding {
+  display: grid;
+  gap: var(--grc-s4);
+}
+
+/* The header strip: a masthead, not a card. It names the record; the cards hold
+   its sections. */
+.grc-finding__strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--grc-s3) var(--grc-s4);
+  padding: var(--grc-s4);
+  border-radius: var(--grc-radius);
+  background: var(--grc-navy);
+  color: var(--grc-on-navy);
+}
+.grc-finding__ident {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+.grc-finding__ref {
+  margin: 0;
+  font-size: var(--grc-fs-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--grc-on-navy-dim);
+  font-variant-numeric: tabular-nums;
+}
+.grc-finding__title {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  color: var(--grc-on-navy);
+  overflow-wrap: anywhere;
+}
+.grc-finding__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: var(--grc-s2) var(--grc-s4);
+  margin: 0;
+  flex: 2 1 22rem;
+}
+.grc-finding__facts dt {
+  margin: 0;
+  font-size: var(--grc-fs-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--grc-on-navy-dim);
+}
+.grc-finding__facts dd {
+  margin: 0.1rem 0 0;
+  font-size: var(--grc-fs-small);
+  font-weight: 600;
+  color: var(--grc-on-navy);
+  overflow-wrap: anywhere;
+}
+.grc-finding__risk {
+  flex: 0 0 auto;
+  align-self: center;
+  margin: 0;
+}
+
+/* Audit's three cards, drawn as one group, so it is visible at a glance which
+   half of the page is the auditor's opinion and which is the auditee's answer. */
+.grc-finding__group {
+  display: grid;
+  gap: var(--grc-s3);
+  padding: var(--grc-s3);
+  border: 1px solid var(--grc-line);
+  border-left: 3px solid var(--grc-gold-deep);
+  border-radius: var(--grc-radius);
+  background: color-mix(in srgb, var(--grc-paper) 60%, transparent);
+}
+
+.grc-fcard {
+  padding: var(--grc-s4);
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: var(--grc-surface);
+}
+.grc-finding__group .grc-fcard {
+  box-shadow: none;
+}
+.grc-fcard__h {
+  margin: 0 0 var(--grc-s3);
+  padding-bottom: var(--grc-s2);
+  border-bottom: 1px solid var(--grc-line);
+  font-size: var(--grc-fs-h2);
+  color: var(--grc-navy);
+}
+.grc-fcard__body {
+  margin: 0;
+}
+.grc-fcard__body + .grc-fcard__body,
+.grc-fcard__facts + .grc-fcard__body,
+.grc-fcard__body + .grc-tablewrap,
+.grc-fcard__facts + .grc-tablewrap {
+  margin-top: var(--grc-s3);
+}
+.grc-fcard__facts {
+  display: grid;
+  gap: var(--grc-s2);
+  margin: 0;
+}
+.grc-fcard__facts dt {
+  margin: 0;
+  font-size: var(--grc-fs-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--grc-muted);
+}
+.grc-fcard__facts dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+  color: var(--grc-ink);
+  overflow-wrap: anywhere;
+}
+/* The quiet empty state: a sentence saying what is not there yet, rather than a
+   headed box with nothing under it. */
+.grc-fcard__empty {
+  margin: 0;
+  color: var(--grc-muted);
+  font-style: italic;
+}
+.grc-fcard__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--grc-fs-small);
+}
+.grc-fcard__table th {
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--grc-line);
+  font-size: var(--grc-fs-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--grc-muted);
+  white-space: nowrap;
+}
+.grc-fcard__table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--grc-stone);
+  vertical-align: top;
+}
+.grc-fcard__table tr:last-child td {
+  border-bottom: none;
+}
+
 /* Print: only the report, edge to edge, colours preserved. */
 @media print {
   .grc-sidebar,
@@ -1809,6 +1987,43 @@
   }
   body {
     background: #fff;
+  }
+
+  /* The finding cards print as the same cards (Build Prompt 67). The layout is
+     not redrawn, only adjusted for paper: the strip and the pill keep their
+     colours because the risk rating is the fact a printed pack is read for, and
+     a card is not allowed to break across a page, because half a
+     recommendation on the next sheet is how a board pack gets misread. */
+  .grc-finding__strip,
+  .grc-pill,
+  .grc-fcard__table th,
+  .grc-report__table th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .grc-fcard,
+  .grc-finding__strip,
+  .grc-finding__group {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none;
+  }
+  .grc-finding {
+    gap: 0.6rem;
+  }
+  .grc-finding__group {
+    gap: 0.6rem;
+    padding: 0.4rem;
+    background: transparent;
+  }
+  .grc-fcard {
+    padding: 0.6rem 0.75rem;
+  }
+  /* A finding starts a fresh page in a pack of several, so the reader is never
+     handed a page holding the tail of one observation and the head of the next. */
+  .grc-report .grc-finding + .grc-finding {
+    break-before: page;
+    page-break-before: always;
   }
 }
 
