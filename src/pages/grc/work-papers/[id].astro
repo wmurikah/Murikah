@@ -2,7 +2,7 @@
 export const prerender = false;
 
 /**
- * Work paper detail (Workpaperview). Shows the full finding, its requirements,
+ * Work paper detail (Workpaperview). Shows the full observation, its requirements,
  * responsibles and CC, the revision history (audit trail), any evidence, the
  * management response, and, prominently, only the workflow actions valid for the
  * current status and the signed-in role (resolved through the engine). Gate:
@@ -57,7 +57,7 @@ const canManageReq = can(Astro.locals, 'update', 'WORK_PAPER');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const storageReady = await storageConfiguredFor(grc.organizationId);
 const canUpload = canEdit && storageReady;
-// Whether this reviewer may consciously send a finding out with nothing
+// Whether this reviewer may consciously send a observation out with nothing
 // attached (Build Prompt 62). Holding the grant only puts the tick box on the
 // screen; the gate still stands unless they tick it.
 const canOverrideEvidence =
@@ -96,7 +96,7 @@ if (allowed && id) {
           listAttachments(db, grc.organizationId, 'work_paper', id),
           listAuditors(db, grc.organizationId),
           loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
-          // The actions agreed against this finding, for the management
+          // The actions agreed against this observation, for the management
           // response card: a response promising remediation and the remediation
           // it promises are one answer, read together (Build Prompt 67).
           listActionPlans(
@@ -112,8 +112,8 @@ if (allowed && id) {
             {},
           ).then((all) => all.filter((p) => p.workPaperId === id)),
         ]);
-      // The subject, not just the status: submitting is the finding's own
-      // auditor's move, so the offer needs to know whose finding it is.
+      // The subject, not just the status: submitting is the observation's own
+      // auditor's move, so the offer needs to know whose observation it is.
       const subject = {
         status: wp.status,
         assignedAuditorId: wp.assignedAuditorId as string | null,
@@ -151,10 +151,10 @@ const rich = (key: string): string => {
 /**
  * The dated attribution the workflow stamps on each move (workPaperActions.ts),
  * read back. Every one of these is stored on a real transition and none of them
- * was rendered anywhere, so the review a finding has actually been through was
+ * was rendered anywhere, so the review a observation has actually been through was
  * invisible on its own page (Build Prompt 50).
  *
- * Only the steps that have happened are listed: a Draft finding shows the one
+ * Only the steps that have happened are listed: a Draft observation shows the one
  * line it has earned rather than a column of dashes claiming it was reviewed.
  */
 interface TrailStep {
@@ -202,11 +202,11 @@ const responseFacts: { label: string; value: string }[] = wp
   : [];
 
 /**
- * The finding as the shared card arrangement sees it (Build Prompt 67).
+ * The observation as the shared card arrangement sees it (Build Prompt 67).
  *
  * The arrangement itself lives in `reports/findingCards.ts` and is drawn by
  * `GrcFindingCards.astro`, so this screen, the report preview and the printed
- * pack show the same finding in the same order with the same headings. What
+ * pack show the same observation in the same order with the same headings. What
  * this does is translate the stored row into that shape, once.
  */
 const findingSource: FindingSource | null = wp
@@ -250,7 +250,7 @@ const findingSource: FindingSource | null = wp
   <div class="grc-page-head">
     <div>
       <h1>{wp ? wp.reference : 'Work paper'}</h1>
-      <p class="grc-lead">{wp ? String(wp.observation_title ?? 'Untitled finding') : ''}</p>
+      <p class="grc-lead">{wp ? String(wp.observation_title ?? 'Untitled observation') : ''}</p>
     </div>
     <div class="grc-actionbar" style="margin:0">
       {
@@ -426,8 +426,8 @@ const findingSource: FindingSource | null = wp
           </dl>
         </div>
 
-        {/* The finding itself, from the shared arrangement: the header strip
-            with its risk pill, then audit's assessment as one group (Finding,
+        {/* The observation itself, from the shared arrangement: the header strip
+            with its risk pill, then audit's assessment as one group (Observation,
             Risk, Recommendation), then management's answer, the evidence and
             the trail. The same component draws it in the board pack, so the
             two cannot drift apart. */}
@@ -455,8 +455,8 @@ const findingSource: FindingSource | null = wp
         <div class="grc-panel">
           <h2>Requirements</h2>
           <p class="grc-lead" style="margin:0 0 0.5rem">
-            The information asked for on this finding, when it was asked for, and when it arrived.
-            To ask an owner for something and run the review rounds on it, use{' '}
+            The information asked for on this observation, when it was asked for, and when it
+            arrived. To ask an owner for something and run the review rounds on it, use{' '}
             <a href={`/requirements?work_paper=${id}`}>Requirements</a>.
           </p>
           {requirements.length === 0 ? (

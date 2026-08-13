@@ -158,14 +158,16 @@ const MUTATION_STEPS: MutationStep[] = [
     expect: 'success',
     verify: (db) => {
       const r = db
-        .prepare(`SELECT status FROM work_papers WHERE observation_title = 'Smoke-created finding'`)
+        .prepare(
+          `SELECT status FROM work_papers WHERE observation_title = 'Smoke-created observation'`,
+        )
         .get() as { status?: string } | undefined;
       assert.equal(String(r?.status), 'Draft', 'the created work paper must exist as a draft');
     },
     method: 'POST',
     path: () => '/api/work-papers',
     form: () => ({
-      observation_title: 'Smoke-created finding',
+      observation_title: 'Smoke-created observation',
       observation_description: 'Created by the smoke test.',
       year: '2026',
       affiliate_code: SMOKE.affiliateCode,
@@ -189,7 +191,7 @@ const MUTATION_STEPS: MutationStep[] = [
       const r = db
         .prepare(`SELECT observation_title AS t FROM work_papers WHERE work_paper_id = ?`)
         .get(String(c.get('wpId'))) as { t?: string };
-      assert.equal(String(r.t), 'Smoke-created finding (edited)', 'the edit must persist');
+      assert.equal(String(r.t), 'Smoke-created observation (edited)', 'the edit must persist');
     },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}`,
@@ -197,7 +199,7 @@ const MUTATION_STEPS: MutationStep[] = [
     // partial finding, and the crawl submits this one two steps later
     // (Build Prompt 59).
     form: () => ({
-      observation_title: 'Smoke-created finding (edited)',
+      observation_title: 'Smoke-created observation (edited)',
       observation_description: 'Created by the smoke test.',
       year: '2026',
       affiliate_code: SMOKE.affiliateCode,
@@ -684,7 +686,7 @@ const MUTATION_STEPS: MutationStep[] = [
       const r = db
         .prepare(
           `SELECT COUNT(*) AS n FROM auditee_responses
-            WHERE work_paper_id = ? AND management_response LIKE '%accepts the finding%'`,
+            WHERE work_paper_id = ? AND management_response LIKE '%accepts the observation%'`,
         )
         .get(SMOKE.sentWorkPaperId) as { n: number | bigint };
       assert.ok(Number(r.n) >= 1, 'the response row must exist with its text');
@@ -693,7 +695,7 @@ const MUTATION_STEPS: MutationStep[] = [
     path: () => '/api/auditee-responses/submit',
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
-      management_response: 'Management accepts the finding and will remediate.',
+      management_response: 'Management accepts the observation and will remediate.',
       action_plan_ids: SMOKE.actionPlanId,
     }),
   },
@@ -2462,12 +2464,12 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const page = await server.get('/action-plans');
       assert.equal(page.status, 200);
       assert.ok(
-        page.body.includes('Plans without a parent finding'),
+        page.body.includes('Plans without a parent observation'),
         'the orphan panel must show while a stray exists',
       );
       const relink = await server.request('POST', `/api/action-plans/${SMOKE.orphanPlanId}`, {
         work_paper_id: SMOKE.sentWorkPaperId,
-        action_description: 'Legacy stray plan with no parent finding.',
+        action_description: 'Legacy stray plan with no parent observation.',
         target_date: today,
         due_date: today,
         priority: 'Low',
@@ -2484,7 +2486,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.equal(String(row.work_paper_id), SMOKE.sentWorkPaperId, 'the stray must be linked');
       const after = await server.get('/action-plans');
       assert.ok(
-        !after.body.includes('Plans without a parent finding'),
+        !after.body.includes('Plans without a parent observation'),
         'the orphan panel clears once every plan is linked',
       );
     });
@@ -2662,7 +2664,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       ].entries()) {
         const res = await server.request('POST', '/api/work-papers', {
           observation_title: title,
-          observation_description: `Batch release smoke finding ${i + 1}.`,
+          observation_description: `Batch release smoke observation ${i + 1}.`,
           year: '2026',
           affiliate_code: SMOKE.affiliateCode,
           audit_area_id: SMOKE.auditAreaId,
@@ -3382,7 +3384,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
              observation_title, observation_description, risk_rating, recommendation,
              status, revision_count, assigned_auditor_id, created_at, updated_at)
            VALUES (?, ?, 'WP/2026/NOEV', ?, 2026, ?, ?, ?, '2026-01-01', '2026-03-31',
-                   'A finding with no attachment', 'Nothing to attach.', 'Low',
+                   'An observation with no attachment', 'Nothing to attach.', 'Low',
                    'Note it in the file.', 'Approved', 0, ?, ?, ?)`,
       ).run(
         approvedId,
@@ -3842,6 +3844,46 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       ]) {
         assert.ok(!page.body.includes(control), `a CC must not be offered "${control}"`);
       }
+    });
+
+    // The word the product does not use any more (Build Prompt 70). Audit calls
+    // these observations, so every screen calls them observations: a page that
+    // says "finding" is a second vocabulary the reader has to reconcile with
+    // the one their charter uses. This crawls the pages a signed-in auditor
+    // sees and asserts the word is absent from the rendered HTML, which is the
+    // only place it matters. Code identifiers keep their own names, and the
+    // class and component names below are deliberately not searched for.
+    await t.test('no screen says "finding" where it means an observation', async () => {
+      await signInAsOwnerInsideHass();
+      const offenders: string[] = [];
+      for (const path of [
+        '/',
+        '/work-papers',
+        `/work-papers/${SMOKE.sentWorkPaperId}`,
+        '/work-papers/new',
+        '/action-plans',
+        '/action-plans/new',
+        '/auditee-responses',
+        `/auditee-responses/${SMOKE.sentWorkPaperId}`,
+        '/requirements',
+        '/requirements/new',
+        '/reports',
+      ]) {
+        const page = await server.get(path);
+        assert.equal(page.status, 200, `${path} answered ${page.status}`);
+        // Strip the markup first: `grc-finding`, `GrcFindingCards` and
+        // `data-card="finding"` are code, and code is not what a reader reads.
+        const text = page.body
+          .replace(/<script[\s\S]*?<\/script>/g, ' ')
+          .replace(/<style[\s\S]*?<\/style>/g, ' ')
+          .replace(/<[^>]+>/g, ' ');
+        const hit = /\b[Ff]indings?\b/.exec(text);
+        if (hit)
+          offenders.push(
+            `${path}: "${text.slice(Math.max(0, hit.index - 40), hit.index + 40).trim()}"`,
+          );
+      }
+      assert.deepEqual(offenders, [], `these screens still say finding:\n${offenders.join('\n')}`);
     });
 
     // The sidebar chrome (Build Prompt 60): no standalone Notifications
@@ -4547,7 +4589,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         'with its own upload form on the row',
       );
       assert.ok(
-        !ownerList.body.includes('Linked finding'),
+        !ownerList.body.includes('Linked observation'),
         'and no column for audit structure they cannot see',
       );
 
@@ -4646,7 +4688,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const ownerAfter = await server.get(`/requirements/${reqId}`);
       assert.equal(ownerAfter.status, 200, `the owner's requirement answered ${ownerAfter.status}`);
       assert.ok(
-        !ownerAfter.body.includes('Linked finding'),
+        !ownerAfter.body.includes('Linked observation'),
         'the owner is never shown which finding their document supports',
       );
       assert.ok(
@@ -4668,7 +4710,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       // Audit, on the other hand, sees the link on their own screen.
       await signInAsOwnerInsideHass();
       const auditAfter = await server.get(`/requirements/${reqId}`);
-      assert.ok(auditAfter.body.includes('Linked finding'), 'audit sees the link');
+      assert.ok(auditAfter.body.includes('Linked observation'), 'audit sees the link');
       assert.ok(auditAfter.body.includes('WP/2026/002'), 'and which finding it points at');
     });
 

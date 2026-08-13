@@ -68,8 +68,8 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
     intro: 'A work paper needs revision before it can proceed.',
   },
   WP_SENT_TO_AUDITEE: {
-    subject: 'Action required: finding {{reference}}',
-    intro: 'A finding has been sent to you for response.',
+    subject: 'Action required: observation {{reference}}',
+    intro: 'A observation has been sent to you for response.',
   },
   WP_STATUS_CHANGE: {
     subject: 'Work paper update: {{reference}}',
@@ -146,7 +146,7 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
   AUDITEE_DELEGATED: {
     subject: 'Response delegated to you: {{reference}}',
     intro:
-      'The response to this finding has been delegated to you. Draft it, attach what supports it, and return it to your unit manager.',
+      'The response to this observation has been delegated to you. Draft it, attach what supports it, and return it to your unit manager.',
   },
   AUDITEE_RETURNED: {
     subject: 'Draft response returned: {{reference}}',
@@ -155,11 +155,11 @@ const COPY: Record<NotificationType, { subject: string; intro: string }> = {
   },
   AUDITEE_RELEASED: {
     subject: 'Response released to audit: {{reference}}',
-    intro: 'The management response to this finding has been released to internal audit.',
+    intro: 'The management response to this observation has been released to internal audit.',
   },
   AUDITEE_DECIDED: {
     subject: 'Audit decision on your response: {{reference}}',
-    intro: 'Internal audit has reviewed the response to this finding.',
+    intro: 'Internal audit has reviewed the response to this observation.',
   },
   PASSWORD_RESET: {
     subject: 'Reset your Internal Audit System password',
@@ -250,7 +250,7 @@ const REQUIREMENT_FACING = new Set<NotificationType>([
 function auditeeShell(intro: string, data: Payload): string {
   const link = val(data, 'link') || '#';
   const row: SubmittedRow = {
-    reference: val(data, 'reference') || 'This finding',
+    reference: val(data, 'reference') || 'This observation',
     title: val(data, 'title'),
     detail: [val(data, 'stage'), val(data, 'riskRating')].filter(Boolean).join(' - '),
     link,
@@ -570,7 +570,7 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
         : requirements.length > 1
           ? `Internal Audit has asked you for ${requirements.length} items`
           : auditee.length > 1
-            ? `${auditee.length} findings need your response`
+            ? `${auditee.length} observations need your response`
             : items.length === 1
               ? items[0].subject
               : `Audit updates: ${items.length} notifications`;
@@ -616,13 +616,13 @@ export function buildDigest(items: DigestItem[], links?: DigestLinks): Rendered 
   if (auditee.length > 0) {
     if (submitted.length > 0 || reminders.length > 0) {
       sections.push(
-        `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Findings with you</p>`,
+        `<p style="margin:24px 0 0;color:#687080;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Observations with you</p>`,
       );
     }
     const lead =
       auditee.length === 1
-        ? 'There is an update on a finding you are named on. Please log in and respond.'
-        : `There are updates on ${auditee.length} findings you are named on. Please log in and respond.`;
+        ? 'There is an update on a observation you are named on. Please log in and respond.'
+        : `There are updates on ${auditee.length} observations you are named on. Please log in and respond.`;
     sections.push(
       `<p style="color:#111827;font-size:14px;margin:0">${escapeHtml(lead)}</p>`,
       digestTable(auditee, 'Now with'),

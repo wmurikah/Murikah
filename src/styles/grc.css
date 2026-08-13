@@ -897,13 +897,28 @@
   border-collapse: collapse;
   font-size: var(--grc-fs-body);
 }
+/* Cells wrap by default (Build Prompt 70).
+   
+   They used to be `white-space: nowrap`, every one of them, which is right for
+   a date and wrong for prose: one long observation title made the table wider
+   than the screen, and the reader had to scroll sideways to reach the status
+   and the date. Nowrap is now asked for by the cells that want it rather than
+   imposed on the cells that cannot bear it. */
 .grc-table th,
 .grc-table td {
   text-align: left;
   padding: var(--grc-s2) var(--grc-s3);
   border-bottom: 1px solid var(--grc-line);
-  white-space: nowrap;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+/* Short values that read worse broken than wrapped: dates, references, counts. */
+.grc-table th.grc-nowrap,
+.grc-table td.grc-nowrap,
+.grc-table td.grc-num,
+.grc-table th.grc-num {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .grc-table th {
   font-size: var(--grc-fs-micro);
@@ -938,6 +953,51 @@
 .grc-table td.grc-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- Responsive lists (Build Prompt 70) ----------------------------------
+   A wide table fits the screen by dropping its least important columns, not by
+   putting a scrollbar under itself. What is dropped is not lost: it reappears
+   as a second line under the row's own title, so a tablet reader still learns
+   the affiliate and the audit area, they simply read them where there is room.
+
+   Column priority is declared in the markup (`grc-col--secondary`), so which
+   columns give way first is a decision made where the table is written rather
+   than guessed at here. */
+.grc-table .grc-cell__meta {
+  display: none;
+}
+@media (max-width: 68rem) {
+  .grc-table--responsive .grc-col--secondary {
+    display: none;
+  }
+  .grc-table--responsive .grc-cell__meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+  }
+}
+/* Narrower still: the title carries the row, and the remaining columns hold
+   their own because they are all short. */
+@media (max-width: 44rem) {
+  .grc-table--responsive .grc-col--tertiary {
+    display: none;
+  }
+  .grc-table--responsive th,
+  .grc-table--responsive td {
+    padding: var(--grc-s2);
+  }
+}
+/* The wrapper keeps its scroll as a last resort for a viewport narrower than
+   anything designed for, but the table is built not to need it. */
+.grc-tablewrap--fit {
+  overflow-x: clip;
+}
+@supports not (overflow: clip) {
+  .grc-tablewrap--fit {
+    overflow-x: auto;
+  }
 }
 
 /* Filter bar over a list. */
@@ -1812,57 +1872,70 @@
   gap: var(--grc-s4);
 }
 
-/* The header strip: a masthead, not a card. It names the record; the cards hold
-   its sections. */
+/* The header strip: the same card every other section of the preview is, so the
+   page reads as one system (Build Prompt 70).
+   
+   It was a solid navy block. On a page of light cards it read as a banner
+   bolted on rather than the head of the thing below it, and its own contents
+   were crowded into it: the reference, the title and four facts all pressed
+   together with no room between the label and the value. It is now the panel
+   treatment used by Requirements and every other card, with the navy kept as a
+   single accent rule down its left edge, which is enough to say "this is the
+   head of it" without shouting. */
 .grc-finding__strip {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--grc-s3) var(--grc-s4);
   padding: var(--grc-s4);
+  border: 1px solid var(--grc-line);
+  border-left: 3px solid var(--grc-navy);
   border-radius: var(--grc-radius);
-  background: var(--grc-navy);
-  color: var(--grc-on-navy);
+  background: var(--grc-surface);
+  color: var(--grc-ink);
 }
 .grc-finding__ident {
   flex: 1 1 18rem;
   min-width: 0;
 }
+/* The reference is the record's number, so it sits above the title as a quiet
+   eyebrow with real space under it rather than jammed against it. */
 .grc-finding__ref {
-  margin: 0;
+  margin: 0 0 var(--grc-s2);
   font-size: var(--grc-fs-caption);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--grc-on-navy-dim);
+  color: var(--grc-muted);
   font-variant-numeric: tabular-nums;
 }
 .grc-finding__title {
-  margin: 0.15rem 0 0;
-  font-size: 1.15rem;
-  line-height: 1.35;
-  color: var(--grc-on-navy);
+  margin: 0;
+  font-size: var(--grc-fs-h2);
+  line-height: 1.4;
+  color: var(--grc-navy);
   overflow-wrap: anywhere;
 }
 .grc-finding__facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
-  gap: var(--grc-s2) var(--grc-s4);
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--grc-s3) var(--grc-s4);
   margin: 0;
   flex: 2 1 22rem;
 }
 .grc-finding__facts dt {
-  margin: 0;
+  margin: 0 0 0.2rem;
   font-size: var(--grc-fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--grc-on-navy-dim);
+  color: var(--grc-muted);
 }
 .grc-finding__facts dd {
-  margin: 0.1rem 0 0;
+  margin: 0;
   font-size: var(--grc-fs-small);
   font-weight: 600;
-  color: var(--grc-on-navy);
+  color: var(--grc-ink);
   overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 .grc-finding__risk {
   flex: 0 0 auto;
@@ -1994,7 +2067,6 @@
      colours because the risk rating is the fact a printed pack is read for, and
      a card is not allowed to break across a page, because half a
      recommendation on the next sheet is how a board pack gets misread. */
-  .grc-finding__strip,
   .grc-pill,
   .grc-fcard__table th,
   .grc-report__table th {
