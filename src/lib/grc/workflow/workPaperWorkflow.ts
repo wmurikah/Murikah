@@ -48,6 +48,8 @@ import { canMatrix, type PermissionMatrix } from '@grc/auth/matrix';
 import { resolveRoleAccess } from '@grc/auth/rbac';
 import { completenessOf, getWorkPaper } from '@grc/repos/workPapers';
 import { countAttachments } from '@grc/repos/evidence';
+import { AUDITEE_STAGE } from '@grc/workflow/auditeeLoop';
+import { setStageStatement } from '@grc/repos/auditeeDelegations';
 import { incompleteMessage, missingForSubmission } from './workPaperCompleteness';
 import { insertRevisionStatement } from '@grc/repos/revisions';
 import { enqueueNotification } from '@grc/repos/notify';
@@ -395,6 +397,15 @@ export async function executeTransition(
       details: `${fromStatus} -> ${target}`,
     }),
   ];
+  // A finding arriving on the auditee side starts the loop with the responsibles
+  // holding it (Build Prompt 68), and a finding audit sends back for another
+  // round returns to the same place. Written in the same batch as the status, so
+  // the two can never disagree about where the finding is.
+  if (target === WP_STATUS.SENT_TO_AUDITEE) {
+    statements.push(
+      setStageStatement(organizationId, workPaperId, AUDITEE_STAGE.WITH_AUDITEE, now),
+    );
+  }
   // Sending with nothing attached is a decision somebody made, so the trail says
   // who made it rather than leaving a finding that went out bare unexplained.
   if (evidenceOverridden) {
