@@ -9,6 +9,7 @@
  */
 import type { Cell, Kpi, ReportBlock, ReportDocument, Tone } from '../reportTypes';
 import { parseRichText, parseInlines, type RichBlock, type RichInline } from '../../richtext.ts';
+import { cardIsEmpty, findingHeader, visibleCards, type FindingSource } from '../findingCards.ts';
 
 const NAVY = '1A365D';
 const GOLD = 'C9A83E';
@@ -166,6 +167,83 @@ function kpiTableXml(items: Kpi[]): string {
   return `<w:tbl>${tblPr}<w:tr>${cells}</w:tr></w:tbl>`;
 }
 
+/** The colour Word paints a risk rating, matched to the pill on the screen. */
+const RISK_COLOUR: Record<string, string> = {
+  extreme: '6B1610',
+  high: '8A2117',
+  medium: '6B4E12',
+  low: '1C4C31',
+};
+
+/**
+ * A finding as the shared card arrangement, rendered for Word.
+ *
+ * The strip is a two-column facts table, each card a bold heading over its
+ * body, and the risk rating is coloured to match its pill. A card with nothing
+ * in it prints its quiet line rather than a heading over blank paper, exactly
+ * as on screen: a board reading a pack should be told the response is
+ * outstanding, not left to wonder whether it was omitted.
+ */
+function findingXml(source: FindingSource): string {
+  const header = findingHeader(source);
+  const parts: string[] = [];
+  parts.push(
+    para(
+      run(header.reference, { bold: true, size: 20, colour: TONE_COLOUR.muted }) +
+        run('    ', { size: 20 }) +
+        run(header.risk.srLabel, {
+          bold: true,
+          size: 20,
+          colour: RISK_COLOUR[header.risk.tone ?? ''] ?? TONE_COLOUR.muted,
+        }),
+      { after: 40 },
+    ),
+  );
+  parts.push(
+    tableXml(
+      ['Affiliate', 'Audit area', 'Status'],
+      [[{ text: header.affiliate }, { text: header.auditArea }, { text: header.status }]],
+    ),
+    para(''),
+  );
+  for (const card of visibleCards(source)) {
+    parts.push(para(run(card.heading, { bold: true, size: 24, colour: NAVY }), { after: 60 }));
+    if (cardIsEmpty(card)) {
+      parts.push(
+        para(run(card.emptyText ?? '', { italic: true, size: 20, colour: TONE_COLOUR.muted }), {
+          after: 120,
+        }),
+      );
+      continue;
+    }
+    for (const body of card.body) {
+      if (body.kind === 'rich') {
+        const rich = parseRichText(body.text);
+        parts.push(rich.length === 0 ? para('') : rich.map(richBlockXml).join(''));
+      } else if (body.kind === 'facts') {
+        for (const fact of body.facts.filter((f) => String(f.value ?? '').trim() !== '')) {
+          parts.push(
+            para(
+              run(`${fact.label}: `, { bold: true, size: 20, colour: TONE_COLOUR.muted }) +
+                run(fact.value, { size: 20 }),
+              { after: 40 },
+            ),
+          );
+        }
+      } else {
+        parts.push(
+          tableXml(
+            body.columns,
+            body.rows.map((row) => row.map((cell) => ({ text: cell }))),
+          ),
+          para(''),
+        );
+      }
+    }
+  }
+  return parts.join('');
+}
+
 function blockXml(block: ReportBlock): string {
   switch (block.kind) {
     case 'kpis':
@@ -197,6 +275,14 @@ function blockXml(block: ReportBlock): string {
         : '';
       return heading + subtitle + badges + tableXml(block.columns, block.rows) + para('');
     }
+    // One finding, as the same header strip and cards the screen draws
+    // (Build Prompt 67). Word has no card, so a card becomes what a card is on
+    // paper: a bold heading over its content, with the strip as a small facts
+    // table and the risk rating carrying the colour the pill carries. The
+    // arrangement comes from the shared model, so the order and the headings
+    // are the screen's, not a second opinion about them.
+    case 'finding':
+      return findingXml(block.source);
     case 'note':
       return para(run(block.text, { italic: true, size: 20, colour: TONE_COLOUR.muted }));
     case 'heading':
