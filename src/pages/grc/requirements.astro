@@ -47,10 +47,12 @@ if (!grc) return Astro.redirect('/login');
 // what comes back. Everyone else is here as an owner.
 const manages = grc.isPlatformOwner || grc.perms.includes('REQUIREMENTS.manage');
 const p = Astro.url.searchParams;
+const linkedParam = manages ? p.get('linked') : null;
 const filters: RequirementFilters = {
   workPaperId: p.get('work_paper') || undefined,
   ownerId: manages ? p.get('owner') || undefined : undefined,
   status: p.get('status') || undefined,
+  linkedOnly: linkedParam === 'yes' ? true : linkedParam === 'no' ? false : undefined,
 };
 
 let rows: RequirementRow[] = [];
@@ -92,7 +94,7 @@ const error = p.get('error');
         {
           manages
             ? `Information requested from the business for ${grc.organizationName}.`
-            : 'The information Internal Audit has asked you to provide.'
+            : 'What Internal Audit has asked you for. Upload each item against its line.'
         }
       </p>
     </div>
@@ -167,6 +169,20 @@ const error = p.get('error');
               </select>
             </div>
           )}
+          {manages && (
+            <div class="grc-field">
+              <label for="f-link">Linking</label>
+              <select id="f-link" name="linked" class="grc-select">
+                <option value="">Linked or not</option>
+                <option value="no" selected={p.get('linked') === 'no'}>
+                  Not linked yet
+                </option>
+                <option value="yes" selected={p.get('linked') === 'yes'}>
+                  Linked to a finding
+                </option>
+              </select>
+            </div>
+          )}
           <div class="grc-field">
             <label for="f-status">Status</label>
             <select id="f-status" name="status" class="grc-select">
@@ -191,7 +207,7 @@ const error = p.get('error');
             <p>
               <strong>Nothing to show.</strong>{' '}
               {manages
-                ? 'No requirement matches these filters. Raise one against a finding to ask for information.'
+                ? 'No requirement matches these filters. Raise one to ask the business for information; a finding can be linked to it later.'
                 : 'You have not been asked for any information.'}
             </p>
           </div>
@@ -200,22 +216,24 @@ const error = p.get('error');
             <table class="grc-table" aria-label="Requirements">
               <thead>
                 <tr>
-                  <th scope="col">Work paper</th>
-                  <th scope="col">What is required</th>
+                  <th scope="col">What is needed</th>
                   {manages && <th scope="col">Owners</th>}
                   <th scope="col">Requested</th>
                   <th scope="col">Due</th>
                   <th scope="col">Rounds</th>
                   <th scope="col">Status</th>
+                  {/* Only audit sees the finding, and only audit can set it
+                      (Build Prompt 69). An owner's table has no column for it,
+                      because which work paper their document supports is not a
+                      question they can answer or should be shown. */}
+                  {manages && <th scope="col">Linked finding</th>}
+                  {/* The owner's own column: the thing they came here to do. */}
+                  {!manages && <th scope="col">Provide it</th>}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr>
-                    <td>
-                      <a href={`/requirements/${r.id}`}>{r.workPaperRef || 'Finding'}</a>
-                      <span class="grc-tone--muted"> {truncate(r.workPaperTitle, 40)}</span>
-                    </td>
                     <td>
                       <a href={`/requirements/${r.id}`}>{truncate(r.description, 80)}</a>
                     </td>
@@ -226,6 +244,61 @@ const error = p.get('error');
                     <td>
                       <span class={statusClass(r.status)}>{requirementStatusLabel(r.status)}</span>
                     </td>
+                    {manages && (
+                      <td>
+                        {r.workPaperId ? (
+                          <a href={`/work-papers/${r.workPaperId}`}>
+                            {r.workPaperRef || 'Finding'}
+                          </a>
+                        ) : (
+                          <a class="grc-tone--muted" href={`/requirements/${r.id}#link`}>
+                            Not linked yet
+                          </a>
+                        )}
+                      </td>
+                    )}
+                    {!manages && (
+                      <td>
+                        {!r.canProvide ? (
+                          /* Copied in: told, not asked (Build Prompt 69). */
+                          <span class="grc-tone--muted">Copied in</span>
+                        ) : r.closedAt ? (
+                          <span class="grc-tone--muted">Closed</span>
+                        ) : (
+                          <form
+                            method="post"
+                            action={`/api/requirements/${r.id}/submit`}
+                            enctype="multipart/form-data"
+                            class="grc-rowupload"
+                          >
+                            <label class="grc-vh" for={`note-${r.id}`}>
+                              What you are providing for: {truncate(r.description, 60)}
+                            </label>
+                            <input
+                              type="text"
+                              id={`note-${r.id}`}
+                              name="note"
+                              class="grc-input grc-rowupload__note"
+                              placeholder="What this is"
+                              maxlength="500"
+                              required
+                            />
+                            <label class="grc-vh" for={`file-${r.id}`}>
+                              The document for: {truncate(r.description, 60)}
+                            </label>
+                            <input
+                              type="file"
+                              id={`file-${r.id}`}
+                              name="file"
+                              class="grc-rowupload__file"
+                            />
+                            <button type="submit" class="grc-btn grc-btn--secondary">
+                              Upload
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

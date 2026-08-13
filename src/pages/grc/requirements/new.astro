@@ -4,11 +4,16 @@ export const prerender = false;
 /**
  * Raise a requirement (Build Prompt 58). Gate: REQUIREMENTS.manage.
  *
- * The finding is chosen here and cannot be left out: a request for information
- * belongs to the piece of audit work that needs it, and one that belongs to
- * nothing cannot be reported on or closed as part of anything. The owners are
- * chosen the same way action plan owners are, several at a time, because a
- * single ask routinely spans two departments.
+ * The finding is optional and sits last (Build Prompt 69). An auditor asks for
+ * the March reconciliations because they are testing something; whether those
+ * reconciliations are evidence for a finding, and which one, is knowable once
+ * they arrive. Requiring the link up front produced findings raised early as a
+ * peg to hang the request on, and requests kept in email entirely. Audit links
+ * it later, from the requirement's own page, or never.
+ *
+ * The owners are chosen the same way action plan owners are, several at a time,
+ * because a single ask routinely spans two departments, and a copy list beside
+ * them for the people who need to know it was asked without owing an answer.
  *
  * Arriving from a finding (`?work_paper=`) preselects it, so the auditor reading
  * a work paper does not have to find it again in a list.
@@ -47,7 +52,10 @@ if (allowed) {
   <div class="grc-page-head">
     <div>
       <h1>New requirement</h1>
-      <p class="grc-lead">Ask the business for the information a finding needs.</p>
+      <p class="grc-lead">
+        Ask the business for information. A finding can be linked to it later, once it is clear what
+        the information supports.
+      </p>
     </div>
     <a href="/requirements" class="grc-btn grc-btn--secondary">Back to requirements</a>
   </div>
@@ -67,30 +75,8 @@ if (allowed) {
       </p>
     ) : loadError ? (
       <GrcErrorCard subject="The requirement form" />
-    ) : workPapers.length === 0 ? (
-      <div class="grc-empty">
-        <p>
-          <strong>There is no finding to attach this to.</strong> Raise the work paper first; a
-          requirement belongs to the audit work that needs the information.
-        </p>
-      </div>
     ) : (
       <form method="post" action="/api/requirements" class="grc-panel">
-        <div class="grc-field">
-          <label for="work-paper">Work paper (required)</label>
-          <select id="work-paper" name="work_paper_id" class="grc-select" required>
-            <option value="">Choose the finding</option>
-            {workPapers.map((w) => (
-              <option value={w.id} selected={presetWorkPaper === w.id}>
-                {w.label}
-              </option>
-            ))}
-          </select>
-          <p class="grc-field__hint">
-            The finding this information is needed for. It cannot be added later.
-          </p>
-        </div>
-
         <div class="grc-field">
           <label for="description">What is required (required)</label>
           <textarea
@@ -122,8 +108,42 @@ if (allowed) {
             ))}
           </select>
           <p class="grc-field__hint">
-            Everyone named here is asked for it and can provide it. Hold Ctrl or Cmd to select more
-            than one.
+            Everyone named here is asked for it and can upload against it. Hold Ctrl or Cmd to
+            select more than one.
+          </p>
+        </div>
+
+        <div class="grc-field">
+          <label for="cc">Copy to</label>
+          <select id="cc" name="cc_ids" class="grc-select" multiple size="4">
+            {users.map((u) => (
+              <option value={u.id}>{u.label}</option>
+            ))}
+          </select>
+          <p class="grc-field__hint">
+            They get the same email and can read it, and they upload nothing. Somebody named as both
+            is treated as an owner.
+          </p>
+        </div>
+
+        {/* The finding, last and optional (Build Prompt 69). It sits at the
+            foot of the form because it is the thing an auditor least often
+            knows at this point: they are asking for the March reconciliations
+            because they are testing something, and whether those turn out to be
+            evidence for a finding is answerable once they arrive. */}
+        <div class="grc-field">
+          <label for="work-paper">Link to a finding (optional)</label>
+          <select id="work-paper" name="work_paper_id" class="grc-select">
+            <option value="">Not yet, link it later</option>
+            {workPapers.map((w) => (
+              <option value={w.id} selected={presetWorkPaper === w.id}>
+                {w.label}
+              </option>
+            ))}
+          </select>
+          <p class="grc-field__hint">
+            Leave this alone unless you already know. Audit can link the requirement to a finding at
+            any time afterwards, and the owner never sees it either way.
           </p>
         </div>
 

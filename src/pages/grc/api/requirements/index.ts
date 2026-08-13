@@ -6,12 +6,18 @@ export const prerender = false;
  * REQUIREMENTS.manage. Scoped to the acting organisation, audited, and the
  * named owners are notified that they have been asked.
  *
- * The work paper is required at creation, not optional and not editable into
- * place later: a request for information that hangs off no finding cannot be
- * reported on, cannot be closed as part of anything, and is exactly the loose
- * paperwork the module exists to replace. The repository refuses an id that
- * belongs to another organisation, so a posted value cannot reach across
- * tenants.
+ * THE FINDING IS OPTIONAL, AND USUALLY ABSENT (Build Prompt 69). An auditor asks
+ * for the March reconciliations because they are testing something; whether
+ * those reconciliations are evidence for a finding, and which finding, is
+ * knowable only once they arrive. Requiring the link up front produced findings
+ * raised early as a peg to hang the request on, and requests kept in email
+ * entirely. It is stamped later, from `/api/requirements/[id]/link`, and a
+ * requirement may stay unlinked for good.
+ *
+ * A finding that IS given is verified to belong to the acting organisation, so
+ * a posted value cannot reach across tenants, and an id that does not resolve is
+ * refused rather than silently dropped: quietly unlinking what the auditor asked
+ * to link would be worse than saying no.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
@@ -20,6 +26,7 @@ import { createRequirement } from '@grc/repos/requirementsModule';
 import { readDate } from '@grc/repos/requirements';
 import { notifyRequirementAssigned } from '@grc/notify/requirements';
 import { requirementNotice } from '@grc/repos/requirementNotice';
+import { recipientIds } from '@grc/repos/requirementRecipients';
 import { writeAuditLog } from '@grc/repos/audit';
 
 const back = (query: string): Response =>
@@ -33,15 +40,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const form = await request.formData();
-  const workPaperId = String(form.get('work_paper_id') ?? '').trim();
+  const workPaperId = String(form.get('work_paper_id') ?? '').trim() || null;
   const description = String(form.get('description') ?? '').trim();
   const ownerIds = form
     .getAll('owner_ids')
     .map((v) => String(v).trim())
     .filter(Boolean);
+  const ccIds = form
+    .getAll('cc_ids')
+    .map((v) => String(v).trim())
+    .filter(Boolean);
 
-  if (!workPaperId || !description) {
-    return back(`error=${encodeURIComponent('Choose a finding and say what is required.')}`);
+  if (!description) {
+    return back(`error=${encodeURIComponent('Say what is required.')}`);
   }
   if (ownerIds.length === 0) {
     return back(`error=${encodeURIComponent('Name at least one owner to provide it.')}`);
@@ -54,14 +65,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
     requestedDate: readDate(form.get('requested_date')),
     dueDate: readDate(form.get('due_date')),
     ownerIds,
+    ccIds,
     requestedBy: grc.userId,
   });
   if (!id) {
     return back(`error=${encodeURIComponent('That finding was not found in your organisation.')}`);
   }
 
+  // Owners and the copy list get the same message, because the copy exists so
+  // somebody knows what was asked for; telling them less defeats it.
   const notice = await requirementNotice(db, grc.organizationId, id, grc.userId);
-  if (notice) await notifyRequirementAssigned(db, grc.organizationId, ownerIds, notice);
+  if (notice) {
+    await notifyRequirementAssigned(
+      db,
+      grc.organizationId,
+      await recipientIds(db, grc.organizationId, id),
+      notice,
+    );
+  }
 
   try {
     await writeAuditLog(db, {
@@ -70,7 +91,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       action: 'REQUIREMENT.create',
       entityType: 'requirement',
       entityId: id,
-      details: `${workPaperId}: ${ownerIds.length} owner(s)`,
+      details: `${workPaperId ?? 'unlinked'}: ${ownerIds.length} owner(s), ${ccIds.length} copied`,
     });
   } catch {
     // best-effort audit
@@ -79,7 +100,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   return new Response(null, {
     status: 303,
     headers: {
-      location: `/requirements/${id}?done=${encodeURIComponent('Requirement raised and the owners notified.')}`,
+      location: `/requirements/${id}?done=${encodeURIComponent('Requirement raised and the recipients notified.')}`,
     },
   });
 };
