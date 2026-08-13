@@ -26,6 +26,9 @@ export const REVIEW_QUEUE_PATH = '/work-papers?status=Submitted';
 /** The work-paper list, filtered to the drafts a reminder is about. */
 export const DRAFT_QUEUE_PATH = '/work-papers?status=Draft';
 
+/** The auditee's own queue of findings to answer (Build Prompt 68). */
+export const RESPOND_QUEUE_PATH = '/auditee-responses';
+
 /**
  * The review queue a submission digest points the head of audit at (Build
  * Prompt 53): the findings waiting on them, not a dashboard to navigate from.
@@ -49,7 +52,16 @@ export function draftQueueLink(): string {
   return `${APP_BASE}${DRAFT_QUEUE_PATH}`;
 }
 
-/** Both destinations a digest can offer, resolved once for a drain run. */
-export function digestLinks(): { review: string; drafts: string } {
-  return { review: reviewQueueLink(), drafts: draftQueueLink() };
+/**
+ * The auditee's own queue (Build Prompt 68): the findings they are named on and
+ * owe an answer to. A unit manager opening a digest wants the list of what is
+ * theirs, not the reviewer's queue of what somebody else owes them.
+ */
+export function respondQueueLink(): string {
+  return `${APP_BASE}${RESPOND_QUEUE_PATH}`;
+}
+
+/** Every destination a digest can offer, resolved once for a drain run. */
+export function digestLinks(): { review: string; drafts: string; respond: string } {
+  return { review: reviewQueueLink(), drafts: draftQueueLink(), respond: respondQueueLink() };
 }
