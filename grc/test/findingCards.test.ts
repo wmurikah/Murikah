@@ -119,16 +119,28 @@ test('audit is three cards are one group, and management is answer is not', () =
   assert.equal(cards.find((c) => c.key === 'response')?.group, 'response', 'a separate voice');
 });
 
-test('the finding card holds the observation and its description, in that order', () => {
+test('the observation card holds the title as a title, then its description', () => {
   const card = findingCards(FULL).find((c) => c.key === 'finding');
   assert.equal(card?.heading, 'Observation');
-  assert.equal(card?.body[0].kind, 'facts');
-  assert.deepEqual(
-    card?.body[0].kind === 'facts' ? card.body[0].facts : [],
-    [{ label: 'Observation', value: 'Fuel reconciliations are not reviewed' }],
-    'the stored title, labelled Observation',
+  // The title is the name of the thing, not a labelled attribute of it
+  // (Build Prompt 71). "Observation: Fuel reconciliations are not reviewed"
+  // reads as a form field; the title alone reads as the heading it is.
+  assert.equal(card?.body[0].kind, 'title');
+  assert.equal(
+    card?.body[0].kind === 'title' ? card.body[0].text : '',
+    'Fuel reconciliations are not reviewed',
   );
   assert.equal(card?.body[1].kind, 'rich', 'and the stored body, as formatted narrative');
+});
+
+test('an observation with no title falls to the card is empty state', () => {
+  // The title counts as content, so a card holding only a blank one is empty
+  // and says so rather than drawing a heading over nothing.
+  const card = findingCards({ ...bare, observationTitle: '', observationDescription: '' }).find(
+    (c) => c.key === 'finding',
+  );
+  assert.equal(cardIsEmpty(card!), true);
+  assert.match(String(card!.emptyText), /No observation/);
 });
 
 test('the management response card carries the response, the owner and the actions', () => {
