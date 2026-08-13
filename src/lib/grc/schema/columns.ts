@@ -522,6 +522,14 @@ export const C = {
     added_at: 'added_at',
     added_by: 'added_by',
   },
+  requirement_recipients: {
+    requirement_id: 'requirement_id',
+    user_id: 'user_id',
+    email: 'email',
+    recipient_role: 'recipient_role',
+    added_at: 'added_at',
+    added_by: 'added_by',
+  },
   requirement_submissions: {
     submission_id: 'submission_id',
     requirement_id: 'requirement_id',
@@ -741,6 +749,9 @@ export const C = {
     last_reviewed_date: 'last_reviewed_date',
     closed_at: 'closed_at',
     closed_by: 'closed_by',
+    linked_work_paper_id: 'linked_work_paper_id',
+    linked_at: 'linked_at',
+    linked_by: 'linked_by',
   },
   work_paper_responsibles: {
     work_paper_id: 'work_paper_id',
