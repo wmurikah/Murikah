@@ -36,7 +36,7 @@ export const SETTINGS_FIELDS: SettingField[] = [
     key: 'RESPONSE_DEADLINE_DAYS',
     label: 'Auditee response deadline (days)',
     kind: 'number',
-    hint: 'How long an auditee has to respond once a finding is sent.',
+    hint: 'How long an auditee has to respond once a observation is sent.',
   },
   {
     key: 'MAX_RESPONSE_ROUNDS',

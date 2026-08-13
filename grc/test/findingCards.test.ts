@@ -121,7 +121,7 @@ test('audit is three cards are one group, and management is answer is not', () =
 
 test('the finding card holds the observation and its description, in that order', () => {
   const card = findingCards(FULL).find((c) => c.key === 'finding');
-  assert.equal(card?.heading, 'Finding');
+  assert.equal(card?.heading, 'Observation');
   assert.equal(card?.body[0].kind, 'facts');
   assert.deepEqual(
     card?.body[0].kind === 'facts' ? card.body[0].facts : [],
