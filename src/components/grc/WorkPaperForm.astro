@@ -23,9 +23,9 @@ interface Props {
    * Whether to offer Submit for review beside the save (Build Prompt 59).
    *
    * The two are one screen and two acts. Saving keeps work in progress and asks
-   * nothing of it; submitting hands the finding to a reviewer and is refused
+   * nothing of it; submitting hands the observation to a reviewer and is refused
    * until it is complete, with the missing fields named. Offered only while the
-   * finding is the actor's to submit, so a reviewer editing somebody's draft is
+   * observation is the actor's to submit, so a reviewer editing somebody's draft is
    * not invited to release it on their behalf.
    */
   offerSubmit?: boolean;
@@ -39,7 +39,7 @@ interface Props {
   hasAi?: boolean;
   /**
    * The evidence panel this form shows. Evidence belongs with the observation
-   * it supports, so it is part of writing the finding on both create and edit,
+   * it supports, so it is part of writing the observation on both create and edit,
    * not a second visit to the detail page. On create the record does not exist
    * yet, so uploads stage against `draftToken` and the save binds them; on edit
    * they attach to the work paper directly. Null when storage is unconfigured.
@@ -283,7 +283,7 @@ const templateJson = JSON.stringify(
   </fieldset>
 
   {
-    /* The finding itself, and it sits here on purpose: an auditor writes the
+    /* The observation itself, and it sits here on purpose: an auditor writes the
       observation once they have done the testing, so it follows the testing
       steps rather than opening the form (Build Prompt 67). The two fields are
       "Observation" and "Description" on screen and observation_title and
@@ -291,7 +291,7 @@ const templateJson = JSON.stringify(
       did not, so nothing stored has moved. */
   }
   <fieldset class="grc-fieldset">
-    <legend>The finding</legend>
+    <legend>The observation</legend>
     <div class="grc-field">
       <label for="observation_title">Observation</label>
       <input
@@ -428,9 +428,9 @@ const templateJson = JSON.stringify(
   {
     offerSubmit && (
       <p class="grc-field__hint" style="margin:0.5rem 0 0">
-        Saving keeps an unfinished finding safe as a draft. Submitting for review needs the audit
-        area, sub-area, audit period, observation, description, risk rating, recommendation and
-        assigned auditor.
+        Saving keeps an unfinished observation safe as a draft. Submitting for review needs the
+        audit area, sub-area, audit period, observation, description, risk rating, recommendation
+        and assigned auditor.
       </p>
     )
   }

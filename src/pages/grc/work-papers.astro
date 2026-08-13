@@ -130,7 +130,7 @@ const submittable = rows.filter(canSubmitRow);
   <div class="grc-page-head">
     <div>
       <h1>Work papers</h1>
-      <p class="grc-lead">Audit findings for {grc.organizationName}.</p>
+      <p class="grc-lead">Audit observations for {grc.organizationName}.</p>
     </div>
     {
       canCreate && (
@@ -141,7 +141,7 @@ const submittable = rows.filter(canSubmitRow);
     }
   </div>
 
-  <GrcAffiliateNotice subject="findings" />
+  <GrcAffiliateNotice subject="observations" />
 
   {
     done && (
@@ -253,7 +253,7 @@ const submittable = rows.filter(canSubmitRow);
           <div class="grc-empty">
             <p>
               <strong>No work papers match.</strong> Adjust the filters, or create the first
-              finding.
+              observation.
             </p>
           </div>
         ) : (
@@ -269,23 +269,43 @@ const submittable = rows.filter(canSubmitRow);
                 </button>
               </div>
             )}
-            <div class="grc-tablewrap">
-              <table class="grc-table" aria-label="Work papers">
+            {/* Column priority is declared here, where the table is written
+                (Build Prompt 70). The five the reader came for always fit:
+                reference, observation, risk, status and updated. The affiliate,
+                the audit area and the auditor give way on a narrower screen and
+                reappear under the observation, so nothing is lost, it is simply
+                read where there is room. */}
+            <div class="grc-tablewrap grc-tablewrap--fit">
+              <table class="grc-table grc-table--responsive" aria-label="Observations">
                 <thead>
                   <tr>
                     {submittable.length > 0 && (
-                      <th scope="col">
+                      <th scope="col" class="grc-nowrap">
                         <span class="grc-vh">Select for submission</span>
                       </th>
                     )}
-                    <th>Reference</th>
-                    <th>Title</th>
-                    <th>Affiliate</th>
-                    <th>Audit area</th>
-                    <th>Risk</th>
-                    <th>Auditor</th>
-                    <th>Status</th>
-                    <th>Updated</th>
+                    <th scope="col" class="grc-nowrap">
+                      Reference
+                    </th>
+                    <th scope="col">Observation</th>
+                    <th scope="col" class="grc-col--secondary">
+                      Affiliate
+                    </th>
+                    <th scope="col" class="grc-col--secondary">
+                      Audit area
+                    </th>
+                    <th scope="col" class="grc-nowrap">
+                      Risk
+                    </th>
+                    <th scope="col" class="grc-col--secondary">
+                      Auditor
+                    </th>
+                    <th scope="col" class="grc-nowrap">
+                      Status
+                    </th>
+                    <th scope="col" class="grc-nowrap grc-col--tertiary">
+                      Updated
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -306,24 +326,39 @@ const submittable = rows.filter(canSubmitRow);
                           )}
                         </td>
                       )}
-                      <td>
+                      <td class="grc-nowrap">
                         <a href={`/work-papers/${r.id}`}>{r.reference}</a>
                       </td>
-                      <td>{r.observationTitle || 'Untitled'}</td>
-                      <td>{r.affiliateName ?? r.affiliateCode ?? '-'}</td>
-                      <td>{r.auditAreaName ?? '-'}</td>
                       <td>
+                        {r.observationTitle || 'Untitled'}
+                        {/* What the collapsed columns said, on the line the
+                            observation already occupies. */}
+                        <span class="grc-cell__meta">
+                          {[
+                            r.affiliateName ?? r.affiliateCode,
+                            r.auditAreaName,
+                            r.assignedAuditorName,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </td>
+                      <td class="grc-col--secondary">
+                        {r.affiliateName ?? r.affiliateCode ?? '-'}
+                      </td>
+                      <td class="grc-col--secondary">{r.auditAreaName ?? '-'}</td>
+                      <td class="grc-nowrap">
                         {r.riskRating ? (
                           <span class={riskClass(r.riskRating)}>{r.riskRating}</span>
                         ) : (
                           '-'
                         )}
                       </td>
-                      <td>{r.assignedAuditorName ?? '-'}</td>
-                      <td>
+                      <td class="grc-col--secondary">{r.assignedAuditorName ?? '-'}</td>
+                      <td class="grc-nowrap">
                         <span class="grc-pill">{statusLabel(labels, r.status)}</span>
                       </td>
-                      <td class="grc-num">{fmtDate(r.updatedAt)}</td>
+                      <td class="grc-num grc-col--tertiary">{fmtDate(r.updatedAt)}</td>
                     </tr>
                   ))}
                 </tbody>

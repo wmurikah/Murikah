@@ -4,10 +4,10 @@ export const prerender = false;
 /**
  * Raise a requirement (Build Prompt 58). Gate: REQUIREMENTS.manage.
  *
- * The finding is optional and sits last (Build Prompt 69). An auditor asks for
+ * The observation is optional and sits last (Build Prompt 69). An auditor asks for
  * the March reconciliations because they are testing something; whether those
- * reconciliations are evidence for a finding, and which one, is knowable once
- * they arrive. Requiring the link up front produced findings raised early as a
+ * reconciliations are evidence for a observation, and which one, is knowable once
+ * they arrive. Requiring the link up front produced observations raised early as a
  * peg to hang the request on, and requests kept in email entirely. Audit links
  * it later, from the requirement's own page, or never.
  *
@@ -15,7 +15,7 @@ export const prerender = false;
  * because a single ask routinely spans two departments, and a copy list beside
  * them for the people who need to know it was asked without owing an answer.
  *
- * Arriving from a finding (`?work_paper=`) preselects it, so the auditor reading
+ * Arriving from a observation (`?work_paper=`) preselects it, so the auditor reading
  * a work paper does not have to find it again in a list.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
@@ -53,8 +53,8 @@ if (allowed) {
     <div>
       <h1>New requirement</h1>
       <p class="grc-lead">
-        Ask the business for information. A finding can be linked to it later, once it is clear what
-        the information supports.
+        Ask the business for information. A observation can be linked to it later, once it is clear
+        what the information supports.
       </p>
     </div>
     <a href="/requirements" class="grc-btn grc-btn--secondary">Back to requirements</a>
@@ -126,13 +126,13 @@ if (allowed) {
           </p>
         </div>
 
-        {/* The finding, last and optional (Build Prompt 69). It sits at the
+        {/* The observation, last and optional (Build Prompt 69). It sits at the
             foot of the form because it is the thing an auditor least often
             knows at this point: they are asking for the March reconciliations
             because they are testing something, and whether those turn out to be
-            evidence for a finding is answerable once they arrive. */}
+            evidence for a observation is answerable once they arrive. */}
         <div class="grc-field">
-          <label for="work-paper">Link to a finding (optional)</label>
+          <label for="work-paper">Link to a observation (optional)</label>
           <select id="work-paper" name="work_paper_id" class="grc-select">
             <option value="">Not yet, link it later</option>
             {workPapers.map((w) => (
@@ -142,8 +142,8 @@ if (allowed) {
             ))}
           </select>
           <p class="grc-field__hint">
-            Leave this alone unless you already know. Audit can link the requirement to a finding at
-            any time afterwards, and the owner never sees it either way.
+            Leave this alone unless you already know. Audit can link the requirement to a
+            observation at any time afterwards, and the owner never sees it either way.
           </p>
         </div>
 

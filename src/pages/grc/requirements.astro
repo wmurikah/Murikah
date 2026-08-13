@@ -6,7 +6,7 @@ export const prerender = false;
  * each ask has got to (Build Prompt 58).
  *
  * ONE SCREEN, TWO READERSHIPS. An auditor holding REQUIREMENTS.manage sees every
- * requirement in the organisation, filterable by finding, owner and status, and
+ * requirement in the organisation, filterable by observation, owner and status, and
  * raises new ones. Everybody else sees the requirements naming them, which for
  * an auditee owner is the whole of their audit system: what they have been asked
  * for, when it is wanted, and whether audit has come back on it.
@@ -147,7 +147,7 @@ const error = p.get('error');
             <div class="grc-field" style="min-width:16rem">
               <label for="f-wp">Work paper</label>
               <select id="f-wp" name="work_paper" class="grc-select">
-                <option value="">All findings</option>
+                <option value="">All observations</option>
                 {workPapers.map((w) => (
                   <option value={w.id} selected={filters.workPaperId === w.id}>
                     {w.label}
@@ -178,7 +178,7 @@ const error = p.get('error');
                   Not linked yet
                 </option>
                 <option value="yes" selected={p.get('linked') === 'yes'}>
-                  Linked to a finding
+                  Linked to a observation
                 </option>
               </select>
             </div>
@@ -207,7 +207,7 @@ const error = p.get('error');
             <p>
               <strong>Nothing to show.</strong>{' '}
               {manages
-                ? 'No requirement matches these filters. Raise one to ask the business for information; a finding can be linked to it later.'
+                ? 'No requirement matches these filters. Raise one to ask the business for information; a observation can be linked to it later.'
                 : 'You have not been asked for any information.'}
             </p>
           </div>
@@ -222,11 +222,11 @@ const error = p.get('error');
                   <th scope="col">Due</th>
                   <th scope="col">Rounds</th>
                   <th scope="col">Status</th>
-                  {/* Only audit sees the finding, and only audit can set it
+                  {/* Only audit sees the observation, and only audit can set it
                       (Build Prompt 69). An owner's table has no column for it,
                       because which work paper their document supports is not a
                       question they can answer or should be shown. */}
-                  {manages && <th scope="col">Linked finding</th>}
+                  {manages && <th scope="col">Linked observation</th>}
                   {/* The owner's own column: the thing they came here to do. */}
                   {!manages && <th scope="col">Provide it</th>}
                 </tr>
@@ -248,7 +248,7 @@ const error = p.get('error');
                       <td>
                         {r.workPaperId ? (
                           <a href={`/work-papers/${r.workPaperId}`}>
-                            {r.workPaperRef || 'Finding'}
+                            {r.workPaperRef || 'Observation'}
                           </a>
                         ) : (
                           <a class="grc-tone--muted" href={`/requirements/${r.id}#link`}>

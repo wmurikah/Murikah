@@ -54,7 +54,7 @@ const cellClass = (c: Cell): string =>
           <h3 class="grc-report__subsection">{block.text}</h3>
         );
       }
-      // One finding, drawn by the very component the work paper's own screen
+      // One observation, drawn by the very component the work paper's own screen
       // uses (Build Prompt 67), so the pack matches the screen it came from.
       if (block.kind === 'finding') {
         return <GrcFindingCards finding={block.source} flat />;

@@ -76,17 +76,17 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   {
     code: 'WORK_PAPER',
     name: 'Work papers',
-    description: 'Audit findings and their working papers.',
+    description: 'Audit observations and their working papers.',
   },
   {
     code: 'ACTION_PLAN',
     name: 'Action plans',
-    description: 'Remediation plans arising from findings.',
+    description: 'Remediation plans arising from observations.',
   },
   {
     code: 'AUDITEE_RESPONSE',
     name: 'Auditee responses',
-    description: 'The auditee side of a finding: responses and proposed plans.',
+    description: 'The auditee side of a observation: responses and proposed plans.',
   },
   {
     code: 'AUDIT_WORKBENCH',

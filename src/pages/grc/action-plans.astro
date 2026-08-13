@@ -2,7 +2,7 @@
 export const prerender = false;
 
 /**
- * Action plans list (Actionplanslist): remediation and follow-up of findings,
+ * Action plans list (Actionplanslist): remediation and follow-up of observations,
  * scoped to the acting organisation and to the source's role-based visibility.
  * Two views of the same data, toggled by ?view: a dense table and a Kanban
  * board grouped by status. Filterable by status, affiliate, audit area, owner,
@@ -219,10 +219,10 @@ const done = p.get('done');
       <>
         {orphans.length > 0 && (
           <div class="grc-panel" style="margin-bottom:1rem">
-            <h2>Plans without a parent finding</h2>
+            <h2>Plans without a parent observation</h2>
             <p>
-              Every action plan must be linked to the finding it remediates. These plans predate
-              that rule and are invisible to the finding drill-downs and reports until they are
+              Every action plan must be linked to the observation it remediates. These plans predate
+              that rule and are invisible to the observation drill-downs and reports until they are
               linked. Open each one and choose its work paper.
             </p>
             <ul>
