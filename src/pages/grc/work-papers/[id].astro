@@ -360,8 +360,8 @@ const findingSource: FindingSource | null = wp
             plain list on purpose, because it is reference material an auditor
             scans rather than the argument a reader follows, and the cards
             below are that argument (Build Prompt 67). */}
-        <div class="grc-panel">
-          <h2>Audit context</h2>
+        <fieldset class="grc-fieldset grc-preview-section">
+          <legend>Audit context</legend>
           <dl class="grc-detail">
             <>
               <dt>Year</dt>
@@ -428,14 +428,14 @@ const findingSource: FindingSource | null = wp
               <dd class="grc-richbody" set:html={rich('testing_steps')} />
             </>
           </dl>
-        </div>
+        </fieldset>
 
         {/* The observation itself, from the shared arrangement: the header strip
             with its risk pill, then audit's assessment as one group (Observation,
             Risk, Recommendation), then management's answer, the evidence and
             the trail. The same component draws it in the board pack, so the
             two cannot drift apart. */}
-        {findingSource && <GrcFindingCards finding={findingSource} />}
+        {findingSource && <GrcFindingCards finding={findingSource} formStyle />}
 
         {hasAi && (
           <div class="grc-panel">
