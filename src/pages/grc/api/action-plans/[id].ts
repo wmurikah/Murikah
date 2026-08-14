@@ -62,7 +62,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     return new Response(null, {
       status: 303,
       headers: {
-        location: `/action-plans/${id}/edit?error=${encodeURIComponent('Every action plan must be linked to a parent finding. Choose the work paper it remediates.')}`,
+        location: `/action-plans/${id}/edit?error=${encodeURIComponent('Every action plan must be linked to a parent observation. Choose the work paper it remediates.')}`,
       },
     });
   }
