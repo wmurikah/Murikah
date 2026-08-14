@@ -1865,204 +1865,208 @@
   font-weight: 600;
 }
 
-/* --- The observation cards, "Quiet paper" (Build Prompts 67, 70, 71) -------
+/* --- The observation panel, "Snapshot-led" (Build Prompt 72) --------------
    One styling system for the observation wherever it is drawn: its own screen,
    the report preview, and the printed or PDF version of either. The class names
    are the contract, which is why the print rules further down adjust these
    rather than redrawing the layout: a board pack that does not match the screen
    it was approved from is a second document nobody reconciled.
 
-   QUIET PAPER. Flat, light cards on a warm paper ground, with a small gold
-   label naming each section and nothing filled or dark anywhere. The point is
-   that the reader's eye goes to the words, not to the boxes around them: a
-   finding is read for its argument, and chrome that competes with the argument
-   is chrome that has to be got past. The palette is declared here as scoped
-   custom properties rather than pushed into the global tokens, so the card
-   system carries its own values without restyling every other screen in the
-   product in the same change. */
-.grc-finding {
-  --qp-paper: #f4efe4;
-  --qp-card: #fffdf9;
-  --qp-line: #e6dfce;
-  --qp-navy: #16233f;
-  /* The gold and the muted grey are a shade darker than the design named
-     (#b8922e and #6d7480). Those two failed WCAG AA where they are actually
-     used: the gold label measured 2.88:1 on the card, and the muted line
-     4.11:1 on the paper, against the 4.5:1 an 11px uppercase label and a 12px
-     line both need. These are the least darkening that clears it, so the
-     colours are the same colours, only legible. `quietPaper.test.ts` computes
-     the ratios rather than taking them on trust. */
-  --qp-gold: #8c6f23;
-  --qp-ink: #1b2430;
-  --qp-muted: #646b76;
+   CLARITY, DEFERENCE, DEPTH. One panel, hairline rules between sections, and
+   nothing filled or dark. Whitespace and type carry the whole hierarchy, which
+   is what leaves the risk pill as the only colour on the page and therefore the
+   only thing that means anything by being coloured. Two text colours: ink for
+   what the reader came for, muted for what merely places it. The title takes
+   navy and the section labels gold, which are the two exceptions the design
+   names, and neither is used for running text.
 
-  display: grid;
-  gap: 16px;
-  color: var(--qp-ink);
+   Weights are 400, 500 and 600. No light weight appears: a 12px label at 300
+   is a label somebody has to lean in to read.
+
+   The spacing is a strict 8px rhythm, so the eye can predict where the next
+   thing starts. */
+.grc-snap {
+  --sn-page: #faf8f3;
+  --sn-panel: #ffffff;
+  --sn-divider: #f2eee4;
+  --sn-border: #ece7db;
+  --sn-navy: #1a2740;
+  --sn-ink: #1d2129;
+  --sn-muted: #71767f;
+  /* Darker than the #a9822b the design named. That value measures 3.55:1 on the
+     panel, and these labels are 11.5px uppercase, so they need 4.5:1. This is
+     the least darkening that clears it: the same gold, legible.
+     `snapshotPalette.test.ts` computes the ratio rather than trusting it. */
+  --sn-gold: #917025;
+
+  /* One typeface, the system stack, so the panel renders in the reader's own
+     interface font and costs no download. */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--sn-panel);
+  border: 1px solid var(--sn-border);
+  border-radius: 12px;
+  color: var(--sn-ink);
+  overflow: hidden;
 }
 
-/* The header strip: a white band with a hairline under it, not a card. It names
-   the record rather than holding a section of it, so it is the masthead the
-   cards hang beneath, and it is deliberately the one thing on the page with no
-   border around it. */
-.grc-finding__strip {
+/* The snapshot: read first, and built to be read first. */
+.grc-snap__head {
+  padding: 24px;
+  border-bottom: 1px solid var(--sn-divider);
+}
+.grc-snap__kicker {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 16px;
-  padding: 0 2px 14px;
-  border-bottom: 1px solid var(--qp-line);
-  background: transparent;
+  gap: 8px;
+  margin-bottom: 16px;
 }
-.grc-finding__ident {
-  flex: 1 1 20rem;
-  min-width: 0;
-}
-.grc-finding__ref {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--qp-navy);
+.grc-snap__ref {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--sn-muted);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-/* Where it sits in the audit, as one quiet line rather than a grid of labels. */
-.grc-finding__meta {
-  margin: 3px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--qp-muted);
+/* The risk is pushed to the far end, where the eye lands after the reference
+   and before the title. */
+.grc-snap__risk {
+  margin-left: auto;
+}
+/* The anchor: the largest thing on the page, and the first thing read. The year
+   and the rest of the administration sit below it, because they answer
+   questions the reader has not asked yet. */
+.grc-snap__title {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--sn-navy);
   overflow-wrap: anywhere;
 }
-.grc-finding__meta:empty {
-  display: none;
+.grc-snap__context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
 }
-/* The status, as a plain chip: a fact about where the record is, carrying no
-   urgency of its own, so it takes no colour beyond the paper it sits on. */
+
+/* A chip: a fact about where the record sits, carrying no urgency of its own,
+   so it takes no colour. */
 .grc-chip {
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 3px 10px;
-  border: 1px solid var(--qp-line);
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--sn-border, #ece7db);
   border-radius: 999px;
-  background: var(--qp-card);
+  background: transparent;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--qp-navy);
+  font-weight: 500;
+  color: var(--sn-muted, #71767f);
   white-space: nowrap;
 }
-.grc-finding__risk {
-  flex: 0 0 auto;
-  margin: 0 0 0 auto;
+.grc-chip--quiet {
+  border-color: var(--sn-divider);
 }
 
-/* Audit's three cards, held together by spacing rather than by a box: they sit
-   closer to one another than to what follows, which says they belong together
-   without putting a card inside a card. */
-.grc-finding__group {
-  display: grid;
-  gap: 10px;
+/* A section: label, then content, ruled off from the next. */
+.grc-snap__section {
+  padding: 24px;
+  border-bottom: 1px solid var(--sn-divider);
 }
-
-.grc-fcard {
-  padding: 15px 17px;
-  border: 1px solid var(--qp-line);
-  border-radius: 10px;
-  background: var(--qp-card);
+.grc-snap__section:last-child {
+  border-bottom: none;
 }
-/* The section label: small, gold, and quiet. It says which part of the argument
-   this is; the content is what the reader came for, so the label must not
-   compete with it. */
-.grc-fcard__label {
+.grc-snap__label {
   margin: 0 0 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.9px;
-  text-transform: uppercase;
-  color: var(--qp-gold);
-}
-/* The card's own title, which on the observation card is the finding's name. */
-.grc-fcard__title {
-  margin: 0 0 8px;
-  font-size: 16px;
-  line-height: 1.4;
+  font-size: 11.5px;
   font-weight: 600;
-  color: var(--qp-navy);
-  overflow-wrap: anywhere;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sn-gold);
 }
-.grc-fcard__body {
+.grc-snap__body {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
-  color: var(--qp-ink);
+  color: var(--sn-ink);
 }
-.grc-fcard__title + .grc-fcard__body,
-.grc-fcard__body + .grc-fcard__body,
-.grc-fcard__facts + .grc-fcard__body,
-.grc-fcard__body + .grc-tablewrap,
-.grc-fcard__facts + .grc-tablewrap {
-  margin-top: 10px;
+/* Risk is the explanation of the observation rather than the observation, so it
+   is set in the secondary colour: present, and plainly a note on what came
+   before it. */
+.grc-snap__section[data-card='risk'] .grc-snap__body,
+.grc-snap__section[data-card='trail'] .grc-snap__table td {
+  color: var(--sn-muted);
 }
-.grc-fcard__facts {
+.grc-snap__body + .grc-snap__body,
+.grc-snap__facts + .grc-snap__body,
+.grc-snap__body + .grc-tablewrap,
+.grc-snap__facts + .grc-tablewrap {
+  margin-top: 16px;
+}
+.grc-snap__facts {
   display: grid;
   gap: 8px;
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
 }
-.grc-fcard__facts dt {
+.grc-snap__facts dt {
   margin: 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--qp-muted);
+  color: var(--sn-muted);
 }
-.grc-fcard__facts dd {
-  margin: 2px 0 0;
-  color: var(--qp-ink);
+.grc-snap__facts dd {
+  margin: 4px 0 0;
+  color: var(--sn-ink);
   overflow-wrap: anywhere;
 }
-/* The quiet empty state: a sentence saying what is not there yet, in the voice
-   of a note rather than a warning, because nothing has gone wrong. */
-.grc-fcard__empty {
+/* The quiet empty state: a short note in the secondary colour, in the voice of
+   a fact rather than a warning, because nothing has gone wrong. */
+.grc-snap__empty {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-style: italic;
-  color: var(--qp-muted);
+  color: var(--sn-muted);
 }
-.grc-fcard__table {
+.grc-snap__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
 }
-.grc-fcard__table th {
+.grc-snap__table th {
   text-align: left;
-  padding: 6px 10px 6px 0;
-  border-bottom: 1px solid var(--qp-line);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
+  padding: 0 16px 8px 0;
+  border-bottom: 1px solid var(--sn-divider);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--qp-muted);
+  color: var(--sn-muted);
   white-space: nowrap;
 }
-.grc-fcard__table td {
-  padding: 8px 10px 8px 0;
-  border-bottom: 1px solid var(--qp-line);
+.grc-snap__table td {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--sn-divider);
   vertical-align: top;
-  color: var(--qp-ink);
+  color: var(--sn-ink);
   overflow-wrap: anywhere;
 }
-.grc-fcard__table tr:last-child td {
+.grc-snap__table tr:last-child td {
   border-bottom: none;
 }
-/* Inside a card the narrative takes the card's own measure and colour. */
-.grc-fcard .grc-richbody h4,
-.grc-fcard .grc-richbody h5 {
-  color: var(--qp-navy);
+/* Inside the panel the narrative takes the panel's own colours and measure. */
+.grc-snap .grc-richbody h4,
+.grc-snap .grc-richbody h5 {
+  color: var(--sn-navy);
 }
-.grc-fcard .grc-richbody li::marker {
-  color: var(--qp-gold);
+.grc-snap .grc-richbody li::marker {
+  color: var(--sn-muted);
 }
 
 /* Print: only the report, edge to edge, colours preserved. */
@@ -2098,46 +2102,43 @@
     background: #fff;
   }
 
-  /* The finding cards print as the same cards (Build Prompt 67). The layout is
-     not redrawn, only adjusted for paper: the strip and the pill keep their
-     colours because the risk rating is the fact a printed pack is read for, and
-     a card is not allowed to break across a page, because half a
-     recommendation on the next sheet is how a board pack gets misread. */
+  /* The observation prints as the same panel (Build Prompt 72). The layout is
+     not redrawn, only adjusted for paper: the risk pill and the gold labels
+     keep their colours because the rating is the fact a printed pack is read
+     for and the labels are what make the sections findable, and no section is
+     allowed to break across a page, because half a recommendation on the next
+     sheet is how a board pack gets misread. */
   .grc-pill,
-  .grc-fcard__table th,
+  .grc-snap__label,
+  .grc-snap__table th,
   .grc-report__table th {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .grc-fcard,
-  .grc-finding__strip,
-  .grc-finding__group {
+  .grc-snap {
+    border-radius: 0;
+  }
+  .grc-snap__head,
+  .grc-snap__section {
     break-inside: avoid;
     page-break-inside: avoid;
+    padding: 16px;
     box-shadow: none;
   }
-  /* Quiet paper prints as quiet paper: the same cards, the same gold labels,
-     the same hairlines, tightened for the sheet. Nothing is redrawn, because
-     the classes are the contract between the screen and the page. */
-  .grc-finding {
-    gap: 10px;
+  .grc-snap__title {
+    font-size: 20px;
   }
-  .grc-finding__group {
-    gap: 7px;
+  .grc-snap__body,
+  .grc-snap__empty,
+  .grc-snap__facts {
+    font-size: 13px;
   }
-  .grc-fcard {
-    padding: 10px 12px;
+  .grc-snap__table {
+    font-size: 12px;
   }
-  .grc-fcard__label,
-  .grc-fcard__title,
-  .grc-fcard__table th,
-  .grc-finding__ref {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  /* A finding starts a fresh page in a pack of several, so the reader is never
-     handed a page holding the tail of one observation and the head of the next. */
-  .grc-report .grc-finding + .grc-finding {
+  /* An observation starts a fresh page in a pack of several, so the reader is
+     never handed a page holding the tail of one and the head of the next. */
+  .grc-report .grc-snap + .grc-snap {
     break-before: page;
     page-break-before: always;
   }
