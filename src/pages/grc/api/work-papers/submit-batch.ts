@@ -60,7 +60,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return back(`error=${encodeURIComponent('Select at least one draft to submit.')}`);
   }
   if (ids.length > MAX_BATCH) {
-    return back(`error=${encodeURIComponent(`Submit at most ${MAX_BATCH} findings at a time.`)}`);
+    return back(
+      `error=${encodeURIComponent(`Submit at most ${MAX_BATCH} observations at a time.`)}`,
+    );
   }
 
   const db = await getDb(getGrcEnv());
@@ -90,7 +92,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (submitted === 0) {
     return back(`error=${encodeURIComponent(`Nothing was submitted. ${refused[0] ?? ''}`.trim())}`);
   }
-  const noun = submitted === 1 ? 'finding' : 'findings';
+  const noun = submitted === 1 ? 'observation' : 'observations';
   const done = `${submitted} ${noun} submitted for review.`;
   if (refused.length > 0) {
     // A partial batch reports both halves in one line: what moved, and what did
