@@ -43,22 +43,6 @@ const meaningful = (value: string | null | undefined): boolean =>
                 </div>
               ))}
           </dl>
-        ) : card.key === 'trail' ? (
-          <ol class="grc-snap__trail" aria-label="Work paper history">
-            {body.rows.map((row) => (
-              <li class="grc-snap__trail-item">
-                <span class="grc-snap__trail-marker" aria-hidden="true" />
-                <div class="grc-snap__trail-content">
-                  <div class="grc-snap__trail-summary">
-                    <span class="grc-snap__trail-step">{row[0]}</span>
-                    {meaningful(row[2]) && <time class="grc-snap__trail-date">{row[2]}</time>}
-                  </div>
-                  {meaningful(row[1]) && <p class="grc-snap__trail-by">By {row[1]}</p>}
-                  {meaningful(row[3]) && <p class="grc-snap__trail-comment">{row[3]}</p>}
-                </div>
-              </li>
-            ))}
-          </ol>
         ) : card.key === 'evidence' ? (
           <ul class="grc-snap__evidence" aria-label="Supporting documents">
             {body.rows.map((row) => (
