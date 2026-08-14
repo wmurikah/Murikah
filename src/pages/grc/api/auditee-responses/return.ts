@@ -46,7 +46,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const db = await getDb(getGrcEnv());
   const wp = await getWorkPaper(db, grc.organizationId, workPaperId, grc.affiliateScope);
-  if (!wp) return fail(workPaperId, 'That finding was not found.');
+  if (!wp) return fail(workPaperId, 'That observation was not found.');
 
   const standing = await auditeeStanding(db, grc.organizationId, workPaperId, {
     userId: grc.userId,
@@ -59,7 +59,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const live = await liveDelegation(db, grc.organizationId, workPaperId);
-  if (!live) return fail(workPaperId, 'There is no open delegation on this finding.');
+  if (!live) return fail(workPaperId, 'There is no open delegation on this observation.');
   if (live.delegatedTo !== grc.userId && !grc.isPlatformOwner) {
     return fail(workPaperId, 'That delegation is not yours to return.');
   }
