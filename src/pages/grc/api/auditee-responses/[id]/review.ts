@@ -59,10 +59,10 @@ const DECISION_LABEL: Record<AuditDecision, string> = {
 };
 
 const DONE_MESSAGE: Record<AuditDecision, (round: number) => string> = {
-  accept: () => 'Response accepted and the finding marked reviewed.',
+  accept: () => 'Response accepted and the observation marked reviewed.',
   modify: () => 'Response modified and accepted. The change is recorded on the round.',
   request_change: (round) =>
-    `Change requested. The finding is back with the auditee for round ${round}.`,
+    `Change requested. The observation is back with the auditee for round ${round}.`,
 };
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
@@ -137,7 +137,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     return back(
       thread,
       `error=${encodeURIComponent(
-        `This finding has used its ${maxRounds} response rounds. Resolve it directly rather than asking for another round.`,
+        `This observation has used its ${maxRounds} response rounds. Resolve it directly rather than asking for another round.`,
       )}`,
     );
   }
@@ -207,7 +207,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   if (!result.ok) {
     return back(
       thread,
-      `error=${encodeURIComponent(`The decision was recorded, but the finding could not move: ${result.message}`)}`,
+      `error=${encodeURIComponent(`The decision was recorded, but the observation could not move: ${result.message}`)}`,
     );
   }
   // Everybody named on the auditee side is told what audit decided, whether or
