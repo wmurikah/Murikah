@@ -13,6 +13,7 @@ import {
   cardIsEmpty,
   findingCards,
   findingHeader,
+  contextChips,
   riskPill,
   riskPillClass,
   visibleCards,
@@ -109,38 +110,51 @@ test('the pill uses the product is own pill classes, not a second set', () => {
 
 test('the cards run in the order the argument runs', () => {
   const keys = visibleCards(FULL).map((c) => c.key);
-  assert.deepEqual(keys, ['finding', 'risk', 'recommendation', 'response', 'evidence', 'trail']);
+  assert.deepEqual(keys, [
+    'description',
+    'risk',
+    'recommendation',
+    'response',
+    'evidence',
+    'trail',
+  ]);
 });
 
 test('audit is three cards are one group, and management is answer is not', () => {
   const cards = findingCards(FULL);
   const audit = cards.filter((c) => c.group === 'audit').map((c) => c.key);
-  assert.deepEqual(audit, ['finding', 'risk', 'recommendation'], "audit's assessment, together");
+  assert.deepEqual(audit, ['description', 'risk', 'recommendation'], "audit's own account");
   assert.equal(cards.find((c) => c.key === 'response')?.group, 'response', 'a separate voice');
 });
 
-test('the observation card holds the title as a title, then its description', () => {
-  const card = findingCards(FULL).find((c) => c.key === 'finding');
-  assert.equal(card?.heading, 'Observation');
-  // The title is the name of the thing, not a labelled attribute of it
-  // (Build Prompt 71). "Observation: Fuel reconciliations are not reviewed"
-  // reads as a form field; the title alone reads as the heading it is.
-  assert.equal(card?.body[0].kind, 'title');
-  assert.equal(
-    card?.body[0].kind === 'title' ? card.body[0].text : '',
-    'Fuel reconciliations are not reviewed',
+test('the title is the snapshot is anchor, and never repeated as a section', () => {
+  // The title is read first, at the top of the panel, so the first section is
+  // the description rather than the title again (Build Prompt 72): a reader who
+  // has to read the same sentence twice before reaching anything new has been
+  // made to work for nothing.
+  assert.equal(findingHeader(FULL).title, 'Fuel reconciliations are not reviewed');
+  const section = findingCards(FULL).find((c) => c.key === 'description');
+  assert.equal(section?.heading, 'Description');
+  assert.deepEqual(
+    section?.body.map((b) => b.kind),
+    ['rich'],
   );
-  assert.equal(card?.body[1].kind, 'rich', 'and the stored body, as formatted narrative');
+  const titles = findingCards(FULL).flatMap((c) =>
+    c.body.filter((b) => b.kind === 'rich' && b.text === FULL.observationTitle),
+  );
+  assert.deepEqual(titles, [], 'no section repeats the title');
 });
 
-test('an observation with no title falls to the card is empty state', () => {
-  // The title counts as content, so a card holding only a blank one is empty
-  // and says so rather than drawing a heading over nothing.
-  const card = findingCards({ ...bare, observationTitle: '', observationDescription: '' }).find(
-    (c) => c.key === 'finding',
-  );
-  assert.equal(cardIsEmpty(card!), true);
-  assert.match(String(card!.emptyText), /No observation/);
+test('the context chips place the observation, and drop what is blank', () => {
+  assert.deepEqual(contextChips({ ...FULL, period: '2026-01-01 to 2026-03-31' }), [
+    'Hass Mombasa',
+    'Treasury',
+    'Reconciliations',
+    '2026-01-01 to 2026-03-31',
+  ]);
+  // A chip reading "-" is a box that says nothing and still costs the reader a
+  // glance to dismiss.
+  assert.deepEqual(contextChips(bare), []);
 });
 
 test('the management response card carries the response, the owner and the actions', () => {
@@ -164,7 +178,7 @@ test('a card with nothing in it is quiet, not an empty box', () => {
   const response = cards.find((c) => c.key === 'response');
   assert.ok(response, 'the response card is kept, because its absence is a fact');
   assert.equal(cardIsEmpty(response!), true);
-  assert.match(String(response!.emptyText), /has not responded/);
+  assert.match(String(response!.emptyText), /Awaiting response/);
   // And a card with nothing to say about its own absence is dropped entirely.
   assert.equal(
     cards.some((c) => c.key === 'evidence'),
@@ -181,13 +195,16 @@ test('a finding still being written keeps its cards and says what is missing', (
   const cards = visibleCards(bare);
   assert.deepEqual(
     cards.map((c) => c.key),
-    ['finding', 'risk', 'recommendation', 'response'],
+    ['description', 'risk', 'recommendation', 'response'],
     'the four that always exist',
   );
   for (const key of ['risk', 'recommendation']) {
     const card = cards.find((c) => c.key === key);
     assert.equal(cardIsEmpty(card!), true, `${key} is empty`);
-    assert.ok(String(card!.emptyText).length > 15, `${key} says what is not there yet`);
+    // Short, because the empty state is a note and not an apology: "Not yet
+    // rated." tells the reader everything the absence means.
+    assert.ok(String(card!.emptyText).length > 8, `${key} says what is not there yet`);
+    assert.match(String(card!.emptyText), /^Not yet/, `${key} says it in the design's voice`);
   }
 });
 

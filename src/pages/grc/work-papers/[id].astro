@@ -217,6 +217,9 @@ const findingSource: FindingSource | null = wp
       affiliate: String(wp.affiliate_name ?? wp.affiliate_code ?? ''),
       auditArea: String(wp.audit_area_name ?? ''),
       subArea: String(wp.sub_area_name ?? ''),
+      // The period as one chip rather than two dates: the reader wants to know
+      // what span was looked at, not to assemble it from a pair of fields.
+      period: [text('audit_period_from'), text('audit_period_to')].filter(Boolean).join(' to '),
       status: statusLabel(labels, String(wp.status ?? '')),
       riskRating: text('risk_rating'),
       riskSummary: text('risk_summary') ?? '',

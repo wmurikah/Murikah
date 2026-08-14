@@ -62,22 +62,25 @@ test('the detail shows every field a work paper stores', () => {
   );
 });
 
-test('the finding panel names the observation and its description, in that order', () => {
+test('the panel anchors on the observation title, then describes it', () => {
   // Build Prompt 63 put the stored title on this panel, because a page can name
   // a record in its heading and still fail to show the field. Build Prompt 67
   // moved the pair into the shared card arrangement, so the assertion moved
   // with them: the arrangement is what all three renderers read, and it is
   // where "Observation, then Description" is now decided.
   const cards = readFileSync(CARDS, 'utf8');
+  // Snapshot-led (Build Prompt 72): the stored title is the panel's anchor,
+  // read before anything else, and the stored body is the first section under
+  // it. Neither is a labelled row any more.
   assert.match(
     cards,
-    /\{ kind: 'title', text: source\.observationTitle \}/,
-    'the stored title is the observation card is own title (Build Prompt 71)',
+    /title: source\.observationTitle \|\| 'Untitled observation'/,
+    'the stored title is the snapshot is anchor',
   );
   assert.match(
     cards,
     /\{ kind: 'rich', text: source\.observationDescription \}/,
-    'and the stored body is the formatted narrative beside it',
+    'and the stored body is the Description section',
   );
   const template = readFileSync(DETAIL, 'utf8');
   assert.ok(
