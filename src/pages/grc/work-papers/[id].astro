@@ -250,6 +250,7 @@ const findingSource: FindingSource | null = wp
 ---
 
 <GrcLayout title={wp ? String(wp.reference) : 'Work paper'}>
+  <div class="grc-work-paper-page">
   <div class="grc-page-head">
     <div>
       <h1>{wp ? wp.reference : 'Work paper'}</h1>
@@ -769,6 +770,7 @@ const findingSource: FindingSource | null = wp
       </>
     )
   }
+  </div>
 </GrcLayout>
 
 <script>
