@@ -19,6 +19,8 @@ interface Props {
 }
 const { card } = Astro.props;
 const filled = (value: string | null | undefined): boolean => String(value ?? '').trim() !== '';
+const meaningful = (value: string | null | undefined): boolean =>
+  filled(value) && String(value).trim() !== '-';
 ---
 
 <section class="grc-snap__section" data-card={card.key}>
