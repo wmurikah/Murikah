@@ -2996,17 +2996,26 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       // group, then what management said. The stored title is the field
       // labelled "Observation" inside the Finding card, which is what Build
       // Prompt 63 put on this page and 67 moved into its proper place.
-      assert.ok(page.body.includes('data-finding-cards'), 'the observation is drawn as cards');
-      // Quiet paper: a small gold section label over the card, and the stored
-      // title set as the card's own title rather than a labelled field
-      // (Build Prompt 71).
+      assert.ok(page.body.includes('data-finding-cards'), 'the observation is drawn as a panel');
+      // Snapshot-led (Build Prompt 72): the title is the anchor at the top of
+      // the panel, and the sections beneath it carry small gold labels.
       assert.ok(
-        /<p class="grc-fcard__label">Observation<\/p>/.test(page.body),
-        'the card carries its gold section label',
+        new RegExp(`<h2 class="grc-snap__title">${title}</h2>`).test(page.body),
+        'the stored title is the snapshot anchor',
       );
       assert.ok(
-        new RegExp(`<h3 class="grc-fcard__title">${title}</h3>`).test(page.body),
-        'and the stored title is the card title',
+        /<p class="grc-snap__label">Description<\/p>/.test(page.body),
+        'and the first section carries its gold label',
+      );
+      // High to low: nothing administrative precedes the title.
+      const titleAt = page.body.indexOf('grc-snap__title');
+      assert.ok(
+        page.body.indexOf('grc-snap__context') > titleAt,
+        'the context chips sit below the title, not above it',
+      );
+      assert.ok(
+        page.body.indexOf('data-card="description"') > titleAt,
+        'and every section follows it',
       );
       assert.ok(
         !page.body.includes('Observation title'),
@@ -3023,11 +3032,11 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         return i;
       };
       assert.ok(
-        at('<dt>Testing steps</dt>') < at('data-card="finding"'),
+        at('<dt>Testing steps</dt>') < at('data-card="description"'),
         'the finding follows the testing that found it',
       );
       for (const [before, after] of [
-        ['data-card="finding"', 'data-card="risk"'],
+        ['data-card="description"', 'data-card="risk"'],
         ['data-card="risk"', 'data-card="recommendation"'],
         ['data-card="recommendation"', 'data-card="response"'],
       ] as const) {
@@ -3062,19 +3071,19 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         !reviewerView.body.includes('does not hold'),
         'and is told no permission reasons either',
       );
-      assert.ok(reviewerView.body.includes('grc-fcard__title'), 'and sees the observation named');
+      assert.ok(reviewerView.body.includes('grc-snap__title'), 'and sees the observation named');
       assert.ok(reviewerView.body.includes('data-finding-cards'), 'in the same card arrangement');
       // A card with nothing in it is a quiet line, not a headed empty box: this
       // finding has never been answered, and the reader is told so rather than
       // left to wonder whether the response was omitted.
       assert.ok(
-        /data-card="response"[\s\S]{0,400}has not responded/.test(reviewerView.body),
+        /data-card="response"[\s\S]{0,400}Awaiting response/.test(reviewerView.body),
         'an unanswered finding says so in its response card',
       );
       // And a card with nothing to say about its own absence is dropped.
       assert.ok(
         !reviewerView.body.includes('data-card="trail"') ||
-          reviewerView.body.includes('grc-fcard__table'),
+          reviewerView.body.includes('grc-snap__table'),
         'a trail card only exists when there is a trail to show',
       );
 
@@ -3084,7 +3093,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.equal(pack.status, 200, `the observations report answered ${pack.status}`);
       assert.ok(pack.body.includes('data-finding-cards'), 'the pack is drawn as the same cards');
       assert.ok(pack.body.includes('grc-pill--risk-'), 'with the same risk pill');
-      for (const card of ['finding', 'risk', 'recommendation']) {
+      for (const card of ['description', 'risk', 'recommendation']) {
         assert.ok(
           pack.body.includes(`data-card="${card}"`),
           `the pack must carry the ${card} card`,
