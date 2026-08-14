@@ -2060,6 +2060,65 @@
 .grc-snap__table tr:last-child td {
   border-bottom: none;
 }
+/* Evidence reads as a lightweight file list rather than a table in a card.
+   The document is the primary action; provenance stays close but deferential. */
+.grc-snap__evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.grc-snap__evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--sn-divider);
+}
+.grc-snap__evidence-item:first-child {
+  padding-top: 4px;
+}
+.grc-snap__evidence-item:last-child {
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+.grc-snap__evidence-icon {
+  display: grid;
+  flex: 0 0 2.5rem;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  background: var(--grc-stone, #f7f5ef);
+  color: var(--sn-navy);
+}
+.grc-snap__evidence-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+.grc-snap__evidence-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.grc-snap__evidence-name {
+  color: var(--sn-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.grc-snap__evidence-detail {
+  color: var(--sn-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
 /* Inside the panel the narrative takes the panel's own colours and measure. */
 .grc-snap .grc-richbody h4,
 .grc-snap .grc-richbody h5 {
