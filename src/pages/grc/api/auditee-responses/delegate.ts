@@ -52,7 +52,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const db = await getDb(getGrcEnv());
   const wp = await getWorkPaper(db, grc.organizationId, workPaperId, grc.affiliateScope);
-  if (!wp) return fail(workPaperId, 'That finding was not found.');
+  if (!wp) return fail(workPaperId, 'That observation was not found.');
 
   const standing = await auditeeStanding(db, grc.organizationId, workPaperId, {
     userId: grc.userId,
@@ -65,13 +65,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       workPaperId,
       stage === AUDITEE_STAGE.DELEGATED
         ? 'This response is already with a delegate. They must return it before it can be delegated again.'
-        : 'Only a responsible on this finding can delegate its response.',
+        : 'Only a responsible on this observation can delegate its response.',
     );
   }
   // Belt and braces against a double submission: the stage says no delegate is
   // holding it, so a live row here means two posts crossed.
   if (await liveDelegation(db, grc.organizationId, workPaperId)) {
-    return fail(workPaperId, 'A delegation on this finding is already open.');
+    return fail(workPaperId, 'A delegation on this observation is already open.');
   }
 
   // The delegate has to be a real, active member of this organisation. Reading

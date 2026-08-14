@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   if (!id) return new Response(null, { status: 303, headers: { location: '/requirements' } });
 
   if (!grc.isPlatformOwner && !grc.perms.includes('REQUIREMENTS.manage')) {
-    return back(id, `error=${encodeURIComponent('You cannot link requirements to findings.')}`);
+    return back(id, `error=${encodeURIComponent('You cannot link requirements to observations.')}`);
   }
 
   const form = await request.formData();
@@ -56,7 +56,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   if (!linked) {
     return back(
       id,
-      `error=${encodeURIComponent('That finding was not found in your organisation.')}`,
+      `error=${encodeURIComponent('That observation was not found in your organisation.')}`,
     );
   }
 
@@ -77,8 +77,8 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     id,
     `done=${encodeURIComponent(
       workPaperId
-        ? 'Linked to the finding. The owner is not told: this is audit structure.'
-        : 'Unlinked from the finding.',
+        ? 'Linked to the observation. The owner is not told: this is audit structure.'
+        : 'Unlinked from the observation.',
     )}`,
   );
 };
