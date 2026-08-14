@@ -33,15 +33,20 @@ interface Props {
   finding: FindingSource;
   /** Set on the print and board views, which want no interactive chrome. */
   flat?: boolean;
+  /** Match the quiet, fieldset-led create/edit work-paper layout. */
+  formStyle?: boolean;
 }
-const { finding, flat = false } = Astro.props;
+const { finding, flat = false, formStyle = false } = Astro.props;
 
 const header = findingHeader(finding);
 const chips = contextChips(finding);
 const cards = visibleCards(finding);
 ---
 
-<article class:list={['grc-snap', { 'grc-snap--flat': flat }]} data-finding-cards>
+<article
+  class:list={['grc-snap', { 'grc-snap--flat': flat, 'grc-snap--form': formStyle }]}
+  data-finding-cards
+>
   <header class="grc-snap__head">
     {
       /* The kicker: which record, where it stands, and how bad it is. Small and
