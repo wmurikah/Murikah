@@ -62,7 +62,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     grc.perms.includes('AUDITEE.respond') ||
     grc.perms.includes('WORK_PAPERS.review');
   if (!mayRespond) {
-    return back(workPaperId, `error=${encodeURIComponent('You cannot respond to this finding.')}`);
+    return back(
+      workPaperId,
+      `error=${encodeURIComponent('You cannot respond to this observation.')}`,
+    );
   }
   if (!managementResponse) {
     return back(
@@ -74,14 +77,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const db = await getDb(getGrcEnv());
   const wp = await getWorkPaper(db, grc.organizationId, workPaperId, grc.affiliateScope);
   if (!wp) {
-    return back(workPaperId, `error=${encodeURIComponent('That finding was not found.')}`);
+    return back(workPaperId, `error=${encodeURIComponent('That observation was not found.')}`);
   }
 
   // Assignment is the auditee's authority to answer; an auditor reviewing on
   // their behalf is covered by the review permission.
   const assigned = await isAssignedAuditee(db, grc.organizationId, workPaperId, grc.userId);
   if (!assigned && !grc.isPlatformOwner && !grc.perms.includes('WORK_PAPERS.review')) {
-    return back(workPaperId, `error=${encodeURIComponent('That finding is not assigned to you.')}`);
+    return back(
+      workPaperId,
+      `error=${encodeURIComponent('That observation is not assigned to you.')}`,
+    );
   }
 
   // Releasing is the unit manager's act, and not while a delegate is still
@@ -101,7 +107,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       `error=${encodeURIComponent(
         stage === AUDITEE_STAGE.DELEGATED
           ? 'The delegate must return this draft before it can be released to audit.'
-          : 'Only a responsible on this finding can release its response to audit.',
+          : 'Only a responsible on this observation can release its response to audit.',
       )}`,
     );
   }

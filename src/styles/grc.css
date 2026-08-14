@@ -2060,6 +2060,139 @@
 .grc-snap__table tr:last-child td {
   border-bottom: none;
 }
+/* Evidence reads as a lightweight file list rather than a table in a card.
+   The document is the primary action; provenance stays close but deferential. */
+.grc-snap__evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.grc-snap__evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--sn-divider);
+}
+.grc-snap__evidence-item:first-child {
+  padding-top: 4px;
+}
+.grc-snap__evidence-item:last-child {
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+.grc-snap__evidence-icon {
+  display: grid;
+  flex: 0 0 2.5rem;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  background: var(--grc-stone, #f7f5ef);
+  color: var(--sn-navy);
+}
+.grc-snap__evidence-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+.grc-snap__evidence-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.grc-snap__evidence-name {
+  color: var(--sn-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.grc-snap__evidence-detail {
+  color: var(--sn-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+/* The audit trail is chronological content, not tabular data. A restrained
+   timeline makes the sequence scannable without enclosing it in another card. */
+.grc-snap__trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.grc-snap__facts + .grc-snap__trail {
+  margin-top: 20px;
+}
+.grc-snap__trail-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 12px;
+  padding-bottom: 18px;
+}
+.grc-snap__trail-item:last-child {
+  padding-bottom: 0;
+}
+.grc-snap__trail-item:not(:last-child)::before {
+  position: absolute;
+  top: 0.85rem;
+  bottom: 0;
+  left: calc(0.5rem - 0.5px);
+  width: 1px;
+  background: var(--sn-divider);
+  content: '';
+}
+.grc-snap__trail-marker {
+  position: relative;
+  z-index: 1;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin: 0.35rem auto 0;
+  border: 2px solid var(--sn-gold);
+  border-radius: 50%;
+  background: var(--grc-paper, #fff);
+}
+.grc-snap__trail-content {
+  min-width: 0;
+}
+.grc-snap__trail-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.grc-snap__trail-step {
+  color: var(--sn-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.grc-snap__trail-date,
+.grc-snap__trail-by {
+  color: var(--sn-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.grc-snap__trail-date {
+  flex: 0 0 auto;
+}
+.grc-snap__trail-by,
+.grc-snap__trail-comment {
+  margin: 3px 0 0;
+}
+.grc-snap__trail-comment {
+  max-width: 68ch;
+  color: var(--sn-ink);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 /* Inside the panel the narrative takes the panel's own colours and measure. */
 .grc-snap .grc-richbody h4,
 .grc-snap .grc-richbody h5 {
@@ -3472,4 +3605,167 @@ dd.grc-richbody {
 .grc-evidence-tile__del[disabled] {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Work papers are a reading surface, not a desktop-sized canvas. Keep every
+   child inside the available viewport and let prose wrap before it can force
+   the application shell wider. */
+.grc-shell,
+.grc-main,
+.grc-work-paper-page,
+.grc-work-paper-page > * {
+  min-width: 0;
+}
+.grc-work-paper-page {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+.grc-work-paper-page .grc-tablewrap {
+  max-width: 100%;
+  overflow-x: clip;
+}
+.grc-work-paper-page .grc-table {
+  table-layout: fixed;
+}
+.grc-work-paper-page .grc-input,
+.grc-work-paper-page .grc-select,
+.grc-work-paper-page .grc-textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+.grc-work-paper-page .grc-snap__table {
+  table-layout: fixed;
+}
+
+/* Evidence belongs to the page's content hierarchy. It is deliberately not an
+   outer card: the heading, generous drop target and attachments breathe in the
+   same horizontal measure as the surrounding work paper. */
+.grc-evidence-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: var(--grc-s3) 0 var(--grc-s5);
+}
+.grc-evidence-panel__head {
+  max-width: 68ch;
+  margin-bottom: var(--grc-s4);
+}
+.grc-evidence-panel__head h2 {
+  font-size: var(--grc-fs-h2);
+}
+.grc-dropzone {
+  padding: clamp(1.5rem, 5vw, 3rem) clamp(1rem, 4vw, 2rem);
+  border-radius: var(--grc-radius-sm);
+  background: color-mix(in srgb, var(--grc-surface) 55%, transparent);
+}
+
+@media (max-width: 44rem) {
+  .grc-main {
+    padding-inline: var(--grc-s3);
+  }
+  .grc-work-paper-page .grc-page-head,
+  .grc-work-paper-page .grc-actionbar {
+    align-items: stretch;
+  }
+  .grc-work-paper-page .grc-page-head > *,
+  .grc-work-paper-page .grc-actionbar > * {
+    min-width: 0;
+  }
+  .grc-work-paper-page .grc-btn {
+    white-space: normal;
+  }
+  .grc-work-paper-page .grc-table {
+    font-size: var(--grc-fs-small);
+  }
+  .grc-work-paper-page .grc-table th,
+  .grc-work-paper-page .grc-table td {
+    padding: var(--grc-s2) var(--grc-s1);
+  }
+  .grc-snap__head,
+  .grc-snap__section {
+    padding: var(--grc-s4);
+  }
+  .grc-snap__table th,
+  .grc-snap__table td {
+    padding-right: var(--grc-s2);
+    white-space: normal;
+  }
+  .grc-evidence-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(8.5rem, 100%), 1fr));
+  }
+}
+
+/* The work-paper preview follows the same calm, fieldset-led hierarchy as the
+   create and edit screens. It is a document to read, not a dashboard of cards. */
+.grc-work-paper-preview {
+  max-width: 60rem;
+}
+.grc-work-paper-preview .grc-preview-section {
+  background: transparent;
+}
+.grc-work-paper-preview .grc-detail {
+  margin-bottom: 0;
+}
+.grc-snap--form {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.grc-snap--form .grc-snap__head {
+  padding: var(--grc-s2) 0 var(--grc-s5);
+  border: 0;
+}
+.grc-snap--form .grc-snap__section {
+  position: relative;
+  margin: 0 0 var(--grc-s4);
+  padding: var(--grc-s4);
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius);
+  background: transparent;
+}
+.grc-snap--form .grc-snap__section:is([data-card='evidence'], [data-card='trail']) {
+  padding: var(--grc-s3) 0 0;
+  border: 0;
+  border-radius: 0;
+}
+.grc-snap--form
+  .grc-snap__section:is([data-card='evidence'], [data-card='trail'])
+  .grc-snap__label {
+  position: static;
+  margin-bottom: var(--grc-s2);
+  padding: 0;
+  color: var(--sn-gold);
+  background: transparent;
+  transform: none;
+}
+@media (max-width: 34rem) {
+  .grc-snap__trail-summary {
+    display: grid;
+    gap: 2px;
+  }
+}
+.grc-snap--form .grc-snap__label {
+  position: absolute;
+  top: 0;
+  left: var(--grc-s3);
+  margin: 0;
+  padding: 0 var(--grc-s2);
+  color: var(--grc-muted);
+  background: var(--grc-paper);
+  transform: translateY(-50%);
+}
+.grc-snap--form .grc-snap__body,
+.grc-snap--form .grc-snap__empty,
+.grc-snap--form .grc-snap__facts {
+  margin-top: var(--grc-s1);
+}
+.grc-snap--form .grc-tablewrap {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }

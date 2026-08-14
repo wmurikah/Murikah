@@ -69,7 +69,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     requestedBy: grc.userId,
   });
   if (!id) {
-    return back(`error=${encodeURIComponent('That finding was not found in your organisation.')}`);
+    return back(
+      `error=${encodeURIComponent('That observation was not found in your organisation.')}`,
+    );
   }
 
   // Owners and the copy list get the same message, because the copy exists so
