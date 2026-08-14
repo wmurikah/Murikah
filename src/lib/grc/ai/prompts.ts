@@ -22,7 +22,7 @@ export interface WorkPaperContext {
 
 export function workPaperInsightsPrompt(wp: WorkPaperContext): string {
   return [
-    'Analyse this internal audit finding and respond in Markdown with these sections:',
+    'Analyse this internal audit observation and respond in Markdown with these sections:',
     '1. Quality assessment of the observation.',
     '2. Risk rating validation (is the stated rating appropriate?).',
     '3. Recommendation enhancement.',
@@ -71,7 +71,7 @@ export function evaluateResponsePrompt(r: ResponseContext): string {
   return [
     'Evaluate this auditee management response and its proposed action plans against',
     'the observation and recommendation. Judge whether the response adequately',
-    'addresses the finding. Respond with strict JSON only, no prose:',
+    'addresses the observation. Respond with strict JSON only, no prose:',
     '{"autoReject": boolean, "score": number (0-100), "feedback": string}',
     '',
     `Observation: ${r.observation}`,
