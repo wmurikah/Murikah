@@ -47,7 +47,12 @@ async function countWoForYear(db: Client, orgId: string, year: number): Promise<
 export async function createLpo(
   db: Client,
   ctx: { orgId: string; userId: string },
-  input: { contractorId: string; baseStationId: string | null },
+  input: {
+    contractorId: string;
+    baseStationId: string | null;
+    regionId?: string | null;
+    notes?: string | null;
+  },
 ): Promise<LpoResult> {
   const { orgId } = ctx;
   const contractor = await db.execute({
@@ -58,6 +63,18 @@ export async function createLpo(
     return { ok: false, code: 'invalid', message: 'Choose an active contractor.' };
   }
 
+  // The document carries where it belongs: default the region from the base
+  // station's region unless one is supplied, so the LPO is complete on its face.
+  let regionId = input.regionId ?? null;
+  if (!regionId && input.baseStationId) {
+    const st = await db.execute({
+      sql: `SELECT region_id FROM stations WHERE id = ? AND org_id = ? LIMIT 1`,
+      args: [input.baseStationId, orgId],
+    });
+    regionId = st.rows[0]?.region_id == null ? null : String(st.rows[0].region_id);
+  }
+  const notes = input.notes && input.notes.trim().length > 0 ? input.notes.trim() : null;
+
   const year = new Date().getUTCFullYear();
   const base = await countLpoForYear(db, orgId, year);
 
@@ -66,24 +83,26 @@ export async function createLpo(
     const id = newId();
     const tx = await db.transaction('write');
     try {
+      // A draft: version 1, no approved_at yet. The contractor is notified at
+      // issue, not now, because a draft is not yet a financial commitment.
       await tx.execute({
-        sql: `INSERT INTO lpos (id, org_id, lpo_no, contractor_id, created_by, base_station_id, status)
-              VALUES (?, ?, ?, ?, ?, ?, 'OPEN')`,
-        args: [id, orgId, lpoNo, input.contractorId, ctx.userId, input.baseStationId],
+        sql: `INSERT INTO lpos (id, org_id, lpo_no, contractor_id, created_by, base_station_id, region_id, notes, version, status)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'OPEN')`,
+        args: [
+          id,
+          orgId,
+          lpoNo,
+          input.contractorId,
+          ctx.userId,
+          input.baseStationId,
+          regionId,
+          notes,
+        ],
       });
       await tx.execute({
         sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
               VALUES (?, ?, 'lpo.create', 'lpo', ?, ?)`,
-        args: [orgId, ctx.userId, id, JSON.stringify({ lpo_no: lpoNo })],
-      });
-      await enqueue(tx, orgId, {
-        recipientType: 'contractor',
-        recipientId: input.contractorId,
-        templateKey: 'lpo.issued',
-        subject: `New LPO ${lpoNo}`,
-        body: `LPO ${lpoNo} has been issued to you. Work orders for the trip will appear under it.`,
-        entityType: 'lpo',
-        entityId: id,
+        args: [orgId, ctx.userId, id, JSON.stringify({ lpo_no: lpoNo, version: 1 })],
       });
       await tx.commit();
       return { ok: true, lpoId: id, lpoNo };
@@ -101,21 +120,35 @@ interface LpoCore {
   contractorId: string;
   baseStationId: string | null;
   status: string;
+  approvedAt: string | null;
+  sealedAt: string | null;
+  cancelledAt: string | null;
 }
 
 async function loadLpo(db: Client, orgId: string, lpoId: string): Promise<LpoCore | null> {
   const res = await db.execute({
-    sql: `SELECT id, contractor_id, base_station_id, status FROM lpos WHERE id = ? AND org_id = ? LIMIT 1`,
+    sql: `SELECT id, contractor_id, base_station_id, status, approved_at, sealed_at, cancelled_at
+            FROM lpos WHERE id = ? AND org_id = ? LIMIT 1`,
     args: [lpoId, orgId],
   });
   const row = res.rows[0];
   if (!row) return null;
+  const orNull = (v: unknown): string | null => (v == null ? null : String(v));
   return {
     id: String(row.id),
     contractorId: String(row.contractor_id),
     baseStationId: row.base_station_id == null ? null : String(row.base_station_id),
     status: String(row.status),
+    approvedAt: orNull(row.approved_at),
+    sealedAt: orNull(row.sealed_at),
+    cancelledAt: orNull(row.cancelled_at),
   };
+}
+
+// A draft is editable: no approval, seal or cancellation yet. Once approved or
+// sealed, the lines are frozen and no work order may be added or attached.
+function isDraft(lpo: LpoCore): boolean {
+  return lpo.approvedAt == null && lpo.sealedAt == null && lpo.cancelledAt == null;
 }
 
 async function markInProgress(
@@ -149,8 +182,12 @@ export async function createWorkOrderInLpo(
   const { orgId } = ctx;
   const lpo = await loadLpo(db, orgId, input.lpoId);
   if (!lpo) return { ok: false, code: 'not_found', message: 'LPO not found.' };
-  if (lpo.status !== 'OPEN' && lpo.status !== 'IN_PROGRESS') {
-    return { ok: false, code: 'conflict', message: 'This LPO is not open for new work orders.' };
+  if (!isDraft(lpo)) {
+    return {
+      ok: false,
+      code: 'conflict',
+      message: 'This LPO is approved or sealed and can no longer take work orders.',
+    };
   }
   const station = await db.execute({
     sql: `SELECT id FROM stations WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
@@ -232,8 +269,12 @@ export async function attachWorkOrder(
   const { orgId } = ctx;
   const lpo = await loadLpo(db, orgId, lpoId);
   if (!lpo) return { ok: false, code: 'not_found', message: 'LPO not found.' };
-  if (lpo.status !== 'OPEN' && lpo.status !== 'IN_PROGRESS') {
-    return { ok: false, code: 'conflict', message: 'This LPO is not open for changes.' };
+  if (!isDraft(lpo)) {
+    return {
+      ok: false,
+      code: 'conflict',
+      message: 'This LPO is approved or sealed and can no longer take work orders.',
+    };
   }
   const now = new Date().toISOString();
   const tx = await db.transaction('write');
@@ -317,8 +358,10 @@ export async function recomputeTotal(db: Client, orgId: string, lpoId: string): 
     args: [lpoId, orgId],
   });
   const total = Number(woCosts.rows[0]?.total ?? 0) + Number(mileage.rows[0]?.total ?? 0);
+  // Never touch a sealed LPO: its total is frozen at issue, so a later cost or
+  // mileage approval cannot mutate the sealed document's financial fields.
   await db.execute({
-    sql: `UPDATE lpos SET total_minor = ?, updated_at = ? WHERE id = ? AND org_id = ?`,
+    sql: `UPDATE lpos SET total_minor = ?, updated_at = ? WHERE id = ? AND org_id = ? AND sealed_at IS NULL`,
     args: [total, new Date().toISOString(), lpoId, orgId],
   });
 }
