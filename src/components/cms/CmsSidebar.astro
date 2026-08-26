@@ -1,0 +1,71 @@
+---
+/**
+ * The navigation rail, rendered from the navigation model.
+ *
+ * One component renders every entry in CMS_NAV, and the entries carry the
+ * permission each will require. Nothing is filtered yet, deliberately: this
+ * phase shows the whole structure. When sessions arrive, permission-driven
+ * visibility is a filter over the same array and this markup does not change,
+ * which is the reason the navigation is data in the first place.
+ *
+ * The active item is marked from the visitor-facing path the middleware
+ * captured on locals, with aria-current="page" as well as the visual state, so
+ * "where am I" is answered for a screen reader too.
+ *
+ * Used twice per page: as the persistent rail from lg upwards, and inside the
+ * mobile drawer. Both render the same list, so they cannot drift apart.
+ */
+import CmsIcon from './CmsIcon.astro';
+import { CMS_NAV } from '@/lib/cms/nav';
+
+interface Props {
+  currentPath: string;
+  idPrefix?: string;
+}
+const { currentPath, idPrefix = 'rail' } = Astro.props;
+
+const isActive = (href: string) =>
+  href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(href + '/');
+---
+
+<nav aria-label="Main" class="flex flex-col gap-0.5">
+  <p
+    id={`${idPrefix}-nav-heading`}
+    class="px-3 pt-2 pb-1.5 text-cms-caption font-semibold tracking-wider text-cms-rail-muted uppercase"
+  >
+    Workspace
+  </p>
+  <ul class="flex flex-col gap-0.5">
+    {
+      CMS_NAV.map((item) => {
+        const active = isActive(item.href);
+        return (
+          <li>
+            <a
+              href={item.href}
+              aria-current={active ? 'page' : undefined}
+              class:list={[
+                'flex h-10 items-center gap-3 rounded-cms px-3 text-cms-body-sm',
+                'transition-colors duration-150 outline-none',
+                'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy',
+                active
+                  ? 'bg-cms-navy-deep font-semibold text-white'
+                  : 'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white',
+              ]}
+            >
+              <span
+                class:list={[
+                  'h-4 w-0.5 shrink-0 rounded-full',
+                  active ? 'bg-cms-gold' : 'bg-transparent',
+                ]}
+                aria-hidden="true"
+              />
+              <CmsIcon name={item.icon} size={18} class="shrink-0" />
+              <span class="truncate">{item.label}</span>
+            </a>
+          </li>
+        );
+      })
+    }
+  </ul>
+</nav>

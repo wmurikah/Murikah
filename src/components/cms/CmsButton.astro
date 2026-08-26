@@ -1,0 +1,109 @@
+---
+/**
+ * The one button. Renders <button> or <a> depending on whether it navigates,
+ * because a link that looks like a button must still be a link for the keyboard
+ * and for middle-click.
+ *
+ * Fitts's law is built in rather than documented: every size is at least 40px
+ * tall (h-10), and the primary size is 44px (h-11). Hick-Hyman is served by the
+ * variants, which are deliberately unequal: one `primary` on a screen, `subtle`
+ * and `ghost` for everything else, so the dominant action is obvious without
+ * anyone having to remember which one it was.
+ *
+ * The loading state keeps the label in place and swaps in a spinner, so the
+ * button does not resize and the user is not left guessing what they pressed.
+ */
+import CmsIcon from './CmsIcon.astro';
+import type { CmsIconName } from './icons';
+
+interface Props {
+  variant?: 'primary' | 'secondary' | 'subtle' | 'ghost' | 'danger';
+  size?: 'md' | 'lg';
+  type?: 'button' | 'submit' | 'reset';
+  href?: string;
+  icon?: CmsIconName;
+  iconAfter?: CmsIconName;
+  disabled?: boolean;
+  loading?: boolean;
+  full?: boolean;
+  id?: string;
+  class?: string;
+  'aria-label'?: string;
+  'data-testid'?: string;
+}
+const {
+  variant = 'secondary',
+  size = 'md',
+  type = 'button',
+  href,
+  icon,
+  iconAfter,
+  disabled = false,
+  loading = false,
+  full = false,
+  id,
+  class: className,
+  ...rest
+} = Astro.props;
+
+const base =
+  'relative inline-flex items-center justify-center gap-2 rounded-cms text-cms-body-sm font-semibold ' +
+  'transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-focus ' +
+  'focus-visible:ring-offset-2 focus-visible:ring-offset-cms-canvas ' +
+  'disabled:cursor-not-allowed disabled:opacity-55';
+
+const sizes = {
+  md: 'h-10 px-4',
+  lg: 'h-11 px-5',
+};
+
+const variants = {
+  primary: 'bg-cms-royal text-white hover:bg-cms-royal-deep active:bg-cms-royal-deep',
+  secondary:
+    'border border-cms-border bg-cms-surface text-cms-ink hover:bg-cms-royal-tint hover:border-cms-royal',
+  subtle: 'bg-cms-royal-tint text-cms-royal hover:bg-cms-info-tint',
+  ghost: 'text-cms-muted hover:bg-cms-canvas hover:text-cms-ink',
+  danger: 'bg-cms-danger text-white hover:brightness-90',
+};
+
+const cls = [
+  base,
+  sizes[size],
+  variants[variant],
+  full ? 'w-full' : '',
+  loading ? 'cursor-progress' : '',
+  className ?? '',
+]
+  .filter(Boolean)
+  .join(' ');
+const isDisabled = disabled || loading;
+---
+
+{
+  href && !isDisabled ? (
+    <a href={href} id={id} class={cls} {...rest}>
+      {icon && <CmsIcon name={icon} size={16} />}
+      <slot />
+      {iconAfter && <CmsIcon name={iconAfter} size={16} />}
+    </a>
+  ) : (
+    <button
+      type={type}
+      id={id}
+      class={cls}
+      disabled={isDisabled}
+      aria-busy={loading ? 'true' : undefined}
+      {...rest}
+    >
+      {loading && (
+        <span
+          class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden="true"
+        />
+      )}
+      {!loading && icon && <CmsIcon name={icon} size={16} />}
+      <slot />
+      {!loading && iconAfter && <CmsIcon name={iconAfter} size={16} />}
+    </button>
+  )
+}

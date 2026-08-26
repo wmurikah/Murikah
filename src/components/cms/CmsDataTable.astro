@@ -1,0 +1,103 @@
+---
+/**
+ * A table shell: real <table> markup, a scroll container, and the three states
+ * a table is actually in (rows, loading, empty).
+ *
+ * A shell rather than a data grid. It takes columns and pre-rendered rows and
+ * has no sorting, paging, selection or virtualisation, because none of that has
+ * a consumer yet and a speculative grid is the most expensive thing to unpick
+ * later. What it does fix now is the part that is painful to retrofit: the
+ * scroll container is the table's own, so a wide table scrolls inside the page
+ * instead of making the whole page scroll sideways.
+ *
+ * `numeric` right-aligns a column and gives it tabular figures.
+ */
+import CmsSkeleton from './CmsSkeleton.astro';
+
+export interface CmsColumn {
+  key: string;
+  label: string;
+  numeric?: boolean;
+  /** Hide below the sm breakpoint, for columns that are context, not content. */
+  secondary?: boolean;
+}
+
+interface Props {
+  caption: string;
+  columns: CmsColumn[];
+  loading?: boolean;
+  empty?: boolean;
+  rowCount?: number;
+  class?: string;
+}
+const {
+  caption,
+  columns,
+  loading = false,
+  empty = false,
+  rowCount = 4,
+  class: className,
+} = Astro.props;
+---
+
+<div
+  class:list={[
+    'overflow-hidden rounded-cms-lg border border-cms-line bg-cms-surface shadow-cms-card',
+    className,
+  ]}
+>
+  <div class="overflow-x-auto">
+    <table class="w-full border-collapse text-cms-body-sm">
+      <caption class="sr-only">{caption}</caption>
+      <thead>
+        <tr class="border-b border-cms-line bg-cms-canvas">
+          {
+            columns.map((column) => (
+              <th
+                scope="col"
+                class:list={[
+                  'px-4 py-2.5 text-cms-caption font-semibold tracking-wide whitespace-nowrap text-cms-muted uppercase',
+                  column.numeric ? 'text-right' : 'text-left',
+                  column.secondary ? 'hidden sm:table-cell' : '',
+                ]}
+              >
+                {column.label}
+              </th>
+            ))
+          }
+        </tr>
+      </thead>
+      <tbody>
+        {
+          loading &&
+            Array.from({ length: rowCount }).map(() => (
+              <tr class="border-b border-cms-line last:border-0">
+                {columns.map((column) => (
+                  <td class:list={['px-4 py-3', column.secondary ? 'hidden sm:table-cell' : '']}>
+                    <CmsSkeleton variant="text" width={column.numeric ? '3rem' : '70%'} />
+                  </td>
+                ))}
+              </tr>
+            ))
+        }
+        {
+          !loading && empty && (
+            <tr>
+              <td colspan={columns.length} class="px-4 py-10 text-center text-cms-muted">
+                <slot name="empty">Nothing to show yet.</slot>
+              </td>
+            </tr>
+          )
+        }
+        {!loading && !empty && <slot />}
+      </tbody>
+    </table>
+  </div>
+  {
+    loading && (
+      <p class="sr-only" role="status">
+        Loading {caption}
+      </p>
+    )
+  }
+</div>
