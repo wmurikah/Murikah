@@ -25,11 +25,11 @@ request internally to the `/cms` route, so the visitor saw the root-relative
 path with no `/cms` prefix. Both forms are listed because the redesign has to
 reproduce the same mapping.
 
-| Visitor path on cms.murikah.com | Internal route file             |
-| ------------------------------- | ------------------------------- |
-| `/`                             | `src/pages/cms/index.astro`     |
-| `/login`                        | `src/pages/cms/login.astro`     |
-| `/mfa`                          | `src/pages/cms/mfa.astro`       |
+| Visitor path on cms.murikah.com | Internal route file                |
+| ------------------------------- | ---------------------------------- |
+| `/`                             | `src/pages/cms/index.astro`        |
+| `/login`                        | `src/pages/cms/login.astro`        |
+| `/mfa`                          | `src/pages/cms/mfa.astro`          |
 | `/portal`                       | `src/pages/cms/portal/index.astro` |
 | `/portal/login`                 | `src/pages/cms/portal/login.astro` |
 | `/api/auth/login`               | `src/pages/cms/api/auth/login.ts`  |
@@ -68,9 +68,9 @@ replaced.** The values behind them are unchanged by this teardown.
 
 | Name                     | Purpose                                              |
 | ------------------------ | ---------------------------------------------------- |
-| `TURSO_CMS_DATABASE_URL` | The Turso (libSQL) database URL for the CMS database  |
-| `TURSO_CMS_AUTH_TOKEN`   | The Turso auth token for that database                |
-| `CMS_SESSION_SECRET`     | 32+ random bytes, base64, signing the session cookie  |
+| `TURSO_CMS_DATABASE_URL` | The Turso (libSQL) database URL for the CMS database |
+| `TURSO_CMS_AUTH_TOKEN`   | The Turso auth token for that database               |
+| `CMS_SESSION_SECRET`     | 32+ random bytes, base64, signing the session cookie |
 
 They are declared as optional on the `Env` interface in `src/env.d.ts` so a
 marketing-only preview typechecks without them; the accessor threw a clear error
@@ -129,11 +129,14 @@ users                  vehicles
 None. The committed snapshot contains no `CREATE VIEW` and no `CREATE TRIGGER`,
 and its header records that no FTS shadow tables exist in this database.
 
-### Indexes (64)
+### Indexes (65)
 
-All are named `ix_*` and are listed in `cms/db/schema.sql`. Every one is
-attached to a table above, so dropping the tables drops them; the teardown
-script does not name them separately.
+Sixty-four named `ix_*`, plus one partial unique index `ux_price_list_default`
+on `price_list (country_code, currency_code)` where `is_default = 1 AND status =
+'ACTIVE'`. All were listed in `cms/db/schema.sql` and are preserved in
+`cms/db/teardown/01_dump_schema_note.md`. Every one is attached to a table
+above, so dropping the tables drops them; the teardown script does not name them
+separately.
 
 ### Migration not reflected in the snapshot
 
