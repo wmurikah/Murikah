@@ -1,0 +1,83 @@
+---
+/**
+ * A single measure.
+ *
+ * The number is the loudest thing on the card and uses tabular figures, so a
+ * row of these stays aligned as the values change rather than jittering. The
+ * trend is never a bare coloured arrow: direction, the figure and a word all
+ * appear together, so it survives greyscale and a screen reader.
+ *
+ * `loading` renders the card's own skeleton at the same size, so the row does
+ * not reflow when the numbers arrive.
+ */
+import CmsIcon from './CmsIcon.astro';
+import CmsSkeleton from './CmsSkeleton.astro';
+import type { CmsIconName } from './icons';
+
+interface Props {
+  label: string;
+  value?: string;
+  unit?: string;
+  icon?: CmsIconName;
+  trend?: {
+    direction: 'up' | 'down' | 'flat';
+    value: string;
+    sentiment: 'good' | 'bad' | 'neutral';
+  };
+  loading?: boolean;
+  class?: string;
+}
+const { label, value, unit, icon, trend, loading = false, class: className } = Astro.props;
+
+const sentiments = {
+  good: 'text-cms-success',
+  bad: 'text-cms-danger',
+  neutral: 'text-cms-muted',
+};
+const directionWord = { up: 'up', down: 'down', flat: 'unchanged' };
+---
+
+<div
+  class:list={[
+    'flex flex-col gap-2 rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-4 shadow-cms-card',
+    className,
+  ]}
+  aria-busy={loading ? 'true' : undefined}
+>
+  <div class="flex items-center justify-between gap-2">
+    <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">{label}</p>
+    {icon && <CmsIcon name={icon} size={16} class="shrink-0 text-cms-muted" />}
+  </div>
+
+  {
+    loading ? (
+      <>
+        <span class="sr-only">Loading {label}</span>
+        <CmsSkeleton variant="title" width="4.5rem" class="my-1" />
+        <CmsSkeleton variant="text" width="6rem" />
+      </>
+    ) : (
+      <>
+        <p class="flex items-baseline gap-1.5">
+          <span class="text-cms-kpi font-semibold text-cms-navy tabular-nums">{value}</span>
+          {unit && <span class="text-cms-body-sm text-cms-muted">{unit}</span>}
+        </p>
+        {trend && (
+          <p
+            class:list={[
+              'flex items-center gap-1 text-cms-caption font-medium',
+              sentiments[trend.sentiment],
+            ]}
+          >
+            <span aria-hidden="true">
+              {trend.direction === 'up' ? '↑' : trend.direction === 'down' ? '↓' : '→'}
+            </span>
+            <span>
+              {trend.value} {directionWord[trend.direction]}
+            </span>
+          </p>
+        )}
+      </>
+    )
+  }
+</div>

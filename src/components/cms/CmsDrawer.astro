@@ -1,0 +1,35 @@
+---
+/**
+ * The mobile navigation drawer, also on <dialog>, for the same reasons as
+ * CmsModal: the platform supplies the focus trap and Escape, and a slide-in
+ * panel that traps focus badly is worse than no panel at all.
+ *
+ * It is the small-screen form of the navigation rail, so it is rendered on
+ * every page of the shell and simply never opened above the lg breakpoint,
+ * where the rail itself is visible.
+ */
+import CmsIconButton from './CmsIconButton.astro';
+
+interface Props {
+  id: string;
+  title: string;
+}
+const { id, title } = Astro.props;
+const titleId = `${id}-title`;
+---
+
+<dialog
+  id={id}
+  aria-labelledby={titleId}
+  class="m-0 h-dvh max-h-none w-[min(19rem,85vw)] max-w-none border-0 bg-cms-navy p-0 text-cms-rail-text backdrop:bg-cms-navy/55"
+>
+  <div class="flex h-full flex-col">
+    <div class="flex items-center justify-between gap-3 px-4 py-3.5">
+      <h2 id={titleId} class="text-cms-card font-semibold text-white">{title}</h2>
+      <CmsIconButton icon="close" label="Close navigation" tone="onNavy" data-cms-modal-close />
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <slot />
+    </div>
+  </div>
+</dialog>

@@ -1,0 +1,62 @@
+---
+/**
+ * The one placeholder page, rendered for every module destination.
+ *
+ * Seven near-identical page files would drift apart within a week, so there is
+ * one component and the pages pass it their href. Everything it shows is read
+ * from CMS_NAV: the label, the summary and the permission the section will
+ * require. Nothing is retyped, so nothing can disagree with the rail.
+ *
+ * Showing the permission key is deliberate. It is the honest statement of what
+ * this phase did and did not do: the model carries the key, and no code reads
+ * it yet.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import { CMS_NAV } from '@/lib/cms/nav';
+
+interface Props {
+  href: string;
+}
+const { href } = Astro.props;
+const item = CMS_NAV.find((entry) => entry.href === href);
+if (!item) throw new Error(`No navigation entry for ${href}`);
+---
+
+<CmsLayout title={item.label}>
+  <CmsPageHeader
+    title={item.label}
+    description={item.summary}
+    crumbs={[{ label: 'Home', href: '/' }, { label: item.label }]}
+  >
+    <CmsBadge slot="actions" tone="neutral" label="Not built yet" />
+  </CmsPageHeader>
+
+  <CmsEmptyState
+    icon={item.icon}
+    title={`${item.label} is not built yet`}
+    description="This destination exists so the navigation can be reviewed as a whole. The module arrives in a later phase."
+  />
+
+  <CmsCard title="What this section will need" headingLevel="h2">
+    <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="flex flex-col gap-1">
+        <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+          Permission key
+        </dt>
+        <dd class="font-mono text-cms-body-sm text-cms-ink">{item.permission}</dd>
+      </div>
+      <div class="flex flex-col gap-1">
+        <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+          Visibility
+        </dt>
+        <dd class="text-cms-body-sm text-cms-ink">
+          Declared on the navigation entry, deliberately unread. Filtering arrives with sessions.
+        </dd>
+      </div>
+    </dl>
+  </CmsCard>
+</CmsLayout>
