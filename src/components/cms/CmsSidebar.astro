@@ -16,13 +16,20 @@
  * mobile drawer. Both render the same list, so they cannot drift apart.
  */
 import CmsIcon from './CmsIcon.astro';
-import { CMS_NAV } from '@/lib/cms/nav';
+import { visibleNav } from '@/lib/cms/nav';
 
 interface Props {
   currentPath: string;
   idPrefix?: string;
+  /** The principal's resolved permission codes. Empty renders only the open entries. */
+  permissions?: readonly string[];
 }
-const { currentPath, idPrefix = 'rail' } = Astro.props;
+const { currentPath, idPrefix = 'rail', permissions = [] } = Astro.props;
+
+// The filter the model was built for. Access comes from resolved permission
+// codes and nothing else: no email, no display name, no job title, no
+// department, no employee number, no hard-coded user or role id.
+const entries = visibleNav(permissions);
 
 const isActive = (href: string) =>
   href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(href + '/');
@@ -37,7 +44,7 @@ const isActive = (href: string) =>
   </p>
   <ul class="flex flex-col gap-0.5">
     {
-      CMS_NAV.map((item) => {
+      entries.map((item) => {
         const active = isActive(item.href);
         return (
           <li>

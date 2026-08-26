@@ -20,26 +20,121 @@ import {
 } from '../../src/lib/cms/auth/client.ts';
 import { CMS_NAV, activeNavItem } from '../../src/lib/cms/nav.ts';
 
-test('submitCredentials returns not_implemented and never a success', async () => {
-  const result = await submitCredentials({ email: 'someone@hass.co.ke', password: 'whatever' });
-  assert.equal(result.status, 'not_implemented');
+/** A fetch stand-in that records the call and returns a scripted response. */
+function stubFetch(response: { status: number; body?: unknown; throws?: boolean }) {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    if (response.throws) throw new TypeError('Failed to fetch');
+    return new Response(response.body === undefined ? null : JSON.stringify(response.body), {
+      status: response.status,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as unknown as typeof fetch;
+  return { calls, restore: () => void (globalThis.fetch = original) };
+}
+
+test('a successful sign-in maps to success and carries the user type', async () => {
+  const stub = stubFetch({
+    status: 200,
+    body: {
+      user: {
+        userId: 'USR-CATH',
+        displayName: 'Catherine Mwangi',
+        email: 'c@h.com',
+        userType: 'INTERNAL',
+      },
+      mustChangePassword: false,
+    },
+  });
+  try {
+    const result = await submitCredentials({ email: 'c@h.com', password: 'x' });
+    assert.equal(result.status, 'success');
+    // The user type decides the destination after sign-in, so it must survive.
+    if (result.status === 'success') assert.equal(result.user.userType, 'INTERNAL');
+    assert.equal(stub.calls.length, 1);
+    assert.equal(stub.calls[0]?.url, '/api/auth/login');
+    assert.equal(stub.calls[0]?.init.method, 'POST');
+    // same-origin, so the cookie the server sets is stored by the browser and
+    // never read by this code.
+    assert.equal(stub.calls[0]?.init.credentials, 'same-origin');
+  } finally {
+    stub.restore();
+  }
 });
 
-test('submitCredentials makes no network call', async () => {
-  // Replace fetch with a trap. If the client ever reaches the network, this
-  // throws and the test fails rather than the call quietly succeeding.
-  const original = globalThis.fetch;
-  let called = false;
-  globalThis.fetch = (() => {
-    called = true;
-    throw new Error('the auth client must not perform a network call in this phase');
-  }) as typeof fetch;
+test('the request carries only the credentials, and no token comes back', async () => {
+  const stub = stubFetch({
+    status: 200,
+    body: { user: { userId: 'U1', userType: 'INTERNAL' }, mustChangePassword: false },
+  });
   try {
-    await submitCredentials({ email: 'a@b.co', password: 'x' });
+    const result = await submitCredentials({ email: 'a@b.co', password: 'secret-value' });
+    const sent = JSON.parse(String(stub.calls[0]?.init.body));
+    assert.deepEqual(Object.keys(sent).sort(), ['email', 'password']);
+    // Nothing token-shaped reaches the caller: the session lives in an HttpOnly
+    // cookie the browser holds and JavaScript cannot read, so there is nothing
+    // for this code to put in localStorage even if it wanted to.
+    const blob = JSON.stringify(result).toLowerCase();
+    for (const forbidden of ['token', 'cookie', 'hash', 'secret-value']) {
+      assert.ok(!blob.includes(forbidden), `the result must not contain ${forbidden}`);
+    }
   } finally {
-    globalThis.fetch = original;
+    stub.restore();
   }
-  assert.equal(called, false);
+});
+
+test('a 401 is the generic failure; 429, 5xx and a dead network are transport errors', async () => {
+  for (const [status, expected] of [
+    [401, 'invalid_credentials'],
+    [429, 'transport_error'],
+    [503, 'transport_error'],
+    [500, 'transport_error'],
+  ] as [number, string][]) {
+    const stub = stubFetch({ status });
+    try {
+      assert.equal((await submitCredentials({ email: 'a@b.co', password: 'x' })).status, expected);
+    } finally {
+      stub.restore();
+    }
+  }
+  const dead = stubFetch({ status: 0, throws: true });
+  try {
+    const result = await submitCredentials({ email: 'a@b.co', password: 'x' });
+    assert.equal(result.status, 'transport_error');
+    // A transport problem may say so: it discloses nothing about any account.
+    if (result.status === 'transport_error') assert.match(result.message, /connection/i);
+  } finally {
+    dead.restore();
+  }
+});
+
+test('a correct password that must be changed is a distinct state, not a failure', async () => {
+  const stub = stubFetch({
+    status: 200,
+    body: { user: { userId: 'USR-X', userType: 'INTERNAL' }, mustChangePassword: true },
+  });
+  try {
+    assert.equal(
+      (await submitCredentials({ email: 'a@b.co', password: 'x' })).status,
+      'password_change_required',
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+test('a 200 with a malformed body is a transport error, not a silent success', async () => {
+  const stub = stubFetch({ status: 200, body: { nonsense: true } });
+  try {
+    assert.equal(
+      (await submitCredentials({ email: 'a@b.co', password: 'x' })).status,
+      'transport_error',
+    );
+  } finally {
+    stub.restore();
+  }
 });
 
 test('the invalid-credentials message names neither the email nor the password', () => {
@@ -74,10 +169,20 @@ test('every outcome the service can return has a decided message', () => {
   }
 });
 
-test('the navigation model carries a permission key on every entry', () => {
+test('every navigation entry names a real permission code, or none at all', () => {
   assert.ok(CMS_NAV.length > 0);
   for (const item of CMS_NAV) {
-    assert.match(item.permission, /^cms\.[a-z]+\.[a-z]+$/, `${item.label} has no permission key`);
+    if (item.permission !== null) {
+      // The database's own form: MODULE.RESOURCE.ACTION, upper case. The
+      // placeholders this model shipped with (`cms.customers.view`) matched no
+      // row in `permissions`, so every entry would have been hidden from
+      // everybody once the filter was wired.
+      assert.match(
+        item.permission,
+        /^[A-Z][A-Z_]*\.[A-Z][A-Z_]*\.[A-Z][A-Z_]*$/,
+        `${item.label} does not name a permission code in MODULE.RESOURCE.ACTION form`,
+      );
+    }
     assert.ok(item.href.startsWith('/'), `${item.label} href must be root-relative on the host`);
     assert.ok(
       !item.href.startsWith('/cms'),
@@ -86,14 +191,20 @@ test('the navigation model carries a permission key on every entry', () => {
   }
 });
 
+test('exactly one entry is reachable without a permission, and it is the landing page', () => {
+  const open = CMS_NAV.filter((item) => item.permission === null);
+  assert.equal(open.length, 1);
+  assert.equal(open[0]?.href, '/app');
+});
+
 test('navigation hrefs are unique', () => {
   const hrefs = CMS_NAV.map((item) => item.href);
   assert.equal(new Set(hrefs).size, hrefs.length);
 });
 
 test('activeNavItem marks the section, including a child path', () => {
-  assert.equal(activeNavItem('/')?.label, 'Home');
-  assert.equal(activeNavItem('/customers')?.label, 'Customers');
-  assert.equal(activeNavItem('/customers/12345')?.label, 'Customers');
+  assert.equal(activeNavItem('/app')?.label, 'Home');
+  assert.equal(activeNavItem('/app/customers')?.label, 'Customers');
+  assert.equal(activeNavItem('/app/customers/12345')?.label, 'Customers');
   assert.equal(activeNavItem('/nowhere'), null);
 });

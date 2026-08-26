@@ -7,11 +7,15 @@
  * real service will be able to return, so connecting it is wiring, not a
  * redesign.
  *
- * This phase implements no authentication. `submitCredentials` performs no
- * network call, reads no secret, opens no database connection and imports
- * nothing. It returns `not_implemented`, and the page renders that as a server
- * error. There is no fake success anywhere in this file, and there is no code
- * path that can produce one.
+ * It now calls the real endpoint. The result type did not have to change to
+ * accommodate it, which was the point of shaping it from the database model in
+ * the first place: `password_change_required`, `account_locked` and
+ * `mfa_required` were all expressible before anything could return them.
+ *
+ * No token is stored here, or anywhere else in the browser. The session cookie
+ * is `HttpOnly`, so JavaScript cannot read it and could not put it in
+ * `localStorage` even deliberately. There is no code preventing that because
+ * none is possible to write.
  *
  * The result shape is taken from the database model rather than invented, so it
  * does not need rewriting when the service arrives:
@@ -92,16 +96,92 @@ export type CmsAuthResult =
  */
 export const INVALID_CREDENTIALS_MESSAGE = 'That email address and password do not match.';
 
+/** The sign-in endpoint, root-relative on the CMS host. */
+const LOGIN_ENDPOINT = '/api/auth/login';
+
 /**
- * Submit credentials. Returns a result; never throws, because a login form
- * should render an error rather than break, and never resolves to a success in
- * this phase.
+ * Submit credentials to the API.
  *
- * The parameter is read only for its type. No value from it leaves this
- * function: nothing is logged, stored, or sent anywhere.
+ * Never throws: a sign-in form should render an error rather than break, so
+ * every failure mode, including the network being gone, comes back as a result
+ * the caller can switch on.
+ *
+ * The three cases section 11 asks to distinguish map like this. A `401` is the
+ * server's single generic answer to every credential problem and stays generic
+ * here. A `5xx` or a malformed body is the server being unavailable, and may
+ * say so, because "this service is down" discloses nothing about any account.
+ * A thrown fetch is the network, and may also say so.
  */
-export async function submitCredentials(_credentials: CmsCredentials): Promise<CmsAuthResult> {
-  return { status: 'not_implemented' };
+export async function submitCredentials(credentials: CmsCredentials): Promise<CmsAuthResult> {
+  let response: Response;
+  try {
+    response = await fetch(LOGIN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      // Same-origin only. The cookie the server sets is HttpOnly and is stored
+      // by the browser, never read by this code.
+      credentials: 'same-origin',
+      body: JSON.stringify({ email: credentials.email, password: credentials.password }),
+    });
+  } catch {
+    return {
+      status: 'transport_error',
+      message: 'Could not reach the server. Check your connection and try again.',
+    };
+  }
+
+  if (response.status === 401) return { status: 'invalid_credentials' };
+
+  if (response.status === 429) {
+    return {
+      status: 'transport_error',
+      message: 'Too many sign-in attempts. Wait a moment and try again.',
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      status: 'transport_error',
+      message: 'Sign-in is temporarily unavailable. Try again shortly.',
+    };
+  }
+
+  let body: {
+    user?: { userId?: string; displayName?: string; email?: string; userType?: CmsUserType };
+    mustChangePassword?: boolean;
+  };
+  try {
+    body = await response.json();
+  } catch {
+    return {
+      status: 'transport_error',
+      message: 'Sign-in is temporarily unavailable. Try again shortly.',
+    };
+  }
+
+  const user = body.user;
+  if (!user?.userId || !user.userType) {
+    return {
+      status: 'transport_error',
+      message: 'Sign-in is temporarily unavailable. Try again shortly.',
+    };
+  }
+
+  // The password was correct, so this is a distinct state rather than a
+  // failure, and the screen must say so rather than pretending sign-in failed.
+  if (body.mustChangePassword === true) {
+    return { status: 'password_change_required', userId: user.userId };
+  }
+
+  return {
+    status: 'success',
+    user: {
+      userId: user.userId,
+      displayName: user.displayName ?? '',
+      email: user.email ?? credentials.email,
+      userType: user.userType,
+    },
+  };
 }
 
 /**
@@ -122,6 +202,8 @@ export function authResultMessage(result: CmsAuthResult): string | null {
     case 'transport_error':
       return result.message;
     case 'not_implemented':
-      return 'Sign-in is not connected yet. This release is the interface only.';
+      // No longer reachable from the endpoint; kept so the union stays
+      // exhaustive and a caller cannot forget an arm.
+      return 'Sign-in is not connected yet.';
   }
 }
