@@ -1,0 +1,91 @@
+/**
+ * An isolated test database for the CMS authentication tests.
+ *
+ * The GRC smoke harness serves the Hrana protocol over HTTP so the built worker
+ * can talk to it. These tests do not need the worker: the login flow, the
+ * session guard and the repositories all take a client, so an in-process
+ * adapter over `node:sqlite` exercises exactly the same SQL with none of the
+ * process and port machinery, and a test run costs milliseconds.
+ *
+ * The adapter implements only the surface this product uses: `execute` with a
+ * parameterised statement, and `close`. Anything else throws rather than
+ * silently returning nothing, so a repository that starts using a wider API
+ * fails loudly here instead of passing a test it never ran.
+ *
+ * The schema is created from the DDL in ./schema.ts, which is copied verbatim
+ * from the operator's hass_cms_turso_v1_FINAL.sql. Foreign keys are ON, and
+ * every CHECK constraint is present, so a test proves the code satisfies the
+ * real constraints rather than a relaxed copy of them.
+ */
+import { DatabaseSync } from 'node:sqlite';
+import { AUTH_SCHEMA_DDL } from './schema.ts';
+
+interface Stmt {
+  sql: string;
+  args?: unknown[];
+}
+
+/** The slice of the libSQL Client interface the CMS code actually calls. */
+export interface TestClient {
+  execute(stmt: Stmt | string): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }>;
+  /** The batched write the login flow uses to keep its bookkeeping atomic. */
+  batch(stmts: Stmt[], mode?: string): Promise<{ rowsAffected: number }[]>;
+  close(): void;
+  /** Test-only escape hatch for arrange and assert steps. */
+  raw: DatabaseSync;
+}
+
+export function createTestDb(): TestClient {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON;');
+  db.exec(AUTH_SCHEMA_DDL);
+
+  const client: TestClient = {
+    async batch(stmts) {
+      // A real transaction, so a test proves the batch is atomic rather than
+      // merely sequential.
+      db.exec('BEGIN');
+      try {
+        const results = [];
+        for (const stmt of stmts) results.push(await client.execute(stmt));
+        db.exec('COMMIT');
+        return results.map((r) => ({ rowsAffected: r.rowsAffected }));
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
+    async execute(stmt) {
+      const sql = typeof stmt === 'string' ? stmt : stmt.sql;
+      const args = typeof stmt === 'string' ? [] : (stmt.args ?? []);
+      // node:sqlite rejects booleans and undefined; the worker's client accepts
+      // them. Normalise the same way the real driver does.
+      const bound = args.map((a) => {
+        if (a === undefined) return null;
+        if (typeof a === 'boolean') return a ? 1 : 0;
+        return a;
+      }) as (string | number | null | bigint | Uint8Array)[];
+
+      if (/^\s*(select|pragma)/i.test(sql)) {
+        const rows = db.prepare(sql).all(...bound) as unknown as Record<string, unknown>[];
+        return { rows, rowsAffected: 0 };
+      }
+      const result = db.prepare(sql).run(...bound);
+      return { rows: [], rowsAffected: Number(result.changes ?? 0) };
+    },
+    close() {
+      db.close();
+    },
+    raw: db,
+  };
+  return client;
+}
+
+/** Rows from an arbitrary query, for assertions. */
+export function query(
+  client: TestClient,
+  sql: string,
+  ...args: unknown[]
+): Record<string, unknown>[] {
+  return client.raw.prepare(sql).all(...(args as never[])) as unknown as Record<string, unknown>[];
+}
