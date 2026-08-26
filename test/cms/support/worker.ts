@@ -15,6 +15,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, request as httpRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { FakeCmsTurso } from './hrana.ts';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
@@ -58,7 +61,9 @@ export class CmsWorker {
   private turso: FakeCmsTurso | null = null;
   private wrangler: ChildProcess | null = null;
   private port = 0;
+  private inspectorPort = 0;
   private log = '';
+  private stateDir = join(tmpdir(), `cms-worker-${randomUUID()}`);
   private cookies = new Map<string, string>();
 
   /** The fake database, for arranging state and asserting rows. */
@@ -71,6 +76,11 @@ export class CmsWorker {
     return this.log;
   }
 
+  /** The port the worker is listening on, for a client other than `call`. */
+  get portNumber(): number {
+    return this.port;
+  }
+
   /** `ddl` is the operator's schema and seed, executed verbatim. */
   async start(ddl: string, sessionSecret: string): Promise<void> {
     this.turso = new FakeCmsTurso(ddl);
@@ -81,11 +91,14 @@ export class CmsWorker {
     // fails in ways that look like application bugs rather than like the
     // environment problem they are.
     this.port = await freePort();
+    this.inspectorPort = await freePort();
 
+    // The binary directly, not through `npx`. A wrapper process takes the
+    // SIGTERM in stop() and wrangler beneath it survives, which is how a run
+    // leaves a worker behind holding a port and a build.
     this.wrangler = spawn(
-      'npx',
+      join(REPO_ROOT, 'node_modules', '.bin', 'wrangler'),
       [
-        'wrangler',
         'dev',
         '--config',
         'dist/server/wrangler.json',
@@ -99,6 +112,16 @@ export class CmsWorker {
         'TURSO_CMS_AUTH_TOKEN:test-token',
         '--var',
         `CMS_SESSION_SECRET:${sessionSecret}`,
+        // Its own state directory, so a run leaves nothing for the next one to
+        // inherit and two `wrangler dev` instances in the same suite (the GRC
+        // smoke test boots one too) never share .wrangler/state.
+        '--persist-to',
+        this.stateDir,
+        // Its own inspector port. Wrangler binds one whether or not a debugger
+        // ever attaches, and it defaults to 9229 for every session, so two
+        // concurrent instances would contend for a port neither test uses.
+        '--inspector-port',
+        String(this.inspectorPort),
       ],
       { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
     );
@@ -108,11 +131,14 @@ export class CmsWorker {
     const deadline = Date.now() + BOOT_TIMEOUT_MS;
     while (Date.now() < deadline) {
       try {
-        const probe = await this.call('GET', '/login');
-        if (probe.status > 0) return;
+        // A fresh worker answers the sign-in page. Anything else, including a
+        // connection that hangs, counts as not ready yet.
+        const probe = await this.call('GET', '/login', { cookie: null });
+        if (probe.status === 200) return;
       } catch {
-        await delay(1000);
+        // Not listening yet, or not answering. Either way, wait and retry.
       }
+      await delay(1000);
     }
     throw new Error(`worker did not start within ${BOOT_TIMEOUT_MS}ms:\n${this.log}`);
   }
@@ -145,7 +171,11 @@ export class CmsWorker {
 
     return new Promise((resolve, reject) => {
       const req = httpRequest(
-        { host: '127.0.0.1', port: this.port, method, path, headers },
+        // A timeout is not optional here. Without one, a connection that is
+        // accepted but never answered blocks the whole run indefinitely, which
+        // is exactly what a half-started worker does, and the symptom is a
+        // suite that appears to hang rather than a test that fails.
+        { host: '127.0.0.1', port: this.port, method, path, headers, timeout: 15_000 },
         (res) => {
           let data = '';
           res.on('data', (chunk) => (data += chunk));
@@ -160,6 +190,9 @@ export class CmsWorker {
           });
         },
       );
+      req.on('timeout', () => {
+        req.destroy(new Error(`request to ${method} ${path} timed out`));
+      });
       req.on('error', reject);
       if (payload !== null) req.write(payload);
       req.end();
@@ -192,8 +225,28 @@ export class CmsWorker {
   }
 
   async stop(): Promise<void> {
-    this.wrangler?.kill('SIGTERM');
-    this.turso?.close();
-    await delay(200);
+    // SIGTERM asks; SIGKILL insists. Wrangler shuts workerd down on the signal,
+    // which takes a moment, so give it one and then stop waiting. Leaving the
+    // child alive holds the test process open, and a `wrangler dev` that
+    // outlives its run is also how the next run ends up talking to a stale
+    // build on a port it thought was free.
+    const child = this.wrangler;
+    this.wrangler = null;
+    if (child) {
+      child.kill('SIGTERM');
+      for (let i = 0; i < 20 && child.exitCode === null && child.signalCode === null; i++) {
+        await delay(250);
+      }
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }
+    await this.turso?.close();
+    this.turso = null;
+    // Leave nothing behind: a stale state directory is how the next run
+    // inherits this one's problems.
+    try {
+      rmSync(this.stateDir, { recursive: true, force: true });
+    } catch {
+      // Best effort.
+    }
   }
 }

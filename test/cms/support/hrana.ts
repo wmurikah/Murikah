@@ -19,6 +19,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { createServer, type Server } from 'node:http';
+import type { Socket } from 'node:net';
 
 interface HranaValue {
   type: 'null' | 'integer' | 'float' | 'text' | 'blob';
@@ -90,6 +91,7 @@ function fromSql(value: unknown): HranaValue {
 export class FakeCmsTurso {
   readonly db: DatabaseSync;
   private server: Server | null = null;
+  private readonly sockets = new Set<Socket>();
   private storedSql = new Map<number, string>();
   private inTransaction = false;
 
@@ -238,6 +240,16 @@ export class FakeCmsTurso {
           .end(JSON.stringify({ baton: null, base_url: null, results }));
       });
     });
+    // Every accepted socket, so close() can destroy them. The libSQL client in
+    // the worker keeps its connection alive between requests, and node's
+    // `server.close()` only stops new connections: it waits for the open ones
+    // to end by themselves, which a keep-alive socket never does. The handle
+    // then holds the event loop open and the test file runs every assertion,
+    // passes, and never exits.
+    server.on('connection', (socket) => {
+      this.sockets.add(socket);
+      socket.on('close', () => this.sockets.delete(socket));
+    });
     this.server = server;
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
@@ -248,8 +260,15 @@ export class FakeCmsTurso {
     return `http://127.0.0.1:${port}`;
   }
 
-  close(): void {
-    this.server?.close();
+  async close(): Promise<void> {
+    const server = this.server;
+    this.server = null;
+    if (server) {
+      const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+      for (const socket of this.sockets) socket.destroy();
+      this.sockets.clear();
+      await closed;
+    }
     this.db.close();
   }
 }
