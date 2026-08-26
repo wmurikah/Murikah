@@ -32,6 +32,7 @@
     "format:check": "prettier --check .",
     "db:apply": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/apply.ts",
     "db:seed": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/seed.ts",
+    "db:cms:bootstrap-admin": "node --env-file-if-exists=.dev.vars --experimental-strip-types cms/db/bootstrap-admin.ts",
     "db:engr:apply": "node --env-file-if-exists=.dev.vars --experimental-strip-types engr/db/apply.ts",
     "db:engr:seed": "node --env-file-if-exists=.dev.vars --experimental-strip-types engr/db/seed.ts",
     "db:engr:bootstrap": "node --env-file-if-exists=.dev.vars --experimental-strip-types engr/db/bootstrap-tenant.ts",

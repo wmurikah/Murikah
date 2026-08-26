@@ -17,7 +17,7 @@
  * string concatenation anywhere in src/lib/cms.
  */
 import { createClient, type Client } from '@libsql/client/web';
-import type { CmsEnv } from './env';
+import type { CmsEnv } from './env.ts';
 
 export async function getDb(env: CmsEnv): Promise<Client> {
   const client = createClient({ url: env.dbUrl, authToken: env.dbToken });
