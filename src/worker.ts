@@ -35,12 +35,7 @@ import {
   isGrcPassthroughAsset,
   grcMarketingRedirect,
 } from './lib/grc/routing';
-import {
-  isCmsHost,
-  toCmsPath,
-  isCmsPassthroughAsset,
-  cmsMarketingRedirect,
-} from './lib/cms/routing';
+import { isCmsHost, toCmsPath, isCmsPassthroughAsset, cmsMarketingRedirect } from './lib/hosts/cms';
 import { getEngrEnv } from './lib/engr/env';
 import { getDeliveryEnv } from './lib/engr/notify/env';
 import { getDb } from './lib/engr/db';
