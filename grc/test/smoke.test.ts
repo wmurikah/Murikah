@@ -23,7 +23,7 @@ import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
 // The same RFC 6238 implementation the worker verifies against, so the round
 // trip computes real codes for the enrolled secret.
-import { totpAt } from '../../src/lib/cms/auth/totp.ts';
+import { totpAt } from '../../src/lib/shared/totp.ts';
 // The same challenge shape the worker stores, so the email-code round trip
 // plants known challenges (the smoke run has no Graph mailer to deliver one).
 import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';

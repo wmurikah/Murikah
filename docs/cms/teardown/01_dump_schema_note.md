@@ -1,3 +1,138 @@
+# CMS v1 schema, preserved
+
+Run order: this is step 2 of three. See `README.md` in this directory.
+
+This file exists so the structure of the CMS database is readable after
+`02_drop_all.sql` has destroyed it. It is documentation, not a script: nothing
+here is meant to be run, and re-creating these tables is explicitly not the
+plan. The redesign starts from nothing.
+
+The DDL below is the snapshot that was committed at `cms/db/schema.sql`,
+introspected from the live database on 2026-07-07 with
+`SELECT sql FROM sqlite_master`. It was deleted along with the rest of the
+application in the same pull request; this is its last readable copy inside the
+repository. The other copy is the archive branch
+`archive/crm-v1-pre-teardown` (commit `5698d25`), which also holds the column
+dictionary `cms/db/schema.md` and the introspection tooling.
+
+## Shape of it
+
+- 64 tables.
+- 65 indexes: 64 named `ix_*`, plus one partial unique index
+  `ux_price_list_default` on `price_list (country_code, currency_code)` where
+  `is_default = 1 AND status = 'ACTIVE'`.
+- No views.
+- No triggers.
+- No FTS virtual tables and no FTS shadow tables.
+- Every index is attached to a table below, so dropping the tables drops the
+  indexes with them. `02_drop_all.sql` names no index.
+
+Conventions, recorded because they belong to the database rather than to the
+deleted code: natural text primary keys throughout; text timestamps defaulting
+to `datetime('now')`; integer booleans, 0 or 1, `NOT NULL DEFAULT`; country
+scoping through `country_code` on nearly every domain table, with `countries`
+as the root reference table; two user types, `STAFF` in `users` and `CUSTOMER`
+in `contacts`, sharing one `sessions` table discriminated by `user_type`.
+
+## Tables, in the order `02_drop_all.sql` drops them
+
+Children before parents, so the sequence is safe even where a console enforces
+foreign keys. The three tenancy tables are dropped ahead of everything else.
+
+```
+tenant_subscriptions, plans, tenants,
+approval_requests, audit_log, bot_conversations, bot_tools, branding,
+business_hours, churn_risk_factors, config, documents, entity_statuses,
+escalation_paths, exchange_rates, holidays, integration_log, job_queue,
+knowledge_articles, localization, menu_items, mfa_challenges,
+notification_preferences, notification_templates, notifications, order_lines,
+order_status_history, password_history, password_resets, payment_uploads,
+po_approvals, po_so_comments, price_list_items, recurring_schedule_lines,
+retention_activities, role_permissions, sessions, signup_requests,
+so_approvals, staff_messages, status_transitions, ticket_attachments,
+ticket_history, user_roles, approval_workflows, bot_llm_configs, invoices,
+knowledge_categories, permissions, price_list, products, recurring_schedule,
+roles, ticket_comments, tickets, orders, sla_config, contacts,
+delivery_locations, drivers, vehicles, customers, depots, segments, users,
+teams, countries
+```
+
+## The tenancy migration
+
+`cms/db/migrations/010_tenancy.sql` added a multi-tenant layer above the
+single-tenant, country-scoped schema, with Hass as the first tenant. Its three
+tables do not appear in the 2026-07-07 snapshot, so it is not certain the
+migration was ever applied to the live database. `02_drop_all.sql` drops them
+with `IF EXISTS`, so it is correct either way.
+
+```sql
+-- ============================================================================
+-- 010_tenancy.sql  -  Hass CMS multi-tenant SaaS layer
+-- ============================================================================
+-- The ported live schema is single-tenant and country-scoped. This migration
+-- adds the tenant layer above it, with Hass as the first tenant, mirroring how
+-- Engineering Rhythm and the GRC platform scope by organisation. Apply to the
+-- live database, then run `pnpm cms:db:introspect` and `pnpm cms:db:columns` so
+-- the typed column layer picks up these tables (and, as they are added per
+-- module, the tenant_id columns on the domain tables).
+--
+-- Idempotent: safe to run more than once.
+-- ============================================================================
+
+-- Tenants (Hass is the first).
+CREATE TABLE IF NOT EXISTS tenants (
+  tenant_id    TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  slug         TEXT NOT NULL UNIQUE,          -- for a future per-tenant subdomain
+  is_active    INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Plans a tenant can subscribe to; features_json gates premium features.
+CREATE TABLE IF NOT EXISTS plans (
+  plan_code     TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  features_json TEXT NOT NULL DEFAULT '{}',
+  price_minor   INTEGER NOT NULL DEFAULT 0,   -- price in the minor unit (cents)
+  currency_code TEXT NOT NULL DEFAULT 'KES',
+  is_active     INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A tenant's subscription (one active per tenant), with trial support.
+CREATE TABLE IF NOT EXISTS tenant_subscriptions (
+  subscription_id TEXT PRIMARY KEY,
+  tenant_id       TEXT NOT NULL REFERENCES tenants(tenant_id),
+  plan_code       TEXT NOT NULL REFERENCES plans(plan_code),
+  status          TEXT NOT NULL DEFAULT 'TRIALING', -- TRIALING | ACTIVE | PAST_DUE | CANCELLED
+  trial_ends_at   TEXT,
+  started_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  current_period_end TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_tenant_sub_tenant ON tenant_subscriptions(tenant_id, status);
+
+-- Seed the first tenant and a starter plan set.
+INSERT OR IGNORE INTO tenants (tenant_id, name, slug) VALUES ('hass', 'Hass', 'hass');
+INSERT OR IGNORE INTO plans (plan_code, name, features_json, price_minor) VALUES
+  ('starter',      'Starter',      '{"customers":true,"orders":true,"tickets":true}', 0),
+  ('professional', 'Professional', '{"customers":true,"orders":true,"tickets":true,"reports":true,"ai_bot":true}', 0),
+  ('enterprise',   'Enterprise',   '{"customers":true,"orders":true,"tickets":true,"reports":true,"ai_bot":true,"integrations":true}', 0);
+INSERT OR IGNORE INTO tenant_subscriptions (subscription_id, tenant_id, plan_code, status)
+  VALUES ('hass-sub', 'hass', 'enterprise', 'ACTIVE');
+
+-- Per module, its domain tables gain the tenant scope, e.g.:
+--   ALTER TABLE customers ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'hass' REFERENCES tenants(tenant_id);
+--   CREATE INDEX ix_customers_tenant ON customers(tenant_id);
+-- Existing rows default to the Hass tenant; every query then scopes by tenant_id.
+```
+
+## The full DDL, as introspected on 2026-07-07
+
+```sql
 -- Hass CMS schema snapshot.
 -- Introspected from the live Turso CMS database (SELECT sql FROM sqlite_master)
 -- on 2026-07-07. This is the ground truth the typed column layer
@@ -1180,3 +1315,4 @@ CREATE INDEX ix_users_status ON users(status);
 CREATE UNIQUE INDEX ux_price_list_default
   ON price_list (country_code, currency_code)
   WHERE is_default = 1 AND status = 'ACTIVE';
+```

@@ -16,7 +16,7 @@ import {
   isCmsApiPath,
   isCmsPortalPath,
   cmsMarketingRedirect,
-} from '../../src/lib/cms/routing.ts';
+} from '../../src/lib/hosts/cms.ts';
 
 test('isCmsHost matches the apex, sub-labels and local equivalents only', () => {
   assert.equal(isCmsHost('cms.murikah.com'), true);
