@@ -1,0 +1,48 @@
+---
+/**
+ * A button whose only content is an icon, so the accessible name has to come
+ * from the `label` prop. It is required, not optional: an unnamed icon button
+ * is invisible to a screen reader, and making the prop optional is how that
+ * happens. The label is also the tooltip.
+ *
+ * 40px square, which is the Fitts's law floor for this system.
+ */
+import CmsIcon from './CmsIcon.astro';
+import type { CmsIconName } from './icons';
+
+interface Props {
+  icon: CmsIconName;
+  label: string;
+  href?: string;
+  tone?: 'default' | 'onNavy';
+  id?: string;
+  class?: string;
+  'aria-expanded'?: 'true' | 'false';
+  'aria-controls'?: string;
+  'data-testid'?: string;
+}
+const { icon, label, href, tone = 'default', id, class: className, ...rest } = Astro.props;
+
+const base =
+  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-cms transition-colors ' +
+  'duration-150 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2';
+const tones = {
+  default:
+    'text-cms-muted hover:bg-cms-canvas hover:text-cms-ink focus-visible:ring-offset-cms-surface',
+  onNavy:
+    'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white focus-visible:ring-offset-cms-navy',
+};
+const cls = [base, tones[tone], className ?? ''].filter(Boolean).join(' ');
+---
+
+{
+  href ? (
+    <a href={href} id={id} class={cls} title={label} aria-label={label} {...rest}>
+      <CmsIcon name={icon} size={19} />
+    </a>
+  ) : (
+    <button type="button" id={id} class={cls} title={label} aria-label={label} {...rest}>
+      <CmsIcon name={icon} size={19} />
+    </button>
+  )
+}

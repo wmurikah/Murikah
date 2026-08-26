@@ -1,0 +1,92 @@
+---
+/**
+ * A native <select> with the same label, hint and error treatment as CmsInput.
+ * Native on purpose: it is the control every platform already knows how to open
+ * with a keyboard, and on a phone it becomes the system picker. A custom
+ * listbox would be more code, worse on touch, and a fresh set of ARIA bugs.
+ *
+ * A shell, as the brief asks: options in, value out, nothing clever.
+ */
+import CmsIcon from './CmsIcon.astro';
+
+export interface CmsSelectOption {
+  value: string;
+  label: string;
+}
+
+interface Props {
+  id: string;
+  name: string;
+  label: string;
+  options: CmsSelectOption[];
+  value?: string;
+  hint?: string;
+  error?: string;
+  required?: boolean;
+  disabled?: boolean;
+  class?: string;
+}
+const {
+  id,
+  name,
+  label,
+  options,
+  value,
+  hint,
+  error,
+  required = false,
+  disabled = false,
+  class: className,
+} = Astro.props;
+const hintId = hint ? `${id}-hint` : undefined;
+const errorId = error ? `${id}-error` : undefined;
+const describedBy = [hintId, errorId].filter(Boolean).join(' ');
+---
+
+<div class={['flex flex-col gap-1.5', className].filter(Boolean).join(' ')}>
+  <label for={id} class="text-cms-label font-semibold text-cms-ink">{label}</label>
+  <div class="relative">
+    <select
+      id={id}
+      name={name}
+      required={required}
+      disabled={disabled}
+      aria-describedby={describedBy || undefined}
+      aria-invalid={error ? 'true' : undefined}
+      class:list={[
+        'h-11 w-full appearance-none rounded-cms border bg-cms-surface px-3 pr-10',
+        'text-cms-body text-cms-ink transition-colors duration-150 outline-none',
+        'focus-visible:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
+        'disabled:cursor-not-allowed disabled:bg-cms-canvas disabled:text-cms-muted',
+        error ? 'border-cms-danger' : 'border-cms-border',
+      ]}
+    >
+      {
+        options.map((option) => (
+          <option value={option.value} selected={option.value === value}>
+            {option.label}
+          </option>
+        ))
+      }
+    </select>
+    <CmsIcon
+      name="chevronDown"
+      size={18}
+      class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-cms-muted"
+    />
+  </div>
+  {
+    hint && (
+      <p id={hintId} class="text-cms-caption text-cms-muted">
+        {hint}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p id={errorId} role="alert" class="text-cms-caption font-medium text-cms-danger">
+        {error}
+      </p>
+    )
+  }
+</div>

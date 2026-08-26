@@ -1,0 +1,63 @@
+---
+/**
+ * The unauthenticated shell: a restrained navy brand panel beside the form on
+ * desktop, a single column on mobile.
+ *
+ * The brand panel is decorative and comes second in the DOM, so a keyboard or
+ * screen-reader user reaches the form first and does not have to travel past a
+ * wall of marketing to sign in. The visual order is restored with `order` at
+ * the lg breakpoint.
+ *
+ * No marketing chrome, for the same reason as CmsLayout: this is the CMS host.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@/styles/global.css';
+import CmsWordmark from '@/components/cms/CmsWordmark.astro';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+const pageTitle = `${title} - Hass Petroleum`;
+---
+
+<!doctype html>
+<html lang="en-KE" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="min-h-full bg-cms-canvas text-cms-ink antialiased">
+    <div class="flex min-h-dvh flex-col lg:grid lg:grid-cols-[1fr_minmax(28rem,34rem)]">
+      {/* The form. First in the DOM, second on screen from lg upwards. */}
+      <main class="flex flex-1 items-center justify-center px-5 py-10 sm:px-8 lg:order-2 lg:py-14">
+        <div class="w-full max-w-sm">
+          <slot />
+        </div>
+      </main>
+
+      {/* The brand panel. Decorative: nothing here is the only copy of anything. */}
+      <aside
+        class="order-first flex flex-col justify-between gap-10 bg-cms-navy px-6 py-8 sm:px-10 lg:order-1 lg:py-14"
+        aria-hidden="true"
+      >
+        <CmsWordmark tone="onNavy" size="lg" />
+        <div class="hidden max-w-md flex-col gap-3 lg:flex">
+          <p class="text-cms-display font-semibold text-white">
+            One view of the customer, from first enquiry to closed ticket.
+          </p>
+          <p class="text-cms-body text-cms-rail-text">
+            Accounts, orders, service and the SLA clock in one place, so the answer to "where is it"
+            takes one screen rather than four.
+          </p>
+        </div>
+        <p class="text-cms-caption text-cms-rail-muted">
+          Customer Relationship, Service &amp; SLA Management System
+        </p>
+      </aside>
+    </div>
+  </body>
+</html>

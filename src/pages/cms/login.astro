@@ -1,0 +1,200 @@
+---
+/**
+ * The CMS sign-in screen, served at /login on cms.murikah.com.
+ *
+ * The file lives at src/pages/cms/login.astro, not src/pages/login.astro: the
+ * worker rewrites a cms-host request to the internal /cms path before Astro
+ * sees it, so a page at the repository root would appear on the marketing site
+ * instead. Every link written here is root-relative on the host, because the
+ * rewrite has already happened by the time this renders.
+ *
+ * There is no authentication in this phase and no pretence of any. The form
+ * calls submitCredentials from the isolated client, which returns
+ * `not_implemented` without touching the network, and the page renders that in
+ * its server-error region. No fake success exists anywhere in this file.
+ *
+ * Nothing here links to a destination that does not exist: no "forgot
+ * password", no "create an account", no social sign-in. A dead link on a login
+ * screen is worse than an absent one, because it costs a user a click and a
+ * page load to discover it does not work.
+ */
+import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsWordmark from '@/components/cms/CmsWordmark.astro';
+---
+
+<CmsAuthLayout title="Sign in">
+  <div class="flex flex-col gap-7">
+    <div class="flex flex-col gap-3">
+      <!-- The wordmark repeats here for the mobile column, where the navy brand
+           panel is collapsed to a band and the form is the page. -->
+      <CmsWordmark tone="onLight" size="sm" class="lg:hidden" />
+      <div class="flex flex-col gap-1.5">
+        <h1 class="text-cms-page font-semibold text-cms-navy">Sign in</h1>
+        <p class="text-cms-body-sm text-cms-muted">
+          Customer Relationship, Service &amp; SLA Management System
+        </p>
+      </div>
+    </div>
+
+    <!--
+      novalidate hands validation to the page rather than the browser's own
+      bubbles, so a message can be placed beside its field, associated with
+      aria-describedby and announced. The fields keep their type and required
+      attributes regardless, so a password manager and the mobile keyboard
+      still behave correctly.
+    -->
+    <form id="cms-login-form" method="post" action="/login" novalidate class="flex flex-col gap-5">
+      <!-- The server-error region. Present and empty rather than injected, so a
+           screen reader is watching it before the first failure happens. -->
+      <div
+        id="cms-login-error"
+        role="alert"
+        hidden
+        class="flex items-start gap-2.5 rounded-cms border border-cms-danger/30 bg-cms-danger-tint px-3.5 py-3"
+      >
+        <CmsIcon name="statusBreach" size={17} class="mt-0.5 shrink-0 text-cms-danger" />
+        <p class="text-cms-body-sm text-cms-ink" data-error-text></p>
+      </div>
+
+      <CmsInput
+        id="cms-email"
+        name="email"
+        label="Email address"
+        type="email"
+        autocomplete="username"
+        inputmode="email"
+        required
+        autofocus
+      />
+
+      <CmsInput
+        id="cms-password"
+        name="password"
+        label="Password"
+        type="password"
+        autocomplete="current-password"
+        required
+        revealable
+      />
+
+      <CmsButton type="submit" variant="primary" size="lg" full id="cms-login-submit">
+        Sign in
+      </CmsButton>
+    </form>
+
+    <p class="text-cms-caption text-cms-muted">
+      Trouble signing in? Contact your system administrator.
+    </p>
+  </div>
+</CmsAuthLayout>
+
+<script>
+  import { submitCredentials, authResultMessage } from '@/lib/cms/auth/client';
+
+  const form = document.getElementById('cms-login-form');
+  if (form instanceof HTMLFormElement) {
+    const email = document.getElementById('cms-email') as HTMLInputElement;
+    const password = document.getElementById('cms-password') as HTMLInputElement;
+    const submit = document.getElementById('cms-login-submit') as HTMLButtonElement;
+    const errorBox = document.getElementById('cms-login-error') as HTMLElement;
+    const errorText = errorBox.querySelector('[data-error-text]') as HTMLElement;
+
+    /** Show or clear one field's message, and keep aria-invalid in step. */
+    const setFieldError = (field: HTMLInputElement, message: string | null) => {
+      const box = document.getElementById(`${field.id}-error`);
+      field.setAttribute('aria-invalid', message ? 'true' : 'false');
+      field.classList.toggle('border-cms-danger', Boolean(message));
+      field.classList.toggle('border-cms-border', !message);
+      if (!box) return;
+      box.textContent = message ?? '';
+      box.classList.toggle('hidden', !message);
+    };
+
+    const setServerError = (message: string | null) => {
+      errorText.textContent = message ?? '';
+      errorBox.hidden = !message;
+    };
+
+    /**
+     * Prevention before messages: this runs on submit, and again on blur once a
+     * field has already been marked, so a corrected field clears as soon as the
+     * user leaves it rather than only on the next submit.
+     */
+    const validate = (): boolean => {
+      let ok = true;
+      const address = email.value.trim();
+      if (!address) {
+        setFieldError(email, 'Enter your email address.');
+        ok = false;
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+        setFieldError(email, 'Enter a complete email address, for example name@hass.co.ke.');
+        ok = false;
+      } else {
+        setFieldError(email, null);
+      }
+
+      if (!password.value) {
+        setFieldError(password, 'Enter your password.');
+        ok = false;
+      } else {
+        setFieldError(password, null);
+      }
+      return ok;
+    };
+
+    for (const field of [email, password]) {
+      field.addEventListener('blur', () => {
+        if (field.getAttribute('aria-invalid') === 'true') validate();
+      });
+    }
+
+    const setLoading = (loading: boolean) => {
+      submit.disabled = loading;
+      submit.setAttribute('aria-busy', String(loading));
+      submit.textContent = loading ? 'Signing in...' : 'Sign in';
+    };
+
+    form.addEventListener('submit', async (event) => {
+      // Handled here in every case: the page never posts, because there is no
+      // endpoint behind it in this phase.
+      event.preventDefault();
+      setServerError(null);
+      if (!validate()) {
+        // Send focus to the first field that failed, so the keyboard user is
+        // taken to the problem rather than left to hunt for it.
+        (email.getAttribute('aria-invalid') === 'true' ? email : password).focus();
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const result = await submitCredentials({
+          email: email.value.trim(),
+          password: password.value,
+        });
+        // Deliberately exhaustive over the union, so a new outcome added to the
+        // client cannot silently fall through to nothing on this screen.
+        switch (result.status) {
+          case 'invalid_credentials':
+          case 'account_locked':
+          case 'transport_error':
+          case 'not_implemented':
+            setServerError(authResultMessage(result));
+            break;
+          case 'mfa_required':
+          case 'password_change_required':
+          case 'success':
+            // No destination exists yet. A later phase routes these; until then
+            // the screen says so rather than inventing a signed-in state.
+            setServerError('Sign-in is not connected yet. This release is the interface only.');
+            break;
+        }
+      } finally {
+        setLoading(false);
+      }
+    });
+  }
+</script>
