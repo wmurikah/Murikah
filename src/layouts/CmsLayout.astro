@@ -24,6 +24,7 @@
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsOverlayScript from '@/components/cms/CmsOverlayScript.astro';
 import CmsSidebar from '@/components/cms/CmsSidebar.astro';
 import CmsTopBar from '@/components/cms/CmsTopBar.astro';
 import CmsWordmark from '@/components/cms/CmsWordmark.astro';
@@ -100,5 +101,7 @@ const DRAWER_ID = 'cms-nav-drawer';
     <CmsDrawer id={DRAWER_ID} title="Navigate">
       <CmsSidebar currentPath={currentPath} idPrefix="drawer" permissions={permissions} />
     </CmsDrawer>
+
+    <CmsOverlayScript />
   </body>
 </html>
