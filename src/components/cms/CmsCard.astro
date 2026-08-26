@@ -1,0 +1,45 @@
+---
+/**
+ * A panel. Grouping comes from the shared surface and the spacing rather than
+ * from a heavy border, which is the Gestalt point: related things read as a
+ * group because they sit together, not because a box was drawn round them.
+ *
+ * The heading is optional and renders as an h2, so a page keeps one h1 and its
+ * sections sit one level below it with nothing skipped.
+ */
+interface Props {
+  title?: string;
+  description?: string;
+  headingLevel?: 'h2' | 'h3';
+  class?: string;
+  bodyClass?: string;
+}
+const {
+  title,
+  description,
+  headingLevel: Heading = 'h2',
+  class: className,
+  bodyClass,
+} = Astro.props;
+---
+
+<section
+  class:list={['rounded-cms-lg border border-cms-line bg-cms-surface shadow-cms-card', className]}
+>
+  {
+    (title || Astro.slots.has('actions')) && (
+      <div class="flex items-center justify-between gap-3 border-b border-cms-line px-4 py-3 sm:px-5">
+        <div class="flex min-w-0 flex-col gap-0.5">
+          {title && <Heading class="text-cms-card font-semibold text-cms-navy">{title}</Heading>}
+          {description && <p class="text-cms-caption text-cms-muted">{description}</p>}
+        </div>
+        <div class="flex shrink-0 items-center gap-1.5">
+          <slot name="actions" />
+        </div>
+      </div>
+    )
+  }
+  <div class:list={['px-4 py-4 sm:px-5', bodyClass]}>
+    <slot />
+  </div>
+</section>

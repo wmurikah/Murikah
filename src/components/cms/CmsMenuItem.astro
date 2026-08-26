@@ -1,0 +1,41 @@
+---
+/**
+ * One row inside CmsDropdown. A link when it navigates, a button when it acts,
+ * for the same reason CmsButton makes that distinction. 40px tall.
+ */
+import CmsIcon from './CmsIcon.astro';
+import type { CmsIconName } from './icons';
+
+interface Props {
+  href?: string;
+  icon?: CmsIconName;
+  tone?: 'default' | 'danger';
+  type?: 'button' | 'submit';
+  class?: string;
+}
+const { href, icon, tone = 'default', type = 'button', class: className } = Astro.props;
+const cls = [
+  'flex h-10 w-full items-center gap-2.5 rounded-cms px-2.5 text-left text-cms-body-sm',
+  'outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-focus',
+  tone === 'danger'
+    ? 'text-cms-danger hover:bg-cms-danger-tint'
+    : 'text-cms-ink hover:bg-cms-royal-tint',
+  className ?? '',
+]
+  .filter(Boolean)
+  .join(' ');
+---
+
+{
+  href ? (
+    <a href={href} class={cls}>
+      {icon && <CmsIcon name={icon} size={16} class="shrink-0 text-cms-muted" />}
+      <slot />
+    </a>
+  ) : (
+    <button type={type} class={cls}>
+      {icon && <CmsIcon name={icon} size={16} class="shrink-0 text-cms-muted" />}
+      <slot />
+    </button>
+  )
+}
