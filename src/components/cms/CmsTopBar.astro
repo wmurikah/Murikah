@@ -1,0 +1,108 @@
+---
+/**
+ * The compact top bar: the drawer trigger on small screens, a search affordance,
+ * notifications, and the account menu.
+ *
+ * Deliberately thin. The page's own title and actions live in CmsPageHeader,
+ * below this, so the top bar carries only what is true on every page. That
+ * keeps the number of equally weighted choices at the top of the screen small,
+ * which is the Hick-Hyman point.
+ *
+ * The account and notification menus are <details> disclosures, so they work
+ * with a keyboard and cost no JavaScript beyond the shared outside-click
+ * handler in CmsDropdown.
+ */
+import CmsAvatar from './CmsAvatar.astro';
+import CmsDropdown from './CmsDropdown.astro';
+import CmsIcon from './CmsIcon.astro';
+import CmsIconButton from './CmsIconButton.astro';
+import CmsMenuItem from './CmsMenuItem.astro';
+
+interface Props {
+  drawerId: string;
+  /** The signed-in user, once sessions exist. Null renders the signed-out bar. */
+  user?: { name: string; role: string } | null;
+  notificationCount?: number;
+}
+const { drawerId, user = null, notificationCount = 0 } = Astro.props;
+---
+
+<div
+  class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-cms-line bg-cms-surface/95 px-3 backdrop-blur-sm sm:px-5"
+>
+  <button
+    type="button"
+    data-cms-modal-open={drawerId}
+    aria-label="Open navigation"
+    class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-cms text-cms-muted outline-none hover:bg-cms-canvas hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus lg:hidden"
+  >
+    <CmsIcon name="menu" size={20} />
+  </button>
+
+  <!-- Search is an affordance in this phase: it shows where search will live
+       and is disabled rather than pretending to work. -->
+  <div class="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm">
+    <label for="cms-search" class="sr-only">Search</label>
+    <CmsIcon
+      name="search"
+      size={17}
+      class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cms-muted"
+    />
+    <input
+      id="cms-search"
+      type="search"
+      disabled
+      placeholder="Search is not connected yet"
+      aria-describedby="cms-search-note"
+      class="h-10 w-full rounded-cms border border-cms-line bg-cms-canvas pr-3 pl-9 text-cms-body-sm text-cms-ink placeholder:text-cms-muted disabled:cursor-not-allowed"
+    />
+    <span id="cms-search-note" class="sr-only">
+      Search will be enabled when the customer and ticket modules are connected.
+    </span>
+  </div>
+
+  <div class="ms-auto flex items-center gap-1">
+    <CmsDropdown id="cms-notifications" label="Notifications">
+      <span
+        slot="trigger"
+        class="relative inline-flex h-10 w-10 items-center justify-center text-cms-muted"
+      >
+        <CmsIcon name="bell" size={19} />
+        {
+          notificationCount > 0 && (
+            <span class="absolute top-1.5 right-1.5 min-w-4 rounded-full bg-cms-danger px-1 text-[0.625rem] leading-4 font-semibold text-white">
+              {notificationCount}
+            </span>
+          )
+        }
+        <span class="sr-only">
+          Notifications{notificationCount > 0 ? `, ${notificationCount} unread` : ''}
+        </span>
+      </span>
+      <p class="px-2.5 py-4 text-center text-cms-body-sm text-cms-muted">
+        Notifications arrive with the service module.
+      </p>
+    </CmsDropdown>
+
+    {
+      user ? (
+        <CmsDropdown id="cms-account" label="Account menu">
+          <span slot="trigger" class="flex items-center gap-2">
+            <CmsAvatar name={user.name} size="sm" />
+            <span class="hidden min-w-0 flex-col text-left sm:flex">
+              <span class="truncate text-cms-body-sm font-semibold text-cms-ink">{user.name}</span>
+              <span class="truncate text-cms-caption text-cms-muted">{user.role}</span>
+            </span>
+            <CmsIcon name="chevronDown" size={15} class="text-cms-muted" />
+          </span>
+          <CmsMenuItem icon="administration">Preferences</CmsMenuItem>
+          <CmsMenuItem icon="logout" tone="danger">
+            Sign out
+          </CmsMenuItem>
+        </CmsDropdown>
+      ) : (
+        <CmsIconButton icon="logout" label="Sign in" href="/login" />
+      )
+    }
+  </div>
+</div>

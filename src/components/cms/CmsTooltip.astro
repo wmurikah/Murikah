@@ -1,0 +1,38 @@
+---
+/**
+ * A CSS-only tooltip. Shows on hover and on keyboard focus, which is the half
+ * that most tooltips forget, and is wired with aria-describedby so the text is
+ * announced rather than merely drawn.
+ *
+ * It holds supporting detail, never the only copy of something a user needs:
+ * anything essential belongs in a visible label or hint, because a tooltip is
+ * unreachable on touch.
+ */
+interface Props {
+  id: string;
+  text: string;
+  placement?: 'top' | 'bottom';
+  class?: string;
+}
+const { id, text, placement = 'top', class: className } = Astro.props;
+const position =
+  placement === 'top'
+    ? 'bottom-full mb-2 left-1/2 -translate-x-1/2'
+    : 'top-full mt-2 left-1/2 -translate-x-1/2';
+---
+
+<span class:list={['group relative inline-flex', className]}>
+  <slot />
+  <span
+    id={id}
+    role="tooltip"
+    class:list={[
+      'pointer-events-none absolute z-30 w-max max-w-56 rounded-cms bg-cms-navy px-2.5 py-1.5',
+      'text-cms-caption font-medium text-white opacity-0 shadow-cms-pop transition-opacity duration-150',
+      'group-focus-within:opacity-100 group-hover:opacity-100',
+      position,
+    ]}
+  >
+    {text}
+  </span>
+</span>

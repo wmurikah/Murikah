@@ -1,0 +1,35 @@
+---
+/**
+ * Renders one glyph from the CMS icon set in currentColor.
+ *
+ * Icons here are decorative by default: they sit beside a text label, so they
+ * are hidden from assistive technology unless a `title` is given, which is the
+ * case where the icon is the only content (an icon button, a status mark that
+ * has to be announced). Mirrors GrcIcon.astro and EngrIcon.astro.
+ */
+import { CMS_ICONS, type CmsIconName } from './icons';
+
+interface Props {
+  name: CmsIconName;
+  size?: number;
+  title?: string;
+  class?: string;
+}
+const { name, size = 18, title, class: className } = Astro.props;
+const path = CMS_ICONS[name];
+---
+
+<svg
+  viewBox="0 0 24 24"
+  width={size}
+  height={size}
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.6"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  class={className}
+  aria-hidden={title ? undefined : 'true'}
+  role={title ? 'img' : undefined}
+  set:html={(title ? `<title>${title}</title>` : '') + path}
+/>
