@@ -26,10 +26,16 @@ export interface CmsNavItem {
   /** Icon key, resolved by CmsIcon.astro. Decorative, always beside a label. */
   readonly icon: CmsIconName;
   /**
-   * The permission this destination will require once sessions exist. Declared
-   * now so the model is complete; deliberately unread in this phase.
+   * The permission code this destination requires, in the database's own
+   * MODULE.RESOURCE.ACTION form. `null` means any authenticated user, which is
+   * true of exactly one entry: the landing page they are redirected to.
+   *
+   * These were placeholders of the form `cms.customers.view` when the model was
+   * written, before the schema was available. They are now the real codes from
+   * the `permissions` table, because a key that matches nothing would hide
+   * every entry from everybody.
    */
-  readonly permission: string;
+  readonly permission: string | null;
   /** One line of context for the section landing page and the page header. */
   readonly summary: string;
 }
@@ -37,61 +43,73 @@ export interface CmsNavItem {
 export const CMS_NAV: readonly CmsNavItem[] = [
   {
     label: 'Home',
-    href: '/',
+    href: '/app',
     icon: 'home',
-    permission: 'cms.home.view',
+    permission: null,
     summary: 'Today across service, orders and accounts.',
   },
   {
     label: 'Customers',
-    href: '/customers',
+    href: '/app/customers',
     icon: 'customers',
-    permission: 'cms.customers.view',
+    permission: 'CUSTOMERS.ACCOUNTS.VIEW',
     summary: 'Accounts, contacts, delivery locations and documents.',
   },
   {
     label: 'CRM',
-    href: '/crm',
+    href: '/app/crm',
     icon: 'crm',
-    permission: 'cms.crm.view',
+    permission: 'CRM.LEADS.VIEW',
     summary: 'Leads, opportunities, retention and churn risk.',
   },
   {
     label: 'Service',
-    href: '/service',
+    href: '/app/service',
     icon: 'service',
-    permission: 'cms.service.view',
+    permission: 'SERVICE.CASES.VIEW',
     summary: 'Tickets, escalations and the SLA clock.',
   },
   {
     label: 'Orders',
-    href: '/orders',
+    href: '/app/orders',
     icon: 'orders',
-    permission: 'cms.orders.view',
+    permission: 'ORDERS.SALES_ORDER.VIEW',
     summary: 'Sales orders, purchase orders, invoices and deliveries.',
   },
   {
     label: 'Performance',
-    href: '/performance',
+    href: '/app/performance',
     icon: 'performance',
-    permission: 'cms.performance.view',
+    permission: 'SLA.DASHBOARD.VIEW',
     summary: 'SLA attainment, resolution times and team load.',
   },
   {
     label: 'Data',
-    href: '/data',
+    href: '/app/data',
     icon: 'data',
-    permission: 'cms.data.view',
+    permission: 'DATA.IMPORTS.VIEW',
     summary: 'Reference data, imports and integration activity.',
   },
   {
     label: 'Administration',
-    href: '/administration',
+    href: '/app/administration',
     icon: 'administration',
-    permission: 'cms.admin.view',
+    permission: 'ADMIN.USERS.MANAGE',
     summary: 'Users, roles, teams and system configuration.',
   },
 ];
+
+/**
+ * The entries this principal may see.
+ *
+ * Presentation, not access control: hiding a link stops nobody from typing the
+ * URL. Server-side authorisation of the routes themselves is a later phase.
+ */
+export function visibleNav(permissions: readonly string[]): CmsNavItem[] {
+  return CMS_NAV.filter(
+    (item) => item.permission === null || permissions.includes(item.permission),
+  );
+}
 
 /**
  * The entry whose href best matches a visitor-facing path, or null. Longest
@@ -101,13 +119,13 @@ export const CMS_NAV: readonly CmsNavItem[] = [
 export function activeNavItem(path: string): CmsNavItem | null {
   let best: CmsNavItem | null = null;
   for (const item of CMS_NAV) {
-    if (item.href === '/') {
-      if (path === '/' && best === null) best = item;
+    if (item.href === '/app') {
+      if (path === '/app' && best === null) best = item;
       continue;
     }
     if (path === item.href || path.startsWith(item.href + '/')) {
       if (best === null || item.href.length > best.href.length) best = item;
     }
   }
-  return best ?? (path === '/' ? (CMS_NAV[0] ?? null) : null);
+  return best ?? (path === '/app' ? (CMS_NAV[0] ?? null) : null);
 }

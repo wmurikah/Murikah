@@ -12,6 +12,11 @@
  * and this copy together.
  */
 import CmsSectionPlaceholder from '@/components/cms/CmsSectionPlaceholder.astro';
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time, the middleware guard runs once during the build
+// instead of per request, and the route protection becomes a static artefact:
+// a signed-in user would be served whatever the build decided.
+export const prerender = false;
 ---
 
-<CmsSectionPlaceholder href="/customers" />
+<CmsSectionPlaceholder href="/app/customers" />

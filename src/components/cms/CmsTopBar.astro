@@ -18,13 +18,20 @@ import CmsIcon from './CmsIcon.astro';
 import CmsIconButton from './CmsIconButton.astro';
 import CmsMenuItem from './CmsMenuItem.astro';
 
+import type { CmsIdentity } from '@/lib/cms/repos/identity';
+import { organisationLine } from '@/lib/cms/organisation';
+
 interface Props {
   drawerId: string;
-  /** The signed-in user, once sessions exist. Null renders the signed-out bar. */
-  user?: { name: string; role: string } | null;
+  /** The resolved principal from the middleware guard. Null when signed out. */
+  principal?: { user: CmsIdentity } | null;
   notificationCount?: number;
 }
-const { drawerId, user = null, notificationCount = 0 } = Astro.props;
+const { drawerId, principal = null, notificationCount = 0 } = Astro.props;
+const user = principal?.user ?? null;
+// Job title and organisational context come from the primary assignment, which
+// an EXTERNAL user does not have at all, so both are optional everywhere.
+const context = user ? organisationLine(user.assignment) : null;
 ---
 
 <div
@@ -88,17 +95,43 @@ const { drawerId, user = null, notificationCount = 0 } = Astro.props;
       user ? (
         <CmsDropdown id="cms-account" label="Account menu">
           <span slot="trigger" class="flex items-center gap-2">
-            <CmsAvatar name={user.name} size="sm" />
+            <CmsAvatar name={user.displayName} size="sm" />
             <span class="hidden min-w-0 flex-col text-left sm:flex">
-              <span class="truncate text-cms-body-sm font-semibold text-cms-ink">{user.name}</span>
-              <span class="truncate text-cms-caption text-cms-muted">{user.role}</span>
+              <span class="truncate text-cms-body-sm font-semibold text-cms-ink">
+                {user.displayName}
+              </span>
+              <span class="truncate text-cms-caption text-cms-muted">
+                {user.assignment?.jobTitle ??
+                  (user.userType === 'EXTERNAL' ? 'Customer portal' : 'No assignment')}
+              </span>
             </span>
             <CmsIcon name="chevronDown" size={15} class="text-cms-muted" />
           </span>
-          <CmsMenuItem icon="administration">Preferences</CmsMenuItem>
-          <CmsMenuItem icon="logout" tone="danger">
-            Sign out
-          </CmsMenuItem>
+
+          <div class="border-b border-cms-line px-2.5 pt-1.5 pb-2.5">
+            <p class="text-cms-body-sm font-semibold text-cms-ink">{user.displayName}</p>
+            <p class="truncate text-cms-caption text-cms-muted">{user.email}</p>
+            {user.assignment?.jobTitle && (
+              <p class="mt-1 text-cms-caption text-cms-muted">{user.assignment.jobTitle}</p>
+            )}
+            {context && <p class="text-cms-caption text-cms-muted">{context}</p>}
+          </div>
+
+          <p class="px-2.5 py-2 text-cms-caption text-cms-muted">
+            Profile settings arrive with the administration module.
+          </p>
+
+          {/*
+            A POST form, never a link. Sign-out on GET can be triggered by any
+            third-party page that can make your browser issue a request, and a
+            forced sign-out is a real if minor nuisance. The form also carries
+            the Origin header the CSRF check requires.
+          */}
+          <form method="post" action="/api/auth/logout" class="border-t border-cms-line pt-1.5">
+            <CmsMenuItem icon="logout" tone="danger" type="submit">
+              Sign out
+            </CmsMenuItem>
+          </form>
         </CmsDropdown>
       ) : (
         <CmsIconButton icon="logout" label="Sign in" href="/login" />

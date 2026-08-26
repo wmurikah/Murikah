@@ -30,15 +30,23 @@ import CmsWordmark from '@/components/cms/CmsWordmark.astro';
 
 interface Props {
   title: string;
-  user?: { name: string; role: string } | null;
   notificationCount?: number;
 }
-const { title, user = null, notificationCount = 0 } = Astro.props;
+const { title, notificationCount = 0 } = Astro.props;
 
 const pageTitle = `${title} - Hass Petroleum`;
 // The visitor-facing path, captured by the middleware before the /cms rewrite,
 // so the rail marks the item the user thinks they are on.
-const currentPath = Astro.locals.cmsPath ?? '/';
+const currentPath = Astro.locals.cmsPath ?? '/app';
+
+// The principal, resolved once per request by the middleware guard and read
+// here. There is no client-side authentication store anywhere in this product,
+// so there is nothing to hydrate, nothing to keep in step, and no window in
+// which the browser holds a view the server has not authorised. A page is
+// simply not rendered until the principal is known, which is also why there is
+// no loading state and no skeleton: there is no gap to hide.
+const principal = Astro.locals.cms;
+const permissions = principal?.user.permissions ?? [];
 const DRAWER_ID = 'cms-nav-drawer';
 ---
 
@@ -63,20 +71,24 @@ const DRAWER_ID = 'cms-nav-drawer';
       {/* The persistent rail. Hidden below lg, where the drawer takes over. */}
       <aside class="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col bg-cms-navy px-3 py-4 lg:flex">
         <a
-          href="/"
+          href="/app"
           class="mb-5 flex min-h-10 items-center rounded-cms px-3 py-1 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
         >
           <CmsWordmark tone="onNavy" size="md" />
           <span class="sr-only">Go to home</span>
         </a>
-        <CmsSidebar currentPath={currentPath} idPrefix="rail" />
+        <CmsSidebar currentPath={currentPath} idPrefix="rail" permissions={permissions} />
         <p class="mt-auto px-3 pt-4 text-cms-caption text-cms-rail-muted">
           Customer Relationship, Service &amp; SLA
         </p>
       </aside>
 
       <div class="flex min-w-0 flex-1 flex-col">
-        <CmsTopBar drawerId={DRAWER_ID} user={user} notificationCount={notificationCount} />
+        <CmsTopBar
+          drawerId={DRAWER_ID}
+          principal={principal}
+          notificationCount={notificationCount}
+        />
         <main id="cms-main" class="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
             <slot />
@@ -86,7 +98,7 @@ const DRAWER_ID = 'cms-nav-drawer';
     </div>
 
     <CmsDrawer id={DRAWER_ID} title="Navigate">
-      <CmsSidebar currentPath={currentPath} idPrefix="drawer" />
+      <CmsSidebar currentPath={currentPath} idPrefix="drawer" permissions={permissions} />
     </CmsDrawer>
   </body>
 </html>
