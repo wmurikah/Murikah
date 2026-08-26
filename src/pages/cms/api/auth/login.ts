@@ -103,6 +103,11 @@ export const POST: APIRoute = async ({ request }) => {
     200,
   );
   response.headers.append('set-cookie', cookie);
+  // The body names the user and the header carries their credential. The
+  // middleware stamps no-store on every response it resolves a principal for,
+  // and this request has no cookie yet, so the one response that establishes
+  // the session has to say so itself.
+  response.headers.set('cache-control', 'no-store');
   return response;
 };
 

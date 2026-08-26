@@ -133,6 +133,12 @@ test('a valid internal sign-in sets the session cookie', { skip: skip() }, async
   worker.clearCookies();
   const response = await signIn(INTERNAL_EMAIL);
   assert.equal(response.status, 200);
+  // Asserted on this response rather than in a case of its own, because a
+  // second sign-in would leave a second live session and the sign-out case
+  // below reads the newest row. The body names the user and the header carries
+  // the credential, so the guard's no-store rule has to reach this one too,
+  // and the guard cannot stamp it: the request arrives without a session.
+  assert.equal(response.headers['cache-control'], 'no-store');
   const setCookie = ([] as string[]).concat(response.headers['set-cookie'] ?? []);
   assert.match(setCookie[0] ?? '', /^cms_session=/);
   assert.match(setCookie[0] ?? '', /HttpOnly/);
