@@ -263,9 +263,25 @@ declare namespace App {
 
     /**
      * The visitor-facing root-relative path on cms.murikah.com, before the /cms
-     * rewrite. Still attached by the middleware host branch, which survives the
-     * Build Prompt 00 teardown so the address keeps resolving.
+     * rewrite. Attached by the middleware host branch on every CMS request,
+     * signed in or not.
      */
     cmsPath?: string;
+
+    /**
+     * The signed-in CMS principal, attached by the middleware guard from a
+     * verified session. Absent on an anonymous request, which is every request
+     * to the sign-in page and the sign-in endpoint.
+     *
+     * `can` is a convenience over the resolved permission codes. It answers
+     * whether a permission was granted, not whether an action is allowed in
+     * context: fine-grained authorisation, including the data scopes on the
+     * roles, arrives in a later phase.
+     */
+    cms?: {
+      sessionId: string;
+      user: import('@/lib/cms/repos/identity').CmsIdentity;
+      can: (permissionCode: string) => boolean;
+    };
   }
 }

@@ -50,6 +50,10 @@ import {
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { scheduleCacheStatsRollUp } from '@grc/cache';
 import { toCmsAppPath } from '@/lib/hosts/cms';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb as getCmsDb } from '@/lib/cms/db';
+import { readSessionCookie as readCmsSessionCookie } from '@/lib/cms/auth/cookie';
+import { resolveSession as resolveCmsSession } from '@/lib/cms/auth/loginFlow';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -265,15 +269,47 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // ---- CMS host branch (/cms routes) ---------------------------------------
-  // The product was torn down to bare ground (Build Prompt 00). The branch stays
-  // exactly where it was, so cms.murikah.com keeps resolving and the Cloudflare
-  // custom domain never has to be re-pointed, but it has no session guard left
-  // to run: the one surviving route is an inert holding page. It reads no
-  // secret and makes no database call, so a missing TURSO_CMS_* credential
-  // cannot take the host down while the redesign is built. The visitor-facing
-  // path is still attached to locals, as it was before.
+  // The branch itself is unchanged from Build Prompt 00, so cms.murikah.com
+  // keeps resolving and the Cloudflare custom domain never has to be
+  // re-pointed. What it now does inside is resolve the session (Build Prompt
+  // 03): read the cms_session cookie, find the matching ACTIVE session by the
+  // HMAC of the token, load the user, and attach the principal to locals for
+  // downstream handlers.
+  //
+  // The guard resolves, it does not authorise. Nothing here decides what a role
+  // may do: it returns the roles, the scopes and the permission codes, and
+  // fine-grained authorisation arrives in a later phase. Pages and endpoints
+  // that need a principal check locals.cms themselves; /api/auth/login must
+  // stay reachable without one, and the sign-in page must not redirect-loop.
+  //
+  // Failure is never fatal to the host. An unconfigured TURSO_CMS_* or an
+  // unreachable database leaves the request anonymous rather than 500ing the
+  // whole product, because the holding page, the login screen and the static
+  // assets have no business depending on the database being up.
   if (pathname === '/cms' || pathname.startsWith('/cms/')) {
-    context.locals.cmsPath = toCmsAppPath(pathname);
+    const appPath = toCmsAppPath(pathname);
+    context.locals.cmsPath = appPath;
+
+    try {
+      const env = getCmsEnv();
+      const db = await getCmsDb(env);
+      const resolution = await resolveCmsSession(
+        db,
+        env.sessionSecret,
+        readCmsSessionCookie(context.request),
+        new Date(),
+      );
+      if (resolution.kind === 'authenticated') {
+        context.locals.cms = {
+          sessionId: resolution.sessionId,
+          user: resolution.identity,
+          can: (code: string) => resolution.identity.permissions.includes(code),
+        };
+      }
+    } catch {
+      // Anonymous. The endpoints answer 401 on their own terms.
+    }
+
     return next();
   }
 
