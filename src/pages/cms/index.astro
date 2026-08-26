@@ -1,59 +1,88 @@
 ---
-export const prerender = false;
-
 /**
- * The staff dashboard shell landing. The foundation lands staff here after
- * sign-in, in the tenant brand; the modules (customers, orders, invoices,
- * tickets and the rest) arrive one per prompt behind the smoke test. Read-only
- * and self-contained, so it never 500s; a data load, when added, is wrapped by
- * the error boundary.
+ * The holding page for cms.murikah.com, and the only route the CMS host serves
+ * while the product is redesigned (Build Prompt 00, clean-slate teardown).
+ *
+ * It exists so the address keeps resolving. The custom domain, the worker, the
+ * host branch in src/worker.ts and the Turso credentials all stay as they are,
+ * so nothing on the Cloudflare side has to be reconfigured when the redesign
+ * lands. Every other path on this host falls through to the worker's neutral
+ * not-found response.
+ *
+ * Deliberately inert: no navigation into a dead app, no sign-in form, no
+ * database call, no secret read, no client JavaScript. It cannot fail, because
+ * there is nothing in it to fail.
+ *
+ * The shared design tokens are pulled in through @/styles/global.css, which
+ * imports @/styles/tokens.css, so the navy, brass and ivory palette and the
+ * type scale are the same ones the rest of the estate uses. BaseLayout is
+ * deliberately not used: it renders the marketing header and footer, and no
+ * corporate navigation belongs on this host.
  */
-import CmsLayout from '@/layouts/CmsLayout.astro';
-import CmsError from '@/components/cms/CmsError.astro';
+import '@/styles/global.css';
 
-const cms = Astro.locals.cms;
-if (!cms) return Astro.redirect('/login');
-
-let loadError = false;
-try {
-  // No aggregation yet; the dashboard's data lands with the reporting prompt.
-  // The try/catch is the safety net every route carries from day one.
-} catch (err) {
-  loadError = true;
-  console.error('[cms.dashboard] load failed', err);
-}
+const title = 'Murikah CMS';
 ---
 
-<CmsLayout title="Dashboard">
-  <div class="cms-page-head">
-    <div>
-      <h1>Dashboard</h1>
-      <p class="cms-lead">
-        Welcome back{cms.userName ? `, ${cms.userName}` : ''}. Your {cms.tenantName} workspace.
+<!doctype html>
+<html lang="en-KE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{title}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="cms-holding">
+    <main class="cms-holding__pane">
+      <p class="cms-holding__eyebrow">Murikah</p>
+      <h1 class="cms-holding__title">This platform is being rebuilt.</h1>
+      <p class="cms-holding__body">
+        The address is reserved and working. There is nothing to sign in to yet.
       </p>
-    </div>
-  </div>
+    </main>
+  </body>
+</html>
 
-  {
-    loadError ? (
-      <CmsError tag="[cms.dashboard]" area="The dashboard" />
-    ) : (
-      <div class="cms-cards">
-        <section class="cms-card">
-          <h2>Your workspace</h2>
-          <p class="cms-lead">
-            Signed in as {cms.userEmail ?? 'staff'}
-            {cms.isPlatformOwner ? ' with the platform-owner tier' : ''}.
-          </p>
-        </section>
-        <section class="cms-card">
-          <h2>Modules</h2>
-          <p class="cms-lead">
-            Customers, orders, invoices, payments, tickets and the rest arrive one at a time, each
-            behind the smoke test.
-          </p>
-        </section>
-      </div>
-    )
+<style>
+  /* Scoped to this page. Colours and type come from the shared tokens in
+     @/styles/tokens.css, so this page cannot drift from the design system. */
+  .cms-holding {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: 1.5rem;
+    background: var(--color-ivory);
+    color: var(--color-ink);
   }
-</CmsLayout>
+
+  .cms-holding__pane {
+    max-width: 34rem;
+    text-align: center;
+  }
+
+  .cms-holding__eyebrow {
+    margin: 0 0 1.25rem;
+    color: var(--color-brass);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .cms-holding__title {
+    margin: 0 0 0.75rem;
+    color: var(--color-navy);
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .cms-holding__body {
+    margin: 0;
+    color: var(--color-slate);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+</style>

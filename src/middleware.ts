@@ -49,18 +49,7 @@ import {
 } from '@grc/routing';
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { scheduleCacheStatsRollUp } from '@grc/cache';
-import { getCmsEnv } from '@cms/env';
-import { getDb as getCmsDb } from '@cms/db';
-import { readSessionCookie } from '@cms/auth/session';
-import {
-  resolveSession as resolveCmsSession,
-  touchSession,
-  getDisplayIdentity,
-} from '@cms/repos/session';
-import { loadRolePermissions, can as cmsCan } from '@cms/auth/rbac';
-import { loadBranding } from '@cms/repos/branding';
-import { resolveTenant } from '@cms/tenancy';
-import { toCmsAppPath, isCmsPublicPath, isCmsApiPath, isCmsPortalPath } from '@cms/routing';
+import { toCmsAppPath } from '@cms/routing';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -275,75 +264,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // ---- Hass CMS guard (/cms routes) ----------------------------------------
+  // ---- CMS host branch (/cms routes) ---------------------------------------
+  // The product was torn down to bare ground (Build Prompt 00). The branch stays
+  // exactly where it was, so cms.murikah.com keeps resolving and the Cloudflare
+  // custom domain never has to be re-pointed, but it has no session guard left
+  // to run: the one surviving route is an inert holding page. It reads no
+  // secret and makes no database call, so a missing TURSO_CMS_* credential
+  // cannot take the host down while the redesign is built. The visitor-facing
+  // path is still attached to locals, as it was before.
   if (pathname === '/cms' || pathname.startsWith('/cms/')) {
-    const appPath = toCmsAppPath(pathname);
-    context.locals.cmsPath = appPath;
-
-    if (isCmsPublicPath(appPath)) return next();
-    const isApi = isCmsApiPath(appPath);
-    const loginPath = isCmsPortalPath(appPath) ? '/portal/login' : '/login';
-
-    let env: ReturnType<typeof getCmsEnv>;
-    try {
-      env = getCmsEnv();
-    } catch {
-      return isApi
-        ? jsonResponse({ error: 'unavailable' }, 503)
-        : new Response('Hass CMS is not configured.', { status: 503 });
-    }
-
-    const cookie = await readSessionCookie(context.request, env.sessionSecret);
-    if (!cookie) {
-      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect(loginPath);
-    }
-
-    const db = await getCmsDb(env);
-    const identity = await resolveCmsSession(db, cookie.sessionId);
-    if (!identity) {
-      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect(loginPath);
-    }
-
-    // A half-authorised (MFA pending) session may only reach the TOTP step.
-    if (cookie.mfa === 'pending') {
-      if (appPath === '/mfa') return next();
-      return isApi ? jsonResponse({ error: 'mfa_required' }, 401) : context.redirect('/mfa');
-    }
-
-    // The two user types never cross: a customer is confined to the portal, a
-    // staff user is kept out of it. Sign-out and the MFA step are shared.
-    const onPortal = isCmsPortalPath(appPath);
-    if (identity.userType === 'CUSTOMER' && !onPortal && appPath !== '/mfa') {
-      return isApi ? jsonResponse({ error: 'forbidden' }, 403) : context.redirect('/portal');
-    }
-    if (identity.userType === 'STAFF' && onPortal) {
-      return isApi ? jsonResponse({ error: 'forbidden' }, 403) : context.redirect('/');
-    }
-
-    const [perms, display] = await Promise.all([
-      identity.role ? loadRolePermissions(db, identity.role) : Promise.resolve(new Set<string>()),
-      getDisplayIdentity(db, identity.userType, identity.userId),
-    ]);
-    const tenant = resolveTenant(identity.role);
-    const branding = await loadBranding(db, identity.countryCode);
-    await touchSession(db, cookie.sessionId);
-
-    context.locals.cms = {
-      userType: identity.userType,
-      userId: identity.userId,
-      role: identity.role,
-      countryCode: identity.countryCode,
-      customerId: display?.customerId ?? null,
-      userName: display?.name,
-      userEmail: display?.email,
-      tenantId: tenant.tenantId,
-      tenantName: tenant.tenantName,
-      isPlatformOwner: tenant.isPlatformOwner,
-      branding,
-      perms: [...perms],
-      can: (code: string) => cmsCan(perms, code),
-    };
-
+    context.locals.cmsPath = toCmsAppPath(pathname);
     return next();
   }
 
