@@ -1,0 +1,33 @@
+---
+/**
+ * The page-title zone: breadcrumb, the single h1, a line of context, and the
+ * page's actions.
+ *
+ * Every page in the shell renders exactly one of these, which is how the
+ * "exactly one h1" rule is kept structurally rather than by discipline. The
+ * actions slot is where the page's dominant action goes, on the right, alone if
+ * possible, so there is one obvious thing to do.
+ */
+import CmsBreadcrumb, { type CmsCrumb } from './CmsBreadcrumb.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  crumbs?: CmsCrumb[];
+  class?: string;
+}
+const { title, description, crumbs, class: className } = Astro.props;
+---
+
+<header class:list={['flex flex-col gap-3', className]}>
+  {crumbs && crumbs.length > 0 && <CmsBreadcrumb items={crumbs} />}
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex min-w-0 flex-col gap-1">
+      <h1 class="text-cms-page font-semibold text-cms-navy">{title}</h1>
+      {description && <p class="max-w-2xl text-cms-body-sm text-cms-muted">{description}</p>}
+    </div>
+    <div class="flex shrink-0 flex-wrap items-center gap-2">
+      <slot name="actions" />
+    </div>
+  </div>
+</header>

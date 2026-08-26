@@ -1,0 +1,52 @@
+---
+/**
+ * A checkbox with its label as the hit target, so the whole row is clickable
+ * and the touch area clears 40px without the box itself having to be huge.
+ * The native input is kept and styled rather than replaced with a div, so it
+ * keeps its keyboard behaviour, its form value and its indeterminate state.
+ */
+interface Props {
+  id: string;
+  name: string;
+  label: string;
+  hint?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  value?: string;
+  class?: string;
+}
+const {
+  id,
+  name,
+  label,
+  hint,
+  checked = false,
+  disabled = false,
+  value,
+  class: className,
+} = Astro.props;
+const hintId = hint ? `${id}-hint` : undefined;
+---
+
+<div class={['flex min-h-10 items-start gap-3 py-2', className].filter(Boolean).join(' ')}>
+  <input
+    id={id}
+    name={name}
+    type="checkbox"
+    value={value}
+    checked={checked}
+    disabled={disabled}
+    aria-describedby={hintId}
+    class="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-cms-border text-cms-royal accent-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-55"
+  />
+  <div class="flex flex-col gap-0.5">
+    <label for={id} class="cursor-pointer text-cms-body-sm text-cms-ink select-none">{label}</label>
+    {
+      hint && (
+        <p id={hintId} class="text-cms-caption text-cms-muted">
+          {hint}
+        </p>
+      )
+    }
+  </div>
+</div>
