@@ -1,6 +1,6 @@
 ---
 /**
- * Placeholder destination for the administration section.
+ * Placeholder destination for the service section.
  *
  * It exists so the navigation is real: every entry in CMS_NAV leads somewhere,
  * and a rail full of dead links cannot be reviewed for structure. It builds no
@@ -12,6 +12,11 @@
  * and this copy together.
  */
 import CmsSectionPlaceholder from '@/components/cms/CmsSectionPlaceholder.astro';
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time, the middleware guard runs once during the build
+// instead of per request, and the route protection becomes a static artefact:
+// a signed-in user would be served whatever the build decided.
+export const prerender = false;
 ---
 
-<CmsSectionPlaceholder href="/administration" />
+<CmsSectionPlaceholder href="/app/service" />

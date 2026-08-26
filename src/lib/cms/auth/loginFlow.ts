@@ -264,9 +264,19 @@ export async function attemptLogin(
   };
 }
 
+/**
+ * Why a request is anonymous.
+ *
+ * The distinction earns its keep at exactly one place: a session that existed
+ * and has run out deserves "your session has expired, sign in again", and a
+ * request that never carried a cookie deserves silence. Collapsing the two
+ * would either nag every first-time visitor or tell a returning user nothing.
+ */
+export type AnonymousReason = 'no_cookie' | 'unknown_token' | 'expired' | 'revoked' | 'no_user';
+
 export type SessionResolution =
   | { readonly kind: 'authenticated'; readonly sessionId: string; readonly identity: CmsIdentity }
-  | { readonly kind: 'anonymous' };
+  | { readonly kind: 'anonymous'; readonly reason: AnonymousReason };
 
 /**
  * Resolve a presented cookie to a principal.
@@ -284,21 +294,25 @@ export async function resolveSession(
   rawToken: string | null,
   now: Date,
 ): Promise<SessionResolution> {
-  if (!rawToken) return { kind: 'anonymous' };
+  if (!rawToken) return { kind: 'anonymous', reason: 'no_cookie' };
 
   const tokenHash = await hashSessionToken(rawToken, secret);
   const session = await findSessionByHash(db, tokenHash);
-  if (!session) return { kind: 'anonymous' };
+  // No row for this hash: a forged cookie, or one signed with another secret.
+  if (!session) return { kind: 'anonymous', reason: 'unknown_token' };
 
-  if (session.status !== 'ACTIVE') return { kind: 'anonymous' };
+  if (session.status === 'REVOKED') return { kind: 'anonymous', reason: 'revoked' };
+  if (session.status !== 'ACTIVE') return { kind: 'anonymous', reason: 'expired' };
 
   if (isExpired(session.expiresAt, now)) {
     await markSessionExpired(db, session.sessionId);
-    return { kind: 'anonymous' };
+    return { kind: 'anonymous', reason: 'expired' };
   }
 
   const identity = await loadIdentity(db, session.userId);
-  if (!identity) return { kind: 'anonymous' };
+  // The session is live but the user is gone or no longer ACTIVE, so a
+  // deactivation takes effect on the next request rather than at expiry.
+  if (!identity) return { kind: 'anonymous', reason: 'no_user' };
 
   return { kind: 'authenticated', sessionId: session.sessionId, identity };
 }

@@ -54,6 +54,18 @@ import { getCmsEnv } from '@/lib/cms/env';
 import { getDb as getCmsDb } from '@/lib/cms/db';
 import { readSessionCookie as readCmsSessionCookie } from '@/lib/cms/auth/cookie';
 import { resolveSession as resolveCmsSession } from '@/lib/cms/auth/loginFlow';
+import { clearSessionCookie as clearCmsCookie, isSecureRequest } from '@/lib/cms/auth/cookie';
+import {
+  isPublicPath as isCmsPublicPath,
+  isApiPath as isCmsApiPath,
+  isAppPath,
+  isPortalPath,
+  homeFor,
+  APP_ROOT,
+  PORTAL_ROOT,
+  LOGIN_PATH,
+  EXPIRED_FLAG,
+} from '@/lib/cms/routes';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -271,24 +283,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // ---- CMS host branch (/cms routes) ---------------------------------------
   // The branch itself is unchanged from Build Prompt 00, so cms.murikah.com
   // keeps resolving and the Cloudflare custom domain never has to be
-  // re-pointed. What it now does inside is resolve the session (Build Prompt
-  // 03): read the cms_session cookie, find the matching ACTIVE session by the
-  // HMAC of the token, load the user, and attach the principal to locals for
-  // downstream handlers.
+  // re-pointed. Inside it, this is the whole of the CMS's route protection.
   //
-  // The guard resolves, it does not authorise. Nothing here decides what a role
-  // may do: it returns the roles, the scopes and the permission codes, and
-  // fine-grained authorisation arrives in a later phase. Pages and endpoints
-  // that need a principal check locals.cms themselves; /api/auth/login must
-  // stay reachable without one, and the sign-in page must not redirect-loop.
+  // Server-side, by redirect. There are no client-side guards anywhere in this
+  // product, and no client-side authentication store: the principal is resolved
+  // here, once per request, and read from locals by whatever renders. That is
+  // why a refresh keeps the user signed in with no code, why there is no
+  // loading state to design, and why protected markup can never flash on an
+  // unauthorised screen: it is never sent.
   //
-  // Failure is never fatal to the host. An unconfigured TURSO_CMS_* or an
-  // unreachable database leaves the request anonymous rather than 500ing the
-  // whole product, because the holding page, the login screen and the static
-  // assets have no business depending on the database being up.
+  // The public list is default-deny (see @/lib/cms/routes): a page added later
+  // is protected because nobody had to remember to protect it.
   if (pathname === '/cms' || pathname.startsWith('/cms/')) {
     const appPath = toCmsAppPath(pathname);
     context.locals.cmsPath = appPath;
+
+    const isApi = isCmsApiPath(appPath);
+    let anonymousReason: string = 'no_cookie';
 
     try {
       const env = getCmsEnv();
@@ -305,12 +316,67 @@ export const onRequest = defineMiddleware(async (context, next) => {
           user: resolution.identity,
           can: (code: string) => resolution.identity.permissions.includes(code),
         };
+      } else {
+        anonymousReason = resolution.reason;
       }
     } catch {
-      // Anonymous. The endpoints answer 401 on their own terms.
+      // Anonymous. An unconfigured TURSO_CMS_* or an unreachable database must
+      // not take the host down: the sign-in page and the static assets have no
+      // business depending on the database being up.
     }
 
-    return next();
+    const principal = context.locals.cms;
+
+    // A page response for a signed-in user must never be cached. Without this,
+    // the Back button can redisplay the shell from the browser's cache after
+    // sign-out, which looks exactly like still being signed in.
+    const guarded = async (): Promise<Response> => {
+      if (principal) {
+        // Signed in. Send each user type to its own surface, and keep them
+        // there. The sign-in page is not somewhere a signed-in user belongs.
+        const home = homeFor(principal.user.userType);
+        if (appPath === LOGIN_PATH) return context.redirect(home, 302);
+        if (appPath === '/') return context.redirect(home, 302);
+        if (principal.user.userType === 'EXTERNAL' && isAppPath(appPath)) {
+          // Never rendered, not merely hidden.
+          return context.redirect(PORTAL_ROOT, 302);
+        }
+        if (principal.user.userType === 'INTERNAL' && isPortalPath(appPath)) {
+          // The decision: staff are sent to /app rather than shown the portal.
+          // The portal is the customer's surface and a staff user has no
+          // customer_portal_memberships row, so it would render an empty shell
+          // and invite confusion about which surface they are on. One home per
+          // user type is easier to reason about than a read-only visit.
+          return context.redirect(APP_ROOT, 302);
+        }
+        return next();
+      }
+
+      // Not signed in.
+      if (isCmsPublicPath(appPath)) return next();
+
+      // An API answers for itself: a JSON client wants 401, not the HTML of a
+      // sign-in page delivered under a 302 it did not ask to follow.
+      if (isApi) return next();
+
+      // A session that ran out gets told so; one that never existed does not.
+      const expired = anonymousReason === 'expired' || anonymousReason === 'revoked';
+      const destination = expired ? `${LOGIN_PATH}?${EXPIRED_FLAG}=1` : LOGIN_PATH;
+      const response = context.redirect(destination, 302);
+      // Clear the dead cookie on the way past, so the browser stops sending a
+      // credential that will never work again.
+      if (anonymousReason !== 'no_cookie') {
+        response.headers.append(
+          'set-cookie',
+          clearCmsCookie({ secure: isSecureRequest(context.request) }),
+        );
+      }
+      return response;
+    };
+
+    const response = await guarded();
+    if (principal) response.headers.set('cache-control', 'no-store');
+    return response;
   }
 
   // ---- Engineering Rhythm guard (/engr routes) -----------------------------

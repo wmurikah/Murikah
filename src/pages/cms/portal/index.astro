@@ -1,0 +1,84 @@
+---
+/**
+ * The customer portal home, served at /portal on cms.murikah.com.
+ *
+ * EXTERNAL users land here and are kept here: the middleware guard redirects
+ * them away from every /app path rather than hiding the links, so this is a
+ * boundary and not a menu.
+ *
+ * The important property of this page is what it does NOT assume. All five
+ * seeded EXTERNAL users have no `user_assignments` row at all, so there is no
+ * job title, no department, no affiliate and no country. Everything
+ * organisational is therefore optional here, and the page renders a complete
+ * screen without it rather than throwing on a null join.
+ *
+ * What an external user does have is `customer_portal_memberships`, the account
+ * scope that will later confine them to their own records. It is shown because
+ * it is the only organisational fact about them that exists.
+ */
+import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+
+const principal = Astro.locals.cms;
+const user = principal?.user;
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time, the middleware guard runs once during the build
+// instead of per request, and the route protection becomes a static artefact:
+// a signed-in user would be served whatever the build decided.
+export const prerender = false;
+---
+
+<CmsAuthLayout title="Customer portal">
+  {
+    user && (
+      <div class="flex w-full flex-col gap-6">
+        <div class="flex flex-col gap-1.5">
+          <h1 class="text-cms-page font-semibold text-cms-navy">Welcome back, {user.firstName}</h1>
+          <p class="text-cms-body-sm text-cms-muted">{user.email}</p>
+        </div>
+
+        {user.portalMemberships.length > 0 ? (
+          <CmsCard title="Your account">
+            <ul class="flex flex-col gap-3">
+              {user.portalMemberships.map((membership) => (
+                <li class="flex items-center justify-between gap-3">
+                  <span class="min-w-0">
+                    <span class="block truncate text-cms-body-sm font-semibold text-cms-ink">
+                      {membership.accountName ?? membership.accountId}
+                    </span>
+                    <span class="block text-cms-caption text-cms-muted">
+                      {membership.accountId}
+                    </span>
+                  </span>
+                  <CmsBadge tone="success" label="Active" />
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        ) : (
+          <CmsEmptyState
+            icon="customers"
+            title="No account is linked to your sign-in yet"
+            description="Contact your Hass Petroleum representative to have your account linked."
+          />
+        )}
+
+        <CmsCard title="What you will be able to do here">
+          <p class="text-cms-body-sm text-cms-muted">
+            Orders, service cases, documents and feedback arrive with the portal module. Your
+            sign-in and account link are already in place.
+          </p>
+        </CmsCard>
+
+        <form method="post" action="/api/auth/logout">
+          <CmsButton type="submit" variant="secondary" icon="logout">
+            Sign out
+          </CmsButton>
+        </form>
+      </div>
+    )
+  }
+</CmsAuthLayout>
