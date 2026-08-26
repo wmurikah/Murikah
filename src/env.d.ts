@@ -69,7 +69,7 @@ declare namespace Cloudflare {
     // bare ground (Build Prompt 00) and these names are deliberately held in
     // reserve, along with the worker secrets and the database behind them, so
     // the redesign reconnects with the same names and the same values rather
-    // than inventing new ones. See cms/docs/CMS_V1_ARCHIVE_NOTES.md.
+    // than inventing new ones. See docs/cms/CMS_V1_ARCHIVE_NOTES.md.
     TURSO_CMS_DATABASE_URL?: string;
     TURSO_CMS_AUTH_TOKEN?: string;
     CMS_SESSION_SECRET?: string;

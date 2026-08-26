@@ -102,7 +102,7 @@ confirm which database the teardown SQL is pointed at before running it.
 
 Introspected from the live database on 2026-07-07 and committed as
 `cms/db/schema.sql` and `cms/db/schema.md`. Full column lists are preserved in
-`cms/db/teardown/01_dump_schema_note.md`.
+`docs/cms/teardown/01_dump_schema_note.md`.
 
 ```
 approval_requests      approval_workflows   audit_log             bot_conversations
@@ -134,7 +134,7 @@ and its header records that no FTS shadow tables exist in this database.
 Sixty-four named `ix_*`, plus one partial unique index `ux_price_list_default`
 on `price_list (country_code, currency_code)` where `is_default = 1 AND status =
 'ACTIVE'`. All were listed in `cms/db/schema.sql` and are preserved in
-`cms/db/teardown/01_dump_schema_note.md`. Every one is attached to a table
+`docs/cms/teardown/01_dump_schema_note.md`. Every one is attached to a table
 above, so dropping the tables drops them; the teardown script does not name them
 separately.
 
@@ -200,10 +200,10 @@ src/styles/
   cms.css                         product stylesheet, 380 lines
 ```
 
-## What was deliberately kept, and why
+## What survived the teardown, and where it went
 
-Two modules under `src/lib/cms/` survive the teardown because code outside the
-CMS depends on them. Neither was modified.
+Two modules under `src/lib/cms/` could not be deleted, because code outside the
+CMS depended on them:
 
 - **`src/lib/cms/routing.ts`** is imported by `src/worker.ts` for `isCmsHost`,
   `toCmsPath`, `isCmsPassthroughAsset` and `cmsMarketingRedirect`. It is the
@@ -212,12 +212,30 @@ CMS depends on them. Neither was modified.
 - **`src/lib/cms/auth/totp.ts`** is the RFC 6238 core. The GRC platform
   re-exports it verbatim from `src/lib/grc/auth/totp.ts`, and two GRC tests
   (`grc/test/loginSecurity.test.ts`, `grc/test/smoke.test.ts`) import it
-  directly. It is a pure, import-free leaf module. Deleting it would break the
-  GRC platform, which is fenced, so it stays exactly where it is and
-  `cms/test/totp.test.ts` stays with it to keep its coverage.
+  directly. It is a pure, import-free leaf module.
 
-The redesign should decide whether to promote `auth/totp.ts` to a shared path.
-Doing so means editing GRC files, which was out of scope for the teardown.
+Neither is CMS code, and keeping them was what forced `src/lib/cms/` and `cms/`
+to stay on disk. **Build Prompt 01 ended that entanglement.** Both were moved
+unchanged, byte for byte, out of the CMS namespace, and the directories were
+then deleted outright:
+
+| Was                                | Is now                                                          |
+| ---------------------------------- | --------------------------------------------------------------- |
+| `src/lib/cms/auth/totp.ts`         | `src/lib/shared/totp.ts`, reached through the `@shared/*` alias |
+| `src/lib/cms/routing.ts`           | `src/lib/hosts/cms.ts`                                          |
+| `cms/test/totp.test.ts`            | `test/shared/totp.test.ts`                                      |
+| `cms/test/routing.test.ts`         | `test/hosts/cms.test.ts`                                        |
+| `cms/docs/CMS_V1_ARCHIVE_NOTES.md` | `docs/cms/CMS_V1_ARCHIVE_NOTES.md`, this file                   |
+| `cms/db/teardown/`                 | `docs/cms/teardown/`                                            |
+
+The exported names were kept exactly as they were, `Cms` and all, so the worker
+host branch did not have to change. `src/pages/cms/index.astro`, the holding
+page, is now the only CMS path left in the repository.
+
+Nothing in `grc/`, `engr/`, `src/lib/grc/` or the marketing site imports a CMS
+path any more. The redesign therefore starts with a genuinely clean namespace:
+if it wants TOTP it takes `@shared/totp` like any other product, and it owns
+`src/pages/cms/**` outright with nothing shared hiding underneath it.
 
 ## Shared code the CMS used
 
