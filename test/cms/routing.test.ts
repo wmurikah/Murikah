@@ -268,6 +268,27 @@ test('a missing email or password is refused the same way', { skip: skip() }, as
   }
 });
 
+test('the shell ships the handler its drawer trigger depends on', { skip: skip() }, async () => {
+  // Astro ships a component's <script> only when that component is rendered.
+  // The overlay handler used to live in CmsModal, which nothing rendered, so
+  // the drawer trigger in the top bar carried data-cms-modal-open and no code
+  // was listening: the navigation drawer never opened on a small screen. The
+  // markup alone cannot show that, which is why this asserts the handler and
+  // not just the attribute.
+  //
+  // The cases above leave the jar signed out or holding the external user, and
+  // only an internal user renders the shell, so this signs in for itself.
+  worker.clearCookies();
+  await signIn(INTERNAL_EMAIL);
+  const page = await worker.call('GET', '/app');
+
+  assert.match(page.body, /data-cms-modal-open="cms-nav-drawer"/, 'the trigger must be rendered');
+  assert.match(page.body, /<dialog id="cms-nav-drawer"/, 'the drawer must be rendered');
+  // cmsOverlaysBound is the guard the handler sets on first run, so finding it
+  // proves the listener itself reached the page rather than only its markup.
+  assert.match(page.body, /cmsOverlaysBound/, 'the overlay handler must reach the page');
+});
+
 test('the apex, engr and grc hosts are unaffected', { skip: skip() }, async () => {
   // The whole point of the host branch is that changing one product cannot move
   // another, so this asserts it rather than assuming it.
