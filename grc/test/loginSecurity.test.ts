@@ -22,7 +22,7 @@ import {
 } from '../../src/lib/grc/auth/sessionRules.ts';
 import { seal, open } from '../../src/lib/grc/auth/secretBox.ts';
 import { otpauthUrl } from '../../src/lib/grc/auth/otpauth.ts';
-import { totpAt, verifyTotp } from '../../src/lib/cms/auth/totp.ts';
+import { totpAt, verifyTotp } from '../../src/lib/shared/totp.ts';
 
 const SECRET_B64 = Buffer.from('a-32-byte-secret-for-unit-tests!').toString('base64');
 

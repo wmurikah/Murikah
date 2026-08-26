@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { base32Decode, totpAt, verifyTotp, generateSecret } from '../../src/lib/cms/auth/totp.ts';
+import { base32Decode, totpAt, verifyTotp, generateSecret } from '../../src/lib/shared/totp.ts';
 
 const RFC_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'; // base32 of "12345678901234567890"
 
