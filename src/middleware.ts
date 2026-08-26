@@ -49,7 +49,7 @@ import {
 } from '@grc/routing';
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { scheduleCacheStatsRollUp } from '@grc/cache';
-import { toCmsAppPath } from '@cms/routing';
+import { toCmsAppPath } from '@/lib/hosts/cms';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
