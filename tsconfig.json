@@ -8,7 +8,7 @@
       "@/*": ["src/*"],
       "@engr/*": ["src/lib/engr/*"],
       "@grc/*": ["src/lib/grc/*"],
-      "@cms/*": ["src/lib/cms/*"]
+      "@shared/*": ["src/lib/shared/*"]
     }
   },
   "include": [".astro/types.d.ts", "**/*"],
