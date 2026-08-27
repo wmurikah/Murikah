@@ -29,6 +29,7 @@ import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsAccountContacts from '@/components/cms/CmsAccountContacts.astro';
+import CmsActivitySection from '@/components/cms/CmsActivitySection.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
@@ -42,6 +43,8 @@ import {
   type ContactRow,
 } from '@/lib/cms/repos/accountAdmin';
 import { STATUS_MEANING } from '@/lib/cms/admin/accountInput';
+import { listAccountActivities, type ActivityPage } from '@/lib/cms/repos/activityAdmin';
+import { leadOptions } from '@/lib/cms/repos/leadAdmin';
 
 export const prerender = false;
 
@@ -68,6 +71,8 @@ const tab: Tab = (TABS as readonly string[]).includes(raw ?? '') ? (raw as Tab) 
 let account: AccountRow | null = null;
 let counts: AccountCounts | null = null;
 let contacts: ContactRow[] = [];
+let activities: ActivityPage | null = null;
+let timelineOptions: Awaited<ReturnType<typeof leadOptions>> | null = null;
 let loadFailed = false;
 
 if (mayRead) {
@@ -77,6 +82,21 @@ if (mayRead) {
     if (account !== null) {
       counts = await accountCounts(db, accountId);
       // Only the tab that needs them, and only when it is open.
+      if (tab === 'timeline') {
+        [activities, timelineOptions] = await Promise.all([
+          listAccountActivities(db, userId, accountId, {
+            activityType: null,
+            ownerUserId: null,
+            state: 'all',
+            from: null,
+            to: null,
+            search: '',
+            page: 1,
+          }),
+          leadOptions(db),
+        ]);
+        contacts = (await listContacts(db, userId, accountId, false)) ?? [];
+      }
       if (tab === 'contacts') {
         contacts = (await listContacts(db, userId, accountId, maySeePortal)) ?? [];
       }
@@ -97,7 +117,6 @@ const shown = (value: string | number | null): string =>
 
 /** Which later phase fills each empty tab, so the message is specific. */
 const COMING: Readonly<Record<string, string>> = {
-  timeline: 'The shared activity timeline arrives with the activity engine.',
   opportunities: 'Opportunities arrive with the sales pipeline.',
   orders: 'Sales and purchase orders arrive with the order import.',
   service: 'Service cases arrive with the helpdesk.',
@@ -349,7 +368,22 @@ const COMING: Readonly<Record<string, string>> = {
           />
         )}
 
-        {tab !== 'overview' && tab !== 'contacts' && (
+        {tab === 'timeline' && (
+          <CmsActivitySection
+            entityType="ACCOUNT"
+            entityId={accountId}
+            activities={activities?.items ?? []}
+            total={activities?.total ?? 0}
+            isAccountTimeline
+            contacts={contacts
+              .filter((ct) => ct.active)
+              .map((ct) => ({ id: ct.contactId, label: ct.fullName }))}
+            owners={timelineOptions?.owners ?? []}
+            currentUserId={userId}
+          />
+        )}
+
+        {tab !== 'overview' && tab !== 'contacts' && tab !== 'timeline' && (
           <CmsEmptyState
             icon="clock"
             title={`${titleCase(tab)} is not built yet`}

@@ -196,3 +196,89 @@ export function canManageLeadSources(permissions: readonly string[]): boolean {
 export function canConvertLeads(permissions: readonly string[]): boolean {
   return permissions.includes(LEADS_MANAGE) && permissions.includes(OPPORTUNITIES_EDIT);
 }
+
+/**
+ * Opportunities and the pipeline.
+ *
+ * EDIT is seeded as PERM-004. VIEW and the two settings codes are added by
+ * docs/cms/crm/04_add_opportunity_permissions.sql, which the operator runs by
+ * hand. VIEW is implied by EDIT, in the same way LEADS.VIEW is implied by the
+ * lead codes: a person allowed to move a deal can obviously see it.
+ *
+ * Pipeline configuration is deliberately not part of EDIT. The stages define
+ * what history means, and a salesperson able to reorder them mid-quarter
+ * would be rewriting every open deal's meaning to improve their own numbers.
+ */
+export const OPPORTUNITIES_VIEW = 'CRM.OPPORTUNITIES.VIEW';
+export const PIPELINES_MANAGE = 'CRM.PIPELINES.MANAGE';
+export const LOST_REASONS_MANAGE = 'CRM.LOST_REASONS.MANAGE';
+
+export function canViewOpportunities(permissions: readonly string[]): boolean {
+  return permissions.includes(OPPORTUNITIES_VIEW) || permissions.includes(OPPORTUNITIES_EDIT);
+}
+
+export function canEditOpportunities(permissions: readonly string[]): boolean {
+  return permissions.includes(OPPORTUNITIES_EDIT);
+}
+
+export function canManagePipelines(permissions: readonly string[]): boolean {
+  return permissions.includes(PIPELINES_MANAGE);
+}
+
+export function canManageLostReasons(permissions: readonly string[]): boolean {
+  return permissions.includes(LOST_REASONS_MANAGE);
+}
+
+/**
+ * Customer service.
+ *
+ * VIEW, CREATE and REASSIGN are seeded as PERM-005 to PERM-007. MANAGE and
+ * the category settings code are added by
+ * docs/cms/service/05_add_service_permissions.sql, run by the operator.
+ * MANAGE is separate from CREATE on purpose: logging a walk-in enquiry and
+ * declaring a complaint resolved are different responsibilities.
+ */
+export const CASES_VIEW = 'SERVICE.CASES.VIEW';
+export const CASES_CREATE = 'SERVICE.CASES.CREATE';
+export const CASES_REASSIGN = 'SERVICE.CASES.REASSIGN';
+export const CASES_MANAGE = 'SERVICE.CASES.MANAGE';
+export const CASE_CATEGORIES_MANAGE = 'SERVICE.CATEGORIES.MANAGE';
+
+export function canViewCases(permissions: readonly string[]): boolean {
+  return (
+    permissions.includes(CASES_VIEW) ||
+    permissions.includes(CASES_CREATE) ||
+    permissions.includes(CASES_MANAGE)
+  );
+}
+
+export function canCreateCases(permissions: readonly string[]): boolean {
+  return permissions.includes(CASES_CREATE);
+}
+
+export function canReassignCases(permissions: readonly string[]): boolean {
+  return permissions.includes(CASES_REASSIGN);
+}
+
+export function canManageCases(permissions: readonly string[]): boolean {
+  return permissions.includes(CASES_MANAGE);
+}
+
+export function canManageCaseCategories(permissions: readonly string[]): boolean {
+  return permissions.includes(CASE_CATEGORIES_MANAGE);
+}
+
+/**
+ * The SLA runtime. Both codes are seeded: PERM-013 reads the monitor,
+ * PERM-014 configures calendars, profiles and rules.
+ */
+export const SLA_DASHBOARD_VIEW = 'SLA.DASHBOARD.VIEW';
+export const SLA_RULES_MANAGE = 'SLA.RULES.MANAGE';
+
+export function canViewSlaDashboard(permissions: readonly string[]): boolean {
+  return permissions.includes(SLA_DASHBOARD_VIEW) || permissions.includes(SLA_RULES_MANAGE);
+}
+
+export function canManageSlaRules(permissions: readonly string[]): boolean {
+  return permissions.includes(SLA_RULES_MANAGE);
+}

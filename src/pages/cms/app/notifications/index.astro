@@ -1,0 +1,217 @@
+---
+/**
+ * The notifications page.
+ *
+ * Rendering it sweeps first, so what is listed is current. Unread is
+ * `read_at IS NULL`; marking read stamps the moment. Clicking through goes
+ * by the target endpoint, which re-runs access control now: a notification
+ * whose record you may no longer see opens a safe message, never the record.
+ *
+ * DELIVERY, HONESTLY: these are in-app notifications. No email channel is
+ * configured for the CMS and nothing here claims one sent anything.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import {
+  listNotifications,
+  sweepNotifications,
+  type NotificationRow,
+} from '@/lib/cms/notify/notifications';
+import { sweepDueSlas } from '@/lib/cms/sla/engine';
+
+export const prerender = false;
+
+const userId = Astro.locals.cms?.user.userId ?? '';
+const params = Astro.url.searchParams;
+const unreadOnly = params.get('unread') === '1';
+const type = params.get('type') || null;
+const pageNumber = Math.max(1, Math.trunc(Number(params.get('page') ?? '1') || 1));
+
+let data: { items: NotificationRow[]; total: number; unread: number } = {
+  items: [],
+  total: 0,
+  unread: 0,
+};
+let loadFailed = false;
+try {
+  const db = await getDb(getCmsEnv());
+  const now = new Date();
+  await sweepDueSlas(db, now);
+  await sweepNotifications(db, now);
+  data = await listNotifications(db, userId, { unreadOnly, type, page: pageNumber });
+} catch (error) {
+  console.error('[cms.notifications] load failed', error);
+  loadFailed = true;
+}
+
+const TYPES = [
+  'ASSIGNMENT',
+  'SLA_WARNING',
+  'SLA_BREACH',
+  'FOLLOW_UP',
+  'IMPORT_EXCEPTION',
+  'SYSTEM',
+];
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const tone = (t: string) =>
+  t === 'SLA_BREACH'
+    ? 'danger'
+    : t === 'SLA_WARNING'
+      ? 'warning'
+      : t === 'ASSIGNMENT'
+        ? 'info'
+        : 'neutral';
+---
+
+<CmsLayout title="Notifications" notificationCount={data.unread}>
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="Notifications could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Notifications"
+          description="In-app only: no email channel is configured for this product, and nothing here claims a message was sent anywhere else."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Notifications' }]}
+        >
+          {data.unread > 0 && (
+            <CmsButton slot="actions" variant="secondary" data-cms-mark-all>
+              Mark all read
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <CmsCard>
+          <form method="get" class="flex flex-wrap items-end gap-3">
+            <CmsSelect
+              id="f-unread"
+              name="unread"
+              label="Show"
+              value={unreadOnly ? '1' : ''}
+              options={[
+                { value: '', label: 'Everything' },
+                { value: '1', label: 'Unread only' },
+              ]}
+            />
+            <CmsSelect
+              id="f-type"
+              name="type"
+              label="Type"
+              value={type ?? ''}
+              options={[
+                { value: '', label: 'Every type' },
+                ...TYPES.map((t) => ({ value: t, label: titleCase(t) })),
+              ]}
+            />
+            <CmsButton type="submit" variant="secondary">
+              Apply
+            </CmsButton>
+          </form>
+        </CmsCard>
+
+        {data.items.length === 0 ? (
+          <CmsEmptyState
+            icon="bell"
+            title="Nothing here"
+            description="Notifications about assignments, SLA warnings and overdue follow-ups appear as they happen."
+          />
+        ) : (
+          <ul class="flex flex-col gap-2">
+            {data.items.map((n) => (
+              <li
+                class:list={[
+                  'flex flex-wrap items-start justify-between gap-3 rounded-cms border px-3 py-2',
+                  n.readAt === null ? 'border-cms-royal bg-cms-surface' : 'border-cms-line',
+                ]}
+              >
+                <div class="min-w-0">
+                  <p class="flex flex-wrap items-center gap-2">
+                    <CmsBadge
+                      tone={tone(n.notificationType)}
+                      label={titleCase(n.notificationType)}
+                    />
+                    <span class="text-cms-body-sm font-medium text-cms-ink">{n.title}</span>
+                  </p>
+                  <p class="mt-0.5 text-cms-body-sm text-cms-muted">{n.message}</p>
+                  <p class="text-cms-caption text-cms-muted">{n.createdAt}</p>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                  {n.entityType !== null && (
+                    <button
+                      type="button"
+                      data-cms-open={n.notificationId}
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      Open
+                    </button>
+                  )}
+                  {n.readAt === null && (
+                    <button
+                      type="button"
+                      data-cms-read={n.notificationId}
+                      class="rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-muted outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      Mark read
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  document.addEventListener('click', async (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-cms-mark-all]')) {
+      await fetch('/api/notifications', { method: 'POST', credentials: 'same-origin' });
+      window.location.reload();
+      return;
+    }
+    const read = target?.closest<HTMLElement>('[data-cms-read]');
+    if (read) {
+      await fetch(`/api/notifications/${encodeURIComponent(read.dataset.cmsRead ?? '')}/read`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      window.location.reload();
+      return;
+    }
+    const open = target?.closest<HTMLElement>('[data-cms-open]');
+    if (open) {
+      const id = open.dataset.cmsOpen ?? '';
+      await fetch(`/api/notifications/${encodeURIComponent(id)}/read`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      const response = await fetch(`/api/notifications/${encodeURIComponent(id)}/target`, {
+        credentials: 'same-origin',
+      });
+      const answer = (await response.json().catch(() => null)) as { target?: string | null } | null;
+      if (answer?.target) {
+        window.location.href = answer.target;
+      } else {
+        window.alert(
+          'This record is no longer available to you. Your access may have changed since this notification was created.',
+        );
+      }
+    }
+  });
+</script>

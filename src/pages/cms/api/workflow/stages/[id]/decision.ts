@@ -54,7 +54,33 @@ export const POST: APIRoute = async (context) => {
       parsed.value,
       writeContext(context.request, auth.principal),
     );
-    if (result.ok) return ok(result);
+    if (result.ok) {
+      // Phase 15: a completed stage stops its SLA, after the decision has
+      // committed. The instance names the business entity the stage measures.
+      if (result.stageStatus === 'COMPLETED') {
+        const parent = await connection.db.execute({
+          sql: `SELECT wi.entity_type, wi.entity_id, ws.stage_code
+                FROM workflow_stage_instances si
+                JOIN workflow_instances wi ON wi.workflow_instance_id = si.workflow_instance_id
+                JOIN workflow_stages ws ON ws.workflow_stage_id = si.workflow_stage_id
+                WHERE si.workflow_stage_instance_id = ? LIMIT 1`,
+          args: [context.params.id ?? ''],
+        });
+        const row = parent.rows[0];
+        const entityType = row === undefined ? '' : String(row.entity_type);
+        if (entityType === 'SALES_ORDER' || entityType === 'PURCHASE_ORDER') {
+          const { stopWorkflowStageSla } = await import('../../../../../../lib/cms/sla/wiring.ts');
+          await stopWorkflowStageSla(connection.db, {
+            entityType,
+            entityId: String(row?.entity_id ?? ''),
+            stageCode: String(row?.stage_code ?? ''),
+            at: new Date(),
+            actorUserId: auth.principal.user.userId,
+          });
+        }
+      }
+      return ok(result);
+    }
 
     switch (result.kind) {
       case 'not_found':

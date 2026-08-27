@@ -622,16 +622,27 @@ CREATE TABLE IF NOT EXISTS mfa_methods (
 -- remainder, added for the 10-to-19 batch so a test proves the code satisfies
 -- the real constraints rather than a relaxed copy of them.
 --
--- Two things this file deliberately does NOT carry, because they are absent
--- from the operator's schema file too:
---   1. sla_breaches and sla_escalation_events, which the operator added by
---      script after that file was produced.
---   2. purchase_orders.submitted_for_approval_at, added by the operator's
---      source-completeness script, which also made the commercial columns on
---      the four order tables nullable.
--- The phases that need them add them to this harness themselves and say so.
--- Neither is a migration in the product: the operator runs both scripts by hand.
+-- THE SOURCE-COMPLETENESS SCRIPT IS ALSO MIRRORED, as of Build Prompt 17:
+-- purchase_orders.submitted_for_approval_at exists, and the commercial
+-- columns on the four order tables (currency, value, supplier, quantity,
+-- price) accept NULL, exactly as the batch instructions describe the
+-- operator's script leaving the live database. The importer verifies the
+-- same facts with pragma queries before any import starts and refuses
+-- loudly where they do not hold, because NULL versus zero is the point of
+-- that script: the real extracts carry no commercial values at all.
+--
+-- sla_breaches and sla_escalation_events below MIRROR THE OPERATOR'S SLA
+-- RUNTIME SCRIPT, which Build Prompt 15's instructions state has been run
+-- against the live database (the batch document describes testing against
+-- the real tables). Their shapes come from those instructions: one primary
+-- breach row per instance enforced by UNIQUE(sla_instance_id), one
+-- escalation per level enforced by UNIQUE(sla_instance_id, escalation_level),
+-- and four indexes. Neither is a migration in the product: the operator runs
+-- the scripts by hand, and the runtime verifies both tables exist before the
+-- engine starts rather than assuming.
 -- ============================================================================
+
+
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     reset_token_id TEXT PRIMARY KEY,
@@ -977,8 +988,8 @@ CREATE TABLE IF NOT EXISTS sales_orders (
     business_unit_id TEXT,
     account_id TEXT NOT NULL,
     order_created_at TEXT NOT NULL,
-    currency_code TEXT NOT NULL,
-    order_value REAL NOT NULL CHECK(order_value >= 0),
+    currency_code TEXT,
+    order_value REAL CHECK(order_value IS NULL OR order_value >= 0),
     finance_approval_required INTEGER NOT NULL DEFAULT 1 CHECK(finance_approval_required IN (0,1)),
     credit_approval_required INTEGER NOT NULL DEFAULT 0 CHECK(credit_approval_required IN (0,1)),
     credit_exception_reason TEXT,
@@ -1000,9 +1011,9 @@ CREATE TABLE IF NOT EXISTS sales_order_lines (
     sales_order_id TEXT NOT NULL,
     line_number INTEGER NOT NULL CHECK(line_number > 0),
     product_id TEXT NOT NULL,
-    quantity REAL NOT NULL CHECK(quantity >= 0),
-    unit_price REAL NOT NULL CHECK(unit_price >= 0),
-    line_value REAL NOT NULL CHECK(line_value >= 0),
+    quantity REAL CHECK(quantity IS NULL OR quantity >= 0),
+    unit_price REAL CHECK(unit_price IS NULL OR unit_price >= 0),
+    line_value REAL CHECK(line_value IS NULL OR line_value >= 0),
     FOREIGN KEY (sales_order_id) REFERENCES sales_orders(sales_order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
     UNIQUE(sales_order_id, line_number)
@@ -1013,10 +1024,11 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     document_number TEXT NOT NULL,
     affiliate_id TEXT NOT NULL,
     business_unit_id TEXT,
-    supplier_name TEXT NOT NULL,
+    supplier_name TEXT,
     po_created_at TEXT NOT NULL,
-    currency_code TEXT NOT NULL,
-    po_value REAL NOT NULL CHECK(po_value >= 0),
+    submitted_for_approval_at TEXT,
+    currency_code TEXT,
+    po_value REAL CHECK(po_value IS NULL OR po_value >= 0),
     physical_received_at TEXT,
     oracle_stock_posted_at TEXT,
     status TEXT NOT NULL CHECK(status IN ('CREATED','IN_APPROVAL','APPROVED','RECEIVED','POSTED','CANCELLED')),
@@ -1032,9 +1044,9 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
     purchase_order_id TEXT NOT NULL,
     line_number INTEGER NOT NULL CHECK(line_number > 0),
     product_id TEXT NOT NULL,
-    quantity REAL NOT NULL CHECK(quantity >= 0),
+    quantity REAL CHECK(quantity IS NULL OR quantity >= 0),
     unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
-    line_value REAL NOT NULL CHECK(line_value >= 0),
+    line_value REAL CHECK(line_value IS NULL OR line_value >= 0),
     FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(purchase_order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
     UNIQUE(purchase_order_id, line_number)
@@ -1157,4 +1169,42 @@ CREATE INDEX IF NOT EXISTS idx_po_affiliate_date ON purchase_orders(affiliate_id
 CREATE INDEX IF NOT EXISTS idx_sla_entity ON sla_instances(entity_type, entity_id, status);
 CREATE INDEX IF NOT EXISTS idx_import_rows_batch ON import_rows(import_batch_id, row_status);
 CREATE INDEX IF NOT EXISTS idx_snapshots_entity ON record_snapshots(entity_type, entity_id, version_no);
+
+-- The operator's SLA runtime script, mirrored. See the note above.
+CREATE TABLE IF NOT EXISTS sla_breaches (
+    sla_breach_id TEXT PRIMARY KEY,
+    sla_instance_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    breached_at TEXT NOT NULL,
+    target_at TEXT NOT NULL,
+    breach_minutes INTEGER CHECK(breach_minutes IS NULL OR breach_minutes >= 0),
+    accountable_user_id TEXT,
+    accountable_team_id TEXT,
+    workflow_stage_instance_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sla_instance_id) REFERENCES sla_instances(sla_instance_id) ON DELETE CASCADE,
+    FOREIGN KEY (accountable_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (accountable_team_id) REFERENCES teams(team_id) ON DELETE SET NULL,
+    UNIQUE(sla_instance_id)
+);
+
+CREATE TABLE IF NOT EXISTS sla_escalation_events (
+    sla_escalation_event_id TEXT PRIMARY KEY,
+    sla_instance_id TEXT NOT NULL,
+    escalation_level INTEGER NOT NULL CHECK(escalation_level > 0),
+    escalated_at TEXT NOT NULL,
+    recipient_user_id TEXT,
+    notification_id TEXT,
+    details_json TEXT,
+    FOREIGN KEY (sla_instance_id) REFERENCES sla_instances(sla_instance_id) ON DELETE CASCADE,
+    FOREIGN KEY (recipient_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    UNIQUE(sla_instance_id, escalation_level)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sla_instances_due ON sla_instances(status, target_at);
+CREATE INDEX IF NOT EXISTS idx_sla_instances_entity ON sla_instances(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_sla_breaches_accountable ON sla_breaches(accountable_user_id, accountable_team_id);
+CREATE INDEX IF NOT EXISTS idx_sla_escalations_instance ON sla_escalation_events(sla_instance_id);
+
 `;

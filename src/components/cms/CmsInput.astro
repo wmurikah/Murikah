@@ -32,7 +32,16 @@ interface Props {
    * then rejects them when they do not. Additive: every existing caller passes
    * one of the original six and renders byte-identically.
    */
-  type?: 'text' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'date' | 'number';
+  type?:
+    | 'text'
+    | 'email'
+    | 'password'
+    | 'search'
+    | 'tel'
+    | 'url'
+    | 'date'
+    | 'datetime-local'
+    | 'number';
   value?: string;
   placeholder?: string;
   hint?: string;
@@ -42,8 +51,9 @@ interface Props {
   readonly?: boolean;
   autocomplete?: string;
   inputmode?: 'text' | 'email' | 'numeric' | 'tel' | 'search' | 'url' | 'decimal';
-  /** `min` and `step` on a numeric input. Ignored on every other type. */
+  /** `min`, `max` and `step` on a numeric input. Ignored on every other type. */
   min?: string;
+  max?: string;
   step?: string;
   revealable?: boolean;
   autofocus?: boolean;
@@ -64,6 +74,7 @@ const {
   autocomplete,
   inputmode,
   min,
+  max,
   step,
   revealable = false,
   autofocus = false,
@@ -103,6 +114,7 @@ const describedBy = [hintId, errorId].filter(Boolean).join(' ');
       autocomplete={autocomplete}
       inputmode={inputmode}
       min={type === 'number' ? min : undefined}
+      max={type === 'number' ? max : undefined}
       step={type === 'number' ? step : undefined}
       autofocus={autofocus}
       data-revealable={revealable ? 'true' : undefined}
