@@ -1,0 +1,201 @@
+---
+/**
+ * Orders → Sales Orders → Operations.
+ *
+ * A transaction queue, not analysis. Somebody working here wants to find an
+ * order, see where it is and open it. The aggregated view is a separate
+ * page, deliberately: merging them produces a screen that is bad at both.
+ *
+ * WHERE A VALUE IS UNKNOWN THIS SAYS SO. The real extract carries no
+ * currency, no order value and no load timestamp, so "Not available" is the
+ * normal case here rather than an edge case, and a zero would be a false
+ * statement about the business rather than a tidy-looking column.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewSalesOrders } from '@/lib/cms/permissions';
+import { parseFilter, filterToQuery, drillTo } from '@/lib/cms/analytics/filters';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import {
+  listSalesOrders,
+  countSalesOrders,
+  type SalesOrderRow,
+} from '@/lib/cms/repos/soPerformance';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewSalesOrders(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let rows: SalesOrderRow[] = [];
+let total = 0;
+let loadFailed = false;
+let filterOptions = {
+  affiliates: [] as { value: string; label: string }[],
+  statuses: [] as string[],
+};
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [rows, total] = await Promise.all([
+      listSalesOrders(db, userId, filter, now, 200),
+      countSalesOrders(db, userId, filter, now),
+    ]);
+    const affiliates = await db.execute(
+      `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
+    );
+    filterOptions = {
+      affiliates: affiliates.rows.map((row) => ({
+        value: String(row.affiliate_id),
+        label: String(row.affiliate_name),
+      })),
+      statuses: [
+        'CREATED',
+        'PENDING_FINANCE',
+        'PENDING_CREDIT',
+        'READY',
+        'INVOICED',
+        'LOADING',
+        'LOADED',
+        'CANCELLED',
+      ],
+    };
+  } catch (error) {
+    console.error('[cms.orders.sales] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const NOT_AVAILABLE = 'Not available';
+const stamp = (value: string | null) => value ?? NOT_AVAILABLE;
+const slaTone = (status: string | null) =>
+  status === 'BREACHED'
+    ? 'danger'
+    : status === 'MET'
+      ? 'success'
+      : status === 'RUNNING'
+        ? 'info'
+        : 'neutral';
+---
+
+<CmsLayout title="Sales orders">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to sales orders"
+        description="Ask a system administrator for the ORDERS.SALES_ORDER.VIEW permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Sales orders could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Sales orders"
+          description={`${total.toLocaleString('en-KE')} orders match this filter. Values the source does not carry read "Not available", never zero.`}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Orders', href: '/app/orders' },
+            { label: 'Sales orders' },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" href={drillTo('/app/orders/sales/performance', filter)}>
+              Performance
+            </CmsButton>
+            <CmsButton
+              variant="secondary"
+              href={`/api/orders/sales/export${filterToQuery(filter)}`}
+            >
+              Export
+            </CmsButton>
+          </Fragment>
+        </CmsPageHeader>
+
+        <CmsOrderFilters
+          filter={filter}
+          affiliates={filterOptions.affiliates}
+          statuses={filterOptions.statuses}
+          action="/app/orders/sales"
+        />
+
+        <CmsDataTable
+          caption="Sales orders"
+          columns={[
+            { key: 'doc', label: 'Order' },
+            { key: 'customer', label: 'Customer' },
+            { key: 'affiliate', label: 'Affiliate' },
+            { key: 'bu', label: 'Business unit' },
+            { key: 'created', label: 'Created' },
+            { key: 'products', label: 'Products' },
+            { key: 'stage', label: 'Current stage' },
+            { key: 'status', label: 'Status' },
+            { key: 'finance', label: 'Finance', numeric: true },
+            { key: 'credit', label: 'Credit', numeric: true },
+            { key: 'invoice', label: 'Invoice' },
+            { key: 'loading', label: 'Loading' },
+            { key: 'sla', label: 'SLA' },
+          ]}
+          empty={rows.length === 0}
+        >
+          {rows.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={drillTo(`/app/orders/sales/${row.salesOrderId}`, filter)}
+                  class="font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.documentNumber}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.customerName}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.affiliateName}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.businessUnitName ?? NOT_AVAILABLE}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.orderCreatedAt}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.productSummary ?? NOT_AVAILABLE}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.currentStage ?? NOT_AVAILABLE}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone="neutral" label={row.status.replace('_', ' ').toLowerCase()} />
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {formatDuration(row.financeMinutes)}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {!row.creditRequired ? 'Not required' : formatDuration(row.creditMinutes)}
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{stamp(row.invoiceCreatedAt)}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{stamp(row.loadingAuthorityAt)}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={slaTone(row.slaStatus)}
+                  label={(row.slaStatus ?? NOT_AVAILABLE).toLowerCase()}
+                />
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="orders"
+              title="No orders match this filter"
+              description="Widen the date range or clear a filter."
+            />
+          </Fragment>
+        </CmsDataTable>
+      </Fragment>
+    )
+  }
+</CmsLayout>
