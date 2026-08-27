@@ -35,6 +35,8 @@ import {
   canReassignCases,
   canManageCases,
   canManageCaseCategories,
+  canViewSlaDashboard,
+  canManageSlaRules,
   canManageLeads,
   canManageOrganisation,
   canManageRoles,
@@ -235,6 +237,16 @@ export function requireCasesManage(context: APIContext): Authorisation {
 /** The case category settings screen. */
 export function requireCaseCategoriesManage(context: APIContext): Authorisation {
   return authorise(context, canManageCaseCategories);
+}
+
+/** Reading the SLA monitor. Implied by the configuration code. */
+export function requireSlaDashboard(context: APIContext): Authorisation {
+  return authorise(context, canViewSlaDashboard);
+}
+
+/** Configuring calendars, profiles and rules. */
+export function requireSlaRulesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageSlaRules);
 }
 
 /**
