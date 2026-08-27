@@ -228,3 +228,42 @@ export function canManagePipelines(permissions: readonly string[]): boolean {
 export function canManageLostReasons(permissions: readonly string[]): boolean {
   return permissions.includes(LOST_REASONS_MANAGE);
 }
+
+/**
+ * Customer service.
+ *
+ * VIEW, CREATE and REASSIGN are seeded as PERM-005 to PERM-007. MANAGE and
+ * the category settings code are added by
+ * docs/cms/service/05_add_service_permissions.sql, run by the operator.
+ * MANAGE is separate from CREATE on purpose: logging a walk-in enquiry and
+ * declaring a complaint resolved are different responsibilities.
+ */
+export const CASES_VIEW = 'SERVICE.CASES.VIEW';
+export const CASES_CREATE = 'SERVICE.CASES.CREATE';
+export const CASES_REASSIGN = 'SERVICE.CASES.REASSIGN';
+export const CASES_MANAGE = 'SERVICE.CASES.MANAGE';
+export const CASE_CATEGORIES_MANAGE = 'SERVICE.CATEGORIES.MANAGE';
+
+export function canViewCases(permissions: readonly string[]): boolean {
+  return (
+    permissions.includes(CASES_VIEW) ||
+    permissions.includes(CASES_CREATE) ||
+    permissions.includes(CASES_MANAGE)
+  );
+}
+
+export function canCreateCases(permissions: readonly string[]): boolean {
+  return permissions.includes(CASES_CREATE);
+}
+
+export function canReassignCases(permissions: readonly string[]): boolean {
+  return permissions.includes(CASES_REASSIGN);
+}
+
+export function canManageCases(permissions: readonly string[]): boolean {
+  return permissions.includes(CASES_MANAGE);
+}
+
+export function canManageCaseCategories(permissions: readonly string[]): boolean {
+  return permissions.includes(CASE_CATEGORIES_MANAGE);
+}

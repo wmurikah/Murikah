@@ -28,6 +28,7 @@ import { resolveScope, scopePredicate, DENY_ALL, type Predicate } from '../auth/
 import { scopedAccounts } from '../repos/accountAdmin.ts';
 import { scopedLeads } from '../repos/leadAdmin.ts';
 import { scopedOpportunities } from '../repos/opportunityAdmin.ts';
+import { scopedCases } from '../repos/serviceAdmin.ts';
 import { LEADS_VIEW } from '../permissions.ts';
 
 export const ACTIVITY_ENTITY_TYPES = [
@@ -52,18 +53,6 @@ export type EntityAccess =
 const text = (v: unknown): string => String(v ?? '');
 const nullableText = (v: unknown): string | null =>
   v === null || v === undefined ? null : String(v);
-
-async function scopedCases(db: Client, userId: string): Promise<Predicate> {
-  const resolution = await resolveScope(db, userId, 'SERVICE.CASES.VIEW');
-  if (!resolution.granted) return DENY_ALL;
-  return scopePredicate(resolution, {
-    country: 'a.country_id',
-    affiliate: 'a.affiliate_id',
-    businessUnit: 'sc.business_unit_id',
-    team: 'sc.assigned_team_id',
-    owner: 'sc.assigned_user_id',
-  });
-}
 
 async function scopedSalesOrders(db: Client, userId: string): Promise<Predicate> {
   const resolution = await resolveScope(db, userId, 'ORDERS.SALES_ORDER.VIEW');
