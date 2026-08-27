@@ -109,3 +109,40 @@ export const PRODUCT_CATALOGUE_MANAGE = 'ADMIN.PRODUCT_CATALOG.MANAGE';
 export function canManageCatalogue(permissions: readonly string[]): boolean {
   return permissions.includes(PRODUCT_CATALOGUE_MANAGE);
 }
+
+/**
+ * The customer account: the spine every other module hangs off.
+ *
+ * Added by docs/cms/customers/02_add_customer_permissions.sql as PERM-031 to
+ * PERM-033, which the operator runs by hand. The seeded catalogue has no
+ * CUSTOMERS module at all, so until that script runs every customer endpoint
+ * refuses every caller, which is the correct direction to fail.
+ *
+ * The navigation model has named CUSTOMERS.ACCOUNTS.VIEW since Build Prompt 02.
+ * That reference resolves to a real row for the first time here.
+ */
+export const ACCOUNTS_VIEW = 'CUSTOMERS.ACCOUNTS.VIEW';
+export const ACCOUNTS_MANAGE = 'CUSTOMERS.ACCOUNTS.MANAGE';
+
+/**
+ * Whether a contact holds customer portal access, and in which state.
+ *
+ * Narrow on purpose. It is a fact about an external person's credentials, so it
+ * is not bundled into the ordinary customer read most of the organisation
+ * holds. It is not PORTAL.ACCOUNT.VIEW (PERM-022), which is what the external
+ * customer holds over their own account.
+ */
+export const PORTAL_ACCESS_VIEW = 'CUSTOMERS.PORTAL_ACCESS.VIEW';
+
+/** MANAGE implies VIEW, for the reason stated on canViewOrganisation. */
+export function canViewAccounts(permissions: readonly string[]): boolean {
+  return permissions.includes(ACCOUNTS_VIEW) || permissions.includes(ACCOUNTS_MANAGE);
+}
+
+export function canManageAccounts(permissions: readonly string[]): boolean {
+  return permissions.includes(ACCOUNTS_MANAGE);
+}
+
+export function canSeePortalAccess(permissions: readonly string[]): boolean {
+  return permissions.includes(PORTAL_ACCESS_VIEW);
+}
