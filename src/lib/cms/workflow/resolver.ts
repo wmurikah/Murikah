@@ -737,8 +737,7 @@ export async function resolveApprovers(
     trace[index] = {
       ...held,
       eligible: false,
-      rejection:
-        candidate.tier !== tier ? 'lower_specificity_available' : 'outranked_by_priority',
+      rejection: candidate.tier !== tier ? 'lower_specificity_available' : 'outranked_by_priority',
       ruleNotes: [...held.ruleNotes, why],
     };
   }
