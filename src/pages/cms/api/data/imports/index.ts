@@ -28,6 +28,7 @@ import {
   ok,
   serverError,
 } from '../../../../../lib/cms/admin/respond.ts';
+import { throttle, PORTAL_THROTTLES } from '../../../../../lib/cms/portal/throttle.ts';
 
 export const prerender = false;
 
@@ -44,6 +45,17 @@ export const GET: APIRoute = async (context) => {
 };
 
 export const POST: APIRoute = async (context) => {
+  // Ahead of the multipart read, because reading the body is the expensive
+  // part and a limiter that runs after it has already paid the cost it
+  // exists to avoid. The data-type guard cannot run first: it needs a field
+  // out of the very form this is protecting.
+  const limited = await throttle(
+    context.request,
+    PORTAL_THROTTLES.upload,
+    context.locals.cms?.user.userId ?? 'anonymous',
+  );
+  if (limited) return limited;
+
   const form = await context.request.formData().catch(() => null);
   if (form === null) {
     return invalid([{ field: 'file', message: 'Send the upload as a multipart form.' }]);
