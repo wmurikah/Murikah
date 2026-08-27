@@ -160,8 +160,22 @@ export class CmsWorker {
   private static readonly PROXY_RESTART = 'worker restarted mid-request';
 
   async call(method: string, path: string, options: CallOptions = {}): Promise<WorkerResponse> {
+    const safe = method === 'GET' || method === 'HEAD';
     for (let attempt = 0; attempt < 4; attempt++) {
-      const response = await this.send(method, path, options);
+      let response: WorkerResponse;
+      try {
+        response = await this.send(method, path, options);
+      } catch (error) {
+        // A request that was accepted and never answered, on a safe method.
+        // Two `wrangler dev` instances in one test run contend in this
+        // container, and the loser's socket goes quiet; wrangler retries GET
+        // and HEAD for the same reason. Replaying an unsafe method here would
+        // risk a double write, so those are rethrown and fail the test.
+        const timedOut = error instanceof Error && /timed out/.test(error.message);
+        if (!safe || !timedOut || attempt === 3) throw error;
+        await delay(250);
+        continue;
+      }
       const proxyDropped =
         response.status === 503 && response.body.includes(CmsWorker.PROXY_RESTART);
       if (!proxyDropped) return response;

@@ -19,7 +19,12 @@
  */
 import type { APIContext } from 'astro';
 import type { CmsIdentity } from '../repos/identity.ts';
-import { canManageOrganisation, canManageUsers, canViewOrganisation } from '../permissions.ts';
+import {
+  canManageOrganisation,
+  canManageRoles,
+  canManageUsers,
+  canViewOrganisation,
+} from '../permissions.ts';
 import { forbidden, unauthorised } from '../errors.ts';
 import { clientIp } from '../../http.ts';
 
@@ -73,6 +78,18 @@ export function requireOrganisationManage(context: APIContext): Authorisation {
  */
 export function requireUsersManage(context: APIContext): Authorisation {
   return authorise(context, canManageUsers);
+}
+
+/**
+ * Role and permission administration.
+ *
+ * This is the permission the last-administrator guard protects: the capability
+ * to grant capabilities. Losing every holder of it is unrecoverable through the
+ * interface, which is why @/lib/cms/repos/rbacAdmin refuses the operation that
+ * would rather than trusting a confirmation dialogue.
+ */
+export function requireRolesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageRoles);
 }
 
 /**
