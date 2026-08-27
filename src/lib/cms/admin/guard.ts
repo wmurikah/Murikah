@@ -25,6 +25,7 @@ import {
   canCreateLeads,
   canManageAccounts,
   canSeePortalAccess,
+  canViewAudit,
   canManageCatalogue,
   canManageLeadSources,
   canViewOpportunities,
@@ -158,6 +159,39 @@ export function requireAccountsView(context: APIContext): Authorisation {
 /** Creating and editing accounts and contacts. */
 export function requireAccountsManage(context: APIContext): Authorisation {
   return authorise(context, canManageAccounts);
+}
+
+/**
+ * Reading the audit trail. `AUDIT.EVENTS.VIEW`, seeded as PERM-020.
+ *
+ * This is the read gate only. The security view and the export each check
+ * their own additional code, and neither is implied by this one.
+ */
+export function requireAuditView(context: APIContext): Authorisation {
+  return authorise(context, canViewAudit);
+}
+
+/**
+ * The configuration-review surfaces: System Health, Access Review, Workflow
+ * Authority Review and Role Impact.
+ *
+ * DECIDED UNATTENDED: authorised on `ADMIN.USERS.MANAGE` or
+ * `ADMIN.WORKFLOW_ROLES.MANAGE`. These screens read who holds what access and
+ * what approval authority, which is exactly what those two codes already
+ * govern the writing of; a person who may grant a role has every reason to
+ * read who holds it, and giving the review a code of its own would mean
+ * minting a permission the operator would have to grant before anybody could
+ * check their own configuration. Either code suffices because Access Review
+ * and Authority Review are two halves of one question and splitting the read
+ * would leave each holder with half a screen.
+ */
+export function requireControlCentre(context: APIContext): Authorisation {
+  return authorise(
+    context,
+    (permissions) =>
+      permissions.includes('ADMIN.USERS.MANAGE') ||
+      permissions.includes('ADMIN.WORKFLOW_ROLES.MANAGE'),
+  );
 }
 
 /**

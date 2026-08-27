@@ -10,6 +10,7 @@
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsAuditHistoryLink from '@/components/cms/CmsAuditHistoryLink.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
@@ -167,13 +168,26 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                     {r.profileName}
                   </p>
                 </div>
-                <span class="text-cms-caption text-cms-muted tabular-nums">
-                  target {r.targetMinutes} min
-                  {r.warningMinutes !== null && ` · warn at ${r.warningMinutes} min left`} ·{' '}
-                  {r.calendarName}
-                  {r.businessHoursOnly ? ' · business hours' : ' · wall clock'}
-                  {r.pauseAllowed ? ' · pausable' : ' · never pauses'}
-                  {!r.active && ' · inactive'}
+                <span class="flex flex-wrap items-center gap-3">
+                  <span class="text-cms-caption text-cms-muted tabular-nums">
+                    target {r.targetMinutes} min
+                    {r.warningMinutes !== null && ` · warn at ${r.warningMinutes} min left`} ·{' '}
+                    {r.calendarName}
+                    {r.businessHoursOnly ? ' · business hours' : ' · wall clock'}
+                    {r.pauseAllowed ? ' · pausable' : ' · never pauses'}
+                    {!r.active && ' · inactive'}
+                  </span>
+                  {/*
+                    Changing an SLA target changes every compliance figure ever
+                    measured against it, which is why the catalogue marks
+                    SLA_RULE_UPDATED high-impact and why the history is one
+                    click from the rule rather than buried in a workspace.
+                  */}
+                  <CmsAuditHistoryLink
+                    entityType="SLA_RULE"
+                    entityId={r.slaRuleId}
+                    label="Audit history"
+                  />
                 </span>
               </li>
             ))}
