@@ -1,0 +1,98 @@
+---
+/**
+ * A chart, its text alternative and its numbers.
+ *
+ * An SVG is a picture, and a picture is not readable by a screen reader, is
+ * not searchable and cannot be copied into a message. So every chart in this
+ * application renders three things: the drawing, a sentence saying what it
+ * shows, and the same values as a real table inside a disclosure. The table
+ * is the data; the drawing is the convenience.
+ *
+ * The KPI definition sits here too, because a chart without its denominator
+ * and its date basis is a shape rather than a measurement.
+ */
+import type { Chart } from '@/lib/cms/charts/svg';
+
+interface Props {
+  title: string;
+  /** What is being measured, its denominator and its date basis. */
+  definition: string;
+  chart: Chart;
+  /** Coverage, where the metric is a duration: "1,742 of 2,109 orders". */
+  coverage?: string;
+  /** The unit or currency, which a money figure must always carry. */
+  unit?: string;
+  class?: string;
+}
+const { title, definition, chart, coverage, unit, class: className } = Astro.props;
+const tableId = `chart-${Math.abs(hash(title))}`;
+
+function hash(value: string): number {
+  let out = 0;
+  for (let index = 0; index < value.length; index++) {
+    out = (out * 31 + value.charCodeAt(index)) | 0;
+  }
+  return out;
+}
+---
+
+<figure class:list={['rounded-cms border border-cms-line bg-cms-surface p-4', className]}>
+  <figcaption class="mb-3">
+    <h3 class="text-cms-body font-semibold text-cms-ink">
+      {title}{unit && <span class="ml-1 font-normal text-cms-muted">({unit})</span>}
+    </h3>
+    <p class="mt-0.5 text-cms-body-sm text-cms-muted">{definition}</p>
+    {coverage && <p class="mt-0.5 text-cms-body-sm text-cms-muted">Coverage: {coverage}</p>}
+  </figcaption>
+
+  <div class="overflow-x-auto">
+    <Fragment set:html={chart.svg} />
+  </div>
+
+  <p class="sr-only">{chart.alt}</p>
+
+  <details class="mt-3">
+    <summary
+      class="cursor-pointer text-cms-body-sm font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Show the numbers
+    </summary>
+    <div class="mt-2 overflow-x-auto">
+      <table id={tableId} class="w-full border-collapse text-cms-body-sm">
+        <caption class="sr-only">{title}. {definition}</caption>
+        <thead>
+          <tr>
+            {
+              chart.table.columns.map((column) => (
+                <th
+                  scope="col"
+                  class="border-b border-cms-line px-2 py-1.5 text-left font-medium text-cms-muted"
+                >
+                  {column}
+                </th>
+              ))
+            }
+          </tr>
+        </thead>
+        <tbody>
+          {
+            chart.table.rows.map((row) => (
+              <tr>
+                {row.map((cell, index) => (
+                  <td
+                    class:list={[
+                      'border-b border-cms-line px-2 py-1.5',
+                      index === 0 ? 'text-cms-ink' : 'text-cms-muted tabular-nums',
+                    ]}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </details>
+</figure>

@@ -1,0 +1,294 @@
+---
+/**
+ * Data → Upload Centre → Upload a file.
+ *
+ * Data type, source system, affiliate, reporting period, file, Validate.
+ * VALIDATION IS NOT A COMMIT: this screen reports what the file contains
+ * and what would happen, and the import only occurs when somebody presses
+ * Import valid records afterwards.
+ *
+ * The affiliate selector is not decoration. The purchase order extract has
+ * no affiliate column at all, so this field is where that fact comes from,
+ * and a purchase order upload without it is refused rather than guessed.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canUploadImports } from '@/lib/cms/permissions';
+import { IMPORT_TYPES, IMPORT_TYPE_LABELS, MAX_UPLOAD_BYTES } from '@/lib/cms/import/uploadCentre';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayUpload = canUploadImports(permissions);
+
+let sources: { value: string; label: string }[] = [];
+let affiliates: { value: string; label: string }[] = [];
+let loadFailed = false;
+if (mayUpload) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const [sourceRows, affiliateRows] = await Promise.all([
+      db.execute(
+        `SELECT source_system_id, system_name FROM source_systems WHERE active = 1 ORDER BY system_name`,
+      ),
+      db.execute(
+        `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
+      ),
+    ]);
+    sources = sourceRows.rows.map((row) => ({
+      value: String(row.source_system_id),
+      label: String(row.system_name),
+    }));
+    affiliates = affiliateRows.rows.map((row) => ({
+      value: String(row.affiliate_id),
+      label: String(row.affiliate_name),
+    }));
+  } catch (error) {
+    console.error('[cms.data.upload] load failed', error);
+    loadFailed = true;
+  }
+}
+const limitMb = Math.round(MAX_UPLOAD_BYTES / 1048576);
+---
+
+<CmsLayout title="Upload a file">
+  {
+    !mayUpload ? (
+      <CmsErrorState
+        title="You do not have access to uploads"
+        description="Ask a system administrator for the DATA.IMPORTS.UPLOAD permission, and for the permission covering the data type you need to load."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The upload form could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Upload a file"
+          description="Validating tells you what the file contains and what would change. Nothing is imported until you commit."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Data', href: '/app/data' },
+            { label: 'Upload' },
+          ]}
+        />
+
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+          <CmsCard title="The file" description={`Excel workbook, up to ${limitMb} MB.`}>
+            <form id="cms-upload-form" novalidate class="flex flex-col gap-4">
+              <p
+                id="cms-upload-error"
+                role="alert"
+                hidden
+                class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              />
+              <CmsSelect
+                id="up-importType"
+                name="importType"
+                label="Data type"
+                required
+                options={IMPORT_TYPES.map((type) => ({
+                  value: type,
+                  label: IMPORT_TYPE_LABELS[type],
+                }))}
+              />
+              <CmsSelect
+                id="up-sourceSystemId"
+                name="sourceSystemId"
+                label="Source system"
+                required
+                options={sources}
+              />
+              <CmsSelect
+                id="up-affiliateId"
+                name="affiliateId"
+                label="Affiliate"
+                hint="Required for purchase orders: that extract carries no affiliate column."
+                options={[{ value: '', label: 'Not specified' }, ...affiliates]}
+              />
+              <div class="grid gap-4 sm:grid-cols-2">
+                <CmsInput id="up-from" name="reportingPeriodFrom" label="Period from" type="date" />
+                <CmsInput id="up-to" name="reportingPeriodTo" label="Period to" type="date" />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="up-file" class="text-cms-body-sm font-medium text-cms-ink">
+                  Workbook
+                </label>
+                <input
+                  id="up-file"
+                  name="file"
+                  type="file"
+                  accept=".xls,.xlsx"
+                  required
+                  class="rounded-cms border border-cms-line bg-white px-3 py-2 text-cms-body-sm text-cms-ink outline-none file:mr-3 file:rounded-cms file:border-0 file:bg-cms-canvas file:px-3 file:py-1.5 file:text-cms-body-sm file:font-medium file:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+                />
+                <p class="text-cms-body-sm text-cms-muted">
+                  The file is checked by its content, not by its name.
+                </p>
+              </div>
+            </form>
+            <div class="mt-4 flex items-center gap-2">
+              <CmsButton id="cms-upload-validate" variant="primary" icon="data">
+                Validate file
+              </CmsButton>
+              <span
+                id="cms-upload-progress"
+                class="text-cms-body-sm text-cms-muted"
+                aria-live="polite"
+              />
+            </div>
+          </CmsCard>
+
+          <CmsCard
+            title="What the file contains"
+            description="Rows and documents, counted separately."
+          >
+            <div id="cms-upload-summary" class="text-cms-body-sm text-cms-muted">
+              Nothing validated yet.
+            </div>
+            <div id="cms-upload-actions" hidden class="mt-4 flex items-center gap-2">
+              <CmsButton id="cms-upload-commit" variant="primary" icon="check">
+                Import valid records
+              </CmsButton>
+              <CmsButton id="cms-upload-review" variant="ghost">
+                Review exceptions
+              </CmsButton>
+            </div>
+          </CmsCard>
+        </div>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  const form = document.getElementById('cms-upload-form') as HTMLFormElement | null;
+  const validate = document.getElementById('cms-upload-validate');
+  const commit = document.getElementById('cms-upload-commit');
+  const review = document.getElementById('cms-upload-review');
+  const errorBox = document.getElementById('cms-upload-error');
+  const progress = document.getElementById('cms-upload-progress');
+  const summary = document.getElementById('cms-upload-summary');
+  const actions = document.getElementById('cms-upload-actions');
+
+  if (form && validate && summary) {
+    let batchId = '';
+
+    const showError = (message: string) => {
+      if (!errorBox) return;
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+    };
+
+    const line = (label: string, value: string) =>
+      `<div class="flex items-center justify-between gap-3 border-b border-cms-line py-1.5 last:border-0"><span>${label}</span><span class="font-medium text-cms-ink tabular-nums">${value}</span></div>`;
+
+    validate.addEventListener('click', async () => {
+      if (errorBox) errorBox.hidden = true;
+      const data = new FormData(form);
+      const file = data.get('file');
+      if (!(file instanceof File) || file.size === 0) {
+        showError('Choose a file to upload.');
+        return;
+      }
+      // Honest progress: uploading, then validating, then a stage word that
+      // says what actually happened.
+      if (progress) progress.textContent = 'Uploading';
+      let response: Response;
+      try {
+        if (progress) progress.textContent = 'Validating';
+        response = await fetch('/api/data/imports', { method: 'POST', body: data });
+      } catch {
+        if (progress) progress.textContent = '';
+        showError('The upload could not be sent.');
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (progress) progress.textContent = '';
+      if (!response.ok && body === null) {
+        showError('The upload was refused.');
+        return;
+      }
+      const outcome = (body ?? {}) as Record<string, unknown>;
+      const stage = String(outcome?.stage ?? '');
+      if (stage === 'REJECTED') {
+        showError(String(outcome?.rejectedReason ?? 'The file was refused.'));
+        summary.textContent = 'Nothing was imported.';
+        if (actions) actions.hidden = true;
+        return;
+      }
+      if (stage === 'DUPLICATE') {
+        const duplicate = outcome?.duplicate as Record<string, unknown> | null;
+        showError(
+          duplicate
+            ? `This exact file was already uploaded as ${String(duplicate.filename)} on ${String(duplicate.uploadedAt)} by ${String(duplicate.uploadedBy)}. Nothing was re-imported.`
+            : 'This exact file has been uploaded before.',
+        );
+        if (duplicate) {
+          summary.innerHTML = `<a class="text-cms-royal hover:underline" href="/app/data/history/${String(duplicate.batchId)}">Open the previous batch</a>`;
+        }
+        if (actions) actions.hidden = true;
+        return;
+      }
+      batchId = String(outcome?.batchId ?? '');
+      const counts = (outcome?.summary ?? {}) as Record<string, number>;
+      const unresolvedUsers = (outcome?.unresolvedUsers ?? []) as string[];
+      const unresolvedProducts = (outcome?.unresolvedProducts ?? []) as unknown[];
+      const unresolvedCustomers = (outcome?.unresolvedCustomers ?? []) as unknown[];
+      summary.innerHTML =
+        line('Rows received', String(counts.rowsReceived ?? 0)) +
+        line('Documents', String(counts.uniqueDocuments ?? 0)) +
+        line('New rows', String(counts.rowsNew ?? 0)) +
+        line('Changed rows', String(counts.rowsChanged ?? 0)) +
+        line('Exact duplicate rows', String(counts.rowsDuplicate ?? 0)) +
+        line('Rows needing a mapping', String(counts.rowsUnresolved ?? 0)) +
+        line('Rejected rows', String(counts.rowsRejected ?? 0)) +
+        line('Unresolved users', String(unresolvedUsers.length)) +
+        line('Unresolved customers', String(unresolvedCustomers.length)) +
+        line('Unresolved products', String(unresolvedProducts.length));
+      if (actions) actions.hidden = false;
+    });
+
+    commit?.addEventListener('click', async () => {
+      if (batchId === '') return;
+      if (progress) progress.textContent = 'Importing';
+      const response = await fetch(`/api/data/imports/${batchId}/commit`, { method: 'POST' });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (progress) progress.textContent = '';
+      if (!response.ok) {
+        showError('The import could not be completed.');
+        return;
+      }
+      const result = (body ?? {}) as Record<string, unknown>;
+      const skipped = (result?.skippedReasons ?? []) as { reason: string; rows: number }[];
+      const status = String(result?.status ?? '');
+      summary.innerHTML =
+        line('Outcome', status === 'PARTIAL' ? 'Partial' : 'Complete') +
+        line('Documents created', String(result?.documentsCreated ?? 0)) +
+        line('Documents updated', String(result?.documentsUpdated ?? 0)) +
+        line('Documents unchanged', String(result?.documentsUnchanged ?? 0)) +
+        line('Documents not imported', String(result?.documentsSkipped ?? 0)) +
+        line('Lines written', String(result?.linesWritten ?? 0)) +
+        line('Workflow events appended', String(result?.workflowEventsAppended ?? 0)) +
+        (skipped.length === 0
+          ? ''
+          : `<p class="mt-3 text-cms-body-sm text-cms-muted">Not imported, and why:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${skipped
+              .map((entry) => `<li>${entry.rows} rows: ${entry.reason}</li>`)
+              .join('')}</ul>`) +
+        `<p class="mt-3"><a class="text-cms-royal hover:underline" href="/app/data/history/${batchId}">Open the batch</a></p>`;
+    });
+
+    review?.addEventListener('click', () => {
+      if (batchId !== '') window.location.href = `/app/data/history/${batchId}`;
+    });
+  }
+</script>

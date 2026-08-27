@@ -30,6 +30,7 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsAccountContacts from '@/components/cms/CmsAccountContacts.astro';
 import CmsActivitySection from '@/components/cms/CmsActivitySection.astro';
+import CmsPortalAccess from '@/components/cms/CmsPortalAccess.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
@@ -44,6 +45,13 @@ import {
 } from '@/lib/cms/repos/accountAdmin';
 import { STATUS_MEANING } from '@/lib/cms/admin/accountInput';
 import { listAccountActivities, type ActivityPage } from '@/lib/cms/repos/activityAdmin';
+import {
+  listMemberships,
+  invitableContacts,
+  portalRoles,
+  type PortalMembershipRow,
+  type InvitableContact,
+} from '@/lib/cms/repos/portalAdmin';
 import { leadOptions } from '@/lib/cms/repos/leadAdmin';
 
 export const prerender = false;
@@ -59,6 +67,7 @@ const TABS = [
   'overview',
   'timeline',
   'contacts',
+  'portal',
   'opportunities',
   'orders',
   'service',
@@ -72,6 +81,9 @@ let account: AccountRow | null = null;
 let counts: AccountCounts | null = null;
 let contacts: ContactRow[] = [];
 let activities: ActivityPage | null = null;
+let memberships: PortalMembershipRow[] = [];
+let invitable: InvitableContact[] = [];
+let roles: { roleId: string; roleName: string }[] = [];
 let timelineOptions: Awaited<ReturnType<typeof leadOptions>> | null = null;
 let loadFailed = false;
 
@@ -99,6 +111,17 @@ if (mayRead) {
       }
       if (tab === 'contacts') {
         contacts = (await listContacts(db, userId, accountId, maySeePortal)) ?? [];
+      }
+      // Same rule as the other tabs: fetched when it is open and not before.
+      // The permission is checked here as well as in the endpoints, so a
+      // reader without it costs three queries fewer rather than being shown
+      // an empty panel.
+      if (tab === 'portal' && maySeePortal) {
+        [memberships, invitable, roles] = await Promise.all([
+          listMemberships(db, accountId),
+          invitableContacts(db, accountId),
+          portalRoles(db),
+        ]);
       }
     }
   } catch (error) {
@@ -192,6 +215,15 @@ const COMING: Readonly<Record<string, string>> = {
               href: href('contacts'),
               count: counts?.contacts ?? undefined,
             },
+            ...(maySeePortal
+              ? [
+                  {
+                    label: 'Portal access',
+                    href: href('portal'),
+                    count: counts?.portalMemberships ?? undefined,
+                  },
+                ]
+              : []),
             { label: 'Opportunities', href: href('opportunities') },
             { label: 'Orders', href: href('orders') },
             { label: 'Service', href: href('service') },
@@ -368,6 +400,23 @@ const COMING: Readonly<Record<string, string>> = {
           />
         )}
 
+        {tab === 'portal' &&
+          (maySeePortal ? (
+            <CmsPortalAccess
+              accountId={accountId}
+              memberships={memberships}
+              contacts={invitable}
+              roles={roles}
+              mayManage={mayManage}
+            />
+          ) : (
+            <CmsEmptyState
+              icon="customers"
+              title="You cannot see portal access on this customer"
+              description="Portal access is a fact about an external person's sign-in, so it is held separately from the ordinary customer read."
+            />
+          ))}
+
         {tab === 'timeline' && (
           <CmsActivitySection
             entityType="ACCOUNT"
@@ -383,7 +432,7 @@ const COMING: Readonly<Record<string, string>> = {
           />
         )}
 
-        {tab !== 'overview' && tab !== 'contacts' && tab !== 'timeline' && (
+        {tab !== 'overview' && tab !== 'contacts' && tab !== 'timeline' && tab !== 'portal' && (
           <CmsEmptyState
             icon="clock"
             title={`${titleCase(tab)} is not built yet`}

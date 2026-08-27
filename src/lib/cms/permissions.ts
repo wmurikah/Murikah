@@ -282,3 +282,72 @@ export function canViewSlaDashboard(permissions: readonly string[]): boolean {
 export function canManageSlaRules(permissions: readonly string[]): boolean {
   return permissions.includes(SLA_RULES_MANAGE);
 }
+
+/**
+ * Data ingestion. Four seeded codes, and the pairing matters.
+ *
+ * PERM-019 says a person may run an import at all. PERM-009 and PERM-011 say
+ * which kind of extract they may put into the product. An upload is checked
+ * against both, because "may use the Upload Centre" and "may load purchase
+ * orders" are different permissions and the seeded catalogue already draws
+ * that line. Nothing here reads a job title, a department or a role name:
+ * the finance manager who runs the monthly extract holds the codes, and a
+ * person who does not hold them is refused however senior their title.
+ *
+ * PERM-019, PERM-009 and PERM-011 reach ROLE-ADMIN through the seed's
+ * grant-everything insert. Granting them to the finance roles that actually
+ * run the monthly upload is data, not code:
+ * docs/cms/data/06_add_import_grants.sql.
+ */
+export const IMPORTS_VIEW = 'DATA.IMPORTS.VIEW';
+export const IMPORTS_UPLOAD = 'DATA.IMPORTS.UPLOAD';
+export const SALES_ORDER_VIEW = 'ORDERS.SALES_ORDER.VIEW';
+export const SALES_ORDER_UPLOAD = 'ORDERS.SALES_ORDER.UPLOAD';
+export const PURCHASE_ORDER_VIEW = 'ORDERS.PURCHASE_ORDER.VIEW';
+export const PURCHASE_ORDER_UPLOAD = 'ORDERS.PURCHASE_ORDER.UPLOAD';
+
+export function canViewImports(permissions: readonly string[]): boolean {
+  return permissions.includes(IMPORTS_VIEW) || permissions.includes(IMPORTS_UPLOAD);
+}
+
+export function canUploadImports(permissions: readonly string[]): boolean {
+  return permissions.includes(IMPORTS_UPLOAD);
+}
+
+export function canViewSalesOrders(permissions: readonly string[]): boolean {
+  return permissions.includes(SALES_ORDER_VIEW);
+}
+
+export function canViewPurchaseOrders(permissions: readonly string[]): boolean {
+  return permissions.includes(PURCHASE_ORDER_VIEW);
+}
+
+/**
+ * Both codes, never one. The Upload Centre is one door; what may come
+ * through it is decided per data type.
+ */
+export function canUploadImportType(
+  permissions: readonly string[],
+  importType: 'SALES_ORDER' | 'PURCHASE_ORDER',
+): boolean {
+  if (!canUploadImports(permissions)) return false;
+  return permissions.includes(
+    importType === 'SALES_ORDER' ? SALES_ORDER_UPLOAD : PURCHASE_ORDER_UPLOAD,
+  );
+}
+
+/**
+ * Credit exception approval, seeded as PERM-012.
+ *
+ * Phase 20 reuses it as the gate on credit INFORMATION as well as on the
+ * decision, because credit limits, terms and exception reasons are
+ * commercially sensitive and a person who may not act on them has no reason
+ * to read them customer by customer. The conservative reading: a caller
+ * without this code sees the operational columns and no credit analysis,
+ * rather than an empty column that hints at what is behind it.
+ */
+export const CREDIT_EXCEPTION_APPROVE = 'CREDIT.EXCEPTION.APPROVE';
+
+export function canSeeCreditInformation(permissions: readonly string[]): boolean {
+  return permissions.includes(CREDIT_EXCEPTION_APPROVE);
+}
