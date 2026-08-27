@@ -57,3 +57,38 @@ export const ROLES_MANAGE = 'ADMIN.ROLES.MANAGE';
 export function canManageRoles(permissions: readonly string[]): boolean {
   return permissions.includes(ROLES_MANAGE);
 }
+
+/**
+ * Workflow definitions and stages. Already in the seeded catalogue as PERM-017
+ * and already granted to ROLE-ADMIN, so Build Prompt 08 needs no data script.
+ */
+export const WORKFLOWS_MANAGE = 'ADMIN.WORKFLOWS.MANAGE';
+
+export function canManageWorkflows(permissions: readonly string[]): boolean {
+  return permissions.includes(WORKFLOWS_MANAGE);
+}
+
+/**
+ * Workflow roles, their scoped assignments and the authority rules that
+ * restrict them. PERM-021, also already granted to ROLE-ADMIN.
+ *
+ * Separate from WORKFLOWS_MANAGE because the schema separates them, and the
+ * separation is meaningful: designing a workflow decides what steps a
+ * transaction goes through, while assigning a workflow role decides who may
+ * approve and for how much. An organisation can reasonably give one of those to
+ * a process owner and keep the other with finance.
+ */
+export const WORKFLOW_ROLES_MANAGE = 'ADMIN.WORKFLOW_ROLES.MANAGE';
+
+export function canManageWorkflowRoles(permissions: readonly string[]): boolean {
+  return permissions.includes(WORKFLOW_ROLES_MANAGE);
+}
+
+/**
+ * Reading workflow configuration: the definitions list, a role's assignments,
+ * the approval preview. Either manage permission is enough, because both halves
+ * of the configuration have to be legible to make sense of the other.
+ */
+export function canViewWorkflows(permissions: readonly string[]): boolean {
+  return canManageWorkflows(permissions) || canManageWorkflowRoles(permissions);
+}

@@ -28,8 +28,18 @@ interface Stmt {
 /** The slice of the libSQL Client interface the CMS code actually calls. */
 export interface TestClient {
   execute(stmt: Stmt | string): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }>;
-  /** The batched write the login flow uses to keep its bookkeeping atomic. */
-  batch(stmts: Stmt[], mode?: string): Promise<{ rowsAffected: number }[]>;
+  /**
+   * The batched write the login flow uses to keep its bookkeeping atomic.
+   *
+   * It returns the full result of every statement, rows included, because the
+   * real client does: `batch(..., 'read')` is how a repository fetches several
+   * selection lists in one round trip, and a stub that dropped the rows would
+   * make that code untestable while looking like it worked.
+   */
+  batch(
+    stmts: Stmt[],
+    mode?: string,
+  ): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }[]>;
   close(): void;
   /** Test-only escape hatch for arrange and assert steps. */
   raw: DatabaseSync;
@@ -49,7 +59,7 @@ export function createTestDb(): TestClient {
         const results = [];
         for (const stmt of stmts) results.push(await client.execute(stmt));
         db.exec('COMMIT');
-        return results.map((r) => ({ rowsAffected: r.rowsAffected }));
+        return results;
       } catch (error) {
         db.exec('ROLLBACK');
         throw error;
