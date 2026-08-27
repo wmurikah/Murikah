@@ -342,10 +342,19 @@ const facts: [string, string][] = team
 
   let endingId: string | null = null;
 
+  /**
+   * Clear the field messages without removing anything. CmsInput and CmsSelect
+   * each render their own always-present `<p id="{field}-error">`, named in the
+   * field's aria-describedby so a client-side message is announced. Emptying
+   * and hiding it is the contract; removing it deletes what the field points at.
+   */
   const clear = (form: HTMLFormElement | null, box: HTMLElement | null) => {
-    form?.querySelectorAll('[data-field-error]').forEach((node) => node.remove());
+    form?.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+      node.textContent = '';
+      node.classList.add('hidden');
+    });
     form?.querySelectorAll('[aria-invalid="true"]').forEach((node) => {
-      node.removeAttribute('aria-invalid');
+      node.setAttribute('aria-invalid', 'false');
     });
     if (box) {
       box.hidden = true;
@@ -356,13 +365,13 @@ const facts: [string, string][] = team
   const paint = (form: HTMLFormElement, fields: { field: string; message: string }[]) => {
     for (const item of fields) {
       const field = form.elements.namedItem(item.field);
-      if (!(field instanceof HTMLElement)) continue;
+      if (!(field instanceof HTMLElement) || !field.id) continue;
       field.setAttribute('aria-invalid', 'true');
-      const message = document.createElement('p');
-      message.dataset.fieldError = 'true';
-      message.className = 'text-cms-caption text-cms-danger';
-      message.textContent = item.message;
-      field.parentElement?.appendChild(message);
+      const message = document.getElementById(`${field.id}-error`);
+      if (message) {
+        message.textContent = item.message;
+        message.classList.remove('hidden');
+      }
     }
     form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
   };
