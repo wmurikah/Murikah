@@ -160,6 +160,8 @@ const facts =
     ) : (
       <Fragment>
         <CmsPageHeader
+          auditEntityType="LEAD"
+          auditEntityId={leadId}
           title={lead.title}
           description={lead.description ?? 'No description was recorded.'}
           crumbs={[

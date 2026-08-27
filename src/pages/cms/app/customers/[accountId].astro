@@ -167,6 +167,8 @@ const COMING: Readonly<Record<string, string>> = {
     ) : (
       <Fragment>
         <CmsPageHeader
+          auditEntityType="ACCOUNT"
+          auditEntityId={accountId}
           title={account.accountName}
           description={`${titleCase(account.accountType)} · ${account.countryName}${account.segment === null ? '' : ` · ${account.segment}`}`}
           crumbs={[{ label: 'Customers', href: '/app/customers' }, { label: account.accountName }]}

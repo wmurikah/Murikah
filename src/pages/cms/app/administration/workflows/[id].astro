@@ -119,6 +119,8 @@ const pick = (list: Option[], empty: string) => [
     ) : (
       <Fragment>
         <CmsPageHeader
+          auditEntityType="WORKFLOW_DEFINITION"
+          auditEntityId={definitionId}
           title={definition.workflowName}
           description={`Version ${definition.versionNo}, effective from ${definition.effectiveFrom}${definition.effectiveTo === null ? '' : ` to ${definition.effectiveTo}`}.`}
           crumbs={[

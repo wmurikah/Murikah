@@ -20,8 +20,10 @@ import {
   canManageCatalogue,
   canManageRoles,
   canManageUsers,
+  canViewAudit,
   canViewOrganisation,
   canViewWorkflows,
+  canManageWorkflowRoles,
 } from '@/lib/cms/permissions';
 import { ORGANISATION_PATH } from '@/lib/cms/admin/workspace';
 import { WORKFLOW_PATH } from '@/lib/cms/admin/workflowWorkspace';
@@ -80,6 +82,38 @@ const sections: Section[] = [
       'One product master for the whole platform: groups, nested categories and the products beneath them. Orders, cases, SLA reporting and approval authority all read these same records.',
     ready: true,
     visible: canManageCatalogue(permissions),
+  },
+  {
+    label: 'Audit trail',
+    href: '/app/administration/audit',
+    description:
+      'Who changed what, and when. Every row is evidence, and two database triggers refuse any attempt to alter or delete one, including by a system administrator.',
+    ready: true,
+    visible: canViewAudit(permissions),
+  },
+  {
+    label: 'System health',
+    href: '/app/administration/health',
+    description:
+      'Configuration checks with a stated rule each, including the workflow roles nobody currently holds, which is how a transaction ends up with no approver.',
+    ready: true,
+    visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
+  },
+  {
+    label: 'Access review',
+    href: '/app/administration/access-review',
+    description:
+      'Application access and approval authority, side by side and never merged. They are different things, and reading them as one list is how authority gets granted by accident.',
+    ready: true,
+    visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
+  },
+  {
+    label: 'Workflow authority review',
+    href: '/app/administration/authority',
+    description:
+      'Who can approve this today. Assignments are effective-dated, so the configuration can look correct while nobody actually holds the authority any more.',
+    ready: true,
+    visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
 ];
 

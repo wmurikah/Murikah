@@ -1,0 +1,51 @@
+---
+/**
+ * The View Audit History action, on every record that has one.
+ *
+ * ONE COMPONENT, TEN CALLERS. Customer, contact, lead, opportunity, case,
+ * sales order, purchase order, user, role, workflow and SLA rule all show the
+ * same action in the same place, and it goes to the same workspace with the
+ * entity pre-filtered.
+ *
+ * IT RENDERS NOTHING FOR SOMEBODY WITHOUT THE AUDIT PERMISSION. That is
+ * presentation and not access control: the workspace checks the permission
+ * for itself and the scope predicate runs there whether or not this component
+ * ever rendered a link.
+ *
+ * There is no inline audit panel on the record. The trail is an
+ * investigation, not a sidebar: it needs the filters, the paging and the
+ * detail view, and a truncated copy of it beside a customer would show the
+ * last five events and quietly imply there were only five.
+ */
+import { canViewAudit } from '@/lib/cms/permissions';
+
+interface Props {
+  /** The `audit_events.entity_type` value this record is written under. */
+  entityType: string;
+  entityId: string;
+  label?: string;
+  class?: string;
+}
+const { entityType, entityId, label = 'View audit history', class: className } = Astro.props;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const visible = canViewAudit(permissions);
+// The entity id goes into the search box, which matches `entity_id` exactly,
+// so this is a filter and not a free-text guess.
+const href = `/app/administration/audit?entityType=${encodeURIComponent(entityType)}&q=${encodeURIComponent(entityId)}`;
+---
+
+{
+  visible && (
+    <a
+      href={href}
+      class:list={[
+        'inline-flex min-h-9 items-center rounded-cms border border-cms-border px-3 text-cms-body-sm font-medium text-cms-royal',
+        'outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus',
+        className,
+      ]}
+    >
+      {label}
+    </a>
+  )
+}
