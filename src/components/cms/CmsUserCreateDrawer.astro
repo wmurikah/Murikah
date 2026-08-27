@@ -1,0 +1,332 @@
+---
+/**
+ * The create-user drawer, and the script that drives it.
+ *
+ * A component rather than markup in the page, for the reason Build Prompt 05
+ * learned twice: Astro ships a component's script only when the component is
+ * rendered, so a handler that lives beside markup nobody rendered is a trigger
+ * with nothing listening, and a script hoisted to a page ships to people who
+ * have no control to use it.
+ *
+ * PROGRESSIVE DISCLOSURE ON THE ASSIGNMENT LEVEL
+ * `user_assignments` carries a CHECK that ties the level to its location
+ * column and forces all three NULL for GROUP. So the level decides which field
+ * is shown, and a hidden field is disabled as well as hidden: a disabled input
+ * is not submitted, which is how the excluded columns arrive as absent rather
+ * than as an empty string the CHECK would reject.
+ *
+ * The status is not a field. A new user is INVITED, because the table CHECK
+ * refuses an ACTIVE user whose email is unverified.
+ */
+import CmsDrawer from './CmsDrawer.astro';
+import CmsButton from './CmsButton.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import type {
+  AffiliateRow,
+  BusinessUnitRow,
+  CountryRow,
+  DepartmentRow,
+} from '@/lib/cms/repos/organisationAdmin';
+import type { JobTitleRow } from '@/lib/cms/repos/userAdmin';
+import { ASSIGNMENT_LEVELS } from '@/lib/cms/admin/userInput';
+
+interface Props {
+  countries: CountryRow[];
+  affiliates: AffiliateRow[];
+  businessUnits: BusinessUnitRow[];
+  departments: DepartmentRow[];
+  titles: JobTitleRow[];
+}
+const { countries, affiliates, businessUnits, departments, titles } = Astro.props;
+
+const levelOptions = ASSIGNMENT_LEVELS.map((value) => ({
+  value,
+  label:
+    value === 'GROUP'
+      ? 'Group, the whole of Hass Petroleum'
+      : value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' '),
+}));
+const titleOptions = titles
+  .filter((t) => t.active)
+  .map((t) => ({ value: t.jobTitleId, label: t.titleName }));
+const departmentOptions = departments
+  .filter((d) => d.active)
+  .map((d) => ({ value: d.departmentId, label: d.departmentName }));
+const countryOptions = countries
+  .filter((c) => c.active)
+  .map((c) => ({ value: c.countryId, label: c.countryName }));
+const affiliateOptions = affiliates
+  .filter((a) => a.active)
+  .map((a) => ({ value: a.affiliateId, label: `${a.affiliateName} (${a.affiliateCode})` }));
+const unitOptions = businessUnits
+  .filter((b) => b.active)
+  .map((b) => ({ value: b.businessUnitId, label: b.businessUnitName }));
+---
+
+<CmsDrawer id="cms-user-drawer" tone="form" title="New user">
+  <form id="cms-user-form" novalidate class="flex flex-col gap-4">
+    <p
+      id="cms-user-error"
+      role="alert"
+      hidden
+      class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+    >
+    </p>
+
+    <CmsInput id="u-firstName" name="firstName" label="First name" required />
+    <CmsInput id="u-lastName" name="lastName" label="Last name" required />
+    <CmsInput
+      id="u-email"
+      name="email"
+      label="Email"
+      type="email"
+      hint="Unique across the platform, and matched without regard to case."
+      required
+    />
+    <CmsInput
+      id="u-employeeNo"
+      name="employeeNo"
+      label="Employee number"
+      hint="Optional, and unique where given."
+    />
+    <CmsInput id="u-phone" name="phone" label="Phone" hint="Optional." />
+    <CmsInput id="u-timezone" name="timezone" label="Time zone" value="Africa/Nairobi" />
+    <CmsInput id="u-locale" name="locale" label="Locale" value="en-KE" />
+
+    <hr class="border-cms-line" />
+    <p class="text-cms-body-sm font-semibold text-cms-navy">Organisational assignment</p>
+
+    <CmsSelect
+      id="u-jobTitleId"
+      name="jobTitleId"
+      label="Job title"
+      options={titleOptions}
+      required
+    />
+    <CmsSelect
+      id="u-departmentId"
+      name="departmentId"
+      label="Department"
+      options={departmentOptions}
+      required
+    />
+    <CmsSelect
+      id="u-level"
+      name="level"
+      label="Assignment level"
+      options={levelOptions}
+      hint="A Group assignment covers the whole group and carries no location."
+      required
+    />
+
+    {/* Shown, and enabled, only for the level that uses it. */}
+    <div data-level-field="COUNTRY" hidden>
+      <CmsSelect id="u-countryId" name="countryId" label="Country" options={countryOptions} />
+    </div>
+    <div data-level-field="AFFILIATE" hidden>
+      <CmsSelect
+        id="u-affiliateId"
+        name="affiliateId"
+        label="Affiliate"
+        options={affiliateOptions}
+      />
+    </div>
+    <div data-level-field="BUSINESS_UNIT" hidden>
+      <CmsSelect
+        id="u-businessUnitId"
+        name="businessUnitId"
+        label="Business unit"
+        options={unitOptions}
+      />
+    </div>
+
+    <p
+      class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted"
+    >
+      The new user is created as <strong class="font-semibold text-cms-ink">invited</strong>. They
+      become active by verifying their email address, which is the only route to an active account.
+    </p>
+  </form>
+
+  <Fragment slot="actions">
+    <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+    <button
+      type="submit"
+      id="cms-user-save"
+      form="cms-user-form"
+      class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      Create and invite
+    </button>
+  </Fragment>
+</CmsDrawer>
+
+{
+  /*
+  Where the invitation link is shown, it is shown once, here, and never logged.
+  Where the environment forbids it, this says mail is not configured instead,
+  so an administrator knows the person cannot yet sign in.
+*/
+}
+<div
+  id="cms-user-result"
+  role="status"
+  hidden
+  class="rounded-cms-lg border border-cms-line bg-cms-surface p-4 text-cms-body-sm shadow-cms-card"
+>
+  <p class="font-semibold text-cms-navy" id="cms-user-result-title"></p>
+  <p class="mt-1 text-cms-muted" id="cms-user-result-body"></p>
+</div>
+
+<script>
+  const drawer = document.getElementById('cms-user-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-user-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-user-error');
+  const save = document.getElementById('cms-user-save') as HTMLButtonElement | null;
+  const result = document.getElementById('cms-user-result');
+  const resultTitle = document.getElementById('cms-user-result-title');
+  const resultBody = document.getElementById('cms-user-result-body');
+
+  if (drawer && form && save) {
+    /**
+     * Show only the location field the level uses, and disable the rest.
+     *
+     * Disabling matters more than hiding: a disabled control is not submitted,
+     * so the columns the level excludes are absent from the payload rather than
+     * present as ''. The CHECK on user_assignments rejects an empty string in a
+     * column it requires to be NULL.
+     */
+    const applyLevel = () => {
+      const level = (form.elements.namedItem('level') as HTMLSelectElement | null)?.value ?? '';
+      form.querySelectorAll<HTMLElement>('[data-level-field]').forEach((group) => {
+        const mine = group.dataset.levelField === level;
+        group.hidden = !mine;
+        group.querySelectorAll('select, input').forEach((field) => {
+          if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement) {
+            field.disabled = !mine;
+          }
+        });
+      });
+    };
+
+    const clearErrors = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((n) => n.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    // The paragraph the field already points at through aria-describedby, not a
+    // new one appended beside it, which no field would describe.
+    const paint = (fields: { field: string; message: string }[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        if (!(field instanceof HTMLElement) || !field.id) continue;
+        field.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${field.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    form.addEventListener('change', (event) => {
+      if ((event.target as HTMLElement | null)?.id === 'u-level') applyLevel();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!(event.target as HTMLElement | null)?.closest('#cms-user-create')) return;
+      clearErrors();
+      form.reset();
+      applyLevel();
+      drawer.showModal();
+      form.querySelector<HTMLElement>('input')?.focus();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearErrors();
+      save.disabled = true;
+
+      const data = new FormData(form);
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of data.entries()) body[name] = value;
+
+      try {
+        const response = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        const payload = (await response.json().catch(() => null)) as {
+          user?: { userId: string; displayName: string };
+          invitation?: { kind: string; path?: string; message?: string };
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+
+        if (response.ok && payload?.user) {
+          const assignment = new FormData(form);
+          // The assignment is a second call rather than a field on the user
+          // endpoint, because it is a row in its own table with its own
+          // lifecycle: a person may hold several and supersede them over time.
+          await fetch(`/api/admin/users/${encodeURIComponent(payload.user.userId)}/assignments`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              jobTitleId: assignment.get('jobTitleId'),
+              departmentId: assignment.get('departmentId'),
+              level: assignment.get('level'),
+              countryId: assignment.get('countryId'),
+              affiliateId: assignment.get('affiliateId'),
+              businessUnitId: assignment.get('businessUnitId'),
+              isPrimary: true,
+            }),
+          });
+
+          drawer.close();
+          if (result && resultTitle && resultBody) {
+            result.hidden = false;
+            resultTitle.textContent = `${payload.user.displayName} was created and invited.`;
+            if (payload.invitation?.kind === 'link' && payload.invitation.path) {
+              resultBody.textContent = `Send them this link: ${window.location.origin}${payload.invitation.path}`;
+            } else {
+              resultBody.textContent = payload.invitation?.message ?? '';
+            }
+          }
+          // Reload so the directory shows the new person, after the notice has
+          // been read: the link is shown once and is not recoverable from a row.
+          window.setTimeout(() => window.location.reload(), 15000);
+          return;
+        }
+
+        if (payload?.error?.fields?.length) paint(payload.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            payload?.error?.message ?? 'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    applyLevel();
+  }
+</script>

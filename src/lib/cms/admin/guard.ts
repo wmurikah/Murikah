@@ -19,7 +19,7 @@
  */
 import type { APIContext } from 'astro';
 import type { CmsIdentity } from '../repos/identity.ts';
-import { canManageOrganisation, canViewOrganisation } from '../permissions.ts';
+import { canManageOrganisation, canManageUsers, canViewOrganisation } from '../permissions.ts';
 import { forbidden, unauthorised } from '../errors.ts';
 import { clientIp } from '../../http.ts';
 
@@ -61,6 +61,18 @@ export function requireOrganisationView(context: APIContext): Authorisation {
 /** Changing organisation master data. */
 export function requireOrganisationManage(context: APIContext): Authorisation {
   return authorise(context, canManageOrganisation);
+}
+
+/**
+ * User administration: creating users, altering assignments, suspending,
+ * reactivating, changing an email, mapping a source identity.
+ *
+ * One permission for the whole of it, which is what the seeded catalogue
+ * offers: there is no ADMIN.USERS.VIEW, so a reader-only tier would be a code
+ * that nothing in the database grants and nobody could ever hold.
+ */
+export function requireUsersManage(context: APIContext): Authorisation {
+  return authorise(context, canManageUsers);
 }
 
 /**
