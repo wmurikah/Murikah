@@ -172,13 +172,16 @@ test('every outcome the service can return has a decided message', () => {
 test('every navigation entry names a real permission code, or none at all', () => {
   assert.ok(CMS_NAV.length > 0);
   for (const item of CMS_NAV) {
-    if (item.permission !== null) {
+    // One entry (Administration) requires any one of several codes, so the
+    // shape is checked over the list rather than over a single string.
+    const codes = item.permission === null ? [] : [item.permission].flat();
+    for (const code of codes) {
       // The database's own form: MODULE.RESOURCE.ACTION, upper case. The
       // placeholders this model shipped with (`cms.customers.view`) matched no
       // row in `permissions`, so every entry would have been hidden from
       // everybody once the filter was wired.
       assert.match(
-        item.permission,
+        code,
         /^[A-Z][A-Z_]*\.[A-Z][A-Z_]*\.[A-Z][A-Z_]*$/,
         `${item.label} does not name a permission code in MODULE.RESOURCE.ACTION form`,
       );

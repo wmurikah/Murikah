@@ -1,0 +1,70 @@
+---
+/**
+ * The up and down controls on a workflow's stage list.
+ *
+ * It sends the whole new order in one PATCH, not one stage at a time.
+ * `UNIQUE(workflow_definition_id, sequence_no)` rejects the intermediate state
+ * a stage-at-a-time swap creates on its very first statement, so the only safe
+ * shape is a single request the server applies as one transaction.
+ *
+ * The browser reorders the list optimistically so the move is visible at once,
+ * then reloads on success. On a refusal it reloads too, which puts the list back
+ * to what the server actually holds rather than leaving the screen showing an
+ * order that was not saved.
+ */
+interface Props {
+  endpoint: string;
+}
+const { endpoint } = Astro.props;
+---
+
+<div data-cms-stage-order={endpoint} hidden></div>
+
+<script>
+  const config = document.querySelector<HTMLElement>('[data-cms-stage-order]');
+  const list = document.getElementById('cms-stage-list');
+  const endpoint = config?.dataset.cmsStageOrder ?? '';
+
+  if (list && endpoint !== '') {
+    const send = async () => {
+      const order = Array.from(list.children).map((node, index) => ({
+        stageId: node instanceof HTMLElement ? (node.dataset.stageId ?? '') : '',
+        sequenceNo: index + 1,
+      }));
+      if (order.some((entry) => entry.stageId === '')) {
+        window.location.reload();
+        return;
+      }
+      try {
+        await fetch(endpoint, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ order }),
+        });
+      } finally {
+        // Whatever happened, the list is repainted from the server. An
+        // optimistic order that was refused must not stay on screen looking
+        // saved.
+        window.location.reload();
+      }
+    };
+
+    list.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest<HTMLElement>('[data-stage-move]');
+      if (!button) return;
+      const item = button.closest('li');
+      if (!item) return;
+
+      if (button.dataset.stageMove === 'up') {
+        const previous = item.previousElementSibling;
+        if (previous) list.insertBefore(item, previous);
+      } else {
+        const next = item.nextElementSibling;
+        if (next) list.insertBefore(next, item);
+      }
+      void send();
+    });
+  }
+</script>

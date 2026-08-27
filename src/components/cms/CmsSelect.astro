@@ -39,7 +39,12 @@ const {
   class: className,
 } = Astro.props;
 const hintId = hint ? `${id}-hint` : undefined;
-const errorId = error ? `${id}-error` : undefined;
+const errorId = `${id}-error`;
+// The error is always described and always present, matching CmsInput. A select
+// in a drawer is validated on the server like every other field, and a message
+// that arrives on the client has nowhere to go if the paragraph only exists
+// when the server rendered one. Build Prompt 05's create-and-edit drawer is the
+// first caller that needed it; the two components now behave the same way.
 const describedBy = [hintId, errorId].filter(Boolean).join(' ');
 ---
 
@@ -82,11 +87,23 @@ const describedBy = [hintId, errorId].filter(Boolean).join(' ');
       </p>
     )
   }
-  {
-    error && (
-      <p id={errorId} role="alert" class="text-cms-caption font-medium text-cms-danger">
-        {error}
-      </p>
-    )
-  }
+  {/* Always present so a message added on the client is announced. */}
+  <p
+    id={errorId}
+    role="alert"
+    data-field-error
+    class:list={[
+      'flex items-start gap-1.5 text-cms-caption font-medium text-cms-danger',
+      error ? '' : 'hidden',
+    ]}
+  >
+    {
+      error && (
+        <>
+          <CmsIcon name="statusBreach" size={14} class="mt-px shrink-0" />
+          <span>{error}</span>
+        </>
+      )
+    }
+  </p>
 </div>

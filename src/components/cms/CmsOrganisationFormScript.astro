@@ -1,0 +1,227 @@
+---
+/**
+ * The behaviour behind the organisation create-and-edit drawer.
+ *
+ * A component rather than a <script> in the page, because Astro ships a
+ * component's script only when the component is rendered, and this is rendered
+ * only inside the branch that renders the drawer. A reader who holds VIEW and
+ * not MANAGE has no drawer and no create control, and now receives no code for
+ * one either. The same rule caught the navigation drawer in Build Prompt 04,
+ * where the handler lived in a component nothing rendered and the trigger did
+ * nothing at all; this is the mirror of that mistake, and worth avoiding for
+ * the same reason.
+ */
+---
+
+<script>
+  /**
+   * The create and edit drawer.
+   *
+   * A fetch to the endpoint and a reload, which is all this needs. There is no
+   * island, no client router and no state library: the page is server-rendered
+   * and a successful write is a new render, so reloading is both the simplest
+   * and the most honest way to show the result.
+   *
+   * Field errors come back from the server in the shared error envelope and are
+   * painted onto the inputs they belong to. The same validation runs on the
+   * server whether or not this script does anything, so a browser with
+   * JavaScript disabled is refused correctly rather than let through.
+   */
+  const ENDPOINTS: Record<string, string> = {
+    countries: '/api/admin/countries',
+    affiliates: '/api/admin/affiliates',
+    'business-units': '/api/admin/business-units',
+    departments: '/api/admin/departments',
+    teams: '/api/admin/teams',
+  };
+  const SINGULAR: Record<string, string> = {
+    countries: 'country',
+    affiliates: 'affiliate',
+    'business-units': 'business unit',
+    departments: 'department',
+    teams: 'team',
+  };
+
+  const drawer = document.getElementById('cms-org-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-org-form') as HTMLFormElement | null;
+  const title = document.getElementById('cms-org-drawer-title');
+  const errorBox = document.getElementById('cms-org-error');
+  const consequence = document.getElementById('cms-org-consequence');
+  const save = document.getElementById('cms-org-save') as HTMLButtonElement | null;
+
+  if (drawer && form && save) {
+    let collection = 'countries';
+    let editingId: string | null = null;
+
+    /**
+     * Clear the field messages without removing anything.
+     *
+     * CmsInput and CmsSelect each render their own `<p id="{field}-error">`,
+     * always present and always named in the field's aria-describedby,
+     * precisely so a message can be put there on the client and be announced.
+     * Emptying and hiding it is the contract. Removing the node, which an
+     * earlier draft of this did, deletes the very element the field points at
+     * and takes the announcement with it.
+     */
+    const clearFieldErrors = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form.querySelectorAll('[aria-invalid="true"]').forEach((node) => {
+        node.setAttribute('aria-invalid', 'false');
+      });
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    /** Show only the field group this collection uses. */
+    const showFields = (key: string) => {
+      form.querySelectorAll<HTMLElement>('[data-fields]').forEach((group) => {
+        const mine = group.dataset.fields === key;
+        group.hidden = !mine;
+        // A hidden required input would block submission for a field nobody can
+        // see, so required is carried by the group that is showing.
+        group.querySelectorAll('input, select').forEach((field) => {
+          if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) {
+            field.disabled = !mine;
+          }
+        });
+      });
+    };
+
+    const open = (
+      key: string,
+      id: string | null,
+      values: Record<string, unknown>,
+      note: string,
+    ) => {
+      collection = key;
+      editingId = id;
+      clearFieldErrors();
+      showFields(key);
+      form.reset();
+
+      for (const [name, value] of Object.entries(values)) {
+        const field = form.elements.namedItem(name);
+        if (field instanceof HTMLInputElement) {
+          if (field.type === 'checkbox') field.checked = value === true;
+          else field.value = String(value ?? '');
+        } else if (field instanceof HTMLSelectElement) {
+          field.value = String(value ?? '');
+        }
+      }
+      const active = form.elements.namedItem('active');
+      if (active instanceof HTMLInputElement && !('active' in values)) active.checked = true;
+
+      if (title) {
+        title.textContent = id ? `Edit ${SINGULAR[key]}` : `New ${SINGULAR[key]}`;
+      }
+      if (consequence) {
+        consequence.hidden = note === '';
+        consequence.textContent = note;
+      }
+      drawer.showModal();
+      form
+        .querySelector<HTMLElement>(
+          '[data-fields]:not([hidden]) input, [data-fields]:not([hidden]) select',
+        )
+        ?.focus();
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+
+      const create = target?.closest<HTMLElement>('[data-cms-create]');
+      if (create) {
+        open(create.dataset.cmsCreate ?? 'countries', null, {}, '');
+        return;
+      }
+
+      const edit = target?.closest<HTMLElement>('[data-cms-edit]');
+      if (edit) {
+        let values: Record<string, unknown> = {};
+        try {
+          values = JSON.parse(edit.dataset.values ?? '{}');
+        } catch {
+          values = {};
+        }
+        open(
+          edit.dataset.cmsEdit ?? 'countries',
+          edit.dataset.id ?? null,
+          values,
+          edit.dataset.consequence ?? '',
+        );
+      }
+    });
+
+    const paint = (fields: { field: string; message: string }[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        if (!(field instanceof HTMLElement) || !field.id) continue;
+        field.setAttribute('aria-invalid', 'true');
+        // The paragraph the field already points at, not a new one appended
+        // beside it. A second element would not be in aria-describedby and a
+        // screen reader would never read it.
+        const message = document.getElementById(`${field.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      // Move focus to the first field that is wrong, so a keyboard user is
+      // taken to the problem rather than told there is one somewhere.
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearFieldErrors();
+      save.disabled = true;
+
+      const data = new FormData(form);
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of data.entries()) body[name] = value;
+      body.active = data.get('active') !== null;
+
+      const base = ENDPOINTS[collection] ?? ENDPOINTS.countries;
+      const url = editingId ? `${base}/${encodeURIComponent(editingId)}` : base;
+
+      try {
+        const response = await fetch(url, {
+          method: editingId ? 'PATCH' : 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+
+        if (response.ok) {
+          // A successful write means the server-rendered page is now stale.
+          // Reloading is the whole of the update path.
+          window.location.reload();
+          return;
+        }
+
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+        if (payload?.error?.fields?.length) paint(payload.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            payload?.error?.message ?? 'That could not be saved. Please try again.';
+          if (!payload?.error?.fields?.length) errorBox.focus();
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+  }
+</script>

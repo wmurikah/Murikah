@@ -1,0 +1,470 @@
+---
+/**
+ * A team, its manager, and its membership over time.
+ *
+ * Membership is the one part of this phase that is not a row you edit. It is
+ * effective-dated: adding somebody inserts a row, removing them stamps an end
+ * date on the row that is already there, and nothing is ever deleted. The page
+ * is built around that rather than hiding it, which is why the list separates
+ * current members from former ones instead of quietly dropping the second
+ * group.
+ *
+ * Current membership is what the page shows by default. `?history=1` adds the
+ * rows that have ended. The default is the honest answer to "who is on this
+ * team", and the history is one click away rather than mixed in.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageOrganisation, canViewOrganisation } from '@/lib/cms/permissions';
+import { ORGANISATION_PATH } from '@/lib/cms/admin/workspace';
+import { isoDate } from '@/lib/cms/admin/organisationInput';
+import {
+  getTeam,
+  listSelectableUsers,
+  listTeamMembers,
+  type SelectableUser,
+  type TeamMemberRow,
+  type TeamRow,
+} from '@/lib/cms/repos/organisationAdmin';
+
+export const prerender = false;
+
+const principal = Astro.locals.cms;
+const permissions = principal?.user.permissions ?? [];
+const mayView = canViewOrganisation(permissions);
+const mayManage = canManageOrganisation(permissions);
+
+const teamId = Astro.params.id ?? '';
+const showHistory = Astro.url.searchParams.get('history') === '1';
+
+let team: TeamRow | null = null;
+let members: TeamMemberRow[] = [];
+let users: SelectableUser[] = [];
+let loadFailed = false;
+
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    team = await getTeam(db, teamId);
+    if (team) {
+      [members, users] = await Promise.all([
+        listTeamMembers(db, teamId, true),
+        listSelectableUsers(db),
+      ]);
+    }
+  } catch (error) {
+    console.error('[cms.organisation.team] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const current = members.filter((row) => row.current);
+const former = members.filter((row) => !row.current);
+const shown = showHistory ? members : current;
+
+const today = isoDate(new Date());
+const teamTypeLabel = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+// Somebody already on the team today cannot be added again today, so they are
+// not offered. The endpoint refuses it either way; this stops the user finding
+// out the hard way.
+const currentUserIds = new Set(current.map((row) => row.userId));
+const addableUsers = users.filter((row) => !currentUserIds.has(row.userId));
+const memberOptions = addableUsers.map((row) => ({ value: row.userId, label: row.displayName }));
+
+const facts: [string, string][] = team
+  ? [
+      ['Type', teamTypeLabel(team.teamType)],
+      // "Group-wide" and "Not specific" rather than a dash: a team with no
+      // affiliate is a Group team, not a team missing one.
+      ['Affiliate', team.affiliateName ?? 'Group-wide'],
+      ['Business unit', team.businessUnitName ?? 'Not specific'],
+      ['Manager', team.managerName ?? 'Unassigned'],
+      ['Created', team.createdAt],
+    ]
+  : [];
+---
+
+<CmsLayout title={team?.teamName ?? 'Team'}>
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to the organisation settings"
+        description="Ask a system administrator for the ADMIN.ORGANISATION.VIEW permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="This team could not be loaded"
+        description="The database did not answer. Try again in a moment."
+      />
+    ) : !team ? (
+      <CmsErrorState
+        title="That team could not be found"
+        description="It may have been renamed, or the link may be out of date."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={team.teamName}
+          description={`${teamTypeLabel(team.teamType)} team, ${team.affiliateName ?? 'Group-wide'}.`}
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Organisation', href: `${ORGANISATION_PATH}?tab=teams` },
+            { label: team.teamName },
+          ]}
+        >
+          {mayManage && (
+            <CmsButton slot="actions" variant="primary" icon="plus" data-cms-add-member>
+              Add member
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <CmsCard>
+          <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {facts.map(([label, value]) => (
+              <div class="flex flex-col gap-0.5">
+                <dt class="text-cms-caption text-cms-muted">{label}</dt>
+                <dd class="text-cms-body-sm text-cms-ink">{value}</dd>
+              </div>
+            ))}
+            <div class="flex flex-col gap-0.5">
+              <dt class="text-cms-caption text-cms-muted">Status</dt>
+              <dd>
+                <CmsBadge
+                  tone={team.active ? 'success' : 'neutral'}
+                  label={team.active ? 'Active' : 'Inactive'}
+                />
+              </dd>
+            </div>
+          </dl>
+        </CmsCard>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-cms-card font-semibold text-cms-navy">
+            {showHistory ? 'Membership, including former members' : 'Current members'}
+          </h2>
+          <CmsButton
+            variant="ghost"
+            href={
+              showHistory
+                ? `${ORGANISATION_PATH}/teams/${team.teamId}`
+                : `${ORGANISATION_PATH}/teams/${team.teamId}?history=1`
+            }
+          >
+            {showHistory
+              ? `Show current only (${current.length})`
+              : `Show history (${former.length} former)`}
+          </CmsButton>
+        </div>
+
+        <CmsDataTable
+          caption="Team members"
+          columns={[
+            { key: 'name', label: 'Member' },
+            { key: 'role', label: 'Role on the team' },
+            { key: 'from', label: 'From' },
+            { key: 'to', label: 'To' },
+            { key: 'status', label: 'Status' },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          empty={shown.length === 0}
+        >
+          {shown.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <span class="font-medium text-cms-ink">{row.displayName}</span>
+                <span class="block text-cms-caption text-cms-muted">{row.email}</span>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.memberRole ?? 'Member'}</td>
+              <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
+              <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveTo ?? 'Open'}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.current ? 'success' : 'neutral'}
+                  label={row.current ? 'Current' : 'Former'}
+                />
+              </td>
+              <td class="px-4 py-2.5">
+                {mayManage && row.current ? (
+                  <button
+                    type="button"
+                    class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-danger outline-none hover:bg-cms-danger-tint focus-visible:ring-2 focus-visible:ring-focus"
+                    data-cms-end-member={row.teamMemberId}
+                    data-name={row.displayName}
+                    data-from={row.effectiveFrom}
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <span class="text-cms-caption text-cms-muted">
+                    {row.current ? 'View only' : 'Ended'}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="customers"
+              title={showHistory ? 'Nobody has ever been on this team' : 'No current members'}
+              description="A team with no members is valid. Add somebody when there is somebody to add."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        {mayManage && (
+          <Fragment>
+            <CmsDrawer id="cms-member-add" tone="form" title="Add a member">
+              <form id="cms-member-form" novalidate class="flex flex-col gap-4">
+                <p
+                  id="cms-member-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                />
+                <CmsSelect
+                  id="m-userId"
+                  name="userId"
+                  label="Person"
+                  options={memberOptions}
+                  hint="Only staff who are not already current members are listed."
+                  required
+                />
+                <CmsInput
+                  id="m-memberRole"
+                  name="memberRole"
+                  label="Role on the team"
+                  hint="Free text, for example Analyst or Dispatcher. Optional."
+                />
+                <CmsInput
+                  id="m-effectiveFrom"
+                  name="effectiveFrom"
+                  label="Effective from"
+                  value={today}
+                  hint="YYYY-MM-DD. The same person cannot start twice on the same date."
+                  required
+                />
+              </form>
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  id="cms-member-save"
+                  form="cms-member-form"
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Add member
+                </button>
+              </Fragment>
+            </CmsDrawer>
+
+            <CmsDrawer id="cms-member-end" tone="form" title="Remove a member">
+              <form id="cms-end-form" novalidate class="flex flex-col gap-4">
+                <p
+                  id="cms-end-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                />
+                {/*
+                  The consequence, said plainly before the action rather than
+                  after it. Nothing is deleted here and the wording should not
+                  suggest otherwise.
+                */}
+                <p id="cms-end-summary" class="text-cms-body-sm text-cms-ink" />
+                <p class="text-cms-body-sm text-cms-muted">
+                  The membership record is kept and end-dated, so this team's history stays
+                  complete. The person keeps their account and every other team they belong to.
+                </p>
+                <CmsInput
+                  id="e-effectiveTo"
+                  name="effectiveTo"
+                  label="Effective to"
+                  value={today}
+                  hint="YYYY-MM-DD. Cannot be before the date they joined."
+                  required
+                />
+              </form>
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  id="cms-end-save"
+                  form="cms-end-form"
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-danger px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Remove from team
+                </button>
+              </Fragment>
+            </CmsDrawer>
+          </Fragment>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  /**
+   * Adding and removing a member: a fetch and a reload, the same shape as the
+   * organisation workspace drawer. No island, no client state.
+   */
+  const teamId = window.location.pathname.split('/').filter(Boolean).pop() ?? '';
+
+  const addDrawer = document.getElementById('cms-member-add') as HTMLDialogElement | null;
+  const addForm = document.getElementById('cms-member-form') as HTMLFormElement | null;
+  const addError = document.getElementById('cms-member-error');
+  const addSave = document.getElementById('cms-member-save') as HTMLButtonElement | null;
+
+  const endDrawer = document.getElementById('cms-member-end') as HTMLDialogElement | null;
+  const endForm = document.getElementById('cms-end-form') as HTMLFormElement | null;
+  const endError = document.getElementById('cms-end-error');
+  const endSummary = document.getElementById('cms-end-summary');
+  const endSave = document.getElementById('cms-end-save') as HTMLButtonElement | null;
+
+  let endingId: string | null = null;
+
+  /**
+   * Clear the field messages without removing anything. CmsInput and CmsSelect
+   * each render their own always-present `<p id="{field}-error">`, named in the
+   * field's aria-describedby so a client-side message is announced. Emptying
+   * and hiding it is the contract; removing it deletes what the field points at.
+   */
+  const clear = (form: HTMLFormElement | null, box: HTMLElement | null) => {
+    form?.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+      node.textContent = '';
+      node.classList.add('hidden');
+    });
+    form?.querySelectorAll('[aria-invalid="true"]').forEach((node) => {
+      node.setAttribute('aria-invalid', 'false');
+    });
+    if (box) {
+      box.hidden = true;
+      box.textContent = '';
+    }
+  };
+
+  const paint = (form: HTMLFormElement, fields: { field: string; message: string }[]) => {
+    for (const item of fields) {
+      const field = form.elements.namedItem(item.field);
+      if (!(field instanceof HTMLElement) || !field.id) continue;
+      field.setAttribute('aria-invalid', 'true');
+      const message = document.getElementById(`${field.id}-error`);
+      if (message) {
+        message.textContent = item.message;
+        message.classList.remove('hidden');
+      }
+    }
+    form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  };
+
+  const send = async (
+    url: string,
+    method: string,
+    body: Record<string, unknown>,
+    form: HTMLFormElement,
+    box: HTMLElement | null,
+    button: HTMLButtonElement | null,
+  ) => {
+    clear(form, box);
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      if (response.ok) {
+        window.location.reload();
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as {
+        error?: { message?: string; fields?: { field: string; message: string }[] };
+      } | null;
+      if (payload?.error?.fields?.length) paint(form, payload.error.fields);
+      if (box) {
+        box.hidden = false;
+        box.textContent = payload?.error?.message ?? 'That could not be saved. Please try again.';
+      }
+    } catch {
+      if (box) {
+        box.hidden = false;
+        box.textContent = 'There was a problem reaching the server. Check your connection.';
+      }
+    } finally {
+      if (button) button.disabled = false;
+    }
+  };
+
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+
+    if (target?.closest('[data-cms-add-member]') && addDrawer && addForm) {
+      clear(addForm, addError);
+      addDrawer.showModal();
+      addForm.querySelector<HTMLElement>('select')?.focus();
+      return;
+    }
+
+    const remove = target?.closest<HTMLElement>('[data-cms-end-member]');
+    if (remove && endDrawer && endForm) {
+      endingId = remove.dataset.cmsEndMember ?? null;
+      clear(endForm, endError);
+      if (endSummary) {
+        endSummary.textContent = `${remove.dataset.name ?? 'This person'} has been on the team since ${remove.dataset.from ?? 'an earlier date'}.`;
+      }
+      endDrawer.showModal();
+      endForm.querySelector<HTMLElement>('input')?.focus();
+    }
+  });
+
+  addForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(addForm);
+    await send(
+      `/api/admin/teams/${encodeURIComponent(teamId)}/members`,
+      'POST',
+      {
+        userId: data.get('userId'),
+        memberRole: data.get('memberRole'),
+        effectiveFrom: data.get('effectiveFrom'),
+      },
+      addForm,
+      addError,
+      addSave,
+    );
+  });
+
+  endForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!endingId) return;
+    const data = new FormData(endForm);
+    await send(
+      `/api/admin/team-members/${encodeURIComponent(endingId)}`,
+      'PATCH',
+      { effectiveTo: data.get('effectiveTo') },
+      endForm,
+      endError,
+      endSave,
+    );
+  });
+</script>

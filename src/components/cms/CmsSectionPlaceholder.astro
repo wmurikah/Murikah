@@ -24,6 +24,11 @@ interface Props {
 const { href } = Astro.props;
 const item = CMS_NAV.find((entry) => entry.href === href);
 if (!item) throw new Error(`No navigation entry for ${href}`);
+// An entry may require any one of several codes, so the list is joined rather
+// than rendered as an array, which would print a comma-separated string that
+// looks like one code with commas in it.
+const permissionLabel =
+  item.permission === null ? 'Any signed-in user' : [item.permission].flat().join(' or ');
 ---
 
 <CmsLayout title={item.label}>
@@ -47,7 +52,7 @@ if (!item) throw new Error(`No navigation entry for ${href}`);
         <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
           Permission key
         </dt>
-        <dd class="font-mono text-cms-body-sm text-cms-ink">{item.permission}</dd>
+        <dd class="font-mono text-cms-body-sm text-cms-ink">{permissionLabel}</dd>
       </div>
       <div class="flex flex-col gap-1">
         <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
