@@ -1,0 +1,103 @@
+---
+/**
+ * The shared analytics filter, as a form.
+ *
+ * It submits with GET, so the filter lands in the URL and the view can be
+ * shared or bookmarked, and every drill-down from here carries the same
+ * query string. One filter object, parsed in one place, applied by every
+ * analytical query behind this page.
+ */
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import type { AnalyticsFilter } from '@/lib/cms/analytics/filters';
+
+interface Props {
+  filter: AnalyticsFilter;
+  affiliates: { value: string; label: string }[];
+  statuses: string[];
+  action: string;
+  /** Purchase order pages have no credit column, so they hide that control. */
+  showCredit?: boolean;
+}
+const { filter, affiliates, statuses, action, showCredit = true } = Astro.props;
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace('_', ' ');
+---
+
+<form
+  method="get"
+  action={action}
+  class="mb-4 grid gap-3 rounded-cms border border-cms-line bg-cms-surface p-4 sm:grid-cols-2 lg:grid-cols-6"
+>
+  <CmsInput id="f-from" name="from" label="From" type="date" value={filter.from ?? ''} />
+  <CmsInput id="f-to" name="to" label="To" type="date" value={filter.to ?? ''} />
+  <CmsSelect
+    id="f-affiliate"
+    name="affiliateId"
+    label="Affiliate"
+    value={filter.affiliateId ?? ''}
+    options={[{ value: '', label: 'All affiliates' }, ...affiliates]}
+  />
+  <CmsSelect
+    id="f-status"
+    name="status"
+    label="Status"
+    value={filter.status ?? ''}
+    options={[
+      { value: '', label: 'Any status' },
+      ...statuses.map((status) => ({ value: status, label: titleCase(status) })),
+    ]}
+  />
+  <CmsSelect
+    id="f-sla"
+    name="slaStatus"
+    label="SLA"
+    value={filter.slaStatus ?? ''}
+    options={[
+      { value: '', label: 'Any SLA state' },
+      { value: 'RUNNING', label: 'Running' },
+      { value: 'AT_RISK', label: 'At risk' },
+      { value: 'BREACHED', label: 'Breached' },
+      { value: 'MET', label: 'Met' },
+    ]}
+  />
+  {
+    showCredit && (
+      <CmsSelect
+        id="f-credit"
+        name="creditRequired"
+        label="Credit approval"
+        value={filter.creditRequired}
+        options={[
+          { value: 'ANY', label: 'Any' },
+          { value: 'YES', label: 'Required' },
+          { value: 'NO', label: 'Not required' },
+        ]}
+      />
+    )
+  }
+  <CmsSelect
+    id="f-grain"
+    name="grain"
+    label="Trend grain"
+    value={filter.grain}
+    options={[
+      { value: 'DAY', label: 'Daily' },
+      { value: 'WEEK', label: 'Weekly' },
+      { value: 'MONTH', label: 'Monthly' },
+    ]}
+  />
+  <CmsInput
+    id="f-min-volume"
+    name="minVolume"
+    label="Minimum volume to rank"
+    type="number"
+    value={String(filter.minVolume)}
+    hint="Below this, figures are shown without a comparative rank."
+  />
+  <div class="flex items-end gap-2">
+    <CmsButton type="submit" variant="primary">Apply</CmsButton>
+    <CmsButton variant="ghost" href={action}>Clear</CmsButton>
+  </div>
+</form>

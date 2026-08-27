@@ -335,3 +335,19 @@ export function canUploadImportType(
     importType === 'SALES_ORDER' ? SALES_ORDER_UPLOAD : PURCHASE_ORDER_UPLOAD,
   );
 }
+
+/**
+ * Credit exception approval, seeded as PERM-012.
+ *
+ * Phase 20 reuses it as the gate on credit INFORMATION as well as on the
+ * decision, because credit limits, terms and exception reasons are
+ * commercially sensitive and a person who may not act on them has no reason
+ * to read them customer by customer. The conservative reading: a caller
+ * without this code sees the operational columns and no credit analysis,
+ * rather than an empty column that hints at what is behind it.
+ */
+export const CREDIT_EXCEPTION_APPROVE = 'CREDIT.EXCEPTION.APPROVE';
+
+export function canSeeCreditInformation(permissions: readonly string[]): boolean {
+  return permissions.includes(CREDIT_EXCEPTION_APPROVE);
+}

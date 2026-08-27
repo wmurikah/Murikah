@@ -50,6 +50,8 @@ import {
   canViewImports,
   canUploadImports,
   canUploadImportType,
+  canViewSalesOrders,
+  canViewPurchaseOrders,
 } from '../permissions.ts';
 import { forbidden, unauthorised } from '../errors.ts';
 import { clientIp } from '../../http.ts';
@@ -267,6 +269,21 @@ export function requireCatalogueManage(context: APIContext): Authorisation {
 /** Reading workflow configuration and running the approval preview. */
 export function requireWorkflowView(context: APIContext): Authorisation {
   return authorise(context, canViewWorkflows);
+}
+
+/**
+ * Reading sales orders: the operations queue, the performance analysis and
+ * every analytical endpoint behind them. A permission check only; WHICH
+ * orders the caller then sees is the Build Prompt 07 scope resolver's
+ * answer, and the two are different questions.
+ */
+export function requireSalesOrdersView(context: APIContext): Authorisation {
+  return authorise(context, canViewSalesOrders);
+}
+
+/** Reading purchase orders, on the same terms. */
+export function requirePurchaseOrdersView(context: APIContext): Authorisation {
+  return authorise(context, canViewPurchaseOrders);
 }
 
 /**
