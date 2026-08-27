@@ -596,9 +596,18 @@ test('removing a member end-dates the row and never deletes it', async () => {
   assert.equal(history.length, 1);
   assert.equal(history[0]?.current, false);
 
-  const audit = audits(c).at(-1);
-  assert.equal(audit?.action, 'DEACTIVATE');
-  assert.equal(JSON.parse(String(audit?.after_json)).effectiveTo, '2026-09-30');
+  // Selected by action, not by position. `audit_events` records `event_at` to
+  // the second and gives the row a random id, so the add and the removal have
+  // no deterministic order when they happen in the same second. That is a
+  // property of the operator's table, not of this code, and this phase may not
+  // change it; asserting on `.at(-1)` passes or fails on a coin toss.
+  const written = audits(c);
+  assert.equal(written.length, 2, 'the add and the removal are both recorded');
+  const removal = written.find((row) => row.action === 'DEACTIVATE');
+  assert.ok(removal, 'the removal must be audited');
+  assert.equal(removal.entity_id, id);
+  assert.equal(JSON.parse(String(removal.after_json)).effectiveTo, '2026-09-30');
+  assert.equal(JSON.parse(String(removal.before_json)).effectiveTo, null);
   c.close();
 });
 
