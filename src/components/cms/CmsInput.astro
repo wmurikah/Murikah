@@ -25,7 +25,14 @@ interface Props {
   id: string;
   name: string;
   label: string;
-  type?: 'text' | 'email' | 'password' | 'search' | 'tel' | 'url';
+  /**
+   * `date` and `number` were added by Build Prompt 08. Effective dates and
+   * amount bands are the substance of an authority rule, and rendering either
+   * as free text puts the burden of getting a format right on the operator and
+   * then rejects them when they do not. Additive: every existing caller passes
+   * one of the original six and renders byte-identically.
+   */
+  type?: 'text' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'date' | 'number';
   value?: string;
   placeholder?: string;
   hint?: string;
@@ -34,7 +41,10 @@ interface Props {
   disabled?: boolean;
   readonly?: boolean;
   autocomplete?: string;
-  inputmode?: 'text' | 'email' | 'numeric' | 'tel' | 'search' | 'url';
+  inputmode?: 'text' | 'email' | 'numeric' | 'tel' | 'search' | 'url' | 'decimal';
+  /** `min` and `step` on a numeric input. Ignored on every other type. */
+  min?: string;
+  step?: string;
   revealable?: boolean;
   autofocus?: boolean;
   class?: string;
@@ -53,6 +63,8 @@ const {
   readonly = false,
   autocomplete,
   inputmode,
+  min,
+  step,
   revealable = false,
   autofocus = false,
   class: className,
@@ -90,6 +102,8 @@ const describedBy = [hintId, errorId].filter(Boolean).join(' ');
       readonly={readonly}
       autocomplete={autocomplete}
       inputmode={inputmode}
+      min={type === 'number' ? min : undefined}
+      step={type === 'number' ? step : undefined}
       autofocus={autofocus}
       data-revealable={revealable ? 'true' : undefined}
       aria-describedby={describedBy || undefined}

@@ -2,10 +2,9 @@
 /**
  * Administration: the landing page for the configuration sections.
  *
- * No longer the shared placeholder, because one of these sections is now real.
- * Organisation is built; users, roles, workflows and the product catalogue are
- * not, and the page says which is which rather than presenting eight equal
- * tiles and letting a person find out by clicking.
+ * No longer the shared placeholder, because most of these sections are now
+ * real. The page says which is built and which is not, rather than presenting
+ * equal tiles and letting a person find out by clicking.
  *
  * Each card is shown only to somebody who could actually use it. That is
  * presentation and not access control: the workspace behind Organisation checks
@@ -17,8 +16,14 @@ import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
-import { canManageRoles, canManageUsers, canViewOrganisation } from '@/lib/cms/permissions';
+import {
+  canManageRoles,
+  canManageUsers,
+  canViewOrganisation,
+  canViewWorkflows,
+} from '@/lib/cms/permissions';
 import { ORGANISATION_PATH } from '@/lib/cms/admin/workspace';
+import { WORKFLOW_PATH } from '@/lib/cms/admin/workflowWorkspace';
 
 // Rendered on the server for every request, never prerendered. Without this the
 // page is baked at build time and the permission check below runs once during
@@ -61,10 +66,11 @@ const sections: Section[] = [
   },
   {
     label: 'Workflows',
-    href: null,
-    description: 'Approval chains, workflow roles and the routing behind them.',
-    ready: false,
-    visible: permissions.includes('ADMIN.WORKFLOWS.MANAGE'),
+    href: WORKFLOW_PATH,
+    description:
+      'Workflow roles and scoped approval authority, versioned approval chains, and the preview that answers who would approve a transaction before one exists.',
+    ready: true,
+    visible: canViewWorkflows(permissions),
   },
   {
     label: 'Product catalogue',

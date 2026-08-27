@@ -101,7 +101,14 @@ export const CMS_NAV: readonly CmsNavItem[] = [
     label: 'Administration',
     href: '/app/administration',
     icon: 'administration',
-    permission: ['ADMIN.USERS.MANAGE', 'ADMIN.ORGANISATION.VIEW', 'ADMIN.ORGANISATION.MANAGE'],
+    permission: [
+      'ADMIN.USERS.MANAGE',
+      'ADMIN.ORGANISATION.VIEW',
+      'ADMIN.ORGANISATION.MANAGE',
+      'ADMIN.ROLES.MANAGE',
+      'ADMIN.WORKFLOWS.MANAGE',
+      'ADMIN.WORKFLOW_ROLES.MANAGE',
+    ],
     summary: 'Users, roles, organisation structure and system configuration.',
   },
 ];

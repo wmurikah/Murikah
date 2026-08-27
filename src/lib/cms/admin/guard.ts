@@ -23,7 +23,10 @@ import {
   canManageOrganisation,
   canManageRoles,
   canManageUsers,
+  canManageWorkflowRoles,
+  canManageWorkflows,
   canViewOrganisation,
+  canViewWorkflows,
 } from '../permissions.ts';
 import { forbidden, unauthorised } from '../errors.ts';
 import { clientIp } from '../../http.ts';
@@ -90,6 +93,45 @@ export function requireUsersManage(context: APIContext): Authorisation {
  */
 export function requireRolesManage(context: APIContext): Authorisation {
   return authorise(context, canManageRoles);
+}
+
+/**
+ * Workflow definitions and stages: what steps a transaction goes through.
+ */
+export function requireWorkflowsManage(context: APIContext): Authorisation {
+  return authorise(context, canManageWorkflows);
+}
+
+/**
+ * Workflow roles, scoped assignments and authority rules: who may approve, for
+ * which organisation, and up to what value.
+ *
+ * This is the permission that grants approval authority, so it is the one an
+ * escalation attack wants. It is checked on every write below it, including the
+ * deliberate re-resolution of a started stage, because re-resolving a stage
+ * against changed configuration reaches the same outcome as editing the
+ * assignment directly.
+ */
+export function requireWorkflowRolesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageWorkflowRoles);
+}
+
+/** Reading workflow configuration and running the approval preview. */
+export function requireWorkflowView(context: APIContext): Authorisation {
+  return authorise(context, canViewWorkflows);
+}
+
+/**
+ * A signed-in principal, with no permission requirement.
+ *
+ * Used by the decision endpoint, and by nothing else. Approving is not an
+ * administration permission: authority to approve comes from being an assignee
+ * of that stage instance, which ../workflow/runtime.ts checks against the
+ * session. A permission code here would be a second, weaker answer to a
+ * question the stage already answers precisely.
+ */
+export function requireSignedIn(context: APIContext): Authorisation {
+  return authorise(context, () => true);
 }
 
 /**
