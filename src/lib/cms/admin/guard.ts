@@ -20,6 +20,7 @@
 import type { APIContext } from 'astro';
 import type { CmsIdentity } from '../repos/identity.ts';
 import {
+  canManageCatalogue,
   canManageOrganisation,
   canManageRoles,
   canManageUsers,
@@ -114,6 +115,18 @@ export function requireWorkflowsManage(context: APIContext): Authorisation {
  */
 export function requireWorkflowRolesManage(context: APIContext): Authorisation {
   return authorise(context, canManageWorkflowRoles);
+}
+
+/**
+ * The shared product catalogue.
+ *
+ * The catalogue is read by leads, opportunities, orders, cases, SLA analytics
+ * and Build Prompt 08's authority rules, so a change here reaches every module
+ * at once. Enforced on the endpoint before any write and before any row is
+ * returned: hidden UI is not access control.
+ */
+export function requireCatalogueManage(context: APIContext): Authorisation {
+  return authorise(context, canManageCatalogue);
 }
 
 /** Reading workflow configuration and running the approval preview. */

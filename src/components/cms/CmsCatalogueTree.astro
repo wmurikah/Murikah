@@ -1,0 +1,81 @@
+---
+/**
+ * The catalogue hierarchy: groups, their categories, their subcategories and
+ * the products beneath them.
+ *
+ * BUILT ON `details` AND `summary`, WITH NO SCRIPT AT ALL.
+ * Expanding and collapsing is the browser's own behaviour. It works with
+ * JavaScript disabled, it is keyboard operable without anything written here,
+ * and a screen reader announces the expanded state correctly because the
+ * elements carry that meaning natively. The same thing written with buttons and
+ * `aria-expanded` would be more code doing less, and less reliably.
+ *
+ * There is no React island here and no tree package. A disclosure list did not
+ * justify either, so this phase ships no hydration directive anywhere.
+ *
+ * Selection is a link, not a click handler: each row is an anchor carrying the
+ * selection in the query string, so the detail panel is server rendered, the
+ * selection survives a reload and a category can be bookmarked or opened in a
+ * new browser tab.
+ *
+ * The tree arrives from one query. This component walks the nested shape it
+ * already has; it never fetches a node.
+ */
+import CmsBadge from './CmsBadge.astro';
+import CmsCatalogueBranch from './CmsCatalogueBranch.astro';
+import type { HierarchyCategory, HierarchyGroup } from '@/lib/cms/repos/catalogueAdmin';
+
+interface Props {
+  groups: HierarchyGroup[];
+  selectedGroupId: string | null;
+  selectedCategoryId: string | null;
+}
+const { groups, selectedGroupId, selectedCategoryId } = Astro.props;
+
+function holdsSelection(category: HierarchyCategory, target: string | null): boolean {
+  if (target === null) return false;
+  if (category.productCategoryId === target) return true;
+  return category.children.some((child) => holdsSelection(child, target));
+}
+---
+
+<ul class="flex flex-col gap-1">
+  {
+    groups.map((group) => {
+      const groupSelected = selectedGroupId === group.productGroupId && selectedCategoryId === null;
+      const open =
+        selectedGroupId === group.productGroupId ||
+        group.categories.some((category) => holdsSelection(category, selectedCategoryId));
+      const rowClass = [
+        'flex flex-1 items-center gap-2 rounded-cms px-2 py-1.5 text-cms-body-sm outline-none',
+        'transition-colors duration-150 hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus',
+        groupSelected ? 'bg-cms-canvas font-semibold text-cms-royal' : 'text-cms-ink',
+      ].join(' ');
+      return (
+        <li>
+          <details open={open || undefined}>
+            <summary class="flex cursor-pointer list-none items-center gap-1 rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus">
+              <span aria-hidden="true" class="w-3 text-cms-muted select-none">
+                ▸
+              </span>
+              <a href={`?group=${group.productGroupId}`} class={rowClass}>
+                <span class="truncate">{group.groupName}</span>
+                <span class="text-cms-caption text-cms-muted">{group.groupCode}</span>
+                {!group.active && <CmsBadge tone="neutral" label="Retired" />}
+              </a>
+            </summary>
+            {group.categories.length === 0 ? (
+              <p class="ms-6 py-1 text-cms-body-sm text-cms-muted">No categories yet.</p>
+            ) : (
+              <ul class="ms-4 flex flex-col gap-1 border-s border-cms-line ps-2">
+                {group.categories.map((category) => (
+                  <CmsCatalogueBranch branch={category} selectedCategoryId={selectedCategoryId} />
+                ))}
+              </ul>
+            )}
+          </details>
+        </li>
+      );
+    })
+  }
+</ul>

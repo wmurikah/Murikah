@@ -92,3 +92,20 @@ export function canManageWorkflowRoles(permissions: readonly string[]): boolean 
 export function canViewWorkflows(permissions: readonly string[]): boolean {
   return canManageWorkflows(permissions) || canManageWorkflowRoles(permissions);
 }
+
+/**
+ * The shared product catalogue: groups, categories and products.
+ *
+ * PERM-028 in the seeded catalogue, already granted to ROLE-ADMIN, so Build
+ * Prompt 09 needs no data script either.
+ *
+ * One permission for the whole catalogue rather than a read tier and a write
+ * tier, for the same reason ADMIN.USERS.MANAGE is one: there is no
+ * ADMIN.PRODUCT_CATALOG.VIEW in the seeded `permissions` table, so a reader
+ * tier would be a code nothing grants and nobody could ever hold.
+ */
+export const PRODUCT_CATALOGUE_MANAGE = 'ADMIN.PRODUCT_CATALOG.MANAGE';
+
+export function canManageCatalogue(permissions: readonly string[]): boolean {
+  return permissions.includes(PRODUCT_CATALOGUE_MANAGE);
+}
