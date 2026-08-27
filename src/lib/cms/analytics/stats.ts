@@ -60,8 +60,11 @@ export const P90_DEFINITION =
  * out of the population instead of contributing a zero.
  */
 export function minutesBetweenSql(from: string, to: string): string {
+  // Rounded to three decimals: julianday arithmetic is floating point, and
+  // without this an exact 80-minute stage reads 79.9999999254942, which then
+  // prints as a duration nobody recognises and compares unequal to itself.
   return `CASE WHEN ${from} IS NULL OR ${to} IS NULL THEN NULL
-               ELSE (julianday(${to}) - julianday(${from})) * 1440.0 END`;
+               ELSE ROUND((julianday(${to}) - julianday(${from})) * 1440.0, 3) END`;
 }
 
 export interface StatsQuery {

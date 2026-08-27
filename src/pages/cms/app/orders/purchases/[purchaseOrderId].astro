@@ -1,0 +1,284 @@
+---
+/**
+ * Orders → Purchase Orders → one order.
+ *
+ * The stages this order actually has, however many that is. The template
+ * allows seven, this extract uses four, and a future one may use six: the
+ * page renders what the workflow instance holds and draws nothing for a
+ * level nobody used.
+ *
+ * An open stage shows how long it has been open. It is not in the completed
+ * cycle figure, because a cycle that has not finished has no duration.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewPurchaseOrders } from '@/lib/cms/permissions';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import { purchaseOrderDetail, type PurchaseOrderDetail } from '@/lib/cms/repos/poPerformance';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewPurchaseOrders(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const orderId = Astro.params.purchaseOrderId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let detail: PurchaseOrderDetail | null = null;
+let loadFailed = false;
+if (mayView) {
+  try {
+    detail = await purchaseOrderDetail(await getDb(getCmsEnv()), userId, orderId, now);
+  } catch (error) {
+    console.error('[cms.orders.purchases.detail] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const NOT_AVAILABLE = 'Not available';
+---
+
+<CmsLayout title={detail === null ? 'Purchase order' : detail.order.documentNumber}>
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to purchase orders"
+        description="Ask a system administrator for the ORDERS.PURCHASE_ORDER.VIEW permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The order could not be loaded"
+        description="The database did not answer."
+      />
+    ) : detail === null ? (
+      <CmsErrorState
+        title="That purchase order could not be found"
+        description="It may not exist, or it may be outside the organisation you can see."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={detail.order.documentNumber}
+          description={`${detail.order.affiliateName}. Raised ${detail.order.poCreatedAt}. ${detail.order.approvalStagesRecorded} approval ${detail.order.approvalStagesRecorded === 1 ? 'stage' : 'stages'} recorded.`}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Orders', href: '/app/orders' },
+            { label: 'Purchase orders', href: drillTo('/app/orders/purchases', filter) },
+            { label: detail.order.documentNumber },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsBadge tone="neutral" label={detail.order.status.replace('_', ' ').toLowerCase()} />
+            {detail.order.awaitingOraclePosting && (
+              <CmsBadge tone="warning" label="Awaiting Oracle posting" />
+            )}
+            <CmsButton variant="ghost" href={drillTo('/app/orders/purchases', filter)}>
+              Back to the queue
+            </CmsButton>
+          </Fragment>
+        </CmsPageHeader>
+
+        <div class="grid gap-4 xl:grid-cols-2">
+          <CmsCard title="Overview" description="What the source carries, and what it does not.">
+            <dl class="text-cms-body-sm">
+              {[
+                ['Supplier', detail.order.supplierName ?? NOT_AVAILABLE],
+                ['Currency', detail.order.currencyCode ?? NOT_AVAILABLE],
+                [
+                  'Value',
+                  detail.order.poValue === null
+                    ? NOT_AVAILABLE
+                    : `${detail.order.currencyCode ?? ''} ${detail.order.poValue.toLocaleString('en-KE')}`.trim(),
+                ],
+                ['Submitted for approval', detail.order.submittedForApprovalAt ?? NOT_AVAILABLE],
+                ['Physical receipt', detail.order.physicalReceivedAt ?? NOT_AVAILABLE],
+                ['Oracle stock posted', detail.order.oracleStockPostedAt ?? NOT_AVAILABLE],
+              ].map(([label, value]) => (
+                <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
+                  <dt class="text-cms-muted">{label}</dt>
+                  <dd class="text-cms-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Supplier, currency and value are absent from the imported extract, and the physical
+              receipt and Oracle posting are absent unless somebody recorded them. The final
+              approval date is never used in their place.
+            </p>
+          </CmsCard>
+
+          <CmsCard title="Durations" description="Each measured from its own start, or not at all.">
+            <dl class="text-cms-body-sm">
+              {[
+                [
+                  'Creation to submission',
+                  formatDuration(detail.durations.creationToSubmissionMinutes),
+                ],
+                [
+                  'Approval cycle',
+                  detail.cycleComplete
+                    ? formatDuration(detail.durations.approvalCycleMinutes)
+                    : 'Not complete: a stage is still open, so this order has no cycle duration yet.',
+                ],
+                [
+                  'Approval to physical receipt',
+                  formatDuration(detail.durations.approvalToPhysicalReceiptMinutes),
+                ],
+                [
+                  'Physical receipt to Oracle posting',
+                  formatDuration(detail.durations.physicalReceiptToOraclePostingMinutes),
+                ],
+              ].map(([label, value]) => (
+                <div class="flex justify-between gap-4 border-b border-cms-line py-1.5 last:border-0">
+                  <dt class="text-cms-muted">{label}</dt>
+                  <dd class="text-right text-cms-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </CmsCard>
+
+          <CmsCard
+            title="Approval workflow"
+            description="The stages this order has. Nothing is drawn for a level it never used."
+          >
+            <CmsDataTable
+              caption="Approval stages"
+              columns={[
+                { key: 'seq', label: '#', numeric: true },
+                { key: 'stage', label: 'Stage' },
+                { key: 'approver', label: 'Approver' },
+                { key: 'actionable', label: 'Became actionable' },
+                { key: 'completed', label: 'Completed' },
+                { key: 'duration', label: 'Duration', numeric: true },
+                { key: 'sla', label: 'SLA' },
+              ]}
+              empty={detail.stages.length === 0}
+            >
+              {detail.stages.map((stage) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {stage.sequenceNo}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-ink">{stage.stageName}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">{stage.approver ?? 'Not yet mapped'}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">{stage.actionableAt ?? NOT_AVAILABLE}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">{stage.completedAt ?? 'Open'}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {stage.completedAt === null
+                      ? `Open for ${formatDuration(stage.pendingMinutes)}`
+                      : formatDuration(stage.elapsedMinutes)}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge
+                      tone={
+                        stage.slaStatus === 'BREACHED'
+                          ? 'danger'
+                          : stage.slaStatus === 'MET'
+                            ? 'success'
+                            : 'neutral'
+                      }
+                      label={(stage.slaStatus ?? NOT_AVAILABLE).toLowerCase()}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Stage one is measured from the submission timestamp; every later stage from the moment
+              it became actionable, which is the timestamp the workflow persisted rather than a
+              guess from the stage before it.
+            </p>
+          </CmsCard>
+
+          <CmsCard title="Products" description="Lines, where the source carried any.">
+            {detail.lines.length === 0 ? (
+              <p class="text-cms-body-sm text-cms-muted">
+                This order has no lines. The purchase order extract has no line grain at all, so
+                none was invented for it.
+              </p>
+            ) : (
+              <CmsDataTable
+                caption="Purchase order lines"
+                columns={[
+                  { key: 'line', label: 'Line', numeric: true },
+                  { key: 'product', label: 'Product' },
+                  { key: 'quantity', label: 'Quantity', numeric: true },
+                  { key: 'cost', label: 'Unit cost', numeric: true },
+                  { key: 'value', label: 'Line value', numeric: true },
+                ]}
+                empty={false}
+              >
+                {detail.lines.map((line) => (
+                  <tr class="border-b border-cms-line last:border-0">
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {line.lineNumber}
+                    </td>
+                    <td class="px-4 py-2.5 text-cms-ink">{line.productCode ?? NOT_AVAILABLE}</td>
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {line.quantity === null
+                        ? NOT_AVAILABLE
+                        : `${line.quantity.toLocaleString('en-KE')} ${line.unitOfMeasure ?? ''}`.trim()}
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {line.unitCost === null
+                        ? NOT_AVAILABLE
+                        : line.unitCost.toLocaleString('en-KE')}
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {line.lineValue === null
+                        ? NOT_AVAILABLE
+                        : line.lineValue.toLocaleString('en-KE')}
+                    </td>
+                  </tr>
+                ))}
+              </CmsDataTable>
+            )}
+          </CmsCard>
+
+          <CmsCard
+            title="Source history"
+            description="What each upload said, kept for reconciliation and never used as a metric."
+          >
+            {detail.snapshots.length === 0 ? (
+              <p class="text-cms-body-sm text-cms-muted">
+                This order was not created by an import, so it has no source snapshots.
+              </p>
+            ) : (
+              <ul class="flex flex-col gap-3">
+                {detail.snapshots.map((snapshot) => (
+                  <li class="border-b border-cms-line pb-3 last:border-0 last:pb-0">
+                    <p class="text-cms-body-sm font-medium text-cms-ink">
+                      Version {snapshot.versionNo}
+                      {snapshot.isCurrent && (
+                        <span class="ml-2 font-normal text-cms-muted">current</span>
+                      )}
+                      <span class="ml-2 font-normal text-cms-muted">{snapshot.capturedAt}</span>
+                    </p>
+                    <pre class="mt-1 overflow-x-auto rounded-cms bg-cms-canvas p-2 text-cms-body-sm text-cms-muted">
+                      {snapshot.snapshotJson}
+                    </pre>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              The extract's own variance columns accumulate from submission, while a stage duration
+              does not. They are kept here as evidence and are never a metric on the performance
+              page.
+            </p>
+          </CmsCard>
+        </div>
+      </Fragment>
+    )
+  }
+</CmsLayout>
