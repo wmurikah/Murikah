@@ -622,11 +622,14 @@ CREATE TABLE IF NOT EXISTS mfa_methods (
 -- remainder, added for the 10-to-19 batch so a test proves the code satisfies
 -- the real constraints rather than a relaxed copy of them.
 --
--- One thing this file still does NOT carry, because it is absent from the
--- operator's schema file too:
---   purchase_orders.submitted_for_approval_at, added by the operator's
---   source-completeness script, which also made the commercial columns on
---   the four order tables nullable. Phase 17 adds the mirror and says so.
+-- THE SOURCE-COMPLETENESS SCRIPT IS ALSO MIRRORED, as of Build Prompt 17:
+-- purchase_orders.submitted_for_approval_at exists, and the commercial
+-- columns on the four order tables (currency, value, supplier, quantity,
+-- price) accept NULL, exactly as the batch instructions describe the
+-- operator's script leaving the live database. The importer verifies the
+-- same facts with pragma queries before any import starts and refuses
+-- loudly where they do not hold, because NULL versus zero is the point of
+-- that script: the real extracts carry no commercial values at all.
 --
 -- sla_breaches and sla_escalation_events below MIRROR THE OPERATOR'S SLA
 -- RUNTIME SCRIPT, which Build Prompt 15's instructions state has been run
@@ -985,8 +988,8 @@ CREATE TABLE IF NOT EXISTS sales_orders (
     business_unit_id TEXT,
     account_id TEXT NOT NULL,
     order_created_at TEXT NOT NULL,
-    currency_code TEXT NOT NULL,
-    order_value REAL NOT NULL CHECK(order_value >= 0),
+    currency_code TEXT,
+    order_value REAL CHECK(order_value IS NULL OR order_value >= 0),
     finance_approval_required INTEGER NOT NULL DEFAULT 1 CHECK(finance_approval_required IN (0,1)),
     credit_approval_required INTEGER NOT NULL DEFAULT 0 CHECK(credit_approval_required IN (0,1)),
     credit_exception_reason TEXT,
@@ -1008,9 +1011,9 @@ CREATE TABLE IF NOT EXISTS sales_order_lines (
     sales_order_id TEXT NOT NULL,
     line_number INTEGER NOT NULL CHECK(line_number > 0),
     product_id TEXT NOT NULL,
-    quantity REAL NOT NULL CHECK(quantity >= 0),
-    unit_price REAL NOT NULL CHECK(unit_price >= 0),
-    line_value REAL NOT NULL CHECK(line_value >= 0),
+    quantity REAL CHECK(quantity IS NULL OR quantity >= 0),
+    unit_price REAL CHECK(unit_price IS NULL OR unit_price >= 0),
+    line_value REAL CHECK(line_value IS NULL OR line_value >= 0),
     FOREIGN KEY (sales_order_id) REFERENCES sales_orders(sales_order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
     UNIQUE(sales_order_id, line_number)
@@ -1021,10 +1024,11 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     document_number TEXT NOT NULL,
     affiliate_id TEXT NOT NULL,
     business_unit_id TEXT,
-    supplier_name TEXT NOT NULL,
+    supplier_name TEXT,
     po_created_at TEXT NOT NULL,
-    currency_code TEXT NOT NULL,
-    po_value REAL NOT NULL CHECK(po_value >= 0),
+    submitted_for_approval_at TEXT,
+    currency_code TEXT,
+    po_value REAL CHECK(po_value IS NULL OR po_value >= 0),
     physical_received_at TEXT,
     oracle_stock_posted_at TEXT,
     status TEXT NOT NULL CHECK(status IN ('CREATED','IN_APPROVAL','APPROVED','RECEIVED','POSTED','CANCELLED')),
@@ -1040,9 +1044,9 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
     purchase_order_id TEXT NOT NULL,
     line_number INTEGER NOT NULL CHECK(line_number > 0),
     product_id TEXT NOT NULL,
-    quantity REAL NOT NULL CHECK(quantity >= 0),
+    quantity REAL CHECK(quantity IS NULL OR quantity >= 0),
     unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
-    line_value REAL NOT NULL CHECK(line_value >= 0),
+    line_value REAL CHECK(line_value IS NULL OR line_value >= 0),
     FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(purchase_order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
     UNIQUE(purchase_order_id, line_number)

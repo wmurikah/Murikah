@@ -569,7 +569,14 @@ INSERT OR IGNORE INTO sales_order_lines VALUES
 ('SOL-004','SO-004',1,'PROD-AGO',4000,115,460000),
 ('SOL-005','SO-005',1,'PROD-AGO',8000,115,920000);
 
-INSERT OR IGNORE INTO purchase_orders VALUES
+-- Named columns rather than the operator's positional VALUES: the
+-- source-completeness script added submitted_for_approval_at, which the
+-- operator's earlier seed rows predate, so they name what they carry and the
+-- new column stays NULL on all five, exactly as it would on the live rows.
+INSERT OR IGNORE INTO purchase_orders
+(purchase_order_id, document_number, affiliate_id, business_unit_id, supplier_name,
+ po_created_at, currency_code, po_value, physical_received_at, oracle_stock_posted_at,
+ status, latest_snapshot_id, created_at) VALUES
 ('PO-001','PO-KE-20001','AFF-KE','BU-CI','Demo Supplier Alpha','2026-08-24 07:30:00','USD',220000,'2026-08-25 06:00:00','2026-08-25 07:20:00','POSTED',NULL,CURRENT_TIMESTAMP),
 ('PO-002','PO-KE-20002','AFF-KE','BU-RET','Demo Supplier Beta','2026-08-24 08:00:00','USD',175000,NULL,NULL,'IN_APPROVAL',NULL,CURRENT_TIMESTAMP),
 ('PO-003','PO-KE-20003','AFF-KE','BU-AV','Demo Supplier Gamma','2026-08-24 08:30:00','USD',95000,'2026-08-25 08:30:00',NULL,'RECEIVED',NULL,CURRENT_TIMESTAMP),
