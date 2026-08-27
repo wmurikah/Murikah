@@ -30,6 +30,11 @@ import {
   canEditOpportunities,
   canManagePipelines,
   canManageLostReasons,
+  canViewCases,
+  canCreateCases,
+  canReassignCases,
+  canManageCases,
+  canManageCaseCategories,
   canManageLeads,
   canManageOrganisation,
   canManageRoles,
@@ -205,6 +210,31 @@ export function requirePipelinesManage(context: APIContext): Authorisation {
 /** The lost reason settings screen. */
 export function requireLostReasonsManage(context: APIContext): Authorisation {
   return authorise(context, canManageLostReasons);
+}
+
+/** Reading the case queue and a case. Implied by CREATE and MANAGE. */
+export function requireCasesView(context: APIContext): Authorisation {
+  return authorise(context, canViewCases);
+}
+
+/** Logging a new case. */
+export function requireCasesCreate(context: APIContext): Authorisation {
+  return authorise(context, canCreateCases);
+}
+
+/** Assigning and reassigning. Its own seeded code, PERM-007. */
+export function requireCasesReassign(context: APIContext): Authorisation {
+  return authorise(context, canReassignCases);
+}
+
+/** Working a case: status, communications, resolve, close, cancel, reopen. */
+export function requireCasesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageCases);
+}
+
+/** The case category settings screen. */
+export function requireCaseCategoriesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageCaseCategories);
 }
 
 /**
