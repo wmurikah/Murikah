@@ -76,7 +76,14 @@ function readText(params: URLSearchParams, key: string): string | null {
 }
 
 function readNumber(params: URLSearchParams, key: string, fallback: number, max: number): number {
-  const raw = Number(params.get(key));
+  // An absent parameter is absent, not zero. Number(null) is 0 and Number('')
+  // is 0, so testing the parsed value alone would silently replace every
+  // default with zero: a minimum volume of zero ranks a person with one
+  // transaction against a person with three hundred, which is the exact
+  // outcome the minimum exists to prevent.
+  const value = params.get(key);
+  if (value === null || value.trim() === '') return fallback;
+  const raw = Number(value);
   if (!Number.isFinite(raw) || raw < 0) return fallback;
   return Math.min(Math.floor(raw), max);
 }
