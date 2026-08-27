@@ -20,12 +20,14 @@
 import type { APIContext } from 'astro';
 import type { CmsIdentity } from '../repos/identity.ts';
 import {
+  canManageAccounts,
   canManageCatalogue,
   canManageOrganisation,
   canManageRoles,
   canManageUsers,
   canManageWorkflowRoles,
   canManageWorkflows,
+  canViewAccounts,
   canViewOrganisation,
   canViewWorkflows,
 } from '../permissions.ts';
@@ -115,6 +117,24 @@ export function requireWorkflowsManage(context: APIContext): Authorisation {
  */
 export function requireWorkflowRolesManage(context: APIContext): Authorisation {
   return authorise(context, canManageWorkflowRoles);
+}
+
+/**
+ * Reading a customer account and its contacts.
+ *
+ * This is the widest read in the product: a service agent opening a case, a
+ * finance approver checking an order and a country manager reading a pipeline
+ * all need the account behind the record. It is a permission check only; which
+ * accounts the caller may then see is decided by the Build Prompt 07 scope
+ * resolver, and the two are not the same question.
+ */
+export function requireAccountsView(context: APIContext): Authorisation {
+  return authorise(context, canViewAccounts);
+}
+
+/** Creating and editing accounts and contacts. */
+export function requireAccountsManage(context: APIContext): Authorisation {
+  return authorise(context, canManageAccounts);
 }
 
 /**
