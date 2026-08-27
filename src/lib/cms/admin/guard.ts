@@ -24,6 +24,7 @@ import {
   canConvertLeads,
   canCreateLeads,
   canManageAccounts,
+  canSeePortalAccess,
   canManageCatalogue,
   canManageLeadSources,
   canViewOpportunities,
@@ -156,6 +157,33 @@ export function requireAccountsView(context: APIContext): Authorisation {
 
 /** Creating and editing accounts and contacts. */
 export function requireAccountsManage(context: APIContext): Authorisation {
+  return authorise(context, canManageAccounts);
+}
+
+/**
+ * Reading who from a customer can sign in to the portal.
+ *
+ * Narrower than the ordinary customer read: `CUSTOMERS.PORTAL_ACCESS.VIEW`
+ * is a fact about an external person's credentials, and the account detail
+ * page already uses it to decide whether a contact's portal state is shown.
+ */
+export function requirePortalAccessView(context: APIContext): Authorisation {
+  return authorise(context, canSeePortalAccess);
+}
+
+/**
+ * Inviting, suspending, revoking and reinstating a portal membership.
+ *
+ * DECIDED UNATTENDED: this authorises on `CUSTOMERS.ACCOUNTS.MANAGE` rather
+ * than on a new `CUSTOMERS.PORTAL_ACCESS.MANAGE` code. Minting a permission
+ * means a row in `permissions` and rows in `role_permissions`, which is the
+ * operator's seed to change and not this phase's; and until an operator ran
+ * that script the surface would be unreachable by everybody, including the
+ * administrator who needs it. ACCOUNTS.MANAGE is held by the people who own
+ * the customer relationship, which is the right group. If a narrower code is
+ * wanted later, this is the one function to change.
+ */
+export function requirePortalAccessManage(context: APIContext): Authorisation {
   return authorise(context, canManageAccounts);
 }
 

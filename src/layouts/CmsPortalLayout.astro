@@ -1,0 +1,174 @@
+---
+/**
+ * The customer's shell. Deliberately not CmsLayout.
+ *
+ * CmsLayout is a working tool: a dense navy rail, a notification bell, a
+ * permission-driven menu of eight modules. A customer signs in perhaps once a
+ * fortnight to answer one question, so this shell is simpler and warmer: six
+ * plain destinations across the top, a wide reading column, generous space,
+ * and nothing that needs to be learnt.
+ *
+ * WHAT IS ABSENT IS THE POINT. There is no bell, because a customer is not on
+ * a queue. There is no rail heading naming modules, because "CRM" and "SLA"
+ * are our words. There is no permission-driven navigation, because an
+ * external user's permissions describe our system and not their account. And
+ * there is no performance figure anywhere in this chrome: how well we are
+ * doing is an internal conversation, and putting a compliance percentage in
+ * front of the customer whose order is late would be an odd way to have it.
+ *
+ * The account line appears only when the person holds more than one
+ * membership. A customer with one account does not need to be told which
+ * account they are looking at.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@/styles/global.css';
+import CmsWordmark from '@/components/cms/CmsWordmark.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+
+interface Props {
+  title: string;
+  scope?: PortalScope | null;
+  /** The nav item to mark current, by href. */
+  current?: string;
+}
+const { title, scope = null, current } = Astro.props;
+const pageTitle = `${title} - Hass Petroleum`;
+
+const NAV = [
+  { href: '/portal', label: 'Home' },
+  { href: '/portal/orders', label: 'Orders' },
+  { href: '/portal/service', label: 'Service' },
+  { href: '/portal/documents', label: 'Documents' },
+  { href: '/portal/feedback', label: 'Feedback' },
+  { href: '/portal/profile', label: 'Profile' },
+] as const;
+
+// The visitor-facing path, captured by the middleware before the /cms rewrite,
+// so the marked item matches the address the customer sees.
+const path = current ?? Astro.locals.cmsPath ?? '/portal';
+const isCurrent = (href: string): boolean =>
+  href === '/portal' ? path === '/portal' || path === '/portal/' : path.startsWith(href);
+
+const memberships = scope?.memberships ?? [];
+const activeName =
+  memberships.find((m) => m.accountId === scope?.activeAccountId)?.accountName ?? null;
+---
+
+<!doctype html>
+<html lang="en-KE" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="min-h-full bg-cms-canvas text-cms-ink antialiased">
+    <a
+      href="#portal-main"
+      class="sr-only rounded-cms bg-cms-navy px-4 py-2 text-white focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50"
+    >
+      Skip to content
+    </a>
+
+    <header class="bg-cms-navy">
+      <div
+        class="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-4 pt-4 sm:px-6"
+      >
+        <a
+          href="/portal"
+          class="flex min-h-10 items-center rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
+        >
+          <CmsWordmark tone="onNavy" size="md" />
+          <span class="sr-only">Go to your home page</span>
+        </a>
+        <form method="post" action="/api/auth/logout" class="ml-auto">
+          <button
+            type="submit"
+            class="flex min-h-10 items-center gap-2 rounded-cms px-3 text-cms-body-sm text-cms-rail-text outline-none hover:bg-cms-navy-soft hover:text-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
+          >
+            <CmsIcon name="logout" class="h-4 w-4" />
+            Sign out
+          </button>
+        </form>
+      </div>
+
+      <nav aria-label="Portal" class="mx-auto w-full max-w-5xl px-4 sm:px-6">
+        <ul class="flex flex-wrap gap-1 pt-2">
+          {
+            NAV.map((item) => (
+              <li>
+                <a
+                  href={item.href}
+                  aria-current={isCurrent(item.href) ? 'page' : undefined}
+                  class:list={[
+                    'flex min-h-11 items-center rounded-t-cms px-3 text-cms-body-sm outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy',
+                    isCurrent(item.href)
+                      ? 'bg-cms-canvas font-semibold text-cms-navy'
+                      : 'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white',
+                  ]}
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+    </header>
+
+    {
+      memberships.length > 1 && (
+        <div class="border-b border-cms-line bg-cms-surface">
+          <form
+            method="get"
+            class="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6"
+          >
+            <label for="portal-account" class="text-cms-label text-cms-muted">
+              Account
+            </label>
+            <select
+              id="portal-account"
+              name="accountId"
+              class="min-h-10 rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              {memberships.map((membership) => (
+                <option
+                  value={membership.accountId}
+                  selected={membership.accountId === scope?.activeAccountId}
+                >
+                  {membership.accountName ?? membership.accountId}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              class="min-h-10 rounded-cms border border-cms-border px-3 text-cms-body-sm font-semibold text-cms-royal outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Show
+            </button>
+          </form>
+        </div>
+      )
+    }
+
+    <main id="portal-main" class="px-4 py-8 sm:px-6">
+      <div class="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <slot />
+      </div>
+    </main>
+
+    <footer class="mt-8 border-t border-cms-line bg-cms-surface">
+      <div
+        class="mx-auto flex w-full max-w-5xl flex-col gap-1 px-4 py-6 text-cms-caption text-cms-muted sm:px-6"
+      >
+        <p>Hass Petroleum{activeName === null ? '' : ` - ${activeName}`}</p>
+        <p>
+          If anything here does not look right, raise a request under Service and somebody will come
+          back to you.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
