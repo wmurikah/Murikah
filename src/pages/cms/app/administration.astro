@@ -17,7 +17,7 @@ import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
-import { canViewOrganisation } from '@/lib/cms/permissions';
+import { canManageUsers, canViewOrganisation } from '@/lib/cms/permissions';
 import { ORGANISATION_PATH } from '@/lib/cms/admin/workspace';
 
 // Rendered on the server for every request, never prerendered. Without this the
@@ -45,11 +45,19 @@ const sections: Section[] = [
     visible: canViewOrganisation(permissions),
   },
   {
-    label: 'Users and roles',
+    label: 'Users',
+    href: '/app/administration/users',
+    description:
+      'Accounts, organisational assignments, job titles, team membership and external account mappings.',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
+    label: 'Roles and permissions',
     href: null,
-    description: 'Accounts, access roles, data scopes and the permission matrix.',
+    description: 'Access roles, data scopes and the permission matrix.',
     ready: false,
-    visible: permissions.includes('ADMIN.USERS.MANAGE'),
+    visible: permissions.includes('ADMIN.ROLES.MANAGE'),
   },
   {
     label: 'Workflows',

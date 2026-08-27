@@ -23,6 +23,7 @@ import {
   requireOrganisationManage,
   requireOrganisationView,
   writeContext,
+  type Authorisation,
   type WriteContext,
 } from './guard.ts';
 import type { Validated } from './organisationInput.ts';
@@ -32,6 +33,20 @@ import { failure, invalid, methodNotAllowed, ok, readJson, serverError } from '.
 export interface CollectionHandlers<TInput, TRow> {
   /** Used in the log tag and nowhere else. */
   readonly name: string;
+  /**
+   * The guards this collection authorises against.
+   *
+   * Parameters rather than a fixed pair, because Build Prompt 06 brought a
+   * second subject with a different permission. They default to the
+   * organisation guards, which is what every Build Prompt 05 caller passes by
+   * omitting them, so no existing endpoint changed when this was added.
+   *
+   * They are still not optional in the sense that matters: an endpoint built
+   * through this factory always runs one of them first, and there is no way to
+   * build one that runs neither.
+   */
+  readonly read?: (context: APIContext) => Authorisation;
+  readonly write?: (context: APIContext) => Authorisation;
   readonly list: (db: Client) => Promise<TRow[]>;
   readonly get: (db: Client, id: string) => Promise<TRow | null>;
   readonly validate: (raw: unknown) => Validated<TInput>;
@@ -77,7 +92,7 @@ export function collectionRoute<TInput, TRow>(
 ): { GET: APIRoute; POST: APIRoute; ALL: APIRoute } {
   return {
     GET: async (context: APIContext) => {
-      const auth = requireOrganisationView(context);
+      const auth = (handlers.read ?? requireOrganisationView)(context);
       if (!auth.ok) return auth.response;
 
       const connection = await connect();
@@ -91,7 +106,7 @@ export function collectionRoute<TInput, TRow>(
     },
 
     POST: async (context: APIContext) => {
-      const auth = requireOrganisationManage(context);
+      const auth = (handlers.write ?? requireOrganisationManage)(context);
       if (!auth.ok) return auth.response;
 
       const body = await readJson(context.request);
@@ -123,7 +138,7 @@ export function itemRoute<TInput, TRow>(
 ): { GET: APIRoute; PATCH: APIRoute; ALL: APIRoute } {
   return {
     GET: async (context: APIContext) => {
-      const auth = requireOrganisationView(context);
+      const auth = (handlers.read ?? requireOrganisationView)(context);
       if (!auth.ok) return auth.response;
 
       const id = context.params.id ?? '';
@@ -139,7 +154,7 @@ export function itemRoute<TInput, TRow>(
     },
 
     PATCH: async (context: APIContext) => {
-      const auth = requireOrganisationManage(context);
+      const auth = (handlers.write ?? requireOrganisationManage)(context);
       if (!auth.ok) return auth.response;
 
       const id = context.params.id ?? '';

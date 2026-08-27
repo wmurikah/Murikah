@@ -73,6 +73,13 @@ declare namespace Cloudflare {
     TURSO_CMS_DATABASE_URL?: string;
     TURSO_CMS_AUTH_TOKEN?: string;
     CMS_SESSION_SECRET?: string;
+    /**
+     * Set to the exact string 'development' to let the CMS show an invitation
+     * link to the administrator who created a user. Off everywhere else,
+     * including where it is unset. See invitationLinksVisible() in
+     * src/lib/cms/env.ts for why the comparison is exact rather than truthy.
+     */
+    CMS_INVITE_LINKS?: string;
 
     // GRC notification delivery via Microsoft Graph (Outlook), sent as the
     // delegated mailbox an admin connects once on Settings -> Email. All
