@@ -27,6 +27,7 @@ import type { WriteContext } from '../admin/guard.ts';
 import { resolveScope, DENY_ALL, type Predicate } from '../auth/rbac.ts';
 import { LEADS_VIEW } from '../permissions.ts';
 import { NUMBER_PREFIX, withGeneratedNumber } from '../crm/numbering.ts';
+import { emitLeadEvent } from '../service/events.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 
@@ -519,6 +520,16 @@ export async function createLead(
     throw error;
   }
   const created = await getLeadUnscoped(db, id);
+  if (created !== null) {
+    // After the commit: a failed SLA consumer must never unmake a lead.
+    await emitLeadEvent(db, {
+      type: 'LEAD_CREATED',
+      leadId: id,
+      at: ctx.now,
+      actorUserId: ctx.actorUserId,
+      detail: { accountId: created.accountId },
+    });
+  }
   return created === null ? { ok: false, kind: 'not_found' } : { ok: true, value: created };
 }
 
@@ -648,6 +659,15 @@ export async function recordFirstContact(
     'write',
   );
   const after = await getLeadUnscoped(db, leadId);
+  if (after !== null && before.firstContactAt === null) {
+    await emitLeadEvent(db, {
+      type: 'LEAD_CONTACTED',
+      leadId,
+      at: ctx.now,
+      actorUserId: ctx.actorUserId,
+      detail: { at: after.firstContactAt },
+    });
+  }
   return after === null ? { ok: false, kind: 'not_found' } : { ok: true, value: after };
 }
 
