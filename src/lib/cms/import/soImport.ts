@@ -27,6 +27,7 @@ import { newId } from '../repos/authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
 import type { WriteContext } from '../admin/guard.ts';
 import {
+  buildMappingReport,
   parseWorkbook,
   cellToIdentifier,
   cellToNumber,
@@ -34,12 +35,17 @@ import {
   cellToTimestamp,
   hashCanonicalRow,
   hashFile,
+  minutesBetween,
+  type HeaderTreatment,
+  type MappingReportLine,
 } from './workbook.ts';
+import { verifyColumns } from './completeness.ts';
+import { insertSnapshot, SALES_ORDER_SNAPSHOT } from './snapshots.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 const text = (v: unknown): string => String(v ?? '');
 
-export type HeaderTreatment = 'canonical' | 'workflow' | 'source_metric' | 'raw_only' | 'unknown';
+export type { HeaderTreatment, MappingReportLine };
 
 /** All 31 headers of the inspected extract, each with exactly one treatment. */
 export const SO_HEADER_CLASSIFICATION: Readonly<
@@ -114,25 +120,14 @@ export const SO_AFFILIATE_MAP: Readonly<Record<string, string>> = {
 export async function verifySourceCompleteness(
   db: Client,
 ): Promise<{ ok: boolean; problems: string[] }> {
-  const problems: string[] = [];
-  const nullable = async (table: string, column: string) => {
-    const result = await db.execute({
-      sql: `SELECT "notnull" AS nn FROM pragma_table_info(?) WHERE name = ?`,
-      args: [table, column],
-    });
-    const row = result.rows[0];
-    if (row === undefined) {
-      problems.push(`${table}.${column} does not exist`);
-    } else if (Number((row as Record<string, unknown>).nn) === 1) {
-      problems.push(`${table}.${column} is NOT NULL, so unknown values cannot be stored honestly`);
-    }
-  };
-  await nullable('sales_orders', 'currency_code');
-  await nullable('sales_orders', 'order_value');
-  await nullable('sales_order_lines', 'quantity');
-  await nullable('sales_order_lines', 'unit_price');
-  await nullable('sales_order_lines', 'line_value');
-  return { ok: problems.length === 0, problems };
+  const result = await verifyColumns(db, [
+    { table: 'sales_orders', column: 'currency_code', requirement: 'NULLABLE' },
+    { table: 'sales_orders', column: 'order_value', requirement: 'NULLABLE' },
+    { table: 'sales_order_lines', column: 'quantity', requirement: 'NULLABLE' },
+    { table: 'sales_order_lines', column: 'unit_price', requirement: 'NULLABLE' },
+    { table: 'sales_order_lines', column: 'line_value', requirement: 'NULLABLE' },
+  ]);
+  return { ok: result.ok, problems: result.problems };
 }
 
 // ---- Normalised rows ---------------------------------------------------------
@@ -230,29 +225,11 @@ async function normaliseRow(
 
 // ---- The mapping report ------------------------------------------------------
 
-export interface MappingReportLine {
-  header: string;
-  treatment: HeaderTreatment;
-  target: string;
-  example: string;
-}
-
 export function mappingReport(
   headers: string[],
   rows: Record<string, unknown>[],
 ): MappingReportLine[] {
-  return headers.map((header) => {
-    const known = SO_HEADER_CLASSIFICATION[header];
-    const example = rows
-      .map((r) => r[header])
-      .find((v) => v !== null && v !== undefined && v !== '');
-    return {
-      header,
-      treatment: known?.treatment ?? 'unknown',
-      target: known?.target ?? 'UNKNOWN HEADER: classified for review, imported into raw_json only',
-      example: example === undefined ? 'no value in this extract' : String(example),
-    };
-  });
+  return buildMappingReport(SO_HEADER_CLASSIFICATION, headers, rows);
 }
 
 // ---- Validation --------------------------------------------------------------
@@ -595,61 +572,6 @@ export function deriveSoStatus(head: NormalisedSoRow): string {
 }
 
 /**
- * The next snapshot version, guarded: the candidate is max + 1, and the
- * UNIQUE(entity_type, entity_id, version_no) constraint is what actually
- * guarantees it. A concurrent commit that takes the same number makes this
- * insert fail, the loop reads the new maximum and tries again, and nobody
- * ever holds two snapshots with one version.
- */
-async function insertSnapshot(
-  db: Client,
-  entityId: string,
-  sourceKey: string,
-  rowHash: string,
-  snapshotJson: string,
-  batchId: string,
-  now: string,
-): Promise<string> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const current = await db.execute({
-      sql: `SELECT COALESCE(MAX(version_no), 0) AS v FROM record_snapshots
-            WHERE entity_type = 'SALES_ORDER' AND entity_id = ?`,
-      args: [entityId],
-    });
-    const version = Number(current.rows[0]?.v ?? 0) + 1;
-    const snapshotId = newId('SNAP');
-    try {
-      await db.batch(
-        [
-          {
-            sql: `UPDATE record_snapshots SET is_current = 0
-                  WHERE entity_type = 'SALES_ORDER' AND entity_id = ? AND is_current = 1`,
-            args: [entityId],
-          },
-          {
-            sql: `INSERT INTO record_snapshots
-                    (snapshot_id, entity_type, entity_id, import_batch_id, source_record_key,
-                     version_no, row_hash, snapshot_json, captured_at, is_current)
-                  VALUES (?, 'SALES_ORDER', ?, ?, ?, ?, ?, ?, ?, 1)`,
-            args: [snapshotId, entityId, batchId, sourceKey, version, rowHash, snapshotJson, now],
-          },
-          {
-            sql: `UPDATE sales_orders SET latest_snapshot_id = ? WHERE sales_order_id = ?`,
-            args: [snapshotId, entityId],
-          },
-        ],
-        'write',
-      );
-      return snapshotId;
-    } catch (error) {
-      if (!/UNIQUE constraint failed/i.test(String(error))) throw error;
-      // A concurrent commit took this version. Read again and retry.
-    }
-  }
-  throw new Error('Could not allocate a snapshot version after five attempts.');
-}
-
-/**
  * Commit the READY rows of a validated batch, document by document.
  *
  * Each document is one transaction: the order, its resolvable lines, its
@@ -920,6 +842,7 @@ export async function commitSoBatch(
     const headRow = actionable[0] ?? head;
     await insertSnapshot(
       db,
+      SALES_ORDER_SNAPSHOT,
       salesOrderId,
       `${group.affiliateId}|${group.documentNumber}`,
       headRow.rowHash,
@@ -967,13 +890,8 @@ export function varianceComparison(raw: Record<string, unknown>): {
   const created = cellToTimestamp(raw.CREATE_DATE_TIME);
   const approved = cellToTimestamp(raw.APPROVAL_DATE_TIME);
   const source = cellToNumber(raw.FINANCE_VARIANCE);
-  const computed =
-    created === null || approved === null
-      ? null
-      : Math.round(
-          (new Date(approved.replace(' ', 'T') + 'Z').getTime() -
-            new Date(created.replace(' ', 'T') + 'Z').getTime()) /
-            60000,
-        );
-  return { sourceFinanceVariance: source, computedFinanceMinutes: computed };
+  return {
+    sourceFinanceVariance: source,
+    computedFinanceMinutes: minutesBetween(created, approved),
+  };
 }
