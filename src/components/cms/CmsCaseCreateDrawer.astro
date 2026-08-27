@@ -1,0 +1,348 @@
+---
+/**
+ * The new-case form.
+ *
+ * The category defaults the priority, live: choosing a category sets the
+ * priority field to the category's default, and changing it away from that
+ * default is an override the server records and permission-checks. The
+ * account lookup is server-scoped like every other module's.
+ */
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import { CASE_TYPES, CASE_PRIORITIES, CASE_CHANNELS } from '@/lib/cms/repos/serviceAdmin';
+
+interface Option {
+  id: string;
+  label: string;
+}
+interface CategoryOption extends Option {
+  defaultPriority: string;
+}
+interface Props {
+  categories: CategoryOption[];
+  teams: Option[];
+  users: Option[];
+  businessUnits: Option[];
+}
+const { categories, teams, users, businessUnits } = Astro.props;
+
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriority]));
+---
+
+<form id="cms-case-form" novalidate class="flex flex-col gap-4">
+  <p
+    id="cms-case-form-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+  >
+  </p>
+
+  <div class="flex flex-col gap-1.5">
+    <label for="k-accountSearch" class="text-cms-body-sm font-medium text-cms-ink">
+      Customer <span class="text-cms-danger">*</span>
+    </label>
+    <input
+      id="k-accountSearch"
+      type="search"
+      autocomplete="off"
+      placeholder="Search customers by name or code"
+      class="h-10 w-full rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    />
+    <p
+      id="k-accountId-error"
+      role="alert"
+      data-field-error
+      class="hidden text-cms-caption text-cms-danger"
+    >
+    </p>
+    <ul
+      id="k-accountResults"
+      hidden
+      class="flex flex-col gap-1 rounded-cms border border-cms-line p-1"
+    >
+    </ul>
+    <p id="k-accountChosen" hidden class="text-cms-body-sm text-cms-ink"></p>
+    <input type="hidden" id="k-accountId" name="accountId" value="" />
+  </div>
+
+  <CmsSelect
+    id="k-contactId"
+    name="contactId"
+    label="Contact"
+    options={[{ value: '', label: 'Choose a customer first' }]}
+  />
+  <CmsSelect
+    id="k-caseType"
+    name="caseType"
+    label="Type"
+    required
+    options={CASE_TYPES.map((t) => ({ value: t, label: titleCase(t) }))}
+  />
+  <CmsSelect
+    id="k-caseCategoryId"
+    name="caseCategoryId"
+    label="Category"
+    required
+    options={pick(categories, 'Choose a category')}
+  />
+  <CmsSelect
+    id="k-priority"
+    name="priority"
+    label="Priority"
+    options={[
+      { value: '', label: 'Category default' },
+      ...CASE_PRIORITIES.map((p) => ({ value: p, label: titleCase(p) })),
+    ]}
+    hint="Defaults from the category. Changing it is recorded as an override and needs the case management permission."
+  />
+  <CmsInput id="k-subject" name="subject" label="Subject" required />
+  <div class="flex flex-col gap-1.5">
+    <label for="k-description" class="text-cms-body-sm font-medium text-cms-ink">
+      Description <span class="text-cms-danger">*</span>
+    </label>
+    <textarea
+      id="k-description"
+      name="description"
+      rows="3"
+      required
+      class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    ></textarea>
+    <p
+      id="k-description-error"
+      role="alert"
+      data-field-error
+      class="hidden text-cms-caption text-cms-danger"
+    >
+    </p>
+  </div>
+  <CmsSelect
+    id="k-channel"
+    name="channel"
+    label="Channel"
+    required
+    options={CASE_CHANNELS.map((ch) => ({ value: ch, label: titleCase(ch) }))}
+    hint="How it reached us."
+  />
+  <CmsSelect
+    id="k-businessUnitId"
+    name="businessUnitId"
+    label="Business unit"
+    options={pick(businessUnits, 'None')}
+  />
+  <CmsSelect
+    id="k-assignedTeamId"
+    name="assignedTeamId"
+    label="Assign to team"
+    options={pick(teams, 'Unassigned')}
+  />
+  <CmsSelect
+    id="k-assignedUserId"
+    name="assignedUserId"
+    label="Assign to person"
+    options={pick(users, 'Unassigned')}
+  />
+  <CmsInput
+    id="k-raisedAt"
+    name="raisedAt"
+    label="Raised at"
+    type="datetime-local"
+    hint="When the customer actually raised it. Defaults to now."
+  />
+</form>
+
+<script
+  is:inline
+  data-cms-case-defaults
+  type="application/json"
+  set:html={JSON.stringify(defaults)}
+/>
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+  interface AccountHit {
+    accountId: string;
+    accountName: string;
+    accountCode: string | null;
+  }
+  interface ContactHit {
+    contactId: string;
+    fullName: string;
+    isPrimary: boolean;
+  }
+
+  const form = document.getElementById('cms-case-form') as HTMLFormElement | null;
+  const drawer = document.getElementById('cms-case-drawer') as HTMLDialogElement | null;
+  const save = document.querySelector<HTMLButtonElement>('[data-cms-case-save]');
+  const errorBox = document.getElementById('cms-case-form-error');
+  const search = document.getElementById('k-accountSearch') as HTMLInputElement | null;
+  const results = document.getElementById('k-accountResults');
+  const chosen = document.getElementById('k-accountChosen');
+  const accountId = document.getElementById('k-accountId') as HTMLInputElement | null;
+  const contacts = document.getElementById('k-contactId') as HTMLSelectElement | null;
+  const category = document.getElementById('k-caseCategoryId') as HTMLSelectElement | null;
+  const priority = document.getElementById('k-priority') as HTMLSelectElement | null;
+  const defaultsNode = document.querySelector('[data-cms-case-defaults]');
+
+  if (
+    form &&
+    drawer &&
+    save &&
+    search &&
+    results &&
+    chosen &&
+    accountId &&
+    contacts &&
+    category &&
+    priority
+  ) {
+    const defaults = JSON.parse(defaultsNode?.textContent ?? '{}') as Record<string, string>;
+
+    // The live default: choosing a category sets the priority to its default,
+    // so leaving it alone means "category default" and touching it afterwards
+    // is a deliberate override.
+    category.addEventListener('change', () => {
+      const preset = defaults[category.value];
+      if (preset !== undefined) priority.value = preset;
+    });
+
+    const setContacts = (list: ContactHit[]) => {
+      contacts.replaceChildren(
+        new Option(list.length === 0 ? 'No contacts on this customer' : 'None', ''),
+      );
+      for (const contact of list) {
+        contacts.appendChild(
+          new Option(
+            contact.isPrimary ? `${contact.fullName} (primary)` : contact.fullName,
+            contact.contactId,
+          ),
+        );
+      }
+    };
+    const resetAccount = () => {
+      accountId.value = '';
+      chosen.hidden = true;
+      results.hidden = true;
+      results.replaceChildren();
+      contacts.replaceChildren(new Option('Choose a customer first', ''));
+    };
+    const choose = async (hit: AccountHit) => {
+      accountId.value = hit.accountId;
+      chosen.hidden = false;
+      chosen.textContent = `For ${hit.accountName}.`;
+      results.hidden = true;
+      results.replaceChildren();
+      search.value = hit.accountName;
+      try {
+        const response = await fetch(
+          `/api/customers/accounts/${encodeURIComponent(hit.accountId)}/contacts`,
+          {
+            credentials: 'same-origin',
+          },
+        );
+        if (response.ok) {
+          const answer = (await response.json()) as { items?: ContactHit[] };
+          setContacts(answer.items ?? []);
+        }
+      } catch {
+        setContacts([]);
+      }
+    };
+
+    let lookup = 0;
+    search.addEventListener('input', () => {
+      if (accountId.value !== '') resetAccount();
+      const term = search.value;
+      const ticket = ++lookup;
+      setTimeout(async () => {
+        if (ticket !== lookup || term.trim().length < 2) return;
+        try {
+          const response = await fetch(
+            `/api/customers/accounts?q=${encodeURIComponent(term)}&page=1`,
+            {
+              credentials: 'same-origin',
+            },
+          );
+          if (!response.ok || ticket !== lookup) return;
+          const answer = (await response.json()) as { items?: AccountHit[] };
+          results.replaceChildren();
+          for (const hit of (answer.items ?? []).slice(0, 8)) {
+            const row = document.createElement('li');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className =
+              'w-full rounded-cms px-2 py-1.5 text-start text-cms-body-sm text-cms-ink outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus';
+            button.textContent =
+              hit.accountCode === null
+                ? hit.accountName
+                : `${hit.accountName} · ${hit.accountCode}`;
+            button.addEventListener('click', () => void choose(hit));
+            row.appendChild(button);
+            results.appendChild(row);
+          }
+          results.hidden = results.childElementCount === 0;
+        } catch {
+          results.hidden = true;
+        }
+      }, 200);
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      save.disabled = true;
+      if (errorBox) errorBox.hidden = true;
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string' && value !== '') body[name] = value;
+      }
+      try {
+        const response = await fetch('/api/service/cases', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          const created = (await response.json()) as { caseId?: string };
+          window.location.href = created.caseId ? `/app/service/${created.caseId}` : '/app/service';
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.fields?.map((f) => f.message).join(' ') ??
+            answer?.error?.message ??
+            'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-cms-case-create]')) return;
+      form.reset();
+      resetAccount();
+      if (errorBox) errorBox.hidden = true;
+      drawer.showModal();
+      search.focus();
+    });
+  }
+</script>
