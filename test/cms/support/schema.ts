@@ -1249,4 +1249,28 @@ CREATE TABLE IF NOT EXISTS survey_invitations (
 
 CREATE INDEX IF NOT EXISTS idx_survey_invitations_account ON survey_invitations(account_id, invited_at);
 CREATE INDEX IF NOT EXISTS idx_entity_attachments_visible ON entity_attachments(entity_type, entity_id, customer_visible);
+
+-- ============================================================================
+-- BUILD PROMPT 26 PREREQUISITE, mirrored from
+-- docs/cms/audit/08_audit_immutability.sql exactly.
+--
+-- The operator runs that script against the live database; this is its test
+-- bed. Immutability is the one audit property that cannot be demonstrated by
+-- reading the application code, because the whole point of it is that it
+-- holds against code nobody has written yet. So the harness carries the real
+-- triggers and the suite attempts a real UPDATE and a real DELETE against
+-- them, which is the only evidence worth anything.
+-- ============================================================================
+
+CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_update
+BEFORE UPDATE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit_events is append-only: UPDATE is refused');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_delete
+BEFORE DELETE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit_events is append-only: DELETE is refused');
+END;
 `;

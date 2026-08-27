@@ -146,6 +146,8 @@ const stageOptions =
     ) : (
       <Fragment>
         <CmsPageHeader
+          auditEntityType="OPPORTUNITY"
+          auditEntityId={opportunityId}
           title={opportunity.title}
           description={`${opportunity.pipelineName} · ${opportunity.currentStageName}`}
           crumbs={[

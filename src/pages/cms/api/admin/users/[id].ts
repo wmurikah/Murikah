@@ -15,12 +15,12 @@ import {
   getUser,
   listAssignments,
   listSourceIdentities,
-  listUserAudit,
   listUserRoles,
   listUserTeams,
   listWorkflowAuthority,
   updateUser,
 } from '../../../../../lib/cms/repos/userAdmin.ts';
+import { userActivity } from '../../../../../lib/cms/repos/auditTrail.ts';
 import { issueInvitation, describeDelivery } from '../../../../../lib/cms/admin/invitation.ts';
 import {
   failure,
@@ -52,7 +52,15 @@ export const GET: APIRoute = async (context) => {
       listWorkflowAuthority(connection.db, id),
       listSourceIdentities(connection.db, id),
       getSecurity(connection.db, id),
-      listUserAudit(connection.db, id),
+      // A DEFECT FOUND AND CLOSED IN PHASE 26. This previously called
+      // `listUserAudit`, which selected every event whose entity_id was this
+      // user, applied no audit scope and no permission check, and returned
+      // `before_json` and `after_json` raw. A historical row containing a
+      // password hash would have been served verbatim to anybody holding
+      // ADMIN.USERS.MANAGE. It now reads through the audit repository, which
+      // applies the caller's own audit scope, excludes authentication events,
+      // and masks every credential field.
+      userActivity(connection.db, auth.principal.user.userId, id),
     ]);
     // Roles and workflow authority are read-only in this phase; the flags say
     // so in the payload as well as on screen, so a client cannot mistake the
