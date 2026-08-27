@@ -9,14 +9,35 @@
  * possible, so there is one obvious thing to do.
  */
 import CmsBreadcrumb, { type CmsCrumb } from './CmsBreadcrumb.astro';
+import CmsAuditHistoryLink from './CmsAuditHistoryLink.astro';
 
 interface Props {
   title: string;
   description?: string;
   crumbs?: CmsCrumb[];
+  /**
+   * A record's audit entity type and identifier. Where both are given, the
+   * header renders the View Audit History action beside the page's own
+   * actions.
+   *
+   * IT LIVES HERE RATHER THAN ON EACH PAGE so that eleven record types get
+   * the same action in the same place from one line each, and so that a
+   * twelfth cannot quietly ship without it. The component renders nothing for
+   * a principal without AUDIT.EVENTS.VIEW, and that is presentation only: the
+   * workspace checks the permission and applies the scope for itself.
+   */
+  auditEntityType?: string;
+  auditEntityId?: string;
   class?: string;
 }
-const { title, description, crumbs, class: className } = Astro.props;
+const {
+  title,
+  description,
+  crumbs,
+  auditEntityType,
+  auditEntityId,
+  class: className,
+} = Astro.props;
 ---
 
 <header class:list={['flex flex-col gap-3', className]}>
@@ -28,6 +49,11 @@ const { title, description, crumbs, class: className } = Astro.props;
     </div>
     <div class="flex shrink-0 flex-wrap items-center gap-2">
       <slot name="actions" />
+      {
+        auditEntityType !== undefined && auditEntityId !== undefined && auditEntityId !== '' && (
+          <CmsAuditHistoryLink entityType={auditEntityType} entityId={auditEntityId} />
+        )
+      }
     </div>
   </div>
 </header>

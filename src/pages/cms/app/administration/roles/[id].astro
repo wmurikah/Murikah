@@ -86,6 +86,8 @@ const total = modules.reduce((n, m) => n + m.totalCount, 0);
     ) : (
       <Fragment>
         <CmsPageHeader
+          auditEntityType="ACCESS_ROLE"
+          auditEntityId={roleId}
           title={role.roleName}
           description={role.description ?? undefined}
           crumbs={[
@@ -217,6 +219,30 @@ const total = modules.reduce((n, m) => n + m.totalCount, 0);
             </CmsCard>
           ))}
         </form>
+
+        {/*
+          THE IMPACT LINE. The point of this screen is that nobody should have
+          to search user by user to answer "who would this change affect". The
+          count is stated before the table so the answer is visible without
+          reading it, and the current holders are separated from the ended
+          ones because only the first group is affected by a change today.
+        */}
+        <p class="max-w-prose rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+          <span class="font-semibold text-cms-ink">
+            Changing this role changes what {holders.filter((row) => row.current).length}{' '}
+            {holders.filter((row) => row.current).length === 1 ? 'person' : 'people'} can do.
+          </span>{' '}
+          It currently grants {totalGranted} of {total} permissions. A permission added here reaches
+          every current holder at once, in whatever scope each of them holds it. Approval authority
+          is granted separately and is not affected by anything on this page; see the{' '}
+          <a
+            href="/app/administration/access-review"
+            class="font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            access review
+          </a>{' '}
+          for the two side by side.
+        </p>
 
         <h2 class="text-cms-card font-semibold text-cms-navy">Who holds this role</h2>
         <CmsDataTable
