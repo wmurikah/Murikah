@@ -1,0 +1,682 @@
+---
+/**
+ * CRM → Analytics.
+ *
+ * Separate from the operational lead and opportunity screens, because
+ * finding one deal and understanding a quarter are different jobs.
+ *
+ * EVERY RATE ON THIS PAGE SHOWS ITS DENOMINATOR. The win rate in particular
+ * excludes open opportunities, which is the difference between a number that
+ * describes performance and one that drifts every time somebody adds a deal.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewOpportunities } from '@/lib/cms/permissions';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import { formatDuration, formatRate, MEDIAN_DEFINITION } from '@/lib/cms/analytics/stats';
+import {
+  funnel,
+  winRate,
+  pipelineValue,
+  stageOccupancy,
+  stageVelocity,
+  firstContact,
+  bant,
+  leadSourcePerformance,
+  productPipeline,
+  ownerPerformance,
+  teamPerformance,
+  lossAnalysis,
+  pipelineEstimate,
+  followUpHealth,
+  trend,
+  type Funnel,
+  type WinRate,
+  type PipelineValueRow,
+  type StageRow,
+  type VelocityRow,
+  type FirstContact,
+  type BantRow,
+  type LeadSourceRow,
+  type ProductPipelineRow,
+  type OwnerRow,
+  type TeamRow,
+  type LossRow,
+  type PipelineEstimate,
+  type FollowUpHealth,
+  type CrmTrendBucket,
+} from '@/lib/cms/repos/crmAnalytics';
+import { funnelChart, lineChart, distributionChart } from '@/lib/cms/charts/svg';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewOpportunities(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let funnelResult: Funnel | null = null;
+let win: WinRate | null = null;
+let pipeline: PipelineValueRow[] = [];
+let occupancy: StageRow[] = [];
+let velocity: VelocityRow[] = [];
+let contact: FirstContact | null = null;
+let bantResult: { rows: BantRow[]; wording: string } = { rows: [], wording: '' };
+let sources: LeadSourceRow[] = [];
+let products: ProductPipelineRow[] = [];
+let owners: { rows: OwnerRow[]; minimumVolume: number } = { rows: [], minimumVolume: 0 };
+let teams: TeamRow[] = [];
+let losses: LossRow[] = [];
+let estimate: PipelineEstimate | null = null;
+let health: FollowUpHealth | null = null;
+let buckets: CrmTrendBucket[] = [];
+let affiliates: { value: string; label: string }[] = [];
+let loadFailed = false;
+
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const [f, w, p, occ, vel, fc, bt, src, prod, own, tm, ls, est, hl, tr, af] = await Promise.all([
+      funnel(db, userId, filter),
+      winRate(db, userId, filter),
+      pipelineValue(db, userId, filter),
+      stageOccupancy(db, userId, filter, now),
+      stageVelocity(db, userId, filter),
+      firstContact(db, userId, filter),
+      bant(db, userId, filter),
+      leadSourcePerformance(db, userId, filter),
+      productPipeline(db, userId, filter),
+      ownerPerformance(db, userId, filter, now),
+      teamPerformance(db, userId, filter),
+      lossAnalysis(db, userId, filter),
+      pipelineEstimate(db, userId, filter),
+      followUpHealth(db, userId, filter, now),
+      trend(db, userId, filter),
+      db.execute(
+        `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
+      ),
+    ]);
+    funnelResult = f;
+    win = w;
+    pipeline = p;
+    occupancy = occ;
+    velocity = vel;
+    contact = fc;
+    bantResult = bt;
+    sources = src;
+    products = prod;
+    owners = own;
+    teams = tm;
+    losses = ls;
+    estimate = est;
+    health = hl;
+    buckets = tr;
+    affiliates = af.rows.map((row) => ({
+      value: String(row.affiliate_id),
+      label: String(row.affiliate_name),
+    }));
+  } catch (error) {
+    console.error('[cms.crm.analytics] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const money = (value: number, currency: string) =>
+  `${currency} ${Math.round(value).toLocaleString('en-KE')}`;
+
+const funnelDrawing =
+  funnelResult === null
+    ? null
+    : funnelChart(
+        funnelResult.steps.map((step) => ({
+          label: step.step,
+          value: step.leads,
+          href: drillTo('/app/crm/leads', filter, step.drill),
+        })),
+        { unit: 'leads' },
+      );
+
+const movementTrend = lineChart(
+  [
+    {
+      name: 'New leads',
+      token: 'cms-royal',
+      points: buckets.map((b) => ({ label: b.bucket, value: b.newLeads })),
+    },
+    {
+      name: 'Qualified',
+      token: 'cms-lavender',
+      points: buckets.map((b) => ({ label: b.bucket, value: b.qualified })),
+    },
+    {
+      name: 'Opportunities created',
+      token: 'cms-gold-ink',
+      points: buckets.map((b) => ({ label: b.bucket, value: b.opportunitiesCreated })),
+    },
+  ],
+  { unit: 'records' },
+);
+
+const velocityChart = distributionChart(
+  {
+    name: 'Stage',
+    token: 'cms-info',
+    points: velocity.map((row) => ({
+      label: `${row.sequenceNo}. ${row.stageName}`,
+      value: row.medianMinutes,
+    })),
+  },
+  { unit: 'minutes', format: formatDuration },
+);
+---
+
+<CmsLayout title="CRM analytics">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to CRM analytics"
+        description="Ask a system administrator for the CRM.OPPORTUNITIES.VIEW permission."
+      />
+    ) : loadFailed || funnelResult === null || win === null || contact === null ? (
+      <CmsErrorState
+        title="CRM analytics could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="CRM analytics"
+          description="Leads, pipeline and conversion, every rate shown with the population it was taken over."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'Analytics' },
+          ]}
+        />
+
+        <CmsOrderFilters
+          filter={filter}
+          affiliates={affiliates}
+          statuses={['NEW', 'CONTACTED', 'QUALIFIED', 'DISQUALIFIED', 'CONVERTED']}
+          action="/app/crm/analytics"
+          showCredit={false}
+        />
+
+        <section aria-labelledby="signals" class="mb-6">
+          <h2 id="signals" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Signals
+          </h2>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">New leads</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {funnelResult.steps[0]?.leads.toLocaleString('en-KE')}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">Date basis: the capture date.</p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Qualification rate</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatRate(funnelResult.qualificationRatePercent)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Qualified divided by {funnelResult.qualificationDenominator.toLocaleString('en-KE')}{' '}
+                eligible leads.
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Win rate</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatRate(win.winRatePercent)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                {win.won} won of {win.denominator} decided. {win.definition}
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Open pipeline</p>
+              <div class="text-cms-body font-semibold text-cms-ink tabular-nums">
+                {pipeline.length === 0 ? (
+                  <span>Not available</span>
+                ) : (
+                  pipeline.map((row) => <p>{money(row.openValue, row.currencyCode)}</p>)
+                )}
+              </div>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                One figure per currency. There is no exchange rate in this system, so nothing is
+                added across them.
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Weighted pipeline</p>
+              <div class="text-cms-body font-semibold text-cms-ink tabular-nums">
+                {pipeline.length === 0 ? (
+                  <span>Not available</span>
+                ) : (
+                  pipeline.map((row) => <p>{money(row.weightedValue, row.currencyCode)}</p>)
+                )}
+              </div>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Value multiplied by the stored probability, which is a fraction between 0 and 1.
+                Average probability {formatRate(pipeline[0]?.averageProbabilityPercent ?? null)}.
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">First contact, median</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatDuration(contact.medianMinutes)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                {contact.contacted} of {contact.leads} leads contacted. Within SLA{' '}
+                {formatRate(contact.withinSlaPercent)} over {contact.slaMeasured} settled timers.{' '}
+                {contact.uncontacted} still uncontacted.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="funnel" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="funnel" class="sr-only">
+            Funnel and movement
+          </h2>
+          {funnelDrawing && (
+            <CmsChart
+              title="Lead funnel"
+              definition="Counts at each step, as bars. Deliberately not a tapering funnel: that shape encodes a count as an area, and an area that shrinks in two dimensions falls away far faster than the number does."
+              chart={funnelDrawing}
+            />
+          )}
+          <CmsChart
+            title="Movement"
+            definition="Leads captured, leads qualified and opportunities created per period, on their own date bases."
+            chart={movementTrend}
+          />
+        </section>
+
+        <section aria-labelledby="stages" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="stages" class="sr-only">
+            Stages
+          </h2>
+          <CmsCard
+            title="Stage occupancy"
+            description="Where open opportunities are sitting, and how long they have been there."
+          >
+            <CmsDataTable
+              caption="Stage occupancy"
+              columns={[
+                { key: 'stage', label: 'Stage' },
+                { key: 'open', label: 'Open', numeric: true },
+                { key: 'value', label: 'Open value' },
+                { key: 'weighted', label: 'Weighted' },
+                { key: 'age', label: 'Median age', numeric: true },
+                { key: 'risk', label: 'Past target' },
+              ]}
+              empty={occupancy.length === 0}
+            >
+              {occupancy.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">
+                    {row.sequenceNo}. {row.stageName}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.openOpportunities}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.currencyBreakdown.length === 0
+                      ? 'Not available'
+                      : row.currencyBreakdown.map((v) => (
+                          <p>{money(v.openValue, v.currencyCode)}</p>
+                        ))}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.currencyBreakdown.length === 0
+                      ? 'Not available'
+                      : row.currencyBreakdown.map((v) => (
+                          <p>{money(v.weightedValue, v.currencyCode)}</p>
+                        ))}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.medianStageAgeMinutes)}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    {row.targetDays === null ? (
+                      <span class="text-cms-body-sm text-cms-muted">No target configured</span>
+                    ) : (
+                      <CmsBadge
+                        tone={(row.atRisk ?? 0) > 0 ? 'warning' : 'neutral'}
+                        label={`${row.atRisk} past ${row.targetDays} days`}
+                      />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              A stage with no configured target shows the age and no judgement: this application
+              does not invent a threshold for "stale".
+            </p>
+          </CmsCard>
+
+          <CmsChart
+            title="Stage velocity"
+            definition={`Median time spent in each stage, from the stage history, so opportunities that have already moved on are counted. A current-stage age would describe only the deals that are stuck. ${MEDIAN_DEFINITION}`}
+            chart={velocityChart}
+          />
+        </section>
+
+        <section aria-labelledby="sources" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="sources" class="sr-only">
+            Sources and qualification
+          </h2>
+          <CmsCard
+            title="Lead sources"
+            description="Where leads came from, and what became of them."
+          >
+            <CmsDataTable
+              caption="Lead sources"
+              columns={[
+                { key: 'source', label: 'Source' },
+                { key: 'leads', label: 'Leads', numeric: true },
+                { key: 'qualified', label: 'Qualified', numeric: true },
+                { key: 'converted', label: 'Converted', numeric: true },
+                { key: 'rate', label: 'Conversion', numeric: true },
+                { key: 'won', label: 'Won value' },
+              ]}
+              empty={sources.length === 0}
+            >
+              {sources.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">
+                    {row.sourceName}
+                    {row.isCustomerService && (
+                      <CmsBadge tone="info" label="Customer service origin" class="ml-2" />
+                    )}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.leads}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.qualified}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.converted}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.conversionPercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.wonValueByCurrency.length === 0
+                      ? 'Not available'
+                      : row.wonValueByCurrency.map((v) => (
+                          <p>{money(v.wonValue, v.currencyCode)}</p>
+                        ))}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard
+            title="Qualification (BANT)"
+            description="Four dimensions, four figures, no single score."
+          >
+            <CmsDataTable
+              caption="BANT"
+              columns={[
+                { key: 'dimension', label: 'Dimension' },
+                { key: 'converted', label: 'Average, converted', numeric: true },
+                { key: 'other', label: 'Average, not converted', numeric: true },
+                { key: 'n', label: 'Assessments', numeric: true },
+              ]}
+              empty={bantResult.rows.length === 0}
+            >
+              {bantResult.rows.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.dimension}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.averageWhenConverted === null
+                      ? 'Not available'
+                      : row.averageWhenConverted.toFixed(1)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.averageWhenNotConverted === null
+                      ? 'Not available'
+                      : row.averageWhenNotConverted.toFixed(1)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.assessments}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">{bantResult.wording}</p>
+          </CmsCard>
+        </section>
+
+        <section aria-labelledby="people" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="people" class="sr-only">
+            Owners and teams
+          </h2>
+          <CmsCard
+            title="Owners"
+            description={`Ordered by portfolio size, not by money. A comparative rank needs ${owners.minimumVolume} decided opportunities.`}
+          >
+            <CmsDataTable
+              caption="Owner performance"
+              columns={[
+                { key: 'owner', label: 'Owner' },
+                { key: 'leads', label: 'Leads', numeric: true },
+                { key: 'sla', label: 'First contact SLA', numeric: true },
+                { key: 'open', label: 'Open', numeric: true },
+                { key: 'pipeline', label: 'Pipeline' },
+                { key: 'won', label: 'Won', numeric: true },
+                { key: 'lost', label: 'Lost', numeric: true },
+                { key: 'rate', label: 'Win rate', numeric: true },
+                { key: 'overdue', label: 'Overdue follow-ups', numeric: true },
+              ]}
+              empty={owners.rows.length === 0}
+            >
+              {owners.rows.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.owner}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.leadsOwned}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.firstContactWithinSlaPercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.openOpportunities}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.pipelineByCurrency.length === 0
+                      ? 'Not available'
+                      : row.pipelineByCurrency.map((v) => (
+                          <p>{money(v.openValue, v.currencyCode)}</p>
+                        ))}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.won}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.lost}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.rankEligible ? formatRate(row.winRatePercent) : 'Below the minimum volume'}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.overdueFollowUps}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard
+            title="Teams"
+            description="Attributed by the membership in force when the record was created, not by today's structure."
+          >
+            <CmsDataTable
+              caption="Team performance"
+              columns={[
+                { key: 'team', label: 'Team' },
+                { key: 'members', label: 'Members', numeric: true },
+                { key: 'leads', label: 'Leads', numeric: true },
+                { key: 'open', label: 'Open', numeric: true },
+                { key: 'won', label: 'Won', numeric: true },
+                { key: 'lost', label: 'Lost', numeric: true },
+                { key: 'rate', label: 'Win rate', numeric: true },
+              ]}
+              empty={teams.length === 0}
+            >
+              {teams.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.teamName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.members}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.leadsOwned}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.openOpportunities}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.won}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.lost}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.winRatePercent)}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+        </section>
+
+        <section aria-labelledby="closing" class="mb-6 grid gap-4 xl:grid-cols-3">
+          <h2 id="closing" class="sr-only">
+            Products, losses and the estimate
+          </h2>
+          <CmsCard
+            title="Product pipeline"
+            description="Quantities are never added across units of measure."
+          >
+            <CmsDataTable
+              caption="Product pipeline"
+              columns={[
+                { key: 'product', label: 'Product' },
+                { key: 'open', label: 'Open', numeric: true },
+                { key: 'quantity', label: 'Expected quantity', numeric: true },
+                { key: 'value', label: 'Pipeline value' },
+              ]}
+              empty={products.length === 0}
+            >
+              {products.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">
+                    {row.productCode}
+                    <span class="block text-cms-body-sm text-cms-muted">
+                      {row.productGroupName} / {row.productCategoryName}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.openOpportunities}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.expectedQuantity === null
+                      ? 'Not available'
+                      : `${row.expectedQuantity.toLocaleString('en-KE')} ${row.unitOfMeasure}`}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.pipelineByCurrency.map((v) => (
+                      <p>{money(v.pipelineValue, v.currencyCode)}</p>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard
+            title="Why deals were lost"
+            description="From the configured reasons, never from free text."
+          >
+            <CmsDataTable
+              caption="Lost reasons"
+              columns={[
+                { key: 'reason', label: 'Reason' },
+                { key: 'count', label: 'Opportunities', numeric: true },
+                { key: 'value', label: 'Lost value' },
+              ]}
+              empty={losses.length === 0}
+            >
+              {losses.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.reasonName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.opportunities}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.lostValueByCurrency.map((v) => (
+                      <p>{money(v.lostValue, v.currencyCode)}</p>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard
+            title={estimate?.label ?? 'Pipeline estimate'}
+            description={estimate?.note ?? ''}
+          >
+            <CmsDataTable
+              caption="Pipeline estimate"
+              columns={[
+                { key: 'currency', label: 'Currency' },
+                { key: 'count', label: 'Closing', numeric: true },
+                { key: 'unweighted', label: 'Unweighted' },
+                { key: 'weighted', label: 'Weighted' },
+              ]}
+              empty={(estimate?.rows.length ?? 0) === 0}
+            >
+              {(estimate?.rows ?? []).map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.currencyCode}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.opportunitiesClosingInPeriod}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {money(row.unweightedValue, row.currencyCode)}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {money(row.weightedValue, row.currencyCode)}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            {health && (
+              <dl class="mt-4 text-cms-body-sm">
+                <div class="flex justify-between border-b border-cms-line py-1.5">
+                  <dt class="text-cms-muted">Follow-ups overdue</dt>
+                  <dd class="text-cms-ink tabular-nums">{health.overdue}</dd>
+                </div>
+                <div class="flex justify-between border-b border-cms-line py-1.5">
+                  <dt class="text-cms-muted">Open opportunities with no next step</dt>
+                  <dd class="text-cms-ink tabular-nums">
+                    {health.openOpportunitiesWithNoFollowUp}
+                  </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                  <dt class="text-cms-muted">Leads with no first contact</dt>
+                  <dd class="text-cms-ink tabular-nums">{health.leadsWithNoFirstContact}</dd>
+                </div>
+              </dl>
+            )}
+          </CmsCard>
+        </section>
+      </Fragment>
+    )
+  }
+</CmsLayout>
