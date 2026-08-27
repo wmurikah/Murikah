@@ -1,173 +1,26 @@
 ---
 /**
- * Home, served at / on cms.murikah.com. Replaces the Build Prompt 00 holding
- * page with the real shell.
+ * The CMS root, `/` on cms.murikah.com.
  *
- * This is the shell demonstrated, not a dashboard: there is no database query
- * anywhere in this phase, so every figure below is a static illustration of a
- * component, clearly labelled as such. The point is that the layout, the states
- * and the primitives are real and reviewable before any module is built on them.
+ * This is a redirect, not a page. The Build Prompt 02 shell that lived here has
+ * moved to `/app`, so that the whole internal application sits under one prefix
+ * and "an EXTERNAL user never renders an /app path" is a single check rather
+ * than a list.
  *
- * The states are shown deliberately side by side (loaded, loading, empty,
- * error), because those four are what a real page will spend its life in and
- * they are the part that usually gets bolted on last.
+ * The file has to exist even though the middleware guard redirects `/` before
+ * it renders. Astro only runs middleware for a path that matches a route: with
+ * no file here, `/cms` matched nothing, middleware never ran, and the request
+ * fell through to a 404 instead of being redirected. The route existing is what
+ * gives the guard a chance to act.
+ *
+ * The redirect below is the fallback for the case the guard does not cover: an
+ * authenticated request whose principal resolved after the guard ran, which
+ * should not happen, and an anonymous one, which the guard sends to /login.
  */
-import CmsLayout from '@/layouts/CmsLayout.astro';
-import CmsBadge from '@/components/cms/CmsBadge.astro';
-import CmsButton from '@/components/cms/CmsButton.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
-import CmsDataTable, { type CmsColumn } from '@/components/cms/CmsDataTable.astro';
-import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
-import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
-import CmsModal from '@/components/cms/CmsModal.astro';
-import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
-import CmsTimeline, { type CmsTimelineEntry } from '@/components/cms/CmsTimeline.astro';
-import CmsToast from '@/components/cms/CmsToast.astro';
-import CmsTooltip from '@/components/cms/CmsTooltip.astro';
+import { homeFor, LOGIN_PATH } from '@/lib/cms/routes';
 
-const ticketColumns: CmsColumn[] = [
-  { key: 'ref', label: 'Ticket' },
-  { key: 'account', label: 'Account' },
-  { key: 'depot', label: 'Depot', secondary: true },
-  { key: 'sla', label: 'SLA' },
-  { key: 'age', label: 'Age', numeric: true },
-];
+export const prerender = false;
 
-const trail: CmsTimelineEntry[] = [
-  {
-    title: 'Shell and design system published',
-    detail: 'Navigation, primitives and the login screen. No module data is connected.',
-    actor: 'Platform',
-    timestamp: '2026-08-26T09:00:00Z',
-    timeLabel: 'Phase 1',
-    tone: 'success',
-  },
-  {
-    title: 'Customer and service modules',
-    detail: 'Accounts, contacts, tickets and the SLA clock.',
-    actor: 'Planned',
-    timestamp: '2026-09-01T09:00:00Z',
-    timeLabel: 'Next',
-  },
-  {
-    title: 'Orders and performance',
-    detail: 'Sales orders, purchase orders and SLA attainment reporting.',
-    actor: 'Planned',
-    timestamp: '2026-10-01T09:00:00Z',
-    timeLabel: 'Later',
-  },
-];
+const principal = Astro.locals.cms;
+return Astro.redirect(principal ? homeFor(principal.user.userType) : LOGIN_PATH, 302);
 ---
-
-<CmsLayout title="Home">
-  <CmsPageHeader
-    title="Home"
-    description="Today across service, orders and accounts. Nothing below is connected to the database yet."
-  >
-    <CmsButton slot="actions" variant="secondary" icon="filter">This week</CmsButton>
-    <CmsButton slot="actions" variant="primary" icon="plus" data-cms-modal-open="cms-demo-modal">
-      New ticket
-    </CmsButton>
-  </CmsPageHeader>
-
-  <CmsToast
-    tone="info"
-    title="Interface only"
-    description="This is Phase 1: the shell, the design system and the sign-in screen. No customer, order or SLA data is read."
-  />
-
-  {
-    /* KPI row. The fourth card is deliberately in its loading state, so the
-      skeleton is visible beside real values rather than only in a story. */
-  }
-  <section aria-labelledby="today-heading" class="flex flex-col gap-3">
-    <h2 id="today-heading" class="text-cms-section font-semibold text-cms-navy">Today</h2>
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <CmsKpiCard
-        label="Open tickets"
-        value="-"
-        icon="service"
-        trend={{ direction: 'flat', value: 'No data', sentiment: 'neutral' }}
-      />
-      <CmsKpiCard label="Within SLA" value="-" unit="%" icon="statusOk" />
-      <CmsKpiCard label="Orders today" value="-" icon="orders" />
-      <CmsKpiCard label="Breaches" icon="statusBreach" loading />
-    </div>
-  </section>
-
-  <div class="grid grid-cols-1 gap-5 xl:grid-cols-3">
-    <div class="flex flex-col gap-5 xl:col-span-2">
-      {/* The table shell in its loading state. */}
-      <section aria-labelledby="queue-heading" class="flex flex-col gap-3">
-        <div class="flex items-center justify-between gap-3">
-          <h2 id="queue-heading" class="text-cms-section font-semibold text-cms-navy">
-            Service queue
-          </h2>
-          <CmsTooltip id="queue-tip" text="Connected when the service module lands.">
-            <CmsBadge tone="info" label="Not connected" />
-          </CmsTooltip>
-        </div>
-        <CmsDataTable caption="Open service tickets" columns={ticketColumns} loading />
-      </section>
-
-      {/* Empty and error, side by side, at the size they will really appear. */}
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <section aria-labelledby="empty-heading" class="flex flex-col gap-3">
-          <h2 id="empty-heading" class="text-cms-card font-semibold text-cms-navy">Empty state</h2>
-          <CmsEmptyState
-            icon="customers"
-            title="No accounts yet"
-            description="Accounts appear here once the customer module is connected."
-          >
-            <CmsButton variant="subtle">Learn what is next</CmsButton>
-          </CmsEmptyState>
-        </section>
-
-        <section aria-labelledby="error-heading" class="flex flex-col gap-3">
-          <h2 id="error-heading" class="text-cms-card font-semibold text-cms-navy">Error state</h2>
-          <CmsErrorState
-            title="Could not load depot activity"
-            description="The service did not answer. Nothing was lost; try again in a moment."
-          >
-            <CmsButton variant="secondary">Try again</CmsButton>
-          </CmsErrorState>
-        </section>
-      </div>
-    </div>
-
-    <div class="flex flex-col gap-5">
-      <CmsCard title="Status vocabulary" description="Colour never carries meaning on its own.">
-        <ul class="flex flex-wrap gap-2">
-          <li><CmsBadge tone="success" label="Within SLA" /></li>
-          <li><CmsBadge tone="warning" label="Approaching" /></li>
-          <li><CmsBadge tone="danger" label="Breached" /></li>
-          <li><CmsBadge tone="info" label="Awaiting customer" /></li>
-          <li><CmsBadge tone="accent" label="Opportunity" /></li>
-          <li><CmsBadge tone="neutral" label="Draft" /></li>
-        </ul>
-        <p class="mt-3 text-cms-body-sm text-cms-muted">
-          Every pill carries its own word and mark, so the state survives greyscale, colour
-          blindness and a screen reader.
-        </p>
-      </CmsCard>
-
-      <CmsCard title="What is being built">
-        <CmsTimeline entries={trail} label="Delivery phases" />
-      </CmsCard>
-    </div>
-  </div>
-
-  <CmsModal
-    id="cms-demo-modal"
-    title="Not connected yet"
-    description="The dialogue primitive, shown working."
-  >
-    <p>
-      Creating a ticket needs the service module and a database connection, neither of which exists
-      in this phase. The dialogue itself is real: it traps focus, closes on Escape and returns focus
-      to the control that opened it.
-    </p>
-    <CmsButton slot="actions" variant="secondary" data-cms-modal-close>Close</CmsButton>
-  </CmsModal>
-</CmsLayout>
