@@ -91,6 +91,18 @@ export const CMS_NAV: readonly CmsNavItem[] = [
     summary: 'SLA attainment, resolution times and team load.',
   },
   {
+    label: 'Executive',
+    href: '/app/executive',
+    icon: 'performance',
+    permission: [
+      'ORDERS.SALES_ORDER.VIEW',
+      'ORDERS.PURCHASE_ORDER.VIEW',
+      'CRM.OPPORTUNITIES.VIEW',
+      'SERVICE.CASES.VIEW',
+    ],
+    summary: 'Where to pay attention, across commercial, operational and service.',
+  },
+  {
     label: 'Data',
     href: '/app/data',
     icon: 'data',

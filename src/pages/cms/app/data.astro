@@ -1,22 +1,164 @@
 ---
 /**
- * Placeholder destination for the data section.
+ * Data → the Upload Centre landing.
  *
- * It exists so the navigation is real: every entry in CMS_NAV leads somewhere,
- * and a rail full of dead links cannot be reviewed for structure. It builds no
- * module, reads no data and makes no promise about what the section will look
- * like.
- *
- * The title and the summary come from the navigation model rather than being
- * typed again here, so a change to the model updates the rail, the page title
- * and this copy together.
+ * One place where extracts arrive, one history for every type, and a light
+ * quality panel: how many names, customers and products are waiting for a
+ * decision, and which imports finished partially. Counts and a short list,
+ * deliberately: this is not an analytics dashboard and does not try to be.
  */
-import CmsSectionPlaceholder from '@/components/cms/CmsSectionPlaceholder.astro';
-// Rendered on the server for every request, never prerendered. Without this the
-// page is baked at build time, the middleware guard runs once during the build
-// instead of per request, and the route protection becomes a static artefact:
-// a signed-in user would be served whatever the build decided.
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canUploadImports, canViewImports } from '@/lib/cms/permissions';
+import {
+  dataQuality,
+  listBatches,
+  type DataQuality,
+  type BatchSummaryRow,
+} from '@/lib/cms/import/uploadCentre';
+
 export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewImports(permissions);
+const mayUpload = canUploadImports(permissions);
+
+let quality: DataQuality | null = null;
+let recent: BatchSummaryRow[] = [];
+let loadFailed = false;
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    quality = await dataQuality(db);
+    recent = (await listBatches(db, 5)).slice(0, 5);
+  } catch (error) {
+    console.error('[cms.data.home] load failed', error);
+    loadFailed = true;
+  }
+}
 ---
 
-<CmsSectionPlaceholder href="/app/data" />
+<CmsLayout title="Data">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to the Upload Centre"
+        description="Ask a system administrator for the DATA.IMPORTS.VIEW permission."
+      />
+    ) : loadFailed || quality === null ? (
+      <CmsErrorState
+        title="The Upload Centre could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Upload Centre"
+          description="One path for every source extract. Uploading validates and reports; nothing becomes an order until somebody commits it."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Data' }]}
+        >
+          {mayUpload && (
+            <CmsButton slot="actions" variant="primary" icon="plus" href="/app/data/upload">
+              Upload a file
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <CmsKpiCard
+            label="Unresolved users"
+            value={String(quality.unresolvedUsers)}
+            icon="administration"
+          />
+          <CmsKpiCard
+            label="Rows awaiting a customer"
+            value={String(quality.unresolvedCustomerRows)}
+            icon="customers"
+          />
+          <CmsKpiCard
+            label="Rows awaiting a product"
+            value={String(quality.unresolvedProductRows)}
+            icon="orders"
+          />
+          <CmsKpiCard label="Rejected rows" value={String(quality.rejectedRows)} icon="data" />
+        </div>
+
+        <div class="mt-6 grid gap-4 lg:grid-cols-2">
+          <CmsCard
+            title="Recent imports"
+            description="Rows and documents are always reported separately."
+          >
+            {recent.length === 0 ? (
+              <CmsEmptyState
+                icon="data"
+                title="Nothing imported yet"
+                description="An upload will appear here."
+              />
+            ) : (
+              <ul class="flex flex-col gap-3">
+                {recent.map((batch) => (
+                  <li class="flex items-center justify-between gap-3">
+                    <a
+                      href={`/app/data/history/${batch.batchId}`}
+                      class="text-cms-body-sm font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {batch.filename}
+                    </a>
+                    <span class="text-cms-body-sm text-cms-muted tabular-nums">
+                      {batch.rowsReceived} rows, {batch.uniqueDocuments} documents,{' '}
+                      {batch.status.toLowerCase()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div class="mt-4">
+              <CmsButton variant="ghost" href="/app/data/history">
+                All import history
+              </CmsButton>
+            </div>
+          </CmsCard>
+
+          <CmsCard
+            title="Partial imports"
+            description="A partial import says exactly what did not land and why."
+          >
+            {quality.recentPartialImports.length === 0 ? (
+              <CmsEmptyState
+                icon="data"
+                title="No partial imports"
+                description="Every commit so far landed whole."
+              />
+            ) : (
+              <ul class="flex flex-col gap-3">
+                {quality.recentPartialImports.map((batch) => (
+                  <li>
+                    <a
+                      href={`/app/data/history/${batch.batchId}`}
+                      class="text-cms-body-sm font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {batch.filename}
+                    </a>
+                    <span class="ml-2 text-cms-body-sm text-cms-muted">{batch.uploadedAt}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div class="mt-4">
+              <CmsButton variant="ghost" href="/app/data/exceptions">
+                Exceptions and unresolved users
+              </CmsButton>
+            </div>
+          </CmsCard>
+        </div>
+      </Fragment>
+    )
+  }
+</CmsLayout>

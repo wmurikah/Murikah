@@ -1,0 +1,232 @@
+---
+/**
+ * One request, its correspondence, the reply box and the survey.
+ *
+ * WHAT IS NOT ON THIS PAGE. No employee name: every message from us is from
+ * "Hass Petroleum". No internal note: `direction = 'INTERNAL'` is excluded
+ * in SQL, so those rows are not in the object this page renders and could
+ * not be revealed by a markup mistake. No team, no queue, no internal timer.
+ *
+ * A request belonging to another customer and one that does not exist give
+ * the same screen and the same 404, for the same reason as an order.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsPortalCaseScript from '@/components/cms/CmsPortalCaseScript.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import { portalCase, type PortalCaseDetail } from '@/lib/cms/repos/portalData';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+import { portalDate, portalDateTime, caseTone, slaTone } from '@/lib/cms/portal/present';
+
+export const prerender = false;
+
+let scope: PortalScope | null = null;
+let record: PortalCaseDetail | null = null;
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+  if (scope) record = await portalCase(db, scope, Astro.params.caseId ?? '');
+} catch (error) {
+  console.error('[cms.portal.case] load failed', error);
+  loadFailed = true;
+}
+
+if (!loadFailed && record === null) Astro.response.status = 404;
+
+const closed = record !== null && (record.status === 'Resolved' || record.status === 'Closed');
+const SCORES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+---
+
+<CmsPortalLayout
+  title={record === null ? 'Request' : record.subject}
+  scope={scope}
+  current="/portal/service"
+>
+  <p class="text-cms-body-sm">
+    <a
+      href="/portal/service"
+      class="text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Back to service
+    </a>
+  </p>
+
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load that request just now"
+        description="Please try again in a moment."
+      />
+    ) : record === null ? (
+      <CmsEmptyState
+        icon="service"
+        title="We could not find that request"
+        description="Check the link, or go back and open it from your list."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-wrap items-center gap-3">
+            <h1 class="text-cms-page font-semibold text-cms-navy">{record.subject}</h1>
+            <CmsBadge tone={caseTone(record.status)} label={record.status} />
+            <CmsBadge tone={slaTone(record.slaState)} label={record.slaState} />
+          </div>
+          <p class="text-cms-caption text-cms-muted">
+            {record.caseNumber} - raised {portalDate(record.raisedAt)}
+          </p>
+        </div>
+
+        {record.delayNote !== null && (
+          <p class="rounded-cms-lg border border-cms-warning bg-cms-warning-tint px-4 py-3 text-cms-body-sm text-cms-warning">
+            {record.delayNote}
+          </p>
+        )}
+
+        <CmsCard title="What you told us">
+          <p class="text-cms-body-sm whitespace-pre-line text-cms-ink">{record.description}</p>
+        </CmsCard>
+
+        {record.resolution !== null && (
+          <CmsCard title="How we resolved it">
+            <p class="text-cms-body-sm whitespace-pre-line text-cms-ink">{record.resolution}</p>
+          </CmsCard>
+        )}
+
+        <CmsCard title="Correspondence">
+          {record.messages.length === 0 ? (
+            <p class="text-cms-body-sm text-cms-muted">
+              Nothing has been exchanged on this request yet.
+            </p>
+          ) : (
+            <ol class="flex flex-col gap-4">
+              {record.messages.map((message) => (
+                <li
+                  class:list={[
+                    'rounded-cms-lg px-4 py-3',
+                    message.direction === 'INBOUND'
+                      ? 'bg-cms-royal-tint'
+                      : 'border border-cms-line bg-cms-canvas',
+                  ]}
+                >
+                  <p class="flex flex-wrap items-baseline gap-x-2 text-cms-caption text-cms-muted">
+                    <span class="font-semibold text-cms-ink">{message.from}</span>
+                    <span>{portalDateTime(message.at)}</span>
+                  </p>
+                  <p class="mt-1 text-cms-body-sm whitespace-pre-line text-cms-ink">
+                    {message.message}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </CmsCard>
+
+        {!closed && (
+          <CmsCard
+            title="Reply"
+            description={
+              record.awaitingYourReply
+                ? 'We are waiting on you before we can carry on.'
+                : 'Add anything else we should know.'
+            }
+          >
+            <form id="portal-reply" novalidate class="flex flex-col gap-3">
+              <p
+                id="portal-reply-error"
+                role="alert"
+                hidden
+                class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              />
+              <label for="portal-reply-message" class="sr-only">
+                Your reply
+              </label>
+              <textarea
+                id="portal-reply-message"
+                name="message"
+                rows="4"
+                required
+                class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none placeholder:text-cms-muted focus-visible:ring-2 focus-visible:ring-focus"
+                placeholder="Type your reply"
+              />
+              <div>
+                <CmsButton type="submit" variant="primary" id="portal-reply-send">
+                  Send reply
+                </CmsButton>
+              </div>
+            </form>
+          </CmsCard>
+        )}
+
+        {record.surveyInvitation !== null &&
+          (record.surveyInvitation.answered ? (
+            <CmsCard title="Thank you">
+              <p class="text-cms-body-sm text-cms-muted">
+                You have already told us how we did on this one. We read every answer.
+              </p>
+            </CmsCard>
+          ) : (
+            <CmsCard title="How did we do?" description={record.surveyInvitation.question}>
+              <form id="portal-survey" novalidate class="flex flex-col gap-4">
+                <p
+                  id="portal-survey-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                />
+                <input
+                  type="hidden"
+                  name="invitationId"
+                  value={record.surveyInvitation.invitationId}
+                />
+                <fieldset class="flex flex-col gap-2">
+                  <legend class="text-cms-label font-medium text-cms-ink">
+                    0 is poor, 10 is excellent
+                  </legend>
+                  <div class="flex flex-wrap gap-1.5">
+                    {SCORES.map((score) => (
+                      <label class="cursor-pointer">
+                        <input type="radio" name="score" value={score} class="peer sr-only" />
+                        <span class="flex h-10 w-10 items-center justify-center rounded-cms border border-cms-border text-cms-body-sm text-cms-ink tabular-nums peer-checked:border-cms-royal peer-checked:bg-cms-royal peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-focus">
+                          {score}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <div class="flex flex-col gap-1.5">
+                  <label
+                    for="portal-survey-comments"
+                    class="text-cms-label font-medium text-cms-ink"
+                  >
+                    Anything you would like to add?
+                  </label>
+                  <textarea
+                    id="portal-survey-comments"
+                    name="comments"
+                    rows="3"
+                    class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none placeholder:text-cms-muted focus-visible:ring-2 focus-visible:ring-focus"
+                    placeholder="Optional"
+                  />
+                </div>
+                <div>
+                  <CmsButton type="submit" variant="primary" id="portal-survey-send">
+                    Send
+                  </CmsButton>
+                </div>
+              </form>
+            </CmsCard>
+          ))}
+
+        <CmsPortalCaseScript caseId={record.caseId} />
+      </div>
+    )
+  }
+</CmsPortalLayout>

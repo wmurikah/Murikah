@@ -1,0 +1,159 @@
+---
+/**
+ * One order.
+ *
+ * THE REFUSAL IS THE INTERESTING PART. An order belonging to another
+ * customer and an order that does not exist produce exactly the same screen
+ * and the same 404, because the repository answers null for both and this
+ * page cannot tell them apart. Anything else would let somebody enumerate
+ * identifiers and learn which of them are real.
+ *
+ * Where the external promise was missed the page says so in one sentence and
+ * names nobody. Which team held it and for how long is our business.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import { portalOrder, type PortalOrderDetail } from '@/lib/cms/repos/portalData';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+import { portalDate, portalDateTime, orderTone, slaTone } from '@/lib/cms/portal/present';
+
+export const prerender = false;
+
+let scope: PortalScope | null = null;
+let order: PortalOrderDetail | null = null;
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+  if (scope) order = await portalOrder(db, scope, Astro.params.orderId ?? '');
+} catch (error) {
+  console.error('[cms.portal.order] load failed', error);
+  loadFailed = true;
+}
+
+if (!loadFailed && order === null) Astro.response.status = 404;
+
+const facts =
+  order === null
+    ? []
+    : [
+        { label: 'Placed', value: portalDate(order.orderCreatedAt) },
+        { label: 'Invoice number', value: order.invoiceNumber ?? 'Not yet invoiced' },
+        { label: 'Invoiced', value: portalDateTime(order.invoiceCreatedAt) },
+        { label: 'Released for loading', value: portalDateTime(order.loadingAt) },
+      ];
+---
+
+<CmsPortalLayout
+  title={order === null ? 'Order' : `Order ${order.documentNumber}`}
+  scope={scope}
+  current="/portal/orders"
+>
+  <p class="text-cms-body-sm">
+    <a
+      href="/portal/orders"
+      class="text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Back to orders
+    </a>
+  </p>
+
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load that order just now"
+        description="Please try again in a moment."
+      />
+    ) : order === null ? (
+      <CmsEmptyState
+        icon="orders"
+        title="We could not find that order"
+        description="Check the link, or go back to your orders and open it from the list."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <h1 class="text-cms-page font-semibold text-cms-navy">{order.documentNumber}</h1>
+          <CmsBadge tone={orderTone(order.status)} label={order.status} />
+          <CmsBadge tone={slaTone(order.slaState)} label={order.slaState} />
+        </div>
+
+        {order.delayNote !== null && (
+          <p class="rounded-cms-lg border border-cms-warning bg-cms-warning-tint px-4 py-3 text-cms-body-sm text-cms-warning">
+            {order.delayNote}
+          </p>
+        )}
+
+        <CmsCard title="Order details">
+          <dl class="grid gap-4 sm:grid-cols-2">
+            {facts.map((fact) => (
+              <div class="flex flex-col gap-0.5">
+                <dt class="text-cms-label text-cms-muted">{fact.label}</dt>
+                <dd class="text-cms-body-sm font-semibold text-cms-ink">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </CmsCard>
+
+        <CmsCard title="What you ordered" bodyClass="p-0">
+          {order.lines.length === 0 ? (
+            <p class="px-4 py-4 text-cms-body-sm text-cms-muted">
+              No product lines were recorded against this order.
+            </p>
+          ) : (
+            <div class="overflow-x-auto">
+              <table class="w-full border-collapse text-left">
+                <caption class="sr-only">Products on this order</caption>
+                <thead>
+                  <tr class="border-b border-cms-line">
+                    <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                      Line
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                      Product
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                      Quantity
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.lines.map((line) => (
+                    <tr class="border-b border-cms-line last:border-0">
+                      <td class="px-4 py-3 text-cms-body-sm text-cms-muted">{line.lineNumber}</td>
+                      <td class="px-4 py-3 text-cms-body-sm text-cms-ink">{line.product}</td>
+                      <td class="px-4 py-3 text-cms-body-sm text-cms-ink tabular-nums">
+                        {line.quantity}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CmsCard>
+
+        <CmsCard title="Something not right?">
+          <p class="text-cms-body-sm text-cms-muted">
+            Raise a request about this order and somebody will come back to you.
+          </p>
+          <p class="mt-3 text-cms-body-sm">
+            <a
+              href={`/portal/service?about=${order.documentNumber}`}
+              class="font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Raise a request
+            </a>
+          </p>
+        </CmsCard>
+      </div>
+    )
+  }
+</CmsPortalLayout>

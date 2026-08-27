@@ -131,3 +131,63 @@ export async function hashFile(buffer: ArrayBuffer | Uint8Array): Promise<string
   const digest = await crypto.subtle.digest('SHA-256', view as never);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+// ---- The mapping report, shared by every importer -----------------------------
+
+/**
+ * What an importer does with a source column. A header the classification
+ * table does not know is 'unknown': reported for review, never dropped, and
+ * always present in raw_json regardless.
+ */
+export type HeaderTreatment = 'canonical' | 'workflow' | 'source_metric' | 'raw_only' | 'unknown';
+
+export interface HeaderClassification {
+  treatment: HeaderTreatment;
+  target: string;
+}
+
+export interface MappingReportLine {
+  header: string;
+  treatment: HeaderTreatment;
+  target: string;
+  example: string;
+}
+
+/**
+ * Every header the file actually carries, with its treatment, its target and
+ * a real example value from the extract. The classification table is the
+ * importer's; this rendering is shared, so no importer grows a second copy.
+ */
+export function buildMappingReport(
+  classification: Readonly<Record<string, HeaderClassification>>,
+  headers: string[],
+  rows: Record<string, unknown>[],
+): MappingReportLine[] {
+  return headers.map((header) => {
+    const known = classification[header];
+    const example = rows
+      .map((r) => r[header])
+      .find((v) => v !== null && v !== undefined && v !== '');
+    return {
+      header,
+      treatment: known?.treatment ?? 'unknown',
+      target: known?.target ?? 'UNKNOWN HEADER: classified for review, imported into raw_json only',
+      example: example === undefined ? 'no value in this extract' : String(example),
+    };
+  });
+}
+
+/**
+ * Whole minutes between two "YYYY-MM-DD HH:MM:SS" stamps, or null where
+ * either end is missing. Missing is missing: it never becomes zero, because
+ * "the stage took no time" and "we do not know when the stage started" are
+ * different facts and only one of them is true here.
+ */
+export function minutesBetween(from: string | null, to: string | null): number | null {
+  if (from === null || to === null) return null;
+  const parse = (stamp: string) => new Date(stamp.replace(' ', 'T') + 'Z').getTime();
+  const start = parse(from);
+  const end = parse(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return Math.round((end - start) / 60000);
+}

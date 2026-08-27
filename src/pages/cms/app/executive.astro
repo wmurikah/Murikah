@@ -1,0 +1,632 @@
+---
+/**
+ * The executive dashboard.
+ *
+ * Sections in one order and one order only: Needs Attention, Customer,
+ * Commercial, Operational, Service, then the drilldowns. Exceptions at the
+ * top, trends in the middle, analysis at the bottom, because a manager
+ * opening this page wants to know where to look before they want to know
+ * how the quarter went.
+ *
+ * COMPOSED FROM PERMISSIONS. There is no page per person: the sections a
+ * caller sees come from their own permission codes, and the scope resolver
+ * then decides which records each section counts.
+ *
+ * EVERY FIGURE COMES FROM ITS MODULE. Nothing on this page recalculates a
+ * metric, so a number here cannot disagree with the module page it links to.
+ *
+ * NO DECORATION. No carousel, no gauge bank, no auto-rotating chart, no
+ * three-dimensional anything, and no wall of red. Status colour is for
+ * status, and every coloured thing also says what it is in words.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { parseFilter, drillTo, filterToQuery } from '@/lib/cms/analytics/filters';
+import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import {
+  dashboard,
+  connectedInsights,
+  attentionCustomers,
+  entityComparison,
+  type Dashboard,
+  type ConnectedInsight,
+  type AttentionCustomer,
+  type EntityComparisonRow,
+} from '@/lib/cms/repos/executive';
+import { lineChart } from '@/lib/cms/charts/svg';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const userId = Astro.locals.cms?.user.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let board: Dashboard | null = null;
+let insights: ConnectedInsight[] = [];
+let customers: AttentionCustomer[] = [];
+let entities: EntityComparisonRow[] = [];
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  board = await dashboard(db, userId, permissions, filter, now);
+  [insights, customers, entities] = await Promise.all([
+    connectedInsights(db, userId, permissions, filter, now),
+    attentionCustomers(db, userId, filter, now),
+    entityComparison(db, userId, permissions, filter, now),
+  ]);
+} catch (error) {
+  console.error('[cms.executive] load failed', error);
+  loadFailed = true;
+}
+
+const money = (value: number, currency: string) =>
+  `${currency} ${Math.round(value).toLocaleString('en-KE')}`;
+
+/**
+ * The arrow and the wording for a movement. The desirable direction belongs
+ * to the metric, so a rising complaint count reads as worse and a falling
+ * turnaround reads as better, and neither is guessed by this function.
+ */
+const direction = (sentiment: string, change: number | null) => {
+  if (change === null) return { glyph: 'Not available', tone: 'neutral' as const };
+  const arrow = change > 0 ? 'up' : change < 0 ? 'down' : 'level';
+  const tone =
+    sentiment === 'GOOD'
+      ? ('success' as const)
+      : sentiment === 'BAD'
+        ? ('danger' as const)
+        : ('neutral' as const);
+  return { glyph: arrow, tone };
+};
+
+const slaTrend =
+  board?.salesOrders === undefined || board?.salesOrders === null
+    ? null
+    : lineChart(
+        [
+          {
+            name: 'Sales order SLA compliance',
+            token: 'cms-royal',
+            points: board.salesOrders.trend.map((row) => ({
+              label: row.bucket,
+              value: row.slaCompliancePercent,
+            })),
+          },
+        ],
+        { unit: 'per cent', format: (v) => (v === null ? 'Not available' : `${v}%`) },
+      );
+---
+
+<CmsLayout title="Executive dashboard">
+  {
+    loadFailed || board === null ? (
+      <CmsErrorState
+        title="The dashboard could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Executive dashboard"
+          description="Where to pay attention, then how the period moved. Every figure comes from the module that owns it and opens the records behind it."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Executive' }]}
+        >
+          <CmsButton
+            slot="actions"
+            variant="secondary"
+            href={`/api/orders/sales/export${filterToQuery(filter)}`}
+          >
+            Export
+          </CmsButton>
+        </CmsPageHeader>
+
+        <form
+          method="get"
+          action="/app/executive"
+          class="mb-6 grid gap-3 rounded-cms border border-cms-line bg-cms-surface p-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <CmsInput id="ex-from" name="from" label="From" type="date" value={filter.from ?? ''} />
+          <CmsInput id="ex-to" name="to" label="To" type="date" value={filter.to ?? ''} />
+          <CmsSelect
+            id="ex-grain"
+            name="grain"
+            label="Trend grain"
+            value={filter.grain}
+            options={[
+              { value: 'DAY', label: 'Daily' },
+              { value: 'WEEK', label: 'Weekly' },
+              { value: 'MONTH', label: 'Monthly' },
+            ]}
+          />
+          <div class="flex items-end gap-2">
+            <CmsButton type="submit" variant="primary">
+              Apply
+            </CmsButton>
+            <CmsButton variant="ghost" href="/app/executive">
+              Clear
+            </CmsButton>
+          </div>
+        </form>
+
+        <section aria-labelledby="attention" class="mb-8">
+          <h2 id="attention" class="text-cms-h2 mb-1 font-semibold text-cms-ink">
+            Needs attention
+          </h2>
+          <p class="mb-3 text-cms-body-sm text-cms-muted">
+            Exceptions only. Every number here opens the records behind it, carrying this period and
+            your own scope.
+          </p>
+          {board.attention.length === 0 ? (
+            <p class="rounded-cms border border-cms-line bg-cms-surface p-4 text-cms-body-sm text-cms-muted">
+              Nothing outstanding in this period within your scope.
+            </p>
+          ) : (
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {board.attention.map((signal) => (
+                <a
+                  href={drillTo(signal.href, filter, signal.destination)}
+                  class="rounded-cms border border-cms-line bg-cms-surface p-4 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <p class="text-cms-body-sm text-cms-muted">{signal.label}</p>
+                  <p class="text-cms-h2 font-semibold text-cms-ink tabular-nums">{signal.count}</p>
+                  <p class="mt-1 text-cms-body-sm text-cms-muted">{signal.definition}</p>
+                  <p class="mt-2 text-cms-body-sm font-medium text-cms-royal">Open the records</p>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {board.movements.length > 0 && (
+          <section aria-labelledby="movement" class="mb-8">
+            <h2 id="movement" class="text-cms-h2 mb-1 font-semibold text-cms-ink">
+              Movement
+            </h2>
+            <p class="mb-3 text-cms-body-sm text-cms-muted">
+              Against {board.comparisonPeriod?.from} to {board.comparisonPeriod?.to}, the previous
+              period of the same length. Each metric carries the direction that counts as an
+              improvement for it, so a falling turnaround and a rising compliance figure both read
+              as progress.
+            </p>
+            <CmsDataTable
+              caption="Movement against the previous equivalent period"
+              columns={[
+                { key: 'metric', label: 'Metric' },
+                { key: 'current', label: 'This period', numeric: true },
+                { key: 'previous', label: 'Previous', numeric: true },
+                { key: 'change', label: 'Change', numeric: true },
+                { key: 'reading', label: 'Reading' },
+              ]}
+              empty={false}
+            >
+              {board.movements.map((move) => {
+                const shape = direction(move.sentiment, move.change);
+                const render = (value: number | null) =>
+                  value === null
+                    ? 'Not available'
+                    : move.unit === 'minutes'
+                      ? formatDuration(value)
+                      : move.unit === 'per cent'
+                        ? formatRate(value)
+                        : value.toLocaleString('en-KE');
+                return (
+                  <tr class="border-b border-cms-line last:border-0">
+                    <td class="px-4 py-2.5 text-cms-ink">
+                      {move.metric}
+                      <span class="block text-cms-body-sm text-cms-muted">
+                        {move.desirable === 'NEUTRAL'
+                          ? 'Volume: neither direction is better.'
+                          : `Better when it goes ${move.desirable.toLowerCase()}.`}
+                      </span>
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-cms-ink tabular-nums">
+                      {render(move.current)}
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {render(move.previous)}
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {move.changePercent === null ? 'Not available' : `${move.changePercent}%`}
+                    </td>
+                    <td class="px-4 py-2.5">
+                      <CmsBadge
+                        tone={shape.tone}
+                        label={
+                          move.sentiment === 'GOOD'
+                            ? `Improved (${shape.glyph})`
+                            : move.sentiment === 'BAD'
+                              ? `Worsened (${shape.glyph})`
+                              : move.sentiment === 'FLAT'
+                                ? `Changed (${shape.glyph})`
+                                : 'Not available'
+                        }
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </CmsDataTable>
+          </section>
+        )}
+
+        <div class="grid gap-4 xl:grid-cols-2">
+          {board.customer && (
+            <CmsCard title="Customer" description="What customers are experiencing.">
+              <dl class="text-cms-body-sm">
+                {[
+                  ['Customers with cases', String(board.customer.activeCustomers)],
+                  [
+                    'External SLA compliance',
+                    formatRate(board.customer.externalSlaCompliancePercent),
+                  ],
+                  ['Open cases', String(board.customer.openCases)],
+                  [
+                    'Satisfaction',
+                    board.customer.satisfactionScore === null
+                      ? 'No responses'
+                      : `${board.customer.satisfactionScore} from ${board.customer.satisfactionResponses} responses`,
+                  ],
+                  [
+                    'Categories with repeat complaints',
+                    String(board.customer.repeatComplaintSignal),
+                  ],
+                ].map(([label, value]) => (
+                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
+                    <dt class="text-cms-muted">{label}</dt>
+                    <dd class="text-cms-ink tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p class="mt-2 text-cms-body-sm text-cms-muted">
+                There is no customer health score here. A single blended number would be opaque,
+                nobody agreed its weights, and none of it could be checked by clicking.
+              </p>
+            </CmsCard>
+          )}
+
+          {board.commercial && (
+            <CmsCard title="Commercial" description="Demand, and what became of it.">
+              <dl class="text-cms-body-sm">
+                <div class="border-b border-cms-line py-1.5">
+                  <dt class="text-cms-muted">Open pipeline</dt>
+                  <dd class="text-cms-ink tabular-nums">
+                    {board.commercial.openPipelineByCurrency.length === 0
+                      ? 'Not available'
+                      : board.commercial.openPipelineByCurrency.map((row) => (
+                          <p>
+                            {money(row.openValue, row.currencyCode)}
+                            <span class="text-cms-muted">
+                              {' '}
+                              (weighted {money(row.weightedValue, row.currencyCode)})
+                            </span>
+                          </p>
+                        ))}
+                  </dd>
+                </div>
+                {[
+                  ['New leads', String(board.commercial.newLeads)],
+                  ['Lead conversion', formatRate(board.commercial.conversionRatePercent)],
+                  [
+                    'Win rate',
+                    `${formatRate(board.commercial.winRatePercent)} of ${board.commercial.winRateDenominator} decided`,
+                  ],
+                  ['Open opportunities', String(board.commercial.closingSoon)],
+                ].map(([label, value]) => (
+                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
+                    <dt class="text-cms-muted">{label}</dt>
+                    <dd class="text-cms-ink tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p class="mt-2 text-cms-body-sm text-cms-muted">
+                One figure per currency, never a total across them: this system holds no exchange
+                rate.
+              </p>
+            </CmsCard>
+          )}
+
+          {board.salesOrders && (
+            <CmsCard title="Sales order execution" description="From raised to invoiced.">
+              <dl class="text-cms-body-sm">
+                {[
+                  ['Orders', board.salesOrders.orders.toLocaleString('en-KE')],
+                  [
+                    'Finance approval (median, elapsed)',
+                    formatDuration(board.salesOrders.financeMedianElapsedMinutes),
+                  ],
+                  [
+                    'Credit exception rate',
+                    formatRate(board.salesOrders.creditExceptionRatePercent),
+                  ],
+                  [
+                    'Order to invoice (median)',
+                    formatDuration(board.salesOrders.orderToInvoiceMedianMinutes),
+                  ],
+                  [
+                    'Order to loading authority (median)',
+                    formatDuration(board.salesOrders.orderToLoadingMedianMinutes),
+                  ],
+                  ['SLA compliance', formatRate(board.salesOrders.slaCompliancePercent)],
+                ].map(([label, value]) => (
+                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
+                    <dt class="text-cms-muted">{label}</dt>
+                    <dd class="text-cms-ink tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div class="mt-3">
+                <CmsButton variant="ghost" href={drillTo('/app/orders/sales/performance', filter)}>
+                  Sales order performance
+                </CmsButton>
+              </div>
+            </CmsCard>
+          )}
+
+          {board.purchaseOrders && (
+            <CmsCard
+              title="Stock and purchase orders"
+              description="How fast the system catches up with the yard."
+            >
+              <dl class="text-cms-body-sm">
+                {[
+                  [
+                    'Approval cycle (median, completed)',
+                    formatDuration(board.purchaseOrders.approvalCycleMedianMinutes),
+                  ],
+                  [
+                    'Receipt to Oracle posting (median)',
+                    formatDuration(board.purchaseOrders.receiptToPostingMedianMinutes),
+                  ],
+                  ['Awaiting Oracle posting', String(board.purchaseOrders.awaitingOraclePosting)],
+                  ['Posting coverage', formatRate(board.purchaseOrders.postingCoveragePercent)],
+                  [
+                    'Main approval bottleneck',
+                    board.purchaseOrders.mainBottleneckStage === null
+                      ? 'Not available'
+                      : `${board.purchaseOrders.mainBottleneckStage} (${formatRate(board.purchaseOrders.mainBottleneckSharePercent)})`,
+                  ],
+                ].map(([label, value]) => (
+                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
+                    <dt class="text-cms-muted">{label}</dt>
+                    <dd class="text-cms-ink tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div class="mt-3">
+                <CmsButton
+                  variant="ghost"
+                  href={drillTo('/app/orders/purchases/performance', filter)}
+                >
+                  Purchase order performance
+                </CmsButton>
+              </div>
+            </CmsCard>
+          )}
+
+          {board.service && (
+            <CmsCard title="Service" description="Promises, and where the time went.">
+              <dl class="text-cms-body-sm">
+                {[
+                  ['Open cases', String(board.service.openCases)],
+                  [
+                    'First response within SLA',
+                    formatRate(board.service.firstResponseWithinSlaPercent),
+                  ],
+                  ['Resolution within SLA', formatRate(board.service.resolutionWithinSlaPercent)],
+                  [
+                    'Median resolution (elapsed)',
+                    formatDuration(board.service.medianResolutionElapsedMinutes),
+                  ],
+                  ['Top complaint category', board.service.topComplaintCategory ?? 'None recorded'],
+                  [
+                    'Share of time waiting internally',
+                    formatRate(board.service.internalWaitingSharePercent),
+                  ],
+                  [
+                    'Satisfaction',
+                    board.service.satisfactionScore === null
+                      ? 'No responses'
+                      : `${board.service.satisfactionScore} from ${board.service.satisfactionResponses} responses`,
+                  ],
+                ].map(([label, value]) => (
+                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
+                    <dt class="text-cms-muted">{label}</dt>
+                    <dd class="text-cms-ink tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div class="mt-3">
+                <CmsButton variant="ghost" href={drillTo('/app/service/analytics', filter)}>
+                  Service analytics
+                </CmsButton>
+              </div>
+            </CmsCard>
+          )}
+
+          {slaTrend && (
+            <CmsChart
+              title="Sales order SLA compliance"
+              definition="Met divided by met plus breached, per period, from the SLA engine's settled timers. The same figure the sales order performance page reports."
+              chart={slaTrend}
+              unit="per cent"
+            />
+          )}
+        </div>
+
+        {insights.length > 0 && (
+          <section aria-labelledby="insights" class="mt-8">
+            <h2 id="insights" class="text-cms-h2 mb-1 font-semibold text-cms-ink">
+              Connected observations
+            </h2>
+            <p class="mb-3 text-cms-body-sm text-cms-muted">
+              Facts that span modules, each with its arithmetic and links to the records. Where two
+              things only coincide, the wording says so: this system holds no link between a sales
+              order and a purchase order, and none is claimed.
+            </p>
+            <div class="grid gap-3 lg:grid-cols-2">
+              {insights.map((card) => (
+                <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+                  <p class="text-cms-body font-medium text-cms-ink">{card.headline}</p>
+                  <p class="mt-2 text-cms-body-sm text-cms-muted">{card.working}</p>
+                  <p class="mt-1 text-cms-body-sm text-cms-muted">Sample: {card.sampleSize}</p>
+                  <div class="mt-2 flex flex-wrap gap-3">
+                    {card.links.map((link) => (
+                      <a
+                        href={drillTo(link.href, filter, link.params)}
+                        class="text-cms-body-sm font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section aria-labelledby="drilldowns" class="mt-8 grid gap-4 xl:grid-cols-2">
+          <h2 id="drilldowns" class="sr-only">
+            Drilldowns
+          </h2>
+          <CmsCard
+            title="Customers to look at"
+            description="Observable indicators a manager can verify by clicking. There is no risk score."
+          >
+            <CmsDataTable
+              caption="Customer attention list"
+              columns={[
+                { key: 'customer', label: 'Customer' },
+                { key: 'orders', label: 'Open orders', numeric: true },
+                { key: 'value', label: 'Commercial value' },
+                { key: 'cases', label: 'Open cases', numeric: true },
+                { key: 'breaches', label: 'SLA breaches', numeric: true },
+                { key: 'manager', label: 'Account manager' },
+              ]}
+              empty={customers.length === 0}
+            >
+              {customers.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">
+                    <a
+                      href={drillTo('/app/customers', filter, { accountId: row.accountId })}
+                      class="text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {row.customerName}
+                    </a>
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.openOrders}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.commercialValueByCurrency.length === 0
+                      ? 'Not available'
+                      : row.commercialValueByCurrency.map((v) => (
+                          <p>{money(v.openValue, v.currencyCode)}</p>
+                        ))}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.openCases}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.slaBreaches}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">{row.accountManager ?? 'Not assigned'}</td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard title="Affiliates" description="Side by side, with currencies kept apart.">
+            <CmsDataTable
+              caption="Affiliate comparison"
+              columns={[
+                { key: 'affiliate', label: 'Affiliate' },
+                { key: 'so', label: 'Sales order SLA', numeric: true },
+                { key: 'cs', label: 'Customer SLA', numeric: true },
+                { key: 'pipeline', label: 'Open pipeline' },
+                { key: 'cases', label: 'Cases', numeric: true },
+                { key: 'exception', label: 'Key exception' },
+              ]}
+              empty={entities.length === 0}
+            >
+              {entities.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.affiliateName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.salesOrderSlaPercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.customerSlaPercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.openPipelineByCurrency.length === 0
+                      ? 'Not available'
+                      : row.openPipelineByCurrency.map((v) => (
+                          <p>{money(v.openValue, v.currencyCode)}</p>
+                        ))}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.cases}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">{row.keyException}</td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+        </section>
+
+        <section aria-labelledby="freshness" class="mt-8">
+          <h2 id="freshness" class="mb-1 text-cms-body font-semibold text-cms-ink">
+            How current this is
+          </h2>
+          <CmsDataTable
+            caption="Data freshness"
+            columns={[
+              { key: 'source', label: 'Source' },
+              { key: 'state', label: 'State' },
+              { key: 'when', label: 'Last imported' },
+              { key: 'note', label: 'What that means' },
+            ]}
+            empty={board.freshness.length === 0}
+          >
+            {board.freshness.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-ink">{row.source}</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.live ? 'success' : 'neutral'}
+                    label={row.live ? 'Live' : 'Imported'}
+                  />
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.live ? 'Written as it happens' : (row.lastImportedAt ?? 'Never imported')}
+                  {row.lastFilename && (
+                    <span class="block text-cms-body-sm text-cms-muted">{row.lastFilename}</span>
+                  )}
+                </td>
+                <td class="px-4 py-2.5 text-cms-body-sm text-cms-muted">{row.wording}</td>
+              </tr>
+            ))}
+          </CmsDataTable>
+          <p class="mt-3 text-cms-body-sm text-cms-muted">
+            {board.composition.rule} This render issued {board.queryCount} database queries and
+            cached nothing: a cached figure served to the wrong scope would be a data breach rather
+            than a performance problem.
+          </p>
+        </section>
+      </Fragment>
+    )
+  }
+</CmsLayout>
