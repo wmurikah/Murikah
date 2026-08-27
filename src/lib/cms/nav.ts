@@ -7,10 +7,10 @@
  * arrives. Markup that hard-codes destinations cannot be filtered later without
  * being rewritten, which is the mistake this avoids.
  *
- * Every entry already carries the permission key it will require. Nothing reads
- * that key yet, and nothing filters on it: this phase renders every entry. When
- * the session lands, the filter is one `.filter()` in the sidebar and a role
- * lookup, with no change to the entries themselves.
+ * Every entry carries the permission it requires, and Build Prompt 04 turned
+ * that from a promise into a filter: the sidebar renders `visibleNav(...)` and
+ * nothing else. The entries themselves did not have to change when it did,
+ * which was the point of writing the model as data in the first place.
  *
  * Paths are root-relative on cms.murikah.com. The worker has already rewritten
  * the request to the internal /cms route by the time a page renders, so a link
@@ -26,16 +26,23 @@ export interface CmsNavItem {
   /** Icon key, resolved by CmsIcon.astro. Decorative, always beside a label. */
   readonly icon: CmsIconName;
   /**
-   * The permission code this destination requires, in the database's own
+   * The permission this destination requires, in the database's own
    * MODULE.RESOURCE.ACTION form. `null` means any authenticated user, which is
    * true of exactly one entry: the landing page they are redirected to.
+   *
+   * A list means any one of them is enough. Administration is the reason: it
+   * covers more than one subject, and a Country Manager holding only
+   * ADMIN.ORGANISATION.VIEW would otherwise be given a workspace with no route
+   * to it. The alternative was to widen a single code until it meant
+   * "administration in general", which is how a permission stops meaning
+   * anything.
    *
    * These were placeholders of the form `cms.customers.view` when the model was
    * written, before the schema was available. They are now the real codes from
    * the `permissions` table, because a key that matches nothing would hide
    * every entry from everybody.
    */
-  readonly permission: string | null;
+  readonly permission: string | readonly string[] | null;
   /** One line of context for the section landing page and the page header. */
   readonly summary: string;
 }
@@ -94,21 +101,28 @@ export const CMS_NAV: readonly CmsNavItem[] = [
     label: 'Administration',
     href: '/app/administration',
     icon: 'administration',
-    permission: 'ADMIN.USERS.MANAGE',
-    summary: 'Users, roles, teams and system configuration.',
+    permission: ['ADMIN.USERS.MANAGE', 'ADMIN.ORGANISATION.VIEW', 'ADMIN.ORGANISATION.MANAGE'],
+    summary: 'Users, roles, organisation structure and system configuration.',
   },
 ];
+
+/** Whether a principal's codes satisfy one entry's requirement. */
+export function navItemAllowed(item: CmsNavItem, permissions: readonly string[]): boolean {
+  if (item.permission === null) return true;
+  if (typeof item.permission === 'string') return permissions.includes(item.permission);
+  return item.permission.some((code) => permissions.includes(code));
+}
 
 /**
  * The entries this principal may see.
  *
  * Presentation, not access control: hiding a link stops nobody from typing the
- * URL. Server-side authorisation of the routes themselves is a later phase.
+ * URL. The endpoints and the pages behind them authorise for themselves, in
+ * @/lib/cms/admin/guard, and would refuse the same caller whether or not this
+ * filter had hidden anything.
  */
 export function visibleNav(permissions: readonly string[]): CmsNavItem[] {
-  return CMS_NAV.filter(
-    (item) => item.permission === null || permissions.includes(item.permission),
-  );
+  return CMS_NAV.filter((item) => navItemAllowed(item, permissions));
 }
 
 /**
