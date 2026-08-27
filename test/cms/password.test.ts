@@ -22,10 +22,36 @@ import {
   PASSWORD_ALGORITHM_PBKDF2,
 } from '../../src/lib/cms/auth/password.ts';
 
-test('the work factor is at least the 210,000 iterations this phase requires', () => {
+/**
+ * The Cloudflare Workers runtime caps PBKDF2 at 100,000 iterations and throws
+ * on anything above it:
+ *
+ *   NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+ *   supported (requested 210000)
+ *
+ * Node has no cap, so a value above the limit passes this whole suite and fails
+ * only on the deployed worker. That is exactly how 210,000 shipped and broke
+ * sign-in in production: every test here was green. This bound belongs to the
+ * runtime, not to a policy, so raising it is never the right fix.
+ */
+const WORKERS_PBKDF2_MAX_ITERATIONS = 100_000;
+
+test('the work factor never exceeds the Cloudflare Workers PBKDF2 ceiling', () => {
   assert.ok(
-    PBKDF2_ITERATIONS >= 210_000,
-    `iterations must be >= 210000, found ${PBKDF2_ITERATIONS}`,
+    PBKDF2_ITERATIONS <= WORKERS_PBKDF2_MAX_ITERATIONS,
+    `iterations must be <= ${WORKERS_PBKDF2_MAX_ITERATIONS} or the deployed ` +
+      `worker throws NotSupportedError on every sign-in, found ${PBKDF2_ITERATIONS}`,
+  );
+});
+
+test('the work factor sits at the ceiling rather than below it', () => {
+  // The cap is low for PBKDF2, so the only sound answer is to spend all of it.
+  // This catches a well-meant "just lower it until it works" that lands at,
+  // say, 10,000 and quietly weakens every credential written afterwards.
+  assert.equal(
+    PBKDF2_ITERATIONS,
+    WORKERS_PBKDF2_MAX_ITERATIONS,
+    `iterations must be exactly ${WORKERS_PBKDF2_MAX_ITERATIONS}, found ${PBKDF2_ITERATIONS}`,
   );
 });
 
@@ -97,10 +123,10 @@ test('a malformed stored value fails closed rather than throwing', async () => {
 test('a credential written at a lower iteration count still verifies', async () => {
   // The migration path the format exists for: verification reads the iteration
   // count from the stored string, not from the module constant.
-  const legacy = 'pbkdf2-sha256$120000$MTIzNDU2Nzg5MDEyMzQ1Ng==$'; // salt only, key added below
+  const legacy = 'pbkdf2-sha256$60000$MTIzNDU2Nzg5MDEyMzQ1Ng==$'; // salt only, key added below
   const salt = Buffer.from('MTIzNDU2Nzg5MDEyMzQ1Ng==', 'base64');
   const { pbkdf2Sync } = await import('node:crypto');
-  const key = pbkdf2Sync('legacy password', salt, 120_000, 32, 'sha256').toString('base64');
+  const key = pbkdf2Sync('legacy password', salt, 60_000, 32, 'sha256').toString('base64');
   const stored = legacy + key;
   assert.deepEqual(await verifyPassword('legacy password', stored, 'PBKDF2'), { ok: true });
   // ...and is reported as due for a rehash, because it is below current cost.
