@@ -101,7 +101,71 @@ export interface ScopeResolution {
  * A role that records the code with `allowed = 0` contributes nothing here,
  * per the rule at the top of this file.
  */
+/**
+ * One answer per (client, user, permission), for the life of one request.
+ *
+ * WHY. This is a pure function of its arguments: the same user and the same
+ * code give the same scopes for the whole of a request, and nothing on a
+ * dashboard changes a role mid-render. Every metric helper resolves scope
+ * before running its own query, so a page that draws forty figures asked this
+ * question forty times. Measured on the executive dashboard: 83 round trips
+ * for 5 distinct answers, which is a third of the page's entire subrequest
+ * budget spent re-reading one row set.
+ *
+ * KEYED ON THE CLIENT, so the cache lives exactly as long as the request does.
+ * `getDb` builds a fresh client per request (Workers are stateless and there
+ * is no safe module-level singleton across isolates), and a WeakMap holds the
+ * entry only while that client is alive. A role changed between two requests
+ * is therefore seen by the second one. A role changed *during* a single render
+ * is not, which is the same guarantee the page already had: it resolved every
+ * scope from one connection within a few milliseconds either way.
+ *
+ * The PROMISE is cached rather than the value, so concurrent callers in the
+ * same tick share one in-flight query instead of racing to issue several.
+ */
+const scopeCache = new WeakMap<Client, Map<string, Promise<ScopeResolution>>>();
+
 export async function resolveScope(
+  db: Client,
+  userId: string,
+  permission: PermissionCode,
+): Promise<ScopeResolution> {
+  // ONLY A BATCHING CLIENT IS CACHED, and that restriction is the whole safety
+  // argument.
+  //
+  // A batching client (src/lib/cms/batching.ts) is handed out by a read-only
+  // analytics render, which issues no writes at all, so no role can change
+  // underneath it. Everything else, the RBAC administration endpoints
+  // included, gets a plain client and resolves afresh every time, exactly as
+  // before: those paths DO grant a role and then re-read the scope in the same
+  // request, and a cache there would answer with what was true before the
+  // grant. `test/cms/rbac.test.ts` proves that case, and it should.
+  //
+  // Each section holds its own wrapper around one underlying client, so the
+  // cache keys on the root rather than the wrapper; otherwise five sections
+  // would ask the same question five times.
+  const root = (db as unknown as Record<symbol, unknown>)[Symbol.for('cms.rootClient')] as
+    | Client
+    | undefined;
+  if (root === undefined) return resolveScopeUncached(db, userId, permission);
+
+  const key = `${userId}\u0000${permission}`;
+  let perClient = scopeCache.get(root);
+  if (perClient === undefined) {
+    perClient = new Map();
+    scopeCache.set(root, perClient);
+  }
+  const cached = perClient.get(key);
+  if (cached !== undefined) return cached;
+  const pending = resolveScopeUncached(db, userId, permission);
+  perClient.set(key, pending);
+  // A failed resolution must not be remembered: the next attempt in the same
+  // request should ask again rather than replay the error.
+  void pending.catch(() => perClient.delete(key));
+  return pending;
+}
+
+async function resolveScopeUncached(
   db: Client,
   userId: string,
   permission: PermissionCode,

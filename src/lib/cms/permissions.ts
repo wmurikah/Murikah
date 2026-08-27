@@ -306,6 +306,31 @@ export const SALES_ORDER_UPLOAD = 'ORDERS.SALES_ORDER.UPLOAD';
 export const PURCHASE_ORDER_VIEW = 'ORDERS.PURCHASE_ORDER.VIEW';
 export const PURCHASE_ORDER_UPLOAD = 'ORDERS.PURCHASE_ORDER.UPLOAD';
 
+/**
+ * The executive dashboard, as a home rather than as a door.
+ *
+ * A DEDICATED CODE, not the union of the four the page composes from. The nav
+ * gates the Executive link on holding ANY of the four module codes, which is
+ * the right question for "may this person open the page": the page composes
+ * itself from whatever they hold, so someone with one code sees the one
+ * section their code covers, and that is useful.
+ *
+ * It is the wrong question for "is this page their home". Landing a person
+ * holding only SERVICE.CASES.VIEW on a dashboard where five of six sections
+ * are composed away is a worse first screen than Home, and nobody chose it for
+ * them. This code says somebody decided this person's job starts here.
+ *
+ * Added as PERM-041 by docs/cms/executive/08_add_executive_permission.sql,
+ * which the operator runs. Until it is run nobody holds the code and everybody
+ * lands on Home, which is exactly today's behaviour: the default of this
+ * change is no change.
+ */
+export const EXECUTIVE_DASHBOARD_VIEW = 'EXECUTIVE.DASHBOARD.VIEW';
+
+export function canViewExecutiveDashboard(permissions: readonly string[]): boolean {
+  return permissions.includes(EXECUTIVE_DASHBOARD_VIEW);
+}
+
 export function canViewImports(permissions: readonly string[]): boolean {
   return permissions.includes(IMPORTS_VIEW) || permissions.includes(IMPORTS_UPLOAD);
 }

@@ -13,6 +13,7 @@
 import type { APIRoute } from 'astro';
 import { requireSignedIn } from '../../../../lib/cms/admin/guard.ts';
 import { connect } from '../../../../lib/cms/admin/crudRoute.ts';
+import { createBatcher } from '../../../../lib/cms/batching.ts';
 import { parseFilter } from '../../../../lib/cms/analytics/filters.ts';
 import {
   attentionCustomers,
@@ -37,11 +38,15 @@ export const GET: APIRoute = async (context) => {
     const now = toDbTimestamp(new Date());
     const userId = auth.principal.user.userId;
     const permissions = auth.principal.user.permissions;
-    const board = await dashboard(connection.db, userId, permissions, filter, now);
-    const [insights, attention, entities] = await Promise.all([
-      connectedInsights(connection.db, userId, permissions, filter, now),
-      attentionCustomers(connection.db, userId, filter, now),
-      entityComparison(connection.db, userId, permissions, filter, now),
+    // The same four sections the page loads, on one batching queue. Every read
+    // here used to be its own outbound subrequest: 237 for one response, where
+    // Cloudflare's Free plan allows 50. See src/lib/cms/batching.ts.
+    const batcher = createBatcher(connection.db);
+    const [board, insights, attention, entities] = await Promise.all([
+      dashboard(batcher.for('executive.dashboard'), userId, permissions, filter, now),
+      connectedInsights(batcher.for('executive.insights'), userId, permissions, filter, now),
+      attentionCustomers(batcher.for('executive.attention-customers'), userId, filter, now),
+      entityComparison(batcher.for('executive.entities'), userId, permissions, filter, now),
     ]);
     return ok({ filter, dashboard: board, insights, attentionCustomers: attention, entities });
   } catch (error) {
