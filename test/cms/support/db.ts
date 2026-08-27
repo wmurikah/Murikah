@@ -45,6 +45,28 @@ export interface TestClient {
   raw: DatabaseSync;
 }
 
+/**
+ * Whether a statement returns rows, so this adapter knows to call `all` rather
+ * than `run`.
+ *
+ * The real libSQL client needs no such decision: `execute` returns a result set
+ * either way. `node:sqlite` splits the two, and its binding exposes no flag for
+ * "does this return rows", so the shape is read from the text.
+ *
+ * A leading `WITH` counts as a read when nothing in the statement writes. That
+ * is what a recursive CTE looks like, which the product catalogue uses to walk
+ * a category's ancestors, and without this clause every one of those queries
+ * would silently come back with no rows. A `WITH ... INSERT` or `WITH ...
+ * DELETE` falls to the write path, which is the safe direction to be wrong in:
+ * a write treated as a read still executes, a read treated as a write returns
+ * nothing and the failure is loud.
+ */
+function returnsRows(sql: string): boolean {
+  if (/^\s*(select|pragma|explain)/i.test(sql)) return true;
+  if (!/^\s*with\b/i.test(sql)) return false;
+  return !/\b(insert|update|delete)\s/i.test(sql.replace(/--[^\n]*/g, ''));
+}
+
 export function createTestDb(): TestClient {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
@@ -76,7 +98,7 @@ export function createTestDb(): TestClient {
         return a;
       }) as (string | number | null | bigint | Uint8Array)[];
 
-      if (/^\s*(select|pragma)/i.test(sql)) {
+      if (returnsRows(sql)) {
         const rows = db.prepare(sql).all(...bound) as unknown as Record<string, unknown>[];
         return { rows, rowsAffected: 0 };
       }
