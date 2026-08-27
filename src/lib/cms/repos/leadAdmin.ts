@@ -632,34 +632,44 @@ export async function recordFirstContact(
   if (before === null) return { ok: false, kind: 'not_found' };
 
   const now = toDbTimestamp(ctx.now);
-  await db.batch(
-    [
-      {
-        sql: `UPDATE leads SET first_contact_at = ?
-              WHERE lead_id = ? AND first_contact_at IS NULL`,
-        args: [now, leadId],
-      },
-      {
-        sql: `UPDATE leads SET status = 'CONTACTED'
-              WHERE lead_id = ? AND status = 'NEW'`,
-        args: [leadId],
-      },
+
+  // PHASE 30 FINDING, FIXED HERE. The two UPDATEs were already guarded, so
+  // calling this twice never moved the timestamp and never emitted a second
+  // domain event. The audit row was NOT guarded, so a second call wrote a
+  // second LEAD_CONTACTED row for a first contact that did not happen, and
+  // anybody counting those rows would count two first contacts for one lead.
+  //
+  // An audit row records a change. Where nothing changed there is nothing to
+  // record, and writing one anyway makes the trail a log of attempts rather
+  // than a record of facts.
+  const isFirstContact = before.firstContactAt === null;
+  const statements: Stmt[] = [
+    {
+      sql: `UPDATE leads SET first_contact_at = ?
+            WHERE lead_id = ? AND first_contact_at IS NULL`,
+      args: [now, leadId],
+    },
+    {
+      sql: `UPDATE leads SET status = 'CONTACTED'
+            WHERE lead_id = ? AND status = 'NEW'`,
+      args: [leadId],
+    },
+  ];
+  if (isFirstContact) {
+    statements.push(
       audit(
         ctx,
         LEAD_AUDIT.contacted,
         leadId,
         'FIRST_CONTACT',
-        {
-          firstContactAt: before.firstContactAt,
-          status: before.status,
-        },
-        { firstContactAt: before.firstContactAt ?? now },
+        { firstContactAt: null, status: before.status },
+        { firstContactAt: now },
       ),
-    ],
-    'write',
-  );
+    );
+  }
+  await db.batch(statements, 'write');
   const after = await getLeadUnscoped(db, leadId);
-  if (after !== null && before.firstContactAt === null) {
+  if (after !== null && isFirstContact) {
     await emitLeadEvent(db, {
       type: 'LEAD_CONTACTED',
       leadId,
