@@ -1045,7 +1045,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
     line_number INTEGER NOT NULL CHECK(line_number > 0),
     product_id TEXT NOT NULL,
     quantity REAL CHECK(quantity IS NULL OR quantity >= 0),
-    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    unit_cost REAL CHECK(unit_cost IS NULL OR unit_cost >= 0),
     line_value REAL CHECK(line_value IS NULL OR line_value >= 0),
     FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(purchase_order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
