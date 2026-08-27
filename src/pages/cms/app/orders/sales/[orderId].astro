@@ -87,6 +87,8 @@ const NOT_AVAILABLE = 'Not available';
     ) : (
       <Fragment>
         <CmsPageHeader
+          auditEntityType="SALES_ORDER"
+          auditEntityId={orderId}
           title={detail.order.documentNumber}
           description={`${detail.order.customerName}, ${detail.order.affiliateName}${detail.order.businessUnitName === null ? '' : `, ${detail.order.businessUnitName}`}. Created ${detail.order.orderCreatedAt}.`}
           crumbs={[

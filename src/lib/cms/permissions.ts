@@ -351,3 +351,43 @@ export const CREDIT_EXCEPTION_APPROVE = 'CREDIT.EXCEPTION.APPROVE';
 export function canSeeCreditInformation(permissions: readonly string[]): boolean {
   return permissions.includes(CREDIT_EXCEPTION_APPROVE);
 }
+
+/**
+ * Audit, and the two codes phase 26 needs that the catalogue does not have.
+ *
+ * `AUDIT.EVENTS.VIEW` is PERM-020 and is already held by the affiliate and
+ * group finance roles, because a finance manager reviewing an approval needs
+ * to see what happened to the order.
+ *
+ * The other two do not exist in the seeded catalogue and are delivered as
+ * `docs/cms/audit/09_add_audit_permissions.sql` for the operator to run.
+ * Until they do, `resolveScope` finds no permission row, returns not-granted,
+ * and the security view and the audit export refuse everybody including the
+ * system administrator. That is correct: the permissions table is the
+ * authority, and a code that does not exist grants nothing. Both surfaces say
+ * so by name rather than rendering an empty screen.
+ *
+ * SECURITY_VIEW is separate from VIEW because reading what happened to an
+ * order is not the same as reading sign-in failures, password resets, role
+ * grants and scope changes, which are investigative material about people.
+ * EXPORT is separate from both because carrying evidence out of the building
+ * is a different act from reading it on screen, and it is the one path by
+ * which audit content leaves the controls that protect it.
+ */
+export const AUDIT_VIEW = 'AUDIT.EVENTS.VIEW';
+export const AUDIT_SECURITY_VIEW = 'AUDIT.EVENTS.SECURITY_VIEW';
+export const AUDIT_EXPORT = 'AUDIT.EVENTS.EXPORT';
+
+export function canViewAudit(permissions: readonly string[]): boolean {
+  return permissions.includes(AUDIT_VIEW);
+}
+
+/** Never implied by VIEW. See above. */
+export function canViewSecurityAudit(permissions: readonly string[]): boolean {
+  return permissions.includes(AUDIT_SECURITY_VIEW);
+}
+
+/** Never implied by VIEW or by SECURITY_VIEW. */
+export function canExportAudit(permissions: readonly string[]): boolean {
+  return permissions.includes(AUDIT_EXPORT);
+}

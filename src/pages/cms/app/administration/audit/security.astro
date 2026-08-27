@@ -1,0 +1,159 @@
+---
+/**
+ * Administration → Audit Trail → Security.
+ *
+ * The authentication and access view: sign-ins, password changes,
+ * suspensions, role grants, scope changes, permission grants and portal
+ * membership revocations.
+ *
+ * IT IS SEPARATE FROM THE MAIN TRAIL FOR ONE REASON. These events are
+ * investigative material about people. A finance manager reviewing an
+ * approval holds AUDIT.EVENTS.VIEW and has every reason to see what happened
+ * to the order; that is not a reason to read who failed to sign in this
+ * morning. So this needs AUDIT.EVENTS.SECURITY_VIEW, which is a different
+ * code and is never implied by the first.
+ *
+ * UNTIL THE OPERATOR RUNS THE SCRIPT, NOBODY HOLDS IT, and this page says so
+ * by name rather than rendering an empty table. An empty security view and an
+ * unconfigured one are different facts, and somebody investigating an
+ * incident must not be shown the first for the second.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsAuditTable from '@/components/cms/CmsAuditTable.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewAudit, AUDIT_SECURITY_VIEW } from '@/lib/cms/permissions';
+import {
+  securityEvents,
+  parseAuditFilter,
+  auditFilterToQuery,
+  maySeeSecurityEvents,
+  PAGE_SIZE,
+  type AuditPage,
+} from '@/lib/cms/repos/auditTrail';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewAudit(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const now = new Date();
+const filter = parseAuditFilter(Astro.url.searchParams, now);
+
+let allowed = false;
+let page: AuditPage = {
+  items: [],
+  total: 0,
+  page: filter.page,
+  pageSize: PAGE_SIZE,
+  window: { from: filter.from, to: filter.to },
+  securityIncluded: false,
+};
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    allowed = await maySeeSecurityEvents(db, userId);
+    if (allowed) page = await securityEvents(db, userId, filter);
+  } catch (error) {
+    console.error('[cms.audit.security] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const totalPages = Math.max(1, Math.ceil(page.total / page.pageSize));
+const pageHref = (target: number) =>
+  `/app/administration/audit/security?${auditFilterToQuery({ ...filter, page: target })}`;
+---
+
+<CmsLayout title="Security events">
+  <CmsPageHeader
+    title="Security events"
+    description="Authentication and access. Who signed in, who was granted what, and whose access was taken away."
+    crumbs={[
+      { label: 'Administration', href: '/app/administration' },
+      { label: 'Audit trail', href: '/app/administration/audit' },
+      { label: 'Security' },
+    ]}
+  />
+
+  {
+    !mayRead ? (
+      <CmsEmptyState
+        icon="administration"
+        title="You do not have permission to read the audit trail"
+        description="AUDIT.EVENTS.VIEW is needed."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Security events could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : !allowed ? (
+      <CmsEmptyState
+        icon="administration"
+        title="Security events need a permission you do not hold"
+        description={`${AUDIT_SECURITY_VIEW} is required, and it is deliberately separate from the ordinary audit read. If nobody in the organisation holds it, the operator has not yet run docs/cms/audit/09_add_audit_permissions.sql, and until they do this view correctly refuses everybody including a system administrator.`}
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <CmsCard title="Filters">
+          <form method="get" class="grid gap-4 sm:grid-cols-3">
+            <CmsInput id="from" name="from" label="From" type="date" value={filter.from} />
+            <CmsInput id="to" name="to" label="To" type="date" value={filter.to} />
+            <div class="flex items-end gap-2">
+              <CmsButton type="submit" variant="primary" icon="filter">
+                Apply
+              </CmsButton>
+              <CmsButton href="/app/administration/audit/security" variant="secondary">
+                Reset
+              </CmsButton>
+            </div>
+          </form>
+        </CmsCard>
+
+        <p class="text-cms-body-sm text-cms-muted">
+          <span class="font-semibold text-cms-ink">{page.total}</span> security events from{' '}
+          {page.window.from} to {page.window.to}.
+        </p>
+
+        <CmsCard bodyClass="p-0">
+          <div class="px-4 py-3">
+            <CmsAuditTable
+              rows={page.items}
+              emptyTitle="No security events in this window"
+              emptyDescription="Nothing was recorded in this range. Widen the dates to look further back."
+            />
+          </div>
+        </CmsCard>
+
+        {totalPages > 1 && (
+          <nav class="flex items-center justify-between gap-3" aria-label="Security pagination">
+            <p class="text-cms-body-sm text-cms-muted">
+              Page {page.page} of {totalPages}
+            </p>
+            <span class="flex gap-2">
+              {page.page > 1 && (
+                <CmsButton href={pageHref(page.page - 1)} variant="secondary">
+                  Previous
+                </CmsButton>
+              )}
+              {page.page < totalPages && (
+                <CmsButton href={pageHref(page.page + 1)} variant="secondary">
+                  Next
+                </CmsButton>
+              )}
+            </span>
+          </nav>
+        )}
+      </div>
+    )
+  }
+</CmsLayout>
