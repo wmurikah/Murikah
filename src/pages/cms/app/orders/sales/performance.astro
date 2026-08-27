@@ -1,0 +1,534 @@
+---
+/**
+ * Orders → Sales Orders → Performance.
+ *
+ * Aggregated analysis, separate from the transaction queue. Every figure on
+ * this page is computed in SQL under the same filter and the same scope
+ * predicate as the operations list, so a number here and the list behind it
+ * cannot disagree.
+ *
+ * EVERY DURATION CARRIES ITS COVERAGE. Where a timestamp is absent the
+ * record leaves the population and the interface says how many did, because
+ * an average over a partial population without its denominator is the kind
+ * of number this application exists to stop.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canSeeCreditInformation, canViewSalesOrders } from '@/lib/cms/permissions';
+import { parseFilter, drillTo, filterToQuery } from '@/lib/cms/analytics/filters';
+import {
+  formatDuration,
+  formatRate,
+  coverageSentence,
+  MEDIAN_DEFINITION,
+  P90_DEFINITION,
+} from '@/lib/cms/analytics/stats';
+import {
+  soSummary,
+  approverPerformance,
+  productPerformance,
+  customerPerformance,
+  ageBuckets,
+  trend,
+  type SoSummary,
+  type ApproverRow,
+  type ProductPerformanceRow,
+  type CustomerPerformanceRow,
+  type TrendBucket,
+} from '@/lib/cms/repos/soPerformance';
+import { lineChart, distributionChart, barChart } from '@/lib/cms/charts/svg';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewSalesOrders(permissions);
+// Credit is commercially sensitive, so the credit columns need the credit
+// permission and not merely the order permission.
+const maySeeCredit = canSeeCreditInformation(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let summary: SoSummary | null = null;
+let approvers: { rows: ApproverRow[]; minimumVolume: number } = { rows: [], minimumVolume: 0 };
+let products: ProductPerformanceRow[] = [];
+let customers: CustomerPerformanceRow[] = [];
+let ages: { key: string; label: string; orders: number }[] = [];
+let buckets: TrendBucket[] = [];
+let affiliates: { value: string; label: string }[] = [];
+let loadFailed = false;
+
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    // Six independent aggregations, run concurrently, all in SQL.
+    const [s, a, p, cst, ag, tr, af] = await Promise.all([
+      soSummary(db, userId, filter, now),
+      approverPerformance(db, userId, filter, now),
+      productPerformance(db, userId, filter, now),
+      customerPerformance(db, userId, filter, now, maySeeCredit),
+      ageBuckets(db, userId, filter, now),
+      trend(db, userId, filter, now),
+      db.execute(
+        `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
+      ),
+    ]);
+    summary = s;
+    approvers = a;
+    products = p;
+    customers = cst;
+    ages = ag;
+    buckets = tr;
+    affiliates = af.rows.map((row) => ({
+      value: String(row.affiliate_id),
+      label: String(row.affiliate_name),
+    }));
+  } catch (error) {
+    console.error('[cms.orders.sales.performance] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const ordersTrend =
+  summary === null
+    ? null
+    : lineChart(
+        [
+          {
+            name: 'Orders created',
+            token: 'cms-royal',
+            points: buckets.map((bucket) => ({
+              label: bucket.bucket,
+              value: bucket.orders,
+              href: drillTo('/app/orders/sales', filter),
+            })),
+          },
+        ],
+        { unit: 'orders' },
+      );
+
+const durationTrend =
+  summary === null
+    ? null
+    : lineChart(
+        [
+          {
+            name: 'Finance median (elapsed)',
+            token: 'cms-royal',
+            points: buckets.map((b) => ({ label: b.bucket, value: b.financeMedianMinutes })),
+          },
+          {
+            name: 'Credit median (elapsed)',
+            token: 'cms-lavender',
+            points: buckets.map((b) => ({ label: b.bucket, value: b.creditMedianMinutes })),
+          },
+          {
+            name: 'Order to invoice median',
+            token: 'cms-gold-ink',
+            points: buckets.map((b) => ({ label: b.bucket, value: b.orderToInvoiceMedianMinutes })),
+          },
+        ],
+        { unit: 'minutes', format: formatDuration },
+      );
+
+const ageChart = distributionChart(
+  {
+    name: 'Open order age',
+    token: 'cms-info',
+    points: ages.map((bucket) => ({ label: bucket.label, value: bucket.orders })),
+  },
+  { unit: 'orders' },
+);
+
+const complianceTrend =
+  summary === null
+    ? null
+    : barChart(
+        {
+          name: 'SLA compliance',
+          token: 'cms-success',
+          points: buckets.map((b) => ({ label: b.bucket, value: b.slaCompliancePercent })),
+        },
+        { unit: 'per cent', format: (v) => (v === null ? 'Not available' : `${v}%`) },
+      );
+---
+
+<CmsLayout title="Sales order performance">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to sales order performance"
+        description="Ask a system administrator for the ORDERS.SALES_ORDER.VIEW permission."
+      />
+    ) : loadFailed || summary === null ? (
+      <CmsErrorState
+        title="Performance could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Sales order performance"
+          description="Every figure is aggregated in the database under this filter and your own scope, and every duration states how many orders carried the timestamps it needs."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Orders', href: '/app/orders' },
+            { label: 'Sales orders', href: drillTo('/app/orders/sales', filter) },
+            { label: 'Performance' },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" href={drillTo('/app/orders/sales', filter)}>
+              Operations
+            </CmsButton>
+            <CmsButton
+              variant="secondary"
+              href={`/api/orders/sales/export${filterToQuery(filter)}`}
+            >
+              Export
+            </CmsButton>
+          </Fragment>
+        </CmsPageHeader>
+
+        <CmsOrderFilters
+          filter={filter}
+          affiliates={affiliates}
+          statuses={[]}
+          action="/app/orders/sales/performance"
+        />
+
+        <section aria-labelledby="signals" class="mb-6">
+          <h2 id="signals" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Signals
+          </h2>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Orders in this selection</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {summary.orders.toLocaleString('en-KE')}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Date basis: the order creation date.
+              </p>
+            </div>
+
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Finance turnaround, median</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatDuration(summary.finance.elapsed.medianMinutes)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Elapsed (wall clock). Accountable, pause-adjusted:{' '}
+                {formatDuration(summary.finance.accountable.medianMinutes)}. Two different
+                durations, never mixed.
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                {coverageSentence(summary.finance.elapsed, 'orders')}
+              </p>
+            </div>
+
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Credit turnaround, median</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatDuration(summary.credit.turnaround.elapsed.medianMinutes)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Denominator: the {summary.credit.ordersRequiringCredit.toLocaleString('en-KE')}{' '}
+                orders that required credit approval. The{' '}
+                {summary.credit.ordersNotRequiringCredit.toLocaleString('en-KE')} that did not are
+                excluded, not counted as zero.
+              </p>
+            </div>
+
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Order to invoice, median</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatDuration(summary.fulfilment.orderToInvoice.medianMinutes)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                The measure the business calls depot loading: the invoice timestamp minus the order
+                timestamp. {coverageSentence(summary.fulfilment.orderToInvoice, 'orders')}
+              </p>
+            </div>
+
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Order to loading authority, median</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatDuration(summary.fulfilment.orderToLoadingAuthority.medianMinutes)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                A different metric from Order to loaded, which is{' '}
+                {formatDuration(summary.fulfilment.orderToLoaded.medianMinutes)}.{' '}
+                {coverageSentence(summary.fulfilment.orderToLoaded, 'orders')}
+              </p>
+            </div>
+
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">SLA compliance</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatRate(summary.slaCompliancePercent)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Met divided by met plus breached, over {summary.slaMeasured.toLocaleString('en-KE')}{' '}
+                settled SLA timers. Running timers are not in the denominator.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="backlog" class="mb-6">
+          <h2 id="backlog" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Backlog
+          </h2>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            {summary.backlog.map((signal) => (
+              <a
+                href={drillTo('/app/orders/sales', filter, signal.drill)}
+                class="rounded-cms border border-cms-line bg-cms-surface p-4 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                <p class="text-cms-body-sm text-cms-muted">{signal.label}</p>
+                <p class="text-cms-h2 font-semibold text-cms-ink tabular-nums">{signal.orders}</p>
+                <p class="mt-1 text-cms-body-sm text-cms-royal">Open the list</p>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="money" class="mb-6">
+          <h2 id="money" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Order value
+          </h2>
+          <CmsDataTable
+            caption="Order value by currency"
+            columns={[
+              { key: 'currency', label: 'Currency' },
+              { key: 'orders', label: 'Orders', numeric: true },
+              { key: 'value', label: 'Total value', numeric: true },
+            ]}
+            empty={summary.currencies.length === 0}
+          >
+            {summary.currencies.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-ink">{row.currencyCode ?? 'Not available'}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.orders}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.totalValue === null
+                    ? 'Not available'
+                    : `${row.currencyCode ?? ''} ${row.totalValue.toLocaleString('en-KE')}`.trim()}
+                </td>
+              </tr>
+            ))}
+          </CmsDataTable>
+          <p class="mt-2 text-cms-body-sm text-cms-muted">
+            One row per currency, and no total across them. KES, USD and UGX are not addable, this
+            schema holds no exchange rate, and a rate this application invented would be wrong by an
+            unknown amount.
+          </p>
+        </section>
+
+        <section aria-labelledby="charts" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="charts" class="sr-only">
+            Trends
+          </h2>
+          {ordersTrend && (
+            <CmsChart
+              title="Orders created"
+              definition="Count of orders whose creation date falls in each period. Denominator: all orders in this filter and scope."
+              chart={ordersTrend}
+            />
+          )}
+          {durationTrend && (
+            <CmsChart
+              title="Turnaround medians (elapsed)"
+              definition={`Wall-clock durations by period. ${MEDIAN_DEFINITION}`}
+              chart={durationTrend}
+              coverage={coverageSentence(summary.finance.elapsed, 'orders')}
+            />
+          )}
+          {complianceTrend && (
+            <CmsChart
+              title="SLA compliance"
+              definition="Met divided by met plus breached, per period, from the SLA engine's own settled timers."
+              chart={complianceTrend}
+              unit="per cent"
+            />
+          )}
+          <CmsChart
+            title="Open order age"
+            definition="Age of orders that are neither loaded nor cancelled, measured from creation to now. These buckets are DESCRIPTIVE and are not SLA thresholds: SLA status comes only from the SLA engine."
+            chart={ageChart}
+          />
+        </section>
+
+        <section aria-labelledby="approvers" class="mb-6">
+          <h2 id="approvers" class="mb-1 text-cms-body font-semibold text-cms-ink">
+            Approver performance
+          </h2>
+          <p class="mb-3 text-cms-body-sm text-cms-muted">
+            One row per person, per process, per stage, per affiliate. A person who approves in two
+            processes keeps two rows and never one blended average, and three people holding the
+            same job title in three affiliates are three rows, because the assignment is the unit of
+            analysis and the title is not. A comparative rank is shown only above{' '}
+            {approvers.minimumVolume.toLocaleString('en-KE')} transactions; below it the figures are
+            shown without a rank. {MEDIAN_DEFINITION} {P90_DEFINITION}
+          </p>
+          <CmsDataTable
+            caption="Approver performance"
+            columns={[
+              { key: 'approver', label: 'Approver' },
+              { key: 'affiliate', label: 'Affiliate' },
+              { key: 'process', label: 'Process' },
+              { key: 'stage', label: 'Stage' },
+              { key: 'transactions', label: 'Transactions', numeric: true },
+              { key: 'median', label: 'Median', numeric: true },
+              { key: 'average', label: 'Average', numeric: true },
+              { key: 'p90', label: 'P90', numeric: true },
+              { key: 'sla', label: 'Within SLA', numeric: true },
+              { key: 'breaches', label: 'Breaches', numeric: true },
+              { key: 'pending', label: 'Pending', numeric: true },
+              { key: 'oldest', label: 'Oldest pending' },
+              { key: 'rank', label: 'Rank' },
+            ]}
+            empty={approvers.rows.length === 0}
+          >
+            {approvers.rows.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.approver}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.affiliateName ?? 'Not available'}</td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.processType.replace('_', ' ').toLowerCase()}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.stageName}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.transactions}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatDuration(row.medianMinutes)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatDuration(row.averageMinutes)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatDuration(row.p90Minutes)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatRate(row.withinSlaPercent)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.breaches}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.pending}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.oldestPendingAt ?? 'None pending'}</td>
+                <td class="px-4 py-2.5">
+                  {row.rank === null ? (
+                    <span class="text-cms-body-sm text-cms-muted">Below the minimum volume</span>
+                  ) : (
+                    <CmsBadge tone="neutral" label={`#${row.rank}`} />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </CmsDataTable>
+        </section>
+
+        <section aria-labelledby="products" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="products" class="sr-only">
+            Products and customers
+          </h2>
+          <CmsCard
+            title="Products"
+            description="Group, category and product, from the structured hierarchy."
+          >
+            <CmsDataTable
+              caption="Product performance"
+              columns={[
+                { key: 'group', label: 'Group' },
+                { key: 'category', label: 'Category' },
+                { key: 'product', label: 'Product' },
+                { key: 'orders', label: 'Orders', numeric: true },
+                { key: 'quantity', label: 'Quantity', numeric: true },
+                { key: 'invoice', label: 'Median to invoice', numeric: true },
+                { key: 'credit', label: 'Credit exception rate', numeric: true },
+                { key: 'sla', label: 'SLA', numeric: true },
+              ]}
+              empty={products.length === 0}
+            >
+              {products.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.productGroupName ?? 'Not available'}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.productCategoryName ?? 'Not available'}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-ink">{row.productCode ?? 'Not available'}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.orders}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.quantity === null
+                      ? 'Not available'
+                      : `${row.quantity.toLocaleString('en-KE')} ${row.unitOfMeasure ?? ''}`.trim()}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.medianOrderToInvoiceMinutes)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.creditExceptionRatePercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.slaCompliancePercent)}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Quantities are shown with their unit of measure and never added across incompatible
+              units.
+            </p>
+          </CmsCard>
+
+          <CmsCard title="Customers" description="Order count, fulfilment and SLA by customer.">
+            <CmsDataTable
+              caption="Customer performance"
+              columns={[
+                { key: 'customer', label: 'Customer' },
+                { key: 'orders', label: 'Orders', numeric: true },
+                { key: 'invoice', label: 'Median to invoice', numeric: true },
+                ...(maySeeCredit
+                  ? [{ key: 'credit', label: 'Credit exception rate', numeric: true }]
+                  : []),
+                { key: 'sla', label: 'SLA', numeric: true },
+              ]}
+              empty={customers.length === 0}
+            >
+              {customers.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.customerName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.orders}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.medianOrderToInvoiceMinutes)}
+                  </td>
+                  {maySeeCredit && (
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {formatRate(row.creditExceptionRatePercent)}
+                    </td>
+                  )}
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.slaCompliancePercent)}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+        </section>
+      </Fragment>
+    )
+  }
+</CmsLayout>
