@@ -29,6 +29,10 @@ import { scopedAccounts } from '../repos/accountAdmin.ts';
 import { scopedLeads } from '../repos/leadAdmin.ts';
 import { scopedOpportunities } from '../repos/opportunityAdmin.ts';
 import { scopedCases } from '../repos/serviceAdmin.ts';
+// Phase 20 made the sales order scope canonical in its own module. This file
+// imports it rather than keeping the second copy it held while no sales order
+// module existed, so the two answer the access question identically.
+import { scopedSalesOrders } from '../repos/soPerformance.ts';
 import { LEADS_VIEW } from '../permissions.ts';
 
 export const ACTIVITY_ENTITY_TYPES = [
@@ -53,16 +57,6 @@ export type EntityAccess =
 const text = (v: unknown): string => String(v ?? '');
 const nullableText = (v: unknown): string | null =>
   v === null || v === undefined ? null : String(v);
-
-async function scopedSalesOrders(db: Client, userId: string): Promise<Predicate> {
-  const resolution = await resolveScope(db, userId, 'ORDERS.SALES_ORDER.VIEW');
-  if (!resolution.granted) return DENY_ALL;
-  return scopePredicate(resolution, {
-    country: 'af.country_id',
-    affiliate: 'so.affiliate_id',
-    businessUnit: 'so.business_unit_id',
-  });
-}
 
 async function scopedPurchaseOrders(db: Client, userId: string): Promise<Predicate> {
   const resolution = await resolveScope(db, userId, 'ORDERS.PURCHASE_ORDER.VIEW');
