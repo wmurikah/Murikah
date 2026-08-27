@@ -26,7 +26,16 @@ export const LOGIN_PATH = '/login';
  * two auth endpoints are not: they answer 401 themselves rather than being
  * redirected, which is what an API client expects.
  */
-const PUBLIC_PATHS: ReadonlySet<string> = new Set([LOGIN_PATH, '/api/auth/login']);
+/**
+ * Three entries, and a third should feel like a decision.
+ *
+ * `/api/health` was added in phase 29. It has to be reachable without a
+ * session, because a health check that needs one cannot tell you the
+ * database is down: resolving the session needs the database. It answers
+ * with three states and nothing else, so an unauthenticated caller learns
+ * that the application is running and no more.
+ */
+const PUBLIC_PATHS: ReadonlySet<string> = new Set([LOGIN_PATH, '/api/auth/login', '/api/health']);
 
 export function isPublicPath(appPath: string): boolean {
   return PUBLIC_PATHS.has(appPath);
