@@ -20,6 +20,7 @@ import {
   explainScope,
   DENY_ALL,
   type ScopedColumns,
+  forgetResolvedScopes,
 } from '../../src/lib/cms/auth/rbac.ts';
 import {
   assignUserRole,
@@ -341,6 +342,11 @@ test('a withheld row reads as not granted, which is the documented rule', async 
     sql: `UPDATE role_permissions SET allowed = 0 WHERE role_id = 'ROLE-FIN' AND permission_id = 'PERM-ACC-VIEW'`,
     args: [],
   });
+  // The harness holds one client across a whole test and changes permissions
+  // inside it, which a request never does. The phase 28 scope memo is scoped
+  // to a client precisely because a client is a request, so the harness says
+  // explicitly where one notional request ends and the next begins.
+  forgetResolvedScopes(asClient(c));
   const withheld = await resolveScope(asClient(c), SEED.gabriel, VIEW);
   assert.equal(withheld.granted, false, 'the withholding role contributes nothing');
 
@@ -367,6 +373,7 @@ test('a withheld row reads as not granted, which is the documented rule', async 
     CTX,
   );
   await grantAccountsView(c, SEED.roleAdmin);
+  forgetResolvedScopes(asClient(c));
   const combined = await resolveScope(asClient(c), SEED.gabriel, VIEW);
   assert.equal(combined.granted, true, 'the other role still grants it');
   assert.equal(combined.group, true);

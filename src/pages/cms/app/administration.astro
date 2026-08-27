@@ -108,6 +108,14 @@ const sections: Section[] = [
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
   {
+    label: 'Design reference',
+    href: '/app/administration/components',
+    description:
+      'Every interface primitive in every state, rendered from the real components. One page, no build tooling, so it cannot drift from what a user sees.',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
     label: 'Workflow authority review',
     href: '/app/administration/authority',
     description:

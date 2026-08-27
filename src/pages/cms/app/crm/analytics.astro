@@ -659,7 +659,14 @@ const velocityChart = distributionChart(
             {health && (
               <dl class="mt-4 text-cms-body-sm">
                 <div class="flex justify-between border-b border-cms-line py-1.5">
-                  <dt class="text-cms-muted">Follow-ups overdue</dt>
+                  {/*
+                    PHASE 28: "overdue" was too close to the fixed SLA
+                    vocabulary. An activity past its due date is not an SLA
+                    breach, and the two must not read alike. Within SLA, At
+                    Risk, Breached, Paused and Met belong to the engine and
+                    to nothing else.
+                  */}
+                  <dt class="text-cms-muted">Follow-ups past their due date</dt>
                   <dd class="text-cms-ink tabular-nums">{health.overdue}</dd>
                 </div>
                 <div class="flex justify-between border-b border-cms-line py-1.5">
