@@ -1,0 +1,142 @@
+---
+/**
+ * One audit event.
+ *
+ * Who, when, which entity, and what changed, in that order, because that is
+ * the order somebody investigating asks. The field-level diff is the primary
+ * experience and the raw payloads sit behind a disclosure.
+ *
+ * There is no Edit, no Delete and no Correct control on this page. None
+ * exists anywhere, and no endpoint would accept one: the database refuses
+ * both operations outright.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsAuditDiff from '@/components/cms/CmsAuditDiff.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewAudit } from '@/lib/cms/permissions';
+import { auditEvent, type AuditDetail } from '@/lib/cms/repos/auditTrail';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewAudit(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+let record: AuditDetail | null = null;
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    record = await auditEvent(db, userId, Astro.params.id ?? '');
+  } catch (error) {
+    console.error('[cms.audit.event] load failed', error);
+    loadFailed = true;
+  }
+}
+
+// Not yours and does not exist are one answer, exactly as they are at the
+// endpoint. A different screen for the two would confirm the first exists.
+if (mayRead && !loadFailed && record === null) Astro.response.status = 404;
+
+const facts =
+  record === null
+    ? []
+    : [
+        { label: 'When (UTC)', value: record.eventAt },
+        { label: 'Who', value: record.actorName },
+        { label: 'Email', value: record.actorEmail ?? 'Not available' },
+        { label: 'Record type', value: record.entityType },
+        { label: 'Record', value: record.entityLabel ?? record.entityId },
+        { label: 'Record identifier', value: record.entityId },
+        { label: 'Action', value: record.action },
+        { label: 'Event code', value: record.eventType },
+        { label: 'Source address', value: record.ipAddress ?? 'Not recorded' },
+        { label: 'Client', value: record.userAgent ?? 'Not recorded' },
+      ];
+---
+
+<CmsLayout title={record === null ? 'Audit event' : record.eventLabel}>
+  <CmsPageHeader
+    title={record === null ? 'Audit event' : record.eventLabel}
+    crumbs={[
+      { label: 'Administration', href: '/app/administration' },
+      { label: 'Audit trail', href: '/app/administration/audit' },
+      { label: record === null ? 'Event' : record.eventLabel },
+    ]}
+  />
+
+  {
+    !mayRead ? (
+      <CmsEmptyState
+        icon="administration"
+        title="You do not have permission to read the audit trail"
+        description="AUDIT.EVENTS.VIEW is needed."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="That audit event could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : record === null ? (
+      <CmsEmptyState
+        icon="search"
+        title="That audit event could not be found"
+        description="Check the link, or go back to the audit trail and open it from the list."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        {record.highRisk && (
+          <p class="flex items-start gap-2 rounded-cms-lg border border-cms-warning bg-cms-warning-tint px-4 py-3 text-cms-body-sm text-cms-warning">
+            <CmsIcon name="statusWarn" size={18} title="High impact" />
+            <span>
+              <span class="font-semibold">High impact.</span> {record.highRiskReason}
+            </span>
+          </p>
+        )}
+
+        <div class="flex flex-wrap items-center gap-2">
+          <CmsBadge tone="info" label={record.classification} />
+          {record.highRisk && <CmsBadge tone="warning" label="High impact" />}
+        </div>
+
+        <CmsCard title="Event">
+          <dl class="grid gap-4 sm:grid-cols-2">
+            {facts.map((fact) => (
+              <div class="flex flex-col gap-0.5">
+                <dt class="text-cms-label text-cms-muted">{fact.label}</dt>
+                <dd class="text-cms-body-sm break-words text-cms-ink">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </CmsCard>
+
+        <CmsCard title="What changed">
+          <CmsAuditDiff
+            diff={record.diff}
+            beforeJson={record.beforeJson}
+            afterJson={record.afterJson}
+          />
+        </CmsCard>
+
+        <CmsCard title="Other events on this record">
+          <p class="text-cms-body-sm text-cms-muted">
+            <a
+              href={`/app/administration/audit?entityType=${encodeURIComponent(record.entityType)}&q=${encodeURIComponent(record.entityId)}`}
+              class="font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              See the full history of {record.entityLabel ?? record.entityId}
+            </a>
+          </p>
+        </CmsCard>
+      </div>
+    )
+  }
+</CmsLayout>

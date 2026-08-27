@@ -21,6 +21,7 @@
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsAuditTable from '@/components/cms/CmsAuditTable.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
@@ -30,6 +31,7 @@ import CmsAvatar from '@/components/cms/CmsAvatar.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsUserRoleDrawer from '@/components/cms/CmsUserRoleDrawer.astro';
 
+import { userActivity, type AuditRow as AuditTrailRow } from '@/lib/cms/repos/auditTrail';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { canManageRoles, canManageUsers } from '@/lib/cms/permissions';
@@ -38,12 +40,10 @@ import {
   getUser,
   listAssignments,
   listSourceIdentities,
-  listUserAudit,
   listUserRoles,
   listUserTeams,
   listWorkflowAuthority,
   type AssignmentRow,
-  type AuditRow,
   type RoleView,
   type SecurityView,
   type SourceIdentityRow,
@@ -63,6 +63,8 @@ const mayManage = canManageUsers(permissions);
 // against.
 const mayManageRoles = canManageRoles(permissions);
 const userId = Astro.params.id ?? '';
+// The reader, not the subject. The audit scope belongs to whoever is looking.
+const viewerUserId = Astro.locals.cms?.user.userId ?? '';
 
 const TABS = [
   'overview',
@@ -87,7 +89,12 @@ let roles: RoleView[] = [];
 let authority: WorkflowAuthorityView[] = [];
 let identities: SourceIdentityRow[] = [];
 let security: SecurityView | null = null;
-let audit: AuditRow[] = [];
+// The Audit tab is what this person CHANGED, read through the audit
+// repository so it carries the same scope, the same security gate and the
+// same masking as the workspace. The previous query here selected events
+// ABOUT the user, applied no scope and rendered before_json raw, which the
+// phase 26 masking control exists to prevent.
+let audit: AuditTrailRow[] = [];
 let loadFailed = false;
 
 if (mayManage) {
@@ -102,7 +109,7 @@ if (mayManage) {
         listWorkflowAuthority(db, userId),
         listSourceIdentities(db, userId),
         getSecurity(db, userId),
-        listUserAudit(db, userId),
+        userActivity(db, viewerUserId, userId),
       ]);
     }
   } catch (error) {
@@ -177,6 +184,8 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
     ) : (
       <Fragment>
         <CmsPageHeader
+          auditEntityType="USER"
+          auditEntityId={userId}
           title={user.displayName}
           crumbs={[
             { label: 'Administration', href: '/app/administration' },
@@ -538,34 +547,20 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
         )}
 
         {tab === 'audit' && (
-          <CmsDataTable
-            caption="Audit"
-            columns={[
-              { key: 'at', label: 'When' },
-              { key: 'event', label: 'Event' },
-              { key: 'actor', label: 'By' },
-              { key: 'change', label: 'Change' },
-            ]}
-            empty={audit.length === 0}
-          >
-            {audit.map((row) => (
-              <tr class="border-b border-cms-line align-top last:border-0">
-                <td class="px-4 py-2.5 whitespace-nowrap text-cms-muted tabular-nums">{row.at}</td>
-                <td class="px-4 py-2.5 font-medium text-cms-ink">{label(row.eventType)}</td>
-                <td class="px-4 py-2.5 text-cms-muted">{row.actor ?? 'System'}</td>
-                <td class="px-4 py-2.5 text-cms-caption text-cms-muted">
-                  {row.beforeJson ? `Was: ${row.beforeJson}` : 'Created'}
-                </td>
-              </tr>
-            ))}
-            <Fragment slot="empty">
-              <CmsEmptyState
-                icon="clock"
-                title="Nothing recorded yet"
-                description="These tables carry no updated_at, so this is the only history there is: an empty list means nothing has changed since the record was seeded."
-              />
-            </Fragment>
-          </CmsDataTable>
+          <div class="flex flex-col gap-3">
+            <p class="max-w-prose text-cms-body-sm text-cms-muted">
+              What this person changed.{' '}
+              <span class="font-semibold text-cms-ink">Not their sign-in history</span>:
+              authentication events belong in the security view, behind its own permission, because
+              a list of somebody's sign-in times on their profile page is surveillance wearing an
+              audit badge and is the wrong place to investigate a compromise anyway.
+            </p>
+            <CmsAuditTable
+              rows={audit}
+              emptyTitle="This person has changed nothing you can see"
+              emptyDescription="An empty list here is bounded by your own audit scope, not a claim that they have never changed anything."
+            />
+          </div>
         )}
       </Fragment>
     )

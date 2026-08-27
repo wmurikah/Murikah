@@ -1300,27 +1300,6 @@ export interface AuditRow {
   afterJson: string | null;
 }
 
-/** The Audit tab: this user as the entity, newest first. */
-export async function listUserAudit(db: Client, userId: string): Promise<AuditRow[]> {
-  const result = await db.execute({
-    sql: `SELECT ae.event_type, ae.action, ae.event_at, ae.before_json, ae.after_json,
-                 u.display_name AS actor
-          FROM audit_events ae
-          LEFT JOIN users u ON u.user_id = ae.actor_user_id
-          WHERE ae.entity_id = ? OR (ae.entity_type = 'USER' AND ae.entity_id = ?)
-          ORDER BY ae.event_at DESC, ae.audit_event_id DESC LIMIT 100`,
-    args: [userId, userId],
-  });
-  return result.rows.map((row) => ({
-    eventType: text(row.event_type),
-    action: text(row.action),
-    actor: nullableText(row.actor),
-    at: text(row.event_at),
-    beforeJson: nullableText(row.before_json),
-    afterJson: nullableText(row.after_json),
-  }));
-}
-
 export interface RoleView {
   roleId: string;
   roleName: string;

@@ -1,0 +1,238 @@
+---
+/**
+ * Administration → System Health.
+ *
+ * DETERMINISTIC CONFIGURATION CHECKS AND NOTHING ELSE. Every check states the
+ * rule it applied, in a sentence a reader can verify against the data by
+ * hand. No warning is invented, because a health screen full of judgements
+ * nobody can reproduce gets ignored within a fortnight, and then the one real
+ * warning is ignored with it.
+ *
+ * THERE IS NO OVERALL SCORE. No percentage, no traffic light for the system
+ * as a whole. Summing unlike checks into one number destroys the only
+ * information a reader can act on, and would let a blocking finding hide
+ * behind seven clean ones.
+ *
+ * A check that could not run says so rather than reporting zero. A clean zero
+ * produced by a failed query is worse than an honest gap.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
+import {
+  systemHealth,
+  expiringAuthority,
+  type SystemHealth,
+  type ExpiringAuthority,
+} from '@/lib/cms/repos/controlCentre';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canManageUsers(permissions) || canManageWorkflowRoles(permissions);
+
+let health: SystemHealth = { checks: [], unavailable: [], generatedAt: '' };
+let expiring: ExpiringAuthority[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const now = new Date();
+    [health, expiring] = await Promise.all([systemHealth(db, now), expiringAuthority(db, now, 30)]);
+  } catch (error) {
+    console.error('[cms.control.health] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const SEVERITY = {
+  BLOCKING: { tone: 'danger', label: 'Blocking', icon: 'statusBreach' },
+  ATTENTION: { tone: 'warning', label: 'Needs attention', icon: 'statusWarn' },
+  INFORMATION: { tone: 'neutral', label: 'For information', icon: 'statusInfo' },
+} as const;
+
+const findings = health.checks.filter((check) => check.count > 0);
+const clean = health.checks.filter((check) => check.count === 0);
+---
+
+<CmsLayout title="System health">
+  <CmsPageHeader
+    title="System health"
+    description="Configuration checks with a stated rule each. Nothing here is a judgement."
+    crumbs={[{ label: 'Administration', href: '/app/administration' }, { label: 'System health' }]}
+  />
+
+  {
+    !mayRead ? (
+      <CmsEmptyState
+        icon="administration"
+        title="You do not have permission to see system health"
+        description="ADMIN.USERS.MANAGE or ADMIN.WORKFLOW_ROLES.MANAGE is needed."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="System health could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <p class="text-cms-body-sm text-cms-muted">
+          Checked at {health.generatedAt} UTC. {findings.length} of {health.checks.length} checks
+          found something.
+        </p>
+
+        {health.unavailable.length > 0 && (
+          <CmsCard title="Checks that could not run">
+            <p class="text-cms-body-sm text-cms-muted">
+              These are reported as unavailable rather than as zero, because a clean zero produced
+              by a failed query is a false reassurance.
+            </p>
+            <ul class="mt-2 flex flex-col gap-1">
+              {health.unavailable.map((check) => (
+                <li class="text-cms-body-sm text-cms-ink">{check.title}</li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+
+        {findings.length === 0 ? (
+          <CmsEmptyState
+            icon="statusOk"
+            title="Every check came back clean"
+            description="That is a statement about these eight rules and nothing wider."
+          />
+        ) : (
+          findings.map((check) => (
+            <CmsCard title={check.title}>
+              <div class="flex flex-wrap items-center gap-2">
+                <CmsIcon name={SEVERITY[check.severity].icon} size={18} />
+                <CmsBadge
+                  tone={SEVERITY[check.severity].tone}
+                  label={SEVERITY[check.severity].label}
+                />
+                <span class="text-cms-body-sm font-semibold text-cms-ink tabular-nums">
+                  {check.count}
+                </span>
+              </div>
+              <p class="mt-2 max-w-prose text-cms-body-sm text-cms-muted">
+                <span class="font-semibold text-cms-ink">The rule:</span> {check.rule}
+              </p>
+              {check.examples.length > 0 && (
+                <ul class="mt-3 flex flex-col gap-1.5 border-t border-cms-line pt-3">
+                  {check.examples.map((example) => (
+                    <li class="text-cms-body-sm text-cms-ink">
+                      {example.label}
+                      {example.detail !== null && (
+                        <span class="text-cms-muted"> - {example.detail}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {check.count > check.examples.length && (
+                <p class="mt-2 text-cms-caption text-cms-muted">
+                  Showing {check.examples.length} of {check.count}.
+                </p>
+              )}
+              {check.href !== null && (
+                <p class="mt-3">
+                  <CmsButton href={check.href} variant="secondary">
+                    Go and fix it
+                  </CmsButton>
+                </p>
+              )}
+            </CmsCard>
+          ))
+        )}
+
+        {clean.length > 0 && (
+          <CmsCard title="Checks that came back clean">
+            {/*
+              Listed, not hidden. A reader needs to know what was actually
+              checked: "nothing found" means nothing against these rules, and
+              a screen that shows only findings leaves them guessing at the
+              coverage.
+            */}
+            <ul class="flex flex-col gap-1.5">
+              {clean.map((check) => (
+                <li class="text-cms-body-sm text-cms-muted">
+                  <span class="text-cms-ink">{check.title}</span> - nothing found
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+
+        <CmsCard
+          title="Authority ending soon"
+          description="Nothing here is ever extended automatically."
+        >
+          {expiring.length === 0 ? (
+            <p class="text-cms-body-sm text-cms-muted">
+              No access role or approval authority ends in the next 30 days.
+            </p>
+          ) : (
+            <div class="overflow-x-auto">
+              <table class="w-full border-collapse text-left">
+                <caption class="sr-only">Effective-dated grants ending in the next 30 days</caption>
+                <thead>
+                  <tr class="border-b border-cms-line">
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      Person
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      What ends
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      Scope
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      Ends
+                    </th>
+                    <th scope="col" class="py-2 text-cms-label font-semibold text-cms-muted">
+                      Days left
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expiring.map((row) => (
+                    <tr class="border-b border-cms-line last:border-0">
+                      <td class="py-2 pr-3 text-cms-body-sm text-cms-ink">{row.displayName}</td>
+                      <td class="py-2 pr-3">
+                        <span class="block text-cms-body-sm text-cms-ink">{row.roleName}</span>
+                        <CmsBadge
+                          tone={row.kind === 'APPROVAL_AUTHORITY' ? 'warning' : 'neutral'}
+                          label={
+                            row.kind === 'APPROVAL_AUTHORITY'
+                              ? 'Approval authority'
+                              : 'Application access'
+                          }
+                        />
+                      </td>
+                      <td class="py-2 pr-3 text-cms-body-sm text-cms-muted">{row.scopeLabel}</td>
+                      <td class="py-2 pr-3 text-cms-body-sm text-cms-ink tabular-nums">
+                        {row.effectiveTo}
+                      </td>
+                      <td class="py-2 text-cms-body-sm text-cms-ink tabular-nums">
+                        {row.daysRemaining}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CmsCard>
+      </div>
+    )
+  }
+</CmsLayout>
