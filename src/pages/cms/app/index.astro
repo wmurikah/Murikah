@@ -1,0 +1,149 @@
+---
+/**
+ * The internal application home, served at /app on cms.murikah.com.
+ *
+ * This was the Build Prompt 02 shell at `/`. It moved here so the whole
+ * internal application sits under one prefix, which is what makes the rule
+ * "an EXTERNAL user never renders an /app path" a single check rather than a
+ * list. `/` is now a redirect by user type, handled in the middleware.
+ *
+ * The principal is read from locals, resolved once per request by the guard.
+ * Nothing on this page fetches /api/auth/me, and there is no client-side
+ * authentication store: the page is not rendered at all until the server knows
+ * who is asking, which is why there is no loading state to design and why a
+ * refresh keeps the user signed in without a line of code.
+ *
+ * Deliberately minimal for this phase. The workspace cards are neutral
+ * placeholders, not invented business figures, and each appears only when the
+ * principal holds the permission its section requires.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import { visibleNav } from '@/lib/cms/nav';
+import { assignmentSummary, organisationLine } from '@/lib/cms/organisation';
+
+const principal = Astro.locals.cms;
+// The guard redirects an anonymous request before this renders, so a missing
+// principal here would be a bug rather than a state to design for. Rendering
+// nothing is the safe answer if it ever happens.
+const user = principal?.user;
+
+const context = user ? organisationLine(user.assignment) : null;
+const summary = user ? assignmentSummary(user.assignment) : null;
+
+// The workspace tiles are the navigation, minus Home, filtered by the same
+// permission codes. One source, so a tile can never appear for a section the
+// rail hides.
+const workspaces = user
+  ? visibleNav(user.permissions).filter((item) => item.permission !== null)
+  : [];
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time, the middleware guard runs once during the build
+// instead of per request, and the route protection becomes a static artefact:
+// a signed-in user would be served whatever the build decided.
+export const prerender = false;
+---
+
+<CmsLayout title="Home">
+  {
+    user && (
+      <>
+        <CmsPageHeader
+          title={`Welcome back, ${user.firstName}`}
+          description={summary ?? 'No organisational assignment is recorded against your account.'}
+        >
+          <CmsBadge
+            slot="actions"
+            tone="info"
+            label={`${user.roles.length} role${user.roles.length === 1 ? '' : 's'}`}
+          />
+        </CmsPageHeader>
+
+        <CmsCard title="Your details">
+          <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="flex flex-col gap-1">
+              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                Name
+              </dt>
+              <dd class="text-cms-body-sm text-cms-ink">{user.displayName}</dd>
+            </div>
+            <div class="flex flex-col gap-1">
+              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                Email
+              </dt>
+              <dd class="truncate text-cms-body-sm text-cms-ink">{user.email}</dd>
+            </div>
+            <div class="flex flex-col gap-1">
+              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                Job title
+              </dt>
+              <dd class="text-cms-body-sm text-cms-ink">
+                {user.assignment?.jobTitle ?? 'Not assigned'}
+              </dd>
+            </div>
+            <div class="flex flex-col gap-1">
+              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                Organisation
+              </dt>
+              <dd class="text-cms-body-sm text-cms-ink">{context ?? 'Not assigned'}</dd>
+            </div>
+            <div class="flex flex-col gap-1">
+              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                Department
+              </dt>
+              <dd class="text-cms-body-sm text-cms-ink">
+                {user.assignment?.department ?? 'Not assigned'}
+              </dd>
+            </div>
+            <div class="flex flex-col gap-1">
+              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                Access roles
+              </dt>
+              <dd class="flex flex-wrap gap-1.5">
+                {user.roles.map((role) => (
+                  <CmsBadge tone="neutral" label={role.roleName} />
+                ))}
+              </dd>
+            </div>
+          </dl>
+        </CmsCard>
+
+        <section aria-labelledby="workspace-heading" class="flex flex-col gap-3">
+          <h2 id="workspace-heading" class="text-cms-section font-semibold text-cms-navy">
+            Your workspace
+          </h2>
+          {workspaces.length > 0 ? (
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {workspaces.map((item) => (
+                <a
+                  href={item.href}
+                  class="flex min-h-10 items-start gap-3 rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-4 shadow-cms-card transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <span class="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-cms bg-cms-royal-tint text-cms-royal">
+                    <CmsIcon name={item.icon} size={18} />
+                  </span>
+                  <span class="min-w-0">
+                    <span class="block text-cms-card font-semibold text-cms-navy">
+                      {item.label} workspace
+                    </span>
+                    <span class="mt-0.5 block text-cms-body-sm text-cms-muted">{item.summary}</span>
+                  </span>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <CmsEmptyState
+              icon="administration"
+              title="No workspaces are available to you yet"
+              description="Your access roles do not currently grant any module. Contact your administrator."
+            />
+          )}
+        </section>
+      </>
+    )
+  }
+</CmsLayout>

@@ -23,6 +23,18 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsWordmark from '@/components/cms/CmsWordmark.astro';
+import { EXPIRED_FLAG, EXPIRED_MESSAGE } from '@/lib/cms/routes';
+
+// The guard sets this flag when it clears a session that had run out or been
+// revoked, so a returning user is told why they are here rather than being
+// dropped on a sign-in page with no explanation. A request that never carried
+// a cookie gets no notice, because there is nothing to explain.
+const sessionExpired = Astro.url.searchParams.get(EXPIRED_FLAG) === '1';
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time, the middleware guard runs once during the build
+// instead of per request, and the route protection becomes a static artefact:
+// a signed-in user would be served whatever the build decided.
+export const prerender = false;
 ---
 
 <CmsAuthLayout title="Sign in">
@@ -38,6 +50,18 @@ import CmsWordmark from '@/components/cms/CmsWordmark.astro';
         </p>
       </div>
     </div>
+
+    {
+      sessionExpired && (
+        <div
+          role="status"
+          class="flex items-start gap-2.5 rounded-cms border border-cms-warning/30 bg-cms-warning-tint px-3.5 py-3"
+        >
+          <CmsIcon name="statusWarn" size={17} class="mt-0.5 shrink-0 text-cms-warning" />
+          <p class="text-cms-body-sm text-cms-ink">{EXPIRED_MESSAGE}</p>
+        </div>
+      )
+    }
 
     <!--
       novalidate hands validation to the page rather than the browser's own
@@ -116,6 +140,14 @@ import CmsWordmark from '@/components/cms/CmsWordmark.astro';
     const setServerError = (message: string | null) => {
       errorText.textContent = message ?? '';
       errorBox.hidden = !message;
+      if (message) {
+        // role="alert" announces it; moving focus puts a keyboard user at the
+        // message rather than leaving them wherever they pressed Enter. The
+        // region is not in the tab order, so tabindex=-1 makes it focusable
+        // without adding a stop.
+        errorBox.setAttribute('tabindex', '-1');
+        errorBox.focus();
+      }
     };
 
     /**
@@ -178,20 +210,45 @@ import CmsWordmark from '@/components/cms/CmsWordmark.astro';
         // Deliberately exhaustive over the union, so a new outcome added to the
         // client cannot silently fall through to nothing on this screen.
         switch (result.status) {
+          case 'success': {
+            // The server has set the HttpOnly cookie on this response. All that
+            // remains is a normal navigation: the middleware resolves the
+            // cookie server-side and renders the right surface. Nothing is
+            // fetched from /api/auth/me, and no session state is kept here.
+            //
+            // The password is not cleared first on purpose: the page is about
+            // to be replaced entirely, and clearing it would only interfere
+            // with a password manager's save prompt.
+            const destination = result.user.userType === 'EXTERNAL' ? '/portal' : '/app';
+            window.location.assign(destination);
+            // Keep the control disabled through the navigation, so a second
+            // click during the page swap cannot fire another request.
+            return;
+          }
+          case 'password_change_required':
+            // The password was correct. Say so, and stop: the change-password
+            // screen does not exist yet, and sending them to a 404 or
+            // pretending the sign-in failed would both be worse.
+            setServerError(
+              'Your password must be changed before you can sign in. The change-password screen is not available yet; contact your administrator.',
+            );
+            break;
+          case 'mfa_required':
+            setServerError(
+              'This account requires a second factor. Verification is not available yet; contact your administrator.',
+            );
+            break;
           case 'invalid_credentials':
           case 'account_locked':
           case 'transport_error':
           case 'not_implemented':
             setServerError(authResultMessage(result));
             break;
-          case 'mfa_required':
-          case 'password_change_required':
-          case 'success':
-            // No destination exists yet. A later phase routes these; until then
-            // the screen says so rather than inventing a signed-in state.
-            setServerError('Sign-in is not connected yet. This release is the interface only.');
-            break;
         }
+        // The email survives a failed attempt so it need not be retyped. The
+        // password never does, and is not written to any store.
+        password.value = '';
+        password.focus();
       } finally {
         setLoading(false);
       }
