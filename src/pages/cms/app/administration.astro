@@ -17,6 +17,7 @@ import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import {
+  canManageCatalogue,
   canManageRoles,
   canManageUsers,
   canViewOrganisation,
@@ -74,10 +75,11 @@ const sections: Section[] = [
   },
   {
     label: 'Product catalogue',
-    href: null,
-    description: 'Product groups, categories and the products beneath them.',
-    ready: false,
-    visible: permissions.includes('ADMIN.PRODUCT_CATALOG.MANAGE'),
+    href: '/app/administration/catalogue',
+    description:
+      'One product master for the whole platform: groups, nested categories and the products beneath them. Orders, cases, SLA reporting and approval authority all read these same records.',
+    ready: true,
+    visible: canManageCatalogue(permissions),
   },
 ];
 
