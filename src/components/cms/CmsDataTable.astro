@@ -28,11 +28,27 @@ interface Props {
   loading?: boolean;
   empty?: boolean;
   rowCount?: number;
+  /**
+   * What an empty table says.
+   *
+   * PHASE 28 FINDING, FIXED HERE. The default used to be "Nothing to show
+   * yet.", which tells a reader nothing and is very often untrue: on a
+   * filtered analytical table an empty result almost always means the filter
+   * excluded everything, not that nothing exists. A reader who takes
+   * "nothing yet" at face value concludes the business has no purchase
+   * orders, when in fact they picked a date range before the first import.
+   *
+   * So the default now says what an empty result does and does not mean, and
+   * a caller with something more specific passes it in one line rather than
+   * writing a slot.
+   */
+  emptyMessage?: string;
   class?: string;
 }
 const {
   caption,
   columns,
+  emptyMessage = 'No rows for this selection. An empty result is not a claim that nothing exists: check the filters and the date range.',
   loading = false,
   empty = false,
   rowCount = 4,
@@ -84,7 +100,7 @@ const {
           !loading && empty && (
             <tr>
               <td colspan={columns.length} class="px-4 py-10 text-center text-cms-muted">
-                <slot name="empty">Nothing to show yet.</slot>
+                <slot name="empty">{emptyMessage}</slot>
               </td>
             </tr>
           )

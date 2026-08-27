@@ -11,6 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTestDb, type TestClient } from './support/db.ts';
+import { forgetResolvedScopes } from '../../src/lib/cms/auth/rbac.ts';
 import { seedHass } from './support/hassSeed.ts';
 import {
   AUDIT_CATALOGUE,
@@ -593,6 +594,10 @@ test('the security view refuses everybody until the operator runs the script', a
   assert.equal(before.securityIncluded, false);
 
   await grantAuditPermissions(c);
+  // The harness grants a permission inside one client, which a request never
+  // does, so it says where the notional next request begins. See the note on
+  // forgetResolvedScopes.
+  forgetResolvedScopes(asClient(c));
   assert.equal(await maySeeSecurityEvents(asClient(c), 'USR-CATH'), true);
   const after = await securityEvents(
     asClient(c),
