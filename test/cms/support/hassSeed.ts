@@ -381,6 +381,291 @@ INSERT OR IGNORE INTO workflow_stages VALUES
 ('WST-010','WFD-004','RESOLVE','Case Resolution',2,'WORKFLOW_ROLE',NULL,'WROLE-CASE','TEAM-CS-KE','ANY_ONE',1,NULL,1),
 ('WST-011','WFD-005','CREDIT_REVIEW','Credit Exception Review',1,'WORKFLOW_ROLE',NULL,'WROLE-SO-CRD','TEAM-CRD-GRP','ANY_ONE',1,'SLAR-004',0),
 ('WST-012','WFD-005','CREDIT_DECISION','Credit Decision',2,'WORKFLOW_ROLE',NULL,'WROLE-SO-CRD','TEAM-CRD-GRP','ANY_ONE',1,NULL,1);
+
+-- ============================================================================
+-- The CRM, service, SLA runtime, order and ingestion seed rows.
+--
+-- Copied verbatim from the operator's hass_cms_turso_v1_FINAL.sql, in that
+-- file's own order, which is already foreign-key safe. The blocks above arrived
+-- with Build Prompts 03 to 09; these 37 are the remainder, added for the
+-- 10-to-19 batch, so an assertion like "the Kenya pipeline's first stage is
+-- Qualification" is a statement about real configuration rather than about a
+-- fixture written to make a test pass.
+--
+-- SEVEN BLOCKS ARE DELIBERATELY NOT COPIED, and the reason matters.
+--
+-- auth_credentials, auth_sessions, email_verification_tokens,
+-- password_reset_tokens, login_attempts and mfa_methods: the authentication
+-- tests build their own credentials and sessions, and seeded password hashes
+-- and live sessions would collide with what those tests arrange for themselves.
+--
+-- audit_events: almost every test in this suite asserts on the audit rows it
+-- caused. A pre-populated trail would turn "exactly one APPROVAL_EXCEPTION row"
+-- and "no row has a null actor" into statements about the seed rather than
+-- about the code under test.
+-- ============================================================================
+
+INSERT OR IGNORE INTO contacts VALUES
+('CON-001','ACC-001','John Kamau','Procurement Director','john.kamau@bluepeak.example','+254722200001','+254722200001','WHATSAPP',1,1,CURRENT_TIMESTAMP),
+('CON-002','ACC-002','Mary Wanjiku','Operations Manager','mary.wanjiku@riftline.example','+254722200002','+254722200002','EMAIL',1,1,CURRENT_TIMESTAMP),
+('CON-003','ACC-003','Peter Otieno','Supply Chain Manager','peter.otieno@eastgate.example','+254722200003','+254722200003','PHONE',1,1,CURRENT_TIMESTAMP),
+('CON-004','ACC-004','Faith Njeri','Finance Manager','faith.njeri@lakeviewfoods.example','+254722200004','+254722200004','EMAIL',1,1,CURRENT_TIMESTAMP),
+('CON-005','ACC-005','David Mutua','Managing Director','david.mutua@savannahagg.example','+254722200005','+254722200005','WHATSAPP',1,1,CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO customer_portal_memberships VALUES
+('CPM-001','USR-EXT001','ACC-001','CON-001','ROLE-PORTAL','ACTIVE','2026-08-01 07:30:00','USR-CATH','2026-08-01 08:00:00',NULL,CURRENT_TIMESTAMP),
+('CPM-002','USR-EXT002','ACC-002','CON-002','ROLE-PORTAL','ACTIVE','2026-08-02 07:30:00','USR-CATH','2026-08-02 08:00:00',NULL,CURRENT_TIMESTAMP),
+('CPM-003','USR-EXT003','ACC-003','CON-003','ROLE-PORTAL','ACTIVE','2026-08-03 07:30:00','USR-CATH','2026-08-03 08:00:00',NULL,CURRENT_TIMESTAMP),
+('CPM-004','USR-EXT004','ACC-004','CON-004','ROLE-PORTAL','ACTIVE','2026-08-04 07:30:00','USR-CATH','2026-08-04 08:00:00',NULL,CURRENT_TIMESTAMP),
+('CPM-005','USR-EXT005','ACC-005','CON-005','ROLE-PORTAL','ACTIVE','2026-08-05 07:30:00','USR-CATH','2026-08-05 08:00:00',NULL,CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO lead_sources VALUES
+('LS-001','Customer Service Referral','Opportunity discovered during a service interaction',1),
+('LS-002','Website Enquiry','Lead captured from web form',1),
+('LS-003','Sales Prospecting','Direct prospecting by sales team',1),
+('LS-004','Customer Referral','Referral from an existing customer',1),
+('LS-005','Industry Event','Lead sourced from event or conference',1);
+
+INSERT OR IGNORE INTO campaigns VALUES
+('CMP-001','Kenya Fleet Growth Q3','DIRECT','2026-07-01','2026-09-30',25000000,'TEAM-SALES-KE','ACTIVE',CURRENT_TIMESTAMP),
+('CMP-002','Lubes Cross-Sell','RETENTION','2026-08-01','2026-10-31',8000000,'TEAM-SALES-KE','ACTIVE',CURRENT_TIMESTAMP),
+('CMP-003','Manufacturing AGO Drive','DIRECT','2026-08-01','2026-12-15',30000000,'TEAM-SALES-KE','ACTIVE',CURRENT_TIMESTAMP),
+('CMP-004','Digital LPG Leads','DIGITAL','2026-06-01','2026-09-30',6000000,'TEAM-SALES-KE','ACTIVE',CURRENT_TIMESTAMP),
+('CMP-005','Transport Forum 2026','EVENT','2026-08-10','2026-08-12',12000000,'TEAM-SALES-KE','COMPLETED',CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO pipelines VALUES
+('PIPE-001','Kenya B2B Fuel Pipeline','CTR-KE','AFF-KE',1,CURRENT_TIMESTAMP),
+('PIPE-002','Uganda B2B Fuel Pipeline','CTR-UG','AFF-UG',1,CURRENT_TIMESTAMP),
+('PIPE-003','Tanzania B2B Fuel Pipeline','CTR-TZ','AFF-TZ',1,CURRENT_TIMESTAMP),
+('PIPE-004','Rwanda B2B Fuel Pipeline','CTR-RW','AFF-RW',1,CURRENT_TIMESTAMP),
+('PIPE-005','Zambia B2B Fuel Pipeline','CTR-ZM','AFF-ZM',1,CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO pipeline_stages VALUES
+('PST-KE-01','PIPE-001','Qualified',1,0.20,3,0,0,1),
+('PST-KE-02','PIPE-001','Proposal',2,0.45,5,0,0,1),
+('PST-KE-03','PIPE-001','Negotiation',3,0.70,7,0,0,1),
+('PST-KE-04','PIPE-001','Won',4,1.00,0,1,0,1),
+('PST-KE-05','PIPE-001','Lost',5,0.00,0,0,1,1);
+
+INSERT OR IGNORE INTO leads
+(lead_id,lead_number,account_id,primary_contact_id,lead_source_id,campaign_id,business_unit_id,owner_user_id,title,description,product_interest,estimated_volume,estimated_value,currency_code,captured_at,first_contact_at,status,disqualification_reason,created_by_user_id,created_at) VALUES
+('LEAD-001','LD-2026-0001','ACC-003','CON-003','LS-002','CMP-001','BU-CI','USR-JAM','Bulk AGO supply enquiry','Website enquiry for monthly AGO supply','AGO',80000,9200000,'KES','2026-08-12 08:20:00','2026-08-12 09:05:00','QUALIFIED',NULL,'USR-CATH',CURRENT_TIMESTAMP),
+('LEAD-002','LD-2026-0002','ACC-005','CON-005','LS-003','CMP-004','BU-CI','USR-JAM','Fleet AGO proposal','Referral for fleet fuel supply','AGO',45000,5200000,'KES','2026-08-13 11:10:00','2026-08-13 13:00:00','QUALIFIED',NULL,'USR-JAM',CURRENT_TIMESTAMP),
+('LEAD-003','LD-2026-0003','ACC-001','CON-001','LS-001','CMP-002','BU-LUB','USR-JAM','Lubricants cross-sell','Customer service call identified workshop demand','LUBRICANTS',150,900000,'KES','2026-08-14 13:40:00','2026-08-14 14:10:00','CONVERTED',NULL,'USR-CATH',CURRENT_TIMESTAMP),
+('LEAD-004','LD-2026-0004','ACC-002','CON-002','LS-004','CMP-001','BU-CI','USR-JAM','Additional AGO volume','Existing customer referred sister fleet','AGO',30000,3450000,'KES','2026-08-15 09:10:00','2026-08-15 09:45:00','CONTACTED',NULL,'USR-JAM',CURRENT_TIMESTAMP),
+('LEAD-005','LD-2026-0005','ACC-004','CON-004','LS-005','CMP-005','BU-LPG','USR-JAM','LPG supply enquiry','Business contact from transport forum','LPG',12000,2100000,'KES','2026-08-16 15:00:00','2026-08-17 08:15:00','DISQUALIFIED','Current contract locked for 12 months','USR-JAM',CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO lead_qualifications VALUES
+('LQ-001','LEAD-001',4,4,5,4,'Budget confirmed; decision maker engaged','USR-JAM','2026-08-12 12:00:00'),
+('LQ-002','LEAD-002',3,4,5,3,'Need is strong; budget range still being confirmed','USR-JAM','2026-08-13 15:20:00'),
+('LQ-003','LEAD-003',5,5,4,5,'Existing key account; immediate need','USR-JAM','2026-08-14 16:00:00'),
+('LQ-004','LEAD-004',4,3,4,4,'Introduced by existing customer','USR-JAM','2026-08-15 14:30:00'),
+('LQ-005','LEAD-005',2,4,3,1,'Timing does not support near-term conversion','USR-JAM','2026-08-17 09:30:00');
+
+INSERT OR IGNORE INTO lost_reasons VALUES
+('LR-001','Price','Commercial','Competitor or market pricing',1),
+('LR-002','Credit Terms','Commercial','Requested credit terms not accepted',1),
+('LR-003','Competitor Retained','Competition','Existing supplier retained',1),
+('LR-004','No Decision','Customer','Customer made no decision',1),
+('LR-005','Timing','Customer','Opportunity timing moved out of current horizon',1);
+
+INSERT OR IGNORE INTO opportunities
+(opportunity_id,opportunity_number,lead_id,account_id,business_unit_id,pipeline_id,current_stage_id,owner_user_id,title,estimated_value,currency_code,probability,estimated_close_date,actual_close_date,status,won_amount,lost_reason_id,lost_notes,created_at,updated_at) VALUES
+('OPP-001','OP-2026-0001','LEAD-001','ACC-003','BU-CI','PIPE-001','PST-KE-02','USR-JAM','EastGate AGO Supply',9200000,'KES',0.45,'2026-09-15',NULL,'OPEN',NULL,NULL,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('OPP-002','OP-2026-0002','LEAD-002','ACC-005','BU-CI','PIPE-001','PST-KE-03','USR-JAM','Savannah Fleet AGO',5200000,'KES',0.70,'2026-09-05',NULL,'OPEN',NULL,NULL,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('OPP-003','OP-2026-0003','LEAD-003','ACC-001','BU-LUB','PIPE-001','PST-KE-04','USR-JAM','BluePeak Lubricants',900000,'KES',1.00,'2026-08-25','2026-08-22','WON',860000,NULL,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('OPP-004','OP-2026-0004','LEAD-004','ACC-002','BU-CI','PIPE-001','PST-KE-01','USR-JAM','Riftline Additional AGO',3450000,'KES',0.20,'2026-09-30',NULL,'OPEN',NULL,NULL,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('OPP-005','OP-2026-0005','LEAD-005','ACC-004','BU-LPG','PIPE-001','PST-KE-05','USR-JAM','Lakeview LPG',2100000,'KES',0.00,'2026-09-20','2026-08-17','LOST',NULL,'LR-005','Customer contract locked for 12 months',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO opportunity_products VALUES
+('OPPPR-001','OPP-001','PROD-AGO',80000,115,9200000),
+('OPPPR-002','OPP-002','PROD-AGO',45000,115.56,5200200),
+('OPPPR-003','OPP-003','PROD-LUBE',150,6000,900000),
+('OPPPR-004','OPP-004','PROD-AGO',30000,115,3450000),
+('OPPPR-005','OPP-005','PROD-LPG',12000,175,2100000);
+
+INSERT OR IGNORE INTO opportunity_stage_history VALUES
+('OSH-001','OPP-001','PST-KE-01','PST-KE-02','USR-JAM','2026-08-18 10:00:00',8640,'Requirements confirmed; proposal prepared'),
+('OSH-002','OPP-002','PST-KE-02','PST-KE-03','USR-JAM','2026-08-20 14:00:00',5760,'Commercial discussion started'),
+('OSH-003','OPP-003','PST-KE-03','PST-KE-04','USR-JAM','2026-08-22 16:40:00',2880,'Customer accepted offer'),
+('OSH-004','OPP-004',NULL,'PST-KE-01','USR-JAM','2026-08-15 14:35:00',NULL,'Opportunity created'),
+('OSH-005','OPP-005','PST-KE-01','PST-KE-05','USR-JAM','2026-08-17 10:00:00',30,'Timing disqualifier confirmed');
+
+INSERT OR IGNORE INTO activities VALUES
+('ACT-001','LEAD','LEAD-001','ACC-003','CON-003','CALL','USR-JAM','Initial qualification call','Confirmed monthly volume and decision process','2026-08-12 09:05:00','2026-08-12 09:35:00','Qualified','Prepare proposal','2026-08-13 12:00:00',CURRENT_TIMESTAMP),
+('ACT-002','OPPORTUNITY','OPP-002','ACC-005','CON-005','MEETING','USR-JAM','Commercial negotiation','Discussed price and delivery frequency','2026-08-20 14:00:00','2026-08-20 15:20:00','Negotiation ongoing','Revise proposal','2026-08-22 12:00:00',CURRENT_TIMESTAMP),
+('ACT-003','OPPORTUNITY','OPP-003','ACC-001','CON-001','PROPOSAL','USR-JAM','Lubricants quotation','Final quotation submitted','2026-08-21 10:00:00','2026-08-21 10:10:00','Accepted next day',NULL,NULL,CURRENT_TIMESTAMP),
+('ACT-004','LEAD','LEAD-004','ACC-002','CON-002','EMAIL','USR-JAM','Follow-up email','Requested additional fleet details','2026-08-18 08:00:00','2026-08-18 08:05:00','Awaiting response','Call customer','2026-08-27 09:00:00',CURRENT_TIMESTAMP),
+('ACT-005','ACCOUNT','ACC-001','ACC-001','CON-001','CALL','USR-CATH','Customer service review call','Customer mentioned new workshop lubricants demand','2026-08-14 13:20:00','2026-08-14 13:40:00','Lead created','Assign to sales','2026-08-14 14:00:00',CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO case_categories VALUES
+('CC-001','Delivery','Late Delivery','HIGH',1),
+('CC-002','Billing','Invoice Discrepancy','HIGH',1),
+('CC-003','Product','Product Availability','MEDIUM',1),
+('CC-004','Credit','Credit Limit Query','MEDIUM',1),
+('CC-005','Service','General Enquiry','LOW',1);
+
+INSERT OR IGNORE INTO service_cases
+(case_id,case_number,account_id,contact_id,business_unit_id,case_type,case_category_id,priority,subject,description,channel,status,assigned_team_id,assigned_user_id,raised_at,first_response_at,resolved_at,closed_at,root_cause,resolution_summary,created_by_user_id,created_at) VALUES
+('CASE-001','CS-2026-0001','ACC-001','CON-001','BU-CI','COMPLAINT','CC-001','HIGH','Late delivery to Nairobi yard','Customer reports tanker arrived outside agreed window','PHONE','IN_PROGRESS','TEAM-CS-KE','USR-CATH','2026-08-25 08:10:00','2026-08-25 08:18:00',NULL,NULL,NULL,NULL,'USR-CATH',CURRENT_TIMESTAMP),
+('CASE-002','CS-2026-0002','ACC-002','CON-002','BU-CI','COMPLAINT','CC-002','HIGH','Invoice value discrepancy','Invoice differs from agreed quotation','EMAIL','WAITING_INTERNAL','TEAM-FIN-KE','USR-GAB','2026-08-25 09:15:00','2026-08-25 09:35:00',NULL,NULL,NULL,NULL,'USR-CATH',CURRENT_TIMESTAMP),
+('CASE-003','CS-2026-0003','ACC-003','CON-003','BU-CI','ENQUIRY','CC-003','MEDIUM','AGO availability for September','Prospect requests supply availability confirmation','WEB','RESOLVED','TEAM-SALES-KE','USR-JAM','2026-08-24 11:00:00','2026-08-24 11:25:00','2026-08-24 13:00:00',NULL,'Stock confirmed','Availability shared with prospect','USR-CATH',CURRENT_TIMESTAMP),
+('CASE-004','CS-2026-0004','ACC-004','CON-004','BU-LPG','ENQUIRY','CC-004','MEDIUM','Credit limit confirmation','Customer wants confirmation before next order','EMAIL','CLOSED','TEAM-CRD-GRP','USR-VIC','2026-08-23 10:00:00','2026-08-23 10:20:00','2026-08-23 12:30:00','2026-08-23 13:00:00','Routine credit enquiry','Credit terms confirmed','USR-CATH',CURRENT_TIMESTAMP),
+('CASE-005','CS-2026-0005','ACC-005','CON-005','BU-CI','REQUEST','CC-005','LOW','Request product catalogue','Prospect requested current product catalogue','WHATSAPP','RESOLVED','TEAM-CS-KE','USR-CATH','2026-08-22 15:00:00','2026-08-22 15:05:00','2026-08-22 15:12:00',NULL,'Information request','Catalogue sent by email','USR-CATH',CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO case_assignment_history VALUES
+('CAH-001','CASE-001',NULL,NULL,'TEAM-CS-KE','USR-CATH','USR-CATH','2026-08-25 08:11:00','Initial assignment'),
+('CAH-002','CASE-002','TEAM-CS-KE','USR-CATH','TEAM-FIN-KE','USR-GAB','USR-CATH','2026-08-25 09:40:00','Finance investigation required'),
+('CAH-003','CASE-003',NULL,NULL,'TEAM-SALES-KE','USR-JAM','USR-CATH','2026-08-24 11:05:00','Product availability sales enquiry'),
+('CAH-004','CASE-004','TEAM-CS-KE','USR-CATH','TEAM-CRD-GRP','USR-VIC','USR-CATH','2026-08-23 10:25:00','Credit confirmation required'),
+('CAH-005','CASE-005',NULL,NULL,'TEAM-CS-KE','USR-CATH','USR-CATH','2026-08-22 15:01:00','Initial assignment');
+
+INSERT OR IGNORE INTO case_status_history VALUES
+('CSH-001','CASE-001','NEW','IN_PROGRESS','USR-CATH','2026-08-25 08:18:00','Customer acknowledged; depot contacted'),
+('CSH-002','CASE-002','ASSIGNED','WAITING_INTERNAL','USR-GAB','2026-08-25 09:45:00','Invoice reconciliation underway'),
+('CSH-003','CASE-003','IN_PROGRESS','RESOLVED','USR-JAM','2026-08-24 13:00:00','Availability confirmed'),
+('CSH-004','CASE-004','RESOLVED','CLOSED','USR-CATH','2026-08-23 13:00:00','Customer confirmed receipt'),
+('CSH-005','CASE-005','NEW','RESOLVED','USR-CATH','2026-08-22 15:12:00','Catalogue sent');
+
+INSERT OR IGNORE INTO case_communications VALUES
+('COM-001','CASE-001','INBOUND','PHONE','CON-001','USR-CATH','Late delivery','Customer reported delayed tanker','2026-08-25 08:10:00'),
+('COM-002','CASE-002','INBOUND','EMAIL','CON-002','USR-CATH','Invoice discrepancy','Customer emailed disputed invoice','2026-08-25 09:15:00'),
+('COM-003','CASE-003','OUTBOUND','EMAIL','CON-003','USR-JAM','AGO availability','Availability confirmed for requested period','2026-08-24 13:00:00'),
+('COM-004','CASE-004','OUTBOUND','EMAIL','CON-004','USR-VIC','Credit terms','Credit limit and days confirmed','2026-08-23 12:30:00'),
+('COM-005','CASE-005','OUTBOUND','EMAIL','CON-005','USR-CATH','Product catalogue','Catalogue sent as requested','2026-08-22 15:12:00');
+
+INSERT OR IGNORE INTO customer_surveys VALUES
+('SUR-001','Case Closure CSAT','CSAT','How satisfied are you with how we handled your case?',1),
+('SUR-002','Resolution Effort','CES','How easy was it to get your issue resolved?',1),
+('SUR-003','Relationship NPS','NPS','How likely are you to recommend Hass Petroleum?',1),
+('SUR-004','Delivery CSAT','CSAT','How satisfied are you with the delivery experience?',1),
+('SUR-005','Sales Experience CSAT','CSAT','How satisfied are you with our commercial engagement?',1);
+
+INSERT OR IGNORE INTO survey_responses VALUES
+('SR-001','SUR-001','CASE-005','ACC-005','CON-005',9,'Very fast response','2026-08-22 16:00:00'),
+('SR-002','SUR-001','CASE-004','ACC-004','CON-004',8,'Clear response','2026-08-23 14:10:00'),
+('SR-003','SUR-002','CASE-003','ACC-003','CON-003',9,'Easy process','2026-08-24 14:00:00'),
+('SR-004','SUR-003',NULL,'ACC-001','CON-001',8,'Generally reliable','2026-08-20 10:00:00'),
+('SR-005','SUR-005',NULL,'ACC-002','CON-002',7,'Would like faster quotations','2026-08-21 11:00:00');
+
+INSERT OR IGNORE INTO holidays VALUES
+('HOL-001','CAL-KE','2026-06-01','Madaraka Day'),
+('HOL-002','CAL-UG','2026-10-09','Independence Day'),
+('HOL-003','CAL-TZ','2026-12-09','Independence Day'),
+('HOL-004','CAL-RW','2026-07-04','Liberation Day'),
+('HOL-005','CAL-ZM','2026-10-24','Independence Day');
+
+INSERT OR IGNORE INTO sales_orders VALUES
+('SO-001','SO-KE-10001','AFF-KE','BU-CI','ACC-001','2026-08-25 08:00:00','KES',1150000,1,0,NULL,'INV-10001','2026-08-25 09:10:00','2026-08-25 09:20:00','2026-08-25 10:15:00','LOADED',NULL,CURRENT_TIMESTAMP),
+('SO-002','SO-KE-10002','AFF-KE','BU-CI','ACC-002','2026-08-25 08:30:00','KES',1725000,1,1,'Credit limit exceeded',NULL,NULL,NULL,NULL,'PENDING_CREDIT',NULL,CURRENT_TIMESTAMP),
+('SO-003','SO-KE-10003','AFF-KE','BU-RET','ACC-004','2026-08-25 09:00:00','KES',805000,1,0,NULL,'INV-10003','2026-08-25 10:05:00','2026-08-25 10:10:00',NULL,'LOADING',NULL,CURRENT_TIMESTAMP),
+('SO-004','SO-KE-10004','AFF-KE','BU-CI','ACC-001','2026-08-26 07:45:00','KES',460000,1,0,NULL,NULL,NULL,NULL,NULL,'PENDING_FINANCE',NULL,CURRENT_TIMESTAMP),
+('SO-005','SO-KE-10005','AFF-KE','BU-CI','ACC-002','2026-08-26 08:10:00','KES',920000,1,1,'Credit days exceeded',NULL,NULL,NULL,NULL,'PENDING_CREDIT',NULL,CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO sales_order_lines VALUES
+('SOL-001','SO-001',1,'PROD-AGO',10000,115,1150000),
+('SOL-002','SO-002',1,'PROD-AGO',15000,115,1725000),
+('SOL-003','SO-003',1,'PROD-PMS',7000,115,805000),
+('SOL-004','SO-004',1,'PROD-AGO',4000,115,460000),
+('SOL-005','SO-005',1,'PROD-AGO',8000,115,920000);
+
+INSERT OR IGNORE INTO purchase_orders VALUES
+('PO-001','PO-KE-20001','AFF-KE','BU-CI','Demo Supplier Alpha','2026-08-24 07:30:00','USD',220000,'2026-08-25 06:00:00','2026-08-25 07:20:00','POSTED',NULL,CURRENT_TIMESTAMP),
+('PO-002','PO-KE-20002','AFF-KE','BU-RET','Demo Supplier Beta','2026-08-24 08:00:00','USD',175000,NULL,NULL,'IN_APPROVAL',NULL,CURRENT_TIMESTAMP),
+('PO-003','PO-KE-20003','AFF-KE','BU-AV','Demo Supplier Gamma','2026-08-24 08:30:00','USD',95000,'2026-08-25 08:30:00',NULL,'RECEIVED',NULL,CURRENT_TIMESTAMP),
+('PO-004','PO-KE-20004','AFF-KE','BU-LPG','Demo Supplier Delta','2026-08-25 09:00:00','USD',48000,NULL,NULL,'APPROVED',NULL,CURRENT_TIMESTAMP),
+('PO-005','PO-KE-20005','AFF-KE','BU-CI','Demo Supplier Epsilon','2026-08-26 07:50:00','USD',130000,NULL,NULL,'CREATED',NULL,CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO purchase_order_lines VALUES
+('POL-001','PO-001',1,'PROD-AGO',200000,1.10,220000),
+('POL-002','PO-002',1,'PROD-PMS',140000,1.25,175000),
+('POL-003','PO-003',1,'PROD-JET',76000,1.25,95000),
+('POL-004','PO-004',1,'PROD-LPG',40000,1.20,48000),
+('POL-005','PO-005',1,'PROD-AGO',118181.82,1.10,130000);
+
+INSERT OR IGNORE INTO workflow_instances VALUES
+('WFI-001','WFD-001','SALES_ORDER','SO-001','COMPLETED','2026-08-25 08:00:00','2026-08-25 10:15:00','WST-003',CURRENT_TIMESTAMP),
+('WFI-002','WFD-001','SALES_ORDER','SO-002','IN_PROGRESS','2026-08-25 08:30:00',NULL,'WST-002',CURRENT_TIMESTAMP),
+('WFI-003','WFD-002','PURCHASE_ORDER','PO-002','IN_PROGRESS','2026-08-24 08:00:00',NULL,'WST-005',CURRENT_TIMESTAMP),
+('WFI-004','WFD-003','LEAD','LEAD-001','COMPLETED','2026-08-12 08:20:00','2026-08-12 12:00:00','WST-008',CURRENT_TIMESTAMP),
+('WFI-005','WFD-004','CASE','CASE-002','IN_PROGRESS','2026-08-25 09:15:00',NULL,'WST-010',CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO workflow_stage_instances VALUES
+('WSI-001','WFI-001','WST-001','USR-GAB','TEAM-FIN-KE','APPROVED','2026-08-25 08:00:00','2026-08-25 08:05:00','2026-08-25 08:42:00','Approved'),
+('WSI-002','WFI-002','WST-002','USR-VIC','TEAM-CRD-GRP','ACTIVE','2026-08-25 09:10:00','2026-08-25 09:12:00',NULL,'Credit limit exception under review'),
+('WSI-003','WFI-003','WST-005','USR-GAB','TEAM-FIN-KE','ACTIVE','2026-08-24 09:00:00','2026-08-24 09:15:00',NULL,'Finance approval pending'),
+('WSI-004','WFI-004','WST-007','USR-JAM','TEAM-SALES-KE','COMPLETED','2026-08-12 08:20:00','2026-08-12 08:30:00','2026-08-12 09:05:00','Customer contacted'),
+('WSI-005','WFI-005','WST-010','USR-CATH','TEAM-CS-KE','ACTIVE','2026-08-25 09:40:00','2026-08-25 09:45:00',NULL,'Customer service resolution tracking');
+
+INSERT OR IGNORE INTO workflow_stage_assignees VALUES
+('WSA-001','WSI-001','USR-GAB','WRA-001',1,1,'APPROVED','2026-08-25 08:00:00','2026-08-25 08:42:00','APPROVE','Finance approved'),
+('WSA-002','WSI-002','USR-VIC','WRA-009',1,1,'ACTIVE','2026-08-25 09:10:00',NULL,NULL,'Credit limit exception under review'),
+('WSA-003','WSI-003','USR-GAB','WRA-005',1,1,'ACTIVE','2026-08-24 09:00:00',NULL,NULL,'PO finance approval pending'),
+('WSA-004','WSI-004','USR-JAM',NULL,1,1,'COMPLETED','2026-08-12 08:20:00','2026-08-12 09:05:00','COMPLETE','Customer contacted'),
+('WSA-005','WSI-005','USR-CATH','WRA-010',1,1,'ACTIVE','2026-08-25 09:40:00',NULL,NULL,'Customer service resolution tracking');
+
+INSERT OR IGNORE INTO sla_instances VALUES
+('SLAI-001','SLAR-003','SALES_ORDER','SO-001','WSI-001','USR-GAB','TEAM-FIN-KE','2026-08-25 08:00:00','2026-08-25 09:00:00','2026-08-25 08:45:00','2026-08-25 08:42:00',0,'MET',NULL),
+('SLAI-002','SLAR-004','SALES_ORDER','SO-002','WSI-002','USR-VIC','TEAM-CRD-GRP','2026-08-25 09:10:00','2026-08-25 11:10:00','2026-08-25 10:40:00',NULL,0,'BREACHED','2026-08-25 11:10:00'),
+('SLAI-003','SLAR-005','PURCHASE_ORDER','PO-002','WSI-003','USR-GAB','TEAM-FIN-KE','2026-08-24 09:00:00','2026-08-24 12:00:00','2026-08-24 11:30:00',NULL,0,'BREACHED','2026-08-24 12:00:00'),
+('SLAI-004','SLAR-002','LEAD','LEAD-001','WSI-004','USR-JAM','TEAM-SALES-KE','2026-08-12 08:20:00','2026-08-12 10:20:00','2026-08-12 09:50:00','2026-08-12 09:05:00',0,'MET',NULL),
+('SLAI-005','SLAR-001','CASE','CASE-002','WSI-005','USR-CATH','TEAM-CS-KE','2026-08-25 09:15:00','2026-08-25 10:15:00','2026-08-25 10:00:00','2026-08-25 09:35:00',0,'MET',NULL);
+
+INSERT OR IGNORE INTO sla_timer_events VALUES
+('SLATE-001','SLAI-001','START','2026-08-25 08:00:00','SO finance SLA started','USR-GAB'),
+('SLATE-002','SLAI-001','STOP','2026-08-25 08:42:00','Finance approved','USR-GAB'),
+('SLATE-003','SLAI-002','BREACH','2026-08-25 11:10:00','Credit approval SLA exceeded','USR-VIC'),
+('SLATE-004','SLAI-004','STOP','2026-08-12 09:05:00','Lead contacted','USR-JAM'),
+('SLATE-005','SLAI-005','STOP','2026-08-25 09:35:00','First response sent','USR-CATH');
+
+INSERT OR IGNORE INTO import_batches VALUES
+('IMP-001','SRC-EXCEL','SALES_ORDER','SO-Aug-25.xlsx','demo_sha_so_001','USR-CATH','2026-08-25 17:00:00','2026-08-01','2026-08-25',500,470,20,8,2,'IMPORTED'),
+('IMP-002','SRC-EXCEL','PURCHASE_ORDER','PO-Aug-25.xlsx','demo_sha_po_002','USR-CATH','2026-08-25 17:10:00','2026-08-01','2026-08-25',120,110,5,5,0,'IMPORTED'),
+('IMP-003','SRC-WEB','LEAD','web-leads-20260825.json','demo_sha_lead_003','USR-CATH','2026-08-25 17:20:00','2026-08-25','2026-08-25',12,12,0,0,0,'IMPORTED'),
+('IMP-004','SRC-EMAIL','CASE','customer-service-20260825.json','demo_sha_case_004','USR-CATH','2026-08-25 17:30:00','2026-08-25','2026-08-25',18,18,0,0,0,'IMPORTED'),
+('IMP-005','SRC-MANUAL','CONTACT','manual-contact-seed.json','demo_sha_contact_005','USR-CATH','2026-08-25 17:40:00','2026-08-25','2026-08-25',5,5,0,0,0,'IMPORTED');
+
+INSERT OR IGNORE INTO import_rows VALUES
+('IR-001','IMP-001',2,'SO-KE-10001','SALES_ORDER','SO-001','rowhash-so-1','NEW',NULL,'{"document_number":"SO-KE-10001"}','2026-08-25 17:01:00'),
+('IR-002','IMP-002',2,'PO-KE-20001','PURCHASE_ORDER','PO-001','rowhash-po-1','NEW',NULL,'{"document_number":"PO-KE-20001"}','2026-08-25 17:11:00'),
+('IR-003','IMP-003',1,'LD-2026-0001','LEAD','LEAD-001','rowhash-lead-1','NEW',NULL,'{"lead_number":"LD-2026-0001"}','2026-08-25 17:21:00'),
+('IR-004','IMP-004',1,'CS-2026-0001','CASE','CASE-001','rowhash-case-1','NEW',NULL,'{"case_number":"CS-2026-0001"}','2026-08-25 17:31:00'),
+('IR-005','IMP-005',1,'CON-001','CONTACT','CON-001','rowhash-contact-1','NEW',NULL,'{"contact_id":"CON-001"}','2026-08-25 17:41:00');
+
+INSERT OR IGNORE INTO record_snapshots VALUES
+('SNAP-001','SALES_ORDER','SO-001','IMP-001','SO-KE-10001',1,'rowhash-so-1','{"status":"LOADED","document_number":"SO-KE-10001"}','2026-08-25 17:01:00',1),
+('SNAP-002','PURCHASE_ORDER','PO-001','IMP-002','PO-KE-20001',1,'rowhash-po-1','{"status":"POSTED","document_number":"PO-KE-20001"}','2026-08-25 17:11:00',1),
+('SNAP-003','LEAD','LEAD-001','IMP-003','LD-2026-0001',1,'rowhash-lead-1','{"status":"QUALIFIED","lead_number":"LD-2026-0001"}','2026-08-25 17:21:00',1),
+('SNAP-004','CASE','CASE-001','IMP-004','CS-2026-0001',1,'rowhash-case-1','{"status":"IN_PROGRESS","case_number":"CS-2026-0001"}','2026-08-25 17:31:00',1),
+('SNAP-005','CONTACT','CON-001','IMP-005','CON-001',1,'rowhash-contact-1','{"full_name":"John Kamau"}','2026-08-25 17:41:00',1);
+
+INSERT OR IGNORE INTO unresolved_actors VALUES
+('UAQ-001','IMP-001','SRC-ORACLE','UNKNOWN.APPROVER1','AFF-KE','OPEN',NULL,NULL,NULL,'Needs mapping to a user with verified email'),
+('UAQ-002','IMP-002','SRC-ORACLE','UNKNOWN.APPROVER2','AFF-KE','OPEN',NULL,NULL,NULL,'Needs mapping before workflow attribution'),
+('UAQ-003','IMP-001','SRC-ORACLE','LEGACY.USER1','AFF-KE','IGNORED',NULL,'USR-CATH','2026-08-25 18:00:00','Legacy system technical account'),
+('UAQ-004','IMP-002','SRC-ORACLE','GABRIEL.MUSEMBI','AFF-KE','MAPPED','USR-GAB','USR-CATH','2026-08-25 18:02:00','Mapped to finance manager'),
+('UAQ-005','IMP-001','SRC-ORACLE','VICTOR.NJOROGE','AFF-KE','MAPPED','USR-VIC','USR-CATH','2026-08-25 18:03:00','Mapped to credit manager');
+
+INSERT OR IGNORE INTO file_objects VALUES
+('FILE-001','SO-Aug-25.xlsx','imports/2026/08/SO-Aug-25.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',125000,'demo_sha_so_001','USR-CATH','2026-08-25 17:00:00'),
+('FILE-002','PO-Aug-25.xlsx','imports/2026/08/PO-Aug-25.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',78000,'demo_sha_po_002','USR-CATH','2026-08-25 17:10:00'),
+('FILE-003','EastGate-Proposal.pdf','crm/opportunities/OPP-001/EastGate-Proposal.pdf','application/pdf',310000,'demo_file_003','USR-JAM','2026-08-18 09:50:00'),
+('FILE-004','Invoice-Dispute.pdf','cases/CASE-002/Invoice-Dispute.pdf','application/pdf',85000,'demo_file_004','USR-CATH','2026-08-25 09:20:00'),
+('FILE-005','Product-Catalogue.pdf','crm/catalogue/Product-Catalogue.pdf','application/pdf',950000,'demo_file_005','USR-CATH','2026-08-22 15:10:00');
+
+INSERT OR IGNORE INTO entity_attachments VALUES
+('EA-001','FILE-001','SALES_ORDER','SO-001','SOURCE_UPLOAD','USR-CATH','2026-08-25 17:00:00'),
+('EA-002','FILE-002','PURCHASE_ORDER','PO-001','SOURCE_UPLOAD','USR-CATH','2026-08-25 17:10:00'),
+('EA-003','FILE-003','OPPORTUNITY','OPP-001','PROPOSAL','USR-JAM','2026-08-18 09:50:00'),
+('EA-004','FILE-004','CASE','CASE-002','CUSTOMER_EVIDENCE','USR-CATH','2026-08-25 09:20:00'),
+('EA-005','FILE-005','ACTIVITY','ACT-005','CATALOGUE','USR-CATH','2026-08-22 15:10:00');
+
+INSERT OR IGNORE INTO notifications VALUES
+('NOT-001','USR-VIC','SLA_BREACH','Credit SLA breached','SO-KE-10002 has exceeded the credit approval SLA.','SALES_ORDER','SO-002','2026-08-25 11:10:00',NULL),
+('NOT-002','USR-ZUL','SLA_BREACH','PO approval overdue','PO-KE-20002 is overdue at Finance Approval.','PURCHASE_ORDER','PO-002','2026-08-24 12:00:00',NULL),
+('NOT-003','USR-JAM','FOLLOW_UP','Lead follow-up due','Riftline additional AGO follow-up is due.','LEAD','LEAD-004','2026-08-26 08:00:00',NULL),
+('NOT-004','USR-GAB','ASSIGNMENT','New case assigned','Invoice discrepancy case CS-2026-0002 is assigned to you.','CASE','CASE-002','2026-08-25 09:40:00','2026-08-25 09:42:00'),
+('NOT-005','USR-CATH','IMPORT_EXCEPTION','Unresolved import actors','Two Oracle usernames require mapping.','IMPORT_BATCH','IMP-001','2026-08-25 17:05:00',NULL);
 `;
 
 /**
@@ -389,8 +674,58 @@ INSERT OR IGNORE INTO workflow_stages VALUES
  * Statement by statement rather than one `exec`, so a failing row names itself
  * instead of the whole block failing as one.
  */
+/**
+ * Split the seed into statements, respecting quoted values and line comments.
+ *
+ * A naive split on ";\n" was enough while every seeded value was a code or a
+ * name. It stops being enough at lead_qualifications, whose notes read
+ * "Budget confirmed; decision maker engaged" and contain exactly the character
+ * the splitter looked for. The result was an unterminated string literal and a
+ * SQL logic error two hundred rows into the seed.
+ *
+ * So a boundary is a semicolon that is neither inside a single-quoted string
+ * nor inside a line comment.
+ *
+ * SQLite escapes a quote by doubling it, and that needs no special case: the
+ * second quote of a doubled pair flips the state back, so a value like
+ * 'it''s' opens, closes, opens and closes again, ending outside a string
+ * exactly as it should.
+ *
+ * Line comments are skipped for the mirror-image reason. The comment blocks in
+ * this file are English, English is full of apostrophes, and an unpaired one in
+ * "the operator's schema" would otherwise open a string that swallowed every
+ * boundary until the next apostrophe came along.
+ */
+function splitStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let start = 0;
+  let inString = false;
+  let inComment = false;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (inComment) {
+      if (ch === '\n') inComment = false;
+      continue;
+    }
+    if (!inString && ch === '-' && sql[i + 1] === '-') {
+      inComment = true;
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      inString = !inString;
+    } else if (ch === ';' && !inString) {
+      statements.push(sql.slice(start, i));
+      start = i + 1;
+    }
+  }
+  const tail = sql.slice(start);
+  if (tail.trim() !== '') statements.push(tail);
+  return statements;
+}
+
 export async function seedHass(db: TestClient): Promise<void> {
-  for (const statement of SEED_SQL.split(';\n')) {
+  for (const statement of splitStatements(SEED_SQL)) {
     const sql = statement
       .split('\n')
       .filter((line) => !line.trimStart().startsWith('--'))
