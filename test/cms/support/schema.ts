@@ -1,11 +1,16 @@
 /**
  * The DDL the CMS authentication tests create their database from.
  *
- * Copied VERBATIM from the operator's hass_cms_turso_v1_FINAL.sql: the twenty
- * tables on the authentication path plus every table they reach through a
- * foreign key, in an order that satisfies those dependencies. Constraints are
- * included exactly as written, so a test proves the code satisfies the real
+ * Copied VERBATIM from the operator's hass_cms_turso_v1_FINAL.sql: the tables
+ * on the authentication path, the organisation master data Build Prompt 05
+ * administers, and every table those reach through a foreign key. Constraints
+ * are included exactly as written, so a test proves the code satisfies the real
  * CHECK and UNIQUE rules rather than a relaxed copy of them.
+ *
+ * The order is not strictly topological and does not need to be: SQLite
+ * resolves a foreign key when a row is written, not when the table is created,
+ * so `teams` and `team_members` may name `users` before it exists here. Foreign
+ * keys are enforced at DML time, which is when the tests exercise them.
  *
  * WHY THIS IS A .ts FILE AND NOT THE .sql
  * The authoritative schema was supplied out of band and is not committed here,
@@ -81,6 +86,19 @@ CREATE TABLE IF NOT EXISTS teams (
     FOREIGN KEY (affiliate_id) REFERENCES affiliates(affiliate_id) ON DELETE SET NULL,
     FOREIGN KEY (business_unit_id) REFERENCES business_units(business_unit_id) ON DELETE SET NULL,
     FOREIGN KEY (manager_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+    team_member_id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    member_role TEXT,
+    effective_from TEXT NOT NULL,
+    effective_to TEXT,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    FOREIGN KEY (team_id) REFERENCES teams(team_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE RESTRICT,
+    UNIQUE(team_id, user_id, effective_from)
 );
 
 CREATE TABLE IF NOT EXISTS access_roles (

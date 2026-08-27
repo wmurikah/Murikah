@@ -13,23 +13,65 @@ import CmsIconButton from './CmsIconButton.astro';
 interface Props {
   id: string;
   title: string;
+  /**
+   * `navigation` is the small-screen menu: navy, anchored to the leading edge,
+   * the width of a rail. `form` is the create-and-edit panel Build Prompt 05
+   * needs: a light surface on the trailing edge, wide enough for labelled
+   * fields, with room for actions at the foot.
+   *
+   * Added rather than writing a second drawer component. The two share the
+   * dialog, the focus trap, Escape, the backdrop and the close control, and
+   * only their surface and their edge differ; a second component would have
+   * been a second place for those five things to drift.
+   */
+  tone?: 'navigation' | 'form';
+  /** Announced with the close control, so it names what is being closed. */
+  closeLabel?: string;
 }
-const { id, title } = Astro.props;
+const { id, title, tone = 'navigation', closeLabel } = Astro.props;
 const titleId = `${id}-title`;
+const form = tone === 'form';
 ---
 
 <dialog
   id={id}
   aria-labelledby={titleId}
-  class="m-0 h-dvh max-h-none w-[min(19rem,85vw)] max-w-none border-0 bg-cms-navy p-0 text-cms-rail-text backdrop:bg-cms-navy/55"
+  class:list={[
+    'm-0 h-dvh max-h-none max-w-none border-0 p-0 backdrop:bg-cms-navy/55',
+    form
+      ? 'ms-auto w-[min(30rem,100vw)] bg-cms-surface text-cms-ink'
+      : 'w-[min(19rem,85vw)] bg-cms-navy text-cms-rail-text',
+  ]}
 >
   <div class="flex h-full flex-col">
-    <div class="flex items-center justify-between gap-3 px-4 py-3.5">
-      <h2 id={titleId} class="text-cms-card font-semibold text-white">{title}</h2>
-      <CmsIconButton icon="close" label="Close navigation" tone="onNavy" data-cms-modal-close />
+    <div
+      class:list={[
+        'flex items-center justify-between gap-3 px-4 py-3.5',
+        form && 'border-b border-cms-line',
+      ]}
+    >
+      <h2
+        id={titleId}
+        class:list={['text-cms-card font-semibold', form ? 'text-cms-navy' : 'text-white']}
+      >
+        {title}
+      </h2>
+      <CmsIconButton
+        icon="close"
+        label={closeLabel ?? (form ? 'Close panel' : 'Close navigation')}
+        tone={form ? 'default' : 'onNavy'}
+        data-cms-modal-close
+      />
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+    <div class:list={['min-h-0 flex-1 overflow-y-auto', form ? 'px-4 py-4' : 'px-3 pb-4']}>
       <slot />
     </div>
+    {
+      form && (
+        <div class="flex justify-end gap-2 border-t border-cms-line px-4 py-3">
+          <slot name="actions" />
+        </div>
+      )
+    }
   </div>
 </dialog>
