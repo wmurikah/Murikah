@@ -1,0 +1,148 @@
+---
+/**
+ * The permission matrix: select-all, clear, the running count and the impact
+ * summary shown before saving.
+ *
+ * A component, so it ships only where the matrix ships.
+ */
+---
+
+<script>
+  const form = document.getElementById('cms-matrix-form') as HTMLFormElement | null;
+  const save = document.getElementById('cms-matrix-save') as HTMLButtonElement | null;
+  const errorBox = document.getElementById('cms-matrix-error');
+  const impact = document.getElementById('cms-matrix-impact');
+  const count = document.getElementById('cms-matrix-count');
+
+  if (form && save) {
+    const boxes = () => [...form.querySelectorAll<HTMLInputElement>('input[name="permission"]')];
+
+    /**
+     * The diff, in words, before it is saved.
+     *
+     * An administrator ticking boxes should be told what the ticks mean while
+     * they are ticking, not after the write. This is the whole of the "impact
+     * summary and diff" requirement and it costs no round trip.
+     */
+    const refresh = () => {
+      const all = boxes();
+      const granting = all.filter((b) => b.checked && b.dataset.was !== '1');
+      const revoking = all.filter((b) => !b.checked && b.dataset.was === '1');
+      if (count) count.textContent = String(all.filter((b) => b.checked).length);
+
+      for (const label of form.querySelectorAll<HTMLElement>('[data-module-count]')) {
+        const module = label.dataset.moduleCount;
+        const mine = all.filter((b) => b.dataset.module === module);
+        label.textContent = `${mine.filter((b) => b.checked).length} of ${mine.length}`;
+      }
+
+      if (!impact) return;
+      if (granting.length === 0 && revoking.length === 0) {
+        impact.hidden = true;
+        impact.textContent = '';
+        return;
+      }
+      const parts: string[] = [];
+      if (granting.length > 0) {
+        parts.push(
+          `Granting ${granting.length}: ${granting.map((b) => b.dataset.code).join(', ')}.`,
+        );
+      }
+      if (revoking.length > 0) {
+        parts.push(
+          `Revoking ${revoking.length}: ${revoking.map((b) => b.dataset.code).join(', ')}.`,
+        );
+      }
+      parts.push('Everybody holding this role is affected on their next request.');
+      impact.hidden = false;
+      impact.textContent = parts.join(' ');
+    };
+
+    form.addEventListener('change', refresh);
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      const selectAll = target?.closest<HTMLElement>('[data-cms-select-all]');
+      if (selectAll) {
+        for (const box of boxes()) {
+          if (box.dataset.module === selectAll.dataset.cmsSelectAll) box.checked = true;
+        }
+        refresh();
+        return;
+      }
+      const clear = target?.closest<HTMLElement>('[data-cms-clear]');
+      if (clear) {
+        for (const box of boxes()) {
+          if (box.dataset.module === clear.dataset.cmsClear) box.checked = false;
+        }
+        refresh();
+        return;
+      }
+      if (target?.closest('[data-cms-matrix-reset]')) {
+        for (const box of boxes()) box.checked = box.dataset.was === '1';
+        refresh();
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const all = boxes();
+      const changed = all.filter((b) => b.checked !== (b.dataset.was === '1'));
+      if (changed.length === 0) return;
+
+      const revoking = changed.filter((b) => !b.checked);
+      if (revoking.length > 0) {
+        const codes = revoking.map((b) => b.dataset.code).join(', ');
+        if (
+          !window.confirm(
+            `Revoke ${revoking.length} permission(s) from this role?\n\n${codes}\n\nEverybody holding it loses them on their next request.`,
+          )
+        ) {
+          return;
+        }
+      }
+
+      save.disabled = true;
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+      try {
+        const response = await fetch(
+          `/api/admin/roles/${encodeURIComponent(form.dataset.roleId ?? '')}/permissions`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              permissions: all.map((b) => ({ permissionId: b.value, granted: b.checked })),
+            }),
+          },
+        );
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          // The last-administrator refusal arrives here, from the server, which
+          // is where it is enforced.
+          errorBox.textContent = payload?.error?.message ?? 'Those permissions could not be saved.';
+          errorBox.scrollIntoView({ block: 'center' });
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    refresh();
+  }
+</script>

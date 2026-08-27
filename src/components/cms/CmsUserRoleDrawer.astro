@@ -1,0 +1,266 @@
+---
+/**
+ * Assigning an access role to a person, with its data scopes.
+ *
+ * The person comes from the page, and the endpoint reads it from the path. A
+ * user id in the request body is not read: this drawer could not grant somebody
+ * else a role even if its markup were rewritten in the browser, because the
+ * server never looks there.
+ *
+ * A scope's target field is shown, and enabled, only for the scope type that
+ * uses it. `user_role_scopes` carries a CHECK forcing the matching column, and
+ * a disabled control is not submitted, so the columns a scope excludes arrive
+ * absent rather than as an empty string.
+ */
+import CmsDrawer from './CmsDrawer.astro';
+import CmsButton from './CmsButton.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { SCOPE_TYPES } from '@/lib/cms/auth/rbac';
+import { listRoles } from '@/lib/cms/repos/rbacAdmin';
+import {
+  listAffiliates,
+  listBusinessUnits,
+  listCountries,
+  listTeams,
+} from '@/lib/cms/repos/organisationAdmin';
+
+interface Props {
+  userId: string;
+}
+const { userId } = Astro.props;
+
+let roleOptions: { value: string; label: string }[] = [];
+let countryOptions: { value: string; label: string }[] = [];
+let affiliateOptions: { value: string; label: string }[] = [];
+let unitOptions: { value: string; label: string }[] = [];
+let teamOptions: { value: string; label: string }[] = [];
+
+try {
+  const db = await getDb(getCmsEnv());
+  const [roles, countries, affiliates, units, teams] = await Promise.all([
+    listRoles(db),
+    listCountries(db),
+    listAffiliates(db),
+    listBusinessUnits(db),
+    listTeams(db),
+  ]);
+  roleOptions = roles.filter((r) => r.active).map((r) => ({ value: r.roleId, label: r.roleName }));
+  countryOptions = countries
+    .filter((c) => c.active)
+    .map((c) => ({ value: c.countryId, label: c.countryName }));
+  // The code disambiguates: `affiliate_name` is not unique in this schema.
+  affiliateOptions = affiliates
+    .filter((a) => a.active)
+    .map((a) => ({ value: a.affiliateId, label: `${a.affiliateName} (${a.affiliateCode})` }));
+  unitOptions = units
+    .filter((b) => b.active)
+    .map((b) => ({ value: b.businessUnitId, label: b.businessUnitName }));
+  teamOptions = teams.filter((t) => t.active).map((t) => ({ value: t.teamId, label: t.teamName }));
+} catch (error) {
+  console.error('[cms.userRoleDrawer] lookups failed', error);
+}
+
+const scopeOptions = SCOPE_TYPES.map((value) => ({
+  value,
+  label:
+    value === 'OWN'
+      ? 'Own records only'
+      : value === 'GROUP'
+        ? 'Group, every record'
+        : value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' '),
+}));
+const today = new Date().toISOString().slice(0, 10);
+---
+
+<CmsDrawer id="cms-userrole-drawer" tone="form" title="Assign a role">
+  <form id="cms-userrole-form" data-user-id={userId} novalidate class="flex flex-col gap-4">
+    <p
+      id="cms-userrole-error"
+      role="alert"
+      hidden
+      class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+    >
+    </p>
+    <CmsSelect id="ur-roleId" name="roleId" label="Role" options={roleOptions} required />
+    <CmsInput
+      id="ur-effectiveFrom"
+      name="effectiveFrom"
+      label="Effective from"
+      value={today}
+      hint="YYYY-MM-DD."
+      required
+    />
+    <CmsInput
+      id="ur-effectiveTo"
+      name="effectiveTo"
+      label="Effective to"
+      hint="Optional. Leave empty for an open-ended assignment."
+    />
+
+    <hr class="border-cms-line" />
+    <p class="text-cms-body-sm font-semibold text-cms-navy">Data scope</p>
+    <p class="text-cms-body-sm text-cms-muted">
+      Which records this role reaches. Several scopes add together: a role scoped to Kenya and
+      Uganda reaches both.
+    </p>
+
+    <CmsSelect id="ur-scopeType" name="scopeType" label="Scope" options={scopeOptions} required />
+    <div data-scope-field="COUNTRY" hidden>
+      <CmsSelect id="ur-countryId" name="countryId" label="Country" options={countryOptions} />
+    </div>
+    <div data-scope-field="AFFILIATE" hidden>
+      <CmsSelect
+        id="ur-affiliateId"
+        name="affiliateId"
+        label="Affiliate"
+        options={affiliateOptions}
+      />
+    </div>
+    <div data-scope-field="BUSINESS_UNIT" hidden>
+      <CmsSelect
+        id="ur-businessUnitId"
+        name="businessUnitId"
+        label="Business unit"
+        options={unitOptions}
+      />
+    </div>
+    <div data-scope-field="TEAM" hidden>
+      <CmsSelect id="ur-teamId" name="teamId" label="Team" options={teamOptions} />
+    </div>
+  </form>
+
+  <Fragment slot="actions">
+    <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+    <button
+      type="submit"
+      id="cms-userrole-save"
+      form="cms-userrole-form"
+      class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      Assign
+    </button>
+  </Fragment>
+</CmsDrawer>
+
+<script>
+  const drawer = document.getElementById('cms-userrole-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-userrole-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-userrole-error');
+  const save = document.getElementById('cms-userrole-save') as HTMLButtonElement | null;
+
+  if (drawer && form && save) {
+    // Show, and enable, only the target the chosen scope uses. A disabled
+    // control is not submitted, which is how the excluded columns reach the
+    // server absent rather than as '' that the CHECK would reject.
+    const applyScope = () => {
+      const scope = (form.elements.namedItem('scopeType') as HTMLSelectElement | null)?.value ?? '';
+      form.querySelectorAll<HTMLElement>('[data-scope-field]').forEach((group) => {
+        const mine = group.dataset.scopeField === scope;
+        group.hidden = !mine;
+        group.querySelectorAll('select').forEach((field) => {
+          if (field instanceof HTMLSelectElement) field.disabled = !mine;
+        });
+      });
+    };
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((n) => {
+        n.textContent = '';
+        n.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((n) => n.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    const paint = (fields: { field: string; message: string }[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        if (!(field instanceof HTMLElement) || !field.id) continue;
+        field.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${field.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    form.addEventListener('change', (event) => {
+      if ((event.target as HTMLElement | null)?.id === 'ur-scopeType') applyScope();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!(event.target as HTMLElement | null)?.closest('[data-cms-userrole-create]')) return;
+      clear();
+      form.reset();
+      applyScope();
+      drawer.showModal();
+      form.querySelector<HTMLElement>('select')?.focus();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      save.disabled = true;
+      const data = new FormData(form);
+      try {
+        const response = await fetch(
+          // The person comes from the path. The body carries no user id, and
+          // the server would not read one if it did.
+          `/api/admin/users/${encodeURIComponent(form.dataset.userId ?? '')}/roles`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              roleId: data.get('roleId'),
+              effectiveFrom: data.get('effectiveFrom'),
+              effectiveTo: data.get('effectiveTo'),
+              active: true,
+              scopes: [
+                {
+                  scopeType: data.get('scopeType'),
+                  countryId: data.get('countryId'),
+                  affiliateId: data.get('affiliateId'),
+                  businessUnitId: data.get('businessUnitId'),
+                  teamId: data.get('teamId'),
+                },
+              ],
+            }),
+          },
+        );
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+        if (payload?.error?.fields?.length) paint(payload.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            payload?.error?.message ?? 'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    applyScope();
+  }
+</script>

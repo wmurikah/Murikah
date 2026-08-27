@@ -46,3 +46,14 @@ export const USERS_MANAGE = 'ADMIN.USERS.MANAGE';
 export function canManageUsers(permissions: readonly string[]): boolean {
   return permissions.includes(USERS_MANAGE);
 }
+
+/**
+ * Role and permission administration. Already in the seeded catalogue as
+ * PERM-015, already granted to ROLE-ADMIN, so Build Prompt 07 needs no data
+ * script either.
+ */
+export const ROLES_MANAGE = 'ADMIN.ROLES.MANAGE';
+
+export function canManageRoles(permissions: readonly string[]): boolean {
+  return permissions.includes(ROLES_MANAGE);
+}
