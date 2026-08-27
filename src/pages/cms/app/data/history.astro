@@ -1,0 +1,140 @@
+---
+/**
+ * Data → Import History.
+ *
+ * Every batch of every type in one list, because there is one ingestion
+ * path. Rows and documents are separate columns and never combined into a
+ * percentage: 1,386 rows describing 662 orders is two facts, and averaging
+ * them would produce a third that is true of nothing.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewImports } from '@/lib/cms/permissions';
+import {
+  listBatches,
+  IMPORT_TYPE_LABELS,
+  type BatchSummaryRow,
+  type ImportType,
+} from '@/lib/cms/import/uploadCentre';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewImports(permissions);
+
+let batches: BatchSummaryRow[] = [];
+let loadFailed = false;
+if (mayView) {
+  try {
+    batches = await listBatches(await getDb(getCmsEnv()));
+  } catch (error) {
+    console.error('[cms.data.history] load failed', error);
+    loadFailed = true;
+  }
+}
+const statusTone = (status: string) =>
+  status === 'IMPORTED'
+    ? 'success'
+    : status === 'PARTIAL'
+      ? 'warning'
+      : status === 'REJECTED'
+        ? 'danger'
+        : 'neutral';
+const typeLabel = (type: string) =>
+  IMPORT_TYPE_LABELS[type as ImportType] ?? type.replace('_', ' ').toLowerCase();
+---
+
+<CmsLayout title="Import history">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to import history"
+        description="Ask a system administrator for the DATA.IMPORTS.VIEW permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Import history could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Import history"
+          description="Every upload, whatever its type. Nothing here is ever deleted: the file, its hash and its lineage are kept."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Data', href: '/app/data' },
+            { label: 'History' },
+          ]}
+        />
+        <CmsDataTable
+          caption="Import batches"
+          columns={[
+            { key: 'file', label: 'File' },
+            { key: 'type', label: 'Type' },
+            { key: 'source', label: 'Source' },
+            { key: 'by', label: 'Uploaded by' },
+            { key: 'at', label: 'Uploaded' },
+            { key: 'rows', label: 'Rows', numeric: true },
+            { key: 'documents', label: 'Documents', numeric: true },
+            { key: 'new', label: 'New', numeric: true },
+            { key: 'changed', label: 'Changed', numeric: true },
+            { key: 'duplicate', label: 'Duplicates', numeric: true },
+            { key: 'rejected', label: 'Rejected', numeric: true },
+            { key: 'status', label: 'Status' },
+          ]}
+          empty={batches.length === 0}
+        >
+          {batches.map((batch) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={`/app/data/history/${batch.batchId}`}
+                  class="font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {batch.filename}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{typeLabel(batch.importType)}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{batch.sourceSystem}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{batch.uploadedBy}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{batch.uploadedAt}</td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsReceived}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.uniqueDocuments}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{batch.rowsNew}</td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsChanged}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsDuplicate}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsRejected}
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone={statusTone(batch.status)} label={batch.status.toLowerCase()} />
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="data"
+              title="No imports yet"
+              description="Uploaded files appear here."
+            />
+          </Fragment>
+        </CmsDataTable>
+      </Fragment>
+    )
+  }
+</CmsLayout>

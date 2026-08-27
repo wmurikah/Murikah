@@ -47,6 +47,9 @@ import {
   canViewLeads,
   canViewOrganisation,
   canViewWorkflows,
+  canViewImports,
+  canUploadImports,
+  canUploadImportType,
 } from '../permissions.ts';
 import { forbidden, unauthorised } from '../errors.ts';
 import { clientIp } from '../../http.ts';
@@ -264,6 +267,32 @@ export function requireCatalogueManage(context: APIContext): Authorisation {
 /** Reading workflow configuration and running the approval preview. */
 export function requireWorkflowView(context: APIContext): Authorisation {
   return authorise(context, canViewWorkflows);
+}
+
+/**
+ * Reading the Upload Centre: import history, batch detail, the exception
+ * queues and the data-quality panel. Implied by the upload code, because a
+ * person who may run an import has no coherent reason to be unable to read
+ * what their own import did.
+ */
+export function requireImportsView(context: APIContext): Authorisation {
+  return authorise(context, canViewImports);
+}
+
+/** Running an import at all. The data type is checked separately, below. */
+export function requireImportsUpload(context: APIContext): Authorisation {
+  return authorise(context, canUploadImports);
+}
+
+/**
+ * Running an import of one particular kind: both DATA.IMPORTS.UPLOAD and
+ * the type's own upload code. Read the reasoning in ../permissions.ts.
+ */
+export function requireImportUpload(
+  context: APIContext,
+  importType: 'SALES_ORDER' | 'PURCHASE_ORDER',
+): Authorisation {
+  return authorise(context, (permissions) => canUploadImportType(permissions, importType));
 }
 
 /**

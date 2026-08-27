@@ -572,6 +572,30 @@ export function deriveSoStatus(head: NormalisedSoRow): string {
 }
 
 /**
+ * A document that could not be written, recorded on its own rows.
+ *
+ * Nothing of it was written: the transaction that failed took every one of
+ * its statements with it. What is left is the reason, on the rows the
+ * document came from, so the batch's PARTIAL report can say exactly what did
+ * not import rather than only that something did not.
+ */
+async function isolateDocument(
+  db: Client,
+  importRowIds: Map<number, string>,
+  error: unknown,
+): Promise<void> {
+  const reason = `The document could not be written: ${String(error)}`.slice(0, 400);
+  const statements: Stmt[] = [...importRowIds.values()].map((importRowId) => ({
+    sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
+          WHERE import_row_id = ? AND imported_at IS NULL`,
+    args: [reason, importRowId],
+  }));
+  for (let start = 0; start < statements.length; start += 200) {
+    await db.batch(statements.slice(start, start + 200), 'write');
+  }
+}
+
+/**
  * Commit the READY rows of a validated batch, document by document.
  *
  * Each document is one transaction: the order, its resolvable lines, its
@@ -836,7 +860,21 @@ export async function commitSoBatch(
       }
     }
 
-    await db.batch(statements, 'write');
+    // The document is the unit of integrity: everything above lands in one
+    // transaction, and a document that cannot land is isolated here rather
+    // than taking the rest of the batch down with it. That is the stated
+    // policy, and the batch reports PARTIAL with the reason attached to the
+    // rows that failed.
+    try {
+      await db.batch(statements, 'write');
+    } catch (error) {
+      await isolateDocument(db, group.importRowIds, error);
+      result.documentsSkipped += 1;
+      result.linesWritten -= actionable.filter(
+        (row) => resolveProduct(maps.products, row.orderedItem) !== null && row.lineNumber !== null,
+      ).length;
+      continue;
+    }
     // The snapshot after the canonical write, per the ordering rule:
     // latest_snapshot_id moves only once both have committed.
     const headRow = actionable[0] ?? head;
@@ -893,5 +931,106 @@ export function varianceComparison(raw: Record<string, unknown>): {
   return {
     sourceFinanceVariance: source,
     computedFinanceMinutes: minutesBetween(created, approved),
+  };
+}
+
+// ---- Revalidation ------------------------------------------------------------
+
+export interface RevalidationResult {
+  rowsExamined: number;
+  rowsResolved: number;
+  rowsStillUnresolved: number;
+  actorsResolved: number;
+}
+
+/**
+ * Reprocess the unresolved rows of a batch that has already been validated,
+ * in place.
+ *
+ * The point of this path is that re-uploading the file to pick up a new
+ * mapping is exactly what the file-hash rule forbids. So the rows stay where
+ * they are, keeping their batch, their source row numbers and their raw
+ * payload, and only their resolution is asked again. A row whose account and
+ * product now resolve moves out of UNRESOLVED and becomes importable; a row
+ * whose mapping is still missing keeps its error message and waits.
+ *
+ * Nothing else is touched: rows already imported are not reconsidered, and
+ * no canonical table is written here.
+ */
+export async function revalidateSoRows(db: Client, batchId: string): Promise<RevalidationResult> {
+  const maps = await loadResolutionMaps(db);
+  const rows = await db.execute({
+    sql: `SELECT import_row_id, source_row_number, source_record_key, row_hash, raw_json
+          FROM import_rows
+          WHERE import_batch_id = ? AND row_status = 'UNRESOLVED' AND imported_at IS NULL
+          ORDER BY source_row_number`,
+    args: [batchId],
+  });
+
+  const statements: Stmt[] = [];
+  let resolved = 0;
+  let stillUnresolved = 0;
+  for (const raw of rows.rows) {
+    const record = raw as unknown as Record<string, unknown>;
+    const parsed = JSON.parse(text(record.raw_json)) as Record<string, unknown>;
+    const row = await normaliseRow(parsed, Number(record.source_row_number));
+    const problems: string[] = [];
+    const account = row.customerCode === null ? null : maps.accounts.get(row.customerCode);
+    if (account === undefined || account === null) {
+      problems.push(`unknown Oracle customer code ${row.customerCode ?? '(blank)'}`);
+    }
+    if (resolveProduct(maps.products, row.orderedItem) === null && row.orderedItem !== null) {
+      problems.push(`unmapped product ${row.orderedItem}`);
+    }
+    if (problems.length > 0) {
+      stillUnresolved += 1;
+      statements.push({
+        sql: `UPDATE import_rows SET error_message = ? WHERE import_row_id = ?`,
+        args: [problems.join('; '), text(record.import_row_id)],
+      });
+      continue;
+    }
+    // The hash rule decides NEW against CHANGED exactly as it did at
+    // validation: a key nothing has ever carried is new.
+    const prior = await db.execute({
+      sql: `SELECT DISTINCT row_hash FROM import_rows
+            WHERE source_record_key = ? AND import_batch_id <> ?`,
+      args: [text(record.source_record_key), batchId],
+    });
+    const status = prior.rows.length === 0 ? 'NEW' : 'CHANGED';
+    resolved += 1;
+    statements.push({
+      sql: `UPDATE import_rows SET row_status = ?, error_message = NULL WHERE import_row_id = ?`,
+      args: [status, text(record.import_row_id)],
+    });
+  }
+
+  // A mapped identity closes its unresolved actor row for this batch.
+  const actors = await db.execute({
+    sql: `SELECT unresolved_actor_id, external_username FROM unresolved_actors
+          WHERE import_batch_id = ? AND status = 'OPEN'`,
+    args: [batchId],
+  });
+  let actorsResolved = 0;
+  for (const raw of actors.rows) {
+    const record = raw as unknown as Record<string, unknown>;
+    const userId = maps.identities.get(text(record.external_username).toUpperCase());
+    if (userId === undefined) continue;
+    actorsResolved += 1;
+    statements.push({
+      sql: `UPDATE unresolved_actors SET status = 'MAPPED', mapped_user_id = ?
+            WHERE unresolved_actor_id = ?`,
+      args: [userId, text(record.unresolved_actor_id)],
+    });
+  }
+
+  for (let start = 0; start < statements.length; start += 200) {
+    await db.batch(statements.slice(start, start + 200), 'write');
+  }
+  return {
+    rowsExamined: rows.rows.length,
+    rowsResolved: resolved,
+    rowsStillUnresolved: stillUnresolved,
+    actorsResolved,
   };
 }
