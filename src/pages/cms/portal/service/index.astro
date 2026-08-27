@@ -1,0 +1,139 @@
+---
+/**
+ * The customer's service requests, and the form that raises one.
+ *
+ * The form is on the page rather than behind a drawer, because the whole
+ * reason a customer signs in is usually to ask us something and making them
+ * find a button first is a small unkindness.
+ *
+ * A request raised here is a real `service_cases` row with `channel = 'WEB'`.
+ * It reaches the same queues, the same SLA rules and the same analytics as
+ * one raised by telephone. There is no separate portal inbox, because a
+ * separate inbox is one nobody watches.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsPortalRequestForm from '@/components/cms/CmsPortalRequestForm.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import {
+  portalCases,
+  portalCategories,
+  type PortalCaseRow,
+  type PortalCategory,
+} from '@/lib/cms/repos/portalData';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+import { portalDate, portalDateTime, caseTone } from '@/lib/cms/portal/present';
+
+export const prerender = false;
+
+let scope: PortalScope | null = null;
+let cases: PortalCaseRow[] = [];
+let categories: PortalCategory[] = [];
+let loadFailed = false;
+
+// Where the customer came from an order, the subject is prefilled with its
+// number. It is only a starting point: they can change it, and the server
+// reads nothing from it.
+const about = Astro.url.searchParams.get('about');
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+  if (scope) {
+    [cases, categories] = await Promise.all([portalCases(db, scope), portalCategories(db)]);
+  }
+} catch (error) {
+  console.error('[cms.portal.service] load failed', error);
+  loadFailed = true;
+}
+
+const open = cases.filter((row) => row.status !== 'Resolved' && row.status !== 'Closed');
+const closed = cases.filter((row) => row.status === 'Resolved' || row.status === 'Closed');
+---
+
+<CmsPortalLayout title="Service" scope={scope} current="/portal/service">
+  <div class="flex flex-col gap-1.5">
+    <h1 class="text-cms-page font-semibold text-cms-navy">Service</h1>
+    <p class="text-cms-body-sm text-cms-muted">
+      Ask us something, tell us when something has gone wrong, and follow what we are doing about
+      it.
+    </p>
+  </div>
+
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load your requests just now"
+        description="Please try again in a moment."
+      />
+    ) : scope === null ? (
+      <CmsEmptyState
+        icon="customers"
+        title="No account is linked to your sign-in yet"
+        description="Contact your Hass Petroleum representative to have your account linked."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <CmsCard title="Raise a request">
+          <CmsPortalRequestForm categories={categories} about={about} />
+        </CmsCard>
+
+        <CmsCard title="Open requests">
+          {open.length === 0 ? (
+            <p class="text-cms-body-sm text-cms-muted">You have no open requests.</p>
+          ) : (
+            <ul class="flex flex-col divide-y divide-cms-line">
+              {open.map((row) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <span class="min-w-0">
+                    <a
+                      href={`/portal/service/${row.caseId}`}
+                      class="block truncate text-cms-body-sm font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {row.subject}
+                    </a>
+                    <span class="block text-cms-caption text-cms-muted">
+                      {row.caseNumber} - raised {portalDate(row.raisedAt)}
+                      {row.lastUpdateAt === null
+                        ? ''
+                        : ` - last update ${portalDateTime(row.lastUpdateAt)}`}
+                    </span>
+                  </span>
+                  <CmsBadge tone={caseTone(row.status)} label={row.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </CmsCard>
+
+        {closed.length > 0 && (
+          <CmsCard title="Closed requests">
+            <ul class="flex flex-col divide-y divide-cms-line">
+              {closed.map((row) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <span class="min-w-0">
+                    <a
+                      href={`/portal/service/${row.caseId}`}
+                      class="block truncate text-cms-body-sm text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {row.subject}
+                    </a>
+                    <span class="block text-cms-caption text-cms-muted">
+                      {row.caseNumber} - raised {portalDate(row.raisedAt)}
+                    </span>
+                  </span>
+                  <CmsBadge tone={caseTone(row.status)} label={row.status} />
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+      </div>
+    )
+  }
+</CmsPortalLayout>

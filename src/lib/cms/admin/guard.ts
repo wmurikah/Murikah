@@ -24,6 +24,7 @@ import {
   canConvertLeads,
   canCreateLeads,
   canManageAccounts,
+  canSeePortalAccess,
   canManageCatalogue,
   canManageLeadSources,
   canViewOpportunities,
@@ -47,6 +48,11 @@ import {
   canViewLeads,
   canViewOrganisation,
   canViewWorkflows,
+  canViewImports,
+  canUploadImports,
+  canUploadImportType,
+  canViewSalesOrders,
+  canViewPurchaseOrders,
 } from '../permissions.ts';
 import { forbidden, unauthorised } from '../errors.ts';
 import { clientIp } from '../../http.ts';
@@ -151,6 +157,33 @@ export function requireAccountsView(context: APIContext): Authorisation {
 
 /** Creating and editing accounts and contacts. */
 export function requireAccountsManage(context: APIContext): Authorisation {
+  return authorise(context, canManageAccounts);
+}
+
+/**
+ * Reading who from a customer can sign in to the portal.
+ *
+ * Narrower than the ordinary customer read: `CUSTOMERS.PORTAL_ACCESS.VIEW`
+ * is a fact about an external person's credentials, and the account detail
+ * page already uses it to decide whether a contact's portal state is shown.
+ */
+export function requirePortalAccessView(context: APIContext): Authorisation {
+  return authorise(context, canSeePortalAccess);
+}
+
+/**
+ * Inviting, suspending, revoking and reinstating a portal membership.
+ *
+ * DECIDED UNATTENDED: this authorises on `CUSTOMERS.ACCOUNTS.MANAGE` rather
+ * than on a new `CUSTOMERS.PORTAL_ACCESS.MANAGE` code. Minting a permission
+ * means a row in `permissions` and rows in `role_permissions`, which is the
+ * operator's seed to change and not this phase's; and until an operator ran
+ * that script the surface would be unreachable by everybody, including the
+ * administrator who needs it. ACCOUNTS.MANAGE is held by the people who own
+ * the customer relationship, which is the right group. If a narrower code is
+ * wanted later, this is the one function to change.
+ */
+export function requirePortalAccessManage(context: APIContext): Authorisation {
   return authorise(context, canManageAccounts);
 }
 
@@ -264,6 +297,47 @@ export function requireCatalogueManage(context: APIContext): Authorisation {
 /** Reading workflow configuration and running the approval preview. */
 export function requireWorkflowView(context: APIContext): Authorisation {
   return authorise(context, canViewWorkflows);
+}
+
+/**
+ * Reading sales orders: the operations queue, the performance analysis and
+ * every analytical endpoint behind them. A permission check only; WHICH
+ * orders the caller then sees is the Build Prompt 07 scope resolver's
+ * answer, and the two are different questions.
+ */
+export function requireSalesOrdersView(context: APIContext): Authorisation {
+  return authorise(context, canViewSalesOrders);
+}
+
+/** Reading purchase orders, on the same terms. */
+export function requirePurchaseOrdersView(context: APIContext): Authorisation {
+  return authorise(context, canViewPurchaseOrders);
+}
+
+/**
+ * Reading the Upload Centre: import history, batch detail, the exception
+ * queues and the data-quality panel. Implied by the upload code, because a
+ * person who may run an import has no coherent reason to be unable to read
+ * what their own import did.
+ */
+export function requireImportsView(context: APIContext): Authorisation {
+  return authorise(context, canViewImports);
+}
+
+/** Running an import at all. The data type is checked separately, below. */
+export function requireImportsUpload(context: APIContext): Authorisation {
+  return authorise(context, canUploadImports);
+}
+
+/**
+ * Running an import of one particular kind: both DATA.IMPORTS.UPLOAD and
+ * the type's own upload code. Read the reasoning in ../permissions.ts.
+ */
+export function requireImportUpload(
+  context: APIContext,
+  importType: 'SALES_ORDER' | 'PURCHASE_ORDER',
+): Authorisation {
+  return authorise(context, (permissions) => canUploadImportType(permissions, importType));
 }
 
 /**

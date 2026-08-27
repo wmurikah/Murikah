@@ -1045,7 +1045,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
     line_number INTEGER NOT NULL CHECK(line_number > 0),
     product_id TEXT NOT NULL,
     quantity REAL CHECK(quantity IS NULL OR quantity >= 0),
-    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    unit_cost REAL CHECK(unit_cost IS NULL OR unit_cost >= 0),
     line_value REAL CHECK(line_value IS NULL OR line_value >= 0),
     FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(purchase_order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
@@ -1207,4 +1207,46 @@ CREATE INDEX IF NOT EXISTS idx_sla_instances_entity ON sla_instances(entity_type
 CREATE INDEX IF NOT EXISTS idx_sla_breaches_accountable ON sla_breaches(accountable_user_id, accountable_team_id);
 CREATE INDEX IF NOT EXISTS idx_sla_escalations_instance ON sla_escalation_events(sla_instance_id);
 
+
+-- ============================================================================
+-- THE PORTAL PREREQUISITE SCRIPT IS MIRRORED HERE, as of Build Prompt 25.
+--
+-- The batch instructions state the operator has already run it and describe
+-- exactly what it adds: entity_attachments.customer_visible defaulting to 0
+-- so every existing attachment is invisible to customers until somebody
+-- decides otherwise, entity_attachments.portal_document_title so a customer
+-- sees a name rather than an internal filename, and survey_invitations with
+-- UNIQUE(survey_id, case_id, contact_id) and a unique survey_response_id, so
+-- one invitation admits exactly one response and the database enforces it
+-- rather than a disabled button.
+--
+-- This mirror is not a migration in the product. The operator runs the
+-- script by hand, and the portal verifies these three facts with queries
+-- before it serves a document or accepts a survey, refusing loudly rather
+-- than assuming. Live verification is impossible from the build environment,
+-- so the runtime check is the guarantee and this is its test bed.
+-- ============================================================================
+
+ALTER TABLE entity_attachments ADD COLUMN customer_visible INTEGER NOT NULL DEFAULT 0 CHECK(customer_visible IN (0,1));
+ALTER TABLE entity_attachments ADD COLUMN portal_document_title TEXT;
+
+CREATE TABLE IF NOT EXISTS survey_invitations (
+    survey_invitation_id TEXT PRIMARY KEY,
+    survey_id TEXT NOT NULL,
+    case_id TEXT,
+    account_id TEXT NOT NULL,
+    contact_id TEXT,
+    invited_at TEXT NOT NULL,
+    expires_at TEXT,
+    survey_response_id TEXT UNIQUE,
+    FOREIGN KEY (survey_id) REFERENCES customer_surveys(survey_id) ON DELETE CASCADE,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
+    FOREIGN KEY (survey_response_id) REFERENCES survey_responses(survey_response_id) ON DELETE SET NULL,
+    UNIQUE(survey_id, case_id, contact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_survey_invitations_account ON survey_invitations(account_id, invited_at);
+CREATE INDEX IF NOT EXISTS idx_entity_attachments_visible ON entity_attachments(entity_type, entity_id, customer_visible);
 `;

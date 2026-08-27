@@ -27,6 +27,7 @@ import { newId } from '../repos/authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
 import type { WriteContext } from '../admin/guard.ts';
 import {
+  buildMappingReport,
   parseWorkbook,
   cellToIdentifier,
   cellToNumber,
@@ -34,12 +35,17 @@ import {
   cellToTimestamp,
   hashCanonicalRow,
   hashFile,
+  minutesBetween,
+  type HeaderTreatment,
+  type MappingReportLine,
 } from './workbook.ts';
+import { verifyColumns } from './completeness.ts';
+import { insertSnapshot, SALES_ORDER_SNAPSHOT } from './snapshots.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 const text = (v: unknown): string => String(v ?? '');
 
-export type HeaderTreatment = 'canonical' | 'workflow' | 'source_metric' | 'raw_only' | 'unknown';
+export type { HeaderTreatment, MappingReportLine };
 
 /** All 31 headers of the inspected extract, each with exactly one treatment. */
 export const SO_HEADER_CLASSIFICATION: Readonly<
@@ -114,25 +120,14 @@ export const SO_AFFILIATE_MAP: Readonly<Record<string, string>> = {
 export async function verifySourceCompleteness(
   db: Client,
 ): Promise<{ ok: boolean; problems: string[] }> {
-  const problems: string[] = [];
-  const nullable = async (table: string, column: string) => {
-    const result = await db.execute({
-      sql: `SELECT "notnull" AS nn FROM pragma_table_info(?) WHERE name = ?`,
-      args: [table, column],
-    });
-    const row = result.rows[0];
-    if (row === undefined) {
-      problems.push(`${table}.${column} does not exist`);
-    } else if (Number((row as Record<string, unknown>).nn) === 1) {
-      problems.push(`${table}.${column} is NOT NULL, so unknown values cannot be stored honestly`);
-    }
-  };
-  await nullable('sales_orders', 'currency_code');
-  await nullable('sales_orders', 'order_value');
-  await nullable('sales_order_lines', 'quantity');
-  await nullable('sales_order_lines', 'unit_price');
-  await nullable('sales_order_lines', 'line_value');
-  return { ok: problems.length === 0, problems };
+  const result = await verifyColumns(db, [
+    { table: 'sales_orders', column: 'currency_code', requirement: 'NULLABLE' },
+    { table: 'sales_orders', column: 'order_value', requirement: 'NULLABLE' },
+    { table: 'sales_order_lines', column: 'quantity', requirement: 'NULLABLE' },
+    { table: 'sales_order_lines', column: 'unit_price', requirement: 'NULLABLE' },
+    { table: 'sales_order_lines', column: 'line_value', requirement: 'NULLABLE' },
+  ]);
+  return { ok: result.ok, problems: result.problems };
 }
 
 // ---- Normalised rows ---------------------------------------------------------
@@ -230,29 +225,11 @@ async function normaliseRow(
 
 // ---- The mapping report ------------------------------------------------------
 
-export interface MappingReportLine {
-  header: string;
-  treatment: HeaderTreatment;
-  target: string;
-  example: string;
-}
-
 export function mappingReport(
   headers: string[],
   rows: Record<string, unknown>[],
 ): MappingReportLine[] {
-  return headers.map((header) => {
-    const known = SO_HEADER_CLASSIFICATION[header];
-    const example = rows
-      .map((r) => r[header])
-      .find((v) => v !== null && v !== undefined && v !== '');
-    return {
-      header,
-      treatment: known?.treatment ?? 'unknown',
-      target: known?.target ?? 'UNKNOWN HEADER: classified for review, imported into raw_json only',
-      example: example === undefined ? 'no value in this extract' : String(example),
-    };
-  });
+  return buildMappingReport(SO_HEADER_CLASSIFICATION, headers, rows);
 }
 
 // ---- Validation --------------------------------------------------------------
@@ -595,58 +572,27 @@ export function deriveSoStatus(head: NormalisedSoRow): string {
 }
 
 /**
- * The next snapshot version, guarded: the candidate is max + 1, and the
- * UNIQUE(entity_type, entity_id, version_no) constraint is what actually
- * guarantees it. A concurrent commit that takes the same number makes this
- * insert fail, the loop reads the new maximum and tries again, and nobody
- * ever holds two snapshots with one version.
+ * A document that could not be written, recorded on its own rows.
+ *
+ * Nothing of it was written: the transaction that failed took every one of
+ * its statements with it. What is left is the reason, on the rows the
+ * document came from, so the batch's PARTIAL report can say exactly what did
+ * not import rather than only that something did not.
  */
-async function insertSnapshot(
+async function isolateDocument(
   db: Client,
-  entityId: string,
-  sourceKey: string,
-  rowHash: string,
-  snapshotJson: string,
-  batchId: string,
-  now: string,
-): Promise<string> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const current = await db.execute({
-      sql: `SELECT COALESCE(MAX(version_no), 0) AS v FROM record_snapshots
-            WHERE entity_type = 'SALES_ORDER' AND entity_id = ?`,
-      args: [entityId],
-    });
-    const version = Number(current.rows[0]?.v ?? 0) + 1;
-    const snapshotId = newId('SNAP');
-    try {
-      await db.batch(
-        [
-          {
-            sql: `UPDATE record_snapshots SET is_current = 0
-                  WHERE entity_type = 'SALES_ORDER' AND entity_id = ? AND is_current = 1`,
-            args: [entityId],
-          },
-          {
-            sql: `INSERT INTO record_snapshots
-                    (snapshot_id, entity_type, entity_id, import_batch_id, source_record_key,
-                     version_no, row_hash, snapshot_json, captured_at, is_current)
-                  VALUES (?, 'SALES_ORDER', ?, ?, ?, ?, ?, ?, ?, 1)`,
-            args: [snapshotId, entityId, batchId, sourceKey, version, rowHash, snapshotJson, now],
-          },
-          {
-            sql: `UPDATE sales_orders SET latest_snapshot_id = ? WHERE sales_order_id = ?`,
-            args: [snapshotId, entityId],
-          },
-        ],
-        'write',
-      );
-      return snapshotId;
-    } catch (error) {
-      if (!/UNIQUE constraint failed/i.test(String(error))) throw error;
-      // A concurrent commit took this version. Read again and retry.
-    }
+  importRowIds: Map<number, string>,
+  error: unknown,
+): Promise<void> {
+  const reason = `The document could not be written: ${String(error)}`.slice(0, 400);
+  const statements: Stmt[] = [...importRowIds.values()].map((importRowId) => ({
+    sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
+          WHERE import_row_id = ? AND imported_at IS NULL`,
+    args: [reason, importRowId],
+  }));
+  for (let start = 0; start < statements.length; start += 200) {
+    await db.batch(statements.slice(start, start + 200), 'write');
   }
-  throw new Error('Could not allocate a snapshot version after five attempts.');
 }
 
 /**
@@ -914,12 +860,27 @@ export async function commitSoBatch(
       }
     }
 
-    await db.batch(statements, 'write');
+    // The document is the unit of integrity: everything above lands in one
+    // transaction, and a document that cannot land is isolated here rather
+    // than taking the rest of the batch down with it. That is the stated
+    // policy, and the batch reports PARTIAL with the reason attached to the
+    // rows that failed.
+    try {
+      await db.batch(statements, 'write');
+    } catch (error) {
+      await isolateDocument(db, group.importRowIds, error);
+      result.documentsSkipped += 1;
+      result.linesWritten -= actionable.filter(
+        (row) => resolveProduct(maps.products, row.orderedItem) !== null && row.lineNumber !== null,
+      ).length;
+      continue;
+    }
     // The snapshot after the canonical write, per the ordering rule:
     // latest_snapshot_id moves only once both have committed.
     const headRow = actionable[0] ?? head;
     await insertSnapshot(
       db,
+      SALES_ORDER_SNAPSHOT,
       salesOrderId,
       `${group.affiliateId}|${group.documentNumber}`,
       headRow.rowHash,
@@ -967,13 +928,109 @@ export function varianceComparison(raw: Record<string, unknown>): {
   const created = cellToTimestamp(raw.CREATE_DATE_TIME);
   const approved = cellToTimestamp(raw.APPROVAL_DATE_TIME);
   const source = cellToNumber(raw.FINANCE_VARIANCE);
-  const computed =
-    created === null || approved === null
-      ? null
-      : Math.round(
-          (new Date(approved.replace(' ', 'T') + 'Z').getTime() -
-            new Date(created.replace(' ', 'T') + 'Z').getTime()) /
-            60000,
-        );
-  return { sourceFinanceVariance: source, computedFinanceMinutes: computed };
+  return {
+    sourceFinanceVariance: source,
+    computedFinanceMinutes: minutesBetween(created, approved),
+  };
+}
+
+// ---- Revalidation ------------------------------------------------------------
+
+export interface RevalidationResult {
+  rowsExamined: number;
+  rowsResolved: number;
+  rowsStillUnresolved: number;
+  actorsResolved: number;
+}
+
+/**
+ * Reprocess the unresolved rows of a batch that has already been validated,
+ * in place.
+ *
+ * The point of this path is that re-uploading the file to pick up a new
+ * mapping is exactly what the file-hash rule forbids. So the rows stay where
+ * they are, keeping their batch, their source row numbers and their raw
+ * payload, and only their resolution is asked again. A row whose account and
+ * product now resolve moves out of UNRESOLVED and becomes importable; a row
+ * whose mapping is still missing keeps its error message and waits.
+ *
+ * Nothing else is touched: rows already imported are not reconsidered, and
+ * no canonical table is written here.
+ */
+export async function revalidateSoRows(db: Client, batchId: string): Promise<RevalidationResult> {
+  const maps = await loadResolutionMaps(db);
+  const rows = await db.execute({
+    sql: `SELECT import_row_id, source_row_number, source_record_key, row_hash, raw_json
+          FROM import_rows
+          WHERE import_batch_id = ? AND row_status = 'UNRESOLVED' AND imported_at IS NULL
+          ORDER BY source_row_number`,
+    args: [batchId],
+  });
+
+  const statements: Stmt[] = [];
+  let resolved = 0;
+  let stillUnresolved = 0;
+  for (const raw of rows.rows) {
+    const record = raw as unknown as Record<string, unknown>;
+    const parsed = JSON.parse(text(record.raw_json)) as Record<string, unknown>;
+    const row = await normaliseRow(parsed, Number(record.source_row_number));
+    const problems: string[] = [];
+    const account = row.customerCode === null ? null : maps.accounts.get(row.customerCode);
+    if (account === undefined || account === null) {
+      problems.push(`unknown Oracle customer code ${row.customerCode ?? '(blank)'}`);
+    }
+    if (resolveProduct(maps.products, row.orderedItem) === null && row.orderedItem !== null) {
+      problems.push(`unmapped product ${row.orderedItem}`);
+    }
+    if (problems.length > 0) {
+      stillUnresolved += 1;
+      statements.push({
+        sql: `UPDATE import_rows SET error_message = ? WHERE import_row_id = ?`,
+        args: [problems.join('; '), text(record.import_row_id)],
+      });
+      continue;
+    }
+    // The hash rule decides NEW against CHANGED exactly as it did at
+    // validation: a key nothing has ever carried is new.
+    const prior = await db.execute({
+      sql: `SELECT DISTINCT row_hash FROM import_rows
+            WHERE source_record_key = ? AND import_batch_id <> ?`,
+      args: [text(record.source_record_key), batchId],
+    });
+    const status = prior.rows.length === 0 ? 'NEW' : 'CHANGED';
+    resolved += 1;
+    statements.push({
+      sql: `UPDATE import_rows SET row_status = ?, error_message = NULL WHERE import_row_id = ?`,
+      args: [status, text(record.import_row_id)],
+    });
+  }
+
+  // A mapped identity closes its unresolved actor row for this batch.
+  const actors = await db.execute({
+    sql: `SELECT unresolved_actor_id, external_username FROM unresolved_actors
+          WHERE import_batch_id = ? AND status = 'OPEN'`,
+    args: [batchId],
+  });
+  let actorsResolved = 0;
+  for (const raw of actors.rows) {
+    const record = raw as unknown as Record<string, unknown>;
+    const userId = maps.identities.get(text(record.external_username).toUpperCase());
+    if (userId === undefined) continue;
+    actorsResolved += 1;
+    statements.push({
+      sql: `UPDATE unresolved_actors SET status = 'MAPPED', mapped_user_id = ?
+            WHERE unresolved_actor_id = ?`,
+      args: [userId, text(record.unresolved_actor_id)],
+    });
+  }
+
+  for (let start = 0; start < statements.length; start += 200) {
+    await db.batch(statements.slice(start, start + 200), 'write');
+  }
+  return {
+    rowsExamined: rows.rows.length,
+    rowsResolved: resolved,
+    rowsStillUnresolved: stillUnresolved,
+    actorsResolved,
+  };
 }

@@ -660,7 +660,12 @@ INSERT OR IGNORE INTO file_objects VALUES
 ('FILE-004','Invoice-Dispute.pdf','cases/CASE-002/Invoice-Dispute.pdf','application/pdf',85000,'demo_file_004','USR-CATH','2026-08-25 09:20:00'),
 ('FILE-005','Product-Catalogue.pdf','crm/catalogue/Product-Catalogue.pdf','application/pdf',950000,'demo_file_005','USR-CATH','2026-08-22 15:10:00');
 
-INSERT OR IGNORE INTO entity_attachments VALUES
+-- Named columns, because the operator's portal script adds customer_visible
+-- and portal_document_title to this table and a positional insert would
+-- break the day it runs.
+INSERT OR IGNORE INTO entity_attachments
+(entity_attachment_id, file_id, entity_type, entity_id, attachment_type,
+ attached_by_user_id, attached_at) VALUES
 ('EA-001','FILE-001','SALES_ORDER','SO-001','SOURCE_UPLOAD','USR-CATH','2026-08-25 17:00:00'),
 ('EA-002','FILE-002','PURCHASE_ORDER','PO-001','SOURCE_UPLOAD','USR-CATH','2026-08-25 17:10:00'),
 ('EA-003','FILE-003','OPPORTUNITY','OPP-001','PROPOSAL','USR-JAM','2026-08-18 09:50:00'),

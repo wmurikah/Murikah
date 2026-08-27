@@ -1,0 +1,158 @@
+---
+/**
+ * The customer's "raise a request" form.
+ *
+ * Four fields and no jargon. There is no priority field and no team field:
+ * the category decides the priority on the server and routing is ours to do,
+ * so neither is something to ask a customer for. There is no account field
+ * either, because the account comes from the membership and a field for it
+ * would be a field to tamper with.
+ *
+ * The form is a real form. Where scripting fails the fields still render and
+ * the required attributes still hold; what the script adds is the JSON post
+ * and the error message beside the offending field rather than a page of
+ * validation nobody reads.
+ */
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import CmsButton from './CmsButton.astro';
+
+interface Props {
+  categories: { caseCategoryId: string; label: string }[];
+  /** Prefilled where the customer arrived from an order. */
+  about?: string | null;
+}
+const { categories, about = null } = Astro.props;
+
+const TYPES = [
+  { value: 'ENQUIRY', label: 'A question' },
+  { value: 'REQUEST', label: 'A request' },
+  { value: 'COMPLAINT', label: 'Something went wrong' },
+];
+---
+
+<form id="portal-request" novalidate class="flex flex-col gap-4">
+  <p
+    id="portal-request-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+  >
+  </p>
+
+  <CmsSelect
+    id="portal-caseType"
+    name="caseType"
+    label="What kind of thing is this?"
+    options={TYPES}
+    required
+  />
+
+  <CmsSelect
+    id="portal-caseCategoryId"
+    name="caseCategoryId"
+    label="What is it about?"
+    options={[
+      { value: '', label: 'Choose one' },
+      ...categories.map((c) => ({ value: c.caseCategoryId, label: c.label })),
+    ]}
+    required
+  />
+
+  <CmsInput
+    id="portal-subject"
+    name="subject"
+    label="In one line"
+    value={about === null ? '' : `About order ${about}`}
+    placeholder="Late delivery on my last order"
+    required
+  />
+
+  <div class="flex flex-col gap-1.5">
+    <label for="portal-description" class="text-cms-label font-medium text-cms-ink">
+      Tell us a little more <span class="text-cms-danger">*</span>
+    </label>
+    <textarea
+      id="portal-description"
+      name="description"
+      rows="5"
+      required
+      class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none placeholder:text-cms-muted focus-visible:ring-2 focus-visible:ring-focus"
+      placeholder="What happened, and what would you like us to do?"></textarea>
+    <p id="portal-description-hint" class="text-cms-caption text-cms-muted">
+      The more you tell us here, the fewer times we will have to come back to you.
+    </p>
+  </div>
+
+  <div>
+    <CmsButton type="submit" variant="primary" id="portal-request-submit">Send request</CmsButton>
+  </div>
+</form>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const form = document.getElementById('portal-request') as HTMLFormElement | null;
+  const errorBox = document.getElementById('portal-request-error');
+  const submit = document.getElementById('portal-request-submit') as HTMLButtonElement | null;
+
+  if (form && errorBox && submit) {
+    const show = (message: string): void => {
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+      errorBox.scrollIntoView({ block: 'nearest' });
+    };
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      errorBox.hidden = true;
+      const data = new FormData(form);
+      const payload = {
+        caseType: String(data.get('caseType') ?? ''),
+        caseCategoryId: String(data.get('caseCategoryId') ?? ''),
+        subject: String(data.get('subject') ?? ''),
+        description: String(data.get('description') ?? ''),
+      };
+      if (payload.caseCategoryId === '') {
+        show('Choose what this is about.');
+        return;
+      }
+      submit.disabled = true;
+      void fetch('/api/portal/service', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(async (response) => {
+          if (response.ok) {
+            const body = (await response.json()) as { caseId?: string };
+            window.location.href = body.caseId
+              ? `/portal/service/${body.caseId}`
+              : '/portal/service';
+            return;
+          }
+          if (response.status === 429) {
+            show('That is a lot of requests at once. Please try again in a few minutes.');
+          } else {
+            const body = (await response.json().catch(() => null)) as {
+              error?: { message?: string; fields?: FieldError[] };
+            } | null;
+            const first = body?.error?.fields?.[0];
+            show(
+              first?.message ??
+                body?.error?.message ??
+                'We could not send that just now. Please try again.',
+            );
+          }
+          submit.disabled = false;
+        })
+        .catch(() => {
+          show('We could not send that just now. Please try again.');
+          submit.disabled = false;
+        });
+    });
+  }
+</script>

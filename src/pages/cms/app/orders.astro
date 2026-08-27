@@ -1,22 +1,73 @@
 ---
 /**
- * Placeholder destination for the orders section.
+ * Orders → the section landing.
  *
- * It exists so the navigation is real: every entry in CMS_NAV leads somewhere,
- * and a rail full of dead links cannot be reviewed for structure. It builds no
- * module, reads no data and makes no promise about what the section will look
- * like.
- *
- * The title and the summary come from the navigation model rather than being
- * typed again here, so a change to the model updates the rail, the page title
- * and this copy together.
+ * Two workspaces, each with an operations view and a performance view. The
+ * split is deliberate: somebody chasing one order and somebody asking where
+ * the month went want different screens, and a page that tries to be both is
+ * bad at both.
  */
-import CmsSectionPlaceholder from '@/components/cms/CmsSectionPlaceholder.astro';
-// Rendered on the server for every request, never prerendered. Without this the
-// page is baked at build time, the middleware guard runs once during the build
-// instead of per request, and the route protection becomes a static artefact:
-// a signed-in user would be served whatever the build decided.
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { canViewPurchaseOrders, canViewSalesOrders } from '@/lib/cms/permissions';
+
 export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const maySeeSales = canViewSalesOrders(permissions);
+const maySeePurchases = canViewPurchaseOrders(permissions);
 ---
 
-<CmsSectionPlaceholder href="/app/orders" />
+<CmsLayout title="Orders">
+  {
+    !maySeeSales && !maySeePurchases ? (
+      <CmsErrorState
+        title="You do not have access to orders"
+        description="Ask a system administrator for the ORDERS.SALES_ORDER.VIEW or ORDERS.PURCHASE_ORDER.VIEW permission."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Orders"
+          description="Sales orders and purchase orders, each with a transaction queue and an aggregated performance view."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Orders' }]}
+        />
+        <div class="grid gap-4 lg:grid-cols-2">
+          {maySeeSales && (
+            <CmsCard
+              title="Sales orders"
+              description="Finance approval, credit approval where required, invoicing and loading."
+            >
+              <div class="flex flex-wrap gap-2">
+                <CmsButton variant="primary" href="/app/orders/sales">
+                  Operations
+                </CmsButton>
+                <CmsButton variant="ghost" href="/app/orders/sales/performance">
+                  Performance
+                </CmsButton>
+              </div>
+            </CmsCard>
+          )}
+          {maySeePurchases && (
+            <CmsCard
+              title="Purchase orders"
+              description="Approval stages, physical receipt and Oracle stock posting."
+            >
+              <div class="flex flex-wrap gap-2">
+                <CmsButton variant="primary" href="/app/orders/purchases">
+                  Operations
+                </CmsButton>
+                <CmsButton variant="ghost" href="/app/orders/purchases/performance">
+                  Performance
+                </CmsButton>
+              </div>
+            </CmsCard>
+          )}
+        </div>
+      </Fragment>
+    )
+  }
+</CmsLayout>

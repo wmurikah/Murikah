@@ -1,0 +1,143 @@
+---
+/**
+ * Feedback: the surveys this account has been invited to answer.
+ *
+ * Answering happens on the request the survey followed, not here, because a
+ * score given without the correspondence in front of you is a score given
+ * about nothing in particular. This page is the list and the link.
+ *
+ * The customer's own scores are shown back to them. Collecting an answer and
+ * then hiding it makes the exercise feel like a box we tick; showing it says
+ * we kept it.
+ *
+ * NO AGGREGATE APPEARS HERE. Not their average, not ours, not a comparison
+ * with anybody. Satisfaction analytics are an internal conversation.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import { portalSurveys, type PortalSurveyRow } from '@/lib/cms/repos/portalData';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+import { portalDate } from '@/lib/cms/portal/present';
+
+export const prerender = false;
+
+let scope: PortalScope | null = null;
+let surveys: PortalSurveyRow[] = [];
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+  if (scope) surveys = await portalSurveys(db, scope, new Date());
+} catch (error) {
+  console.error('[cms.portal.feedback] load failed', error);
+  loadFailed = true;
+}
+
+const waiting = surveys.filter((row) => row.answeredAt === null && !row.expired);
+const answered = surveys.filter((row) => row.answeredAt !== null);
+const missed = surveys.filter((row) => row.answeredAt === null && row.expired);
+---
+
+<CmsPortalLayout title="Feedback" scope={scope} current="/portal/feedback">
+  <div class="flex flex-col gap-1.5">
+    <h1 class="text-cms-page font-semibold text-cms-navy">Feedback</h1>
+    <p class="text-cms-body-sm text-cms-muted">
+      Telling us how we did takes half a minute and it is the fastest way to change something.
+    </p>
+  </div>
+
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load your feedback just now"
+        description="Please try again in a moment."
+      />
+    ) : scope === null ? (
+      <CmsEmptyState
+        icon="customers"
+        title="No account is linked to your sign-in yet"
+        description="Contact your Hass Petroleum representative to have your account linked."
+      />
+    ) : surveys.length === 0 ? (
+      <CmsEmptyState
+        icon="service"
+        title="Nothing to answer just now"
+        description="When we close a request we will ask you how it went, and it will appear here."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        {waiting.length > 0 && (
+          <CmsCard title="Waiting for you">
+            <ul class="flex flex-col divide-y divide-cms-line">
+              {waiting.map((row) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <span class="min-w-0">
+                    <span class="block text-cms-body-sm text-cms-ink">{row.question}</span>
+                    <span class="block text-cms-caption text-cms-muted">
+                      {row.caseNumber === null ? 'General' : row.caseNumber} - asked{' '}
+                      {portalDate(row.invitedAt)}
+                    </span>
+                  </span>
+                  {row.caseId === null ? (
+                    <CmsBadge tone="warning" label="Waiting for you" />
+                  ) : (
+                    <a
+                      href={`/portal/service/${row.caseId}`}
+                      class="min-h-10 rounded-cms border border-cms-border px-3 py-2 text-cms-body-sm font-semibold text-cms-royal outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      Answer
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+
+        {answered.length > 0 && (
+          <CmsCard title="What you told us">
+            <ul class="flex flex-col divide-y divide-cms-line">
+              {answered.map((row) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <span class="min-w-0">
+                    <span class="block text-cms-body-sm text-cms-ink">{row.question}</span>
+                    <span class="block text-cms-caption text-cms-muted">
+                      {row.caseNumber === null ? 'General' : row.caseNumber} - answered{' '}
+                      {portalDate(row.answeredAt)}
+                    </span>
+                  </span>
+                  <span class="text-cms-kpi font-semibold text-cms-navy tabular-nums">
+                    {row.score}
+                    <span class="text-cms-caption font-normal text-cms-muted"> out of 10</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+
+        {missed.length > 0 && (
+          <CmsCard
+            title="Closed without an answer"
+            description="These have passed their date. There is nothing you need to do."
+          >
+            <ul class="flex flex-col gap-2">
+              {missed.map((row) => (
+                <li class="text-cms-body-sm text-cms-muted">
+                  {row.question} ({row.caseNumber === null ? 'General' : row.caseNumber})
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+      </div>
+    )
+  }
+</CmsPortalLayout>

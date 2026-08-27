@@ -10,12 +10,11 @@
  * access it through the Build Prompt 07 scope resolver for that entity's own
  * module. Never in template code, never trusted from a payload.
  *
- * Each entry reuses the module's own predicate where the module exists:
- * accounts, leads and opportunities call the exact functions their modules
- * export. Cases, sales orders and purchase orders have no module yet, so
- * their entries build a predicate from the same resolveScope/scopePredicate
- * machinery against their seeded permission codes; when phases 14 and 17
- * arrive they inherit these entries rather than writing second ones.
+ * Each entry reuses the module's own predicate: accounts, leads,
+ * opportunities, cases, sales orders and purchase orders all call the exact
+ * function their own module exports. This file held private copies of the
+ * order predicates while no order module existed; phases 14, 20 and 21 gave
+ * each one a home, and the copies were removed rather than left to drift.
  *
  * The check answers with the entity's own account id where the entity has
  * one, because `activities.account_id` is derived here on the server and
@@ -24,11 +23,16 @@
  * indexed query.
  */
 import type { Client } from '@libsql/client/web';
-import { resolveScope, scopePredicate, DENY_ALL, type Predicate } from '../auth/rbac.ts';
+import { resolveScope } from '../auth/rbac.ts';
 import { scopedAccounts } from '../repos/accountAdmin.ts';
 import { scopedLeads } from '../repos/leadAdmin.ts';
 import { scopedOpportunities } from '../repos/opportunityAdmin.ts';
 import { scopedCases } from '../repos/serviceAdmin.ts';
+// Phase 20 made the sales order scope canonical in its own module. This file
+// imports it rather than keeping the second copy it held while no sales order
+// module existed, so the two answer the access question identically.
+import { scopedSalesOrders } from '../repos/soPerformance.ts';
+import { scopedPurchaseOrders } from '../repos/poPerformance.ts';
 import { LEADS_VIEW } from '../permissions.ts';
 
 export const ACTIVITY_ENTITY_TYPES = [
@@ -53,26 +57,6 @@ export type EntityAccess =
 const text = (v: unknown): string => String(v ?? '');
 const nullableText = (v: unknown): string | null =>
   v === null || v === undefined ? null : String(v);
-
-async function scopedSalesOrders(db: Client, userId: string): Promise<Predicate> {
-  const resolution = await resolveScope(db, userId, 'ORDERS.SALES_ORDER.VIEW');
-  if (!resolution.granted) return DENY_ALL;
-  return scopePredicate(resolution, {
-    country: 'af.country_id',
-    affiliate: 'so.affiliate_id',
-    businessUnit: 'so.business_unit_id',
-  });
-}
-
-async function scopedPurchaseOrders(db: Client, userId: string): Promise<Predicate> {
-  const resolution = await resolveScope(db, userId, 'ORDERS.PURCHASE_ORDER.VIEW');
-  if (!resolution.granted) return DENY_ALL;
-  return scopePredicate(resolution, {
-    country: 'af.country_id',
-    affiliate: 'po.affiliate_id',
-    businessUnit: 'po.business_unit_id',
-  });
-}
 
 /**
  * The registry. One row per entity type: how to fetch the row under the
