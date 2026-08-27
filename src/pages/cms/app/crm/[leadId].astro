@@ -1,0 +1,292 @@
+---
+/**
+ * Lead detail.
+ *
+ * Everything a lead is, and the four things that can be done to it: record the
+ * first contact, score it, disqualify it, convert it. Each is a separate
+ * endpoint and each writes its own audit event, because "the lead changed" is
+ * not a useful thing to read six months later.
+ *
+ * THE SCORE IS NOT A DECISION.
+ * The BANT panel shows four numbers out of five, what each one asks, and the
+ * total. It does not gate conversion and it does not compute a verdict. A high
+ * score on a lead nobody has spoken to is exactly as convertible as a low one;
+ * the guards on conversion are an account, a pipeline and a status that is not
+ * DISQUALIFIED, all of them facts rather than judgements.
+ *
+ * WHAT IS ABSENT SAYS SO.
+ * Estimated value, volume, currency, business unit, campaign, account and
+ * contact are all genuinely optional on a lead. Where one is missing this page
+ * renders "Not available". It never renders zero, and it never renders a dash
+ * that could be read as a name or an amount.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsLeadActions from '@/components/cms/CmsLeadActions.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewLeads, canManageLeads, canConvertLeads } from '@/lib/cms/permissions';
+import {
+  ageInDays,
+  getLead,
+  getQualification,
+  leadOptions,
+  type LeadOptions,
+  type LeadRow,
+  type QualificationRow,
+} from '@/lib/cms/repos/leadAdmin';
+import { BANT_MEANING } from '@/lib/cms/admin/leadInput';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewLeads(permissions);
+const mayManage = canManageLeads(permissions);
+const mayConvert = canConvertLeads(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const leadId = Astro.params.leadId ?? '';
+
+let lead: LeadRow | null = null;
+let qualification: QualificationRow | null = null;
+let options: LeadOptions = {
+  sources: [],
+  campaigns: [],
+  businessUnits: [],
+  owners: [],
+  pipelines: [],
+};
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    lead = await getLead(db, userId, leadId);
+    if (lead !== null) {
+      [qualification, options] = await Promise.all([getQualification(db, leadId), leadOptions(db)]);
+    }
+  } catch (error) {
+    console.error('[cms.crm.lead] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const now = new Date();
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const statusTone = (status: string) =>
+  status === 'CONVERTED'
+    ? 'success'
+    : status === 'DISQUALIFIED'
+      ? 'danger'
+      : status === 'QUALIFIED'
+        ? 'info'
+        : 'neutral';
+
+/** A date and time as written, or the honest absence. */
+const stamp = (value: string | null) =>
+  value === null ? 'Not available' : value.replace('T', ' ');
+
+const money = (value: number | null, currency: string | null) =>
+  value === null ? 'Not available' : `${currency ?? ''} ${value.toLocaleString('en-KE')}`.trim();
+
+const facts =
+  lead === null
+    ? []
+    : [
+        { label: 'Lead number', value: lead.leadNumber },
+        { label: 'Source', value: lead.sourceName },
+        { label: 'Campaign', value: lead.campaignName ?? 'Not available' },
+        { label: 'Owner', value: lead.ownerName },
+        { label: 'Business unit', value: lead.businessUnitName ?? 'Not available' },
+        { label: 'Contact', value: lead.contactName ?? 'Not available' },
+        { label: 'Product interest', value: lead.productInterest ?? 'Not available' },
+        {
+          label: 'Estimated volume',
+          value:
+            lead.estimatedVolume === null
+              ? 'Not available'
+              : lead.estimatedVolume.toLocaleString('en-KE'),
+        },
+        { label: 'Estimated value', value: money(lead.estimatedValue, lead.currencyCode) },
+        { label: 'Captured', value: stamp(lead.capturedAt) },
+        { label: 'First contact', value: stamp(lead.firstContactAt) },
+        { label: 'Age', value: `${ageInDays(lead.capturedAt, now)} days` },
+      ];
+---
+
+<CmsLayout title={lead?.title ?? 'Lead'}>
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to leads"
+        description="Ask a system administrator for the CRM.LEADS.VIEW permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="This lead could not be loaded"
+        description="The database did not answer."
+      />
+    ) : lead === null ? (
+      <CmsErrorState
+        title="Lead not found"
+        description="Either it does not exist or it sits outside your data scope. The two are answered the same way on purpose, so this page never confirms that a record you may not see exists."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={lead.title}
+          description={lead.description ?? 'No description was recorded.'}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'Leads', href: '/app/crm' },
+            { label: lead.leadNumber },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsBadge tone={statusTone(lead.status)} label={titleCase(lead.status)} />
+            {mayManage && lead.firstContactAt === null && (
+              <CmsButton variant="secondary" data-cms-lead-first-contact>
+                Record first contact
+              </CmsButton>
+            )}
+            {mayManage && lead.status !== 'CONVERTED' && (
+              <CmsButton variant="secondary" data-cms-lead-qualify>
+                {qualification === null ? 'Score this lead' : 'Update the score'}
+              </CmsButton>
+            )}
+            {mayManage && lead.status !== 'CONVERTED' && lead.status !== 'DISQUALIFIED' && (
+              <CmsButton variant="danger" data-cms-lead-disqualify>
+                Disqualify
+              </CmsButton>
+            )}
+            {mayConvert && lead.opportunityId === null && lead.status !== 'DISQUALIFIED' && (
+              <CmsButton variant="primary" data-cms-lead-convert>
+                Convert to opportunity
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+
+        {lead.status === 'DISQUALIFIED' && (
+          <CmsCard title="Disqualified">
+            <p class="text-cms-body-sm text-cms-ink">
+              {lead.disqualificationReason ?? 'No reason was recorded.'}
+            </p>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              A disqualified lead is kept, not deleted. The reason is the part that is worth reading
+              next quarter, which is why it is required before the status changes.
+            </p>
+          </CmsCard>
+        )}
+
+        {lead.opportunityId !== null && (
+          <CmsCard title="Converted">
+            <p class="text-cms-body-sm text-cms-ink">
+              This lead became an opportunity. The lead is kept as the record of where the business
+              came from; nothing was moved or deleted.
+            </p>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Opportunity {lead.opportunityId}. The opportunity workspace is built in a later phase,
+              so there is no link to follow yet.
+            </p>
+          </CmsCard>
+        )}
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <CmsCard title="The lead">
+            <dl class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              {facts.map((fact) => (
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">{fact.label}</dt>
+                  <dd class="text-cms-body-sm text-cms-ink">{fact.value}</dd>
+                </div>
+              ))}
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Account</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {lead.accountName === null ? (
+                    'Not available'
+                  ) : (
+                    <a
+                      href={`/app/customers/${lead.accountId}`}
+                      class="rounded-cms text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {lead.accountName}
+                    </a>
+                  )}
+                </dd>
+              </div>
+            </dl>
+            {lead.accountId === null && (
+              <p class="mt-4 text-cms-body-sm text-cms-muted">
+                No account is attached. That is normal for early interest, and it is the one thing
+                that must be settled before this lead can be converted.
+              </p>
+            )}
+          </CmsCard>
+
+          <CmsCard
+            title="Qualification"
+            description="Four dimensions, each scored 0 to 5. The total is arithmetic, not a verdict: it does not gate conversion and no threshold is applied to it anywhere in this product."
+          >
+            {qualification === null ? (
+              <CmsEmptyState
+                icon="statusInfo"
+                title="Not scored yet"
+                description="Nothing has been recorded against this lead. An unscored lead is not a low-scoring lead, so no total is shown."
+              />
+            ) : (
+              <Fragment>
+                <p class="text-cms-body-sm text-cms-muted">
+                  Scored by {qualification.qualifiedByName} on {stamp(qualification.qualifiedAt)}.
+                </p>
+                <ul class="mt-3 flex flex-col gap-3">
+                  {BANT_MEANING.map((dimension) => (
+                    <li class="flex items-start justify-between gap-4">
+                      <div>
+                        <p class="text-cms-body-sm font-medium text-cms-ink">{dimension.label}</p>
+                        <p class="text-cms-caption text-cms-muted">{dimension.question}</p>
+                      </div>
+                      <span class="text-cms-body-sm font-semibold text-cms-ink tabular-nums">
+                        {qualification[dimension.key]} / 5
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p class="mt-4 border-t border-cms-line pt-3 text-cms-body-sm text-cms-ink">
+                  Total <span class="font-semibold tabular-nums">{qualification.total} / 20</span>
+                </p>
+                {qualification.qualificationNotes !== null && (
+                  <p class="mt-2 text-cms-body-sm text-cms-muted">
+                    {qualification.qualificationNotes}
+                  </p>
+                )}
+              </Fragment>
+            )}
+          </CmsCard>
+        </div>
+
+        {mayManage && (
+          <CmsLeadActions
+            leadId={lead.leadId}
+            hasAccount={lead.accountId !== null}
+            mayConvert={mayConvert}
+            pipelines={options.pipelines}
+            owners={options.owners}
+            currencyCode={lead.currencyCode}
+            estimatedValue={lead.estimatedValue}
+            title={lead.title}
+            qualification={qualification}
+          />
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

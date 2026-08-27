@@ -613,4 +613,548 @@ CREATE TABLE IF NOT EXISTS mfa_methods (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     UNIQUE(user_id, method_type, label)
 );
+
+-- ============================================================================
+-- The CRM, service, SLA runtime, order and ingestion tables.
+--
+-- Copied verbatim from the operator's hass_cms_turso_v1_FINAL.sql, which holds
+-- 72 tables. The 39 above arrived with Build Prompts 03 to 09; these 33 are the
+-- remainder, added for the 10-to-19 batch so a test proves the code satisfies
+-- the real constraints rather than a relaxed copy of them.
+--
+-- Two things this file deliberately does NOT carry, because they are absent
+-- from the operator's schema file too:
+--   1. sla_breaches and sla_escalation_events, which the operator added by
+--      script after that file was produced.
+--   2. purchase_orders.submitted_for_approval_at, added by the operator's
+--      source-completeness script, which also made the commercial columns on
+--      the four order tables nullable.
+-- The phases that need them add them to this harness themselves and say so.
+-- Neither is a migration in the product: the operator runs both scripts by hand.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    reset_token_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    issued_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    status TEXT NOT NULL CHECK(status IN ('PENDING','USED','EXPIRED','REVOKED')),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    CHECK(expires_at >= issued_at)
+);
+
+CREATE TABLE IF NOT EXISTS lead_sources (
+    lead_source_id TEXT PRIMARY KEY,
+    source_name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))
+);
+
+CREATE TABLE IF NOT EXISTS campaigns (
+    campaign_id TEXT PRIMARY KEY,
+    campaign_name TEXT NOT NULL,
+    campaign_type TEXT NOT NULL CHECK(campaign_type IN ('DIRECT','DIGITAL','EVENT','REFERRAL','RETENTION','OTHER')),
+    start_date TEXT,
+    end_date TEXT,
+    target_revenue REAL CHECK(target_revenue IS NULL OR target_revenue >= 0),
+    owner_team_id TEXT,
+    status TEXT NOT NULL CHECK(status IN ('DRAFT','ACTIVE','ON_HOLD','COMPLETED','CANCELLED')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_team_id) REFERENCES teams(team_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS pipelines (
+    pipeline_id TEXT PRIMARY KEY,
+    pipeline_name TEXT NOT NULL UNIQUE,
+    country_id TEXT,
+    affiliate_id TEXT,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (country_id) REFERENCES countries(country_id) ON DELETE SET NULL,
+    FOREIGN KEY (affiliate_id) REFERENCES affiliates(affiliate_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS pipeline_stages (
+    pipeline_stage_id TEXT PRIMARY KEY,
+    pipeline_id TEXT NOT NULL,
+    stage_name TEXT NOT NULL,
+    sequence_no INTEGER NOT NULL CHECK(sequence_no > 0),
+    default_probability REAL NOT NULL DEFAULT 0 CHECK(default_probability BETWEEN 0 AND 1),
+    target_days INTEGER CHECK(target_days IS NULL OR target_days >= 0),
+    is_won_stage INTEGER NOT NULL DEFAULT 0 CHECK(is_won_stage IN (0,1)),
+    is_lost_stage INTEGER NOT NULL DEFAULT 0 CHECK(is_lost_stage IN (0,1)),
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    FOREIGN KEY (pipeline_id) REFERENCES pipelines(pipeline_id) ON DELETE CASCADE,
+    UNIQUE(pipeline_id, sequence_no),
+    UNIQUE(pipeline_id, stage_name)
+);
+
+CREATE TABLE IF NOT EXISTS leads (
+    lead_id TEXT PRIMARY KEY,
+    lead_number TEXT NOT NULL UNIQUE,
+    account_id TEXT,
+    primary_contact_id TEXT,
+    lead_source_id TEXT NOT NULL,
+    campaign_id TEXT,
+    business_unit_id TEXT,
+    owner_user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    product_interest TEXT,
+    estimated_volume REAL CHECK(estimated_volume IS NULL OR estimated_volume >= 0),
+    estimated_value REAL CHECK(estimated_value IS NULL OR estimated_value >= 0),
+    currency_code TEXT,
+    captured_at TEXT NOT NULL,
+    first_contact_at TEXT,
+    status TEXT NOT NULL CHECK(status IN ('NEW','CONTACTED','QUALIFIED','DISQUALIFIED','CONVERTED')),
+    disqualification_reason TEXT,
+    created_by_user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL,
+    FOREIGN KEY (primary_contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
+    FOREIGN KEY (lead_source_id) REFERENCES lead_sources(lead_source_id) ON DELETE RESTRICT,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(campaign_id) ON DELETE SET NULL,
+    FOREIGN KEY (business_unit_id) REFERENCES business_units(business_unit_id) ON DELETE SET NULL,
+    FOREIGN KEY (owner_user_id) REFERENCES users(user_id) ON DELETE RESTRICT,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS lead_qualifications (
+    qualification_id TEXT PRIMARY KEY,
+    lead_id TEXT NOT NULL,
+    budget_score INTEGER NOT NULL CHECK(budget_score BETWEEN 0 AND 5),
+    authority_score INTEGER NOT NULL CHECK(authority_score BETWEEN 0 AND 5),
+    need_score INTEGER NOT NULL CHECK(need_score BETWEEN 0 AND 5),
+    timeline_score INTEGER NOT NULL CHECK(timeline_score BETWEEN 0 AND 5),
+    qualification_notes TEXT,
+    qualified_by_user_id TEXT NOT NULL,
+    qualified_at TEXT NOT NULL,
+    FOREIGN KEY (lead_id) REFERENCES leads(lead_id) ON DELETE CASCADE,
+    FOREIGN KEY (qualified_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS lost_reasons (
+    lost_reason_id TEXT PRIMARY KEY,
+    reason_name TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,
+    description TEXT,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))
+);
+
+CREATE TABLE IF NOT EXISTS opportunities (
+    opportunity_id TEXT PRIMARY KEY,
+    opportunity_number TEXT NOT NULL UNIQUE,
+    lead_id TEXT,
+    account_id TEXT NOT NULL,
+    business_unit_id TEXT,
+    pipeline_id TEXT NOT NULL,
+    current_stage_id TEXT NOT NULL,
+    owner_user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    estimated_value REAL NOT NULL CHECK(estimated_value >= 0),
+    currency_code TEXT NOT NULL,
+    probability REAL NOT NULL CHECK(probability BETWEEN 0 AND 1),
+    estimated_close_date TEXT,
+    actual_close_date TEXT,
+    status TEXT NOT NULL CHECK(status IN ('OPEN','WON','LOST')),
+    won_amount REAL CHECK(won_amount IS NULL OR won_amount >= 0),
+    lost_reason_id TEXT,
+    lost_notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lead_id) REFERENCES leads(lead_id) ON DELETE SET NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT,
+    FOREIGN KEY (business_unit_id) REFERENCES business_units(business_unit_id) ON DELETE SET NULL,
+    FOREIGN KEY (pipeline_id) REFERENCES pipelines(pipeline_id) ON DELETE RESTRICT,
+    FOREIGN KEY (current_stage_id) REFERENCES pipeline_stages(pipeline_stage_id) ON DELETE RESTRICT,
+    FOREIGN KEY (owner_user_id) REFERENCES users(user_id) ON DELETE RESTRICT,
+    FOREIGN KEY (lost_reason_id) REFERENCES lost_reasons(lost_reason_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS opportunity_products (
+    opportunity_product_id TEXT PRIMARY KEY,
+    opportunity_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    expected_quantity REAL NOT NULL CHECK(expected_quantity >= 0),
+    unit_price REAL CHECK(unit_price IS NULL OR unit_price >= 0),
+    estimated_line_value REAL CHECK(estimated_line_value IS NULL OR estimated_line_value >= 0),
+    FOREIGN KEY (opportunity_id) REFERENCES opportunities(opportunity_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS opportunity_stage_history (
+    stage_history_id TEXT PRIMARY KEY,
+    opportunity_id TEXT NOT NULL,
+    from_stage_id TEXT,
+    to_stage_id TEXT NOT NULL,
+    changed_by_user_id TEXT NOT NULL,
+    changed_at TEXT NOT NULL,
+    duration_in_previous_stage_minutes INTEGER CHECK(duration_in_previous_stage_minutes IS NULL OR duration_in_previous_stage_minutes >= 0),
+    reason TEXT,
+    FOREIGN KEY (opportunity_id) REFERENCES opportunities(opportunity_id) ON DELETE CASCADE,
+    FOREIGN KEY (from_stage_id) REFERENCES pipeline_stages(pipeline_stage_id) ON DELETE SET NULL,
+    FOREIGN KEY (to_stage_id) REFERENCES pipeline_stages(pipeline_stage_id) ON DELETE RESTRICT,
+    FOREIGN KEY (changed_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS activities (
+    activity_id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('ACCOUNT','LEAD','OPPORTUNITY','CASE','SALES_ORDER','PURCHASE_ORDER','CAMPAIGN')),
+    entity_id TEXT NOT NULL,
+    account_id TEXT,
+    contact_id TEXT,
+    activity_type TEXT NOT NULL CHECK(activity_type IN ('CALL','EMAIL','WHATSAPP','MEETING','VISIT','QUOTATION','PROPOSAL','FOLLOW_UP','NOTE','TASK','OTHER')),
+    owner_user_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    notes TEXT,
+    scheduled_at TEXT,
+    completed_at TEXT,
+    outcome TEXT,
+    next_action TEXT,
+    next_action_due TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL,
+    FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
+    FOREIGN KEY (owner_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS case_categories (
+    case_category_id TEXT PRIMARY KEY,
+    category_name TEXT NOT NULL,
+    subcategory_name TEXT NOT NULL,
+    default_priority TEXT NOT NULL CHECK(default_priority IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    UNIQUE(category_name, subcategory_name)
+);
+
+CREATE TABLE IF NOT EXISTS service_cases (
+    case_id TEXT PRIMARY KEY,
+    case_number TEXT NOT NULL UNIQUE,
+    account_id TEXT NOT NULL,
+    contact_id TEXT,
+    business_unit_id TEXT,
+    case_type TEXT NOT NULL CHECK(case_type IN ('ENQUIRY','COMPLAINT','REQUEST','INCIDENT','FEEDBACK','COMPLIMENT')),
+    case_category_id TEXT NOT NULL,
+    priority TEXT NOT NULL CHECK(priority IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+    subject TEXT NOT NULL,
+    description TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK(channel IN ('EMAIL','PHONE','WHATSAPP','WEB','WALK_IN','SOCIAL','OTHER')),
+    status TEXT NOT NULL CHECK(status IN ('NEW','ASSIGNED','IN_PROGRESS','WAITING_CUSTOMER','WAITING_INTERNAL','RESOLVED','CLOSED','CANCELLED')),
+    assigned_team_id TEXT,
+    assigned_user_id TEXT,
+    raised_at TEXT NOT NULL,
+    first_response_at TEXT,
+    resolved_at TEXT,
+    closed_at TEXT,
+    root_cause TEXT,
+    resolution_summary TEXT,
+    created_by_user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT,
+    FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
+    FOREIGN KEY (business_unit_id) REFERENCES business_units(business_unit_id) ON DELETE SET NULL,
+    FOREIGN KEY (case_category_id) REFERENCES case_categories(case_category_id) ON DELETE RESTRICT,
+    FOREIGN KEY (assigned_team_id) REFERENCES teams(team_id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS case_assignment_history (
+    case_assignment_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    from_team_id TEXT,
+    from_user_id TEXT,
+    to_team_id TEXT,
+    to_user_id TEXT,
+    assigned_by_user_id TEXT NOT NULL,
+    assigned_at TEXT NOT NULL,
+    reason TEXT,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE CASCADE,
+    FOREIGN KEY (from_team_id) REFERENCES teams(team_id) ON DELETE SET NULL,
+    FOREIGN KEY (from_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (to_team_id) REFERENCES teams(team_id) ON DELETE SET NULL,
+    FOREIGN KEY (to_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS case_status_history (
+    case_status_history_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    changed_by_user_id TEXT NOT NULL,
+    changed_at TEXT NOT NULL,
+    reason TEXT,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE CASCADE,
+    FOREIGN KEY (changed_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS case_communications (
+    communication_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK(direction IN ('INBOUND','OUTBOUND','INTERNAL')),
+    channel TEXT NOT NULL CHECK(channel IN ('EMAIL','PHONE','WHATSAPP','WEB','NOTE','OTHER')),
+    contact_id TEXT,
+    user_id TEXT,
+    subject TEXT,
+    message_summary TEXT NOT NULL,
+    communicated_at TEXT NOT NULL,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS customer_surveys (
+    survey_id TEXT PRIMARY KEY,
+    survey_name TEXT NOT NULL,
+    survey_type TEXT NOT NULL CHECK(survey_type IN ('CSAT','NPS','CES','OTHER')),
+    question_text TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))
+);
+
+CREATE TABLE IF NOT EXISTS survey_responses (
+    survey_response_id TEXT PRIMARY KEY,
+    survey_id TEXT NOT NULL,
+    case_id TEXT,
+    account_id TEXT NOT NULL,
+    contact_id TEXT,
+    score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 10),
+    comments TEXT,
+    responded_at TEXT NOT NULL,
+    FOREIGN KEY (survey_id) REFERENCES customer_surveys(survey_id) ON DELETE RESTRICT,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE SET NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT,
+    FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS holidays (
+    holiday_id TEXT PRIMARY KEY,
+    business_calendar_id TEXT NOT NULL,
+    holiday_date TEXT NOT NULL,
+    holiday_name TEXT NOT NULL,
+    FOREIGN KEY (business_calendar_id) REFERENCES business_calendars(business_calendar_id) ON DELETE CASCADE,
+    UNIQUE(business_calendar_id, holiday_date)
+);
+
+CREATE TABLE IF NOT EXISTS sla_instances (
+    sla_instance_id TEXT PRIMARY KEY,
+    sla_rule_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    workflow_stage_instance_id TEXT,
+    accountable_user_id TEXT,
+    accountable_team_id TEXT,
+    started_at TEXT NOT NULL,
+    target_at TEXT NOT NULL,
+    warning_at TEXT,
+    stopped_at TEXT,
+    paused_minutes INTEGER NOT NULL DEFAULT 0 CHECK(paused_minutes >= 0),
+    status TEXT NOT NULL CHECK(status IN ('RUNNING','PAUSED','MET','BREACHED','CANCELLED')),
+    breached_at TEXT,
+    FOREIGN KEY (sla_rule_id) REFERENCES sla_rules(sla_rule_id) ON DELETE RESTRICT,
+    FOREIGN KEY (workflow_stage_instance_id) REFERENCES workflow_stage_instances(workflow_stage_instance_id) ON DELETE SET NULL,
+    FOREIGN KEY (accountable_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (accountable_team_id) REFERENCES teams(team_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS sla_timer_events (
+    sla_timer_event_id TEXT PRIMARY KEY,
+    sla_instance_id TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK(event_type IN ('START','PAUSE','RESUME','WARNING','BREACH','STOP','CANCEL')),
+    event_at TEXT NOT NULL,
+    reason TEXT,
+    actor_user_id TEXT,
+    FOREIGN KEY (sla_instance_id) REFERENCES sla_instances(sla_instance_id) ON DELETE CASCADE,
+    FOREIGN KEY (actor_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS sales_orders (
+    sales_order_id TEXT PRIMARY KEY,
+    document_number TEXT NOT NULL,
+    affiliate_id TEXT NOT NULL,
+    business_unit_id TEXT,
+    account_id TEXT NOT NULL,
+    order_created_at TEXT NOT NULL,
+    currency_code TEXT NOT NULL,
+    order_value REAL NOT NULL CHECK(order_value >= 0),
+    finance_approval_required INTEGER NOT NULL DEFAULT 1 CHECK(finance_approval_required IN (0,1)),
+    credit_approval_required INTEGER NOT NULL DEFAULT 0 CHECK(credit_approval_required IN (0,1)),
+    credit_exception_reason TEXT,
+    invoice_number TEXT,
+    invoice_created_at TEXT,
+    loading_authority_at TEXT,
+    loaded_at TEXT,
+    status TEXT NOT NULL CHECK(status IN ('CREATED','PENDING_FINANCE','PENDING_CREDIT','READY','INVOICED','LOADING','LOADED','CANCELLED')),
+    latest_snapshot_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (affiliate_id) REFERENCES affiliates(affiliate_id) ON DELETE RESTRICT,
+    FOREIGN KEY (business_unit_id) REFERENCES business_units(business_unit_id) ON DELETE SET NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT,
+    UNIQUE(affiliate_id, document_number)
+);
+
+CREATE TABLE IF NOT EXISTS sales_order_lines (
+    sales_order_line_id TEXT PRIMARY KEY,
+    sales_order_id TEXT NOT NULL,
+    line_number INTEGER NOT NULL CHECK(line_number > 0),
+    product_id TEXT NOT NULL,
+    quantity REAL NOT NULL CHECK(quantity >= 0),
+    unit_price REAL NOT NULL CHECK(unit_price >= 0),
+    line_value REAL NOT NULL CHECK(line_value >= 0),
+    FOREIGN KEY (sales_order_id) REFERENCES sales_orders(sales_order_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
+    UNIQUE(sales_order_id, line_number)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    purchase_order_id TEXT PRIMARY KEY,
+    document_number TEXT NOT NULL,
+    affiliate_id TEXT NOT NULL,
+    business_unit_id TEXT,
+    supplier_name TEXT NOT NULL,
+    po_created_at TEXT NOT NULL,
+    currency_code TEXT NOT NULL,
+    po_value REAL NOT NULL CHECK(po_value >= 0),
+    physical_received_at TEXT,
+    oracle_stock_posted_at TEXT,
+    status TEXT NOT NULL CHECK(status IN ('CREATED','IN_APPROVAL','APPROVED','RECEIVED','POSTED','CANCELLED')),
+    latest_snapshot_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (affiliate_id) REFERENCES affiliates(affiliate_id) ON DELETE RESTRICT,
+    FOREIGN KEY (business_unit_id) REFERENCES business_units(business_unit_id) ON DELETE SET NULL,
+    UNIQUE(affiliate_id, document_number)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_lines (
+    purchase_order_line_id TEXT PRIMARY KEY,
+    purchase_order_id TEXT NOT NULL,
+    line_number INTEGER NOT NULL CHECK(line_number > 0),
+    product_id TEXT NOT NULL,
+    quantity REAL NOT NULL CHECK(quantity >= 0),
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    line_value REAL NOT NULL CHECK(line_value >= 0),
+    FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(purchase_order_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
+    UNIQUE(purchase_order_id, line_number)
+);
+
+CREATE TABLE IF NOT EXISTS import_batches (
+    import_batch_id TEXT PRIMARY KEY,
+    source_system_id TEXT NOT NULL,
+    import_type TEXT NOT NULL CHECK(import_type IN ('SALES_ORDER','PURCHASE_ORDER','LEAD','CONTACT','CASE','OTHER')),
+    original_filename TEXT NOT NULL,
+    file_sha256 TEXT NOT NULL,
+    uploaded_by_user_id TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    reporting_period_from TEXT,
+    reporting_period_to TEXT,
+    rows_received INTEGER NOT NULL DEFAULT 0 CHECK(rows_received >= 0),
+    rows_new INTEGER NOT NULL DEFAULT 0 CHECK(rows_new >= 0),
+    rows_changed INTEGER NOT NULL DEFAULT 0 CHECK(rows_changed >= 0),
+    rows_exact_duplicate INTEGER NOT NULL DEFAULT 0 CHECK(rows_exact_duplicate >= 0),
+    rows_rejected INTEGER NOT NULL DEFAULT 0 CHECK(rows_rejected >= 0),
+    status TEXT NOT NULL CHECK(status IN ('VALIDATING','READY','IMPORTED','PARTIAL','REJECTED')),
+    FOREIGN KEY (source_system_id) REFERENCES source_systems(source_system_id) ON DELETE RESTRICT,
+    FOREIGN KEY (uploaded_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT,
+    UNIQUE(file_sha256)
+);
+
+CREATE TABLE IF NOT EXISTS import_rows (
+    import_row_id TEXT PRIMARY KEY,
+    import_batch_id TEXT NOT NULL,
+    source_row_number INTEGER NOT NULL CHECK(source_row_number > 0),
+    source_record_key TEXT,
+    entity_type TEXT,
+    entity_id TEXT,
+    row_hash TEXT NOT NULL,
+    row_status TEXT NOT NULL CHECK(row_status IN ('NEW','CHANGED','DUPLICATE','REJECTED','UNRESOLVED')),
+    error_message TEXT,
+    raw_json TEXT NOT NULL,
+    imported_at TEXT,
+    FOREIGN KEY (import_batch_id) REFERENCES import_batches(import_batch_id) ON DELETE CASCADE,
+    UNIQUE(import_batch_id, source_row_number)
+);
+
+CREATE TABLE IF NOT EXISTS record_snapshots (
+    snapshot_id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('SALES_ORDER','PURCHASE_ORDER','LEAD','CASE','CONTACT','ACCOUNT')),
+    entity_id TEXT NOT NULL,
+    import_batch_id TEXT,
+    source_record_key TEXT,
+    version_no INTEGER NOT NULL CHECK(version_no > 0),
+    row_hash TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0,1)),
+    FOREIGN KEY (import_batch_id) REFERENCES import_batches(import_batch_id) ON DELETE SET NULL,
+    UNIQUE(entity_type, entity_id, version_no)
+);
+
+CREATE TABLE IF NOT EXISTS unresolved_actors (
+    unresolved_actor_id TEXT PRIMARY KEY,
+    import_batch_id TEXT NOT NULL,
+    source_system_id TEXT NOT NULL,
+    external_username TEXT NOT NULL,
+    affiliate_id TEXT,
+    status TEXT NOT NULL CHECK(status IN ('OPEN','MAPPED','IGNORED')),
+    mapped_user_id TEXT,
+    resolved_by_user_id TEXT,
+    resolved_at TEXT,
+    notes TEXT,
+    FOREIGN KEY (import_batch_id) REFERENCES import_batches(import_batch_id) ON DELETE CASCADE,
+    FOREIGN KEY (source_system_id) REFERENCES source_systems(source_system_id) ON DELETE RESTRICT,
+    FOREIGN KEY (affiliate_id) REFERENCES affiliates(affiliate_id) ON DELETE SET NULL,
+    FOREIGN KEY (mapped_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (resolved_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS file_objects (
+    file_id TEXT PRIMARY KEY,
+    original_filename TEXT NOT NULL,
+    storage_key TEXT NOT NULL UNIQUE,
+    mime_type TEXT,
+    size_bytes INTEGER CHECK(size_bytes IS NULL OR size_bytes >= 0),
+    sha256 TEXT,
+    uploaded_by_user_id TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    FOREIGN KEY (uploaded_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS entity_attachments (
+    entity_attachment_id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('ACCOUNT','CONTACT','LEAD','OPPORTUNITY','CASE','SALES_ORDER','PURCHASE_ORDER','ACTIVITY')),
+    entity_id TEXT NOT NULL,
+    attachment_type TEXT,
+    attached_by_user_id TEXT NOT NULL,
+    attached_at TEXT NOT NULL,
+    FOREIGN KEY (file_id) REFERENCES file_objects(file_id) ON DELETE CASCADE,
+    FOREIGN KEY (attached_by_user_id) REFERENCES users(user_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    notification_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    notification_type TEXT NOT NULL CHECK(notification_type IN ('ASSIGNMENT','SLA_WARNING','SLA_BREACH','FOLLOW_UP','IMPORT_EXCEPTION','SYSTEM')),
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id TEXT,
+    created_at TEXT NOT NULL,
+    read_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_leads_owner_status ON leads(owner_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_opportunities_owner_status ON opportunities(owner_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_activities_entity ON activities(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_cases_assignee_status ON service_cases(assigned_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_cases_account ON service_cases(account_id, raised_at);
+CREATE INDEX IF NOT EXISTS idx_so_account_date ON sales_orders(account_id, order_created_at);
+CREATE INDEX IF NOT EXISTS idx_po_affiliate_date ON purchase_orders(affiliate_id, po_created_at);
+CREATE INDEX IF NOT EXISTS idx_sla_entity ON sla_instances(entity_type, entity_id, status);
+CREATE INDEX IF NOT EXISTS idx_import_rows_batch ON import_rows(import_batch_id, row_status);
+CREATE INDEX IF NOT EXISTS idx_snapshots_entity ON record_snapshots(entity_type, entity_id, version_no);
 `;

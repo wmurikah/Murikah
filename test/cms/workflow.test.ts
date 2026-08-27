@@ -808,7 +808,17 @@ test('loading a started stage twice returns the same assignees, with the configu
       [SEED.zuleika],
     );
   }
-  assert.equal(query(c, `SELECT COUNT(*) AS n FROM workflow_stage_assignees`)[0]?.n, 1);
+  // Scoped to this stage instance. The operator's seed carries five
+  // workflow_stage_assignees rows of its own, so a table-wide count would
+  // assert about the fixture rather than about the idempotent write.
+  assert.equal(
+    query(
+      c,
+      `SELECT COUNT(*) AS n FROM workflow_stage_assignees WHERE workflow_stage_instance_id = ?`,
+      stageInstanceId,
+    )[0]?.n,
+    1,
+  );
   c.close();
 });
 
@@ -1359,7 +1369,10 @@ test('a definition with instances refuses a substantive edit, and still allows r
   const definition = await getDefinition(asClient(c), KENYA_SO);
   assert.notEqual(definition, null);
   if (definition === null) return;
-  assert.equal(definition.instanceCount, 1);
+  // In use, without asserting exactly how many times: the seed already runs
+  // records under this definition, and `started` above added one more. What the
+  // rule turns on is "more than none".
+  assert.equal(definition.instanceCount > 0, true);
 
   const renamed = await updateDefinition(
     asClient(c),
@@ -1404,7 +1417,25 @@ test('a definition with instances refuses a substantive edit, and still allows r
 
 test('reordering stages survives the unique constraint that a naive swap would break', async () => {
   const c = await db();
-  const before = await listStages(asClient(c), KENYA_SO);
+  // A fresh version of the Kenya sales order workflow, which copies the stages
+  // forward and carries no instances. The original cannot be reordered at all
+  // now that the seed runs records under it, which is section 12 working and
+  // not something to test around.
+  const version = await newVersion(
+    asClient(c),
+    KENYA_SO,
+    { effectiveFrom: '2026-09-01', retirePrevious: false },
+    CTX,
+  );
+  assert.equal(version.ok, true);
+  if (!version.ok) return;
+  const draft = version.value.workflowDefinitionId;
+  const stageIds = (await listStages(asClient(c), draft)).map((s) => s.workflowStageId);
+  const [one, two, three] = stageIds;
+  assert.notEqual(three, undefined);
+  if (one === undefined || two === undefined || three === undefined) return;
+
+  const before = await listStages(asClient(c), draft);
   assert.deepEqual(
     before.map((s) => s.stageCode),
     ['FINANCE_APPROVAL', 'CREDIT_CHECK', 'LOADING'],
@@ -1414,25 +1445,25 @@ test('reordering stages survives the unique constraint that a naive swap would b
   await assert.rejects(
     async () =>
       c.execute({
-        sql: `UPDATE workflow_stages SET sequence_no = 2 WHERE workflow_stage_id = 'WST-001'`,
-        args: [],
+        sql: `UPDATE workflow_stages SET sequence_no = 2 WHERE workflow_stage_id = ?`,
+        args: [one],
       }),
     /UNIQUE constraint failed/,
   );
 
   const reordered = await reorderStages(
     asClient(c),
-    KENYA_SO,
+    draft,
     [
-      { stageId: 'WST-002', sequenceNo: 1 },
-      { stageId: 'WST-001', sequenceNo: 2 },
-      { stageId: 'WST-003', sequenceNo: 3 },
+      { stageId: two, sequenceNo: 1 },
+      { stageId: one, sequenceNo: 2 },
+      { stageId: three, sequenceNo: 3 },
     ],
     CTX,
   );
   assert.equal(reordered.ok, true);
 
-  const after = await listStages(asClient(c), KENYA_SO);
+  const after = await listStages(asClient(c), draft);
   assert.deepEqual(
     after.map((s) => s.stageCode),
     ['CREDIT_CHECK', 'FINANCE_APPROVAL', 'LOADING'],
