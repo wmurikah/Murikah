@@ -10,6 +10,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { refusalFields } from './support/refusal.ts';
 import { createTestDb, query, type TestClient } from './support/db.ts';
 import { seedHass, SEED } from './support/hassSeed.ts';
 import {
@@ -315,8 +316,9 @@ test('a category cannot be its own parent', async () => {
   );
   assert.equal(direct.ok, false);
   if (!direct.ok) {
-    assert.equal(direct.fields[0]?.field, 'parentCategoryId');
-    assert.match(String(direct.fields[0]?.message), /cannot be its own parent/);
+    const fields = refusalFields(direct);
+    assert.equal(fields[0]?.field, 'parentCategoryId');
+    assert.match(String(fields[0]?.message), /cannot be its own parent/);
   }
   c.close();
 });
@@ -379,8 +381,9 @@ test('an indirect cycle is refused, and the parent chain walk shows why', async 
   );
   assert.equal(cycle.ok, false);
   if (!cycle.ok) {
-    assert.equal(cycle.fields[0]?.field, 'parentCategoryId');
-    assert.match(String(cycle.fields[0]?.message), /ancestor of itself/);
+    const fields = refusalFields(cycle);
+    assert.equal(fields[0]?.field, 'parentCategoryId');
+    assert.match(String(fields[0]?.message), /ancestor of itself/);
   }
 
   // A is still where it was.
@@ -422,7 +425,7 @@ test('the tree stops at the depth the interface can render', async () => {
   assert.equal(tooDeep.ok, false);
   if (!tooDeep.ok) {
     assert.match(
-      String(tooDeep.fields[0]?.message),
+      String(refusalFields(tooDeep)[0]?.message),
       new RegExp(`${MAX_CATEGORY_DEPTH} levels deep`),
     );
   }
