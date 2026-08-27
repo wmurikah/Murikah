@@ -267,3 +267,18 @@ export function canManageCases(permissions: readonly string[]): boolean {
 export function canManageCaseCategories(permissions: readonly string[]): boolean {
   return permissions.includes(CASE_CATEGORIES_MANAGE);
 }
+
+/**
+ * The SLA runtime. Both codes are seeded: PERM-013 reads the monitor,
+ * PERM-014 configures calendars, profiles and rules.
+ */
+export const SLA_DASHBOARD_VIEW = 'SLA.DASHBOARD.VIEW';
+export const SLA_RULES_MANAGE = 'SLA.RULES.MANAGE';
+
+export function canViewSlaDashboard(permissions: readonly string[]): boolean {
+  return permissions.includes(SLA_DASHBOARD_VIEW) || permissions.includes(SLA_RULES_MANAGE);
+}
+
+export function canManageSlaRules(permissions: readonly string[]): boolean {
+  return permissions.includes(SLA_RULES_MANAGE);
+}

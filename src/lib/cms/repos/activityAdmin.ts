@@ -37,6 +37,7 @@ import { newId, auditEventStmt } from './authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
 import type { WriteContext } from '../admin/guard.ts';
 import { resolveEntityAccess, type ActivityEntityType } from '../crm/entityAccess.ts';
+import { emitLeadEvent } from '../service/events.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 
@@ -311,6 +312,21 @@ export async function createActivity(
     throw error;
   }
   const created = await getActivityRaw(db, activityId);
+  if (
+    created !== null &&
+    input.entityType === 'LEAD' &&
+    QUALIFYING_CONTACT.includes(input.activityType)
+  ) {
+    // Emitted whether or not this particular activity was the first: the SLA
+    // stop is idempotent, so a later contact stops nothing twice.
+    await emitLeadEvent(db, {
+      type: 'LEAD_CONTACTED',
+      leadId: input.entityId,
+      at: ctx.now,
+      actorUserId: ctx.actorUserId,
+      detail: { at: input.completedAt ?? toDbTimestamp(ctx.now) },
+    });
+  }
   return created === null ? { ok: false, kind: 'not_found' } : { ok: true, value: created };
 }
 
