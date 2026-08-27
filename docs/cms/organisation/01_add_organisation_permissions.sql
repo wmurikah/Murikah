@@ -16,8 +16,8 @@
 --
 -- WHY THIS IS DATA AND NOT SCHEMA
 -- No table, column, constraint, index or trigger is added or altered. The
--- `permissions` table exists precisely so that codes can be added to it; adding
--- a row is using the schema, not changing it.
+-- `permissions` table exists precisely so that codes can be added to it, and
+-- adding a row is using the schema rather than changing it.
 --
 -- SAFE TO RUN TWICE
 -- Every statement is INSERT OR IGNORE against an explicit primary key, and the
@@ -60,7 +60,7 @@ INSERT OR IGNORE INTO permissions (permission_id, module_name, resource_name, ac
 -- ----------------------------------------------------------------------------
 -- The seed grants ROLE-ADMIN every permission through a SELECT over the whole
 -- `permissions` table, with the id built as 'RP-ADMIN-' || permission_id. That
--- statement already ran, so it will not pick these two up; this repeats it in
+-- statement already ran, so it will not pick these two up. This repeats it in
 -- the same form and with the same id convention, so the result is identical to
 -- what the seed would have produced had these rows existed then.
 
@@ -93,7 +93,7 @@ INSERT OR IGNORE INTO role_permissions (role_permission_id, role_id, permission_
 ('RP-CM-006','ROLE-CM','PERM-029',1,CURRENT_TIMESTAMP);
 
 -- ============================================================================
--- 4. Verification. Read the output; nothing below writes.
+-- 4. Verification. Read the output. Nothing below writes.
 -- ============================================================================
 
 -- Expect exactly the two rows added above.
@@ -114,8 +114,8 @@ WHERE p.resource_name = 'ORGANISATION'
 ORDER BY rp.role_id, p.action_name;
 
 -- The resolved permission count for the System Administrator, Catherine Mwangi.
--- Expect 30. Build Prompt 04 recorded 28; this script is why the number moved,
--- and the earlier assertion should be updated to 30 rather than read as a
+-- Expect 30. Build Prompt 04 recorded 28, and this script is why the number
+-- moved. The earlier assertion should be updated to 30 rather than read as a
 -- regression.
 -- This is the application's own resolver, copied from
 -- src/lib/cms/repos/identity.ts, so the number the console prints is the number
