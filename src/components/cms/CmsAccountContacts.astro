@@ -1,0 +1,280 @@
+---
+/**
+ * The contacts of one account, as cards with the operational actions.
+ *
+ * OPERATIONAL ACTIONS ONLY, AND ONLY WHERE THEY WORK.
+ * `mailto:` and `tel:` are real and open the person's own mail client or
+ * dialler, so they are rendered. A contact with no phone number gets no Call
+ * link at all rather than a disabled one, because a button that does nothing is
+ * worse than an absent button: it promises a capability the product does not
+ * have.
+ *
+ * THE PORTAL INDICATOR IS QUIET, AND IT IS NOT DECIDED HERE.
+ * `portalStatus` arrives already filtered: a caller without
+ * CUSTOMERS.PORTAL_ACCESS.VIEW receives a literal NULL from the query, so there
+ * is nothing to hide. This component renders what it is given. Portal
+ * management itself is not built here at all.
+ */
+import CmsBadge from './CmsBadge.astro';
+import CmsButton from './CmsButton.astro';
+import CmsCard from './CmsCard.astro';
+import CmsDrawer from './CmsDrawer.astro';
+import CmsEmptyState from './CmsEmptyState.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import CmsCheckbox from './CmsCheckbox.astro';
+import CmsIcon from './CmsIcon.astro';
+import CmsWorkflowFormScript from './CmsWorkflowFormScript.astro';
+import { CONTACT_CHANNELS } from '@/lib/cms/admin/accountInput';
+import type { ContactRow } from '@/lib/cms/repos/accountAdmin';
+
+interface Props {
+  accountId: string;
+  contacts: ContactRow[];
+  mayManage: boolean;
+  maySeePortal: boolean;
+}
+const { accountId, contacts, mayManage, maySeePortal } = Astro.props;
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+/** The three states `customer_portal_memberships.status` can show a reader. */
+const PORTAL_LABEL: Readonly<Record<string, string>> = {
+  ACTIVE: 'Portal access active',
+  INVITED: 'Portal access invited',
+  SUSPENDED: 'Portal access suspended',
+  REVOKED: 'Portal access revoked',
+};
+
+const primary = contacts.find((c) => c.isPrimary && c.active) ?? null;
+---
+
+<Fragment>
+  {
+    mayManage && (
+      <div class="flex justify-end">
+        <CmsButton
+          variant="primary"
+          icon="plus"
+          data-cms-wf-open="cms-contact-drawer"
+          data-endpoint={`/api/customers/accounts/${accountId}/contacts`}
+          data-method="POST"
+          data-title="New contact"
+          data-values="{}"
+        >
+          New contact
+        </CmsButton>
+      </div>
+    )
+  }
+
+  {
+    primary === null && contacts.length > 0 && (
+      <p class="flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+        <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
+        <span>
+          No active primary contact. Nothing breaks without one, and every process that needs a
+          default person to write to has to ask instead.
+        </span>
+      </p>
+    )
+  }
+
+  {
+    contacts.length === 0 ? (
+      <CmsEmptyState
+        icon="customers"
+        title="No contacts yet"
+        description="A contact is a real person at this company. Add the one you actually deal with."
+      />
+    ) : (
+      <ul class="grid gap-4 sm:grid-cols-2">
+        {contacts.map((contact) => (
+          <li>
+            <CmsCard class={contact.active ? '' : 'opacity-70'}>
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 class="text-cms-card font-semibold text-cms-navy">{contact.fullName}</h3>
+                <span class="flex flex-wrap items-center gap-1">
+                  {contact.isPrimary && contact.active && (
+                    <CmsBadge tone="success" label="Primary" />
+                  )}
+                  {!contact.active && <CmsBadge tone="neutral" label="Inactive" />}
+                  {maySeePortal && contact.portalStatus !== null && (
+                    <CmsBadge
+                      tone={contact.portalStatus === 'ACTIVE' ? 'success' : 'neutral'}
+                      label={PORTAL_LABEL[contact.portalStatus] ?? 'Portal access'}
+                    />
+                  )}
+                </span>
+              </div>
+
+              <p class="text-cms-body-sm text-cms-muted">
+                {contact.jobTitle ?? 'No job title recorded'}
+              </p>
+
+              <dl class="mt-2 flex flex-col gap-1 text-cms-body-sm">
+                <div class="flex gap-2">
+                  <dt class="text-cms-muted">Email</dt>
+                  <dd>
+                    {contact.email === null ? (
+                      <span class="text-cms-muted">Not available</span>
+                    ) : (
+                      <a
+                        href={`mailto:${contact.email}`}
+                        class="rounded-cms text-cms-royal underline-offset-2 hover:underline"
+                      >
+                        {contact.email}
+                      </a>
+                    )}
+                  </dd>
+                </div>
+                <div class="flex gap-2">
+                  <dt class="text-cms-muted">Phone</dt>
+                  <dd>
+                    {contact.phone === null ? (
+                      <span class="text-cms-muted">Not available</span>
+                    ) : (
+                      <a
+                        href={`tel:${contact.phone}`}
+                        class="rounded-cms text-cms-royal underline-offset-2 hover:underline"
+                      >
+                        {contact.phone}
+                      </a>
+                    )}
+                  </dd>
+                </div>
+                {contact.preferredChannel !== null && (
+                  <div class="flex gap-2">
+                    <dt class="text-cms-muted">Prefers</dt>
+                    <dd class="text-cms-ink">{titleCase(contact.preferredChannel)}</dd>
+                  </div>
+                )}
+              </dl>
+
+              {mayManage && (
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                    data-cms-wf-open="cms-contact-drawer"
+                    data-endpoint={`/api/customers/contacts/${contact.contactId}`}
+                    data-method="PATCH"
+                    data-title="Edit contact"
+                    data-values={JSON.stringify({
+                      fullName: contact.fullName,
+                      jobTitle: contact.jobTitle ?? '',
+                      email: contact.email ?? '',
+                      phone: contact.phone ?? '',
+                      whatsapp: contact.whatsapp ?? '',
+                      preferredChannel: contact.preferredChannel ?? '',
+                      isPrimary: contact.isPrimary,
+                      active: contact.active,
+                    })}
+                  >
+                    Edit
+                  </button>
+                  {!contact.isPrimary && contact.active && (
+                    <button
+                      type="button"
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                      data-cms-wf-open="cms-contact-drawer"
+                      data-endpoint={`/api/customers/contacts/${contact.contactId}`}
+                      data-method="PATCH"
+                      data-title="Make this the primary contact"
+                      data-note="Setting a primary contact clears the current one in the same transaction, so an account never holds two."
+                      data-values={JSON.stringify({
+                        fullName: contact.fullName,
+                        jobTitle: contact.jobTitle ?? '',
+                        email: contact.email ?? '',
+                        phone: contact.phone ?? '',
+                        whatsapp: contact.whatsapp ?? '',
+                        preferredChannel: contact.preferredChannel ?? '',
+                        isPrimary: true,
+                        active: true,
+                      })}
+                    >
+                      Make primary
+                    </button>
+                  )}
+                </div>
+              )}
+            </CmsCard>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  {
+    mayManage && (
+      <CmsDrawer id="cms-contact-drawer" tone="form" title="Contact">
+        <form
+          id="cms-contact-form"
+          data-cms-wf-form="cms-contact-drawer"
+          novalidate
+          class="flex flex-col gap-4"
+        >
+          <p
+            id="cms-contact-form-error"
+            role="alert"
+            hidden
+            class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+          />
+          <p id="cms-contact-form-note" hidden class="text-cms-body-sm text-cms-muted" />
+          <CmsInput id="ct-fullName" name="fullName" label="Full name" required />
+          <CmsInput id="ct-jobTitle" name="jobTitle" label="Job title" />
+          <CmsInput id="ct-email" name="email" label="Email" type="email" />
+          <CmsInput id="ct-phone" name="phone" label="Phone" type="tel" />
+          <CmsInput id="ct-whatsapp" name="whatsapp" label="WhatsApp" type="tel" />
+          <CmsSelect
+            id="ct-preferredChannel"
+            name="preferredChannel"
+            label="Preferred channel"
+            options={[
+              { value: '', label: 'Not stated' },
+              ...CONTACT_CHANNELS.map((c) => ({ value: c, label: titleCase(c) })),
+            ]}
+            hint="A channel needs an address to reach: choosing WhatsApp without a number is refused."
+          />
+          <CmsCheckbox
+            id="ct-isPrimary"
+            name="isPrimary"
+            label="Primary contact"
+            hint="Clears the current primary in the same transaction. An account never holds two."
+          />
+          <CmsCheckbox
+            id="ct-active"
+            name="active"
+            label="Active"
+            checked
+            hint="Deactivating keeps the person and their history, and takes them out of new selection."
+          />
+        </form>
+        <Fragment slot="actions">
+          <CmsButton variant="ghost" data-cms-modal-close>
+            Cancel
+          </CmsButton>
+          <button
+            type="submit"
+            form="cms-contact-form"
+            data-cms-wf-save
+            class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Save
+          </button>
+        </Fragment>
+      </CmsDrawer>
+    )
+  }
+
+  {
+    /*
+    The drawer behaviour: the generic form script from the workflow phase, which
+    already does the fetch, the field-message painting into the slots the
+    primitives render, and the reload. Rendered inside the mayManage branch, so
+    Astro ships it only to somebody who can actually write.
+  */
+  }
+  {mayManage && <CmsWorkflowFormScript />}
+</Fragment>

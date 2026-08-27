@@ -1,0 +1,93 @@
+---
+/**
+ * One category in the catalogue tree, and everything beneath it.
+ *
+ * Recursive through `Astro.self`, which is the framework's own way of rendering
+ * a tree and needs no library. The recursion terminates on the data: the depth
+ * limit in @/lib/cms/catalogue/model bounds the chain before it reaches here,
+ * so an unbounded tree cannot arrive at this component.
+ *
+ * A separate component from CmsCatalogueTree rather than one that takes two
+ * shapes, because a component whose props mean different things depending on
+ * which are present is a component nobody can read.
+ */
+import CmsBadge from './CmsBadge.astro';
+import type { HierarchyCategory } from '@/lib/cms/repos/catalogueAdmin';
+
+interface Props {
+  branch: HierarchyCategory;
+  selectedCategoryId: string | null;
+}
+const { branch, selectedCategoryId } = Astro.props;
+
+const selected = branch.productCategoryId === selectedCategoryId;
+
+function holdsSelection(category: HierarchyCategory, target: string | null): boolean {
+  if (target === null) return false;
+  if (category.productCategoryId === target) return true;
+  return category.children.some((child) => holdsSelection(child, target));
+}
+// Rendered as the `open` attribute, so following a link to a category three
+// levels down arrives with the path already expanded, with no script and no
+// second request.
+const open = holdsSelection(branch, selectedCategoryId);
+
+const leaf = branch.children.length === 0 && branch.products.length === 0;
+
+const rowClass = [
+  'flex flex-1 items-center gap-2 rounded-cms px-2 py-1 text-cms-body-sm outline-none',
+  'transition-colors duration-150 hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus',
+  selected ? 'bg-cms-canvas font-semibold text-cms-royal' : 'text-cms-ink',
+].join(' ');
+---
+
+<li>
+  {
+    leaf ? (
+      <div class="flex items-center gap-1 ps-4">
+        <a href={`?category=${branch.productCategoryId}`} class={rowClass}>
+          <span class="truncate">{branch.categoryName}</span>
+          <span class="text-cms-caption text-cms-muted">{branch.categoryCode}</span>
+          {!branch.active ? (
+            <CmsBadge tone="neutral" label="Retired" />
+          ) : (
+            !branch.available && <CmsBadge tone="warning" label="Parent retired" />
+          )}
+        </a>
+      </div>
+    ) : (
+      <details open={open || undefined}>
+        <summary class="flex cursor-pointer list-none items-center gap-1 rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus">
+          <span aria-hidden="true" class="w-3 text-cms-muted select-none">
+            ▸
+          </span>
+          <a href={`?category=${branch.productCategoryId}`} class={rowClass}>
+            <span class="truncate">{branch.categoryName}</span>
+            <span class="text-cms-caption text-cms-muted">{branch.categoryCode}</span>
+            {!branch.active ? (
+              <CmsBadge tone="neutral" label="Retired" />
+            ) : (
+              !branch.available && <CmsBadge tone="warning" label="Parent retired" />
+            )}
+          </a>
+        </summary>
+        <ul class="ms-4 flex flex-col gap-1 border-s border-cms-line ps-2">
+          {branch.children.map((child) => (
+            <Astro.self branch={child} selectedCategoryId={selectedCategoryId} />
+          ))}
+          {branch.products.map((product) => (
+            <li class="flex items-center gap-2 ps-4 text-cms-body-sm">
+              <span aria-hidden="true" class="text-cms-muted select-none">
+                ·
+              </span>
+              <span class={product.available ? 'text-cms-muted' : 'text-cms-muted line-through'}>
+                {product.productName}
+              </span>
+              <span class="text-cms-caption text-cms-muted">{product.unitOfMeasure}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    )
+  }
+</li>

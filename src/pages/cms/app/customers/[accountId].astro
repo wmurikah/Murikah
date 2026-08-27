@@ -1,0 +1,362 @@
+---
+/**
+ * Account 360.
+ *
+ * Header, then seven tabs. Overview and Contacts are real. Timeline,
+ * Opportunities, Orders, Service and SLA belong to later phases, and this page
+ * says so rather than filling them with plausible-looking nothing.
+ *
+ * THE EMPTY TABS ARE EMPTY ON PURPOSE.
+ * Section 4 of the phase, and section 0d of Part A: where a value is absent,
+ * render "Not available", never zero. A tab showing "0 open cases" would be a
+ * claim about this customer's service history. "This is built in a later phase"
+ * is a claim about the software. They are different statements and only one of
+ * them is true today.
+ *
+ * QUERY COUNT
+ * Opening an account issues three statements: the scope resolution, the account
+ * row, and the counts. Contacts are fetched when that tab is opened, not
+ * before, so an account with two hundred contacts costs the same to open as one
+ * with none.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsAccountContacts from '@/components/cms/CmsAccountContacts.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageAccounts, canSeePortalAccess, canViewAccounts } from '@/lib/cms/permissions';
+import {
+  accountCounts,
+  getAccount,
+  listContacts,
+  type AccountCounts,
+  type AccountRow,
+  type ContactRow,
+} from '@/lib/cms/repos/accountAdmin';
+import { STATUS_MEANING } from '@/lib/cms/admin/accountInput';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewAccounts(permissions);
+const mayManage = canManageAccounts(permissions);
+const maySeePortal = canSeePortalAccess(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const accountId = Astro.params.accountId ?? '';
+
+const TABS = [
+  'overview',
+  'timeline',
+  'contacts',
+  'opportunities',
+  'orders',
+  'service',
+  'sla',
+] as const;
+type Tab = (typeof TABS)[number];
+const raw = Astro.url.searchParams.get('tab');
+const tab: Tab = (TABS as readonly string[]).includes(raw ?? '') ? (raw as Tab) : 'overview';
+
+let account: AccountRow | null = null;
+let counts: AccountCounts | null = null;
+let contacts: ContactRow[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    account = await getAccount(db, userId, accountId);
+    if (account !== null) {
+      counts = await accountCounts(db, accountId);
+      // Only the tab that needs them, and only when it is open.
+      if (tab === 'contacts') {
+        contacts = (await listContacts(db, userId, accountId, maySeePortal)) ?? [];
+      }
+    }
+  } catch (error) {
+    console.error('[cms.account360] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const href = (target: Tab) => `/app/customers/${accountId}?tab=${target}`;
+
+/** A field that has no value reads "Not available", never blank and never zero. */
+const shown = (value: string | number | null): string =>
+  value === null || value === '' ? 'Not available' : String(value);
+
+/** Which later phase fills each empty tab, so the message is specific. */
+const COMING: Readonly<Record<string, string>> = {
+  timeline: 'The shared activity timeline arrives with the activity engine.',
+  opportunities: 'Opportunities arrive with the sales pipeline.',
+  orders: 'Sales and purchase orders arrive with the order import.',
+  service: 'Service cases arrive with the helpdesk.',
+  sla: 'SLA measurement arrives with the SLA runtime engine.',
+};
+---
+
+<CmsLayout title={account?.accountName ?? 'Account'}>
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to customers"
+        description="Ask a system administrator for the CUSTOMERS.ACCOUNTS.VIEW permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="That account could not be loaded"
+        description="The database did not answer."
+      />
+    ) : account === null ? (
+      <CmsErrorState
+        title="No such account"
+        description="It may not exist, or it may sit outside your data scope. Those two look the same on purpose."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={account.accountName}
+          description={`${titleCase(account.accountType)} · ${account.countryName}${account.segment === null ? '' : ` · ${account.segment}`}`}
+          crumbs={[{ label: 'Customers', href: '/app/customers' }, { label: account.accountName }]}
+        >
+          <Fragment slot="actions">
+            {/*
+              Real actions only. `tel:` and `mailto:` do something; a Call button
+              that opened nothing would be worse than no button. Where the
+              account has no number or address, the action is not rendered.
+            */}
+            {account.phone !== null && (
+              <CmsButton variant="ghost" href={`tel:${account.phone}`}>
+                Call
+              </CmsButton>
+            )}
+            {account.email !== null && (
+              <CmsButton variant="ghost" href={`mailto:${account.email}`}>
+                Email
+              </CmsButton>
+            )}
+            {mayManage && (
+              <CmsButton variant="secondary" href={`${href('overview')}&edit=1`}>
+                Edit
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+
+        {account.status !== 'ACTIVE' && (
+          <p class="flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+            <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
+            <span>
+              <strong>{titleCase(account.status)}.</strong> {STATUS_MEANING[account.status]}
+            </span>
+          </p>
+        )}
+
+        <CmsTabs
+          label="Account"
+          current={href(tab)}
+          tabs={[
+            { label: 'Overview', href: href('overview') },
+            { label: 'Timeline', href: href('timeline') },
+            {
+              label: 'Contacts',
+              href: href('contacts'),
+              count: counts?.contacts ?? undefined,
+            },
+            { label: 'Opportunities', href: href('opportunities') },
+            { label: 'Orders', href: href('orders') },
+            { label: 'Service', href: href('service') },
+            { label: 'SLA', href: href('sla') },
+          ]}
+        />
+
+        {tab === 'overview' && (
+          <Fragment>
+            <CmsCard title="Identity">
+              <dl class="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Account code</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.accountCode)}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Oracle customer code</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.oracleCustomerCode)}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Tax PIN</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.taxPin)}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Type</dt>
+                  <dd>
+                    <CmsBadge
+                      tone={account.accountType === 'CUSTOMER' ? 'success' : 'neutral'}
+                      label={titleCase(account.accountType)}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Industry</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.industry)}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Segment</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.segment)}</dd>
+                </div>
+              </dl>
+            </CmsCard>
+
+            <CmsCard title="Commercial">
+              <dl class="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Credit limit</dt>
+                  <dd class="text-cms-body text-cms-ink tabular-nums">
+                    {shown(account.creditLimit)}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Credit days</dt>
+                  <dd class="text-cms-body text-cms-ink tabular-nums">
+                    {account.creditDays === null ? 'Not available' : `${account.creditDays} days`}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Customer since</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.customerSince)}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Country</dt>
+                  <dd class="text-cms-body text-cms-ink">{account.countryName}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Affiliate</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.affiliateName)}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Account manager</dt>
+                  <dd class="text-cms-body text-cms-ink">
+                    {account.accountManagerName ?? 'Unassigned'}
+                  </dd>
+                </div>
+              </dl>
+            </CmsCard>
+
+            <CmsCard title="Contact details">
+              <dl class="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Email</dt>
+                  <dd class="text-cms-body text-cms-ink">
+                    {account.email === null ? (
+                      'Not available'
+                    ) : (
+                      <a
+                        href={`mailto:${account.email}`}
+                        class="rounded-cms text-cms-royal underline-offset-2 hover:underline"
+                      >
+                        {account.email}
+                      </a>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Phone</dt>
+                  <dd class="text-cms-body text-cms-ink">
+                    {account.phone === null ? (
+                      'Not available'
+                    ) : (
+                      <a
+                        href={`tel:${account.phone}`}
+                        class="rounded-cms text-cms-royal underline-offset-2 hover:underline"
+                      >
+                        {account.phone}
+                      </a>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Website</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.website)}</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Address</dt>
+                  <dd class="text-cms-body text-cms-ink">{shown(account.address)}</dd>
+                </div>
+              </dl>
+            </CmsCard>
+
+            <CmsCard title="What references this account">
+              {/*
+                Section 7: before deactivating or blocking, show what references
+                the account. Only two of these tables exist today, and the rest
+                read "Not available" rather than zero, because a zero here is a
+                claim that this customer has no open cases.
+              */}
+              <dl class="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Contacts</dt>
+                  <dd class="text-cms-body text-cms-ink tabular-nums">
+                    {counts?.contacts ?? 0} ({counts?.activeContacts ?? 0} active)
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Portal memberships</dt>
+                  <dd class="text-cms-body text-cms-ink tabular-nums">
+                    {counts?.portalMemberships ?? 0}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Service cases</dt>
+                  <dd class="text-cms-body text-cms-muted">Not available</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Opportunities</dt>
+                  <dd class="text-cms-body text-cms-muted">Not available</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Orders</dt>
+                  <dd class="text-cms-body text-cms-muted">Not available</dd>
+                </div>
+                <div>
+                  <dt class="text-cms-caption text-cms-muted">Activities</dt>
+                  <dd class="text-cms-body text-cms-muted">Not available</dd>
+                </div>
+              </dl>
+              <p class="mt-3 text-cms-body-sm text-cms-muted">
+                Four of these modules are not built yet, so their counts are unknown rather than
+                zero. Nothing is destroyed when an account is made inactive or blocked: the status
+                takes it out of new selection and every existing record keeps its reference.
+              </p>
+            </CmsCard>
+          </Fragment>
+        )}
+
+        {tab === 'contacts' && (
+          <CmsAccountContacts
+            accountId={accountId}
+            contacts={contacts}
+            mayManage={mayManage}
+            maySeePortal={maySeePortal}
+          />
+        )}
+
+        {tab !== 'overview' && tab !== 'contacts' && (
+          <CmsEmptyState
+            icon="clock"
+            title={`${titleCase(tab)} is not built yet`}
+            description={`${COMING[tab] ?? ''} Nothing is shown here rather than a zero, because this customer's real history is unknown to the software today, not empty.`}
+          />
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

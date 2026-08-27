@@ -1,0 +1,136 @@
+---
+/**
+ * The behaviour behind the job title drawer.
+ *
+ * A component rather than a script in the page, so it ships only where the
+ * drawer ships. A page's script is hoisted whether or not the markup around it
+ * rendered, and a reader who cannot manage users would otherwise be sent the
+ * code for a control they do not have.
+ */
+---
+
+<script>
+  const drawer = document.getElementById('cms-title-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-title-form') as HTMLFormElement | null;
+  const heading = document.getElementById('cms-title-drawer-title');
+  const errorBox = document.getElementById('cms-title-error');
+  const consequence = document.getElementById('cms-title-consequence');
+  const save = document.getElementById('cms-title-save') as HTMLButtonElement | null;
+
+  if (drawer && form && save) {
+    let editingId: string | null = null;
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((n) => n.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    // The paragraph the field already points at through aria-describedby.
+    const paint = (fields: { field: string; message: string }[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        if (!(field instanceof HTMLElement) || !field.id) continue;
+        field.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${field.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    const open = (id: string | null, values: Record<string, unknown>, note: string) => {
+      editingId = id;
+      clear();
+      form.reset();
+      for (const [name, value] of Object.entries(values)) {
+        const field = form.elements.namedItem(name);
+        if (field instanceof HTMLInputElement) {
+          if (field.type === 'checkbox') field.checked = value === true;
+          else field.value = String(value ?? '');
+        } else if (field instanceof HTMLSelectElement) {
+          field.value = String(value ?? '');
+        }
+      }
+      const active = form.elements.namedItem('active');
+      if (active instanceof HTMLInputElement && !('active' in values)) active.checked = true;
+      if (heading) heading.textContent = id ? 'Edit job title' : 'New job title';
+      if (consequence) {
+        consequence.hidden = note === '';
+        consequence.textContent = note;
+      }
+      drawer.showModal();
+      form.querySelector<HTMLElement>('input')?.focus();
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-cms-title-create]')) {
+        open(null, {}, '');
+        return;
+      }
+      const edit = target?.closest<HTMLElement>('[data-cms-title-edit]');
+      if (edit) {
+        let values: Record<string, unknown> = {};
+        try {
+          values = JSON.parse(edit.dataset.values ?? '{}');
+        } catch {
+          values = {};
+        }
+        open(edit.dataset.cmsTitleEdit ?? null, values, edit.dataset.consequence ?? '');
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      save.disabled = true;
+      const data = new FormData(form);
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of data.entries()) body[name] = value;
+      body.active = data.get('active') !== null;
+
+      const url = editingId
+        ? `/api/admin/job-titles/${encodeURIComponent(editingId)}`
+        : '/api/admin/job-titles';
+      try {
+        const response = await fetch(url, {
+          method: editingId ? 'PATCH' : 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+        if (payload?.error?.fields?.length) paint(payload.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            payload?.error?.message ?? 'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+  }
+</script>

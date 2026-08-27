@@ -143,7 +143,52 @@ export class CmsWorker {
     throw new Error(`worker did not start within ${BOOT_TIMEOUT_MS}ms:\n${this.log}`);
   }
 
+  /**
+   * Wrangler's dev proxy sometimes fails to reach workerd and answers for it.
+   *
+   * The signature is unmistakable: a 503 in one or two milliseconds, this exact
+   * body, and no line at all in the worker's own log, because the worker never
+   * received the request. Wrangler retries GET and HEAD itself and says so in
+   * the message; it will not retry anything else, so a POST surfaces as a
+   * mutation that failed for no reason, at random, roughly twice in six.
+   *
+   * Replaying it is not papering over a failure. The request never ran, so
+   * there is nothing to be idempotent about. The match is deliberately narrow:
+   * any other 503, including one this product returns when its database is
+   * unreachable, is a real answer and is passed straight through.
+   */
+  private static readonly PROXY_RESTART = 'worker restarted mid-request';
+
   async call(method: string, path: string, options: CallOptions = {}): Promise<WorkerResponse> {
+    const safe = method === 'GET' || method === 'HEAD';
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let response: WorkerResponse;
+      try {
+        response = await this.send(method, path, options);
+      } catch (error) {
+        // A request that was accepted and never answered, on a safe method.
+        // Two `wrangler dev` instances in one test run contend in this
+        // container, and the loser's socket goes quiet; wrangler retries GET
+        // and HEAD for the same reason. Replaying an unsafe method here would
+        // risk a double write, so those are rethrown and fail the test.
+        const timedOut = error instanceof Error && /timed out/.test(error.message);
+        if (!safe || !timedOut || attempt === 3) throw error;
+        await delay(250);
+        continue;
+      }
+      const proxyDropped =
+        response.status === 503 && response.body.includes(CmsWorker.PROXY_RESTART);
+      if (!proxyDropped) return response;
+      await delay(50);
+    }
+    throw new Error(`wrangler's dev proxy refused ${method} ${path} four times running`);
+  }
+
+  private async send(
+    method: string,
+    path: string,
+    options: CallOptions = {},
+  ): Promise<WorkerResponse> {
     const payload = options.form
       ? new URLSearchParams(options.form).toString()
       : options.body !== undefined
@@ -171,11 +216,26 @@ export class CmsWorker {
 
     return new Promise((resolve, reject) => {
       const req = httpRequest(
-        // A timeout is not optional here. Without one, a connection that is
-        // accepted but never answered blocks the whole run indefinitely, which
-        // is exactly what a half-started worker does, and the symptom is a
-        // suite that appears to hang rather than a test that fails.
-        { host: '127.0.0.1', port: this.port, method, path, headers, timeout: 15_000 },
+        {
+          host: '127.0.0.1',
+          port: this.port,
+          method,
+          path,
+          headers,
+          // A timeout is not optional here. Without one, a connection that is
+          // accepted but never answered blocks the whole run indefinitely,
+          // which is exactly what a half-started worker does, and the symptom
+          // is a suite that appears to hang rather than a test that fails.
+          timeout: 15_000,
+          // A fresh connection every time. Node's global agent keeps
+          // connections alive by default from version 19, and wrangler's dev
+          // proxy drops an idle upstream to workerd; a request sent down a
+          // connection it has just closed comes back as a 1ms 503 saying the
+          // worker restarted, which it did not. GETs are retried automatically
+          // and hide it. POSTs are not, so it surfaces as a mutation that
+          // appears to fail for no reason, at random, roughly twice in six.
+          agent: false,
+        },
         (res) => {
           let data = '';
           res.on('data', (chunk) => (data += chunk));

@@ -28,11 +28,43 @@ interface Stmt {
 /** The slice of the libSQL Client interface the CMS code actually calls. */
 export interface TestClient {
   execute(stmt: Stmt | string): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }>;
-  /** The batched write the login flow uses to keep its bookkeeping atomic. */
-  batch(stmts: Stmt[], mode?: string): Promise<{ rowsAffected: number }[]>;
+  /**
+   * The batched write the login flow uses to keep its bookkeeping atomic.
+   *
+   * It returns the full result of every statement, rows included, because the
+   * real client does: `batch(..., 'read')` is how a repository fetches several
+   * selection lists in one round trip, and a stub that dropped the rows would
+   * make that code untestable while looking like it worked.
+   */
+  batch(
+    stmts: Stmt[],
+    mode?: string,
+  ): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }[]>;
   close(): void;
   /** Test-only escape hatch for arrange and assert steps. */
   raw: DatabaseSync;
+}
+
+/**
+ * Whether a statement returns rows, so this adapter knows to call `all` rather
+ * than `run`.
+ *
+ * The real libSQL client needs no such decision: `execute` returns a result set
+ * either way. `node:sqlite` splits the two, and its binding exposes no flag for
+ * "does this return rows", so the shape is read from the text.
+ *
+ * A leading `WITH` counts as a read when nothing in the statement writes. That
+ * is what a recursive CTE looks like, which the product catalogue uses to walk
+ * a category's ancestors, and without this clause every one of those queries
+ * would silently come back with no rows. A `WITH ... INSERT` or `WITH ...
+ * DELETE` falls to the write path, which is the safe direction to be wrong in:
+ * a write treated as a read still executes, a read treated as a write returns
+ * nothing and the failure is loud.
+ */
+function returnsRows(sql: string): boolean {
+  if (/^\s*(select|pragma|explain)/i.test(sql)) return true;
+  if (!/^\s*with\b/i.test(sql)) return false;
+  return !/\b(insert|update|delete)\s/i.test(sql.replace(/--[^\n]*/g, ''));
 }
 
 export function createTestDb(): TestClient {
@@ -49,7 +81,7 @@ export function createTestDb(): TestClient {
         const results = [];
         for (const stmt of stmts) results.push(await client.execute(stmt));
         db.exec('COMMIT');
-        return results.map((r) => ({ rowsAffected: r.rowsAffected }));
+        return results;
       } catch (error) {
         db.exec('ROLLBACK');
         throw error;
@@ -66,7 +98,7 @@ export function createTestDb(): TestClient {
         return a;
       }) as (string | number | null | bigint | Uint8Array)[];
 
-      if (/^\s*(select|pragma)/i.test(sql)) {
+      if (returnsRows(sql)) {
         const rows = db.prepare(sql).all(...bound) as unknown as Record<string, unknown>[];
         return { rows, rowsAffected: 0 };
       }
