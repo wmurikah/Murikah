@@ -124,6 +124,9 @@ function pageHref(target: number): string {
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'CRM' }, { label: 'Leads' }]}
         >
           <Fragment slot="actions">
+            <CmsButton variant="secondary" href="/app/crm/opportunities">
+              Opportunities
+            </CmsButton>
             {maySources && (
               <CmsButton variant="secondary" href="/app/crm/lead-sources">
                 Lead sources

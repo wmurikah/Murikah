@@ -26,6 +26,10 @@ import {
   canManageAccounts,
   canManageCatalogue,
   canManageLeadSources,
+  canViewOpportunities,
+  canEditOpportunities,
+  canManagePipelines,
+  canManageLostReasons,
   canManageLeads,
   canManageOrganisation,
   canManageRoles,
@@ -177,6 +181,30 @@ export function requireLeadConvert(context: APIContext): Authorisation {
 /** The lead source settings screen. */
 export function requireLeadSourcesManage(context: APIContext): Authorisation {
   return authorise(context, canManageLeadSources);
+}
+
+/** Reading the pipeline and the opportunity list. Implied by EDIT. */
+export function requireOpportunitiesView(context: APIContext): Authorisation {
+  return authorise(context, canViewOpportunities);
+}
+
+/** Creating, editing and moving opportunities. */
+export function requireOpportunitiesEdit(context: APIContext): Authorisation {
+  return authorise(context, canEditOpportunities);
+}
+
+/**
+ * Pipeline and stage configuration. Administrative on purpose: the stages
+ * define what every deal's history means, so this is never granted with EDIT
+ * as a package.
+ */
+export function requirePipelinesManage(context: APIContext): Authorisation {
+  return authorise(context, canManagePipelines);
+}
+
+/** The lost reason settings screen. */
+export function requireLostReasonsManage(context: APIContext): Authorisation {
+  return authorise(context, canManageLostReasons);
 }
 
 /**
