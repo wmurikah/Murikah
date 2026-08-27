@@ -1,0 +1,124 @@
+---
+/**
+ * The customer's orders.
+ *
+ * One list, newest first, with the customer-safe status and the external
+ * promise. There is no filter panel: a customer has tens of orders where an
+ * account manager has thousands, and a search box that finds nothing is
+ * worse than a list that fits on a screen.
+ *
+ * The columns are the ones a customer rings up about: which order, when it
+ * was placed, where it has got to, and the invoice number if there is one.
+ * Nothing about our approval steps appears, because the repository maps the
+ * status before this page sees it.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import { portalOrders, type PortalOrderRow } from '@/lib/cms/repos/portalData';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+import { portalDate, orderTone, slaTone } from '@/lib/cms/portal/present';
+
+export const prerender = false;
+
+let scope: PortalScope | null = null;
+let orders: PortalOrderRow[] = [];
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+  if (scope) orders = await portalOrders(db, scope);
+} catch (error) {
+  console.error('[cms.portal.orders] load failed', error);
+  loadFailed = true;
+}
+---
+
+<CmsPortalLayout title="Your orders" scope={scope} current="/portal/orders">
+  <div class="flex flex-col gap-1.5">
+    <h1 class="text-cms-page font-semibold text-cms-navy">Orders</h1>
+    <p class="text-cms-body-sm text-cms-muted">
+      Everything you have ordered from us, most recent first.
+    </p>
+  </div>
+
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load your orders just now"
+        description="Please try again in a moment."
+      />
+    ) : scope === null ? (
+      <CmsEmptyState
+        icon="customers"
+        title="No account is linked to your sign-in yet"
+        description="Contact your Hass Petroleum representative to have your account linked."
+      />
+    ) : orders.length === 0 ? (
+      <CmsEmptyState
+        icon="orders"
+        title="No orders yet"
+        description="Orders placed on your account will appear here."
+      />
+    ) : (
+      <CmsCard bodyClass="p-0">
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[40rem] border-collapse text-left">
+            <caption class="sr-only">Your orders, most recent first</caption>
+            <thead>
+              <tr class="border-b border-cms-line">
+                <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                  Order
+                </th>
+                <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                  Placed
+                </th>
+                <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                  Status
+                </th>
+                <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                  Invoice
+                </th>
+                <th scope="col" class="px-4 py-3 text-cms-label font-semibold text-cms-muted">
+                  Our promise
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-3">
+                    <a
+                      href={`/portal/orders/${order.salesOrderId}`}
+                      class="text-cms-body-sm font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {order.documentNumber}
+                    </a>
+                  </td>
+                  <td class="px-4 py-3 text-cms-body-sm text-cms-ink">
+                    {portalDate(order.orderCreatedAt)}
+                  </td>
+                  <td class="px-4 py-3">
+                    <CmsBadge tone={orderTone(order.status)} label={order.status} />
+                  </td>
+                  <td class="px-4 py-3 text-cms-body-sm text-cms-ink">
+                    {order.invoiceNumber ?? 'Not yet invoiced'}
+                  </td>
+                  <td class="px-4 py-3">
+                    <CmsBadge tone={slaTone(order.slaState)} label={order.slaState} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CmsCard>
+    )
+  }
+</CmsPortalLayout>
