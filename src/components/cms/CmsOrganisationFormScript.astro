@@ -53,10 +53,23 @@
     let collection = 'countries';
     let editingId: string | null = null;
 
+    /**
+     * Clear the field messages without removing anything.
+     *
+     * CmsInput and CmsSelect each render their own `<p id="{field}-error">`,
+     * always present and always named in the field's aria-describedby,
+     * precisely so a message can be put there on the client and be announced.
+     * Emptying and hiding it is the contract. Removing the node, which an
+     * earlier draft of this did, deletes the very element the field points at
+     * and takes the announcement with it.
+     */
     const clearFieldErrors = () => {
-      form.querySelectorAll('[data-field-error]').forEach((node) => node.remove());
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
       form.querySelectorAll('[aria-invalid="true"]').forEach((node) => {
-        node.removeAttribute('aria-invalid');
+        node.setAttribute('aria-invalid', 'false');
       });
       if (errorBox) {
         errorBox.hidden = true;
@@ -146,15 +159,17 @@
 
     const paint = (fields: { field: string; message: string }[]) => {
       for (const item of fields) {
-        const input = form.elements.namedItem(item.field);
-        const node = input instanceof HTMLElement ? input : null;
-        if (!node) continue;
-        node.setAttribute('aria-invalid', 'true');
-        const message = document.createElement('p');
-        message.dataset.fieldError = 'true';
-        message.className = 'text-cms-caption text-cms-danger';
-        message.textContent = item.message;
-        node.parentElement?.appendChild(message);
+        const field = form.elements.namedItem(item.field);
+        if (!(field instanceof HTMLElement) || !field.id) continue;
+        field.setAttribute('aria-invalid', 'true');
+        // The paragraph the field already points at, not a new one appended
+        // beside it. A second element would not be in aria-describedby and a
+        // screen reader would never read it.
+        const message = document.getElementById(`${field.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
       }
       // Move focus to the first field that is wrong, so a keyboard user is
       // taken to the problem rather than told there is one somewhere.
