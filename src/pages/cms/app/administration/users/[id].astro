@@ -27,10 +27,12 @@ import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsAvatar from '@/components/cms/CmsAvatar.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsUserRoleDrawer from '@/components/cms/CmsUserRoleDrawer.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { canManageUsers } from '@/lib/cms/permissions';
+import { canManageRoles, canManageUsers } from '@/lib/cms/permissions';
 import {
   getSecurity,
   getUser,
@@ -54,6 +56,12 @@ export const prerender = false;
 
 const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayManage = canManageUsers(permissions);
+// Build Prompt 06 made this tab read-only. Build Prompt 07 makes it writable,
+// for a viewer who holds the role permission and not merely the user one. Those
+// are different capabilities and conflating them would let a user administrator
+// grant access, which is the escalation the read-only tab was protecting
+// against.
+const mayManageRoles = canManageRoles(permissions);
 const userId = Astro.params.id ?? '';
 
 const TABS = [
@@ -306,12 +314,24 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
 
         {tab === 'roles' && (
           <Fragment>
-            <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
-              <strong class="font-semibold text-cms-ink">Read-only in this phase.</strong> Access
-              roles are administered in the next phase. The absence of an edit control here is
-              deliberate: with no path from editing a profile to granting access, a user cannot
-              elevate their own permissions through this screen.
-            </p>
+            {mayManageRoles ? (
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-cms-body-sm text-cms-muted">
+                  An access role says what this person may do. A data scope says which records it
+                  reaches. A scope is never inferred from a job title, a department or a team.
+                </p>
+                <CmsButton variant="primary" icon="plus" data-cms-userrole-create>
+                  Assign a role
+                </CmsButton>
+              </div>
+            ) : (
+              <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+                <strong class="font-semibold text-cms-ink">Read-only for you.</strong> Assigning an
+                access role needs ADMIN.ROLES.MANAGE, which is a different capability from
+                administering users. Conflating the two would let a user administrator grant
+                themselves access.
+              </p>
+            )}
             <CmsDataTable
               caption="Access roles"
               columns={[
@@ -360,6 +380,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
                 />
               </Fragment>
             </CmsDataTable>
+            {mayManageRoles && <CmsUserRoleDrawer userId={userId} />}
           </Fragment>
         )}
 
