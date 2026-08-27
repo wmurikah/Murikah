@@ -18,7 +18,7 @@
  * two reasons that are about behaviour rather than taste:
  *
  *   1. Iteration count. engr hashes at 60,000 iterations. This phase requires
- *      at least 210,000. Raising engr's value would silently change the cost of
+ *      at least 100,000. Raising engr's value would silently change the cost of
  *      every Engineering Rhythm and GRC login, which is not this phase's call
  *      to make.
  *   2. Algorithm dispatch. engr's verifier assumes its own format, because engr
@@ -27,7 +27,7 @@
  *      written under ARGON2ID, so verification here has to dispatch on the
  *      stored algorithm before it can parse anything.
  *
- * The stored format is self-describing, so the parameters can be raised later
+ * The stored format is self-describing, so the parameters can be changed later
  * without a migration and without breaking existing credentials:
  *
  *   pbkdf2-sha256$<iterations>$<saltBase64>$<derivedKeyBase64>
@@ -35,16 +35,27 @@
  * The hash function is named as well as the family, so a future SHA-512 variant
  * is expressible in the same field. Verification reads the iteration count from
  * the string rather than from this module's constant, so a credential written
- * at 210,000 still verifies after the constant is raised to 400,000, and is
+ * at 60,000 still verifies after the constant is raised to 100,000, and is
  * simply rehashed on next login by the caller if it wants to.
  */
 
 /**
- * The work factor for newly written credentials. Raising this is a
+ * The work factor for newly written credentials. Lowering this is a
  * configuration change, not a code change: existing credentials carry their own
  * iteration count inside the stored string and keep verifying unchanged.
+ *
+ * 100,000 is a hard ceiling, not a preference. The Cloudflare Workers runtime
+ * rejects a PBKDF2 derivation above it:
+ *
+ *   NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+ *   supported (requested 210000)
+ *
+ * Node applies no such cap, so a higher value passes every test in this
+ * repository and fails only on the deployed worker, which is how 210,000
+ * reached production and took sign-in down. `test/cms/password.test.ts` now
+ * asserts the ceiling so it cannot come back.
  */
-export const PBKDF2_ITERATIONS = 210_000;
+export const PBKDF2_ITERATIONS = 100_000;
 
 const KEY_LEN_BITS = 256; // 32-byte derived key
 const SALT_BYTES = 16;
