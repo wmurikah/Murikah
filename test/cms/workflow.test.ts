@@ -779,10 +779,7 @@ test('loading a started stage twice returns the same assignees, with the configu
   assert.equal(replacement.ok, true);
 
   // The resolver, asked afresh, now says Victor.
-  const fresh = await resolveApprovers(
-    asClient(c),
-    salesOrder({ businessUnitId: 'BU-RET' }),
-  );
+  const fresh = await resolveApprovers(asClient(c), salesOrder({ businessUnitId: 'BU-RET' }));
   assert.deepEqual(names(fresh), ['Victor Njoroge']);
 
   // The started stage does not care, and that is the point.
@@ -811,10 +808,7 @@ test('loading a started stage twice returns the same assignees, with the configu
       [SEED.zuleika],
     );
   }
-  assert.equal(
-    query(c, `SELECT COUNT(*) AS n FROM workflow_stage_assignees`)[0]?.n,
-    1,
-  );
+  assert.equal(query(c, `SELECT COUNT(*) AS n FROM workflow_stage_assignees`)[0]?.n, 1);
   c.close();
 });
 
@@ -1610,10 +1604,9 @@ test('every workflow audit event type this phase writes reaches audit_events wit
     { ...CTX, actorUserId: SEED.zuleika },
   );
 
-  const written = query(
-    c,
-    `SELECT DISTINCT event_type FROM audit_events ORDER BY event_type`,
-  ).map((r) => String(r.event_type));
+  const written = query(c, `SELECT DISTINCT event_type FROM audit_events ORDER BY event_type`).map(
+    (r) => String(r.event_type),
+  );
 
   for (const expected of [
     'WORKFLOW_ROLE_CREATED',
