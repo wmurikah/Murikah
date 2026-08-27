@@ -1,0 +1,362 @@
+---
+/**
+ * The reusable activity section: one timeline, one composer, one behaviour,
+ * rendered on the lead, the opportunity and the account. Build one timeline
+ * component and reuse it, rather than three private ones drifting apart.
+ *
+ * THE COMPOSER IS PROGRESSIVE.
+ * A call asks for contact, summary, outcome and next action. A task asks for
+ * owner, due date and summary. A note asks for summary and notes. The type
+ * decides which fields show; nothing shows every field for every type.
+ *
+ * HONESTY ABOUT CHANNELS.
+ * The heading on an EMAIL entry reads "Recorded email interaction". Nothing
+ * here sends anything, and nothing implies it did.
+ */
+import CmsTimeline, { type CmsTimelineEntry } from './CmsTimeline.astro';
+import CmsButton from './CmsButton.astro';
+import CmsModal from './CmsModal.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import CmsEmptyState from './CmsEmptyState.astro';
+import { ACTIVITY_TYPES, type ActivityRow } from '@/lib/cms/repos/activityAdmin';
+
+interface Option {
+  id: string;
+  label: string;
+}
+interface Props {
+  entityType: string;
+  entityId: string;
+  activities: ActivityRow[];
+  total: number;
+  /** Whether the account timeline note about included records is shown. */
+  isAccountTimeline?: boolean;
+  contacts: Option[];
+  owners: Option[];
+  currentUserId: string;
+}
+const {
+  entityType,
+  entityId,
+  activities,
+  total,
+  isAccountTimeline = false,
+  contacts,
+  owners,
+  currentUserId,
+} = Astro.props;
+
+/** The verbs the timeline uses. Recorded, never sent: nothing here sends. */
+const VERB: Record<string, string> = {
+  CALL: 'Recorded call',
+  EMAIL: 'Recorded email interaction',
+  WHATSAPP: 'Recorded WhatsApp interaction',
+  MEETING: 'Meeting',
+  VISIT: 'Site visit',
+  QUOTATION: 'Quotation recorded',
+  PROPOSAL: 'Proposal recorded',
+  FOLLOW_UP: 'Follow-up',
+  NOTE: 'Note',
+  TASK: 'Task',
+  OTHER: 'Activity',
+};
+
+const entries: CmsTimelineEntry[] = activities.map((a) => ({
+  title: `${VERB[a.activityType] ?? a.activityType}: ${a.summary}`,
+  detail: [
+    a.contactName === null ? null : `With ${a.contactName}`,
+    a.outcome === null ? null : `Outcome: ${a.outcome}`,
+    a.nextAction === null
+      ? null
+      : `Next: ${a.nextAction}${a.nextActionDue === null ? '' : ` by ${a.nextActionDue}`}`,
+    a.completedAt === null && a.dueAt !== null ? `Due ${a.dueAt}` : null,
+    isAccountTimeline && a.entityType !== 'ACCOUNT'
+      ? `On ${a.entityType.toLowerCase().replace('_', ' ')} ${a.entityId}`
+      : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join(' · '),
+  actor: a.ownerName,
+  timestamp: (a.completedAt ?? a.scheduledAt ?? a.createdAt).replace(' ', 'T'),
+  timeLabel: a.completedAt ?? a.scheduledAt ?? a.createdAt,
+  tone: a.completedAt !== null ? 'default' : 'warning',
+}));
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+---
+
+<section
+  class="flex flex-col gap-3"
+  data-cms-activity-entity-type={entityType}
+  data-cms-activity-entity-id={entityId}
+>
+  <div class="flex items-center justify-between">
+    <h2 class="text-cms-body font-semibold text-cms-ink">
+      Activity
+      <span class="ms-1 text-cms-caption font-normal text-cms-muted">{total}</span>
+    </h2>
+    <CmsButton variant="secondary" icon="plus" data-cms-activity-add> Add activity </CmsButton>
+  </div>
+  {
+    isAccountTimeline && (
+      <p class="text-cms-body-sm text-cms-muted">
+        Everything recorded against this customer, whether directly or through its leads,
+        opportunities, cases and orders. Each activity appears once: the customer link is fixed when
+        the activity is written, so no path can show the same event twice.
+      </p>
+    )
+  }
+  {
+    entries.length === 0 ? (
+      <CmsEmptyState
+        icon="clock"
+        title="Nothing recorded yet"
+        description="Calls, meetings, notes and tasks recorded here become the record of the relationship."
+      />
+    ) : (
+      <CmsTimeline entries={entries} label="Activity timeline" />
+    )
+  }
+  {
+    total > activities.length && (
+      <p class="text-cms-caption text-cms-muted">
+        Showing the most recent {activities.length} of {total}.
+      </p>
+    )
+  }
+
+  <CmsModal id="cms-activity-modal" title="Add activity">
+    <form id="cms-activity-form" novalidate class="flex flex-col gap-4">
+      <p
+        id="cms-activity-error"
+        role="alert"
+        hidden
+        class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+      >
+      </p>
+      <CmsSelect
+        id="act-activityType"
+        name="activityType"
+        label="Type"
+        required
+        options={ACTIVITY_TYPES.map((t) => ({ value: t, label: titleCase(t) }))}
+      />
+      <CmsInput id="act-summary" name="summary" label="Summary" required />
+      {
+        contacts.length > 0 && (
+          <div data-act-field="contact">
+            <CmsSelect
+              id="act-contactId"
+              name="contactId"
+              label="Contact"
+              options={[
+                { value: '', label: 'None' },
+                ...contacts.map((o) => ({ value: o.id, label: o.label })),
+              ]}
+            />
+          </div>
+        )
+      }
+      <div data-act-field="owner">
+        <CmsSelect
+          id="act-ownerUserId"
+          name="ownerUserId"
+          label="Owner"
+          value={currentUserId}
+          options={owners.map((o) => ({ value: o.id, label: o.label }))}
+        />
+      </div>
+      <div data-act-field="completed">
+        <label class="flex items-start gap-2 text-cms-body-sm text-cms-ink">
+          <input type="checkbox" id="act-done" checked class="mt-0.5" />
+          <span>Already happened. Untick to schedule it instead.</span>
+        </label>
+      </div>
+      <div data-act-field="completedAt">
+        <CmsInput
+          id="act-completedAt"
+          name="completedAt"
+          label="When it happened"
+          type="datetime-local"
+        />
+      </div>
+      <div data-act-field="scheduledAt" hidden>
+        <CmsInput
+          id="act-scheduledAt"
+          name="scheduledAt"
+          label="Scheduled for"
+          type="datetime-local"
+        />
+      </div>
+      <div data-act-field="outcome">
+        <CmsInput id="act-outcome" name="outcome" label="Outcome" />
+      </div>
+      <div data-act-field="next">
+        <CmsInput id="act-nextAction" name="nextAction" label="Next action" />
+        <CmsInput
+          id="act-nextActionDue"
+          name="nextActionDue"
+          label="Next action due"
+          type="datetime-local"
+        />
+      </div>
+      <div data-act-field="notes">
+        <label for="act-notes" class="text-cms-body-sm font-medium text-cms-ink">Notes</label>
+        <textarea
+          id="act-notes"
+          name="notes"
+          rows="3"
+          class="mt-1.5 w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        ></textarea>
+      </div>
+      <p class="text-cms-caption text-cms-muted">
+        This records that the interaction happened. Nothing is sent from here: there is no email or
+        messaging integration, and the timeline says "recorded", never "sent".
+      </p>
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-activity-save>Record it</CmsButton>
+    </Fragment>
+  </CmsModal>
+</section>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const section = document.querySelector<HTMLElement>('[data-cms-activity-entity-type]');
+  const form = document.getElementById('cms-activity-form') as HTMLFormElement | null;
+  const modal = document.getElementById('cms-activity-modal') as HTMLDialogElement | null;
+  const errorBox = document.getElementById('cms-activity-error');
+  const typeField = document.getElementById('act-activityType') as HTMLSelectElement | null;
+  const doneBox = document.getElementById('act-done') as HTMLInputElement | null;
+
+  if (section && form && modal && typeField) {
+    const entityType = section.dataset.cmsActivityEntityType ?? '';
+    const entityId = section.dataset.cmsActivityEntityId ?? '';
+
+    // Which optional fields each type shows. The progressive composer: a call
+    // is not a task and the form should not pretend otherwise.
+    const SHOW: Record<string, string[]> = {
+      CALL: ['contact', 'owner', 'completed', 'completedAt', 'outcome', 'next'],
+      EMAIL: ['contact', 'owner', 'completed', 'completedAt', 'outcome', 'next'],
+      WHATSAPP: ['contact', 'owner', 'completed', 'completedAt', 'outcome', 'next'],
+      MEETING: [
+        'contact',
+        'owner',
+        'completed',
+        'completedAt',
+        'scheduledAt',
+        'outcome',
+        'next',
+        'notes',
+      ],
+      VISIT: [
+        'contact',
+        'owner',
+        'completed',
+        'completedAt',
+        'scheduledAt',
+        'outcome',
+        'next',
+        'notes',
+      ],
+      QUOTATION: ['contact', 'owner', 'completedAt', 'notes'],
+      PROPOSAL: ['contact', 'owner', 'completedAt', 'notes'],
+      FOLLOW_UP: ['owner', 'scheduledAt', 'next', 'notes'],
+      NOTE: ['notes'],
+      TASK: ['owner', 'scheduledAt', 'notes'],
+      OTHER: [
+        'contact',
+        'owner',
+        'completed',
+        'completedAt',
+        'scheduledAt',
+        'outcome',
+        'next',
+        'notes',
+      ],
+    };
+
+    const sync = () => {
+      const visible = SHOW[typeField.value] ?? [];
+      for (const node of document.querySelectorAll<HTMLElement>('[data-act-field]')) {
+        const key = node.dataset.actField ?? '';
+        let show = visible.includes(key);
+        if (key === 'completedAt' && doneBox && !doneBox.checked) show = false;
+        if (key === 'scheduledAt' && doneBox?.checked && visible.includes('completedAt')) {
+          show = visible.includes('scheduledAt') && !visible.includes('completed');
+        }
+        node.toggleAttribute('hidden', !show);
+      }
+      // A pure future item: scheduling shows when "already happened" is off.
+      if (doneBox && !doneBox.checked) {
+        document
+          .querySelector<HTMLElement>('[data-act-field="scheduledAt"]')
+          ?.toggleAttribute('hidden', false);
+      }
+    };
+    typeField.addEventListener('change', sync);
+    doneBox?.addEventListener('change', sync);
+
+    document.addEventListener('click', async (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-cms-activity-add]')) {
+        form.reset();
+        if (doneBox) doneBox.checked = true;
+        sync();
+        if (errorBox) errorBox.hidden = true;
+        modal.showModal();
+        return;
+      }
+      if (!target?.closest('[data-cms-activity-save]')) return;
+
+      const body: Record<string, unknown> = { entityType, entityId };
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string' && value !== '') body[name] = value;
+      }
+      // Recorded as already done with no explicit time: the server stamps now
+      // on completion through the completedAt the payload omits? No: the rule
+      // is explicit. Done and no time given sends the current local time.
+      if (doneBox?.checked && !('completedAt' in body)) {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        body.completedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+      }
+      if (!doneBox?.checked) delete body.completedAt;
+
+      try {
+        const response = await fetch('/api/crm/activities', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.fields?.map((f) => f.message).join(' ') ??
+            answer?.error?.message ??
+            'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      }
+    });
+  }
+</script>
