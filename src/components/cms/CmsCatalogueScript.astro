@@ -1,0 +1,114 @@
+---
+/**
+ * The two things the catalogue drawers need beyond the shared form script.
+ *
+ * 1. **Progressive category selection.** Choosing a group in the product drawer
+ *    narrows the category list to that group's categories, so a catalogue with
+ *    hundreds of categories does not present one flat dropdown of all of them.
+ *    The narrowing is a filter over options already on the page, not a fetch:
+ *    the categories arrived with the hierarchy in one query, and re-fetching
+ *    them on every change would be a request per keystroke of a form.
+ *
+ * 2. **The category's default unit, pre-filled.** `products.unit_of_measure` is
+ *    NOT NULL and nothing defaults it server side. The category's `default_uom`
+ *    is a suggestion, so it fills an empty field and never overwrites a value
+ *    somebody has typed.
+ *
+ * The category map is passed in as a prop and serialised into the script rather
+ * than fetched, because the page already has it.
+ *
+ * A component, so Astro ships it only where it is rendered. A page-level
+ * `<script>` is hoisted whatever markup surrounds it, which would send this to
+ * a caller who may not manage the catalogue.
+ */
+interface CategoryHint {
+  id: string;
+  groupId: string;
+  defaultUom: string | null;
+}
+interface Props {
+  categories: CategoryHint[];
+}
+const { categories } = Astro.props;
+---
+
+<script
+  type="application/json"
+  data-cms-catalogue-categories
+  set:html={JSON.stringify(categories)}
+/>
+
+<script>
+  interface CategoryHint {
+    id: string;
+    groupId: string;
+    defaultUom: string | null;
+  }
+
+  const source = document.querySelector('[data-cms-catalogue-categories]');
+  let categories: CategoryHint[] = [];
+  try {
+    categories = JSON.parse(source?.textContent ?? '[]') as CategoryHint[];
+  } catch {
+    categories = [];
+  }
+
+  const form = document.getElementById('cms-product-form');
+  const groupFilter = document.getElementById('p-groupFilter');
+  const categorySelect = document.getElementById('p-productCategoryId');
+  const unitField = document.getElementById('p-unitOfMeasure');
+
+  if (
+    form instanceof HTMLFormElement &&
+    groupFilter instanceof HTMLSelectElement &&
+    categorySelect instanceof HTMLSelectElement &&
+    unitField instanceof HTMLInputElement
+  ) {
+    const byId = new Map(categories.map((category) => [category.id, category]));
+
+    // Every option, kept aside once, because filtering by removing options and
+    // then needing them again is how a selector ends up permanently empty.
+    const allOptions = Array.from(categorySelect.options).map((option) => ({
+      value: option.value,
+      label: option.textContent ?? '',
+    }));
+
+    const narrow = () => {
+      const groupId = groupFilter.value;
+      const keep =
+        groupId === ''
+          ? allOptions
+          : allOptions.filter((option) => byId.get(option.value)?.groupId === groupId);
+      const held = categorySelect.value;
+      categorySelect.replaceChildren();
+      for (const option of keep) {
+        const node = document.createElement('option');
+        node.value = option.value;
+        node.textContent = option.label;
+        categorySelect.appendChild(node);
+      }
+      // Keep the selection if the narrowing did not remove it, so changing the
+      // group filter back and forth does not silently reset a chosen category.
+      if (keep.some((option) => option.value === held)) categorySelect.value = held;
+      suggestUnit();
+    };
+
+    const suggestUnit = () => {
+      const suggestion = byId.get(categorySelect.value)?.defaultUom ?? '';
+      // Only into an empty field. A unit somebody typed is theirs.
+      if (unitField.value.trim() === '' && suggestion !== '') unitField.value = suggestion;
+    };
+
+    groupFilter.addEventListener('change', narrow);
+    categorySelect.addEventListener('change', suggestUnit);
+
+    // The shared drawer script fires this after it has filled the fields, so
+    // the narrowing runs against the values the drawer was opened with rather
+    // than against whatever the form last held.
+    form.addEventListener('cms-wf-opened', () => {
+      const chosen = byId.get(categorySelect.value);
+      groupFilter.value = chosen?.groupId ?? '';
+      narrow();
+    });
+  }
+</script>

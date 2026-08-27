@@ -108,6 +108,7 @@ export const CMS_NAV: readonly CmsNavItem[] = [
       'ADMIN.ROLES.MANAGE',
       'ADMIN.WORKFLOWS.MANAGE',
       'ADMIN.WORKFLOW_ROLES.MANAGE',
+      'ADMIN.PRODUCT_CATALOG.MANAGE',
     ],
     summary: 'Users, roles, organisation structure and system configuration.',
   },
