@@ -96,6 +96,20 @@ export const POST: APIRoute = async (context) => {
       });
       const stageCode = stage.rows[0]?.stage_code;
       if (stageCode !== undefined && stageCode !== null) {
+        // Phase 16: each assignee learns their queue grew, by document number
+        // and stage name only, once per (person, document).
+        const { notifyStageAssignment } =
+          await import('../../../../lib/cms/notify/notifications.ts');
+        for (const assignee of started.first.assignees) {
+          await notifyStageAssignment(connection.db, {
+            userId: assignee.userId,
+            documentLabel: input.entityId,
+            stageName: String(stageCode).toLowerCase().replace(/_/g, ' '),
+            entityType: input.entityType,
+            entityId: input.entityId,
+            at: ctx.now,
+          });
+        }
         const { startWorkflowStageSla } = await import('../../../../lib/cms/sla/wiring.ts');
         await startWorkflowStageSla(connection.db, {
           entityType: input.entityType,

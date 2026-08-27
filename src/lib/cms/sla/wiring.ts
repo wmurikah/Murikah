@@ -192,6 +192,24 @@ async function handleCaseEvent(db: Client, event: CaseEvent): Promise<void> {
           event.caseId,
         ] as never[],
       });
+      // Phase 16: tell the assignee, once per (person, case), by number only.
+      const assignee = event.detail.toUserId ?? null;
+      if (assignee !== null) {
+        const found = await db.execute({
+          sql: `SELECT case_number FROM service_cases WHERE case_id = ? LIMIT 1`,
+          args: [event.caseId],
+        });
+        const caseNumber = found.rows[0]?.case_number;
+        if (caseNumber !== undefined && caseNumber !== null) {
+          const { notifyCaseAssignment } = await import('../notify/notifications.ts');
+          await notifyCaseAssignment(db, {
+            userId: assignee,
+            caseNumber: String(caseNumber),
+            caseId: event.caseId,
+            at: event.at,
+          });
+        }
+      }
       return;
     }
     case 'CASE_CLOSED':

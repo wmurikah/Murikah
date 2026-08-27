@@ -26,8 +26,9 @@ interface Props {
   /** The resolved principal from the middleware guard. Null when signed out. */
   principal?: { user: CmsIdentity } | null;
   notificationCount?: number;
+  notificationPreview?: { title: string; createdAt: string }[];
 }
-const { drawerId, principal = null, notificationCount = 0 } = Astro.props;
+const { drawerId, principal = null, notificationCount = 0, notificationPreview = [] } = Astro.props;
 const user = principal?.user ?? null;
 // Job title and organisational context come from the primary assignment, which
 // an EXTERNAL user does not have at all, so both are optional everywhere.
@@ -86,9 +87,28 @@ const context = user ? organisationLine(user.assignment) : null;
           Notifications{notificationCount > 0 ? `, ${notificationCount} unread` : ''}
         </span>
       </span>
-      <p class="px-2.5 py-4 text-center text-cms-body-sm text-cms-muted">
-        Notifications arrive with the service module.
-      </p>
+      {
+        notificationPreview.length === 0 ? (
+          <p class="px-2.5 py-4 text-center text-cms-body-sm text-cms-muted">
+            Nothing needs your attention right now.
+          </p>
+        ) : (
+          <ul class="flex flex-col">
+            {notificationPreview.map((item) => (
+              <li class="border-b border-cms-line px-2.5 py-2 last:border-0">
+                <p class="text-cms-body-sm text-cms-ink">{item.title}</p>
+                <p class="text-cms-caption text-cms-muted">{item.createdAt}</p>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+      <a
+        href="/app/notifications"
+        class="block border-t border-cms-line px-2.5 py-2 text-center text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        View notifications
+      </a>
     </CmsDropdown>
 
     {
