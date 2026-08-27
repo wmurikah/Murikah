@@ -34,6 +34,12 @@ GRC_SESSION_SECRET="base64-encoded-32-byte-secret"
 TURSO_CMS_DATABASE_URL=""
 TURSO_CMS_AUTH_TOKEN=""
 CMS_SESSION_SECRET=""
+# Set to exactly "development" to have the CMS show a new user's invitation link
+# to the administrator who created them. There is no mail sender for this
+# product yet, so this is how the invitation flow is walked end to end locally.
+# Leave it empty in production: with it unset, an invitation that cannot be
+# delivered fails loudly instead of creating a user nobody can sign in as.
+CMS_INVITE_LINKS=""
 
 # --- GRC evidence storage connectors, OPTIONAL (grc/docs/storage-setup.md) ---
 # The platform's own OAuth application registrations, the same for every

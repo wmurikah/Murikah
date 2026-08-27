@@ -1,0 +1,191 @@
+---
+/**
+ * Administration → Users → Job Titles.
+ *
+ * A job title says what a person's organisational position is. It is not an
+ * access role and it is not a workflow role, and nothing in this product reads
+ * a title to decide what somebody may do.
+ *
+ * A title is held by however many people hold it. Four people hold Finance
+ * Manager in the seeded data, in Kenya at two different levels, in Uganda and
+ * in Tanzania, and the holder count is shown so that is visible rather than
+ * assumed. No title name is written into this source.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsJobTitleScript from '@/components/cms/CmsJobTitleScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers } from '@/lib/cms/permissions';
+import { listJobTitles, type JobTitleRow } from '@/lib/cms/repos/userAdmin';
+import { listDepartments, type DepartmentRow } from '@/lib/cms/repos/organisationAdmin';
+
+export const prerender = false;
+
+const mayManage = canManageUsers(Astro.locals.cms?.user.permissions ?? []);
+let titles: JobTitleRow[] = [];
+let departments: DepartmentRow[] = [];
+let loadFailed = false;
+
+if (mayManage) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [titles, departments] = await Promise.all([listJobTitles(db), listDepartments(db)]);
+  } catch (error) {
+    console.error('[cms.jobTitles] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const departmentOptions = [
+  // `job_titles.department_id` is nullable with ON DELETE SET NULL, so a title
+  // that belongs to no department is a real state and is offered as one.
+  { value: '', label: 'No department' },
+  ...departments
+    .filter((d) => d.active)
+    .map((d) => ({ value: d.departmentId, label: d.departmentName })),
+];
+---
+
+<CmsLayout title="Job titles">
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to user administration"
+        description="Ask a system administrator for the ADMIN.USERS.MANAGE permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Job titles could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Job titles"
+          description="A position in the organisation. Separate from an access role, which says what a person may do, and from a workflow role, which says what they may approve."
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Users', href: '/app/administration/users' },
+            { label: 'Job titles' },
+          ]}
+        >
+          <CmsButton slot="actions" variant="primary" icon="plus" data-cms-title-create>
+            New job title
+          </CmsButton>
+        </CmsPageHeader>
+
+        <CmsDataTable
+          caption="Job titles"
+          columns={[
+            { key: 'name', label: 'Title' },
+            { key: 'department', label: 'Department' },
+            { key: 'description', label: 'Description', secondary: true },
+            { key: 'holders', label: 'Held by', numeric: true },
+            { key: 'status', label: 'Status' },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          empty={titles.length === 0}
+        >
+          {titles.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">{row.titleName}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.department ?? 'None'}</td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.description ?? '—'}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {row.holderCount} {row.holderCount === 1 ? 'person' : 'people'}
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.active ? 'success' : 'neutral'}
+                  label={row.active ? 'Active' : 'Inactive'}
+                />
+              </td>
+              <td class="px-4 py-2.5">
+                <button
+                  type="button"
+                  class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                  data-cms-title-edit={row.jobTitleId}
+                  data-values={JSON.stringify({
+                    titleName: row.titleName,
+                    departmentId: row.departmentId ?? '',
+                    description: row.description ?? '',
+                    active: row.active,
+                  })}
+                  data-consequence={
+                    row.holderCount > 0
+                      ? `${row.holderCount} ${row.holderCount === 1 ? 'person holds' : 'people hold'} this title. Deactivating it stops it being chosen for new assignments and leaves theirs unchanged.`
+                      : ''
+                  }
+                >
+                  Edit
+                </button>
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="administration"
+              title="No job titles"
+              description="Create the first one to give assignments something to reference."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        <CmsDrawer id="cms-title-drawer" tone="form" title="Job title">
+          <form id="cms-title-form" novalidate class="flex flex-col gap-4">
+            <p
+              id="cms-title-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+            />
+            <CmsInput id="jt-titleName" name="titleName" label="Title" required />
+            <CmsSelect
+              id="jt-departmentId"
+              name="departmentId"
+              label="Department"
+              options={departmentOptions}
+              hint="Optional."
+            />
+            <CmsInput id="jt-description" name="description" label="Description" hint="Optional." />
+            <CmsCheckbox
+              id="jt-active"
+              name="active"
+              label="Active"
+              checked
+              hint="Deactivating stops this title being chosen for new assignments. Existing assignments are unchanged."
+            />
+            <p id="cms-title-consequence" hidden class="text-cms-body-sm text-cms-warning" />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              id="cms-title-save"
+              form="cms-title-form"
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+        <CmsJobTitleScript />
+      </Fragment>
+    )
+  }
+</CmsLayout>

@@ -36,3 +36,13 @@ export function canViewOrganisation(permissions: readonly string[]): boolean {
 export function canManageOrganisation(permissions: readonly string[]): boolean {
   return permissions.includes(ORGANISATION_MANAGE);
 }
+
+/**
+ * User administration. Already in the seeded catalogue as PERM-016, already
+ * granted to ROLE-ADMIN, so Build Prompt 06 needs no data script.
+ */
+export const USERS_MANAGE = 'ADMIN.USERS.MANAGE';
+
+export function canManageUsers(permissions: readonly string[]): boolean {
+  return permissions.includes(USERS_MANAGE);
+}
