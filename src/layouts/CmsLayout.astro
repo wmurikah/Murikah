@@ -33,7 +33,40 @@ interface Props {
   title: string;
   notificationCount?: number;
 }
-const { title, notificationCount = 0 } = Astro.props;
+const { title, notificationCount } = Astro.props;
+
+// The live unread count, fetched here so every page's bell is real without
+// per-page work. A page may still pass its own count (the notifications page
+// does, having just marked things read); the fetch is skipped then. A
+// database failure leaves the bell quiet rather than breaking the page.
+let bellCount = notificationCount ?? 0;
+let bellPreview: { title: string; createdAt: string }[] = [];
+if (Astro.locals.cms) {
+  try {
+    const [{ getCmsEnv }, { getDb }, { unreadCount, listNotifications }] = await Promise.all([
+      import('@/lib/cms/env'),
+      import('@/lib/cms/db'),
+      import('@/lib/cms/notify/notifications'),
+    ]);
+    const db = await getDb(getCmsEnv());
+    const userId = Astro.locals.cms.user.userId;
+    if (notificationCount === undefined) {
+      bellCount = await unreadCount(db, userId);
+    }
+    if (bellCount > 0) {
+      const recent = await listNotifications(db, userId, {
+        unreadOnly: true,
+        type: null,
+        page: 1,
+      });
+      bellPreview = recent.items
+        .slice(0, 5)
+        .map((n) => ({ title: n.title, createdAt: n.createdAt }));
+    }
+  } catch {
+    // The bell is a convenience. The page renders without it.
+  }
+}
 
 const pageTitle = `${title} - Hass Petroleum`;
 // The visitor-facing path, captured by the middleware before the /cms rewrite,
@@ -88,7 +121,8 @@ const DRAWER_ID = 'cms-nav-drawer';
         <CmsTopBar
           drawerId={DRAWER_ID}
           principal={principal}
-          notificationCount={notificationCount}
+          notificationCount={bellCount}
+          notificationPreview={bellPreview}
         />
         <main id="cms-main" class="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div class="mx-auto flex w-full max-w-6xl flex-col gap-6">

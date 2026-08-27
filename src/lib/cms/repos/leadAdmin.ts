@@ -27,6 +27,7 @@ import type { WriteContext } from '../admin/guard.ts';
 import { resolveScope, DENY_ALL, type Predicate } from '../auth/rbac.ts';
 import { LEADS_VIEW } from '../permissions.ts';
 import { NUMBER_PREFIX, withGeneratedNumber } from '../crm/numbering.ts';
+import { emitLeadEvent } from '../service/events.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 
@@ -519,6 +520,16 @@ export async function createLead(
     throw error;
   }
   const created = await getLeadUnscoped(db, id);
+  if (created !== null) {
+    // After the commit: a failed SLA consumer must never unmake a lead.
+    await emitLeadEvent(db, {
+      type: 'LEAD_CREATED',
+      leadId: id,
+      at: ctx.now,
+      actorUserId: ctx.actorUserId,
+      detail: { accountId: created.accountId },
+    });
+  }
   return created === null ? { ok: false, kind: 'not_found' } : { ok: true, value: created };
 }
 
@@ -648,6 +659,15 @@ export async function recordFirstContact(
     'write',
   );
   const after = await getLeadUnscoped(db, leadId);
+  if (after !== null && before.firstContactAt === null) {
+    await emitLeadEvent(db, {
+      type: 'LEAD_CONTACTED',
+      leadId,
+      at: ctx.now,
+      actorUserId: ctx.actorUserId,
+      detail: { at: after.firstContactAt },
+    });
+  }
   return after === null ? { ok: false, kind: 'not_found' } : { ok: true, value: after };
 }
 
@@ -932,6 +952,30 @@ export async function convertLead(
         { field: 'status', message: 'That lead is disqualified. Reopen it before converting.' },
       ],
     };
+  }
+
+  // `opportunities.estimated_value` and `currency_code` are NOT NULL, unlike
+  // the lead's, which are honestly nullable because early interest is
+  // uncertain. So a value and a currency must exist by conversion time, from
+  // the payload or from the lead. Refusing here with a field message is the
+  // difference between a form asking for the number and a 500 from the
+  // constraint. Requiring a real figure at this boundary is not inventing a
+  // number: the person converting is being asked to commit to one.
+  const valueFields: FieldError[] = [];
+  if ((input.estimatedValue ?? lead.estimatedValue) === null) {
+    valueFields.push({
+      field: 'estimatedValue',
+      message: 'An opportunity needs an estimated value. The lead never had one, so enter it now.',
+    });
+  }
+  if ((input.currencyCode ?? lead.currencyCode) === null) {
+    valueFields.push({
+      field: 'currencyCode',
+      message: 'An opportunity needs a currency. The lead never had one, so choose it now.',
+    });
+  }
+  if (valueFields.length > 0) {
+    return { ok: false, kind: 'invalid_reference', fields: valueFields };
   }
 
   // The initial stage: the one asked for, or the pipeline's lowest sequence.

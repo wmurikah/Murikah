@@ -82,6 +82,49 @@ export const POST: APIRoute = async (context) => {
       );
     }
 
+    // Phase 15: the stage became actionable, so its SLA starts now, after
+    // the workflow write has committed. Keyed on the business entity plus the
+    // stage code, matching the seeded rules; only order entities carry stage
+    // SLAs in the current configuration, and resolveSlaRule answers null for
+    // anything unconfigured, creating nothing.
+    if (input.entityType === 'SALES_ORDER' || input.entityType === 'PURCHASE_ORDER') {
+      const stage = await connection.db.execute({
+        sql: `SELECT ws.stage_code FROM workflow_stage_instances si
+              JOIN workflow_stages ws ON ws.workflow_stage_id = si.workflow_stage_id
+              WHERE si.workflow_stage_instance_id = ? LIMIT 1`,
+        args: [started.first.stageInstanceId],
+      });
+      const stageCode = stage.rows[0]?.stage_code;
+      if (stageCode !== undefined && stageCode !== null) {
+        // Phase 16: each assignee learns their queue grew, by document number
+        // and stage name only, once per (person, document).
+        const { notifyStageAssignment } =
+          await import('../../../../lib/cms/notify/notifications.ts');
+        for (const assignee of started.first.assignees) {
+          await notifyStageAssignment(connection.db, {
+            userId: assignee.userId,
+            documentLabel: input.entityId,
+            stageName: String(stageCode).toLowerCase().replace(/_/g, ' '),
+            entityType: input.entityType,
+            entityId: input.entityId,
+            at: ctx.now,
+          });
+        }
+        const { startWorkflowStageSla } = await import('../../../../lib/cms/sla/wiring.ts');
+        await startWorkflowStageSla(connection.db, {
+          entityType: input.entityType,
+          entityId: input.entityId,
+          stageCode: String(stageCode),
+          stageInstanceId: started.first.stageInstanceId,
+          accountableUserId: started.first.assignees[0]?.userId ?? null,
+          accountableTeamId: null,
+          affiliateId: input.context.affiliateId,
+          at: ctx.now,
+          actorUserId: ctx.actorUserId,
+        });
+      }
+    }
+
     return ok(
       {
         workflowInstanceId: started.workflowInstanceId,

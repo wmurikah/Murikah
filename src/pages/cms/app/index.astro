@@ -13,9 +13,11 @@
  * who is asking, which is why there is no loading state to design and why a
  * refresh keeps the user signed in without a line of code.
  *
- * Deliberately minimal for this phase. The workspace cards are neutral
- * placeholders, not invented business figures, and each appears only when the
- * principal holds the permission its section requires.
+ * PHASE 16 MADE THIS AN ACTION CENTRE.
+ * Needs Attention leads: SLA breaches and at-risk instances in the caller's
+ * scope, cases assigned to them, and their overdue follow-ups. No vanity
+ * metric sits above urgent work; the profile card and workspace tiles moved
+ * below it. Every number drills into the list it counts.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
@@ -25,6 +27,14 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import { visibleNav } from '@/lib/cms/nav';
 import { assignmentSummary, organisationLine } from '@/lib/cms/organisation';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { sweepDueSlas } from '@/lib/cms/sla/engine';
+import { sweepNotifications } from '@/lib/cms/notify/notifications';
+import { listSlaInstances } from '@/lib/cms/repos/slaAdmin';
+import { caseIndicators } from '@/lib/cms/repos/serviceAdmin';
+import { myWork } from '@/lib/cms/repos/activityAdmin';
+import { canViewSlaDashboard, canViewCases } from '@/lib/cms/permissions';
 
 const principal = Astro.locals.cms;
 // The guard redirects an anonymous request before this renders, so a missing
@@ -46,6 +56,79 @@ const workspaces = user
 // instead of per request, and the route protection becomes a static artefact:
 // a signed-in user would be served whatever the build decided.
 export const prerender = false;
+
+// Needs Attention: computed under the caller's own scope, after a sweep so
+// the figures are current. Each block appears only where the permission does,
+// and a database failure degrades to the profile page rather than an error.
+let attentionBreached = 0;
+let attentionAtRisk = 0;
+let attentionMyCases = 0;
+let attentionOverdue = 0;
+let attentionLoaded = false;
+if (user) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const now = new Date();
+    await sweepDueSlas(db, now);
+    await sweepNotifications(db, now);
+    if (canViewSlaDashboard(user.permissions)) {
+      const [breached, atRisk] = await Promise.all([
+        listSlaInstances(
+          db,
+          user.userId,
+          { slaType: null, entityType: null, status: null, bucket: 'breached', page: 1 },
+          now,
+        ),
+        listSlaInstances(
+          db,
+          user.userId,
+          { slaType: null, entityType: null, status: null, bucket: 'at-risk', page: 1 },
+          now,
+        ),
+      ]);
+      attentionBreached = breached.total;
+      attentionAtRisk = atRisk.total;
+    }
+    if (canViewCases(user.permissions)) {
+      attentionMyCases = (await caseIndicators(db, user.userId, now)).assignedToMe;
+    }
+    attentionOverdue = (await myWork(db, user.userId, now)).overdue.length;
+    attentionLoaded = true;
+  } catch (error) {
+    console.error('[cms.home] needs attention failed', error);
+  }
+}
+
+const attention = [
+  {
+    label: 'Breached SLAs',
+    count: attentionBreached,
+    href: '/app/performance?bucket=breached',
+    tone: 'danger' as const,
+    show: user ? canViewSlaDashboard(user.permissions) : false,
+  },
+  {
+    label: 'At-risk SLAs',
+    count: attentionAtRisk,
+    href: '/app/performance?bucket=at-risk',
+    tone: 'warning' as const,
+    show: user ? canViewSlaDashboard(user.permissions) : false,
+  },
+  {
+    label: 'Cases assigned to me',
+    count: attentionMyCases,
+    href: '/app/service?queue=mine',
+    tone: 'info' as const,
+    show: user ? canViewCases(user.permissions) : false,
+  },
+  {
+    label: 'Overdue follow-ups',
+    count: attentionOverdue,
+    href: '/app/crm/activities',
+    tone: 'warning' as const,
+    show: true,
+  },
+].filter((item) => item.show);
 ---
 
 <CmsLayout title="Home">
@@ -62,6 +145,37 @@ export const prerender = false;
             label={`${user.roles.length} role${user.roles.length === 1 ? '' : 's'}`}
           />
         </CmsPageHeader>
+
+        {attentionLoaded && (
+          <section aria-labelledby="attention-heading" class="flex flex-col gap-3">
+            <h2 id="attention-heading" class="text-cms-section font-semibold text-cms-navy">
+              Needs attention
+            </h2>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {attention.map((item) => (
+                <a
+                  href={item.href}
+                  class:list={[
+                    'flex items-center justify-between rounded-cms-lg border bg-cms-surface px-4 py-4 shadow-cms-card transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
+                    item.count > 0 && item.tone === 'danger'
+                      ? 'border-cms-danger'
+                      : 'border-cms-line',
+                  ]}
+                >
+                  <span class="text-cms-body-sm font-medium text-cms-ink">{item.label}</span>
+                  <CmsBadge
+                    tone={item.count === 0 ? 'success' : item.tone}
+                    label={String(item.count)}
+                  />
+                </a>
+              ))}
+            </div>
+            <p class="text-cms-caption text-cms-muted">
+              Every number opens the list it counts, already filtered. Nothing decorative sits above
+              this section on purpose.
+            </p>
+          </section>
+        )}
 
         <CmsCard title="Your details">
           <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

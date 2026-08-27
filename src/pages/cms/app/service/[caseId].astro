@@ -1,0 +1,363 @@
+---
+/**
+ * Case detail.
+ *
+ * The case, its communications in all three directions, the assignment and
+ * status histories, the shared activity timeline, and the actions the
+ * transition table allows from here. Waiting statuses read as what they are;
+ * nothing here says late or breached, because that is phase 15's word to say.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsActivitySection from '@/components/cms/CmsActivitySection.astro';
+import CmsCaseActions from '@/components/cms/CmsCaseActions.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import {
+  canViewCases,
+  canManageCases,
+  canReassignCases,
+  canCreateLeads,
+} from '@/lib/cms/permissions';
+import {
+  getCase,
+  listAssignmentHistory,
+  listCommunications,
+  listStatusHistory,
+  listCaseSurveyResponses,
+  serviceOptions,
+  CASE_TRANSITIONS,
+  type CaseRow,
+  type CommunicationRow,
+  type AssignmentHistoryRow,
+  type StatusHistoryRow,
+  type SurveyResponseRow,
+  type ServiceOptions,
+} from '@/lib/cms/repos/serviceAdmin';
+import { listEntityActivities, type ActivityPage } from '@/lib/cms/repos/activityAdmin';
+import { listContacts, type ContactRow } from '@/lib/cms/repos/accountAdmin';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewCases(permissions);
+const mayManage = canManageCases(permissions);
+const mayReassign = canReassignCases(permissions);
+const mayCreateLead = canCreateLeads(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const caseId = Astro.params.caseId ?? '';
+
+let found: CaseRow | null = null;
+let communications: CommunicationRow[] = [];
+let assignments: AssignmentHistoryRow[] = [];
+let statuses: StatusHistoryRow[] = [];
+let surveys: SurveyResponseRow[] = [];
+let options: ServiceOptions = { categories: [], teams: [], users: [], businessUnits: [] };
+let activities: ActivityPage | null = null;
+let contacts: ContactRow[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    found = await getCase(db, userId, caseId);
+    if (found !== null) {
+      [communications, assignments, statuses, surveys, options, activities] = await Promise.all([
+        listCommunications(db, userId, caseId).then((v) => v ?? []),
+        listAssignmentHistory(db, caseId),
+        listStatusHistory(db, caseId),
+        listCaseSurveyResponses(db, userId, caseId).then((v) => v ?? []),
+        serviceOptions(db),
+        listEntityActivities(db, userId, 'CASE', caseId, {
+          activityType: null,
+          ownerUserId: null,
+          state: 'all',
+          from: null,
+          to: null,
+          search: '',
+          page: 1,
+        }),
+      ]);
+      contacts = (await listContacts(db, userId, found.accountId, false)) ?? [];
+    }
+  } catch (error) {
+    console.error('[cms.service.case] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const statusTone = (status: string) =>
+  status === 'RESOLVED' || status === 'CLOSED'
+    ? 'success'
+    : status === 'CANCELLED'
+      ? 'neutral'
+      : status.startsWith('WAITING')
+        ? 'warning'
+        : 'info';
+const directionTone = (direction: string) =>
+  direction === 'INTERNAL' ? 'neutral' : direction === 'INBOUND' ? 'info' : 'success';
+
+const allowedMoves = found === null ? [] : [...(CASE_TRANSITIONS[found.status] ?? [])];
+---
+
+<CmsLayout title={found?.subject ?? 'Case'}>
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to service cases"
+        description="Ask a system administrator for the SERVICE.CASES.VIEW permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="This case could not be loaded"
+        description="The database did not answer."
+      />
+    ) : found === null ? (
+      <CmsErrorState
+        title="Case not found"
+        description="Either it does not exist or it sits outside your data scope. Assignment alone does not grant access; the two are answered the same way on purpose."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={found.subject}
+          description={`${found.accountName} · ${found.categoryName} / ${found.subcategoryName} · raised ${found.raisedAt}`}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Service', href: '/app/service' },
+            { label: found.caseNumber },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsBadge tone={statusTone(found.status)} label={titleCase(found.status)} />
+            <CmsBadge
+              tone={
+                found.priority === 'CRITICAL'
+                  ? 'danger'
+                  : found.priority === 'HIGH'
+                    ? 'warning'
+                    : 'neutral'
+              }
+              label={titleCase(found.priority)}
+            />
+            {mayManage && allowedMoves.length > 0 && (
+              <CmsButton variant="primary" data-cms-case-status>
+                Change status
+              </CmsButton>
+            )}
+            {mayReassign && (
+              <CmsButton variant="secondary" data-cms-case-assign>
+                Assign
+              </CmsButton>
+            )}
+            {mayCreateLead && (
+              <CmsButton variant="secondary" href={`/app/crm?fromCase=${found.caseNumber}`}>
+                Create lead
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <CmsCard title="The case">
+            <dl class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Case number</dt>
+                <dd class="text-cms-body-sm text-cms-ink tabular-nums">{found.caseNumber}</dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Customer</dt>
+                <dd class="text-cms-body-sm">
+                  <a
+                    href={`/app/customers/${found.accountId}`}
+                    class="rounded-cms text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {found.accountName}
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Contact</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {found.contactName ?? 'Not available'}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Type</dt>
+                <dd class="text-cms-body-sm text-cms-ink">{titleCase(found.caseType)}</dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Channel</dt>
+                <dd class="text-cms-body-sm text-cms-ink">{titleCase(found.channel)}</dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Business unit</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {found.businessUnitName ?? 'Not available'}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Assigned team</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {found.assignedTeamName ?? 'Unassigned'}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Assigned person</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {found.assignedUserName ?? 'Unassigned'}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">First response</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {found.firstResponseAt ?? 'None recorded yet'}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Resolved</dt>
+                <dd class="text-cms-body-sm text-cms-ink">{found.resolvedAt ?? 'Not resolved'}</dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Closed</dt>
+                <dd class="text-cms-body-sm text-cms-ink">{found.closedAt ?? 'Not closed'}</dd>
+              </div>
+            </dl>
+            <p class="mt-4 text-cms-body-sm text-cms-ink">{found.description}</p>
+            {found.resolutionSummary !== null && (
+              <p class="mt-3 border-t border-cms-line pt-3 text-cms-body-sm text-cms-ink">
+                <span class="font-medium">Resolution:</span> {found.resolutionSummary}
+                {found.rootCause !== null && (
+                  <span class="ms-2 text-cms-muted">Root cause: {found.rootCause}</span>
+                )}
+              </p>
+            )}
+          </CmsCard>
+
+          <CmsCard
+            title="Communications"
+            description="All three directions are shown here. The customer portal receives a different shape whose SQL already excludes internal rows; nothing there depends on hiding."
+          >
+            {communications.length === 0 ? (
+              <CmsEmptyState icon="service" title="Nothing recorded" />
+            ) : (
+              <ul class="flex flex-col gap-2">
+                {communications.map((cm) => (
+                  <li class="rounded-cms border border-cms-line px-3 py-2">
+                    <p class="flex flex-wrap items-center gap-2">
+                      <CmsBadge
+                        tone={directionTone(cm.direction)}
+                        label={titleCase(cm.direction)}
+                      />
+                      <span class="text-cms-caption text-cms-muted">
+                        {titleCase(cm.channel)} · {cm.communicatedAt}
+                        {cm.userName !== null && ` · ${cm.userName}`}
+                        {cm.contactName !== null && ` · ${cm.contactName}`}
+                      </span>
+                    </p>
+                    {cm.subject !== null && (
+                      <p class="mt-1 text-cms-body-sm font-medium text-cms-ink">{cm.subject}</p>
+                    )}
+                    <p class="text-cms-body-sm text-cms-ink">{cm.messageSummary}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {mayManage && (
+              <div class="mt-3">
+                <CmsButton variant="secondary" data-cms-case-communicate>
+                  Record communication
+                </CmsButton>
+              </div>
+            )}
+          </CmsCard>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <CmsCard title="Status history">
+            <ol class="flex flex-col gap-2">
+              {statuses.map((h) => (
+                <li class="text-cms-body-sm text-cms-ink">
+                  {h.fromStatus === null
+                    ? `Created as ${titleCase(h.toStatus)}`
+                    : `${titleCase(h.fromStatus)} to ${titleCase(h.toStatus)}`}
+                  <span class="ms-2 text-cms-caption text-cms-muted">
+                    {h.changedAt} · {h.changedByName}
+                    {h.reason !== null && ` · ${h.reason}`}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </CmsCard>
+          <CmsCard title="Assignment history">
+            {assignments.length === 0 ? (
+              <CmsEmptyState icon="customers" title="Never assigned" />
+            ) : (
+              <ol class="flex flex-col gap-2">
+                {assignments.map((h) => (
+                  <li class="text-cms-body-sm text-cms-ink">
+                    {h.fromTeamName === null && h.fromUserName === null
+                      ? `Assigned to ${h.toTeamName ?? ''}${h.toUserName !== null ? ` (${h.toUserName})` : ''}`
+                      : `${h.fromTeamName ?? 'Unassigned'}${h.fromUserName !== null ? ` (${h.fromUserName})` : ''} to ${h.toTeamName ?? 'Unassigned'}${h.toUserName !== null ? ` (${h.toUserName})` : ''}`}
+                    <span class="ms-2 text-cms-caption text-cms-muted">
+                      {h.assignedAt} · by {h.assignedByName}
+                      {h.reason !== null && ` · ${h.reason}`}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CmsCard>
+        </div>
+
+        {surveys.length > 0 && (
+          <CmsCard title="Customer feedback">
+            <ul class="flex flex-col gap-2">
+              {surveys.map((r) => (
+                <li class="text-cms-body-sm text-cms-ink">
+                  {r.surveyName} ({r.surveyType}): score {r.score}
+                  <span class="ms-2 text-cms-caption text-cms-muted">
+                    {r.respondedAt}
+                    {r.comments !== null && ` · ${r.comments}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+
+        <CmsActivitySection
+          entityType="CASE"
+          entityId={found.caseId}
+          activities={activities?.items ?? []}
+          total={activities?.total ?? 0}
+          contacts={contacts
+            .filter((ct) => ct.active)
+            .map((ct) => ({ id: ct.contactId, label: ct.fullName }))}
+          owners={options.users}
+          currentUserId={userId}
+        />
+
+        {(mayManage || mayReassign) && (
+          <CmsCaseActions
+            caseId={found.caseId}
+            allowedMoves={allowedMoves}
+            teams={options.teams}
+            users={options.users}
+            contacts={contacts
+              .filter((ct) => ct.active)
+              .map((ct) => ({ id: ct.contactId, label: ct.fullName }))}
+          />
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

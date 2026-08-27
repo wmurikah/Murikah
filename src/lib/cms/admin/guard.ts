@@ -26,6 +26,17 @@ import {
   canManageAccounts,
   canManageCatalogue,
   canManageLeadSources,
+  canViewOpportunities,
+  canEditOpportunities,
+  canManagePipelines,
+  canManageLostReasons,
+  canViewCases,
+  canCreateCases,
+  canReassignCases,
+  canManageCases,
+  canManageCaseCategories,
+  canViewSlaDashboard,
+  canManageSlaRules,
   canManageLeads,
   canManageOrganisation,
   canManageRoles,
@@ -177,6 +188,65 @@ export function requireLeadConvert(context: APIContext): Authorisation {
 /** The lead source settings screen. */
 export function requireLeadSourcesManage(context: APIContext): Authorisation {
   return authorise(context, canManageLeadSources);
+}
+
+/** Reading the pipeline and the opportunity list. Implied by EDIT. */
+export function requireOpportunitiesView(context: APIContext): Authorisation {
+  return authorise(context, canViewOpportunities);
+}
+
+/** Creating, editing and moving opportunities. */
+export function requireOpportunitiesEdit(context: APIContext): Authorisation {
+  return authorise(context, canEditOpportunities);
+}
+
+/**
+ * Pipeline and stage configuration. Administrative on purpose: the stages
+ * define what every deal's history means, so this is never granted with EDIT
+ * as a package.
+ */
+export function requirePipelinesManage(context: APIContext): Authorisation {
+  return authorise(context, canManagePipelines);
+}
+
+/** The lost reason settings screen. */
+export function requireLostReasonsManage(context: APIContext): Authorisation {
+  return authorise(context, canManageLostReasons);
+}
+
+/** Reading the case queue and a case. Implied by CREATE and MANAGE. */
+export function requireCasesView(context: APIContext): Authorisation {
+  return authorise(context, canViewCases);
+}
+
+/** Logging a new case. */
+export function requireCasesCreate(context: APIContext): Authorisation {
+  return authorise(context, canCreateCases);
+}
+
+/** Assigning and reassigning. Its own seeded code, PERM-007. */
+export function requireCasesReassign(context: APIContext): Authorisation {
+  return authorise(context, canReassignCases);
+}
+
+/** Working a case: status, communications, resolve, close, cancel, reopen. */
+export function requireCasesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageCases);
+}
+
+/** The case category settings screen. */
+export function requireCaseCategoriesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageCaseCategories);
+}
+
+/** Reading the SLA monitor. Implied by the configuration code. */
+export function requireSlaDashboard(context: APIContext): Authorisation {
+  return authorise(context, canViewSlaDashboard);
+}
+
+/** Configuring calendars, profiles and rules. */
+export function requireSlaRulesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageSlaRules);
 }
 
 /**

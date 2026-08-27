@@ -28,6 +28,7 @@ import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsLeadActions from '@/components/cms/CmsLeadActions.astro';
+import CmsActivitySection from '@/components/cms/CmsActivitySection.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
@@ -42,6 +43,8 @@ import {
   type QualificationRow,
 } from '@/lib/cms/repos/leadAdmin';
 import { BANT_MEANING } from '@/lib/cms/admin/leadInput';
+import { listEntityActivities, type ActivityPage } from '@/lib/cms/repos/activityAdmin';
+import { listContacts, type ContactRow } from '@/lib/cms/repos/accountAdmin';
 
 export const prerender = false;
 
@@ -61,6 +64,8 @@ let options: LeadOptions = {
   owners: [],
   pipelines: [],
 };
+let activities: ActivityPage | null = null;
+let contacts: ContactRow[] = [];
 let loadFailed = false;
 
 if (mayRead) {
@@ -68,7 +73,22 @@ if (mayRead) {
     const db = await getDb(getCmsEnv());
     lead = await getLead(db, userId, leadId);
     if (lead !== null) {
-      [qualification, options] = await Promise.all([getQualification(db, leadId), leadOptions(db)]);
+      [qualification, options, activities] = await Promise.all([
+        getQualification(db, leadId),
+        leadOptions(db),
+        listEntityActivities(db, userId, 'LEAD', leadId, {
+          activityType: null,
+          ownerUserId: null,
+          state: 'all',
+          from: null,
+          to: null,
+          search: '',
+          page: 1,
+        }),
+      ]);
+      if (lead.accountId !== null) {
+        contacts = (await listContacts(db, userId, lead.accountId, false)) ?? [];
+      }
     }
   } catch (error) {
     console.error('[cms.crm.lead] load failed', error);
@@ -272,6 +292,18 @@ const facts =
             )}
           </CmsCard>
         </div>
+
+        <CmsActivitySection
+          entityType="LEAD"
+          entityId={lead.leadId}
+          activities={activities?.items ?? []}
+          total={activities?.total ?? 0}
+          contacts={contacts
+            .filter((ct) => ct.active)
+            .map((ct) => ({ id: ct.contactId, label: ct.fullName }))}
+          owners={options.owners}
+          currentUserId={userId}
+        />
 
         {mayManage && (
           <CmsLeadActions

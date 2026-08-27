@@ -1,0 +1,193 @@
+---
+/**
+ * CRM → My Work.
+ *
+ * The acting user's activities in four sections, all derived from timestamps
+ * with no status column: overdue and upcoming split on the one due-time rule
+ * (COALESCE of next_action_due and scheduled_at, stated in the repository and
+ * shown in the page copy), recently completed is the last seven days, and the
+ * lifetime completed figure is a count.
+ *
+ * An open activity with no due time appears under upcoming, after the dated
+ * ones. Hiding it would lose the row; calling it overdue would invent a
+ * deadline nobody set.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { myWork, type MyWork, type ActivityRow } from '@/lib/cms/repos/activityAdmin';
+
+export const prerender = false;
+
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+let work: MyWork = { overdue: [], upcoming: [], recentlyCompleted: [], completedTotal: 0 };
+let loadFailed = false;
+try {
+  work = await myWork(await getDb(getCmsEnv()), userId, new Date());
+} catch (error) {
+  console.error('[cms.crm.myWork] load failed', error);
+  loadFailed = true;
+}
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+/** Where an activity's parent lives, for the click-through. */
+function parentHref(a: ActivityRow): string | null {
+  switch (a.entityType) {
+    case 'ACCOUNT':
+      return `/app/customers/${a.entityId}`;
+    case 'LEAD':
+      return `/app/crm/${a.entityId}`;
+    case 'OPPORTUNITY':
+      return `/app/crm/opportunities/${a.entityId}`;
+    default:
+      return null;
+  }
+}
+---
+
+<CmsLayout title="My Work">
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="Your work could not be loaded"
+        description="The database did not answer."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="My Work"
+          description="Your activities, split by their timestamps. Due means the explicit follow-up deadline where one was set, otherwise the scheduled time."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'My Work' },
+          ]}
+        />
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <CmsCard title={`Overdue (${work.overdue.length})`}>
+            {work.overdue.length === 0 ? (
+              <CmsEmptyState icon="statusOk" title="Nothing overdue" />
+            ) : (
+              <ul class="flex flex-col gap-2">
+                {work.overdue.map((a) => (
+                  <li class="flex items-start justify-between gap-3 rounded-cms border border-cms-danger px-3 py-2">
+                    <div>
+                      <p class="text-cms-body-sm font-medium text-cms-ink">
+                        {titleCase(a.activityType)}: {a.summary}
+                      </p>
+                      <p class="text-cms-caption text-cms-muted">
+                        Due {a.dueAt}
+                        {a.accountName !== null && ` · ${a.accountName}`}
+                      </p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                      {parentHref(a) !== null && (
+                        <a
+                          href={parentHref(a)}
+                          class="rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          Open
+                        </a>
+                      )}
+                      <CmsButton variant="subtle" size="md" data-cms-complete={a.activityId}>
+                        Done
+                      </CmsButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CmsCard>
+
+          <CmsCard title={`Upcoming (${work.upcoming.length})`}>
+            {work.upcoming.length === 0 ? (
+              <CmsEmptyState icon="clock" title="Nothing scheduled" />
+            ) : (
+              <ul class="flex flex-col gap-2">
+                {work.upcoming.map((a) => (
+                  <li class="flex items-start justify-between gap-3 rounded-cms border border-cms-line px-3 py-2">
+                    <div>
+                      <p class="text-cms-body-sm font-medium text-cms-ink">
+                        {titleCase(a.activityType)}: {a.summary}
+                      </p>
+                      <p class="text-cms-caption text-cms-muted">
+                        {a.dueAt === null ? 'No due time set' : `Due ${a.dueAt}`}
+                        {a.accountName !== null && ` · ${a.accountName}`}
+                      </p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                      {parentHref(a) !== null && (
+                        <a
+                          href={parentHref(a)}
+                          class="rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          Open
+                        </a>
+                      )}
+                      <CmsButton variant="subtle" size="md" data-cms-complete={a.activityId}>
+                        Done
+                      </CmsButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CmsCard>
+        </div>
+
+        <CmsCard
+          title={`Recently completed (${work.recentlyCompleted.length})`}
+          description={`The last seven days. ${work.completedTotal} completed in total.`}
+        >
+          {work.recentlyCompleted.length === 0 ? (
+            <CmsEmptyState icon="clock" title="Nothing completed this week" />
+          ) : (
+            <ul class="flex flex-col gap-2">
+              {work.recentlyCompleted.map((a) => (
+                <li class="flex items-start justify-between gap-3 rounded-cms border border-cms-line px-3 py-2">
+                  <div>
+                    <p class="text-cms-body-sm text-cms-ink">
+                      {titleCase(a.activityType)}: {a.summary}
+                    </p>
+                    <p class="text-cms-caption text-cms-muted">
+                      Completed {a.completedAt}
+                      {a.outcome !== null && ` · ${a.outcome}`}
+                    </p>
+                  </div>
+                  <CmsBadge tone="success" label="Done" />
+                </li>
+              ))}
+            </ul>
+          )}
+        </CmsCard>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  document.addEventListener('click', async (event) => {
+    const target = event.target as HTMLElement | null;
+    const button = target?.closest<HTMLElement>('[data-cms-complete]');
+    if (!button) return;
+    const id = button.dataset.cmsComplete ?? '';
+    const response = await fetch(`/api/crm/activities/${encodeURIComponent(id)}/completion`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    });
+    if (response.ok) window.location.reload();
+  });
+</script>
