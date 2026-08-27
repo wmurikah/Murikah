@@ -146,3 +146,53 @@ export function canManageAccounts(permissions: readonly string[]): boolean {
 export function canSeePortalAccess(permissions: readonly string[]): boolean {
   return permissions.includes(PORTAL_ACCESS_VIEW);
 }
+
+/**
+ * Lead management.
+ *
+ * VIEW, CREATE and ASSIGN are seeded as PERM-001 to PERM-003. MANAGE and the
+ * lead-source settings code are added by
+ * docs/cms/crm/03_add_lead_permissions.sql, which the operator runs by hand.
+ *
+ * MANAGE is separate from CREATE on purpose. The person who takes a web enquiry
+ * is often not the person who decides it is qualified, and folding the two
+ * together would mean anyone who can log an enquiry can also declare it dead.
+ */
+export const LEADS_VIEW = 'CRM.LEADS.VIEW';
+export const LEADS_CREATE = 'CRM.LEADS.CREATE';
+export const LEADS_ASSIGN = 'CRM.LEADS.ASSIGN';
+export const LEADS_MANAGE = 'CRM.LEADS.MANAGE';
+export const LEAD_SOURCES_MANAGE = 'CRM.LEAD_SOURCES.MANAGE';
+export const OPPORTUNITIES_EDIT = 'CRM.OPPORTUNITIES.EDIT';
+
+export function canViewLeads(permissions: readonly string[]): boolean {
+  return (
+    permissions.includes(LEADS_VIEW) ||
+    permissions.includes(LEADS_CREATE) ||
+    permissions.includes(LEADS_MANAGE)
+  );
+}
+
+export function canCreateLeads(permissions: readonly string[]): boolean {
+  return permissions.includes(LEADS_CREATE);
+}
+
+export function canManageLeads(permissions: readonly string[]): boolean {
+  return permissions.includes(LEADS_MANAGE);
+}
+
+export function canAssignLeads(permissions: readonly string[]): boolean {
+  return permissions.includes(LEADS_ASSIGN);
+}
+
+export function canManageLeadSources(permissions: readonly string[]): boolean {
+  return permissions.includes(LEAD_SOURCES_MANAGE);
+}
+
+/**
+ * Conversion writes an opportunity as well as closing the lead, so it needs
+ * both codes. Holding one without the other converts nothing.
+ */
+export function canConvertLeads(permissions: readonly string[]): boolean {
+  return permissions.includes(LEADS_MANAGE) && permissions.includes(OPPORTUNITIES_EDIT);
+}

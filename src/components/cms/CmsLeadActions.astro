@@ -1,0 +1,384 @@
+---
+/**
+ * The four lead actions, as four modals and one script.
+ *
+ * Record first contact, score, disqualify, convert. They are separate because
+ * they are separate decisions with separate audit events, and collapsing them
+ * into one "edit" form would make the history unreadable.
+ *
+ * ONE COMPONENT, SO ONE SCRIPT.
+ * Astro hoists a page-level `<script>` whatever markup surrounds it, so a
+ * page-level version of this would ship the convert behaviour to somebody who
+ * may only read. The detail page renders this only for a caller who holds
+ * CRM.LEADS.MANAGE, and the convert modal only when they also hold the
+ * opportunity permission. The server checks both again on every request: this
+ * is about not sending code, never about security.
+ *
+ * NOTHING HERE DECIDES ANYTHING.
+ * The score modal collects four numbers and shows what each one asks. It
+ * computes a total for the person filling it in and stops there. The convert
+ * modal refuses only what the server refuses: no account, no pipeline, a
+ * disqualified lead.
+ */
+import CmsModal from './CmsModal.astro';
+import CmsButton from './CmsButton.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import { BANT_MEANING } from '@/lib/cms/admin/leadInput';
+import type { QualificationRow } from '@/lib/cms/repos/leadAdmin';
+
+interface Option {
+  id: string;
+  label: string;
+}
+interface Props {
+  leadId: string;
+  hasAccount: boolean;
+  mayConvert: boolean;
+  pipelines: Option[];
+  owners: Option[];
+  currencyCode: string | null;
+  estimatedValue: number | null;
+  title: string;
+  qualification: QualificationRow | null;
+}
+const {
+  leadId,
+  hasAccount,
+  mayConvert,
+  pipelines,
+  owners,
+  currencyCode,
+  estimatedValue,
+  title,
+  qualification,
+} = Astro.props;
+
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+const scores = [0, 1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }));
+---
+
+<div data-cms-lead-id={leadId}>
+  <p
+    id="cms-lead-action-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+  >
+  </p>
+
+  <CmsModal id="cms-lead-first-contact" title="Record first contact">
+    <form id="cms-lead-first-contact-form" novalidate class="flex flex-col gap-4">
+      <p class="text-cms-body-sm text-cms-ink">
+        This stamps the first contact as now, and moves a new lead to contacted.
+      </p>
+      <p class="text-cms-body-sm text-cms-muted">
+        It is written once. A second attempt leaves the original stamp where it is rather than
+        moving it later, and it never walks a qualified, disqualified or converted lead backwards.
+      </p>
+      <p class="text-cms-body-sm text-cms-muted">
+        There is no field for a past date on purpose: a backdated first contact is unverifiable, and
+        phase 15 reads this timestamp as the moment the response clock stopped.
+      </p>
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-lead-submit="first-contact">Record it</CmsButton>
+    </Fragment>
+  </CmsModal>
+
+  <CmsModal id="cms-lead-qualify" title="Score this lead">
+    <form id="cms-lead-qualify-form" novalidate class="flex flex-col gap-4">
+      <p class="text-cms-body-sm text-cms-muted">
+        Four dimensions, 0 to 5 each. The total is shown for you, not applied by the system: no
+        threshold anywhere in this product reads it, and scoring a lead does not convert it.
+      </p>
+      {
+        BANT_MEANING.map((dimension) => (
+          <div class="rounded-cms border border-cms-line p-3">
+            <CmsSelect
+              id={`q-${dimension.key}`}
+              name={dimension.key}
+              label={dimension.label}
+              value={qualification === null ? '' : String(qualification[dimension.key])}
+              options={[{ value: '', label: 'Not scored' }, ...scores]}
+            />
+            <p class="mt-1 text-cms-caption text-cms-muted">{dimension.question}</p>
+            <p class="text-cms-caption text-cms-muted">{dimension.low}</p>
+            <p class="text-cms-caption text-cms-muted">{dimension.high}</p>
+          </div>
+        ))
+      }
+      <p class="text-cms-body-sm text-cms-ink">
+        Total <span id="cms-lead-qualify-total" class="font-semibold tabular-nums">Not scored</span>
+      </p>
+      <div class="flex flex-col gap-1.5">
+        <label for="q-qualificationNotes" class="text-cms-body-sm font-medium text-cms-ink">
+          Notes
+        </label>
+        <textarea
+          id="q-qualificationNotes"
+          name="qualificationNotes"
+          rows="3"
+          class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >{qualification?.qualificationNotes ?? ''}</textarea
+        >
+      </div>
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-lead-submit="qualification">Save the score</CmsButton>
+    </Fragment>
+  </CmsModal>
+
+  <CmsModal id="cms-lead-disqualify" title="Disqualify this lead">
+    <form id="cms-lead-disqualify-form" novalidate class="flex flex-col gap-4">
+      <p class="text-cms-body-sm text-cms-muted">
+        The lead is kept, not deleted. Only its status changes, and the reason is stored with it.
+        There is no agreed list of reasons yet, so this is free text rather than a taxonomy invented
+        here.
+      </p>
+      <div class="flex flex-col gap-1.5">
+        <label for="d-reason" class="text-cms-body-sm font-medium text-cms-ink">
+          Reason <span class="text-cms-danger">*</span>
+        </label>
+        <textarea
+          id="d-reason"
+          name="reason"
+          rows="3"
+          required
+          class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        ></textarea>
+        <p
+          id="d-reason-error"
+          role="alert"
+          data-field-error
+          class="hidden text-cms-caption text-cms-danger"
+        >
+        </p>
+        <p class="text-cms-caption text-cms-muted">
+          For example: no budget this year, contract locked with another supplier, duplicate of an
+          existing enquiry, or out of our supply area.
+        </p>
+      </div>
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="danger" data-cms-lead-submit="disqualification">Disqualify</CmsButton>
+    </Fragment>
+  </CmsModal>
+
+  {
+    mayConvert && (
+      <CmsModal id="cms-lead-convert" title="Convert to opportunity">
+        <form id="cms-lead-convert-form" novalidate class="flex flex-col gap-4">
+          {!hasAccount ? (
+            <p class="rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+              This lead has no account. An opportunity belongs to a customer, so attach one to the
+              lead first. The server refuses the conversion until then, and this panel says so
+              rather than letting you fill in a form that cannot be saved.
+            </p>
+          ) : (
+            <p class="text-cms-body-sm text-cms-muted">
+              The lead is kept and marked converted. It stays the record of where this business came
+              from, and converting twice returns the same opportunity rather than making a second
+              one.
+            </p>
+          )}
+          <CmsSelect
+            id="c-pipelineId"
+            name="pipelineId"
+            label="Pipeline"
+            required
+            options={pick(pipelines, 'Choose a pipeline')}
+          />
+          <CmsSelect
+            id="c-ownerUserId"
+            name="ownerUserId"
+            label="Owner"
+            options={pick(owners, 'Keep the lead owner')}
+          />
+          <CmsInput id="c-title" name="title" label="Opportunity title" value={title} />
+          <CmsInput
+            id="c-estimatedValue"
+            name="estimatedValue"
+            label="Estimated value"
+            type="number"
+            min="0"
+            step="any"
+            value={estimatedValue === null ? '' : String(estimatedValue)}
+            hint="Carried from the lead where one was estimated. Leave empty when nobody has: empty is not zero."
+          />
+          <CmsInput
+            id="c-currencyCode"
+            name="currencyCode"
+            label="Currency"
+            value={currencyCode ?? ''}
+          />
+          <CmsInput
+            id="c-estimatedCloseDate"
+            name="estimatedCloseDate"
+            label="Estimated close date"
+            type="date"
+          />
+          <p
+            id="c-pipelineId-error"
+            role="alert"
+            data-field-error
+            class="hidden text-cms-caption text-cms-danger"
+          />
+          <p
+            id="c-accountId-error"
+            role="alert"
+            data-field-error
+            class="hidden text-cms-caption text-cms-danger"
+          />
+          <p
+            id="c-status-error"
+            role="alert"
+            data-field-error
+            class="hidden text-cms-caption text-cms-danger"
+          />
+        </form>
+        <Fragment slot="actions">
+          <CmsButton variant="ghost" data-cms-modal-close>
+            Cancel
+          </CmsButton>
+          <CmsButton variant="primary" data-cms-lead-submit="conversion" disabled={!hasAccount}>
+            Convert
+          </CmsButton>
+        </Fragment>
+      </CmsModal>
+    )
+  }
+</div>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-cms-lead-id]');
+  const leadId = root?.dataset.cmsLeadId ?? '';
+  const errorBox = document.getElementById('cms-lead-action-error');
+
+  if (leadId !== '') {
+    // Which trigger opens which modal, and which form each submit posts.
+    const OPENERS: readonly { trigger: string; modal: string }[] = [
+      { trigger: '[data-cms-lead-first-contact]', modal: 'cms-lead-first-contact' },
+      { trigger: '[data-cms-lead-qualify]', modal: 'cms-lead-qualify' },
+      { trigger: '[data-cms-lead-disqualify]', modal: 'cms-lead-disqualify' },
+      { trigger: '[data-cms-lead-convert]', modal: 'cms-lead-convert' },
+    ];
+    const FORMS: Record<string, string> = {
+      'first-contact': 'cms-lead-first-contact-form',
+      qualification: 'cms-lead-qualify-form',
+      disqualification: 'cms-lead-disqualify-form',
+      conversion: 'cms-lead-convert-form',
+    };
+
+    const clear = () => {
+      document.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    const paint = (prefix: string, fields: FieldError[]) => {
+      let painted = false;
+      for (const item of fields) {
+        const node = document.getElementById(`${prefix}-${item.field}-error`);
+        if (node) {
+          node.textContent = item.message;
+          node.classList.remove('hidden');
+          painted = true;
+        }
+      }
+      return painted;
+    };
+
+    for (const opener of OPENERS) {
+      document.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement | null;
+        if (!target?.closest(opener.trigger)) return;
+        clear();
+        const modal = document.getElementById(opener.modal) as HTMLDialogElement | null;
+        modal?.showModal();
+      });
+    }
+
+    // The running total, for the person filling the form in. Nothing reads it.
+    const total = document.getElementById('cms-lead-qualify-total');
+    const scoreFields = ['budgetScore', 'authorityScore', 'needScore', 'timelineScore'];
+    const retotal = () => {
+      if (!total) return;
+      const values = scoreFields.map((name) => {
+        const select = document.getElementById(`q-${name}`) as HTMLSelectElement | null;
+        return select === null || select.value === '' ? null : Number(select.value);
+      });
+      total.textContent = values.some((v) => v === null)
+        ? 'Not scored'
+        : `${values.reduce((sum, v) => (sum ?? 0) + (v ?? 0), 0)} / 20`;
+    };
+    for (const name of scoreFields) {
+      document.getElementById(`q-${name}`)?.addEventListener('change', retotal);
+    }
+    retotal();
+
+    document.addEventListener('click', async (event) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest<HTMLElement>('[data-cms-lead-submit]');
+      if (!button) return;
+      const action = button.dataset.cmsLeadSubmit ?? '';
+      const form = document.getElementById(FORMS[action] ?? '') as HTMLFormElement | null;
+      if (form === null) return;
+
+      clear();
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string' && value !== '') body[name] = value;
+      }
+
+      try {
+        const response = await fetch(`/api/crm/leads/${encodeURIComponent(leadId)}/${action}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        const prefix = action === 'conversion' ? 'c' : action === 'disqualification' ? 'd' : 'fc';
+        const painted = answer?.error?.fields?.length ? paint(prefix, answer.error.fields) : false;
+        // A field message that has nowhere to land still has to be read, so it
+        // falls back to the banner rather than disappearing.
+        if (!painted && errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.fields?.[0]?.message ??
+            answer?.error?.message ??
+            'That could not be saved. Please try again.';
+          errorBox.scrollIntoView({ block: 'nearest' });
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      }
+    });
+  }
+</script>
