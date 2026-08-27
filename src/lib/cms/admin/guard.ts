@@ -20,14 +20,20 @@
 import type { APIContext } from 'astro';
 import type { CmsIdentity } from '../repos/identity.ts';
 import {
+  canAssignLeads,
+  canConvertLeads,
+  canCreateLeads,
   canManageAccounts,
   canManageCatalogue,
+  canManageLeadSources,
+  canManageLeads,
   canManageOrganisation,
   canManageRoles,
   canManageUsers,
   canManageWorkflowRoles,
   canManageWorkflows,
   canViewAccounts,
+  canViewLeads,
   canViewOrganisation,
   canViewWorkflows,
 } from '../permissions.ts';
@@ -135,6 +141,42 @@ export function requireAccountsView(context: APIContext): Authorisation {
 /** Creating and editing accounts and contacts. */
 export function requireAccountsManage(context: APIContext): Authorisation {
   return authorise(context, canManageAccounts);
+}
+
+/**
+ * Reading a lead. CREATE and MANAGE both imply it, because a person who may
+ * log an enquiry or qualify one has no coherent reason to be unable to read it.
+ */
+export function requireLeadsView(context: APIContext): Authorisation {
+  return authorise(context, canViewLeads);
+}
+
+/** Logging a new lead. */
+export function requireLeadsCreate(context: APIContext): Authorisation {
+  return authorise(context, canCreateLeads);
+}
+
+/** Editing, recording first contact, qualifying and disqualifying. */
+export function requireLeadsManage(context: APIContext): Authorisation {
+  return authorise(context, canManageLeads);
+}
+
+/** Changing a lead's owner. Its own code in the seeded catalogue. */
+export function requireLeadsAssign(context: APIContext): Authorisation {
+  return authorise(context, canAssignLeads);
+}
+
+/**
+ * Converting a lead to an opportunity, which needs both codes because it
+ * writes both records. Holding one without the other converts nothing.
+ */
+export function requireLeadConvert(context: APIContext): Authorisation {
+  return authorise(context, canConvertLeads);
+}
+
+/** The lead source settings screen. */
+export function requireLeadSourcesManage(context: APIContext): Authorisation {
+  return authorise(context, canManageLeadSources);
 }
 
 /**
