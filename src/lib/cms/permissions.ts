@@ -196,3 +196,35 @@ export function canManageLeadSources(permissions: readonly string[]): boolean {
 export function canConvertLeads(permissions: readonly string[]): boolean {
   return permissions.includes(LEADS_MANAGE) && permissions.includes(OPPORTUNITIES_EDIT);
 }
+
+/**
+ * Opportunities and the pipeline.
+ *
+ * EDIT is seeded as PERM-004. VIEW and the two settings codes are added by
+ * docs/cms/crm/04_add_opportunity_permissions.sql, which the operator runs by
+ * hand. VIEW is implied by EDIT, in the same way LEADS.VIEW is implied by the
+ * lead codes: a person allowed to move a deal can obviously see it.
+ *
+ * Pipeline configuration is deliberately not part of EDIT. The stages define
+ * what history means, and a salesperson able to reorder them mid-quarter
+ * would be rewriting every open deal's meaning to improve their own numbers.
+ */
+export const OPPORTUNITIES_VIEW = 'CRM.OPPORTUNITIES.VIEW';
+export const PIPELINES_MANAGE = 'CRM.PIPELINES.MANAGE';
+export const LOST_REASONS_MANAGE = 'CRM.LOST_REASONS.MANAGE';
+
+export function canViewOpportunities(permissions: readonly string[]): boolean {
+  return permissions.includes(OPPORTUNITIES_VIEW) || permissions.includes(OPPORTUNITIES_EDIT);
+}
+
+export function canEditOpportunities(permissions: readonly string[]): boolean {
+  return permissions.includes(OPPORTUNITIES_EDIT);
+}
+
+export function canManagePipelines(permissions: readonly string[]): boolean {
+  return permissions.includes(PIPELINES_MANAGE);
+}
+
+export function canManageLostReasons(permissions: readonly string[]): boolean {
+  return permissions.includes(LOST_REASONS_MANAGE);
+}
