@@ -12,6 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { refusalFields } from './support/refusal.ts';
 import { createTestDb, query, type TestClient } from './support/db.ts';
 import { seedHass, SEED } from './support/hassSeed.ts';
 import {
@@ -209,7 +210,7 @@ test('a duplicate Oracle customer code is a conflict with a field message, never
     CTX,
   );
   assert.equal(clash.ok, false);
-  if (!clash.ok) assert.equal(clash.fields[0]?.field, 'accountCode');
+  if (!clash.ok) assert.equal(refusalFields(clash)[0]?.field, 'accountCode');
   c.close();
 });
 
