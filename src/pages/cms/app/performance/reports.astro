@@ -1,0 +1,355 @@
+---
+/**
+ * Performance → Reports.
+ *
+ * A REPORT IS A SHAPE OVER A METRIC SERVICE, NEVER A SECOND QUERY. Every
+ * report in the catalogue calls the module phases 20 to 24 built, and the
+ * module it calls is printed on the page. That is not decoration: a report
+ * that computed finance turnaround independently would eventually disagree
+ * with the dashboard, the disagreement would surface in front of a manager,
+ * and after that neither number would be trusted.
+ *
+ * SAVED REPORTS ARE URLS. The filter is serialised into the address, so a
+ * view is shareable, bookmarkable and survives being pasted into an email.
+ * The schema has no table for saved reports and this batch may not add one;
+ * a URL needs no storage and works across devices anyway.
+ *
+ * THE PRINT STYLESHEET IS AT THE BOTTOM OF THIS FILE. Printing keeps the
+ * title, the filters, the generation time, the definitions and the table, and
+ * drops the navigation, the buttons and the form. A printed report that
+ * cannot say what it is a view of is not evidence.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { parseFilter, filterToQuery } from '@/lib/cms/analytics/filters';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+import {
+  REPORTS,
+  reportById,
+  reportsFor,
+  FAMILY_LABEL,
+  type ReportDefinition,
+  type ReportRun,
+  type ReportFamily,
+} from '@/lib/cms/reports/catalogue';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const userId = Astro.locals.cms?.user.userId ?? '';
+const available = reportsFor(permissions);
+const requestedId = Astro.url.searchParams.get('report') ?? '';
+const requested = reportById(requestedId);
+
+// A report the caller may not run is treated as no report at all, not as an
+// error: the address may have come from a colleague with different access,
+// and "choose a report" is the honest response to that.
+const report: ReportDefinition | null =
+  requested !== null && permissions.includes(requested.permission) ? requested : null;
+
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+let run: ReportRun | null = null;
+let affiliates: { value: string; label: string }[] = [];
+let statuses: string[] = [];
+let loadFailed = false;
+
+if (report !== null) {
+  try {
+    const db = await getDb(getCmsEnv());
+    // The report and its filter options together. The options come from the
+    // same connection and the same request, so a filter cannot offer an
+    // affiliate the report was not run against.
+    const [result, affiliateRows] = await Promise.all([
+      report.run(db, userId, filter, now, permissions),
+      db.execute(
+        `SELECT affiliate_id AS value, affiliate_name AS label FROM affiliates
+          WHERE active = 1 ORDER BY affiliate_name`,
+      ),
+    ]);
+    run = result;
+    affiliates = affiliateRows.rows.map((raw) => {
+      const row = raw as unknown as Record<string, unknown>;
+      return { value: String(row.value), label: String(row.label) };
+    });
+    statuses = [];
+  } catch (error) {
+    console.error('[cms.reports.run] failed', error);
+    loadFailed = true;
+  }
+}
+
+const families = [...new Set(available.map((r) => r.family))] as ReportFamily[];
+const query = filterToQuery(filter);
+const exportHref = (format: string) =>
+  report === null ? '#' : `/api/reports/${report.id}/export?format=${format}&${query}`;
+const reportHref = (id: string) => `/app/performance/reports?report=${id}&${query}`;
+
+/** A blank cell is unknown. It is never rendered as a zero or a dash. */
+const cell = (value: string | number | null): string =>
+  value === null || value === undefined || value === '' ? 'Not available' : String(value);
+---
+
+<CmsLayout title="Reports">
+  <CmsPageHeader
+    title="Reports"
+    description="Parameterised views over the metric services. The same definitions as the dashboards, because they are the same code."
+    crumbs={[{ label: 'Performance', href: '/app/performance' }, { label: 'Reports' }]}
+  />
+
+  {
+    available.length === 0 ? (
+      <CmsEmptyState
+        icon="performance"
+        title="No report is available to you"
+        description="Reports are gated on the same permissions as the modules they read. Ask an administrator if you need one for your work."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <CmsCard title="Choose a report" class="cms-print-hide">
+          <div class="flex flex-col gap-4">
+            {families.map((family) => (
+              <div>
+                <p class="text-cms-label font-semibold text-cms-muted">{FAMILY_LABEL[family]}</p>
+                <ul class="mt-1.5 flex flex-wrap gap-2">
+                  {available
+                    .filter((r) => r.family === family)
+                    .map((r) => (
+                      <li>
+                        <a
+                          href={reportHref(r.id)}
+                          aria-current={report?.id === r.id ? 'page' : undefined}
+                          class:list={[
+                            'inline-flex min-h-9 items-center rounded-cms border px-3 text-cms-body-sm outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                            report?.id === r.id
+                              ? 'border-cms-royal bg-cms-royal-tint font-semibold text-cms-royal'
+                              : 'border-cms-border text-cms-ink hover:bg-cms-canvas',
+                          ]}
+                        >
+                          {r.name}
+                        </a>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          {available.length < REPORTS.length && (
+            <p class="mt-4 text-cms-caption text-cms-muted">
+              {REPORTS.length - available.length} further{' '}
+              {REPORTS.length - available.length === 1 ? 'report is' : 'reports are'} defined and
+              need permissions you do not hold. They are named here rather than hidden, so you can
+              ask for the right code rather than for "reports".
+            </p>
+          )}
+        </CmsCard>
+
+        {report === null ? (
+          <CmsEmptyState
+            icon="performance"
+            title="Choose a report above"
+            description="Each one declares its own parameters, its KPI definitions and the module it reads."
+          />
+        ) : loadFailed ? (
+          <CmsErrorState
+            title="That report could not be run"
+            description="Please try again in a moment."
+          />
+        ) : (
+          <div class="flex flex-col gap-6">
+            <div class="flex flex-col gap-2">
+              <h2 class="text-cms-section font-semibold text-cms-navy">{report.name}</h2>
+              <p class="max-w-prose text-cms-body-sm text-cms-muted">{report.description}</p>
+              <p class="flex flex-wrap items-center gap-2 text-cms-caption text-cms-muted">
+                <span>
+                  Generated {now} UTC. Source: <code>{report.source}</code>. The same service the
+                  dashboard calls, so the figures cannot disagree.
+                </span>
+                <CmsBadge tone="neutral" label={FAMILY_LABEL[report.family]} />
+              </p>
+            </div>
+
+            {/*
+              Only the parameters this report uses. A date range on a report
+              that ignores dates is worse than no control: somebody sets it,
+              nothing moves, and they conclude the report is broken.
+            */}
+            <CmsCard title="Parameters" class="cms-print-hide">
+              <p class="mb-3 text-cms-caption text-cms-muted">
+                This report reads: {report.parameters.join(', ')}. Other filters are not shown
+                because it does not use them.
+              </p>
+              <CmsOrderFilters
+                filter={filter}
+                affiliates={affiliates}
+                statuses={statuses}
+                action={Astro.url.pathname}
+                showCredit={false}
+                showStatus={report.parameters.includes('country')}
+              >
+                <input type="hidden" name="report" value={report.id} />
+              </CmsOrderFilters>
+            </CmsCard>
+
+            <div class="cms-print-hide flex flex-wrap gap-2">
+              <CmsButton href={exportHref('csv')} variant="secondary">
+                Export CSV
+              </CmsButton>
+              <CmsButton href={exportHref('xlsx')} variant="secondary">
+                Export Excel
+              </CmsButton>
+            </div>
+
+            <CmsCard title="What these figures mean">
+              <dl class="flex flex-col gap-4">
+                {report.kpis.map((kpi) => (
+                  <div>
+                    <dt class="text-cms-body-sm font-semibold text-cms-ink">{kpi.name}</dt>
+                    <dd class="mt-0.5 max-w-prose text-cms-body-sm text-cms-muted">
+                      {kpi.definition}
+                    </dd>
+                    <dd class="mt-0.5 text-cms-caption text-cms-muted">
+                      Denominator: {kpi.denominator} Date basis: <code>{kpi.dateBasis}</code>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </CmsCard>
+
+            {run !== null && run.notes.length > 0 && (
+              <CmsCard title="Notes">
+                <ul class="flex flex-col gap-2">
+                  {run.notes.map((note) => (
+                    <li class="max-w-prose text-cms-body-sm text-cms-muted">{note}</li>
+                  ))}
+                </ul>
+              </CmsCard>
+            )}
+
+            <CmsCard bodyClass="p-0">
+              {run === null || run.rows.length === 0 ? (
+                <div class="px-4 py-4">
+                  <CmsEmptyState
+                    icon="search"
+                    title="No rows for this selection"
+                    description="An empty result is not a claim that nothing happened. Widen the dates or clear a filter."
+                  />
+                </div>
+              ) : (
+                <div class="overflow-x-auto px-4 py-3">
+                  <table class="w-full border-collapse text-left">
+                    <caption class="sr-only">{report.name}</caption>
+                    <thead>
+                      <tr class="border-b border-cms-line">
+                        {run.columns.map((column) => (
+                          <th
+                            scope="col"
+                            class:list={[
+                              'py-2 pr-3 text-cms-label font-semibold text-cms-muted',
+                              column.numeric && 'text-right',
+                            ]}
+                          >
+                            {column.label}
+                            {column.note !== undefined && (
+                              <span class="block text-cms-caption font-normal">{column.note}</span>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {run.rows.map((row) => {
+                        const href = run.hrefFor?.(row) ?? null;
+                        return (
+                          <tr class="border-b border-cms-line last:border-0">
+                            {run.columns.map((column, index) => (
+                              <td
+                                class:list={[
+                                  'py-2 pr-3 text-cms-body-sm',
+                                  column.numeric
+                                    ? 'text-right text-cms-ink tabular-nums'
+                                    : 'text-cms-ink',
+                                ]}
+                              >
+                                {index === 0 && href !== null ? (
+                                  <a
+                                    href={href}
+                                    class="text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                                  >
+                                    {cell(row[column.key] ?? null)}
+                                  </a>
+                                ) : (
+                                  cell(row[column.key] ?? null)
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CmsCard>
+
+            <p class="text-cms-caption text-cms-muted">
+              {run?.rows.length ?? 0} rows. A blank cell is unknown, not zero.
+            </p>
+          </div>
+        )}
+      </div>
+    )
+  }
+</CmsLayout>
+
+<style is:global>
+  /*
+    The print rules. Kept here rather than in the global stylesheet because
+    they describe this page's evidence and nothing else's.
+
+    WHAT SURVIVES: the title, the generation time, the KPI definitions, the
+    notes and the table. WHAT GOES: the rail, the top bar, the report picker,
+    the filter form and the export buttons, all of which are controls and
+    none of which mean anything on paper.
+  */
+  @media print {
+    aside,
+    header[class*='sticky'],
+    nav[aria-label='Main'],
+    .cms-print-hide {
+      display: none !important;
+    }
+    body {
+      background: white;
+    }
+    main {
+      padding: 0 !important;
+    }
+    table {
+      /* A table split across pages repeats its header, so page four is still
+         readable without page one beside it. */
+      break-inside: auto;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tr {
+      break-inside: avoid;
+    }
+    a[href]::after {
+      /* A printed link that says "see the order" and nothing else is a dead
+         end. The address is appended so a reader can type it. */
+      content: ' (' attr(href) ')';
+      font-size: 0.7em;
+      color: #555;
+    }
+  }
+</style>
