@@ -271,11 +271,17 @@ test('an EXTERNAL user resolves their portal account scope', async () => {
   c.close();
 });
 
-test('/me without a session is anonymous', async () => {
+test('/me without a session is anonymous, and says why', async () => {
   const c = await db();
-  assert.deepEqual(await resolveSession(asClient(c), SECRET, null, NOW), { kind: 'anonymous' });
+  // The reason exists so the sign-in page can tell a returning user their session
+  // ran out, without nagging a first-time visitor who never had one.
+  assert.deepEqual(await resolveSession(asClient(c), SECRET, null, NOW), {
+    kind: 'anonymous',
+    reason: 'no_cookie',
+  });
   assert.deepEqual(await resolveSession(asClient(c), SECRET, 'not-a-real-token', NOW), {
     kind: 'anonymous',
+    reason: 'unknown_token',
   });
   c.close();
 });
@@ -285,7 +291,9 @@ test('a session presented with the wrong secret does not resolve', async () => {
   const outcome = await login(c, EMAILS.active, FIXTURE_PASSWORD);
   if (outcome.kind !== 'success') return assert.fail('login failed');
   const resolved = await resolveSession(asClient(c), 'the wrong secret', outcome.rawToken, NOW);
-  assert.deepEqual(resolved, { kind: 'anonymous' });
+  // Indistinguishable from a forged cookie, which is correct: a token signed with
+  // another key is not a session of ours.
+  assert.deepEqual(resolved, { kind: 'anonymous', reason: 'unknown_token' });
   c.close();
 });
 
@@ -301,6 +309,7 @@ test('logout revokes the session and the same cookie is then rejected', async ()
 
   assert.deepEqual(await resolveSession(asClient(c), SECRET, outcome.rawToken, NOW), {
     kind: 'anonymous',
+    reason: 'revoked',
   });
   // Revoking again is a no-op rather than an error.
   assert.deepEqual(await endSession(asClient(c), SECRET, outcome.rawToken, CTX), {
@@ -317,6 +326,7 @@ test('an expired session is marked EXPIRED on the way past and rejected', async 
   const later = new Date(NOW.getTime() + 9 * 60 * 60 * 1000); // past the 8h TTL
   assert.deepEqual(await resolveSession(asClient(c), SECRET, outcome.rawToken, later), {
     kind: 'anonymous',
+    reason: 'expired',
   });
   assert.equal(query(c, `SELECT status FROM auth_sessions`)[0]?.status, 'EXPIRED');
   c.close();
