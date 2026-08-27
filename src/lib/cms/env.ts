@@ -39,3 +39,26 @@ export function getCmsEnv(): CmsEnv {
   }
   return { dbUrl, dbToken, sessionSecret };
 }
+
+/**
+ * Whether this deployment may show an invitation link to the administrator who
+ * created a user.
+ *
+ * There is no mail sender configured for this product. `RESEND_API_KEY` belongs
+ * to the marketing site and is not this product's to reuse. Until one exists,
+ * an invitation has to reach the new user somehow, and the honest local answer
+ * is to hand the link to the administrator who is sitting there.
+ *
+ * That is a development affordance and nothing else. It is off unless
+ * `CMS_INVITE_LINKS` is exactly the string `development`, so the default in
+ * every environment, including one where the variable was never set, is off.
+ * A truthy check would have made `CMS_INVITE_LINKS=false` turn it on.
+ *
+ * With it off the invitation still issues and the user still exists as INVITED;
+ * what fails is the attempt to deliver, loudly, saying mail is not configured.
+ * The alternative, creating a user nobody can ever sign in as and saying
+ * nothing, is worse.
+ */
+export function invitationLinksVisible(): boolean {
+  return env.CMS_INVITE_LINKS === 'development';
+}

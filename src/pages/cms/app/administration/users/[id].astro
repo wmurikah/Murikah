@@ -1,0 +1,573 @@
+---
+/**
+ * A user: who they are, where they sit, and what the record says about them.
+ *
+ * Eight tabs, driven by the URL rather than by client state, so a tab can be
+ * bookmarked and survives a reload. Two of them are read-only in this phase and
+ * say so on screen, because a missing button that nobody explained gets reported
+ * as a defect:
+ *
+ *   Roles              Build Prompt 07 makes this writable
+ *   Workflow Authority Build Prompt 08 owns it
+ *
+ * The Roles tab being read-only is also the security posture. This phase
+ * exposes no path from editing a profile to granting access, which is the
+ * simplest possible defence against a user elevating their own permissions.
+ *
+ * The Security tab shows whether a credential exists and whether MFA is on. It
+ * never shows a hash, a token or a secret, and the queries behind it select
+ * booleans rather than values, so there is nothing to leak by accident.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsAvatar from '@/components/cms/CmsAvatar.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsUserRoleDrawer from '@/components/cms/CmsUserRoleDrawer.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageRoles, canManageUsers } from '@/lib/cms/permissions';
+import {
+  getSecurity,
+  getUser,
+  listAssignments,
+  listSourceIdentities,
+  listUserAudit,
+  listUserRoles,
+  listUserTeams,
+  listWorkflowAuthority,
+  type AssignmentRow,
+  type AuditRow,
+  type RoleView,
+  type SecurityView,
+  type SourceIdentityRow,
+  type TeamMembershipView,
+  type UserRow,
+  type WorkflowAuthorityView,
+} from '@/lib/cms/repos/userAdmin';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageUsers(permissions);
+// Build Prompt 06 made this tab read-only. Build Prompt 07 makes it writable,
+// for a viewer who holds the role permission and not merely the user one. Those
+// are different capabilities and conflating them would let a user administrator
+// grant access, which is the escalation the read-only tab was protecting
+// against.
+const mayManageRoles = canManageRoles(permissions);
+const userId = Astro.params.id ?? '';
+
+const TABS = [
+  'overview',
+  'assignments',
+  'teams',
+  'roles',
+  'authority',
+  'identities',
+  'security',
+  'audit',
+] as const;
+type Tab = (typeof TABS)[number];
+const requested = Astro.url.searchParams.get('tab');
+const tab: Tab = (TABS as readonly string[]).includes(requested ?? '')
+  ? (requested as Tab)
+  : 'overview';
+
+let user: UserRow | null = null;
+let assignments: AssignmentRow[] = [];
+let teams: TeamMembershipView[] = [];
+let roles: RoleView[] = [];
+let authority: WorkflowAuthorityView[] = [];
+let identities: SourceIdentityRow[] = [];
+let security: SecurityView | null = null;
+let audit: AuditRow[] = [];
+let loadFailed = false;
+
+if (mayManage) {
+  try {
+    const db = await getDb(getCmsEnv());
+    user = await getUser(db, userId);
+    if (user) {
+      [assignments, teams, roles, authority, identities, security, audit] = await Promise.all([
+        listAssignments(db, userId),
+        listUserTeams(db, userId),
+        listUserRoles(db, userId),
+        listWorkflowAuthority(db, userId),
+        listSourceIdentities(db, userId),
+        getSecurity(db, userId),
+        listUserAudit(db, userId),
+      ]);
+    }
+  } catch (error) {
+    console.error('[cms.users.detail] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const base = `/app/administration/users/${userId}`;
+const href = (t: Tab) => `${base}?tab=${t}`;
+const label = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const statusTone = (status: string) =>
+  status === 'ACTIVE'
+    ? 'success'
+    : status === 'SUSPENDED'
+      ? 'danger'
+      : status === 'INVITED'
+        ? 'info'
+        : 'neutral';
+
+const tabs = [
+  { label: 'Overview', href: href('overview') },
+  { label: 'Assignments', href: href('assignments'), count: assignments.length },
+  { label: 'Teams', href: href('teams'), count: teams.length },
+  { label: 'Roles', href: href('roles'), count: roles.length },
+  { label: 'Workflow authority', href: href('authority'), count: authority.length },
+  { label: 'Source identities', href: href('identities'), count: identities.length },
+  { label: 'Security', href: href('security') },
+  { label: 'Audit', href: href('audit'), count: audit.length },
+];
+
+/**
+ * The organisational line, rendered naturally.
+ *
+ * A GROUP assignment is the group, said in words. An external user with no
+ * assignment gets no organisational line at all rather than an empty one: the
+ * absence is the fact, and a dangling separator would misreport it as a
+ * rendering fault.
+ */
+const primary =
+  assignments.find((a) => a.current && a.isPrimary) ?? assignments.find((a) => a.current);
+const entity =
+  primary === undefined
+    ? null
+    : primary.level === 'GROUP'
+      ? 'Hass Petroleum Group'
+      : (primary.businessUnitName ?? primary.affiliateName ?? primary.countryName ?? null);
+const organisationLine =
+  primary === undefined
+    ? null
+    : [primary.jobTitle, entity].filter((part): part is string => Boolean(part)).join(', ');
+const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : null;
+---
+
+<CmsLayout title={user?.displayName ?? 'User'}>
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to user administration"
+        description="Ask a system administrator for the ADMIN.USERS.MANAGE permission."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="This user could not be loaded"
+        description="The database did not answer."
+      />
+    ) : !user ? (
+      <CmsErrorState
+        title="That user could not be found"
+        description="They may have been renamed, or the link may be out of date. Nobody is ever deleted, so the record still exists somewhere."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={user.displayName}
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Users', href: '/app/administration/users' },
+            { label: user.displayName },
+          ]}
+        >
+          <CmsBadge slot="actions" tone={statusTone(user.status)} label={label(user.status)} />
+        </CmsPageHeader>
+
+        <CmsCard>
+          <div class="flex items-start gap-4">
+            <CmsAvatar name={user.displayName} size="md" />
+            <div class="flex min-w-0 flex-col gap-0.5">
+              <p class="text-cms-card font-semibold text-cms-navy">{user.displayName}</p>
+              <p class="truncate text-cms-body-sm text-cms-muted">{user.email}</p>
+              {organisationLine && (
+                <p class="text-cms-body-sm text-cms-muted">{organisationLine}</p>
+              )}
+              {portalLine && <p class="text-cms-body-sm text-cms-muted">{portalLine}</p>}
+            </div>
+          </div>
+        </CmsCard>
+
+        <CmsTabs tabs={tabs} current={href(tab)} label="User sections" />
+
+        {tab === 'overview' && (
+          <CmsCard>
+            <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(
+                [
+                  ['Employee number', user.employeeNo ?? 'Not recorded'],
+                  ['Phone', user.phone ?? 'Not recorded'],
+                  ['User type', label(user.userType)],
+                  ['Time zone', user.timezone],
+                  ['Locale', user.locale],
+                  ['Email verified', user.emailVerifiedAt ?? 'Not verified'],
+                  ['Last login', user.lastLoginAt ?? 'Never'],
+                  ['Created', user.createdAt],
+                  ['Updated', user.updatedAt],
+                ] as [string, string][]
+              ).map(([term, value]) => (
+                <div class="flex flex-col gap-0.5">
+                  <dt class="text-cms-caption text-cms-muted">{term}</dt>
+                  <dd class="text-cms-body-sm text-cms-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </CmsCard>
+        )}
+
+        {tab === 'assignments' && (
+          <CmsDataTable
+            caption="Assignments"
+            columns={[
+              { key: 'title', label: 'Job title' },
+              { key: 'department', label: 'Department' },
+              { key: 'level', label: 'Level' },
+              { key: 'where', label: 'Where' },
+              { key: 'from', label: 'From' },
+              { key: 'to', label: 'To' },
+              { key: 'primary', label: 'Primary' },
+              { key: 'status', label: 'Status' },
+            ]}
+            empty={assignments.length === 0}
+          >
+            {assignments.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.jobTitle}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.department}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{label(row.level)}</td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.level === 'GROUP'
+                    ? 'Hass Petroleum Group'
+                    : (row.businessUnitName ?? row.affiliateName ?? row.countryName ?? '—')}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
+                <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveTo ?? 'Open'}</td>
+                <td class="px-4 py-2.5">
+                  {row.isPrimary && <CmsBadge tone="accent" label="Primary" />}
+                </td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.current ? 'success' : 'neutral'}
+                    label={row.current ? 'Current' : row.active ? 'Not yet current' : 'Ended'}
+                  />
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="customers"
+                title="No assignment"
+                description="An external portal user holds no organisational assignment, which is why this is empty rather than broken."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab === 'teams' && (
+          <CmsDataTable
+            caption="Teams"
+            columns={[
+              { key: 'team', label: 'Team' },
+              { key: 'role', label: 'Role on the team' },
+              { key: 'from', label: 'From' },
+              { key: 'to', label: 'To' },
+              { key: 'status', label: 'Status' },
+            ]}
+            empty={teams.length === 0}
+          >
+            {teams.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.teamName}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.memberRole ?? 'Member'}</td>
+                <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
+                <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveTo ?? 'Open'}</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.active ? 'success' : 'neutral'}
+                    label={row.active ? 'Current' : 'Former'}
+                  />
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="customers"
+                title="Not on any team"
+                description="Team membership is managed under Administration → Organisation."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab === 'roles' && (
+          <Fragment>
+            {mayManageRoles ? (
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-cms-body-sm text-cms-muted">
+                  An access role says what this person may do. A data scope says which records it
+                  reaches. A scope is never inferred from a job title, a department or a team.
+                </p>
+                <CmsButton variant="primary" icon="plus" data-cms-userrole-create>
+                  Assign a role
+                </CmsButton>
+              </div>
+            ) : (
+              <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+                <strong class="font-semibold text-cms-ink">Read-only for you.</strong> Assigning an
+                access role needs ADMIN.ROLES.MANAGE, which is a different capability from
+                administering users. Conflating the two would let a user administrator grant
+                themselves access.
+              </p>
+            )}
+            <CmsDataTable
+              caption="Access roles"
+              columns={[
+                { key: 'role', label: 'Role' },
+                { key: 'scopes', label: 'Scopes' },
+                { key: 'from', label: 'From' },
+                { key: 'to', label: 'To' },
+                { key: 'status', label: 'Status' },
+              ]}
+              empty={roles.length === 0}
+            >
+              {roles.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 font-medium text-cms-ink">
+                    {row.roleName}
+                    {row.isSystemRole && (
+                      <CmsBadge tone="warning" label="System role" class="ms-2" />
+                    )}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.scopes.length === 0
+                      ? 'None'
+                      : row.scopes
+                          .map((s) =>
+                            s.target ? `${label(s.scopeType)}: ${s.target}` : label(s.scopeType),
+                          )
+                          .join('; ')}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.effectiveTo ?? 'Open'}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge
+                      tone={row.active ? 'success' : 'neutral'}
+                      label={row.active ? 'Active' : 'Inactive'}
+                    />
+                  </td>
+                </tr>
+              ))}
+              <Fragment slot="empty">
+                <CmsEmptyState
+                  icon="administration"
+                  title="No access role"
+                  description="This person holds no access role yet."
+                />
+              </Fragment>
+            </CmsDataTable>
+            {mayManageRoles && <CmsUserRoleDrawer userId={userId} />}
+          </Fragment>
+        )}
+
+        {tab === 'authority' && (
+          <Fragment>
+            <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+              <strong class="font-semibold text-cms-ink">Read-only in this phase.</strong> Workflow
+              authority is what a person may approve in a business process, which is a different
+              thing from an access role and from a job title. It is administered in a later phase.
+            </p>
+            <CmsDataTable
+              caption="Workflow authority"
+              columns={[
+                { key: 'role', label: 'Workflow role' },
+                { key: 'scope', label: 'Scope' },
+                { key: 'priority', label: 'Priority', numeric: true },
+                { key: 'from', label: 'From' },
+                { key: 'to', label: 'To' },
+                { key: 'status', label: 'Status' },
+              ]}
+              empty={authority.length === 0}
+            >
+              {authority.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 font-medium text-cms-ink">{row.roleName}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.scopeType === 'GROUP'
+                      ? 'Hass Petroleum Group'
+                      : (row.target ?? label(row.scopeType))}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.priority}</td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.effectiveTo ?? 'Open'}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge
+                      tone={row.active ? 'success' : 'neutral'}
+                      label={row.active ? 'Active' : 'Inactive'}
+                    />
+                  </td>
+                </tr>
+              ))}
+              <Fragment slot="empty">
+                <CmsEmptyState
+                  icon="performance"
+                  title="No workflow authority"
+                  description="This person approves nothing in any configured workflow."
+                />
+              </Fragment>
+            </CmsDataTable>
+          </Fragment>
+        )}
+
+        {tab === 'identities' && (
+          <CmsDataTable
+            caption="Source identities"
+            columns={[
+              { key: 'system', label: 'Source system' },
+              { key: 'username', label: 'External username' },
+              { key: 'affiliate', label: 'Affiliate' },
+              { key: 'status', label: 'Status' },
+            ]}
+            empty={identities.length === 0}
+          >
+            {identities.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.sourceSystem}</td>
+                <td class="px-4 py-2.5 font-mono text-cms-body-sm text-cms-muted">
+                  {row.externalUsername}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.affiliateName ?? 'Any'}</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.active ? 'success' : 'neutral'}
+                    label={row.active ? 'Active' : 'Inactive'}
+                  />
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="data"
+                title="No external accounts mapped"
+                description="A mapping links an account in another system, such as Oracle, to this person. It never creates a user."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab === 'security' && security && (
+          <Fragment>
+            <CmsCard>
+              <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {(
+                  [
+                    ['Status', label(security.status)],
+                    ['Email verified', security.emailVerifiedAt ?? 'Not verified'],
+                    ['Last login', security.lastLoginAt ?? 'Never'],
+                    ['Password set', security.hasCredential ? 'Yes' : 'No'],
+                    ['Two-factor', security.mfaEnabled ? 'Enabled' : 'Not enabled'],
+                  ] as [string, string][]
+                ).map(([term, value]) => (
+                  <div class="flex flex-col gap-0.5">
+                    <dt class="text-cms-caption text-cms-muted">{term}</dt>
+                    <dd class="text-cms-body-sm text-cms-ink">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {/*
+                Whether a credential exists, never what it is. The queries behind
+                this select COUNT(*) rather than the hash, so there is nothing
+                here to leak.
+              */}
+              <p class="mt-4 text-cms-caption text-cms-muted">
+                Passwords, tokens and two-factor secrets are never shown, and are not read by this
+                page.
+              </p>
+            </CmsCard>
+
+            <CmsDataTable
+              caption="Recent sign-in attempts"
+              columns={[
+                { key: 'at', label: 'When' },
+                { key: 'result', label: 'Result' },
+                { key: 'reason', label: 'Reason' },
+                { key: 'ip', label: 'Address', secondary: true },
+              ]}
+              empty={security.recentAttempts.length === 0}
+            >
+              {security.recentAttempts.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.at}</td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge
+                      tone={row.success ? 'success' : 'danger'}
+                      label={row.success ? 'Signed in' : 'Refused'}
+                    />
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">{row.reason ?? '—'}</td>
+                  <td class="hidden px-4 py-2.5 font-mono text-cms-caption text-cms-muted sm:table-cell">
+                    {row.ip ?? '—'}
+                  </td>
+                </tr>
+              ))}
+              <Fragment slot="empty">
+                <CmsEmptyState
+                  icon="clock"
+                  title="No recorded attempts"
+                  description="Nobody has tried to sign in as this person."
+                />
+              </Fragment>
+            </CmsDataTable>
+          </Fragment>
+        )}
+
+        {tab === 'audit' && (
+          <CmsDataTable
+            caption="Audit"
+            columns={[
+              { key: 'at', label: 'When' },
+              { key: 'event', label: 'Event' },
+              { key: 'actor', label: 'By' },
+              { key: 'change', label: 'Change' },
+            ]}
+            empty={audit.length === 0}
+          >
+            {audit.map((row) => (
+              <tr class="border-b border-cms-line align-top last:border-0">
+                <td class="px-4 py-2.5 whitespace-nowrap text-cms-muted tabular-nums">{row.at}</td>
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{label(row.eventType)}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.actor ?? 'System'}</td>
+                <td class="px-4 py-2.5 text-cms-caption text-cms-muted">
+                  {row.beforeJson ? `Was: ${row.beforeJson}` : 'Created'}
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="clock"
+                title="Nothing recorded yet"
+                description="These tables carry no updated_at, so this is the only history there is: an empty list means nothing has changed since the record was seeded."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

@@ -1,0 +1,447 @@
+---
+/**
+ * Administration → Workflows → a definition.
+ *
+ * The stages of one version, in sequence, and the controls for changing them.
+ *
+ * VERSIONING IS VISIBLE, NOT IMPLIED.
+ * Once a record is running under this version, the screen says so and the edit
+ * controls give way to "create a new version". That is not a courtesy: version
+ * 1 describes what every record created under it went through, and editing it
+ * rewrites their history. The endpoint refuses the substantive edit as well, so
+ * a caller who never loads this page is refused the same way.
+ *
+ * REORDERING GOES THROUGH ONE CALL.
+ * `UNIQUE(workflow_definition_id, sequence_no)` rejects a stage-at-a-time
+ * reorder the moment two stages briefly share a position, which a simple swap
+ * does immediately. The up and down controls therefore send the whole new order
+ * in one request, and the repository applies it as an offset pass and then an
+ * assignment pass inside one batch.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsWorkflowFormScript from '@/components/cms/CmsWorkflowFormScript.astro';
+import CmsStageOrderScript from '@/components/cms/CmsStageOrderScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageWorkflows, canViewWorkflows } from '@/lib/cms/permissions';
+import {
+  getDefinition,
+  listStages,
+  workflowOptions,
+  type Option,
+  type StageRow,
+  type WorkflowDefinitionRow,
+} from '@/lib/cms/repos/workflowAdmin';
+import { APPROVAL_MODES, ASSIGNMENT_TYPES } from '@/lib/cms/workflow/model';
+import {
+  APPROVAL_MODE_LABELS,
+  ASSIGNMENT_TYPE_LABELS,
+  describeApproval,
+  WORKFLOW_PATH,
+} from '@/lib/cms/admin/workflowWorkspace';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewWorkflows(permissions);
+const mayManage = canManageWorkflows(permissions);
+const definitionId = Astro.params.id ?? '';
+
+let definition: WorkflowDefinitionRow | null = null;
+let stages: StageRow[] = [];
+let options: {
+  users: Option[];
+  teams: Option[];
+  workflowRoles: Option[];
+  slaRules: Option[];
+} = { users: [], teams: [], workflowRoles: [], slaRules: [] };
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    definition = await getDefinition(db, definitionId);
+    if (definition !== null) {
+      [stages, options] = await Promise.all([listStages(db, definitionId), workflowOptions(db)]);
+    }
+  } catch (error) {
+    console.error('[cms.workflowDefinition] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const inUse = (definition?.instanceCount ?? 0) > 0;
+const mayEditStages = mayManage && !inUse;
+
+const assignmentOptions = ASSIGNMENT_TYPES.map((value) => ({
+  value,
+  label: ASSIGNMENT_TYPE_LABELS[value] ?? value,
+}));
+const modeOptions = APPROVAL_MODES.map((value) => ({
+  value,
+  label: APPROVAL_MODE_LABELS[value] ?? value,
+}));
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+---
+
+<CmsLayout title={definition?.workflowName ?? 'Workflow'}>
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to workflow administration"
+        description="Ask a system administrator for ADMIN.WORKFLOWS.MANAGE or ADMIN.WORKFLOW_ROLES.MANAGE."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="That workflow could not be loaded"
+        description="The database did not answer."
+      />
+    ) : definition === null ? (
+      <CmsErrorState
+        title="No such workflow"
+        description="It may have been removed, or the address may be wrong."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={definition.workflowName}
+          description={`Version ${definition.versionNo}, effective from ${definition.effectiveFrom}${definition.effectiveTo === null ? '' : ` to ${definition.effectiveTo}`}.`}
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Workflows', href: WORKFLOW_PATH },
+            { label: definition.workflowName },
+          ]}
+        >
+          {mayManage && (
+            <Fragment slot="actions">
+              {mayEditStages && (
+                <CmsButton
+                  variant="secondary"
+                  icon="plus"
+                  data-cms-wf-open="cms-wfstage-drawer"
+                  data-endpoint={`/api/admin/workflows/${definition.workflowDefinitionId}/stages`}
+                  data-method="POST"
+                  data-title="New stage"
+                  data-values={JSON.stringify({ sequenceNo: stages.length + 1 })}
+                >
+                  Add a stage
+                </CmsButton>
+              )}
+              <CmsButton
+                variant="primary"
+                data-cms-wf-open="cms-wfversion-drawer"
+                data-endpoint={`/api/admin/workflows/${definition.workflowDefinitionId}/versions`}
+                data-method="POST"
+                data-title="New version"
+                data-values="{}"
+              >
+                New version
+              </CmsButton>
+            </Fragment>
+          )}
+        </CmsPageHeader>
+
+        {inUse && (
+          <p class="flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+            <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
+            <span>
+              {definition.instanceCount}{' '}
+              {definition.instanceCount === 1 ? 'record is' : 'records are'} running under this
+              version, so its stages cannot be changed. This version describes what those records
+              went through, and editing it would rewrite their history. Create a new version
+              instead: existing records stay on this one, and new transactions pick up the new one
+              from its effective date.
+            </span>
+          </p>
+        )}
+
+        <CmsCard>
+          <dl class="grid gap-3 sm:grid-cols-4">
+            <div>
+              <dt class="text-cms-caption text-cms-muted">Process</dt>
+              <dd class="text-cms-body text-cms-ink">
+                {definition.processType.toLowerCase().replace(/_/g, ' ')}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-cms-caption text-cms-muted">Applies to</dt>
+              <dd class="text-cms-body text-cms-ink">
+                {definition.businessUnitId ??
+                  definition.affiliateId ??
+                  definition.countryId ??
+                  'Everywhere'}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-cms-caption text-cms-muted">In use by</dt>
+              <dd class="text-cms-body text-cms-ink tabular-nums">{definition.instanceCount}</dd>
+            </div>
+            <div>
+              <dt class="text-cms-caption text-cms-muted">Status</dt>
+              <dd>
+                <CmsBadge
+                  tone={definition.active ? 'success' : 'neutral'}
+                  label={definition.active ? 'Active' : 'Retired'}
+                />
+              </dd>
+            </div>
+          </dl>
+        </CmsCard>
+
+        {stages.length === 0 ? (
+          <CmsEmptyState
+            icon="administration"
+            title="No stages"
+            description="A workflow with no stages cannot start. Add the first one."
+          />
+        ) : (
+          <ol id="cms-stage-list" class="flex flex-col gap-3">
+            {stages.map((stage, index) => (
+              <li
+                class="rounded-cms-lg border border-cms-line bg-cms-surface p-4 shadow-cms-card"
+                data-stage-id={stage.workflowStageId}
+              >
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 class="text-cms-card font-semibold text-cms-navy">
+                    {stage.sequenceNo}. {stage.stageName}
+                    <span class="ms-2 text-cms-caption font-normal text-cms-muted">
+                      {stage.stageCode}
+                    </span>
+                  </h3>
+                  <div class="flex items-center gap-1">
+                    {stage.terminalStage && <CmsBadge tone="neutral" label="Terminal" />}
+                    {mayEditStages && (
+                      <Fragment>
+                        <button
+                          type="button"
+                          class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-40"
+                          data-stage-move="up"
+                          disabled={index === 0}
+                          aria-label={`Move ${stage.stageName} earlier`}
+                        >
+                          Up
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-40"
+                          data-stage-move="down"
+                          disabled={index === stages.length - 1}
+                          aria-label={`Move ${stage.stageName} later`}
+                        >
+                          Down
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                          data-cms-wf-open="cms-wfstage-drawer"
+                          data-endpoint={`/api/admin/workflow-stages/${stage.workflowStageId}`}
+                          data-method="PATCH"
+                          data-title="Edit stage"
+                          data-values={JSON.stringify({
+                            stageCode: stage.stageCode,
+                            stageName: stage.stageName,
+                            sequenceNo: stage.sequenceNo,
+                            assignmentType: stage.assignmentType,
+                            assignedUserId: stage.assignedUserId ?? '',
+                            assignedWorkflowRoleId: stage.assignedWorkflowRoleId ?? '',
+                            assignedTeamId: stage.assignedTeamId ?? '',
+                            approvalMode: stage.approvalMode,
+                            requiredApprovals: stage.requiredApprovals,
+                            slaRuleId: stage.slaRuleId ?? '',
+                            terminalStage: stage.terminalStage,
+                          })}
+                        >
+                          Edit
+                        </button>
+                      </Fragment>
+                    )}
+                  </div>
+                </div>
+                <p class="mt-1 text-cms-body-sm text-cms-muted">
+                  {ASSIGNMENT_TYPE_LABELS[stage.assignmentType] ?? stage.assignmentType}
+                  {stage.assignedWorkflowRoleName !== null && `: ${stage.assignedWorkflowRoleName}`}
+                  {stage.assignedUserName !== null && `: ${stage.assignedUserName}`}
+                  {stage.assignmentType === 'TEAM' &&
+                    stage.assignedTeamName !== null &&
+                    `: ${stage.assignedTeamName}`}
+                </p>
+                <p class="text-cms-body-sm text-cms-muted">
+                  {describeApproval(stage.approvalMode, stage.requiredApprovals)}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {mayManage && (
+          <Fragment>
+            <CmsDrawer id="cms-wfstage-drawer" tone="form" title="Stage">
+              <form
+                id="cms-wfstage-form"
+                data-cms-wf-form="cms-wfstage-drawer"
+                novalidate
+                class="flex flex-col gap-4"
+              >
+                <p
+                  id="cms-wfstage-form-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                />
+                <CmsInput id="st-stageCode" name="stageCode" label="Stage code" required />
+                <CmsInput id="st-stageName" name="stageName" label="Stage name" required />
+                <CmsInput
+                  id="st-sequenceNo"
+                  name="sequenceNo"
+                  label="Position"
+                  type="number"
+                  min="1"
+                  hint="Position is changed with the up and down controls on the list, which reorder the whole set at once."
+                />
+                <CmsSelect
+                  id="st-assignmentType"
+                  name="assignmentType"
+                  label="Assigned to"
+                  required
+                  options={assignmentOptions}
+                />
+                <div data-assignment-field="USER">
+                  <CmsSelect
+                    id="st-assignedUserId"
+                    name="assignedUserId"
+                    label="Person"
+                    options={pick(options.users, 'Choose a person')}
+                  />
+                </div>
+                <div data-assignment-field="WORKFLOW_ROLE">
+                  <CmsSelect
+                    id="st-assignedWorkflowRoleId"
+                    name="assignedWorkflowRoleId"
+                    label="Workflow role"
+                    options={pick(options.workflowRoles, 'Choose a workflow role')}
+                    hint="The stage resolves against this role's assignments and authority rules when it starts."
+                  />
+                </div>
+                <div data-assignment-field="USER WORKFLOW_ROLE TEAM">
+                  <CmsSelect
+                    id="st-assignedTeamId"
+                    name="assignedTeamId"
+                    label="Team"
+                    options={pick(options.teams, 'No team')}
+                  />
+                </div>
+                <CmsSelect
+                  id="st-approvalMode"
+                  name="approvalMode"
+                  label="Approval mode"
+                  required
+                  options={modeOptions}
+                />
+                <CmsInput
+                  id="st-requiredApprovals"
+                  name="requiredApprovals"
+                  label="Approvals needed"
+                  type="number"
+                  min="0"
+                  value="1"
+                  hint="Read with the mode. Any one approver takes this as the number needed; every approver ignores it, because the assignee list is the requirement."
+                />
+                <CmsSelect
+                  id="st-slaRuleId"
+                  name="slaRuleId"
+                  label="SLA rule"
+                  options={pick(options.slaRules, 'No SLA rule')}
+                />
+                <CmsCheckbox
+                  id="st-terminalStage"
+                  name="terminalStage"
+                  label="Terminal stage"
+                  hint="The last stage of the workflow."
+                />
+              </form>
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  form="cms-wfstage-form"
+                  data-cms-wf-save
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </Fragment>
+            </CmsDrawer>
+
+            <CmsDrawer id="cms-wfversion-drawer" tone="form" title="New version">
+              <form
+                id="cms-wfversion-form"
+                data-cms-wf-form="cms-wfversion-drawer"
+                novalidate
+                class="flex flex-col gap-4"
+              >
+                <p
+                  id="cms-wfversion-form-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                />
+                <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+                  The stages of this version are copied into the new one, which you can then edit.
+                  Records already running under this version stay on it and keep reporting it.
+                </p>
+                <CmsInput
+                  id="nv-effectiveFrom"
+                  name="effectiveFrom"
+                  label="Effective from"
+                  type="date"
+                  hint="Transactions from this date pick up the new version."
+                />
+                <CmsCheckbox
+                  id="nv-retirePrevious"
+                  name="retirePrevious"
+                  label="Retire this version on that date"
+                  checked
+                />
+              </form>
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  form="cms-wfversion-form"
+                  data-cms-wf-save
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Create
+                </button>
+              </Fragment>
+            </CmsDrawer>
+
+            <CmsWorkflowFormScript />
+            {mayEditStages && (
+              <CmsStageOrderScript endpoint={`/api/admin/workflows/${definitionId}/stages`} />
+            )}
+          </Fragment>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>
