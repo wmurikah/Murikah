@@ -669,7 +669,7 @@ function stageForLevel(
   definitionId: string,
   level: number,
   statements: Stmt[],
-  created: { count: number },
+  created: { count: number; levels: number[] },
 ): StageRef {
   const existing = configured.get(level);
   if (existing !== undefined) return existing;
@@ -685,6 +685,7 @@ function stageForLevel(
   });
   configured.set(level, ref);
   created.count += 1;
+  created.levels.push(level);
   return ref;
 }
 
@@ -831,7 +832,7 @@ export async function commitPoBatch(
     const purchaseOrderId = existingId === undefined ? newId('PO') : text(existingId);
     const status = derivePoStatus(head);
     const statements: Stmt[] = [];
-    const stagesCreated = { count: 0 };
+    const stagesCreated: { count: number; levels: number[] } = { count: 0, levels: [] };
 
     if (existingId === undefined) {
       statements.push({
@@ -957,7 +958,27 @@ export async function commitPoBatch(
       }
     }
 
-    await db.batch(statements, 'write');
+    // One order, one transaction. An order that cannot land is isolated on
+    // its own rows and the rest of the batch continues, which is what makes
+    // PARTIAL mean something exact.
+    try {
+      await db.batch(statements, 'write');
+    } catch (error) {
+      const reason = `The purchase order could not be written: ${String(error)}`.slice(0, 400);
+      const failures: Stmt[] = [...group.importRowIds.values()].map((importRowId) => ({
+        sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
+              WHERE import_row_id = ? AND imported_at IS NULL`,
+        args: [reason, importRowId],
+      }));
+      await db.batch(failures, 'write');
+      result.ordersSkipped += 1;
+      // A stage minted inside the failed transaction did not survive it, so
+      // the cached definition forgets exactly those levels. Stages minted by
+      // an earlier order that did commit stay cached, because they are still
+      // there.
+      for (const level of stagesCreated.levels) definition?.stages.delete(level);
+      continue;
+    }
     result.stagesCreated += stagesCreated.count;
 
     await insertSnapshot(
@@ -993,4 +1014,118 @@ export async function commitPoBatch(
     args: [finalStatus, batchId],
   });
   return result;
+}
+
+// ---- Revalidation ------------------------------------------------------------
+
+/**
+ * Reprocess a purchase order batch after an administrator has mapped an
+ * identity, without re-uploading the file.
+ *
+ * A purchase order row is never held back by an unmapped approver: the order
+ * is a fact of its own and imports regardless, with the approval stage
+ * carrying no assignee until the name has a home. So revalidation here does
+ * two things and no more. It closes the unresolved actor rows whose names now
+ * resolve, and it fills the assignee on the stage instances this batch
+ * reconstructed that are still unassigned. The batch, its rows and their
+ * provenance are untouched.
+ */
+export async function revalidatePoRows(
+  db: Client,
+  batchId: string,
+): Promise<{
+  rowsExamined: number;
+  rowsResolved: number;
+  rowsStillUnresolved: number;
+  actorsResolved: number;
+  stageAssigneesFilled: number;
+}> {
+  const rows = await db.execute({
+    sql: `SELECT import_row_id, source_row_number, source_record_key, entity_id, raw_json
+          FROM import_rows WHERE import_batch_id = ? ORDER BY source_row_number`,
+    args: [batchId],
+  });
+
+  const statements: Stmt[] = [];
+  const identityCache = new Map<string, Map<string, string>>();
+  const identitiesFor = async (affiliateId: string) => {
+    const cached = identityCache.get(affiliateId);
+    if (cached !== undefined) return cached;
+    const loaded = await loadIdentities(db, affiliateId);
+    identityCache.set(affiliateId, loaded);
+    return loaded;
+  };
+
+  let stageAssigneesFilled = 0;
+  let stillUnresolved = 0;
+  for (const raw of rows.rows) {
+    const record = raw as unknown as Record<string, unknown>;
+    const key = record.source_record_key === null ? null : text(record.source_record_key);
+    if (key === null) continue;
+    const affiliateId = key.split('|')[0] ?? '';
+    const identities = await identitiesFor(affiliateId);
+    const parsed = JSON.parse(text(record.raw_json)) as Record<string, unknown>;
+    const row = await normalisePoRow(parsed, Number(record.source_row_number), affiliateId);
+    const unmapped = [row.createdBy, ...row.approvals.map((a) => a.approver)].filter(
+      (name): name is string => name !== null && !identities.has(name.toUpperCase()),
+    );
+    if (unmapped.length > 0) stillUnresolved += 1;
+
+    const entityId = record.entity_id === null ? null : text(record.entity_id);
+    if (entityId === null) continue;
+    for (const approval of row.approvals) {
+      if (approval.approver === null) continue;
+      const userId = identities.get(approval.approver.toUpperCase());
+      if (userId === undefined) continue;
+      // Only a stage this batch left unassigned, and only the level it
+      // belongs to. An assignee already recorded is never overwritten.
+      const stage = await db.execute({
+        sql: `SELECT wsi.workflow_stage_instance_id AS id FROM workflow_stage_instances wsi
+              JOIN workflow_instances wi ON wi.workflow_instance_id = wsi.workflow_instance_id
+              WHERE wi.entity_type = 'PURCHASE_ORDER' AND wi.entity_id = ?
+                AND wsi.assigned_user_id IS NULL
+                AND wsi.action_notes = ?`,
+        args: [entityId, `Reconstructed from the PO extract, approval level ${approval.level}`],
+      });
+      for (const found of stage.rows) {
+        statements.push({
+          sql: `UPDATE workflow_stage_instances SET assigned_user_id = ?
+                WHERE workflow_stage_instance_id = ?`,
+          args: [userId, text((found as Record<string, unknown>).id)],
+        });
+        stageAssigneesFilled += 1;
+      }
+    }
+  }
+
+  const actors = await db.execute({
+    sql: `SELECT unresolved_actor_id, external_username, affiliate_id FROM unresolved_actors
+          WHERE import_batch_id = ? AND status = 'OPEN'`,
+    args: [batchId],
+  });
+  let actorsResolved = 0;
+  for (const raw of actors.rows) {
+    const record = raw as unknown as Record<string, unknown>;
+    const affiliateId = record.affiliate_id === null ? '' : text(record.affiliate_id);
+    const identities = await identitiesFor(affiliateId);
+    const userId = identities.get(text(record.external_username).toUpperCase());
+    if (userId === undefined) continue;
+    actorsResolved += 1;
+    statements.push({
+      sql: `UPDATE unresolved_actors SET status = 'MAPPED', mapped_user_id = ?
+            WHERE unresolved_actor_id = ?`,
+      args: [userId, text(record.unresolved_actor_id)],
+    });
+  }
+
+  for (let start = 0; start < statements.length; start += 200) {
+    await db.batch(statements.slice(start, start + 200), 'write');
+  }
+  return {
+    rowsExamined: rows.rows.length,
+    rowsResolved: stageAssigneesFilled,
+    rowsStillUnresolved: stillUnresolved,
+    actorsResolved,
+    stageAssigneesFilled,
+  };
 }
