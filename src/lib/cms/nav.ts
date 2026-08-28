@@ -53,7 +53,7 @@ export const CMS_NAV: readonly CmsNavItem[] = [
     href: '/app',
     icon: 'home',
     permission: null,
-    summary: 'Today across service, orders and accounts.',
+    summary: 'SLA, exceptions, orders, commercial and service.',
   },
   {
     label: 'Customers',
@@ -89,18 +89,6 @@ export const CMS_NAV: readonly CmsNavItem[] = [
     icon: 'performance',
     permission: 'SLA.DASHBOARD.VIEW',
     summary: 'SLA attainment, resolution times and team load.',
-  },
-  {
-    label: 'Executive',
-    href: '/app/executive',
-    icon: 'performance',
-    permission: [
-      'ORDERS.SALES_ORDER.VIEW',
-      'ORDERS.PURCHASE_ORDER.VIEW',
-      'CRM.OPPORTUNITIES.VIEW',
-      'SERVICE.CASES.VIEW',
-    ],
-    summary: 'Where to pay attention, across commercial, operational and service.',
   },
   {
     label: 'Data',
