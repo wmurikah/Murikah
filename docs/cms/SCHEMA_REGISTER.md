@@ -28,6 +28,7 @@ database rather than from a record of intent.
 | 9   | `audit/09_add_audit_permissions.sql`                      | `AUDIT.EVENTS.SECURITY_VIEW` and `AUDIT.EVENTS.EXPORT`                                           | Yes                        | Yes                                | Its own `SELECT`                                          |
 | —   | `SO/PO source completeness rebuild` (run before phase 17) | Makes the commercial columns on the four order tables nullable                                   | **No**                     | No                                 | `/api/health` checks `purchase_order_lines.unit_cost`     |
 | —   | `production/10_production_cleanup.sql`                    | **Removes the demo seed. Never run without review.**                                             | No                         | **No**                             | See the script                                            |
+| —   | `production/11_validation_cleanup.sql`                    | **Removes the phase 30 validation dataset.** Only needed if the journeys were replayed by hand   | No                         | **No**                             | Its own step 9, every count zero                          |
 | —   | `teardown/00_inventory.sql`                               | Read-only. Counts every table before a teardown, so an operator sees what they are about to lose | Yes                        | Not applicable, it changes nothing | It is itself a `SELECT`                                   |
 | —   | `teardown/02_drop_all.sql`                                | **Drops every CMS table.** For rebuilding a development database, never production               | Yes                        | **No**                             | `SELECT COUNT(*) FROM sqlite_master` returns 0 CMS tables |
 
@@ -37,7 +38,7 @@ database rather than from a record of intent.
    created; a portal query references a column script 7 added.
 2. **No transaction keywords.** The Turso console runs statements one at a
    time and a `BEGIN` left open is worse than a script half-applied.
-3. **Read the top of the file first.** Scripts 7, 8 and 10 each have a
+3. **Read the top of the file first.** Scripts 7, 8, 10 and 11 each have a
    consequence stated there that is not obvious from the SQL.
 4. **Never run `hass_cms_turso_v1_FINAL.sql` against a live database.** It
    recreates the demo seed. There is no guard preventing it; the only control
