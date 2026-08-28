@@ -2072,7 +2072,7 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding: 14px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--sn-divider);
 }
 .grc-snap__evidence-item:first-child {
@@ -2089,7 +2089,7 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 10px;
-  background: var(--grc-stone, #f7f5ef);
+  background: var(--grc-stone, var(--sn-page));
   color: var(--sn-navy);
 }
 .grc-snap__evidence-icon svg {
@@ -2104,7 +2104,7 @@
 .grc-snap__evidence-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 4px;
 }
 .grc-snap__evidence-name {
   color: var(--sn-ink);
