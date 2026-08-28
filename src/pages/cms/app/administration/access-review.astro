@@ -57,7 +57,7 @@ const money = (value: number | null): string =>
 <CmsLayout title="Access review">
   <CmsPageHeader
     title="Access review"
-    description="Application access and approval authority, kept apart because they are not the same thing."
+    definition="Application access and approval authority are separate mechanisms. A role says what a person may do; approval authority says what they may approve. Neither implies the other, which is why they are never merged into one list."
     crumbs={[{ label: 'Administration', href: '/app/administration' }, { label: 'Access review' }]}
   />
 

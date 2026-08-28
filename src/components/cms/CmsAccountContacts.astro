@@ -71,7 +71,7 @@ const primary = contacts.find((c) => c.isPrimary && c.active) ?? null;
 
   {
     primary === null && contacts.length > 0 && (
-      <p class="flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+      <p class="flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
         <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
         <span>
           No active primary contact. Nothing breaks without one, and every process that needs a
@@ -219,7 +219,7 @@ const primary = contacts.find((c) => c.isPrimary && c.active) ?? null;
             id="cms-contact-form-error"
             role="alert"
             hidden
-            class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+            class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
           />
           <p id="cms-contact-form-note" hidden class="text-cms-body-sm text-cms-muted" />
           <CmsInput id="ct-fullName" name="fullName" label="Full name" required />

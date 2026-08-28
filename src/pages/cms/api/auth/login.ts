@@ -20,6 +20,7 @@ import { parseLoginInput, MAX_BODY_BYTES } from '@/lib/cms/auth/loginInput';
 import { attemptLogin } from '@/lib/cms/auth/loginFlow';
 import { serialiseSessionCookie, isSecureRequest } from '@/lib/cms/auth/cookie';
 import { apiError, loginFailure, newTraceId } from '@/lib/cms/errors';
+import { homeFor } from '@/lib/cms/routes';
 
 export const prerender = false;
 
@@ -99,6 +100,13 @@ export const POST: APIRoute = async ({ request }) => {
       // A distinct state, not a leak: the password was correct, and Build
       // Prompt 02's client interface already expresses this outcome.
       mustChangePassword: outcome.mustChangePassword,
+      // WHERE TO GO NEXT, DECIDED HERE. The browser is told a destination
+      // rather than working one out, because the decision is a permission
+      // question and the browser holds no permissions: the response carries a
+      // user type and nothing else, by design. Deciding it here also keeps one
+      // answer for the three ways in, the sign-in form, the host root and the
+      // middleware's redirect of a signed-in visitor, so they cannot drift.
+      landing: homeFor(outcome.identity.userType, outcome.identity.permissions),
     },
     200,
   );

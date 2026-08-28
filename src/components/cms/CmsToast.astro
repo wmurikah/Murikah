@@ -20,9 +20,9 @@ interface Props {
 const { tone = 'info', title, description, class: className } = Astro.props;
 
 const tones = {
-  success: 'border-cms-success/30 bg-cms-success-tint text-cms-success',
-  warning: 'border-cms-warning/30 bg-cms-warning-tint text-cms-warning',
-  danger: 'border-cms-danger/30 bg-cms-danger-tint text-cms-danger',
+  success: 'border-cms-positive/30 bg-cms-positive-tint text-cms-positive',
+  warning: 'border-cms-caution/30 bg-cms-caution-tint text-cms-caution',
+  danger: 'border-cms-negative/30 bg-cms-negative-tint text-cms-negative',
   info: 'border-cms-info/30 bg-cms-info-tint text-cms-info',
 };
 const glyphs: Record<string, CmsIconName> = {
@@ -38,7 +38,7 @@ const glyphs: Record<string, CmsIconName> = {
   aria-live={tone === 'danger' ? 'assertive' : 'polite'}
   data-cms-toast
   class:list={[
-    'flex w-full max-w-md items-start gap-3 rounded-cms-lg border px-4 py-3 shadow-cms-card',
+    'flex w-full max-w-md items-start gap-3 rounded-cms-lg border px-4 py-3',
     tones[tone],
     className,
   ]}

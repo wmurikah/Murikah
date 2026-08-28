@@ -112,12 +112,12 @@ const cycleTrend = lineChart(
   [
     {
       name: 'Approval cycle median',
-      token: 'cms-royal',
+      token: 'cms-series-1',
       points: buckets.map((b) => ({ label: b.bucket, value: b.approvalCycleMedianMinutes })),
     },
     {
       name: 'Receipt to Oracle posting median',
-      token: 'cms-lavender',
+      token: 'cms-series-2',
       points: buckets.map((b) => ({ label: b.bucket, value: b.receiptToPostingMedianMinutes })),
     },
   ],
@@ -127,7 +127,7 @@ const cycleTrend = lineChart(
 const bottleneckChart = distributionChart(
   {
     name: 'Stage',
-    token: 'cms-info',
+    token: 'cms-series-4',
     points: shares.rows.map((row) => ({
       label: `${row.sequenceNo}. ${row.stageName}`,
       value: row.sharePercent,
@@ -153,7 +153,6 @@ const bottleneckChart = distributionChart(
       <Fragment>
         <CmsPageHeader
           title="Purchase order performance"
-          description="Approval stages as they were actually used, and how fast system stock catches up with physical stock."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Orders', href: '/app/orders' },
@@ -247,7 +246,7 @@ const bottleneckChart = distributionChart(
             ].map((metric) => (
               <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
                 <p class="text-cms-body-sm text-cms-muted">{metric.label}</p>
-                <p class="text-cms-h2 font-semibold text-cms-ink tabular-nums">
+                <p class="text-cms-section font-semibold text-cms-ink tabular-nums">
                   {formatDuration(metric.stats.medianMinutes)}
                 </p>
                 <p class="mt-1 text-cms-body-sm text-cms-muted">
@@ -277,7 +276,9 @@ const bottleneckChart = distributionChart(
                 class="rounded-cms border border-cms-line bg-cms-surface p-4 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
               >
                 <p class="text-cms-body-sm text-cms-muted">{signal.label}</p>
-                <p class="text-cms-h2 font-semibold text-cms-ink tabular-nums">{signal.orders}</p>
+                <p class="text-cms-section font-semibold text-cms-ink tabular-nums">
+                  {signal.orders}
+                </p>
                 <p class="mt-1 text-cms-body-sm text-cms-royal">Open the list</p>
               </a>
             ))}

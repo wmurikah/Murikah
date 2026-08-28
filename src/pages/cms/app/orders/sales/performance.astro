@@ -106,7 +106,7 @@ const ordersTrend =
         [
           {
             name: 'Orders created',
-            token: 'cms-royal',
+            token: 'cms-series-1',
             points: buckets.map((bucket) => ({
               label: bucket.bucket,
               value: bucket.orders,
@@ -124,17 +124,17 @@ const durationTrend =
         [
           {
             name: 'Finance median (elapsed)',
-            token: 'cms-royal',
+            token: 'cms-series-1',
             points: buckets.map((b) => ({ label: b.bucket, value: b.financeMedianMinutes })),
           },
           {
             name: 'Credit median (elapsed)',
-            token: 'cms-lavender',
+            token: 'cms-series-2',
             points: buckets.map((b) => ({ label: b.bucket, value: b.creditMedianMinutes })),
           },
           {
             name: 'Order to invoice median',
-            token: 'cms-gold-ink',
+            token: 'cms-series-3',
             points: buckets.map((b) => ({ label: b.bucket, value: b.orderToInvoiceMedianMinutes })),
           },
         ],
@@ -144,7 +144,7 @@ const durationTrend =
 const ageChart = distributionChart(
   {
     name: 'Open order age',
-    token: 'cms-info',
+    token: 'cms-series-4',
     points: ages.map((bucket) => ({ label: bucket.label, value: bucket.orders })),
   },
   { unit: 'orders' },
@@ -156,7 +156,7 @@ const complianceTrend =
     : barChart(
         {
           name: 'SLA compliance',
-          token: 'cms-success',
+          token: 'cms-series-5',
           points: buckets.map((b) => ({ label: b.bucket, value: b.slaCompliancePercent })),
         },
         { unit: 'per cent', format: (v) => (v === null ? 'Not available' : `${v}%`) },
@@ -179,7 +179,7 @@ const complianceTrend =
       <Fragment>
         <CmsPageHeader
           title="Sales order performance"
-          description="Every figure is aggregated in the database under this filter and your own scope, and every duration states how many orders carried the timestamps it needs."
+          definition="Every figure is aggregated in the database under this filter and your own scope, and every duration states how many orders carried the timestamps it needs."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Orders', href: '/app/orders' },
@@ -297,7 +297,9 @@ const complianceTrend =
                 class="rounded-cms border border-cms-line bg-cms-surface p-4 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
               >
                 <p class="text-cms-body-sm text-cms-muted">{signal.label}</p>
-                <p class="text-cms-h2 font-semibold text-cms-ink tabular-nums">{signal.orders}</p>
+                <p class="text-cms-section font-semibold text-cms-ink tabular-nums">
+                  {signal.orders}
+                </p>
                 <p class="mt-1 text-cms-body-sm text-cms-royal">Open the list</p>
               </a>
             ))}
@@ -494,7 +496,7 @@ const complianceTrend =
             </p>
           </CmsCard>
 
-          <CmsCard title="Customers" description="Order count, fulfilment and SLA by customer.">
+          <CmsCard title="Customers">
             <CmsDataTable
               caption="Customer performance"
               columns={[

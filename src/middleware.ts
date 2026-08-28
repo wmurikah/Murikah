@@ -335,7 +335,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       if (principal) {
         // Signed in. Send each user type to its own surface, and keep them
         // there. The sign-in page is not somewhere a signed-in user belongs.
-        const home = homeFor(principal.user.userType);
+        const home = homeFor(principal.user.userType, principal.user.permissions);
         if (appPath === LOGIN_PATH) return context.redirect(home, 302);
         if (appPath === '/') return context.redirect(home, 302);
         if (principal.user.userType === 'EXTERNAL' && isAppPath(appPath)) {
