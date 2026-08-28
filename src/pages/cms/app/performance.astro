@@ -134,6 +134,9 @@ function bucketHref(key: string | null): string {
             { label: 'SLA Monitor' },
           ]}
         >
+          <CmsButton slot="actions" variant="secondary" href="/app/performance/reports">
+            Reports
+          </CmsButton>
           {mayConfigure && (
             <CmsButton slot="actions" variant="secondary" href="/app/administration/sla">
               Configuration

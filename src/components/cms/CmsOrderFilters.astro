@@ -19,8 +19,15 @@ interface Props {
   action: string;
   /** Purchase order pages have no credit column, so they hide that control. */
   showCredit?: boolean;
+  /**
+   * Hides the status control, for a page whose report has no status
+   * dimension. Absent rather than empty: a control that does nothing is
+   * worse than no control, because somebody sets it and concludes the page
+   * is broken when the numbers do not move.
+   */
+  showStatus?: boolean;
 }
-const { filter, affiliates, statuses, action, showCredit = true } = Astro.props;
+const { filter, affiliates, statuses, action, showCredit = true, showStatus = true } = Astro.props;
 const titleCase = (value: string) =>
   value.charAt(0) + value.slice(1).toLowerCase().replace('_', ' ');
 ---
@@ -30,6 +37,15 @@ const titleCase = (value: string) =>
   action={action}
   class="mb-4 grid gap-3 rounded-cms border border-cms-line bg-cms-surface p-4 sm:grid-cols-2 lg:grid-cols-6"
 >
+  {
+    /*
+    Extra hidden fields from the caller. A GET form replaces the whole query
+    string, so a page carrying its own parameter (the reports page carries
+    which report) must put it back or submitting the filter would navigate
+    away from the thing being filtered.
+  */
+  }
+  <slot />
   <CmsInput id="f-from" name="from" label="From" type="date" value={filter.from ?? ''} />
   <CmsInput id="f-to" name="to" label="To" type="date" value={filter.to ?? ''} />
   <CmsSelect
@@ -39,16 +55,20 @@ const titleCase = (value: string) =>
     value={filter.affiliateId ?? ''}
     options={[{ value: '', label: 'All affiliates' }, ...affiliates]}
   />
-  <CmsSelect
-    id="f-status"
-    name="status"
-    label="Status"
-    value={filter.status ?? ''}
-    options={[
-      { value: '', label: 'Any status' },
-      ...statuses.map((status) => ({ value: status, label: titleCase(status) })),
-    ]}
-  />
+  {
+    showStatus && (
+      <CmsSelect
+        id="f-status"
+        name="status"
+        label="Status"
+        value={filter.status ?? ''}
+        options={[
+          { value: '', label: 'Any status' },
+          ...statuses.map((status) => ({ value: status, label: titleCase(status) })),
+        ]}
+      />
+    )
+  }
   <CmsSelect
     id="f-sla"
     name="slaStatus"

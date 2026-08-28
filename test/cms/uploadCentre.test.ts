@@ -539,13 +539,10 @@ test('a rejected upload writes nothing at all', async () => {
   assert.equal(refused.stage, 'REJECTED');
   assert.equal(refused.batchId, null);
 
-  const noAffiliate = await receiveUpload(
-    asClient(c),
-    { ...poUpload(new Uint8Array(PO_FILE)), affiliateId: null },
-    CTX,
-  );
-  assert.equal(noAffiliate.stage, 'REJECTED');
-  assert.ok(noAffiliate.rejectedReason?.includes('no affiliate'));
+  // A purchase order upload with no affiliate is NOT a rejection any more: the
+  // extract carries no affiliate column, so the batch is Group scope. That
+  // case is proved in poImport.test.ts; what belongs here is only what a
+  // genuine rejection must not leave behind.
 
   const unknownSource = await receiveUpload(
     asClient(c),
