@@ -21,6 +21,7 @@ import {
   IMPORT_TYPE_LABELS,
   type BatchSummaryRow,
   type ImportType,
+  isNonTerminal,
 } from '@/lib/cms/import/uploadCentre';
 
 export const prerender = false;
@@ -123,6 +124,20 @@ const typeLabel = (type: string) =>
               </td>
               <td class="px-4 py-2.5">
                 <CmsBadge tone={statusTone(batch.status)} label={batch.status.toLowerCase()} />
+                {/*
+                 * A batch that never reached a terminal state is not a
+                 * status anybody should have to open the detail page to
+                 * discover. It says so here, where the operator is already
+                 * looking, with the action that clears it beside it.
+                 */}
+                {isNonTerminal(batch.status) && (
+                  <a
+                    class="mt-1 block text-cms-body-sm text-cms-royal hover:underline"
+                    href={`/app/data/history/${batch.batchId}`}
+                  >
+                    Never finished, reprocess
+                  </a>
+                )}
               </td>
             </tr>
           ))}

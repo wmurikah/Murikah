@@ -1073,6 +1073,111 @@ CREATE TABLE IF NOT EXISTS import_batches (
     UNIQUE(file_sha256)
 );
 
+-- ---------------------------------------------------------------------------
+-- THE LANDING TABLES.
+--
+-- One column per workbook header, named after the header in lower case with
+-- underscores, plus the bookkeeping the importer adds. Every workbook column
+-- is nullable by design: an extract's own blanks are facts about the extract,
+-- and a NOT NULL here would reject the file rather than record what it said.
+--
+-- so_extract_rows is 38 columns: 31 headers, 6 bookkeeping, 1 identity.
+-- po_extract_rows is 36 columns: 29 headers, 6 bookkeeping, 1 identity.
+--
+-- The application NEVER creates these; the operator does. This copy exists so
+-- the suite can prove the landing against the real extracts, and the writer
+-- reads the live column list at runtime rather than trusting this file, so a
+-- name that differs in the operator's database lands in extra_json instead of
+-- throwing.
+--
+-- UNIQUE(import_batch_id, source_row_number) is what makes re-landing a batch
+-- replace its rows rather than duplicate them.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS so_extract_rows (
+    so_extract_row_id TEXT PRIMARY KEY,
+    import_batch_id TEXT NOT NULL,
+    source_row_number INTEGER NOT NULL CHECK(source_row_number > 0),
+    source_record_key TEXT,
+    row_hash TEXT NOT NULL,
+    affiliate TEXT,
+    document_number TEXT,
+    posting_date TEXT,
+    actual_order_date_user_input TEXT,
+    customer_code TEXT,
+    customer_name TEXT,
+    user_name TEXT,
+    create_date TEXT,
+    create_time TEXT,
+    create_date_time TEXT,
+    approval_date1 TEXT,
+    approval_date TEXT,
+    approval_time TEXT,
+    approval_date_time TEXT,
+    finance_variance TEXT,
+    delayed_raising_orders TEXT,
+    approval_status TEXT,
+    approver TEXT,
+    credit_hold_date TEXT,
+    credit_hold_name TEXT,
+    released_flag TEXT,
+    release_reason_code TEXT,
+    credit_hold_release_date TEXT,
+    hold_released_by TEXT,
+    credit_variance TEXT,
+    invoice_creation_date TEXT,
+    invoice_variance TEXT,
+    line_number TEXT,
+    ordered_item TEXT,
+    loading_authority_date TEXT,
+    loading_authority_variance TEXT,
+    extra_json TEXT,
+    ingested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (import_batch_id) REFERENCES import_batches(import_batch_id) ON DELETE CASCADE,
+    UNIQUE(import_batch_id, source_row_number)
+);
+
+CREATE TABLE IF NOT EXISTS po_extract_rows (
+    po_extract_row_id TEXT PRIMARY KEY,
+    import_batch_id TEXT NOT NULL,
+    source_row_number INTEGER NOT NULL CHECK(source_row_number > 0),
+    source_record_key TEXT,
+    row_hash TEXT NOT NULL,
+    purchase_number TEXT,
+    req_description TEXT,
+    nature TEXT,
+    original_creation_date TEXT,
+    submission_for_approval_date TEXT,
+    time_diff_raisepo_toaprovalsubmit TEXT,
+    purchase_order_created_by TEXT,
+    first_approval_date TEXT,
+    second_approval_date TEXT,
+    third_approval_date TEXT,
+    fourth_approval_date TEXT,
+    fifth_approval_date TEXT,
+    sixth_approval_date TEXT,
+    seventh_approval_date TEXT,
+    first_approver TEXT,
+    second_approver TEXT,
+    third_approver TEXT,
+    fourth_approver TEXT,
+    fifth_approver TEXT,
+    sixth_approver TEXT,
+    seventh_approver TEXT,
+    first_approvals_variance TEXT,
+    second_approvals_variance TEXT,
+    third_approvals_variance TEXT,
+    fourth_approvals_variance TEXT,
+    fifth_approvals_variance TEXT,
+    sixth_approvals_variance TEXT,
+    seventh_approvals_variance TEXT,
+    authorization_status TEXT,
+    extra_json TEXT,
+    ingested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (import_batch_id) REFERENCES import_batches(import_batch_id) ON DELETE CASCADE,
+    UNIQUE(import_batch_id, source_row_number)
+);
+
 CREATE TABLE IF NOT EXISTS import_rows (
     import_row_id TEXT PRIMARY KEY,
     import_batch_id TEXT NOT NULL,

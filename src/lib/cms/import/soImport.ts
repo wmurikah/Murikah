@@ -42,6 +42,12 @@ import {
   rejectBatch,
   describeFailure,
 } from './workbook.ts';
+import {
+  planLanding,
+  landingStatements,
+  clearLandingStatement,
+  SO_LANDING_TABLE,
+} from './landing.ts';
 import { verifyColumns } from './completeness.ts';
 import { insertSnapshot, SALES_ORDER_SNAPSHOT } from './snapshots.ts';
 
@@ -259,6 +265,8 @@ export interface SoValidation {
   report: MappingReportLine[];
   dateRange: { from: string | null; to: string | null };
   affiliates: string[];
+  /** Headers with no column in the landing table. Kept in extra_json. */
+  unmappedColumns: string[];
 }
 
 interface ResolutionMaps {
@@ -311,7 +319,23 @@ export function resolveProduct(products: Map<string, string>, item: string | nul
 export async function validateSoWorkbook(
   db: Client,
   buffer: ArrayBuffer | Uint8Array,
-  input: { filename: string; uploadedBy: string; sourceSystemId: string },
+  input: {
+    filename: string;
+    uploadedBy: string;
+    sourceSystemId: string;
+    /**
+     * Set only when reprocessing: the batch to run again, in place.
+     *
+     * HOW THIS SEPARATES THE TWO CASES. `UNIQUE(file_sha256)` and the
+     * duplicate check exist to answer one question: is somebody uploading a
+     * file that has been uploaded before? Reprocessing is not a second
+     * upload. It declares up front which batch it IS, so the question is
+     * never asked, no batch row is created and no file_objects row is
+     * written. The identity, the uploader, the upload timestamp and the file
+     * hash all stay exactly as they were.
+     */
+    reprocessBatchId?: string | null;
+  },
   ctx: WriteContext,
 ): Promise<SoValidation> {
   const completeness = await verifySourceCompleteness(db);
@@ -322,10 +346,17 @@ export async function validateSoWorkbook(
   }
 
   const fileSha256 = await hashFile(buffer);
-  const existing = await db.execute({
-    sql: `SELECT import_batch_id FROM import_batches WHERE file_sha256 = ? LIMIT 1`,
-    args: [fileSha256],
-  });
+  // REPROCESSING IS NOT A SECOND UPLOAD, so the duplicate question is not put
+  // to it. An upload asks "have these bytes been seen before"; a reprocess has
+  // already said which batch it is and is running that batch again.
+  const reprocessOf = input.reprocessBatchId ?? null;
+  const existing: { rows: Record<string, unknown>[] } =
+    reprocessOf !== null
+      ? { rows: [] }
+      : await db.execute({
+          sql: `SELECT import_batch_id FROM import_batches WHERE file_sha256 = ? LIMIT 1`,
+          args: [fileSha256],
+        });
   if (existing.rows[0] !== undefined) {
     // The exact file was uploaded before. The hash, not the filename, is the
     // rule; nothing is re-imported and the previous batch is named.
@@ -347,45 +378,71 @@ export async function validateSoWorkbook(
       report: [],
       dateRange: { from: null, to: null },
       affiliates: [],
+      unmappedColumns: [],
     };
   }
 
   const sheet = parseWorkbook(buffer);
   const maps = await loadResolutionMaps(db);
-  const batchId = newId('IMP');
+  const batchId = reprocessOf ?? newId('IMP');
   const now = toDbTimestamp(ctx.now);
 
-  await db.batch(
-    [
-      {
-        sql: `INSERT INTO file_objects (file_id, original_filename, storage_key, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_at)
+  // A reprocess keeps the batch it was given: the same identifier, uploader,
+  // upload timestamp and file hash. Only its rows are rebuilt, and the status
+  // is put back to VALIDATING for the duration of the run.
+  const creationStatements = [
+    {
+      sql: `INSERT INTO file_objects (file_id, original_filename, storage_key, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_at)
               VALUES (?, ?, ?, 'application/vnd.ms-excel', ?, ?, ?, ?)`,
-        args: [
-          newId('FILE'),
-          input.filename,
-          `imports/${batchId}/${input.filename}`,
-          buffer instanceof Uint8Array ? buffer.byteLength : buffer.byteLength,
-          fileSha256,
-          input.uploadedBy,
-          now,
-        ],
-      },
-      {
-        sql: `INSERT INTO import_batches
+      args: [
+        newId('FILE'),
+        input.filename,
+        `imports/${batchId}/${input.filename}`,
+        buffer instanceof Uint8Array ? buffer.byteLength : buffer.byteLength,
+        fileSha256,
+        input.uploadedBy,
+        now,
+      ],
+    },
+    {
+      sql: `INSERT INTO import_batches
                 (import_batch_id, source_system_id, import_type, original_filename, file_sha256,
                  uploaded_by_user_id, uploaded_at, rows_received, status)
               VALUES (?, ?, 'SALES_ORDER', ?, ?, ?, ?, ?, 'VALIDATING')`,
-        args: [
-          batchId,
-          input.sourceSystemId,
-          input.filename,
-          fileSha256,
-          input.uploadedBy,
-          now,
-          sheet.rows.length,
+      args: [
+        batchId,
+        input.sourceSystemId,
+        input.filename,
+        fileSha256,
+        input.uploadedBy,
+        now,
+        sheet.rows.length,
+      ],
+    },
+  ];
+
+  await db.batch(
+    reprocessOf === null
+      ? creationStatements
+      : [
+          // The same batch, run again: its previous rows and landing go, the
+          // status returns to VALIDATING, and nothing about its identity moves.
+          {
+            sql: `DELETE FROM import_rows WHERE import_batch_id = ?`,
+            args: [batchId],
+          },
+          {
+            sql: `DELETE FROM unresolved_actors WHERE import_batch_id = ?`,
+            args: [batchId],
+          },
+          {
+            sql: `UPDATE import_batches
+                    SET status = 'VALIDATING', rows_received = ?, rows_new = 0, rows_changed = 0,
+                        rows_exact_duplicate = 0, rows_rejected = 0
+                  WHERE import_batch_id = ?`,
+            args: [sheet.rows.length, batchId],
+          },
         ],
-      },
-    ],
     'write',
   );
   // FROM HERE THE BATCH ROW EXISTS, SO EVERY EXIT MUST LEAVE IT TERMINAL.
@@ -426,6 +483,14 @@ export async function validateSoWorkbook(
       normalised.map((r) => r.sourceKey).filter((k): k is string => k !== null),
       batchId,
     );
+
+    // The landing plan: which of this extract's headers this database can hold
+    // in a column of their own, and which have to go to extra_json. One read.
+    const landing = await planLanding(db, SO_LANDING_TABLE, sheet.headers);
+    if (landing !== null) {
+      // A re-landing replaces the batch's rows rather than adding to them.
+      statements.push(clearLandingStatement(SO_LANDING_TABLE, batchId));
+    }
 
     for (let index = 0; index < sheet.rows.length; index++) {
       const raw = sheet.rows[index] ?? {};
@@ -518,6 +583,29 @@ export async function validateSoWorkbook(
       });
     }
 
+    // EVERY PARSED ROW LANDED, AS THE WORKBOOK GAVE IT.
+    //
+    // These statements join the queue the loop already built, so a 1,386-row
+    // extract lands in the same chunked writes as its import_rows and costs no
+    // round trip of its own. Landing writes only to so_extract_rows: no
+    // canonical row is created by a validation.
+    if (landing !== null) {
+      statements.push(
+        ...landingStatements(
+          landing,
+          batchId,
+          normalised.map((row, index) => ({
+            sourceRowNumber: row.sourceRowNumber,
+            sourceRecordKey: row.sourceKey,
+            rowHash: row.rowHash,
+            raw: sheet.rows[index] ?? {},
+          })),
+          now,
+          newId,
+        ),
+      );
+    }
+
     // Unresolved actors, once per username per batch, never a user created.
     for (const username of unresolvedUsers) {
       statements.push({
@@ -561,6 +649,7 @@ export async function validateSoWorkbook(
       report: mappingReport(sheet.headers, sheet.rows),
       dateRange: { from, to },
       affiliates: [...affiliates],
+      unmappedColumns: landing === null ? [] : landing.unmapped,
     };
   } catch (error) {
     await rejectBatch(db, batchId, describeFailure(error), {
@@ -587,6 +676,7 @@ export async function validateSoWorkbook(
       report: [],
       dateRange: { from: null, to: null },
       affiliates: [],
+      unmappedColumns: [],
     };
   }
 }
