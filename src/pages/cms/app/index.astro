@@ -1,263 +1,673 @@
 ---
 /**
- * The internal application home, served at /app on cms.murikah.com.
+ * The dashboard. One of them, at /app, and it is what a person lands on.
  *
- * This was the Build Prompt 02 shell at `/`. It moved here so the whole
- * internal application sits under one prefix, which is what makes the rule
- * "an EXTERNAL user never renders an /app path" a single check rather than a
- * list. `/` is now a redirect by user type, handled in the middleware.
+ * THERE USED TO BE TWO. A verbose Home carrying a profile card and a grid of
+ * workspace tiles that duplicated the navigation rail, and an Executive page
+ * carrying the figures. A person signing in met the one with no numbers on it
+ * and had to go and find the other. They are merged here: Executive is a
+ * redirect, its rail entry is gone, and this is the only dashboard.
  *
- * The principal is read from locals, resolved once per request by the guard.
- * Nothing on this page fetches /api/auth/me, and there is no client-side
- * authentication store: the page is not rendered at all until the server knows
- * who is asking, which is why there is no loading state to design and why a
- * refresh keeps the user signed in without a line of code.
+ * SLA FIRST, because it is the reason this system exists. The segmented
+ * control at the top chooses Internal or External and lives in the URL, so a
+ * view can be sent to somebody else and the browser's back button works.
  *
- * PHASE 16 MADE THIS AN ACTION CENTRE.
- * Needs Attention leads: SLA breaches and at-risk instances in the caller's
- * scope, cases assigned to them, and their overdue follow-ups. No vanity
- * metric sits above urgent work; the profile card and workspace tiles moved
- * below it. Every number drills into the list it counts.
+ * THE SWITCH COSTS NOTHING. Both families are read from figures the Orders and
+ * Service sections already load, so choosing one does not fetch anything the
+ * other did not. Fetching an "SLA payload" per family would have added round
+ * trips to a page that is already at its budget.
+ *
+ * COMPOSED FROM PERMISSIONS, AND IT DOES NOT SAY SO ON THE PAGE. A section
+ * renders where the caller holds the permission its module requires and the
+ * scope resolver decides what it counts. That is how the system works; it is
+ * not something a manager needs read to them, and the paragraph that used to
+ * explain it here has gone.
+ *
+ * WHAT WENT WITH THE OLD HOME. The profile card (the same facts are on the
+ * account menu), the workspace tiles (the rail is the navigation), and the
+ * personal SLA and follow-up counters, which cost four round trips and two
+ * write sweeps on the landing page. The sweep still runs: on the SLA monitor,
+ * on notifications, on both of their endpoints, and on every domain event
+ * through the SLA wiring, so nothing stops being settled because this page
+ * stopped doing it.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
-import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
+import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
+import CmsStatusPill from '@/components/cms/CmsStatusPill.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterBar from '@/components/cms/CmsFilterBar.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
-import { visibleNav } from '@/lib/cms/nav';
-import { assignmentSummary, organisationLine } from '@/lib/cms/organisation';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { sweepDueSlas } from '@/lib/cms/sla/engine';
-import { sweepNotifications } from '@/lib/cms/notify/notifications';
-import { listSlaInstances } from '@/lib/cms/repos/slaAdmin';
-import { caseIndicators } from '@/lib/cms/repos/serviceAdmin';
-import { myWork } from '@/lib/cms/repos/activityAdmin';
-import { canViewSlaDashboard, canViewCases } from '@/lib/cms/permissions';
+import { createBatcher, runSection } from '@/lib/cms/batching';
+import { parseFilter, drillTo, filterToQuery } from '@/lib/cms/analytics/filters';
+import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import {
+  dashboard,
+  attentionCustomers,
+  entityComparison,
+  type Dashboard,
+  type AttentionCustomer,
+  type EntityComparisonRow,
+} from '@/lib/cms/repos/executive';
+import { lineChart, barChart, horizontalBarChart, sparkline } from '@/lib/cms/charts/svg';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+import { SLA_FAMILIES, readSlaFamily, slaFamilyView } from '@/lib/cms/dashboard/sla';
 
-const principal = Astro.locals.cms;
-// The guard redirects an anonymous request before this renders, so a missing
-// principal here would be a bug rather than a state to design for. Rendering
-// nothing is the safe answer if it ever happens.
-const user = principal?.user;
-
-const context = user ? organisationLine(user.assignment) : null;
-const summary = user ? assignmentSummary(user.assignment) : null;
-
-// The workspace tiles are the navigation, minus Home, filtered by the same
-// permission codes. One source, so a tile can never appear for a section the
-// rail hides.
-const workspaces = user
-  ? visibleNav(user.permissions).filter((item) => item.permission !== null)
-  : [];
-// Rendered on the server for every request, never prerendered. Without this the
-// page is baked at build time, the middleware guard runs once during the build
-// instead of per request, and the route protection becomes a static artefact:
-// a signed-in user would be served whatever the build decided.
 export const prerender = false;
 
-// Needs Attention: computed under the caller's own scope, after a sweep so
-// the figures are current. Each block appears only where the permission does,
-// and a database failure degrades to the profile page rather than an error.
-let attentionBreached = 0;
-let attentionAtRisk = 0;
-let attentionMyCases = 0;
-let attentionOverdue = 0;
-let attentionLoaded = false;
+const principal = Astro.locals.cms;
+const user = principal?.user;
+const permissions = user?.permissions ?? [];
+const userId = user?.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+/** Internal or External, from the URL, so the view can be shared. */
+const family = readSlaFamily(Astro.url.searchParams);
+
+let board: Dashboard | null = null;
+let customers: AttentionCustomer[] = [];
+let entities: EntityComparisonRow[] = [];
+let boardFailure: { traceId: string } | null = null;
+let connectionFailed = false;
+
 if (user) {
   try {
     const db = await getDb(getCmsEnv());
-    const now = new Date();
-    await sweepDueSlas(db, now);
-    await sweepNotifications(db, now);
-    if (canViewSlaDashboard(user.permissions)) {
-      const [breached, atRisk] = await Promise.all([
-        listSlaInstances(
-          db,
-          user.userId,
-          { slaType: null, entityType: null, status: null, bucket: 'breached', page: 1 },
-          now,
-        ),
-        listSlaInstances(
-          db,
-          user.userId,
-          { slaType: null, entityType: null, status: null, bucket: 'at-risk', page: 1 },
-          now,
-        ),
-      ]);
-      attentionBreached = breached.total;
-      attentionAtRisk = atRisk.total;
-    }
-    if (canViewCases(user.permissions)) {
-      attentionMyCases = (await caseIndicators(db, user.userId, now)).assignedToMe;
-    }
-    attentionOverdue = (await myWork(db, user.userId, now)).overdue.length;
-    attentionLoaded = true;
+    // ONE QUEUE FOR THE WHOLE PAGE. Every read issued in the same microtask
+    // leaves as a single batch, which is how a dashboard of this size costs a
+    // handful of round trips rather than one per figure.
+    const batcher = createBatcher(db);
+    const [boardResult, customersResult, entitiesResult] = await Promise.all([
+      runSection(batcher, 'dashboard.board', (client) =>
+        dashboard(client, userId, permissions, filter, now),
+      ),
+      runSection(batcher, 'dashboard.attention-customers', (client) =>
+        attentionCustomers(client, userId, filter, now),
+      ),
+      runSection(batcher, 'dashboard.entities', (client) =>
+        entityComparison(client, userId, permissions, filter, now),
+      ),
+    ]);
+    if (boardResult.ok) board = boardResult.value;
+    else boardFailure = { traceId: boardResult.traceId };
+    if (customersResult.ok) customers = customersResult.value;
+    if (entitiesResult.ok) entities = entitiesResult.value;
   } catch (error) {
-    console.error('[cms.home] needs attention failed', error);
+    console.error('[cms.dashboard] no database connection', error);
+    connectionFailed = true;
   }
 }
 
-const attention = [
-  {
-    label: 'Breached SLAs',
-    count: attentionBreached,
-    href: '/app/performance?bucket=breached',
-    tone: 'danger' as const,
-    show: user ? canViewSlaDashboard(user.permissions) : false,
-  },
-  {
-    label: 'At-risk SLAs',
-    count: attentionAtRisk,
-    href: '/app/performance?bucket=at-risk',
-    tone: 'warning' as const,
-    show: user ? canViewSlaDashboard(user.permissions) : false,
-  },
-  {
-    label: 'Cases assigned to me',
-    count: attentionMyCases,
-    href: '/app/service?queue=mine',
-    tone: 'info' as const,
-    show: user ? canViewCases(user.permissions) : false,
-  },
-  {
-    label: 'Follow-ups past due date',
-    count: attentionOverdue,
-    href: '/app/crm/activities',
-    tone: 'warning' as const,
-    show: true,
-  },
-].filter((item) => item.show);
+const money = (value: number, currency: string) =>
+  `${currency} ${Math.round(value).toLocaleString('en-KE')}`;
+const count = (value: number) => value.toLocaleString('en-KE');
+
+/** The four module destinations, each carrying the whole filter. */
+const toService = drillTo('/app/service/analytics', filter);
+const toCrm = drillTo('/app/crm/analytics', filter);
+const toSales = drillTo('/app/orders/sales/performance', filter);
+const toPurchases = drillTo('/app/orders/purchases/performance', filter);
+
+/** A compliance percentage read as a state, so a pill can carry a judgement. */
+const slaTone = (percent: number | null) =>
+  percent === null
+    ? ('neutral' as const)
+    : percent >= 95
+      ? ('positive' as const)
+      : percent >= 85
+        ? ('caution' as const)
+        : ('negative' as const);
+const slaState = (percent: number | null) =>
+  percent === null
+    ? 'Not available'
+    : percent >= 95
+      ? 'Met'
+      : percent >= 85
+        ? 'At Risk'
+        : 'Breached';
+
+// ---- The SLA section, derived from figures the page already holds ---------
+const sla = board === null ? null : slaFamilyView(family, board);
+
+// ---- Charts, every one drawn from data already loaded --------------------
+const trend = board?.salesOrders ?? null;
+const percent = (v: number | null) => (v === null ? 'Not available' : `${v}%`);
+
+const slaTrendChart =
+  trend === null || trend.trend.length === 0
+    ? null
+    : lineChart(
+        [
+          {
+            name: 'Sales order SLA',
+            token: 'cms-series-1',
+            points: trend.trend.map((row) => ({
+              label: row.bucket,
+              value: row.slaCompliancePercent,
+              href: toSales,
+            })),
+          },
+        ],
+        { unit: 'per cent', format: percent, endLabels: true, height: 200 },
+      );
+
+const volumeSpark =
+  trend === null || trend.trend.length === 0
+    ? undefined
+    : sparkline(
+        {
+          name: 'Sales orders raised',
+          token: 'cms-series-1',
+          points: trend.trend.map((row) => ({ label: row.bucket, value: row.orders })),
+        },
+        { unit: 'orders' },
+      );
+
+/**
+ * SLA by affiliate, with the group's own figure drawn across it.
+ *
+ * The reference line is the group compliance the Orders section already
+ * reports, not an invented target: a dashed line at a number nobody agreed
+ * would be a target this system made up, and every affiliate would be measured
+ * against it. Drawn this way it answers the only question the chart is for,
+ * which is who is above and below the line the group is actually running at.
+ */
+/**
+ * Five affiliates all called "Hass Petroleum X" overlap into one grey smear
+ * under the bars. The company name is the same on every one of them and is
+ * therefore carrying nothing, so the chart drops it and the axis reads Kenya,
+ * Uganda, Tanzania. The full name is still in the data table under the chart
+ * and in the Affiliates table below it.
+ */
+const shortAffiliate = (name: string) => name.replace(/^Hass Petroleum\s+/i, '');
+
+const affiliateChart =
+  entities.length === 0
+    ? null
+    : barChart(
+        {
+          name: 'Sales order SLA compliance by affiliate',
+          token: 'cms-series-1',
+          points: entities.map((row) => ({
+            label: shortAffiliate(row.affiliateName),
+            value: row.salesOrderSlaPercent,
+            href: drillTo('/app/orders/sales/performance', filter, {
+              affiliateId: row.affiliateId,
+            }),
+          })),
+        },
+        {
+          unit: 'per cent',
+          format: percent,
+          height: 220,
+          reference:
+            board?.salesOrders?.slaCompliancePercent == null
+              ? undefined
+              : {
+                  value: board.salesOrders.slaCompliancePercent,
+                  label: `Group ${board.salesOrders.slaCompliancePercent}%`,
+                },
+        },
+      );
+
+/**
+ * Customers to look at, as a horizontal bar.
+ *
+ * Horizontal because a customer's name is words: "Sirikwa Haulage Limited"
+ * rotated under a vertical bar is a truncation, and on its own line it is a
+ * name. The bar is open cases, which is the count the reader acts on.
+ */
+const customerChart =
+  customers.length === 0
+    ? null
+    : horizontalBarChart(
+        {
+          name: 'Open cases by customer',
+          token: 'cms-series-4',
+          points: customers.slice(0, 6).map((row) => ({
+            label: row.customerName,
+            value: row.openCases,
+            href: drillTo('/app/customers', filter, { accountId: row.accountId }),
+          })),
+        },
+        { unit: 'cases', format: (v) => (v === null ? 'Not available' : count(v)) },
+      );
+
+const composition = board?.composition ?? null;
+const nothingVisible =
+  composition !== null &&
+  !composition.needsAttention &&
+  !composition.commercial &&
+  !composition.salesOrders &&
+  !composition.purchaseOrders &&
+  !composition.service &&
+  !composition.freshness;
 ---
 
-<CmsLayout title="Home">
+<CmsLayout title="Dashboard">
   {
-    user && (
-      <>
-        <CmsPageHeader
-          title={`Welcome back, ${user.firstName}`}
-          description={summary ?? 'No organisational assignment is recorded against your account.'}
-        >
-          <CmsBadge
+    connectionFailed || board === null ? (
+      <CmsErrorState
+        title="The dashboard could not be loaded"
+        description={
+          boardFailure
+            ? `The database did not answer. Quote reference ${boardFailure.traceId} when reporting this.`
+            : 'The database did not answer.'
+        }
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader title={`Good day, ${user?.firstName ?? ''}`.trim()}>
+          <CmsButton
             slot="actions"
-            tone="info"
-            label={`${user.roles.length} role${user.roles.length === 1 ? '' : 's'}`}
-          />
+            variant="secondary"
+            href={`/api/orders/sales/export${filterToQuery(filter)}`}
+          >
+            Export
+          </CmsButton>
         </CmsPageHeader>
 
-        {attentionLoaded && (
-          <section aria-labelledby="attention-heading" class="flex flex-col gap-3">
-            <h2 id="attention-heading" class="text-cms-section font-semibold text-cms-navy">
-              Needs attention
-            </h2>
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {attention.map((item) => (
-                <a
-                  href={item.href}
-                  class:list={[
-                    'flex items-center justify-between rounded-cms-lg border bg-cms-surface px-4 py-4 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
-                    item.count > 0 && item.tone === 'danger'
-                      ? 'border-cms-negative'
-                      : 'border-cms-line',
-                  ]}
-                >
-                  <span class="text-cms-body-sm font-medium text-cms-ink">{item.label}</span>
-                  <CmsBadge
-                    tone={item.count === 0 ? 'success' : item.tone}
-                    label={String(item.count)}
+        {/*
+          The filter row: one line of small controls and a reset, on the canvas
+          rather than inside a bordered panel. The panel it replaces was a card
+          with a heading, which gave three date fields the weight of a section
+          and pushed the first real figure below the fold.
+        */}
+        <CmsFilterBar action="/app" class="-mt-1">
+          <input type="hidden" name="sla" value={family} />
+          <CmsInput
+            id="d-from"
+            name="from"
+            label="From"
+            type="date"
+            size="sm"
+            value={filter.from ?? ''}
+          />
+          <CmsInput id="d-to" name="to" label="To" type="date" size="sm" value={filter.to ?? ''} />
+          <CmsSelect
+            id="d-grain"
+            name="grain"
+            label="Trend"
+            size="sm"
+            value={filter.grain}
+            options={[
+              { value: 'DAY', label: 'Daily' },
+              { value: 'WEEK', label: 'Weekly' },
+              { value: 'MONTH', label: 'Monthly' },
+            ]}
+          />
+        </CmsFilterBar>
+
+        {nothingVisible ? (
+          <CmsEmptyState
+            icon="performance"
+            title="No dashboard sections are available to you yet"
+            description="Your access roles do not currently reach orders, opportunities, cases or imports. Contact your administrator."
+          />
+        ) : (
+          <Fragment>
+            {/* ---- 1. SLA ------------------------------------------------ */}
+            {sla !== null && (
+              <section aria-labelledby="sla" class="flex flex-col gap-3">
+                <CmsSectionHeader id="sla" title="SLA">
+                  {/*
+                    A segmented control, built from two links rather than a
+                    script: the choice is in the URL, so it survives a reload,
+                    a share and the back button, and it works with no
+                    JavaScript at all.
+                  */}
+                  <div
+                    slot="actions"
+                    role="group"
+                    aria-label="SLA family"
+                    class="inline-flex rounded-cms bg-cms-sunken p-0.5"
+                  >
+                    {SLA_FAMILIES.map((option) => (
+                      <a
+                        href={drillTo('/app', filter, { sla: option.key })}
+                        aria-current={option.key === family ? 'true' : undefined}
+                        class:list={[
+                          'inline-flex h-8 items-center rounded-cms px-3 text-cms-caption font-semibold outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                          option.key === family
+                            ? 'bg-cms-surface text-cms-ink'
+                            : 'text-cms-muted hover:text-cms-ink',
+                        ]}
+                      >
+                        {option.label}
+                      </a>
+                    ))}
+                  </div>
+                </CmsSectionHeader>
+
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {sla.measures.map((measure) => (
+                    <CmsKpiCard
+                      label={measure.label}
+                      value={measure.value}
+                      context={measure.context}
+                      tone={measure.tone}
+                      href={measure.href}
+                      definition={measure.definition}
+                      denominator={measure.denominator}
+                      dateBasis={measure.dateBasis}
+                    />
+                  ))}
+                </div>
+
+                <div class="grid gap-3 xl:grid-cols-2">
+                  {slaTrendChart && (
+                    <CmsChart
+                      title="Sales order SLA compliance over time"
+                      definition="Sales order SLA instances that were Met, by period."
+                      chart={slaTrendChart}
+                      unit="per cent"
+                    />
+                  )}
+                  {affiliateChart && (
+                    <CmsChart
+                      title="SLA compliance by affiliate"
+                      definition="Sales order SLA instances that were Met, per affiliate, against the group's own figure."
+                      chart={affiliateChart}
+                      unit="per cent"
+                    />
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* ---- 2. Needs attention ------------------------------------ */}
+            {composition?.needsAttention && (
+              <section aria-labelledby="attention" class="flex flex-col gap-3">
+                <CmsSectionHeader id="attention" title="Needs attention" />
+                {board.attention.length === 0 ? (
+                  <p class="rounded-cms bg-cms-surface p-4 text-cms-body-sm text-cms-muted">
+                    Nothing outstanding in this period within your scope.
+                  </p>
+                ) : (
+                  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {board.attention.slice(0, 4).map((signal) => (
+                      <CmsKpiCard
+                        label={signal.label}
+                        value={count(signal.count)}
+                        tone={signal.count > 0 ? 'caution' : 'positive'}
+                        href={drillTo(signal.href, filter, signal.destination)}
+                        definition={signal.definition}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ---- 3. Orders --------------------------------------------- */}
+            {(composition?.salesOrders || composition?.purchaseOrders) && (
+              <section aria-labelledby="orders" class="flex flex-col gap-3">
+                <CmsSectionHeader id="orders" title="Orders" />
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {board.salesOrders && (
+                    <Fragment>
+                      <CmsKpiCard
+                        label="Sales orders"
+                        value={count(board.salesOrders.orders)}
+                        context="Raised in this period"
+                        href={drillTo('/app/orders/sales', filter)}
+                        spark={volumeSpark}
+                        definition="Sales orders raised in this period."
+                        denominator="Sales orders in your scope"
+                        dateBasis="Order created at"
+                      />
+                      <CmsKpiCard
+                        label="Order to invoice"
+                        value={formatDuration(board.salesOrders.orderToInvoiceMedianMinutes)}
+                        context="Median, elapsed"
+                        href={toSales}
+                        definition="Median time from the order being created to its invoice being created."
+                        denominator="Orders that carried both timestamps"
+                        dateBasis="Order created at"
+                      />
+                    </Fragment>
+                  )}
+                  {board.purchaseOrders && (
+                    <Fragment>
+                      <CmsKpiCard
+                        label="Awaiting Oracle posting"
+                        value={count(board.purchaseOrders.awaitingOraclePosting)}
+                        context="Received, not yet posted"
+                        tone={
+                          board.purchaseOrders.awaitingOraclePosting > 0 ? 'caution' : 'positive'
+                        }
+                        href={drillTo('/app/orders/purchases', filter)}
+                        definition="Purchase orders physically received where Oracle has not yet been posted. Stock the yard has and the system does not."
+                        denominator="Purchase orders in your scope"
+                        dateBasis="Purchase order created at"
+                      />
+                      <CmsKpiCard
+                        label="Posting coverage"
+                        value={formatRate(board.purchaseOrders.postingCoveragePercent)}
+                        context="Of orders received"
+                        tone={slaTone(board.purchaseOrders.postingCoveragePercent)}
+                        href={toPurchases}
+                        definition="Received purchase orders that have an Oracle posting timestamp."
+                        denominator="Purchase orders physically received in this period"
+                        dateBasis="Purchase order created at"
+                      />
+                    </Fragment>
+                  )}
+                </div>
+
+                {entities.length > 0 && (
+                  <CmsDataTable
+                    caption="Affiliates"
+                    columns={[
+                      { key: 'affiliate', label: 'Affiliate' },
+                      { key: 'so', label: 'Sales order SLA', numeric: true },
+                      { key: 'po', label: 'Purchase order SLA', numeric: true },
+                      { key: 'cases', label: 'Cases', numeric: true },
+                      { key: 'exception', label: 'Key exception', secondary: true },
+                    ]}
+                    empty={false}
+                  >
+                    {entities.map((row) => (
+                      <tr class="border-b border-cms-line last:border-0 hover:bg-cms-sunken">
+                        <td class="px-4 py-2.5">
+                          <a
+                            href={drillTo('/app/orders/sales/performance', filter, {
+                              affiliateId: row.affiliateId,
+                            })}
+                            class="rounded-cms font-medium text-cms-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                          >
+                            {row.affiliateName}
+                          </a>
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <CmsStatusPill
+                            value={formatRate(row.salesOrderSlaPercent)}
+                            tone={slaTone(row.salesOrderSlaPercent)}
+                            state={slaState(row.salesOrderSlaPercent)}
+                          />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <CmsStatusPill
+                            value={formatRate(row.purchaseOrderSlaPercent)}
+                            tone={slaTone(row.purchaseOrderSlaPercent)}
+                            state={slaState(row.purchaseOrderSlaPercent)}
+                          />
+                        </td>
+                        <td class="px-4 py-2.5 text-right text-cms-ink tabular-nums">
+                          {count(row.cases)}
+                        </td>
+                        <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                          {row.keyException}
+                        </td>
+                      </tr>
+                    ))}
+                  </CmsDataTable>
+                )}
+              </section>
+            )}
+
+            {/* ---- 4. Commercial ----------------------------------------- */}
+            {composition?.commercial && board.commercial && (
+              <section aria-labelledby="commercial" class="flex flex-col gap-3">
+                <CmsSectionHeader id="commercial" title="Commercial" />
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <CmsKpiCard
+                    label="New leads"
+                    value={count(board.commercial.newLeads)}
+                    context="Captured in this period"
+                    href={toCrm}
+                    definition="Leads captured in this period."
+                    denominator="Leads in your scope"
+                    dateBasis="Lead captured at"
                   />
-                </a>
-              ))}
-            </div>
-            <p class="text-cms-caption text-cms-muted">
-              Every number opens the list it counts, already filtered. Nothing decorative sits above
-              this section on purpose.
-            </p>
-          </section>
-        )}
+                  <CmsKpiCard
+                    label="Lead conversion"
+                    value={formatRate(board.commercial.conversionRatePercent)}
+                    context="Of leads that qualified"
+                    href={toCrm}
+                    definition="Leads that reached Converted."
+                    denominator="Leads that qualified"
+                    dateBasis="Lead captured at"
+                  />
+                  <CmsKpiCard
+                    label="Win rate"
+                    value={formatRate(board.commercial.winRatePercent)}
+                    context={`Of ${count(board.commercial.winRateDenominator)} decided`}
+                    href={toCrm}
+                    definition="Opportunities won, as a share of those decided. An open opportunity is not in the denominator: open is not lost."
+                    denominator="Opportunities won plus opportunities lost"
+                    dateBasis="Actual close date"
+                  />
+                  <CmsKpiCard
+                    label="Open opportunities"
+                    value={count(board.commercial.closingSoon)}
+                    context="Still open at period end"
+                    href={toCrm}
+                    definition="Opportunities still open at the end of the period."
+                    denominator="Opportunities in your scope"
+                    dateBasis="Expected close date"
+                  />
+                </div>
+                {board.commercial.openPipelineByCurrency.length > 0 && (
+                  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {board.commercial.openPipelineByCurrency.map((row) => (
+                      <CmsKpiCard
+                        label={`Open pipeline (${row.currencyCode})`}
+                        value={money(row.openValue, row.currencyCode)}
+                        context={`Weighted ${money(row.weightedValue, row.currencyCode)}`}
+                        href={drillTo('/app/crm/analytics', filter, { currency: row.currencyCode })}
+                        definition="Value of opportunities still open, and the same value weighted by each stage probability. Never summed across currencies."
+                        denominator="Open opportunities in your scope"
+                        dateBasis="Expected close date"
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-        <CmsCard title="Your details">
-          <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Name
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">{user.displayName}</dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Email
-              </dt>
-              <dd class="truncate text-cms-body-sm text-cms-ink">{user.email}</dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Job title
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">
-                {user.assignment?.jobTitle ?? 'Not assigned'}
-              </dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Organisation
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">{context ?? 'Not assigned'}</dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Department
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">
-                {user.assignment?.department ?? 'Not assigned'}
-              </dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Access roles
-              </dt>
-              <dd class="flex flex-wrap gap-1.5">
-                {user.roles.map((role) => (
-                  <CmsBadge tone="neutral" label={role.roleName} />
-                ))}
-              </dd>
-            </div>
-          </dl>
-        </CmsCard>
+            {/* ---- 5. Service -------------------------------------------- */}
+            {composition?.service && board.service && (
+              <section aria-labelledby="service" class="flex flex-col gap-3">
+                <CmsSectionHeader id="service" title="Service" />
+                <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <CmsKpiCard
+                      label="Open cases"
+                      value={count(board.service.openCases)}
+                      context="Not resolved, closed or cancelled"
+                      href={toService}
+                      definition="Cases not Resolved, Closed or Cancelled."
+                      denominator="Cases in your scope"
+                      dateBasis="Case raised at"
+                    />
+                    <CmsKpiCard
+                      label="First response"
+                      value={formatRate(board.service.firstResponseWithinSlaPercent)}
+                      context="Within SLA"
+                      tone={slaTone(board.service.firstResponseWithinSlaPercent)}
+                      href={toService}
+                      definition="First-response SLA instances that were Met. An internal note is not a first response."
+                      denominator="First-response SLA instances settled in this period"
+                      dateBasis="SLA settled at"
+                    />
+                    <CmsKpiCard
+                      label="Median resolution"
+                      value={formatDuration(board.service.medianResolutionElapsedMinutes)}
+                      context="Elapsed, not accountable"
+                      href={toService}
+                      definition="Median wall-clock time from a case being raised to it being resolved. Time waiting on the customer is still in it."
+                      denominator="Cases resolved in this period"
+                      dateBasis="Case resolved at"
+                    />
+                    <CmsKpiCard
+                      label="Satisfaction"
+                      value={
+                        board.service.satisfactionScore === null
+                          ? 'Not available'
+                          : String(board.service.satisfactionScore)
+                      }
+                      context={`${count(board.service.satisfactionResponses)} responses`}
+                      href={toService}
+                      definition="Mean survey score, on the scale the survey itself defines."
+                      denominator="Survey responses received in this period"
+                      dateBasis="Response received at"
+                    />
+                  </div>
+                  {customerChart && (
+                    <CmsChart
+                      title="Open cases by customer"
+                      definition="Customers with the most cases still open, in your scope."
+                      chart={customerChart}
+                      unit="cases"
+                    />
+                  )}
+                </div>
+              </section>
+            )}
 
-        <section aria-labelledby="workspace-heading" class="flex flex-col gap-3">
-          <h2 id="workspace-heading" class="text-cms-section font-semibold text-cms-navy">
-            Your workspace
-          </h2>
-          {workspaces.length > 0 ? (
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {workspaces.map((item) => (
-                <a
-                  href={item.href}
-                  class="flex min-h-10 items-start gap-3 rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-4 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+            {/* ---- 6. Data freshness ------------------------------------- */}
+            {composition?.freshness && board.freshness.length > 0 && (
+              <section aria-labelledby="freshness" class="flex flex-col gap-3">
+                <CmsSectionHeader id="freshness" title="Data freshness" />
+                <CmsDataTable
+                  caption="Data freshness"
+                  columns={[
+                    { key: 'source', label: 'Source' },
+                    { key: 'state', label: 'State' },
+                    { key: 'at', label: 'Last updated', numeric: true },
+                  ]}
+                  empty={false}
                 >
-                  <span class="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-cms bg-cms-royal-tint text-cms-royal">
-                    <CmsIcon name={item.icon} size={18} />
-                  </span>
-                  <span class="min-w-0">
-                    <span class="block text-cms-card font-semibold text-cms-navy">
-                      {item.label} workspace
-                    </span>
-                    <span class="mt-0.5 block text-cms-body-sm text-cms-muted">{item.summary}</span>
-                  </span>
-                </a>
-              ))}
-            </div>
-          ) : (
-            <CmsEmptyState
-              icon="administration"
-              title="No workspaces are available to you yet"
-              description="Your access roles do not currently grant any module. Contact your administrator."
-            />
-          )}
-        </section>
-      </>
+                  {board.freshness.map((row) => (
+                    <tr class="border-b border-cms-line last:border-0">
+                      <td class="px-4 py-2 text-cms-ink">{row.source}</td>
+                      <td class="px-4 py-2">
+                        <CmsBadge
+                          tone={row.live ? 'success' : 'info'}
+                          label={row.live ? 'Live' : 'Imported'}
+                        />
+                      </td>
+                      <td class="px-4 py-2 text-right text-cms-muted tabular-nums">
+                        {row.lastImportedAt ?? 'Never'}
+                      </td>
+                    </tr>
+                  ))}
+                </CmsDataTable>
+              </section>
+            )}
+          </Fragment>
+        )}
+      </Fragment>
     )
   }
 </CmsLayout>

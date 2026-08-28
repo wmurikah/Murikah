@@ -23,7 +23,6 @@ import {
   connectedInsights,
   attentionCustomers,
   entityComparison,
-  COMPOSITION_RULE,
   CORRELATION_WORDING,
   EXTRACT_WORDING,
   LIVE_WORDING,
@@ -75,8 +74,9 @@ test('the dashboard is composed from permissions, with no page per person', () =
   assert.equal(everything.purchaseOrders, true);
   assert.equal(everything.commercial, true);
   assert.equal(everything.service, true);
-  assert.equal(everything.rule, COMPOSITION_RULE);
-  assert.ok(everything.rule.includes('no page per person'));
+  // The composition rule is no longer a string the page prints. It was a
+  // paragraph naming the scope resolver, shipped to a manager as body text.
+  // What it described is asserted here instead, which is where a rule belongs.
 
   // A finance reader who may see orders and nothing else gets the order
   // sections and no CRM or service section, from the same code path.
