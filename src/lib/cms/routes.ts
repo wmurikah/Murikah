@@ -13,6 +13,8 @@
  */
 
 /** The internal application. Everything under it needs an INTERNAL session. */
+import { canViewExecutiveDashboard } from './permissions.ts';
+
 export const APP_ROOT = '/app';
 /** The customer surface. Everything under it needs an EXTERNAL session. */
 export const PORTAL_ROOT = '/portal';
@@ -45,9 +47,22 @@ export function isPortalPath(appPath: string): boolean {
   return appPath === PORTAL_ROOT || appPath.startsWith(PORTAL_ROOT + '/');
 }
 
-/** Where a signed-in user's home is, by user type. */
-export function homeFor(userType: string): string {
-  return userType === 'EXTERNAL' ? PORTAL_ROOT : APP_ROOT;
+/** The executive dashboard, when it is somebody's home rather than a page. */
+export const EXECUTIVE_HOME = '/app/executive';
+
+/**
+ * Where a signed-in user's home is: their user type first, then what they hold.
+ *
+ * NOTHING HERE READS A NAME. No email address, no user id, no job title. A
+ * person lands on the executive dashboard because somebody granted them
+ * EXECUTIVE.DASHBOARD.VIEW, and the same code path sends everyone else to Home.
+ * Permissions are optional so the existing call sites that only know a user
+ * type keep their previous answer rather than silently landing somebody
+ * somewhere new.
+ */
+export function homeFor(userType: string, permissions: readonly string[] = []): string {
+  if (userType === 'EXTERNAL') return PORTAL_ROOT;
+  return canViewExecutiveDashboard(permissions) ? EXECUTIVE_HOME : APP_ROOT;
 }
 
 /**

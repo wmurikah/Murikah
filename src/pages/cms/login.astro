@@ -219,8 +219,10 @@ export const prerender = false;
             // The password is not cleared first on purpose: the page is about
             // to be replaced entirely, and clearing it would only interfere
             // with a password manager's save prompt.
-            const destination = result.user.userType === 'EXTERNAL' ? '/portal' : '/app';
-            window.location.assign(destination);
+            // The server decided this, from the permissions it holds and this
+            // page does not. Hard-coding /app here is what made the executive
+            // dashboard something every user had to go and find.
+            window.location.assign(result.landing);
             // Keep the control disabled through the navigation, so a second
             // click during the page swap cannot fire another request.
             return;

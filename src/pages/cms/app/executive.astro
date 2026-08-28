@@ -31,6 +31,7 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
+import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo, filterToQuery } from '@/lib/cms/analytics/filters';
 import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
 import {
@@ -57,19 +58,57 @@ let board: Dashboard | null = null;
 let insights: ConnectedInsight[] = [];
 let customers: AttentionCustomer[] = [];
 let entities: EntityComparisonRow[] = [];
-let loadFailed = false;
+/** Per section, so one bad aggregate costs its own panel and not the page. */
+let boardFailure: { traceId: string } | null = null;
+let insightsFailure: { traceId: string } | null = null;
+let customersFailure: { traceId: string } | null = null;
+let entitiesFailure: { traceId: string } | null = null;
+/** Only true when the database could not be reached at all. */
+let connectionFailed = false;
 
 try {
   const db = await getDb(getCmsEnv());
-  board = await dashboard(db, userId, permissions, filter, now);
-  [insights, customers, entities] = await Promise.all([
-    connectedInsights(db, userId, permissions, filter, now),
-    attentionCustomers(db, userId, filter, now),
-    entityComparison(db, userId, permissions, filter, now),
+  // FOUR SECTIONS, ONE QUEUE.
+  //
+  // Every read on this page goes through one batcher, so the whole render
+  // costs a handful of subrequests rather than one per figure. Cloudflare's
+  // Free plan allows 50 per request and this page used to issue 237, which is
+  // why it did not load at all: it died at the 51st, inside the libSQL client,
+  // with nothing in the log naming the section or the statement.
+  //
+  // The sections are independent. `runSection` never throws, so a section that
+  // fails comes back with a trace id and renders its own failure while the
+  // others draw normally. A single `try` around all four is what turned one
+  // bad aggregate into a blank dashboard.
+  const batcher = createBatcher(db);
+  const [boardResult, insightsResult, customersResult, entitiesResult] = await Promise.all([
+    runSection(batcher, 'executive.dashboard', (client) =>
+      dashboard(client, userId, permissions, filter, now),
+    ),
+    runSection(batcher, 'executive.insights', (client) =>
+      connectedInsights(client, userId, permissions, filter, now),
+    ),
+    runSection(batcher, 'executive.attention-customers', (client) =>
+      attentionCustomers(client, userId, filter, now),
+    ),
+    runSection(batcher, 'executive.entities', (client) =>
+      entityComparison(client, userId, permissions, filter, now),
+    ),
   ]);
+
+  if (boardResult.ok) board = boardResult.value;
+  else boardFailure = { traceId: boardResult.traceId };
+  if (insightsResult.ok) insights = insightsResult.value;
+  else insightsFailure = { traceId: insightsResult.traceId };
+  if (customersResult.ok) customers = customersResult.value;
+  else customersFailure = { traceId: customersResult.traceId };
+  if (entitiesResult.ok) entities = entitiesResult.value;
+  else entitiesFailure = { traceId: entitiesResult.traceId };
 } catch (error) {
-  console.error('[cms.executive] load failed', error);
-  loadFailed = true;
+  // Reached only when there is no connection to run a section against, so
+  // there is no section to attribute it to.
+  console.error('[cms.executive] no database connection', error);
+  connectionFailed = true;
 }
 
 const money = (value: number, currency: string) =>
@@ -112,10 +151,14 @@ const slaTrend =
 
 <CmsLayout title="Executive dashboard">
   {
-    loadFailed || board === null ? (
+    connectionFailed || board === null ? (
       <CmsErrorState
         title="The dashboard could not be loaded"
-        description="The database did not answer."
+        description={
+          boardFailure
+            ? `The database did not answer. Quote reference ${boardFailure.traceId} when reporting this.`
+            : 'The database did not answer.'
+        }
       />
     ) : (
       <Fragment>
@@ -466,6 +509,14 @@ const slaTrend =
           )}
         </div>
 
+        {insightsFailure && (
+          <CmsErrorState
+            class="mt-8"
+            title="Connected observations could not be loaded"
+            description={`The rest of the dashboard is unaffected. Quote reference ${insightsFailure.traceId} when reporting this.`}
+          />
+        )}
+
         {insights.length > 0 && (
           <section aria-labelledby="insights" class="mt-8">
             <h2 id="insights" class="text-cms-h2 mb-1 font-semibold text-cms-ink">
@@ -506,6 +557,13 @@ const slaTrend =
             title="Customers to look at"
             description="Observable indicators a manager can verify by clicking. There is no risk score."
           >
+            {customersFailure && (
+              <CmsErrorState
+                class="mb-3"
+                title="This list could not be loaded"
+                description={`Every other panel on this page is unaffected. Quote reference ${customersFailure.traceId} when reporting this.`}
+              />
+            )}
             <CmsDataTable
               caption="Customer attention list"
               columns={[
@@ -516,7 +574,7 @@ const slaTrend =
                 { key: 'breaches', label: 'SLA breaches', numeric: true },
                 { key: 'manager', label: 'Account manager' },
               ]}
-              empty={customers.length === 0}
+              empty={customers.length === 0 && customersFailure === null}
             >
               {customers.map((row) => (
                 <tr class="border-b border-cms-line last:border-0">
@@ -551,6 +609,13 @@ const slaTrend =
           </CmsCard>
 
           <CmsCard title="Affiliates" description="Side by side, with currencies kept apart.">
+            {entitiesFailure && (
+              <CmsErrorState
+                class="mb-3"
+                title="The affiliate comparison could not be loaded"
+                description={`Every other panel on this page is unaffected. Quote reference ${entitiesFailure.traceId} when reporting this.`}
+              />
+            )}
             <CmsDataTable
               caption="Affiliate comparison"
               columns={[
@@ -561,7 +626,7 @@ const slaTrend =
                 { key: 'cases', label: 'Cases', numeric: true },
                 { key: 'exception', label: 'Key exception' },
               ]}
-              empty={entities.length === 0}
+              empty={entities.length === 0 && entitiesFailure === null}
             >
               {entities.map((row) => (
                 <tr class="border-b border-cms-line last:border-0">
