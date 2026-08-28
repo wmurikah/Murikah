@@ -256,8 +256,25 @@ export async function needsAttention(
   const signals: AttentionSignal[] = [];
   const query = (path: string, extra: Record<string, string>) => ({ path, extra });
 
+  // EVERY SOURCE STARTED BEFORE ANY IS AWAITED.
+  //
+  // The six sources below are independent of each other; only the ORDER the
+  // signals are pushed in matters, and that is decided by the blocks further
+  // down, not by when a query is issued. Awaiting each one where it was used
+  // made this function six serial round trips deep, and a serial chain is the
+  // one shape the batching client cannot help: it can only send together what
+  // was asked for together. Starting them here and awaiting the promises below
+  // leaves the signal order byte for byte what it was, and collapses the
+  // chain into a single batch.
+  const soBacklogLoad = composition.salesOrders ? soBacklog(db, userId, filter, now) : null;
+  const poBacklogLoad = composition.purchaseOrders ? poBacklog(db, userId, filter, now) : null;
+  const stagesLoad = composition.commercial ? stageOccupancy(db, userId, filter, now) : null;
+  const healthLoad = composition.commercial ? followUpHealth(db, userId, filter, now) : null;
+  const serviceLoad = composition.service ? serviceSummary(db, userId, filter) : null;
+  const categoriesLoad = composition.service ? categoryMix(db, userId, filter) : null;
+
   if (composition.salesOrders) {
-    const rows = await soBacklog(db, userId, filter, now);
+    const rows = await soBacklogLoad!;
     for (const key of ['breached', 'at_risk', 'awaiting_finance']) {
       const signal = rows.find((row) => row.key === key);
       if (signal === undefined || signal.orders === 0) continue;
@@ -277,7 +294,7 @@ export async function needsAttention(
   }
 
   if (composition.purchaseOrders) {
-    const rows = await poBacklog(db, userId, filter, now);
+    const rows = await poBacklogLoad!;
     for (const key of ['awaiting_posting', 'breached']) {
       const signal = rows.find((row) => row.key === key);
       if (signal === undefined || signal.orders === 0) continue;
@@ -296,7 +313,7 @@ export async function needsAttention(
   }
 
   if (composition.commercial) {
-    const stages = await stageOccupancy(db, userId, filter, now);
+    const stages = await stagesLoad!;
     const past = stages.reduce((sum, stage) => sum + (stage.atRisk ?? 0), 0);
     if (past > 0) {
       signals.push({
@@ -309,7 +326,7 @@ export async function needsAttention(
           'Open opportunities older than the configured target_days for the stage they are in. Stages with no configured target are not counted, because no threshold is invented.',
       });
     }
-    const health = await followUpHealth(db, userId, filter, now);
+    const health = await healthLoad!;
     if (health.overdue > 0) {
       signals.push({
         key: 'crm_overdue',
@@ -323,7 +340,7 @@ export async function needsAttention(
   }
 
   if (composition.service) {
-    const service = await serviceSummary(db, userId, filter);
+    const service = await serviceLoad!;
     if (service.awaitingFirstResponse > 0) {
       signals.push({
         key: 'service_no_response',
@@ -336,7 +353,7 @@ export async function needsAttention(
     }
     // A complaint cluster is a category with repeat volume, stated as a count
     // and never as a diagnosis.
-    const categories = await categoryMix(db, userId, filter);
+    const categories = await categoriesLoad!;
     const cluster = categories.find((row) => row.complaints >= 3);
     if (cluster !== undefined) {
       signals.push({
@@ -687,9 +704,22 @@ export async function connectedInsights(
   const composition = composeDashboard(permissions);
   const out: ConnectedInsight[] = [];
 
+  // Both insights' sources started together, for the reason given in
+  // needsAttention above: awaiting them where they are used made this
+  // function four serial round trips, and serial is the one shape a batching
+  // client cannot rescue.
+  const { stockConstraint } = await import('./poPerformance.ts');
+  const stockLoad =
+    composition.salesOrders && composition.purchaseOrders
+      ? stockConstraint(db, userId, filter, now)
+      : null;
+  const serviceLoad =
+    composition.service && composition.commercial ? serviceSummary(db, userId, filter) : null;
+  const funnelLoad =
+    composition.service && composition.commercial ? funnel(db, userId, filter) : null;
+
   if (composition.salesOrders && composition.purchaseOrders) {
-    const { stockConstraint } = await import('./poPerformance.ts');
-    const stock = await stockConstraint(db, userId, filter, now);
+    const stock = await stockLoad!;
     const top = stock.rows[0];
     if (top !== undefined) {
       out.push({
@@ -714,8 +744,8 @@ export async function connectedInsights(
   }
 
   if (composition.service && composition.commercial) {
-    const service = await serviceSummary(db, userId, filter);
-    const crm = await funnel(db, userId, filter);
+    const service = await serviceLoad!;
+    const crm = await funnelLoad!;
     if (service.casesOpened >= 5 && crm.steps[0] !== undefined) {
       out.push({
         headline: `${service.casesOpened} cases and ${crm.steps[0].leads} leads in the same period.`,
@@ -841,45 +871,61 @@ export async function entityComparison(
   const affiliates = await db.execute(
     `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
   );
-  const rows: EntityComparisonRow[] = [];
-  for (const raw of affiliates.rows) {
-    const row = raw as unknown as Record<string, unknown>;
-    const affiliateId = text(row.affiliate_id);
-    const scoped = { ...filter, affiliateId };
-    const so = composition.salesOrders ? await soSummary(db, userId, scoped, now) : null;
-    const service = composition.service ? await serviceSummary(db, userId, scoped) : null;
-    const pipeline = composition.commercial ? await pipelineValue(db, userId, scoped) : [];
-    const po = composition.purchaseOrders ? await poBacklog(db, userId, scoped, now) : null;
-    const poBreached = po?.find((signal) => signal.key === 'breached')?.orders ?? 0;
-    const poAwaiting = po?.find((signal) => signal.key === 'awaiting_posting')?.orders ?? 0;
-    const soBreached = so?.backlog.find((signal) => signal.key === 'breached')?.orders ?? 0;
+  // EVERY AFFILIATE AT ONCE, not one after another.
+  //
+  // This loop used to be sequential: `for (const affiliate) { await ... }`,
+  // four awaits deep, so the whole metric suite ran once per affiliate in
+  // series. Measured on the seed, that was exactly 30 subrequests per
+  // affiliate plus one for the list: 151 at five affiliates, 301 at ten,
+  // growing without bound as the business does.
+  //
+  // Issuing them together puts every affiliate's statements in the same
+  // microtask, where the section client (src/lib/cms/batching.ts) collects
+  // them into ONE batch. The SQL is unchanged and each figure still comes from
+  // the module that owns it, so no number here can drift from its module page;
+  // only the number of round trips changes.
+  const rows: EntityComparisonRow[] = await Promise.all(
+    affiliates.rows.map(async (raw): Promise<EntityComparisonRow> => {
+      const row = raw as unknown as Record<string, unknown>;
+      const affiliateId = text(row.affiliate_id);
+      const scoped = { ...filter, affiliateId };
+      const [so, service, pipeline, po] = await Promise.all([
+        composition.salesOrders ? soSummary(db, userId, scoped, now) : null,
+        composition.service ? serviceSummary(db, userId, scoped) : null,
+        composition.commercial ? pipelineValue(db, userId, scoped) : [],
+        composition.purchaseOrders ? poBacklog(db, userId, scoped, now) : null,
+      ]);
+      const poBreached = po?.find((signal) => signal.key === 'breached')?.orders ?? 0;
+      const poAwaiting = po?.find((signal) => signal.key === 'awaiting_posting')?.orders ?? 0;
+      const soBreached = so?.backlog.find((signal) => signal.key === 'breached')?.orders ?? 0;
 
-    // Nothing is compared across entities except within one currency, and
-    // the "key exception" is the largest observable count rather than a score.
-    const exceptions: { label: string; count: number }[] = [
-      { label: 'sales order SLA breaches', count: soBreached },
-      { label: 'purchase orders awaiting Oracle posting', count: poAwaiting },
-      { label: 'purchase order SLA breaches', count: poBreached },
-      { label: 'cases with no first response', count: service?.awaitingFirstResponse ?? 0 },
-    ].sort((a, b) => b.count - a.count);
+      // Nothing is compared across entities except within one currency, and
+      // the "key exception" is the largest observable count rather than a score.
+      const exceptions: { label: string; count: number }[] = [
+        { label: 'sales order SLA breaches', count: soBreached },
+        { label: 'purchase orders awaiting Oracle posting', count: poAwaiting },
+        { label: 'purchase order SLA breaches', count: poBreached },
+        { label: 'cases with no first response', count: service?.awaitingFirstResponse ?? 0 },
+      ].sort((a, b) => b.count - a.count);
 
-    rows.push({
-      affiliateId,
-      affiliateName: text(row.affiliate_name),
-      salesOrderSlaPercent: so?.slaCompliancePercent ?? null,
-      purchaseOrderSlaPercent: null,
-      customerSlaPercent: service?.externalSlaCompliancePercent ?? null,
-      openPipelineByCurrency: pipeline.map((entry) => ({
-        currencyCode: entry.currencyCode,
-        openValue: entry.openValue,
-      })),
-      cases: service?.casesOpened ?? 0,
-      keyException:
-        (exceptions[0]?.count ?? 0) === 0
-          ? 'None outstanding'
-          : `${exceptions[0]?.count} ${exceptions[0]?.label}`,
-    });
-  }
+      return {
+        affiliateId,
+        affiliateName: text(row.affiliate_name),
+        salesOrderSlaPercent: so?.slaCompliancePercent ?? null,
+        purchaseOrderSlaPercent: null,
+        customerSlaPercent: service?.externalSlaCompliancePercent ?? null,
+        openPipelineByCurrency: pipeline.map((entry) => ({
+          currencyCode: entry.currencyCode,
+          openValue: entry.openValue,
+        })),
+        cases: service?.casesOpened ?? 0,
+        keyException:
+          (exceptions[0]?.count ?? 0) === 0
+            ? 'None outstanding'
+            : `${exceptions[0]?.count} ${exceptions[0]?.label}`,
+      };
+    }),
+  );
   return rows;
 }
 

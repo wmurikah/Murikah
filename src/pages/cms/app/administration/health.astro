@@ -67,7 +67,7 @@ const clean = health.checks.filter((check) => check.count === 0);
 <CmsLayout title="System health">
   <CmsPageHeader
     title="System health"
-    description="Configuration checks with a stated rule each. Nothing here is a judgement."
+    definition="Each check states the rule it applies. Nothing here is a judgement, and there is no overall score: a single number invites a target, and a green average hides one blocking finding."
     crumbs={[{ label: 'Administration', href: '/app/administration' }, { label: 'System health' }]}
   />
 

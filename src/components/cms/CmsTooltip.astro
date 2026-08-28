@@ -27,8 +27,13 @@ const position =
     id={id}
     role="tooltip"
     class:list={[
-      'pointer-events-none absolute z-30 w-max max-w-56 rounded-cms bg-cms-navy px-2.5 py-1.5',
-      'text-cms-caption font-medium text-white opacity-0 shadow-cms-pop transition-opacity duration-150',
+      // A LIGHT BUBBLE, NOT A DARK ONE. It used to be white on navy, which is
+      // the one combination this application no longer uses in the content
+      // area: light text on a dark field causes halation, and a tooltip is
+      // read at the exact moment somebody is struggling. It floats on the
+      // single elevation instead, like every other overlay.
+      'pointer-events-none absolute z-30 w-max max-w-56 rounded-cms bg-cms-surface px-2.5 py-1.5',
+      'text-cms-caption font-medium text-cms-ink opacity-0 shadow-cms-overlay transition-opacity duration-150',
       'group-focus-within:opacity-100 group-hover:opacity-100',
       position,
     ]}

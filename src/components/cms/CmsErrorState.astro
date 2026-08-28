@@ -20,12 +20,12 @@ const { title, description, class: className } = Astro.props;
 <div
   role="alert"
   class:list={[
-    'flex flex-col items-start gap-2 rounded-cms-lg border border-cms-danger/30',
-    'bg-cms-danger-tint px-5 py-4',
+    'flex flex-col items-start gap-2 rounded-cms-lg border border-cms-negative/30',
+    'bg-cms-negative-tint px-5 py-4',
     className,
   ]}
 >
-  <p class="flex items-center gap-2 text-cms-card font-semibold text-cms-danger">
+  <p class="flex items-center gap-2 text-cms-card font-semibold text-cms-negative">
     <CmsIcon name="statusBreach" size={17} class="shrink-0" />
     {title}
   </p>

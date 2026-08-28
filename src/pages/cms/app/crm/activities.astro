@@ -66,7 +66,7 @@ function parentHref(a: ActivityRow): string | null {
       <Fragment>
         <CmsPageHeader
           title="My Work"
-          description="Your activities, split by their timestamps. Due means the explicit follow-up deadline where one was set, otherwise the scheduled time."
+          definition="Due means the explicit follow-up deadline where one was set, and otherwise the scheduled time."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'CRM', href: '/app/crm' },
@@ -75,13 +75,13 @@ function parentHref(a: ActivityRow): string | null {
         />
 
         <div class="grid gap-4 lg:grid-cols-2">
-          <CmsCard title={`Overdue (${work.overdue.length})`}>
+          <CmsCard title={`Past their due date (${work.overdue.length})`}>
             {work.overdue.length === 0 ? (
-              <CmsEmptyState icon="statusOk" title="Nothing overdue" />
+              <CmsEmptyState icon="statusOk" title="Nothing past its due date" />
             ) : (
               <ul class="flex flex-col gap-2">
                 {work.overdue.map((a) => (
-                  <li class="flex items-start justify-between gap-3 rounded-cms border border-cms-danger px-3 py-2">
+                  <li class="flex items-start justify-between gap-3 rounded-cms border border-cms-negative px-3 py-2">
                     <div>
                       <p class="text-cms-body-sm font-medium text-cms-ink">
                         {titleCase(a.activityType)}: {a.summary}

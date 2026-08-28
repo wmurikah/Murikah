@@ -90,7 +90,7 @@ try {
           </CmsCard>
         )}
 
-        <CmsCard title="Orders in progress" description="Orders that are not yet complete.">
+        <CmsCard title="Orders in progress">
           {home.currentOrders.length === 0 ? (
             <p class="text-cms-body-sm text-cms-muted">
               You have no orders in progress. Completed orders are under Orders.
@@ -117,7 +117,7 @@ try {
           )}
         </CmsCard>
 
-        <CmsCard title="Open requests" description="Service requests we have not closed yet.">
+        <CmsCard title="Open requests">
           {home.openRequests.length === 0 ? (
             <p class="text-cms-body-sm text-cms-muted">
               You have no open requests. You can raise one under Service.

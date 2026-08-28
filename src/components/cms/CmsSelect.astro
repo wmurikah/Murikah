@@ -63,7 +63,7 @@ const describedBy = [hintId, errorId].filter(Boolean).join(' ');
         'text-cms-body text-cms-ink transition-colors duration-150 outline-none',
         'focus-visible:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
         'disabled:cursor-not-allowed disabled:bg-cms-canvas disabled:text-cms-muted',
-        error ? 'border-cms-danger' : 'border-cms-border',
+        error ? 'border-cms-negative' : 'border-cms-border',
       ]}
     >
       {
@@ -93,7 +93,7 @@ const describedBy = [hintId, errorId].filter(Boolean).join(' ');
     role="alert"
     data-field-error
     class:list={[
-      'flex items-start gap-1.5 text-cms-caption font-medium text-cms-danger',
+      'flex items-start gap-1.5 text-cms-caption font-medium text-cms-negative',
       error ? '' : 'hidden',
     ]}
   >

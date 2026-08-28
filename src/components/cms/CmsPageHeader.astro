@@ -10,10 +10,32 @@
  */
 import CmsBreadcrumb, { type CmsCrumb } from './CmsBreadcrumb.astro';
 import CmsAuditHistoryLink from './CmsAuditHistoryLink.astro';
+import CmsDefinition from './CmsDefinition.astro';
 
 interface Props {
   title: string;
+  /**
+   * Context about the RECORD this page is showing: a customer's type and
+   * country, an order's affiliate and value, a workflow's version.
+   *
+   * NOT A DESCRIPTION OF THE PAGE. A page titled Customers showing a table of
+   * customers does not need a sentence saying it lists customers, and every
+   * one of those has been deleted. What survives here is data. Where a page
+   * genuinely carries a rule a reader could not work out by looking, it goes
+   * in `definition` below and opens on demand.
+   */
   description?: string;
+  /**
+   * A rule or definition that governs the whole page, available from a control
+   * beside the title rather than printed underneath it.
+   *
+   * This is where the deleted paragraphs went when they turned out to be
+   * saying something real: that a lead's account is optional here and required
+   * at conversion, that SLA precedence runs customer, segment, affiliate,
+   * default. Progressive disclosure, so the rule is one control away for the
+   * person who needs it and invisible to the ninety-nine who do not.
+   */
+  definition?: string;
   crumbs?: CmsCrumb[];
   /**
    * A record's audit entity type and identifier. Where both are given, the
@@ -33,6 +55,7 @@ interface Props {
 const {
   title,
   description,
+  definition,
   crumbs,
   auditEntityType,
   auditEntityId,
@@ -44,7 +67,10 @@ const {
   {crumbs && crumbs.length > 0 && <CmsBreadcrumb items={crumbs} />}
   <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div class="flex min-w-0 flex-col gap-1">
-      <h1 class="text-cms-page font-semibold text-cms-navy">{title}</h1>
+      <div class="flex items-start gap-1.5">
+        <h1 class="text-cms-page font-semibold text-cms-ink">{title}</h1>
+        {definition && <CmsDefinition label={title} definition={definition} class="mt-1" />}
+      </div>
       {description && <p class="max-w-2xl text-cms-body-sm text-cms-muted">{description}</p>}
     </div>
     <div class="flex shrink-0 flex-wrap items-center gap-2">

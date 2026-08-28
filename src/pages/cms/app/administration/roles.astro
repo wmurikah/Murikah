@@ -60,7 +60,7 @@ if (mayManage) {
       <Fragment>
         <CmsPageHeader
           title="Roles and permissions"
-          description="An access role says what a person may do in the application. It is not their job title, which says where they sit, and not their workflow role, which says what they may approve."
+          definition="An access role says what a person may do in the application. It is not their job title, which says where they sit, and not their workflow role, which says what they may approve."
           crumbs={[
             { label: 'Administration', href: '/app/administration' },
             { label: 'Roles and permissions' },
@@ -80,7 +80,7 @@ if (mayManage) {
           class:list={[
             'flex items-start gap-2 rounded-cms border px-3 py-2 text-cms-body-sm',
             administrators <= 1
-              ? 'border-cms-warning bg-cms-warning-tint text-cms-ink'
+              ? 'border-cms-caution bg-cms-caution-tint text-cms-ink'
               : 'border-cms-line bg-cms-canvas text-cms-muted',
           ]}
         >
@@ -168,12 +168,12 @@ if (mayManage) {
               id="cms-role-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <p
               id="cms-role-system"
               hidden
-              class="rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink"
+              class="rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink"
             >
               This is a system role. It exists because the platform depends on it, and changing it
               affects everybody who holds it.
@@ -192,7 +192,7 @@ if (mayManage) {
               checked
               hint="Deactivating a role takes its access away from everybody who holds it, on their next request."
             />
-            <p id="cms-role-consequence" hidden class="text-cms-body-sm text-cms-warning" />
+            <p id="cms-role-consequence" hidden class="text-cms-body-sm text-cms-caution" />
           </form>
           <Fragment slot="actions">
             <CmsButton variant="ghost" data-cms-modal-close>

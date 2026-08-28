@@ -22,7 +22,6 @@ import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
-import CmsWordmark from '@/components/cms/CmsWordmark.astro';
 import { EXPIRED_FLAG, EXPIRED_MESSAGE } from '@/lib/cms/routes';
 
 // The guard sets this flag when it clears a session that had run out or been
@@ -38,26 +37,28 @@ export const prerender = false;
 ---
 
 <CmsAuthLayout title="Sign in">
-  <div class="flex flex-col gap-7">
-    <div class="flex flex-col gap-3">
-      <!-- The wordmark repeats here for the mobile column, where the navy brand
-           panel is collapsed to a band and the form is the page. -->
-      <CmsWordmark tone="onLight" size="sm" class="lg:hidden" />
-      <div class="flex flex-col gap-1.5">
-        <h1 class="text-cms-page font-semibold text-cms-navy">Sign in</h1>
-        <p class="text-cms-body-sm text-cms-muted">
-          Customer Relationship, Service &amp; SLA Management System
-        </p>
-      </div>
-    </div>
+  <div class="flex flex-col gap-8">
+    {
+      /*
+      No subtitle. It said "Customer Relationship, Service & SLA Management
+      System", which is the system's name and is already on the brand panel
+      beside this form. Saying it twice on one screen is repetition, and under
+      an h1 that reads "Sign in" it is not telling anybody anything they could
+      not see.
+
+      No wordmark here either, for the same reason: the brand band at the top
+      of the mobile layout carries it, and this was a second copy.
+    */
+    }
+    <h1 class="text-cms-display font-semibold text-cms-ink">Sign in</h1>
 
     {
       sessionExpired && (
         <div
           role="status"
-          class="flex items-start gap-2.5 rounded-cms border border-cms-warning/30 bg-cms-warning-tint px-3.5 py-3"
+          class="flex items-start gap-2.5 rounded-cms border border-cms-caution-border bg-cms-caution-tint px-3.5 py-3"
         >
-          <CmsIcon name="statusWarn" size={17} class="mt-0.5 shrink-0 text-cms-warning" />
+          <CmsIcon name="statusWarn" size={17} class="mt-0.5 shrink-0 text-cms-caution" />
           <p class="text-cms-body-sm text-cms-ink">{EXPIRED_MESSAGE}</p>
         </div>
       )
@@ -71,16 +72,32 @@ export const prerender = false;
       still behave correctly.
     -->
     <form id="cms-login-form" method="post" action="/login" novalidate class="flex flex-col gap-5">
-      <!-- The server-error region. Present and empty rather than injected, so a
-           screen reader is watching it before the first failure happens. -->
-      <div
-        id="cms-login-error"
-        role="alert"
-        hidden
-        class="flex items-start gap-2.5 rounded-cms border border-cms-danger/30 bg-cms-danger-tint px-3.5 py-3"
-      >
-        <CmsIcon name="statusBreach" size={17} class="mt-0.5 shrink-0 text-cms-danger" />
-        <p class="text-cms-body-sm text-cms-ink" data-error-text></p>
+      <!--
+        The server-error region. Present and empty rather than injected, so a
+        screen reader is watching it before the first failure happens.
+
+        AND THE SPACE IS RESERVED, SO NOTHING MOVES WHEN IT ARRIVES. The region
+        used to be `hidden`, which meant a failed sign-in pushed both fields and
+        the button down the page at the exact moment the user was reaching for
+        them. The outer element always occupies its height; the box inside
+        appears in place.
+
+        The band is one comfortable line, not the tallest message: a permanent
+        five-line hole above the fields would be a worse screen ninety-nine
+        times out of a hundred than a rare message that scrolls inside its own
+        box. Either way the shift is zero, which is the property that matters,
+        and it is asserted in test/cms/designSweep.test.ts.
+      -->
+      <div class="min-h-14">
+        <div
+          id="cms-login-error"
+          role="alert"
+          class="flex max-h-14 items-start gap-2.5 overflow-y-auto rounded-cms border border-cms-negative-border bg-cms-negative-tint px-3.5 py-3 data-[empty]:invisible"
+          data-empty
+        >
+          <CmsIcon name="statusBreach" size={17} class="mt-0.5 shrink-0 text-cms-negative" />
+          <p class="text-cms-body-sm text-cms-ink" data-error-text></p>
+        </div>
       </div>
 
       <CmsInput
@@ -130,7 +147,7 @@ export const prerender = false;
     const setFieldError = (field: HTMLInputElement, message: string | null) => {
       const box = document.getElementById(`${field.id}-error`);
       field.setAttribute('aria-invalid', message ? 'true' : 'false');
-      field.classList.toggle('border-cms-danger', Boolean(message));
+      field.classList.toggle('border-cms-negative', Boolean(message));
       field.classList.toggle('border-cms-border', !message);
       if (!box) return;
       box.textContent = message ?? '';
@@ -139,7 +156,9 @@ export const prerender = false;
 
     const setServerError = (message: string | null) => {
       errorText.textContent = message ?? '';
-      errorBox.hidden = !message;
+      // `data-empty` rather than `hidden`: the region keeps its height either
+      // way, so the form does not jump when a message arrives.
+      errorBox.toggleAttribute('data-empty', !message);
       if (message) {
         // role="alert" announces it; moving focus puts a keyboard user at the
         // message rather than leaving them wherever they pressed Enter. The
@@ -219,8 +238,10 @@ export const prerender = false;
             // The password is not cleared first on purpose: the page is about
             // to be replaced entirely, and clearing it would only interfere
             // with a password manager's save prompt.
-            const destination = result.user.userType === 'EXTERNAL' ? '/portal' : '/app';
-            window.location.assign(destination);
+            // The server decided this, from the permissions it holds and this
+            // page does not. Hard-coding /app here is what made the executive
+            // dashboard something every user had to go and find.
+            window.location.assign(result.landing);
             // Keep the control disabled through the navigation, so a second
             // click during the page swap cannot fire another request.
             return;

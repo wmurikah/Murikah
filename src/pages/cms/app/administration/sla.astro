@@ -75,7 +75,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       <Fragment>
         <CmsPageHeader
           title="SLA Configuration"
-          description="Calendars, profiles and rules. Precedence runs customer-specific, then segment, then affiliate, then the general default, resolved in one place; the higher configured precedence wins."
+          definition="Precedence runs customer-specific, then segment, then affiliate, then the general default, resolved in one place. The higher configured precedence wins."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Administration', href: '/app/administration' },
@@ -200,7 +200,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
               id="cms-rule-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <CmsInput id="r-ruleName" name="ruleName" label="Rule name" required />
             <CmsSelect
@@ -304,7 +304,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
               id="cms-holiday-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <input type="hidden" id="h-calendarId" name="calendarId" value="" />
             <CmsInput id="h-holidayDate" name="holidayDate" label="Date" type="date" required />

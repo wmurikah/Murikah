@@ -1,0 +1,121 @@
+---
+/**
+ * One measured figure: its name, its value, the records behind it, and its
+ * definition on demand.
+ *
+ * WHY THIS COMPONENT EXISTS. Two rules were being kept by hand on every page
+ * and were therefore being kept unevenly.
+ *
+ * A FIGURE A PERSON CANNOT OPEN IS A FIGURE THEY CANNOT ACT ON. Every number
+ * in this application links to the records behind it, carrying the filter and
+ * the period it was computed under, so nobody has to reconstruct the query
+ * they just clicked. That is a real link with a focus ring, not a click
+ * handler on a number, because a keyboard user and a middle click both matter.
+ *
+ * AND A FIGURE WITH NOTHING BEHIND IT IS NEVER A LINK. When the value is
+ * absent, or no destination was given, this renders as plain text. Wiring a
+ * link to a page that will show nothing costs a click and a page load to
+ * discover, and teaches people that the numbers lie.
+ *
+ * THE DEFINITION IS AVAILABLE, NOT PRINTED. A number whose denominator and
+ * date basis are unavailable cannot be acted on; a number that prints them
+ * underneath every time is clutter. Progressive disclosure resolves it: a
+ * small control beside the figure opens the definition, and it is a native
+ * <details> so it works with no JavaScript, takes focus and announces itself.
+ *
+ * ABSENT IS "NOT AVAILABLE", NEVER ZERO. The caller formats the value; this
+ * component recognises the absent string and refuses to link it.
+ */
+import CmsDefinition from './CmsDefinition.astro';
+
+/**
+ * The one string that means a figure has no value.
+ *
+ * Declared here rather than exported, because an Astro component may not
+ * export a value, and duplicated nowhere: every caller writes the words, and
+ * this component is the only thing that has to recognise them.
+ */
+const NOT_AVAILABLE = 'Not available';
+
+interface Props {
+  label: string;
+  /** Already formatted by the caller, or the absent string. */
+  value: string;
+  /** The currency or unit a figure must carry where it has one. */
+  unit?: string;
+  /** Where the records behind this figure live, with the filter applied. */
+  href?: string;
+  /** What is being measured. */
+  definition?: string;
+  /** The population the figure was taken over. */
+  denominator?: string;
+  /** Which timestamp decides the period. */
+  dateBasis?: string;
+  /** `card` for a grid of measures, `row` for a definition list. */
+  variant?: 'card' | 'row';
+  class?: string;
+}
+const {
+  label,
+  value,
+  unit,
+  href,
+  definition,
+  denominator,
+  dateBasis,
+  variant = 'row',
+  class: className,
+} = Astro.props;
+
+const absent = value === NOT_AVAILABLE || value === '' || value === '-';
+const drillable = href !== undefined && href !== '' && !absent;
+const hasDefinition = definition !== undefined || denominator !== undefined;
+const valueClass =
+  variant === 'card'
+    ? 'text-cms-kpi font-semibold tabular-nums'
+    : 'text-cms-body-sm font-semibold tabular-nums';
+---
+
+<div
+  class:list={[
+    variant === 'card'
+      ? 'flex flex-col gap-1 rounded-cms bg-cms-surface px-4 py-3'
+      : 'flex items-baseline justify-between gap-3 border-b border-cms-line py-2 last:border-0',
+    className,
+  ]}
+>
+  <div class:list={[variant === 'card' ? 'flex items-start justify-between gap-2' : 'contents']}>
+    <span class="text-cms-body-sm text-cms-muted">{label}</span>
+    {
+      hasDefinition && (
+        <CmsDefinition
+          label={label}
+          definition={definition}
+          denominator={denominator}
+          dateBasis={dateBasis}
+        />
+      )
+    }
+  </div>
+
+  {
+    drillable ? (
+      <a
+        href={href}
+        class:list={[
+          valueClass,
+          'rounded-cms text-cms-royal underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus',
+        ]}
+      >
+        {value}
+        {unit && <span class="ml-1 text-cms-body-sm font-normal text-cms-muted">{unit}</span>}
+        <span class="sr-only">. Open the records behind this figure.</span>
+      </a>
+    ) : (
+      <span class:list={[valueClass, absent ? 'text-cms-muted' : 'text-cms-ink']}>
+        {value}
+        {unit && <span class="ml-1 text-cms-body-sm font-normal text-cms-muted">{unit}</span>}
+      </span>
+    )
+  }
+</div>

@@ -61,7 +61,7 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
       <Fragment>
         <CmsPageHeader
           title="Case categories"
-          description="Two levels, category and subcategory, each pair unique, each with a default priority. Historical cases keep theirs; deactivation is the only removal."
+          definition="Two levels, category and subcategory, each pair unique, each with a default priority. Historical cases keep theirs; deactivation is the only removal."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Service', href: '/app/service' },
@@ -138,7 +138,7 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
               id="cms-category-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <CmsInput id="cat-categoryName" name="categoryName" label="Category" required />
             <CmsInput

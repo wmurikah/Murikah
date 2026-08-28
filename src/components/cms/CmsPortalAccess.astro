@@ -50,7 +50,7 @@ const stamp = (value: string | null): string => value ?? 'Never';
     id="portal-access-error"
     role="alert"
     hidden
-    class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
   >
   </p>
 
@@ -146,7 +146,7 @@ const stamp = (value: string | null): string => value ?? 'Never';
                             data-portal-action="revoke"
                             data-membership-id={row.membershipId}
                             data-confirm="Revoke this person's access? They keep their history and can be reinstated later."
-                            class="min-h-9 rounded-cms border border-cms-danger px-2.5 text-cms-body-sm text-cms-danger outline-none hover:bg-cms-danger-tint focus-visible:ring-2 focus-visible:ring-focus"
+                            class="min-h-9 rounded-cms border border-cms-negative px-2.5 text-cms-body-sm text-cms-negative outline-none hover:bg-cms-negative-tint focus-visible:ring-2 focus-visible:ring-focus"
                           >
                             Revoke
                           </button>

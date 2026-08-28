@@ -73,7 +73,7 @@ const departmentOptions = [
       <Fragment>
         <CmsPageHeader
           title="Job titles"
-          description="A position in the organisation. Separate from an access role, which says what a person may do, and from a workflow role, which says what they may approve."
+          definition="A position in the organisation. Separate from an access role, which says what a person may do, and from a workflow role, which says what they may approve."
           crumbs={[
             { label: 'Administration', href: '/app/administration' },
             { label: 'Users', href: '/app/administration/users' },
@@ -150,7 +150,7 @@ const departmentOptions = [
               id="cms-title-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <CmsInput id="jt-titleName" name="titleName" label="Title" required />
             <CmsSelect
@@ -168,7 +168,7 @@ const departmentOptions = [
               checked
               hint="Deactivating stops this title being chosen for new assignments. Existing assignments are unchanged."
             />
-            <p id="cms-title-consequence" hidden class="text-cms-body-sm text-cms-warning" />
+            <p id="cms-title-consequence" hidden class="text-cms-body-sm text-cms-caution" />
           </form>
           <Fragment slot="actions">
             <CmsButton variant="ghost" data-cms-modal-close>

@@ -102,80 +102,67 @@ export interface ScopeResolution {
  * per the rule at the top of this file.
  */
 /**
- * The per-request memo, added in phase 28 after measuring.
+ * One answer per (client, user, permission), for the life of one request.
  *
- * THE MEASUREMENT THAT PROMPTED IT. The executive dashboard issued 72
- * database round trips to render one screen, and 26 of them, 36 per cent,
- * were this identical scope query. The sales order performance page issued
- * 28, of which 9 were. Each module's `scoped*` helper resolves the scope for
- * itself, correctly, and a page calling eight of them resolves the same
- * scope eight times. On Turso over the network at 30ms a round trip, those
- * 26 duplicates are most of a second of nothing.
+ * WHY. This is a pure function of its arguments: the same user and the same
+ * code give the same scopes for the whole of a request, and nothing on a
+ * dashboard changes a role mid-render. Every metric helper resolves scope
+ * before running its own query, so a page that draws forty figures asked this
+ * question forty times. Measured on the executive dashboard: 83 round trips
+ * for 5 distinct answers, which is a third of the page's entire subrequest
+ * budget spent re-reading one row set.
  *
- * WHY THIS IS SAFE, AND WHY IT IS A WeakMap KEYED ON THE CLIENT.
- * `getDb` creates a fresh client per request, so a WeakMap keyed on the
- * client is request-scoped by construction: the entry becomes unreachable
- * when the request's client does. Nothing survives into the next request, so
- * a scope changed a moment ago is resolved afresh the next time somebody
- * asks.
+ * KEYED ON THE CLIENT, so the cache lives exactly as long as the request does.
+ * `getDb` builds a fresh client per request (Workers are stateless and there
+ * is no safe module-level singleton across isolates), and a WeakMap holds the
+ * entry only while that client is alive. A role changed between two requests
+ * is therefore seen by the second one. A role changed *during* a single render
+ * is not, which is the same guarantee the page already had: it resolved every
+ * scope from one connection within a few milliseconds either way.
  *
- * THE SECURITY SCOPE IS THE KEY, which section 0d requires of any cache in
- * this batch. The key is the user id and the permission code together, so a
- * Group user's resolution can never be handed to a country user, and a
- * resolution for one permission can never answer for another. Serving a
- * Group result to a country user is a breach and not a performance bug.
- *
- * The promise is stored rather than the value, so eight concurrent callers
- * inside one `Promise.all` share one query rather than starting eight.
+ * The PROMISE is cached rather than the value, so concurrent callers in the
+ * same tick share one in-flight query instead of racing to issue several.
  */
-const scopeMemo = new WeakMap<Client, Map<string, Promise<ScopeResolution>>>();
+const scopeCache = new WeakMap<Client, Map<string, Promise<ScopeResolution>>>();
 
 export async function resolveScope(
   db: Client,
   userId: string,
   permission: PermissionCode,
 ): Promise<ScopeResolution> {
-  const key = `${userId}::${permission}`;
-  let perRequest = scopeMemo.get(db);
-  if (perRequest === undefined) {
-    perRequest = new Map();
-    scopeMemo.set(db, perRequest);
-  }
-  const memoised = perRequest.get(key);
-  if (memoised !== undefined) return memoised;
+  // ONLY A BATCHING CLIENT IS CACHED, and that restriction is the whole safety
+  // argument.
+  //
+  // A batching client (src/lib/cms/batching.ts) is handed out by a read-only
+  // analytics render, which issues no writes at all, so no role can change
+  // underneath it. Everything else, the RBAC administration endpoints
+  // included, gets a plain client and resolves afresh every time, exactly as
+  // before: those paths DO grant a role and then re-read the scope in the same
+  // request, and a cache there would answer with what was true before the
+  // grant. `test/cms/rbac.test.ts` proves that case, and it should.
+  //
+  // Each section holds its own wrapper around one underlying client, so the
+  // cache keys on the root rather than the wrapper; otherwise five sections
+  // would ask the same question five times.
+  const root = (db as unknown as Record<symbol, unknown>)[Symbol.for('cms.rootClient')] as
+    | Client
+    | undefined;
+  if (root === undefined) return resolveScopeUncached(db, userId, permission);
 
+  const key = `${userId}\u0000${permission}`;
+  let perClient = scopeCache.get(root);
+  if (perClient === undefined) {
+    perClient = new Map();
+    scopeCache.set(root, perClient);
+  }
+  const cached = perClient.get(key);
+  if (cached !== undefined) return cached;
   const pending = resolveScopeUncached(db, userId, permission);
-  perRequest.set(key, pending);
-  try {
-    return await pending;
-  } catch (error) {
-    // A failed resolution is not memoised. Caching a rejection would turn one
-    // transient database error into a whole request that believes the user
-    // has no permissions, which renders as an empty screen rather than as an
-    // error and is the worst of both.
-    perRequest.delete(key);
-    throw error;
-  }
-}
-
-/**
- * Forget everything memoised for one client.
- *
- * THIS EXISTS FOR THE TEST HARNESS AND IS HONEST ABOUT IT. In production the
- * memo's lifetime is the request, because `getDb` builds a client per
- * request, and a permission never changes in the middle of one. The suite is
- * different: it holds one client for a whole test, grants a role, withholds
- * a permission and re-resolves, all against the same connection. Without
- * this the memo would correctly serve the answer from before the grant, and
- * the test would be asserting against a request that never happened.
- *
- * It is deliberately not called anywhere in `src/`. A production caller
- * reaching for this would be saying that a permission changed mid-request,
- * which is not a thing that happens; if it ever did, the fix is a fresh
- * client and not a cache flush.
- */
-export function forgetResolvedScopes(db: Client): void {
-  scopeMemo.delete(db);
+  perClient.set(key, pending);
+  // A failed resolution must not be remembered: the next attempt in the same
+  // request should ask again rather than replay the error.
+  void pending.catch(() => perClient.delete(key));
+  return pending;
 }
 
 async function resolveScopeUncached(

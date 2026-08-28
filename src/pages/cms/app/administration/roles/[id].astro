@@ -105,7 +105,7 @@ const total = modules.reduce((n, m) => n + m.totalCount, 0);
         </CmsPageHeader>
 
         {role.isSystemRole && (
-          <p class="flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+          <p class="flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
             <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
             <span>
               This is a system role. The platform depends on it existing, and a change here reaches
@@ -141,7 +141,7 @@ const total = modules.reduce((n, m) => n + m.totalCount, 0);
             id="cms-matrix-error"
             role="alert"
             hidden
-            class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+            class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
           />
 
           {/*
@@ -204,7 +204,7 @@ const total = modules.reduce((n, m) => n + m.totalCount, 0);
                               // to the resolver, and saying so is the honest
                               // thing: unticking here does not take the code
                               // away from somebody who also holds it elsewhere.
-                              <span class="text-cms-caption text-cms-warning">
+                              <span class="text-cms-caption text-cms-caution">
                                 Recorded as withheld on this role. Another role granting the same
                                 code still grants it.
                               </span>

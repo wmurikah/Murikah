@@ -7,30 +7,40 @@
  * information survives greyscale, a colour-blind reader and a screen reader.
  * There is deliberately no way to render this component as a bare coloured dot.
  *
- * Tones map to the SLA vocabulary this product will speak: within, approaching,
- * breached, plus neutral and informational.
+ * FIVE ROLES, AND THEY MEAN THINGS. Each maps to one semantic ramp, and a ramp
+ * is text, border and tint taken from one hue so the three are related values.
+ * `accent` is deliberately absent: the brand accent means "this is the action",
+ * not "this is good", and a badge is never an action.
+ *
+ * The tone names kept here are `success`, `warning` and `danger` rather than
+ * positive, caution and negative, because they are a TypeScript union consumed
+ * at roughly a hundred call sites and renaming a compiler-checked prop changes
+ * nothing a user sees. The colours behind them are the new ramps.
  */
 import CmsIcon from './CmsIcon.astro';
 import type { CmsIconName } from './icons';
 
 interface Props {
-  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent';
+  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
   label: string;
   icon?: CmsIconName;
   class?: string;
 }
 const { tone = 'neutral', label, icon, class: className } = Astro.props;
 
+// Border rather than a translucent ring: the ramp already carries a border
+// value measured against its own tint, so the edge is a stated colour instead
+// of an opacity that lands wherever the background happens to be.
 const tones = {
-  neutral: 'bg-cms-canvas text-cms-muted ring-cms-line',
-  success: 'bg-cms-success-tint text-cms-success ring-cms-success/25',
-  warning: 'bg-cms-warning-tint text-cms-warning ring-cms-warning/25',
-  danger: 'bg-cms-danger-tint text-cms-danger ring-cms-danger/25',
-  info: 'bg-cms-info-tint text-cms-info ring-cms-info/25',
-  accent: 'bg-cms-lavender-tint text-cms-lavender ring-cms-lavender/25',
+  neutral: 'bg-cms-neutral-tint text-cms-neutral border-cms-neutral-border',
+  success: 'bg-cms-positive-tint text-cms-positive border-cms-positive-border',
+  warning: 'bg-cms-caution-tint text-cms-caution border-cms-caution-border',
+  danger: 'bg-cms-negative-tint text-cms-negative border-cms-negative-border',
+  info: 'bg-cms-info-tint text-cms-info border-cms-info-border',
 };
 
 const defaultIcon: Record<string, CmsIconName> = {
+  neutral: 'statusInfo',
   success: 'statusOk',
   warning: 'statusWarn',
   danger: 'statusBreach',
@@ -41,7 +51,7 @@ const glyph = icon ?? defaultIcon[tone];
 
 <span
   class:list={[
-    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-cms-caption font-semibold whitespace-nowrap ring-1 ring-inset',
+    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-cms-caption font-semibold whitespace-nowrap',
     tones[tone],
     className,
   ]}
