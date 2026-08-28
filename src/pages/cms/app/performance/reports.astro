@@ -101,7 +101,6 @@ const cell = (value: string | number | null): string =>
 <CmsLayout title="Reports">
   <CmsPageHeader
     title="Reports"
-    description="Parameterised views over the metric services. The same definitions as the dashboards, because they are the same code."
     crumbs={[{ label: 'Performance', href: '/app/performance' }, { label: 'Reports' }]}
   />
 
@@ -349,7 +348,7 @@ const cell = (value: string | number | null): string =>
          end. The address is appended so a reader can type it. */
       content: ' (' attr(href) ')';
       font-size: 0.7em;
-      color: #555;
+      color: var(--color-cms-muted);
     }
   }
 </style>
