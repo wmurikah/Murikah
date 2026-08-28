@@ -1045,9 +1045,16 @@ export async function trend(
           ),
           ranked AS (
             SELECT bucket, elapsed_minutes, response_minutes,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY elapsed_minutes) AS e_rn,
+            -- NULLS SORT LAST, AND THE MEDIAN DEPENDS ON IT. One ranked CTE
+            -- serves several columns, so it cannot filter the nulls out the
+            -- way a single-metric query does. The count counts only values
+            -- that exist, so the median sits at row (c + 1) / 2 among them;
+            -- SQLite sorts NULL first by default, which would put that row
+            -- number inside the missing values and report Not available for
+            -- a period that has perfectly good figures in it.
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (elapsed_minutes IS NULL), elapsed_minutes) AS e_rn,
               COUNT(elapsed_minutes) OVER (PARTITION BY bucket) AS e_c,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY response_minutes) AS r_rn,
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (response_minutes IS NULL), response_minutes) AS r_rn,
               COUNT(response_minutes) OVER (PARTITION BY bucket) AS r_c,
               case_type, external_sla, csat, csat_responses
             FROM base

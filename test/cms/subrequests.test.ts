@@ -29,6 +29,7 @@ import {
 } from './support/subrequestBudget.ts';
 import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
 import { parseFilter } from '../../src/lib/cms/analytics/filters.ts';
+import { approvals } from '../../src/lib/cms/dashboard/approvals.ts';
 import {
   dashboard,
   attentionCustomers,
@@ -181,6 +182,9 @@ test('/app stays inside its subrequest budget', async () => {
       runSection(b, 'dashboard.entities', (db) =>
         entityComparison(db, USER, PERMISSIONS, filter, NOW),
       ),
+      runSection(b, 'dashboard.approvals', (db) =>
+        approvals(db, USER, filter, NOW, { salesOrders: true, purchaseOrders: true }),
+      ),
     ]),
   );
   assertWithinBudget('/app', trips, statements);
@@ -204,6 +208,9 @@ test('switching the SLA family costs nothing', async () => {
         ),
         runSection(b, 'dashboard.entities', (db) =>
           entityComparison(db, USER, PERMISSIONS, filter, NOW),
+        ),
+        runSection(b, 'dashboard.approvals', (db) =>
+          approvals(db, USER, filter, NOW, { salesOrders: true, purchaseOrders: true }),
         ),
       ]),
     );

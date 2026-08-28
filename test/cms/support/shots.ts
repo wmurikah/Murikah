@@ -15,6 +15,7 @@
 import { CmsWorker } from './worker.ts';
 import { AUTH_SCHEMA_DDL } from './schema.ts';
 import { seedHass } from './hassSeed.ts';
+import { withApprovalWork } from './approvalWork.ts';
 import type { TestClient } from './db.ts';
 import { hashPassword } from '../../../src/lib/cms/auth/password.ts';
 
@@ -29,7 +30,11 @@ import { hashPassword } from '../../../src/lib/cms/auth/password.ts';
  */
 const PLAYWRIGHT = process.env.PLAYWRIGHT_MODULE ?? 'playwright-core';
 const CHROMIUM = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const { chromium } = (await import(PLAYWRIGHT)) as {
+// playwright-core exposes `chromium` on the module in some builds and only on
+// the default export in others, so both are accepted rather than the operator
+// being told their install is wrong.
+const loaded = (await import(PLAYWRIGHT)) as Record<string, unknown>;
+const { chromium } = ((loaded.chromium === undefined ? loaded.default : loaded) ?? {}) as {
   chromium: {
     launch(options: unknown): Promise<{
       newContext(options: unknown): Promise<{
@@ -79,7 +84,11 @@ const worker = new CmsWorker();
 await worker.start(AUTH_SCHEMA_DDL, SECRET);
 console.log('worker up on', worker.portNumber);
 
-await seedHass(adapt(worker.db));
+const seedClient = adapt(worker.db);
+await seedHass(seedClient);
+// The completed approval work the SLA section reports, the same fixture the
+// tests assert against, so the picture and the assertions agree.
+await withApprovalWork(seedClient);
 
 // A real credential for a seeded administrator, so the dashboard composes with
 // every section rather than with whatever a minimal fixture happened to allow.
@@ -118,7 +127,13 @@ const jar = (cookie ?? '')
     return { name: name!, value: rest.join('='), domain: 'cms.localhost', path: '/' };
   });
 
-const shoot = async (name: string, width: number, height: number, pin: boolean) => {
+const shoot = async (
+  name: string,
+  width: number,
+  height: number,
+  pin: boolean,
+  fullPage = false,
+) => {
   const context = await browser.newContext({ viewport: { width, height } });
   await context.addCookies(jar);
   if (pin) {
@@ -136,12 +151,15 @@ const shoot = async (name: string, width: number, height: number, pin: boolean) 
   // described: the rail must not move it.
   const main = await page.$('#cms-main');
   const box = main ? await main.boundingBox() : null;
-  await page.screenshot({ path: `${OUT}/${name}.png` });
+  await page.screenshot({ path: `${OUT}/${name}.png`, fullPage });
   console.log(`${name}: main starts at x=${box?.x ?? 'unknown'}`);
   await context.close();
   return box?.x ?? null;
 };
 
+// The whole page, because the SLA section runs well below the fold and a
+// screenshot of the top of it proves nothing about the charts underneath.
+await shoot('after-desktop-full', 1440, 900, false, true);
 const collapsed = await shoot('after-desktop-collapsed', 1440, 900, false);
 const pinned = await shoot('after-desktop-expanded', 1440, 900, true);
 await shoot('after-laptop-collapsed', 1280, 720, false);

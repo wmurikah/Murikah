@@ -401,7 +401,20 @@ export interface SalesOrderSection {
   orderToInvoiceMedianMinutes: number | null;
   orderToLoadingMedianMinutes: number | null;
   slaCompliancePercent: number | null;
-  trend: { bucket: string; orders: number; slaCompliancePercent: number | null }[];
+  /**
+   * The per-period figures the dashboard draws.
+   *
+   * `orderToInvoiceMedianMinutes` is carried through rather than dropped
+   * because the SLA section's cycle chart needs it and `soTrend` has already
+   * computed it: projecting it away here would have cost a second query for a
+   * number that was in the first one.
+   */
+  trend: {
+    bucket: string;
+    orders: number;
+    slaCompliancePercent: number | null;
+    orderToInvoiceMedianMinutes: number | null;
+  }[];
 }
 
 export interface PurchaseOrderSection {
@@ -553,6 +566,7 @@ export async function dashboard(
             bucket: row.bucket,
             orders: row.orders,
             slaCompliancePercent: row.slaCompliancePercent,
+            orderToInvoiceMedianMinutes: row.orderToInvoiceMedianMinutes,
           })),
         }
       : null;

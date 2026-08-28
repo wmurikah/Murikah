@@ -45,6 +45,7 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
+import { SALES_ORDER_VIEW, PURCHASE_ORDER_VIEW } from '@/lib/cms/permissions';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
@@ -58,9 +59,11 @@ import {
   type AttentionCustomer,
   type EntityComparisonRow,
 } from '@/lib/cms/repos/executive';
-import { lineChart, barChart, horizontalBarChart, sparkline } from '@/lib/cms/charts/svg';
+import { lineChart, horizontalBarChart, sparkline } from '@/lib/cms/charts/svg';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
 import { SLA_FAMILIES, readSlaFamily, slaFamilyView } from '@/lib/cms/dashboard/sla';
+import { approvals, alignBuckets, type ApprovalsView } from '@/lib/cms/dashboard/approvals';
+import CmsLeaderboardRow from '@/components/cms/CmsLeaderboardRow.astro';
 
 export const prerender = false;
 
@@ -76,6 +79,7 @@ const family = readSlaFamily(Astro.url.searchParams);
 let board: Dashboard | null = null;
 let customers: AttentionCustomer[] = [];
 let entities: EntityComparisonRow[] = [];
+let approvalsView: ApprovalsView | null = null;
 let boardFailure: { traceId: string } | null = null;
 let connectionFailed = false;
 
@@ -86,7 +90,7 @@ if (user) {
     // leaves as a single batch, which is how a dashboard of this size costs a
     // handful of round trips rather than one per figure.
     const batcher = createBatcher(db);
-    const [boardResult, customersResult, entitiesResult] = await Promise.all([
+    const [boardResult, customersResult, entitiesResult, approvalsResult] = await Promise.all([
       runSection(batcher, 'dashboard.board', (client) =>
         dashboard(client, userId, permissions, filter, now),
       ),
@@ -96,11 +100,20 @@ if (user) {
       runSection(batcher, 'dashboard.entities', (client) =>
         entityComparison(client, userId, permissions, filter, now),
       ),
+      // The approval functions, issued alongside everything else so its
+      // statements join the same batch rather than starting a new round trip.
+      runSection(batcher, 'dashboard.approvals', (client) =>
+        approvals(client, userId, filter, now, {
+          salesOrders: permissions.includes(SALES_ORDER_VIEW),
+          purchaseOrders: permissions.includes(PURCHASE_ORDER_VIEW),
+        }),
+      ),
     ]);
     if (boardResult.ok) board = boardResult.value;
     else boardFailure = { traceId: boardResult.traceId };
     if (customersResult.ok) customers = customersResult.value;
     if (entitiesResult.ok) entities = entitiesResult.value;
+    if (approvalsResult.ok) approvalsView = approvalsResult.value;
   } catch (error) {
     console.error('[cms.dashboard] no database connection', error);
     connectionFailed = true;
@@ -140,26 +153,6 @@ const sla = board === null ? null : slaFamilyView(family, board);
 
 // ---- Charts, every one drawn from data already loaded --------------------
 const trend = board?.salesOrders ?? null;
-const percent = (v: number | null) => (v === null ? 'Not available' : `${v}%`);
-
-const slaTrendChart =
-  trend === null || trend.trend.length === 0
-    ? null
-    : lineChart(
-        [
-          {
-            name: 'Sales order SLA',
-            token: 'cms-series-1',
-            points: trend.trend.map((row) => ({
-              label: row.bucket,
-              value: row.slaCompliancePercent,
-              href: toSales,
-            })),
-          },
-        ],
-        { unit: 'per cent', format: percent, endLabels: true, height: 200 },
-      );
-
 const volumeSpark =
   trend === null || trend.trend.length === 0
     ? undefined
@@ -173,50 +166,143 @@ const volumeSpark =
       );
 
 /**
- * SLA by affiliate, with the group's own figure drawn across it.
+ * The affiliates a reader may narrow to, from the comparison the page already
+ * loaded, so the control costs nothing and can only offer an affiliate the
+ * reader is actually allowed to see.
  *
- * The reference line is the group compliance the Orders section already
- * reports, not an invented target: a dashed line at a number nobody agreed
- * would be a target this system made up, and every affiliate would be measured
- * against it. Drawn this way it answers the only question the chart is for,
- * which is who is above and below the line the group is actually running at.
- */
-/**
- * Five affiliates all called "Hass Petroleum X" overlap into one grey smear
- * under the bars. The company name is the same on every one of them and is
- * therefore carrying nothing, so the chart drops it and the axis reads Kenya,
- * Uganda, Tanzania. The full name is still in the data table under the chart
- * and in the Affiliates table below it.
+ * Five affiliates all called "Hass Petroleum X" put the same two words on every
+ * chip, so the company name is dropped and the chip reads Kenya, Uganda,
+ * Tanzania. The full name is in the Affiliates table further down the page.
  */
 const shortAffiliate = (name: string) => name.replace(/^Hass Petroleum\s+/i, '');
+const affiliateChoices = [
+  { id: null, label: 'All affiliates' },
+  ...entities.map((row) => ({ id: row.affiliateId, label: shortAffiliate(row.affiliateName) })),
+];
 
-const affiliateChart =
-  entities.length === 0
+/**
+ * The approval function chart: the one question both processes share.
+ *
+ * The axis is the function, because a function is a thing somebody owns and can
+ * be asked about. The bars carry their own targets where a target is
+ * configured, and a function nobody set a target for has no mark rather than
+ * being measured against somebody else’s.
+ *
+ * Every bar drills to the orders behind it, carrying the function and the whole
+ * filter, so the reader lands on the population the bar was computed from.
+ */
+const processLabel = (processType: string) =>
+  processType === 'SALES_ORDER' ? 'sales orders' : 'purchase orders';
+const processPath = (processType: string) =>
+  processType === 'SALES_ORDER' ? '/app/orders/sales' : '/app/orders/purchases';
+
+const functionChart =
+  approvalsView === null || approvalsView.functions.length === 0
     ? null
-    : barChart(
+    : horizontalBarChart(
         {
-          name: 'Sales order SLA compliance by affiliate',
+          name: 'Median turnaround by approval function',
           token: 'cms-series-1',
-          points: entities.map((row) => ({
-            label: shortAffiliate(row.affiliateName),
-            value: row.salesOrderSlaPercent,
-            href: drillTo('/app/orders/sales/performance', filter, {
-              affiliateId: row.affiliateId,
+          points: approvalsView.functions.map((one) => ({
+            label: `${one.functionName}, ${processLabel(one.processType)}`,
+            value: one.medianMinutes,
+            target: one.targetMinutes,
+            href: drillTo(processPath(one.processType), filter, { stageCode: one.stageCode }),
+          })),
+        },
+        { unit: 'minutes', format: formatDuration, height: undefined },
+      );
+
+/**
+ * One trend line per process, on one pair of axes.
+ *
+ * Both are medians in minutes, so they share a scale honestly. The buckets are
+ * the union of the two, and a period a process had no completed cycles in is a
+ * gap in its line rather than a zero, because zero minutes would claim the
+ * approvals were instant.
+ */
+const cycleAlignment =
+  approvalsView === null
+    ? null
+    : alignBuckets(
+        (trend?.trend ?? []).map((row) => ({
+          bucket: row.bucket,
+          medianMinutes: row.orderToInvoiceMedianMinutes,
+        })),
+        approvalsView.purchaseTrend,
+      );
+
+const cycleChart =
+  cycleAlignment === null || cycleAlignment.buckets.length === 0
+    ? null
+    : lineChart(
+        [
+          {
+            name: 'Sales orders',
+            token: 'cms-series-1',
+            points: cycleAlignment.buckets.map((bucket, index) => ({
+              label: bucket,
+              value: cycleAlignment.first[index] ?? null,
+              href: toSales,
+            })),
+          },
+          {
+            name: 'Purchase orders',
+            token: 'cms-series-2',
+            points: cycleAlignment.buckets.map((bucket, index) => ({
+              label: bucket,
+              value: cycleAlignment.second[index] ?? null,
+              href: toPurchases,
+            })),
+          },
+        ],
+        { unit: 'minutes', format: formatDuration, endLabels: true, height: 200 },
+      );
+
+/**
+ * Stage one splits by what was being bought, so the chart is by product group.
+ * Three bars from the current extract, and however many the next one carries.
+ */
+const stageOneChart =
+  approvalsView === null || approvalsView.stageOneByProductGroup.length === 0
+    ? null
+    : horizontalBarChart(
+        {
+          name: 'Median stage one turnaround by product group',
+          token: 'cms-series-3',
+          points: approvalsView.stageOneByProductGroup.map((row) => ({
+            label: row.productGroupName,
+            value: row.medianMinutes,
+            href: drillTo('/app/orders/purchases', filter, { productGroupId: row.productGroupId }),
+          })),
+        },
+        { unit: 'minutes', format: formatDuration },
+      );
+
+/**
+ * Credit release turnaround, by the person who released it.
+ *
+ * HOLD_RELEASED_BY in the sales order extract is a person, and the importer
+ * resolves it to the credit stage’s actor through `source_identities`, so this
+ * is that column read back rather than a second reading of it.
+ */
+const creditReleaseChart =
+  approvalsView === null || approvalsView.creditRelease.length === 0
+    ? null
+    : horizontalBarChart(
+        {
+          name: 'Credit release turnaround by approver',
+          token: 'cms-series-2',
+          points: approvalsView.creditRelease.slice(0, 6).map((row) => ({
+            label: row.approver,
+            value: row.medianMinutes,
+            href: drillTo('/app/orders/sales', filter, {
+              stageCode: row.stageCode,
+              ownerId: row.userId,
             }),
           })),
         },
-        {
-          unit: 'per cent',
-          format: percent,
-          height: 220,
-          reference:
-            board?.salesOrders?.slaCompliancePercent == null
-              ? undefined
-              : {
-                  value: board.salesOrders.slaCompliancePercent,
-                  label: `Group ${board.salesOrders.slaCompliancePercent}%`,
-                },
-        },
+        { unit: 'minutes', format: formatDuration },
       );
 
 /**
@@ -348,6 +434,39 @@ const nothingVisible =
                   </div>
                 </CmsSectionHeader>
 
+                {/*
+                  The affiliate filter, at the top of the section and applied to
+                  everything below it. It is the page filter rather than a
+                  second one: two affiliate controls that can disagree would
+                  show SLA figures for one company above order figures for
+                  another, and both would look authoritative.
+
+                  Chips rather than a select with an Apply button, because the
+                  list is a handful of affiliates and a chip is one click. Each
+                  one is a link carrying the whole filter, so it works with no
+                  JavaScript and the choice lives in the URL.
+                */}
+                {affiliateChoices.length > 1 && (
+                  <div role="group" aria-label="Affiliate" class="-mt-1 flex flex-wrap gap-1.5">
+                    {affiliateChoices.map((choice) => (
+                      <a
+                        href={drillTo('/app', filter, { affiliateId: choice.id, sla: family })}
+                        aria-current={
+                          (choice.id ?? null) === (filter.affiliateId ?? null) ? 'true' : undefined
+                        }
+                        class:list={[
+                          'inline-flex h-7 items-center rounded-cms border px-2.5 text-cms-caption font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                          (choice.id ?? null) === (filter.affiliateId ?? null)
+                            ? 'border-cms-royal bg-cms-royal text-white'
+                            : 'border-cms-line bg-cms-surface text-cms-muted hover:text-cms-ink',
+                        ]}
+                      >
+                        {choice.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
+
                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {sla.measures.map((measure) => (
                     <CmsKpiCard
@@ -363,24 +482,90 @@ const nothingVisible =
                   ))}
                 </div>
 
-                <div class="grid gap-3 xl:grid-cols-2">
-                  {slaTrendChart && (
-                    <CmsChart
-                      title="Sales order SLA compliance over time"
-                      definition="Sales order SLA instances that were Met, by period."
-                      chart={slaTrendChart}
-                      unit="per cent"
-                    />
-                  )}
-                  {affiliateChart && (
-                    <CmsChart
-                      title="SLA compliance by affiliate"
-                      definition="Sales order SLA instances that were Met, per affiliate, against the group's own figure."
-                      chart={affiliateChart}
-                      unit="per cent"
-                    />
-                  )}
-                </div>
+                {functionChart && (
+                  <CmsChart
+                    title="Median turnaround by approval function"
+                    definition="Median minutes from a stage becoming answerable to it being decided, for every approval function the selected orders actually used. The functions are read from the workflow, not from a list: a level nobody used has no bar and a level somebody adds appears on its own. A dashed mark is that function's own configured target, shown only where every workflow definition contributing to it agrees on the number. Purchase orders carry the affiliate chosen on upload, not one from the file."
+                    chart={functionChart}
+                    unit="minutes"
+                  />
+                )}
+
+                {cycleChart && (
+                  <CmsChart
+                    title="Median cycle over the period"
+                    definition="One line per process. Sales orders are measured from the order being created to its invoice being created; purchase orders from submission for approval to the last approval stage being decided. A period with no completed cycles is a gap, never a zero."
+                    chart={cycleChart}
+                    unit="minutes"
+                  />
+                )}
+
+                {/*
+                  The leaderboard, grouped by function and ranked within it.
+
+                  A single ranking down the whole list would put the fastest
+                  invoicing clerk above the slowest credit approver and call it a
+                  league table. Within a function the comparison is between
+                  people facing the same queue, which is the only comparison
+                  that means anything. A person who approves at two functions
+                  appears once under each and is never blended into one average.
+                */}
+                {approvalsView !== null && approvalsView.groups.length > 0 && (
+                  <div class="grid gap-3 xl:grid-cols-2">
+                    {approvalsView.groups.map((one) => (
+                      <div class="rounded-cms-lg bg-cms-surface p-4">
+                        <div class="flex items-baseline justify-between gap-2 pb-1">
+                          <h3 class="text-cms-body-sm font-semibold text-cms-ink">
+                            {one.functionName}
+                          </h3>
+                          <span class="text-cms-caption text-cms-muted">
+                            {processLabel(one.processType)}
+                          </span>
+                        </div>
+                        {one.rows.map((row) => (
+                          <CmsLeaderboardRow
+                            rank={row.rank}
+                            name={row.approver}
+                            href={drillTo(processPath(one.processType), filter, {
+                              stageCode: one.stageCode,
+                              ownerId: row.userId,
+                            })}
+                            volume={row.transactions}
+                            median={formatDuration(row.medianMinutes)}
+                            p90={formatDuration(row.p90Minutes)}
+                            compliance={row.withinSlaPercent}
+                            pending={row.pending}
+                            oldestPending={
+                              row.oldestPendingAt === null ? 'Not available' : row.oldestPendingAt
+                            }
+                            minimumVolume={approvalsView.minimumVolume}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(stageOneChart || creditReleaseChart) && (
+                  <div class="grid gap-3 xl:grid-cols-2">
+                    {stageOneChart && (
+                      <CmsChart
+                        title="Stage one turnaround by product group"
+                        definition="Median minutes on the purchase order's first stage, by the product group of its lines. An order with lines in two groups is counted once in each, because apportioning one turnaround between them would invent a split the data does not carry."
+                        chart={stageOneChart}
+                        unit="minutes"
+                      />
+                    )}
+                    {creditReleaseChart && (
+                      <CmsChart
+                        title="Credit release turnaround by approver"
+                        definition="Median minutes from the credit stage opening to the release being recorded, by the person who released it. HOLD_RELEASED_BY from the extract, resolved to that person through source identities."
+                        chart={creditReleaseChart}
+                        unit="minutes"
+                      />
+                    )}
+                  </div>
+                )}
               </section>
             )}
 

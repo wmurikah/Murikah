@@ -310,10 +310,13 @@ about consequence to the business, not about how hard the fix was.
 | **D30-002** | 30    | **Medium**         | `test/cms/endToEnd.test.ts` originally moved a case NEW to WAITING_CUSTOMER directly. The status machine refused it, correctly: a case nobody has picked up cannot be waiting on the customer for anything. The defect was in the test's model of the process, not in the process.                                                                                                 | **Fixed** in the test. No product change; the refusal was right.                                                                                                                                                          |
 | **D30-003** | 30    | **Medium**         | The stage move takes an `expectedStageId` and refuses a lost race. The validation journey did not supply it and was refused with "Somebody moved this opportunity while you were looking at it." The optimistic check is correct and the caller was wrong.                                                                                                                         | **Fixed** in the test. No product change.                                                                                                                                                                                 |
 | **D30-004** | 30    | **Low**            | `case_status_history.changed_at` holds **whole seconds** and the primary key is random hex, so **two transitions inside the same second have no order that can be read back**. In practice each transition is a separate request and they are seldom that close, but the schema records no monotonic sequence beside the timestamp, so the ordering is not guaranteed by anything. | **Open. Not fixed in this batch:** the fix is a schema change and the batch may not make one. See section 8.                                                                                                              |
+| **D32-001** | 32    | **High**           | Every **trend median was silently dropped whenever any row in the period had no value**. One `ranked` CTE serves several columns in `soTrend`, `poTrend` and the service trend, so it cannot filter nulls the way a single-metric query does; the count counts only real values, but SQLite sorts NULL first, so the row number `(c + 1) / 2` landed inside the missing rows and returned NULL. Order to invoice, order to loading authority, credit median, the purchase order approval cycle and receipt to posting all read "Not available" for periods that had perfectly good figures in them. | **Fixed.** The ranking orders by `(column IS NULL)` first, so rows 1..c are the real values in ascending order, which is what the row number assumes. Five figures that reported nothing now report. Regression test in `test/cms/dashboardApprovals.test.ts`.                                                    |
+| **D32-002** | 32    | **Medium**         | The value axis on a line or bar chart reserved a **fixed 56px**, which was sized for "40" and "95%". A duration axis says "3 h 20 min", so the right-anchored label started at a negative x and the reader was shown "h 20 min" with the hours cut off the left edge of the viewBox.                                                                                                                                                                                                                                                        | **Fixed.** The axis measures its own widest label and claims the room it needs. Regression test asserts every axis label anchor leaves space for its own characters.                                                                                                                                            |
+| **D32-003** | 32    | **Medium**         | The SLA section was asked for a **hold reason distribution from `CREDIT_HOLD_NAME`**. That column is `raw_only` in `soImport.ts` and is not written to the curated `snapshot_json`, so **the only surviving copy is `import_rows.raw_json`**: one row per spreadsheet line per batch, not per order, with no scope predicate on it. Counting it would count spreadsheet rows across re-uploads and would bypass the Build Prompt 07 scope resolver.                                                                                          | **Open. Not built, deliberately:** the alternative was a chart of the wrong population that also leaked. The fix is a schema change — curate the column into `sales_orders` or into `snapshot_json` on import — and needs a decision. The release turnaround **by the person** in `HOLD_RELEASED_BY` **is** built, because the importer resolves it to the credit stage actor. |
 | **D29-001** | 29    | **High**, external | `xlsx` 0.18.5 carries **two high advisories with no patched version on npm**. It is the only advisory in code that runs in the worker on untrusted input.                                                                                                                                                                                                                          | **Open. Not fixable in this batch:** every remedy is a dependency change, which is a stop condition. Mitigations recorded in `production/PRODUCTION_READINESS.md`.                                                        |
 | **D29-002** | 29    | **High**, process  | The build was asked for PBKDF2 at **210,000 iterations**. Cloudflare Workers caps it at 100,000 and throws above it; Node applies no cap. So 210,000 passes every test in this repository and fails only on the deployed worker, which is how it reached production once and took sign-in down.                                                                                    | **Resolved by reporting rather than by faking.** 100,000, the platform ceiling, with the parameters recorded and the verifier dispatching on the stored algorithm so a stronger one can be added later with no migration. |
 
-**Nothing above is unfixed and unrecorded.** The three open items are open for
+**Nothing above is unfixed and unrecorded.** The four open items are open for
 stated reasons that are stop conditions in this batch, and each names what a
 human has to decide.
 
@@ -393,16 +396,23 @@ the reason and the decision required.
    removing spreadsheet export. All three are dependency changes and none could
    be made in this batch.
 
-3. **Decide on D30-004.** Adding a monotonic sequence column to
+3. **Decide on D32-003.** The hold reason lives only in `import_rows.raw_json`
+   today. Curating `CREDIT_HOLD_NAME` into `sales_orders` (or into the
+   snapshot payload) is a schema change and a re-import, and until it is made
+   the SLA section shows the credit release **by person** and no reason
+   distribution, because an empty chart is worse than no chart and a chart
+   built on raw import rows would count the wrong population.
+
+4. **Decide on D30-004.** Adding a monotonic sequence column to
    `case_status_history` is a schema change. If the answer is yes, it is a
    numbered script under `docs/cms/`, written for the operator and run by them.
 
-4. **Run the numbered scripts in order**, per `docs/cms/SCHEMA_REGISTER.md`,
+5. **Run the numbered scripts in order**, per `docs/cms/SCHEMA_REGISTER.md`,
    and confirm `GET /api/health` reports `ok` before running
    `production/10_production_cleanup.sql`. That order is deliberate: verify the
    schema is complete while the demo data is still there to verify it against.
 
-5. **Run `pnpm db:cms:bootstrap-admin`** to create the first real
+6. **Run `pnpm db:cms:bootstrap-admin`** to create the first real
    administrator, after the demo seed has gone.
 
 6. **Read `production/10_production_cleanup.sql` end to end before running

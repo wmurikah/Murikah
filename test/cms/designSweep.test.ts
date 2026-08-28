@@ -624,12 +624,25 @@ test('the four chart types the dashboard needs all exist', () => {
   assert.match(svg, /stroke-dasharray="4 3"/);
   assert.match(svg, /escape\(reference\.label\)/);
 
-  // And the dashboard actually renders one of each of the three big ones.
+  // A HORIZONTAL BAR CARRIES A TARGET PER BAR, NOT ONE LINE ACROSS THE CHART.
+  // The chart's categories are approval functions, and finance approval and
+  // the country manager's sign-off are held to different SLA rules. One line
+  // drawn across both would measure one of them against a number nobody set
+  // for it, so the target travels on the point.
+  assert.match(svg, /target\?: number \| null;/, 'a bar point cannot carry its own target');
+  assert.match(svg, /stroke="var\(--color-cms-ink-600\)"/, 'the per-bar target is not drawn');
+  assert.match(
+    svg,
+    /Math\.max\(p\.value \?\? 0, p\.target \?\? 0\)/,
+    'a target beyond the tallest bar would be pinned to the frame and read as met',
+  );
+
+  // And the dashboard actually renders the three the SLA section is built from.
   const page = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  for (const fn of ['lineChart(', 'barChart(', 'horizontalBarChart(', 'sparkline(']) {
+  for (const fn of ['lineChart(', 'horizontalBarChart(', 'sparkline(']) {
     assert.ok(page.includes(fn), `the dashboard renders no ${fn.slice(0, -1)}`);
   }
-  assert.match(page, /reference:/, 'the affiliate bars carry a target line');
+  assert.match(page, /target: one\.targetMinutes/, 'the function bars carry no target');
 });
 
 // ---------------------------------------------------------------------------

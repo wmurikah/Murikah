@@ -908,9 +908,16 @@ export async function trend(
           ),
           ranked AS (
             SELECT bucket, cycle, posting, is_pending, sla_status,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY cycle) AS cycle_rn,
+            -- NULLS SORT LAST, AND THE MEDIAN DEPENDS ON IT. One ranked CTE
+            -- serves several columns, so it cannot filter the nulls out the
+            -- way a single-metric query does. The count counts only values
+            -- that exist, so the median sits at row (c + 1) / 2 among them;
+            -- SQLite sorts NULL first by default, which would put that row
+            -- number inside the missing values and report Not available for
+            -- a period that has perfectly good figures in it.
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (cycle IS NULL), cycle) AS cycle_rn,
               COUNT(cycle) OVER (PARTITION BY bucket) AS cycle_c,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY posting) AS posting_rn,
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (posting IS NULL), posting) AS posting_rn,
               COUNT(posting) OVER (PARTITION BY bucket) AS posting_c
             FROM base
           )

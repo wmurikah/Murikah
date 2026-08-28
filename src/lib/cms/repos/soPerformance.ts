@@ -963,13 +963,20 @@ export async function trend(
           ),
           ranked AS (
             SELECT bucket, finance, credit, to_invoice, to_loading, sla_status,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY finance) AS finance_rn,
+            -- NULLS SORT LAST, AND THE MEDIAN DEPENDS ON IT. One ranked CTE
+            -- serves several columns, so it cannot filter the nulls out the
+            -- way a single-metric query does. The count counts only values
+            -- that exist, so the median sits at row (c + 1) / 2 among them;
+            -- SQLite sorts NULL first by default, which would put that row
+            -- number inside the missing values and report Not available for
+            -- a period that has perfectly good figures in it.
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (finance IS NULL), finance) AS finance_rn,
               COUNT(finance) OVER (PARTITION BY bucket) AS finance_c,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY credit) AS credit_rn,
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (credit IS NULL), credit) AS credit_rn,
               COUNT(credit) OVER (PARTITION BY bucket) AS credit_c,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY to_invoice) AS to_invoice_rn,
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (to_invoice IS NULL), to_invoice) AS to_invoice_rn,
               COUNT(to_invoice) OVER (PARTITION BY bucket) AS to_invoice_c,
-              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY to_loading) AS to_loading_rn,
+              ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY (to_loading IS NULL), to_loading) AS to_loading_rn,
               COUNT(to_loading) OVER (PARTITION BY bucket) AS to_loading_c
             FROM base
           )

@@ -29,6 +29,20 @@ export interface ChartPoint {
   value: number | null;
   /** Where clicking this point should lead, if anywhere. */
   href?: string;
+  /**
+   * The configured target for THIS bar, where one is configured.
+   *
+   * A single reference line across the chart assumes every category is held
+   * to the same number. Approval functions are not: finance approval carries
+   * one SLA rule and the country manager's approval carries another, so one
+   * dashed line drawn across both would measure one of them against a target
+   * nobody set for it. Each bar therefore carries its own, and a function
+   * with no configured target simply has no mark, which is the honest
+   * rendering of "nobody agreed a number for this".
+   *
+   * Read only by `horizontalBarChart`.
+   */
+  target?: number | null;
 }
 
 export interface ChartSeries {
@@ -73,6 +87,22 @@ export interface ChartOptions {
 
 /** Above this many points a line carries no markers. See lineChart. */
 const MARKER_LIMIT = 14;
+
+/**
+ * The room the value axis needs on the left, measured from its own labels.
+ *
+ * A fixed inset was fine while every axis said "40" or "95%". A duration axis
+ * says "3 h 20 min", which is five times as wide, and at a fixed inset the
+ * label ran off the left edge of the viewBox and the reader was shown "h 20
+ * min". The width is estimated from the character count at the label's font
+ * size, which is a rough measure and only ever errs towards more room.
+ */
+function axisLeft(format: (v: number | null) => string, ceiling: number): number {
+  const widest = [0, 0.5, 1]
+    .map((fraction) => format(ceiling * fraction).length)
+    .reduce((a, b) => Math.max(a, b), 0);
+  return Math.max(PADDING.left, Math.ceil(widest * 6.2) + 12);
+}
 
 const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 240;
@@ -134,6 +164,8 @@ function frame(
   format: (v: number | null) => string,
   /** Room reserved on the right for end labels, so the baseline stops short. */
   gutter = 0,
+  /** The value axis's own width, which a duration axis needs more of. */
+  left = PADDING.left,
 ): string {
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const baseY = PADDING.top + innerHeight;
@@ -141,27 +173,33 @@ function frame(
     .map((fraction) => {
       const y = PADDING.top + innerHeight * (1 - fraction);
       return (
-        `<text x="${PADDING.left - 8}" y="${round(y + 4)}" text-anchor="end" font-size="11" ` +
+        `<text x="${left - 8}" y="${round(y + 4)}" text-anchor="end" font-size="11" ` +
         `fill="var(--color-cms-muted)">${escape(format(ceiling * fraction))}</text>`
       );
     })
     .join('');
   return (
-    `<line x1="${PADDING.left}" y1="${round(baseY)}" x2="${width - PADDING.right - gutter}" ` +
+    `<line x1="${left}" y1="${round(baseY)}" x2="${width - PADDING.right - gutter}" ` +
     `y2="${round(baseY)}" stroke="var(--color-cms-line)" stroke-width="1" />` +
     labels
   );
 }
 
-function categoryLabels(labels: string[], width: number, height: number, gutter = 0): string {
-  const inner = width - PADDING.left - PADDING.right - gutter;
+function categoryLabels(
+  labels: string[],
+  width: number,
+  height: number,
+  gutter = 0,
+  left = PADDING.left,
+): string {
+  const inner = width - left - PADDING.right - gutter;
   const step = inner / Math.max(labels.length, 1);
   // A label every nth category, so a year of weeks does not overprint itself.
   const stride = Math.max(1, Math.ceil(labels.length / 12));
   return labels
     .map((label, index) => {
       if (index % stride !== 0) return '';
-      const x = PADDING.left + step * (index + 0.5);
+      const x = left + step * (index + 0.5);
       return (
         `<text x="${round(x)}" y="${height - PADDING.bottom + 16}" text-anchor="middle" ` +
         `font-size="11" fill="var(--color-cms-muted)">${escape(label)}</text>`
@@ -176,12 +214,13 @@ function referenceLine(
   width: number,
   height: number,
   gutter = 0,
+  left = PADDING.left,
 ): string {
   if (reference === undefined) return '';
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const y = PADDING.top + innerHeight * (1 - Math.min(reference.value / ceiling, 1));
   return (
-    `<line x1="${PADDING.left}" y1="${round(y)}" x2="${width - PADDING.right - gutter}" y2="${round(y)}" ` +
+    `<line x1="${left}" y1="${round(y)}" x2="${width - PADDING.right - gutter}" y2="${round(y)}" ` +
     `stroke="var(--color-cms-ink-600)" stroke-width="1" stroke-dasharray="4 3" />` +
     `<text x="${width - PADDING.right - gutter}" y="${round(y - 5)}" text-anchor="end" font-size="11" ` +
     `fill="var(--color-cms-ink-600)">${escape(reference.label)}</text>`
@@ -229,14 +268,15 @@ export function barChart(series: ChartSeries, options: ChartOptions = {}): Chart
   const unit = options.unit ?? 'units';
   const values = series.points.map((point) => point.value ?? 0);
   const ceiling = niceCeiling(Math.max(...values, 0));
-  const innerWidth = width - PADDING.left - PADDING.right;
+  const left = axisLeft(format, ceiling);
+  const innerWidth = width - left - PADDING.right;
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const step = innerWidth / Math.max(series.points.length, 1);
   const barWidth = Math.max(2, step * 0.62);
 
   const bars = series.points
     .map((point, index) => {
-      const x = PADDING.left + step * (index + 0.5) - barWidth / 2;
+      const x = left + step * (index + 0.5) - barWidth / 2;
       if (point.value === null) {
         return (
           `<text x="${round(x + barWidth / 2)}" y="${height - PADDING.bottom - 4}" ` +
@@ -257,14 +297,16 @@ export function barChart(series: ChartSeries, options: ChartOptions = {}): Chart
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
       `aria-label="${escape(`${series.name}. ${altOf([series], unit, format)}`)}" ` +
       `preserveAspectRatio="xMidYMid meet">` +
-      frame(width, height, ceiling, format) +
+      frame(width, height, ceiling, format, 0, left) +
       bars +
       categoryLabels(
         series.points.map((point) => point.label),
         width,
         height,
+        0,
+        left,
       ) +
-      referenceLine(options.reference, ceiling, width, height) +
+      referenceLine(options.reference, ceiling, width, height, 0, left) +
       `</svg>`,
     alt: altOf([series], unit, format),
     table: tableOf([series], format),
@@ -295,7 +337,8 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   // only when the caller asked for it, so a single-series chart keeps the
   // full plot width.
   const labelGutter = options.endLabels === true && series.length > 0 ? 92 : 0;
-  const innerWidth = width - PADDING.left - PADDING.right - labelGutter;
+  const left = axisLeft(format, ceiling);
+  const innerWidth = width - left - PADDING.right - labelGutter;
   const step = innerWidth / Math.max(count - 1, 1);
 
   const paths = series
@@ -304,7 +347,7 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
       let open = false;
       const marks: string[] = [];
       one.points.forEach((point, index) => {
-        const x = PADDING.left + step * index;
+        const x = left + step * index;
         if (point.value === null) {
           open = false;
           return;
@@ -341,7 +384,7 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
             const last = [...one.points].reverse().find((point) => point.value !== null);
             if (last === undefined || last.value === null) return '';
             const index = one.points.lastIndexOf(last);
-            const x = PADDING.left + step * index;
+            const x = left + step * index;
             const y = PADDING.top + innerHeight * (1 - last.value / ceiling);
             return (
               `<text x="${round(x + 8)}" y="${round(y + 4)}" font-size="11" ` +
@@ -354,15 +397,16 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
     svg:
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
       `aria-label="${escape(altOf(series, unit, format))}" preserveAspectRatio="xMidYMid meet">` +
-      frame(width, height, ceiling, format, labelGutter) +
+      frame(width, height, ceiling, format, labelGutter, left) +
       paths +
       categoryLabels(
         (series[0]?.points ?? []).map((point) => point.label),
         width,
         height,
         labelGutter,
+        left,
       ) +
-      referenceLine(options.reference, ceiling, width, height, labelGutter) +
+      referenceLine(options.reference, ceiling, width, height, labelGutter, left) +
       endLabels +
       `</svg>`,
     alt: altOf(series, unit, format),
@@ -385,7 +429,8 @@ export function stackedBarChart(series: ChartSeries[], options: ChartOptions = {
     series.reduce((sum, one) => sum + (one.points[index]?.value ?? 0), 0),
   );
   const ceiling = niceCeiling(Math.max(...totals, 0));
-  const innerWidth = width - PADDING.left - PADDING.right;
+  const left = axisLeft(format, ceiling);
+  const innerWidth = width - left - PADDING.right;
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const step = innerWidth / Math.max(count, 1);
   const barWidth = Math.max(2, step * 0.62);
@@ -398,7 +443,7 @@ export function stackedBarChart(series: ChartSeries[], options: ChartOptions = {
       if (value <= 0) continue;
       const barHeight = (value / ceiling) * innerHeight;
       cursor -= barHeight;
-      const x = PADDING.left + step * (index + 0.5) - barWidth / 2;
+      const x = left + step * (index + 0.5) - barWidth / 2;
       bars +=
         `<rect x="${round(x)}" y="${round(cursor)}" width="${round(barWidth)}" ` +
         `height="${round(barHeight)}" fill="var(--color-${one.token})">` +
@@ -410,12 +455,14 @@ export function stackedBarChart(series: ChartSeries[], options: ChartOptions = {
     svg:
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
       `aria-label="${escape(altOf(series, unit, format))}" preserveAspectRatio="xMidYMid meet">` +
-      frame(width, height, ceiling, format) +
+      frame(width, height, ceiling, format, 0, left) +
       bars +
       categoryLabels(
         (series[0]?.points ?? []).map((point) => point.label),
         width,
         height,
+        0,
+        left,
       ) +
       `</svg>`,
     alt: altOf(series, unit, format),
@@ -508,6 +555,12 @@ export function funnelChart(steps: ChartPoint[], options: ChartOptions = {}): Ch
  *
  * There is no value axis and there are no gridlines: the number is printed at
  * the end of each bar, so an axis would be a second way of saying it.
+ *
+ * A TARGET IS PER BAR, NOT PER CHART. Where a point carries `target`, a dashed
+ * mark is drawn on that bar's own track at its own configured number. Drawing
+ * one line across every bar would be claiming they share a target, which
+ * approval functions do not. A bar with no configured target carries no mark
+ * and is not silently measured against somebody else's.
  */
 export function horizontalBarChart(series: ChartSeries, options: ChartOptions = {}): Chart {
   const width = options.width ?? DEFAULT_WIDTH;
@@ -519,7 +572,11 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
   const barHeight = 14;
   const height = options.height ?? series.points.length * rowHeight + 12;
   const trackWidth = width - labelWidth - valueWidth - 16;
-  const ceiling = niceCeiling(Math.max(...series.points.map((p) => p.value ?? 0), 0));
+  // Targets are in the scale too: a target beyond the tallest bar would
+  // otherwise be pinned to the frame and read as "just met".
+  const ceiling = niceCeiling(
+    Math.max(...series.points.map((p) => Math.max(p.value ?? 0, p.target ?? 0)), 0),
+  );
 
   const rows = series.points
     .map((point, index) => {
@@ -543,17 +600,50 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
         `<text x="${round(labelWidth + 16 + barWidth)}" y="${round(y + barHeight)}" ` +
         `font-size="11" fill="var(--color-cms-muted)">${escape(format(point.value))}</text>`;
       const drawn = point.href === undefined ? bar : `<a href="${escape(point.href)}">${bar}</a>`;
-      return label + drawn + value;
+      // The target sits on the track, not on the bar: it has to be readable
+      // whether the bar is short of it or past it.
+      const target =
+        point.target === undefined || point.target === null
+          ? ''
+          : `<line x1="${round(labelWidth + 8 + Math.min(point.target / ceiling, 1) * trackWidth)}" ` +
+            `y1="${round(y - 2)}" ` +
+            `x2="${round(labelWidth + 8 + Math.min(point.target / ceiling, 1) * trackWidth)}" ` +
+            `y2="${round(y + barHeight + 8)}" stroke="var(--color-cms-ink-600)" stroke-width="1.5" ` +
+            `stroke-dasharray="3 2"><title>${escape(`${point.label} target: ${format(point.target)}`)}` +
+            `</title></line>`;
+      return label + drawn + target + value;
     })
     .join('');
+
+  // A target that is drawn must also be readable as a number, so where any
+  // point carries one the disclosure table grows a column for it.
+  const hasTargets = series.points.some(
+    (point) => point.target !== undefined && point.target !== null,
+  );
+  const table = tableOf([series], format);
+  const withTargets: ChartTable = hasTargets
+    ? {
+        columns: [...table.columns, 'Target'],
+        rows: table.rows.map((row, index) => [
+          ...row,
+          series.points[index]?.target == null
+            ? 'Not available'
+            : format(series.points[index]?.target ?? null),
+        ]),
+      }
+    : table;
+
+  const targetNote = hasTargets
+    ? ' A dashed mark on a bar is that function\u2019s own configured target.'
+    : '';
 
   return {
     svg:
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
-      `aria-label="${escape(`${series.name}. ${altOf([series], unit, format)}`)}" ` +
+      `aria-label="${escape(`${series.name}. ${altOf([series], unit, format)}${targetNote}`)}" ` +
       `preserveAspectRatio="xMinYMin meet">${rows}</svg>`,
-    alt: altOf([series], unit, format),
-    table: tableOf([series], format),
+    alt: altOf([series], unit, format) + targetNote,
+    table: withTargets,
   };
 }
 
