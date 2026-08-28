@@ -22,5 +22,8 @@ import { homeFor, LOGIN_PATH } from '@/lib/cms/routes';
 export const prerender = false;
 
 const principal = Astro.locals.cms;
-return Astro.redirect(principal ? homeFor(principal.user.userType) : LOGIN_PATH, 302);
+return Astro.redirect(
+  principal ? homeFor(principal.user.userType, principal.user.permissions) : LOGIN_PATH,
+  302,
+);
 ---
