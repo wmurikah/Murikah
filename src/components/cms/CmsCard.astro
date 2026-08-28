@@ -4,6 +4,12 @@
  * from a heavy border, which is the Gestalt point: related things read as a
  * group because they sit together, not because a box was drawn round them.
  *
+ * NO BORDER AND NO SHADOW. The surface is a lighter plane than the canvas, and
+ * that tone step is the common region. Drawing a line round it as well says the
+ * same thing twice, and a shadow says something untrue: a card does not float.
+ * The one hairline that survives is between the card's head and its body,
+ * because those are two regions that genuinely meet.
+ *
  * The heading is optional and renders as an h2, so a page keeps one h1 and its
  * sections sit one level below it with nothing skipped.
  */
@@ -23,9 +29,7 @@ const {
 } = Astro.props;
 ---
 
-<section
-  class:list={['rounded-cms-lg border border-cms-line bg-cms-surface shadow-cms-card', className]}
->
+<section class:list={['rounded-cms-lg bg-cms-surface', className]}>
   {
     (title || Astro.slots.has('actions')) && (
       <div class="flex items-center justify-between gap-3 border-b border-cms-line px-4 py-3 sm:px-5">

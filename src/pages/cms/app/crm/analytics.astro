@@ -150,17 +150,17 @@ const movementTrend = lineChart(
   [
     {
       name: 'New leads',
-      token: 'cms-royal',
+      token: 'cms-series-1',
       points: buckets.map((b) => ({ label: b.bucket, value: b.newLeads })),
     },
     {
       name: 'Qualified',
-      token: 'cms-lavender',
+      token: 'cms-series-2',
       points: buckets.map((b) => ({ label: b.bucket, value: b.qualified })),
     },
     {
       name: 'Opportunities created',
-      token: 'cms-gold-ink',
+      token: 'cms-series-3',
       points: buckets.map((b) => ({ label: b.bucket, value: b.opportunitiesCreated })),
     },
   ],
@@ -170,7 +170,7 @@ const movementTrend = lineChart(
 const velocityChart = distributionChart(
   {
     name: 'Stage',
-    token: 'cms-info',
+    token: 'cms-series-4',
     points: velocity.map((row) => ({
       label: `${row.sequenceNo}. ${row.stageName}`,
       value: row.medianMinutes,
@@ -196,7 +196,6 @@ const velocityChart = distributionChart(
       <Fragment>
         <CmsPageHeader
           title="CRM analytics"
-          description="Leads, pipeline and conversion, every rate shown with the population it was taken over."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'CRM', href: '/app/crm' },
@@ -307,10 +306,7 @@ const velocityChart = distributionChart(
           <h2 id="stages" class="sr-only">
             Stages
           </h2>
-          <CmsCard
-            title="Stage occupancy"
-            description="Where open opportunities are sitting, and how long they have been there."
-          >
+          <CmsCard title="Stage occupancy">
             <CmsDataTable
               caption="Stage occupancy"
               columns={[
@@ -378,10 +374,7 @@ const velocityChart = distributionChart(
           <h2 id="sources" class="sr-only">
             Sources and qualification
           </h2>
-          <CmsCard
-            title="Lead sources"
-            description="Where leads came from, and what became of them."
-          >
+          <CmsCard title="Lead sources">
             <CmsDataTable
               caption="Lead sources"
               columns={[
@@ -480,7 +473,7 @@ const velocityChart = distributionChart(
                 { key: 'won', label: 'Won', numeric: true },
                 { key: 'lost', label: 'Lost', numeric: true },
                 { key: 'rate', label: 'Win rate', numeric: true },
-                { key: 'overdue', label: 'Overdue follow-ups', numeric: true },
+                { key: 'overdue', label: 'Follow-ups past due date', numeric: true },
               ]}
               empty={owners.rows.length === 0}
             >
@@ -659,7 +652,7 @@ const velocityChart = distributionChart(
             {health && (
               <dl class="mt-4 text-cms-body-sm">
                 <div class="flex justify-between border-b border-cms-line py-1.5">
-                  <dt class="text-cms-muted">Follow-ups overdue</dt>
+                  <dt class="text-cms-muted">Follow-ups past their due date</dt>
                   <dd class="text-cms-ink tabular-nums">{health.overdue}</dd>
                 </div>
                 <div class="flex justify-between border-b border-cms-line py-1.5">

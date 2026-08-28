@@ -145,7 +145,7 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
       <Fragment>
         <CmsPageHeader
           title="Service"
-          description="Enquiries, complaints and requests. Ageing here is a fact in days; whether anything is late is the SLA engine's call, and that arrives in a later phase."
+          definition="Ageing here is a fact in days. Whether a promise was kept is the SLA engine decision, and it is reported against the SLA vocabulary rather than as an age."
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'Service' }]}
         >
           <Fragment slot="actions">

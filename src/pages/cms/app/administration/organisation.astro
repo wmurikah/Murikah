@@ -206,7 +206,7 @@ function references(pairs: [number, string][]): string {
       <Fragment>
         <CmsPageHeader
           title="Organisation"
-          description="Countries, affiliates, business units, departments and teams. These structures drive data visibility, assignments, approvals and reporting."
+          definition="These structures drive data visibility, assignments, approvals and reporting. A change here reaches every one of those at once."
           crumbs={[
             { label: 'Administration', href: '/app/administration' },
             { label: 'Organisation' },
@@ -626,7 +626,7 @@ function references(pairs: [number, string][]): string {
                   id="cms-org-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
 
                 <div data-fields="countries" hidden class="flex flex-col gap-4">
@@ -754,7 +754,7 @@ function references(pairs: [number, string][]): string {
                   checked
                   hint="Deactivating prevents this record from being chosen for new records. Existing records are unchanged."
                 />
-                <p id="cms-org-consequence" hidden class="text-cms-body-sm text-cms-warning" />
+                <p id="cms-org-consequence" hidden class="text-cms-body-sm text-cms-caution" />
               </form>
 
               <Fragment slot="actions">
