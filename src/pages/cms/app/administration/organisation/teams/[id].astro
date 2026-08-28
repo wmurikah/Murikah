@@ -202,7 +202,7 @@ const facts: [string, string][] = team
                 {mayManage && row.current ? (
                   <button
                     type="button"
-                    class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-danger outline-none hover:bg-cms-danger-tint focus-visible:ring-2 focus-visible:ring-focus"
+                    class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-negative outline-none hover:bg-cms-negative-tint focus-visible:ring-2 focus-visible:ring-focus"
                     data-cms-end-member={row.teamMemberId}
                     data-name={row.displayName}
                     data-from={row.effectiveFrom}
@@ -234,7 +234,7 @@ const facts: [string, string][] = team
                   id="cms-member-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
                 <CmsSelect
                   id="m-userId"
@@ -280,7 +280,7 @@ const facts: [string, string][] = team
                   id="cms-end-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
                 {/*
                   The consequence, said plainly before the action rather than
@@ -309,7 +309,7 @@ const facts: [string, string][] = team
                   type="submit"
                   id="cms-end-save"
                   form="cms-end-form"
-                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-danger px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-negative px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Remove from team
                 </button>

@@ -27,6 +27,7 @@ import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsFigure from '@/components/cms/CmsFigure.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import { getCmsEnv } from '@/lib/cms/env';
@@ -131,6 +132,27 @@ const direction = (sentiment: string, change: number | null) => {
   return { glyph: arrow, tone };
 };
 
+/**
+ * The four module destinations, each carrying the whole filter.
+ *
+ * EVERY FIGURE ON THIS PAGE OPENS THE RECORDS BEHIND IT, and it opens them at
+ * the module that owns the metric, under the same filter and the same scope
+ * the figure was computed with. That is not a convenience: a drill-through
+ * that loses the filter shows a different population from the number that was
+ * clicked, and the reader is left holding two figures with no way to tell
+ * which is right.
+ *
+ * The destination is the owning module's analytical view rather than a raw
+ * list, because the view calls the same service with the same filter, so the
+ * figure reproduces exactly. A raw list would need a predicate the list page
+ * does not have, and inventing one would change what a query returns, which
+ * this sweep may not do.
+ */
+const service = drillTo('/app/service/analytics', filter);
+const crm = drillTo('/app/crm/analytics', filter);
+const sales = drillTo('/app/orders/sales/performance', filter);
+const purchases = drillTo('/app/orders/purchases/performance', filter);
+
 const slaTrend =
   board?.salesOrders === undefined || board?.salesOrders === null
     ? null
@@ -138,7 +160,7 @@ const slaTrend =
         [
           {
             name: 'Sales order SLA compliance',
-            token: 'cms-royal',
+            token: 'cms-series-1',
             points: board.salesOrders.trend.map((row) => ({
               label: row.bucket,
               value: row.slaCompliancePercent,
@@ -164,7 +186,6 @@ const slaTrend =
       <Fragment>
         <CmsPageHeader
           title="Executive dashboard"
-          description="Where to pay attention, then how the period moved. Every figure comes from the module that owns it and opens the records behind it."
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'Executive' }]}
         >
           <CmsButton
@@ -205,29 +226,32 @@ const slaTrend =
         </form>
 
         <section aria-labelledby="attention" class="mb-8">
-          <h2 id="attention" class="text-cms-h2 mb-1 font-semibold text-cms-ink">
+          <h2 id="attention" class="mb-1 text-cms-section font-semibold text-cms-ink">
             Needs attention
           </h2>
-          <p class="mb-3 text-cms-body-sm text-cms-muted">
-            Exceptions only. Every number here opens the records behind it, carrying this period and
-            your own scope.
-          </p>
           {board.attention.length === 0 ? (
-            <p class="rounded-cms border border-cms-line bg-cms-surface p-4 text-cms-body-sm text-cms-muted">
+            <p class="rounded-cms-lg bg-cms-surface p-4 text-cms-body-sm text-cms-muted">
               Nothing outstanding in this period within your scope.
             </p>
           ) : (
+            /*
+              The signal's definition used to print as a third line under every
+              card, so a row of six exceptions carried six paragraphs the
+              reader had already understood from the label. It is now behind
+              the control beside the label, and the card lost its border: the
+              surface is a lighter plane than the canvas and that is the
+              grouping. "Open the records" went too, because the figure is
+              itself the link and says so to a screen reader.
+            */
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {board.attention.map((signal) => (
-                <a
+                <CmsFigure
+                  variant="card"
+                  label={signal.label}
+                  value={String(signal.count)}
                   href={drillTo(signal.href, filter, signal.destination)}
-                  class="rounded-cms border border-cms-line bg-cms-surface p-4 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  <p class="text-cms-body-sm text-cms-muted">{signal.label}</p>
-                  <p class="text-cms-h2 font-semibold text-cms-ink tabular-nums">{signal.count}</p>
-                  <p class="mt-1 text-cms-body-sm text-cms-muted">{signal.definition}</p>
-                  <p class="mt-2 text-cms-body-sm font-medium text-cms-royal">Open the records</p>
-                </a>
+                  definition={signal.definition}
+                />
               ))}
             </div>
           )}
@@ -235,14 +259,19 @@ const slaTrend =
 
         {board.movements.length > 0 && (
           <section aria-labelledby="movement" class="mb-8">
-            <h2 id="movement" class="text-cms-h2 mb-1 font-semibold text-cms-ink">
+            <h2 id="movement" class="mb-1 text-cms-section font-semibold text-cms-ink">
               Movement
             </h2>
+            {/*
+              The comparison window is a fact about the table, not an
+              explanation of it, so it stays as one short line. What went was
+              the paragraph telling the reader that each metric knows which
+              direction is good, which the Reading column already says in words
+              on every row.
+            */}
             <p class="mb-3 text-cms-body-sm text-cms-muted">
               Against {board.comparisonPeriod?.from} to {board.comparisonPeriod?.to}, the previous
-              period of the same length. Each metric carries the direction that counts as an
-              improvement for it, so a falling turnaround and a rising compliance figure both read
-              as progress.
+              period of the same length.
             </p>
             <CmsDataTable
               caption="Movement against the previous equivalent period"
@@ -307,33 +336,62 @@ const slaTrend =
 
         <div class="grid gap-4 xl:grid-cols-2">
           {board.customer && (
-            <CmsCard title="Customer" description="What customers are experiencing.">
-              <dl class="text-cms-body-sm">
-                {[
-                  ['Customers with cases', String(board.customer.activeCustomers)],
-                  [
-                    'External SLA compliance',
-                    formatRate(board.customer.externalSlaCompliancePercent),
-                  ],
-                  ['Open cases', String(board.customer.openCases)],
-                  [
-                    'Satisfaction',
+            <CmsCard title="Customer">
+              {[
+                {
+                  label: 'Customers with cases',
+                  value: String(board.customer.activeCustomers),
+                  href: service,
+                  definition: 'Distinct customers with at least one case raised in this period.',
+                  denominator: 'Customers in your scope',
+                  dateBasis: 'Case raised at',
+                },
+                {
+                  label: 'External SLA compliance',
+                  value: formatRate(board.customer.externalSlaCompliancePercent),
+                  href: service,
+                  definition: 'Customer-facing SLA instances that were Met.',
+                  denominator: 'Customer-facing SLA instances settled in this period',
+                  dateBasis: 'SLA settled at',
+                },
+                {
+                  label: 'Open cases',
+                  value: String(board.customer.openCases),
+                  href: service,
+                  definition: 'Cases not Resolved, Closed or Cancelled.',
+                  denominator: 'Cases in your scope',
+                  dateBasis: 'Case raised at',
+                },
+                {
+                  label: 'Satisfaction',
+                  value:
                     board.customer.satisfactionScore === null
-                      ? 'No responses'
+                      ? 'Not available'
                       : `${board.customer.satisfactionScore} from ${board.customer.satisfactionResponses} responses`,
-                  ],
-                  [
-                    'Categories with repeat complaints',
-                    String(board.customer.repeatComplaintSignal),
-                  ],
-                ].map(([label, value]) => (
-                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
-                    <dt class="text-cms-muted">{label}</dt>
-                    <dd class="text-cms-ink tabular-nums">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <p class="mt-2 text-cms-body-sm text-cms-muted">
+                  href: service,
+                  definition: 'Mean survey score, on the scale the survey itself defines.',
+                  denominator: 'Survey responses received in this period',
+                  dateBasis: 'Response received at',
+                },
+                {
+                  label: 'Categories with repeat complaints',
+                  value: String(board.customer.repeatComplaintSignal),
+                  href: service,
+                  definition:
+                    'Case categories where the same customer raised the same category more than once inside the repeat window.',
+                  denominator: 'Case categories in your scope',
+                  dateBasis: 'Case raised at',
+                },
+              ].map((figure) => (
+                <CmsFigure {...figure} />
+              ))}
+              {/*
+                KEPT, BECAUSE IT IS NOT A DESCRIPTION OF THE PAGE. It says what
+                is deliberately absent and why, which is the one thing a reader
+                cannot work out by looking: they would conclude the score was
+                forgotten rather than refused.
+              */}
+              <p class="mt-3 text-cms-caption text-cms-muted">
                 There is no customer health score here. A single blended number would be opaque,
                 nobody agreed its weights, and none of it could be checked by clicking.
               </p>
@@ -341,161 +399,257 @@ const slaTrend =
           )}
 
           {board.commercial && (
-            <CmsCard title="Commercial" description="Demand, and what became of it.">
-              <dl class="text-cms-body-sm">
-                <div class="border-b border-cms-line py-1.5">
-                  <dt class="text-cms-muted">Open pipeline</dt>
-                  <dd class="text-cms-ink tabular-nums">
-                    {board.commercial.openPipelineByCurrency.length === 0
-                      ? 'Not available'
-                      : board.commercial.openPipelineByCurrency.map((row) => (
-                          <p>
-                            {money(row.openValue, row.currencyCode)}
-                            <span class="text-cms-muted">
-                              {' '}
-                              (weighted {money(row.weightedValue, row.currencyCode)})
-                            </span>
-                          </p>
-                        ))}
-                  </dd>
-                </div>
-                {[
-                  ['New leads', String(board.commercial.newLeads)],
-                  ['Lead conversion', formatRate(board.commercial.conversionRatePercent)],
-                  [
-                    'Win rate',
-                    `${formatRate(board.commercial.winRatePercent)} of ${board.commercial.winRateDenominator} decided`,
-                  ],
-                  ['Open opportunities', String(board.commercial.closingSoon)],
-                ].map(([label, value]) => (
-                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
-                    <dt class="text-cms-muted">{label}</dt>
-                    <dd class="text-cms-ink tabular-nums">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <p class="mt-2 text-cms-body-sm text-cms-muted">
-                One figure per currency, never a total across them: this system holds no exchange
-                rate.
-              </p>
+            <CmsCard title="Commercial">
+              {/*
+                One row per currency, because this system holds no exchange
+                rate and a total across currencies would be an invented number.
+                Each is a link on its own, so a reader who wants the Kenyan
+                pipeline is not sent to a combined list.
+              */}
+              {board.commercial.openPipelineByCurrency.length === 0 ? (
+                <CmsFigure
+                  label="Open pipeline"
+                  value="Not available"
+                  definition="Value of opportunities still open, and the same value weighted by each stage probability."
+                  denominator="Open opportunities in your scope"
+                  dateBasis="Expected close date"
+                />
+              ) : (
+                board.commercial.openPipelineByCurrency.map((row) => (
+                  <CmsFigure
+                    label={`Open pipeline (${row.currencyCode})`}
+                    value={`${money(row.openValue, row.currencyCode)}, weighted ${money(row.weightedValue, row.currencyCode)}`}
+                    href={drillTo('/app/crm/analytics', filter, { currency: row.currencyCode })}
+                    definition="Value of opportunities still open, and the same value weighted by each stage probability. Never summed across currencies."
+                    denominator="Open opportunities in your scope"
+                    dateBasis="Expected close date"
+                  />
+                ))
+              )}
+              {[
+                {
+                  label: 'New leads',
+                  value: String(board.commercial.newLeads),
+                  href: crm,
+                  definition: 'Leads captured in this period.',
+                  denominator: 'Leads in your scope',
+                  dateBasis: 'Lead captured at',
+                },
+                {
+                  label: 'Lead conversion',
+                  value: formatRate(board.commercial.conversionRatePercent),
+                  href: crm,
+                  definition: 'Leads that reached Converted.',
+                  denominator: 'Leads that qualified',
+                  dateBasis: 'Lead captured at',
+                },
+                {
+                  label: 'Win rate',
+                  value: `${formatRate(board.commercial.winRatePercent)} of ${board.commercial.winRateDenominator} decided`,
+                  href: crm,
+                  definition:
+                    'Opportunities won, as a share of those decided. An open opportunity is not in the denominator: open is not lost.',
+                  denominator: 'Opportunities won plus opportunities lost',
+                  dateBasis: 'Actual close date',
+                },
+                {
+                  label: 'Open opportunities',
+                  value: String(board.commercial.closingSoon),
+                  href: crm,
+                  definition: 'Opportunities still open at the end of the period.',
+                  denominator: 'Opportunities in your scope',
+                  dateBasis: 'Expected close date',
+                },
+              ].map((figure) => (
+                <CmsFigure {...figure} />
+              ))}
             </CmsCard>
           )}
 
           {board.salesOrders && (
-            <CmsCard title="Sales order execution" description="From raised to invoiced.">
-              <dl class="text-cms-body-sm">
-                {[
-                  ['Orders', board.salesOrders.orders.toLocaleString('en-KE')],
-                  [
-                    'Finance approval (median, elapsed)',
-                    formatDuration(board.salesOrders.financeMedianElapsedMinutes),
-                  ],
-                  [
-                    'Credit exception rate',
-                    formatRate(board.salesOrders.creditExceptionRatePercent),
-                  ],
-                  [
-                    'Order to invoice (median)',
-                    formatDuration(board.salesOrders.orderToInvoiceMedianMinutes),
-                  ],
-                  [
-                    'Order to loading authority (median)',
-                    formatDuration(board.salesOrders.orderToLoadingMedianMinutes),
-                  ],
-                  ['SLA compliance', formatRate(board.salesOrders.slaCompliancePercent)],
-                ].map(([label, value]) => (
-                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
-                    <dt class="text-cms-muted">{label}</dt>
-                    <dd class="text-cms-ink tabular-nums">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <div class="mt-3">
-                <CmsButton variant="ghost" href={drillTo('/app/orders/sales/performance', filter)}>
-                  Sales order performance
-                </CmsButton>
-              </div>
+            <CmsCard title="Sales order execution">
+              {[
+                {
+                  label: 'Orders',
+                  value: board.salesOrders.orders.toLocaleString('en-KE'),
+                  href: drillTo('/app/orders/sales', filter),
+                  definition: 'Sales orders raised in this period.',
+                  denominator: 'Sales orders in your scope',
+                  dateBasis: 'Order created at',
+                },
+                {
+                  label: 'Finance approval (median, elapsed)',
+                  value: formatDuration(board.salesOrders.financeMedianElapsedMinutes),
+                  href: drillTo('/app/orders/sales/performance', filter, { stageCode: 'FINANCE' }),
+                  definition:
+                    'Median wall-clock time from the finance stage opening to it being decided. Elapsed, not accountable: waiting on somebody else is still in it.',
+                  denominator: 'Orders that carried both finance timestamps',
+                  dateBasis: 'Order created at',
+                },
+                {
+                  label: 'Credit exception rate',
+                  value: formatRate(board.salesOrders.creditExceptionRatePercent),
+                  href: drillTo('/app/orders/sales/performance', filter, { creditRequired: 'YES' }),
+                  definition: 'Orders released with a credit exception recorded.',
+                  denominator: 'Orders that required credit approval, never all orders',
+                  dateBasis: 'Order created at',
+                },
+                {
+                  label: 'Order to invoice (median)',
+                  value: formatDuration(board.salesOrders.orderToInvoiceMedianMinutes),
+                  href: sales,
+                  definition:
+                    'Median time from the order being created to its invoice being created.',
+                  denominator: 'Orders that carried both timestamps',
+                  dateBasis: 'Order created at',
+                },
+                {
+                  label: 'Order to loading authority (median)',
+                  value: formatDuration(board.salesOrders.orderToLoadingMedianMinutes),
+                  href: sales,
+                  definition:
+                    'Median time from the order being created to loading authority being granted.',
+                  denominator: 'Orders that carried both timestamps',
+                  dateBasis: 'Order created at',
+                },
+                {
+                  label: 'SLA compliance',
+                  value: formatRate(board.salesOrders.slaCompliancePercent),
+                  href: sales,
+                  definition: 'Sales order SLA instances that were Met.',
+                  denominator: 'Sales order SLA instances settled in this period',
+                  dateBasis: 'SLA settled at',
+                },
+              ].map((figure) => (
+                <CmsFigure {...figure} />
+              ))}
             </CmsCard>
           )}
 
           {board.purchaseOrders && (
-            <CmsCard
-              title="Stock and purchase orders"
-              description="How fast the system catches up with the yard."
-            >
-              <dl class="text-cms-body-sm">
-                {[
-                  [
-                    'Approval cycle (median, completed)',
-                    formatDuration(board.purchaseOrders.approvalCycleMedianMinutes),
-                  ],
-                  [
-                    'Receipt to Oracle posting (median)',
-                    formatDuration(board.purchaseOrders.receiptToPostingMedianMinutes),
-                  ],
-                  ['Awaiting Oracle posting', String(board.purchaseOrders.awaitingOraclePosting)],
-                  ['Posting coverage', formatRate(board.purchaseOrders.postingCoveragePercent)],
-                  [
-                    'Main approval bottleneck',
+            <CmsCard title="Stock and purchase orders">
+              {[
+                {
+                  label: 'Approval cycle (median, completed)',
+                  value: formatDuration(board.purchaseOrders.approvalCycleMedianMinutes),
+                  href: purchases,
+                  definition:
+                    'Median time from submission for approval to the last approval stage being decided.',
+                  denominator: 'Purchase orders whose approval completed in this period',
+                  dateBasis: 'Purchase order created at',
+                },
+                {
+                  label: 'Receipt to Oracle posting (median)',
+                  value: formatDuration(board.purchaseOrders.receiptToPostingMedianMinutes),
+                  href: purchases,
+                  definition:
+                    'Median time from physical receipt to the stock being posted in Oracle.',
+                  denominator: 'Purchase orders that carried both timestamps',
+                  dateBasis: 'Purchase order created at',
+                },
+                {
+                  label: 'Awaiting Oracle posting',
+                  value: String(board.purchaseOrders.awaitingOraclePosting),
+                  href: drillTo('/app/orders/purchases', filter),
+                  definition:
+                    'Purchase orders physically received where Oracle has not yet been posted. Stock the yard has and the system does not.',
+                  denominator: 'Purchase orders in your scope',
+                  dateBasis: 'Purchase order created at',
+                },
+                {
+                  label: 'Posting coverage',
+                  value: formatRate(board.purchaseOrders.postingCoveragePercent),
+                  href: purchases,
+                  definition: 'Received purchase orders that have an Oracle posting timestamp.',
+                  denominator: 'Purchase orders physically received in this period',
+                  dateBasis: 'Purchase order created at',
+                },
+                {
+                  label: 'Main approval bottleneck',
+                  value:
                     board.purchaseOrders.mainBottleneckStage === null
                       ? 'Not available'
                       : `${board.purchaseOrders.mainBottleneckStage} (${formatRate(board.purchaseOrders.mainBottleneckSharePercent)})`,
-                  ],
-                ].map(([label, value]) => (
-                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
-                    <dt class="text-cms-muted">{label}</dt>
-                    <dd class="text-cms-ink tabular-nums">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <div class="mt-3">
-                <CmsButton
-                  variant="ghost"
-                  href={drillTo('/app/orders/purchases/performance', filter)}
-                >
-                  Purchase order performance
-                </CmsButton>
-              </div>
+                  href: board.purchaseOrders.mainBottleneckStage === null ? undefined : purchases,
+                  definition:
+                    'The approval stage holding the largest share of total approval time.',
+                  denominator: 'Purchase orders whose approval completed in this period',
+                  dateBasis: 'Purchase order created at',
+                },
+              ].map((figure) => (
+                <CmsFigure {...figure} />
+              ))}
             </CmsCard>
           )}
 
           {board.service && (
-            <CmsCard title="Service" description="Promises, and where the time went.">
-              <dl class="text-cms-body-sm">
-                {[
-                  ['Open cases', String(board.service.openCases)],
-                  [
-                    'First response within SLA',
-                    formatRate(board.service.firstResponseWithinSlaPercent),
-                  ],
-                  ['Resolution within SLA', formatRate(board.service.resolutionWithinSlaPercent)],
-                  [
-                    'Median resolution (elapsed)',
-                    formatDuration(board.service.medianResolutionElapsedMinutes),
-                  ],
-                  ['Top complaint category', board.service.topComplaintCategory ?? 'None recorded'],
-                  [
-                    'Share of time waiting internally',
-                    formatRate(board.service.internalWaitingSharePercent),
-                  ],
-                  [
-                    'Satisfaction',
+            <CmsCard title="Service">
+              {[
+                {
+                  label: 'Open cases',
+                  value: String(board.service.openCases),
+                  href: service,
+                  definition: 'Cases not Resolved, Closed or Cancelled.',
+                  denominator: 'Cases in your scope',
+                  dateBasis: 'Case raised at',
+                },
+                {
+                  label: 'First response within SLA',
+                  value: formatRate(board.service.firstResponseWithinSlaPercent),
+                  href: service,
+                  definition:
+                    'First-response SLA instances that were Met. An internal note is not a first response.',
+                  denominator: 'First-response SLA instances settled in this period',
+                  dateBasis: 'SLA settled at',
+                },
+                {
+                  label: 'Resolution within SLA',
+                  value: formatRate(board.service.resolutionWithinSlaPercent),
+                  href: service,
+                  definition: 'Resolution SLA instances that were Met.',
+                  denominator: 'Resolution SLA instances settled in this period',
+                  dateBasis: 'SLA settled at',
+                },
+                {
+                  label: 'Median resolution (elapsed)',
+                  value: formatDuration(board.service.medianResolutionElapsedMinutes),
+                  href: service,
+                  definition:
+                    'Median wall-clock time from a case being raised to it being resolved. Elapsed, not accountable: time waiting on the customer is still in it.',
+                  denominator: 'Cases resolved in this period',
+                  dateBasis: 'Case resolved at',
+                },
+                {
+                  label: 'Top complaint category',
+                  value: board.service.topComplaintCategory ?? 'Not available',
+                  href: service,
+                  definition: 'The case category carrying the most complaints in this period.',
+                  denominator: 'Complaints raised in this period',
+                  dateBasis: 'Case raised at',
+                },
+                {
+                  label: 'Share of time waiting internally',
+                  value: formatRate(board.service.internalWaitingSharePercent),
+                  href: service,
+                  definition:
+                    'Share of total case time spent in an internally-waiting status rather than waiting on the customer.',
+                  denominator: 'Total recorded case time in this period',
+                  dateBasis: 'Case raised at',
+                },
+                {
+                  label: 'Satisfaction',
+                  value:
                     board.service.satisfactionScore === null
-                      ? 'No responses'
+                      ? 'Not available'
                       : `${board.service.satisfactionScore} from ${board.service.satisfactionResponses} responses`,
-                  ],
-                ].map(([label, value]) => (
-                  <div class="flex justify-between border-b border-cms-line py-1.5 last:border-0">
-                    <dt class="text-cms-muted">{label}</dt>
-                    <dd class="text-cms-ink tabular-nums">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <div class="mt-3">
-                <CmsButton variant="ghost" href={drillTo('/app/service/analytics', filter)}>
-                  Service analytics
-                </CmsButton>
-              </div>
+                  href: service,
+                  definition: 'Mean survey score, on the scale the survey itself defines.',
+                  denominator: 'Survey responses received in this period',
+                  dateBasis: 'Response received at',
+                },
+              ].map((figure) => (
+                <CmsFigure {...figure} />
+              ))}
             </CmsCard>
           )}
 
@@ -519,7 +673,7 @@ const slaTrend =
 
         {insights.length > 0 && (
           <section aria-labelledby="insights" class="mt-8">
-            <h2 id="insights" class="text-cms-h2 mb-1 font-semibold text-cms-ink">
+            <h2 id="insights" class="mb-1 text-cms-section font-semibold text-cms-ink">
               Connected observations
             </h2>
             <p class="mb-3 text-cms-body-sm text-cms-muted">

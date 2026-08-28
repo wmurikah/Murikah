@@ -159,7 +159,7 @@ const pick = (list: Option[], empty: string) => [
         </CmsPageHeader>
 
         {inUse && (
-          <p class="flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+          <p class="flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
             <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
             <span>
               {definition.instanceCount}{' '}
@@ -215,7 +215,7 @@ const pick = (list: Option[], empty: string) => [
           <ol id="cms-stage-list" class="flex flex-col gap-3">
             {stages.map((stage, index) => (
               <li
-                class="rounded-cms-lg border border-cms-line bg-cms-surface p-4 shadow-cms-card"
+                class="rounded-cms-lg border border-cms-line bg-cms-surface p-4"
                 data-stage-id={stage.workflowStageId}
               >
                 <div class="flex flex-wrap items-baseline justify-between gap-2">
@@ -303,7 +303,7 @@ const pick = (list: Option[], empty: string) => [
                   id="cms-wfstage-form-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
                 <CmsInput id="st-stageCode" name="stageCode" label="Stage code" required />
                 <CmsInput id="st-stageName" name="stageName" label="Stage name" required />
@@ -402,7 +402,7 @@ const pick = (list: Option[], empty: string) => [
                   id="cms-wfversion-form-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
                 <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
                   The stages of this version are copied into the new one, which you can then edit.

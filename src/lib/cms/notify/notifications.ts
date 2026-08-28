@@ -370,7 +370,7 @@ export async function sweepNotifications(db: Client, now: Date): Promise<Notific
     const created = await notify(db, {
       userId: text(row.owner_user_id),
       type: 'FOLLOW_UP',
-      title: `Overdue: ${text(row.summary)}`,
+      title: `Past due: ${text(row.summary)}`,
       message: `Your ${text(row.activity_type).toLowerCase()} was due at ${text(row.due_at)} and is not yet completed.`,
       entityType: 'ACTIVITY',
       entityId: text(row.activity_id),
