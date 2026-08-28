@@ -1,0 +1,142 @@
+---
+/**
+ * One person in a ranked list: a rank marker, their name, their metrics, and a
+ * percentage with a thin bar beneath it.
+ *
+ * NOBODY IS RANKED ON SPEED ALONE, AND THE COMPONENT WILL NOT LET THEM BE.
+ * `volume`, `median`, `p90`, `compliance`, `pending` and `oldestPending` are
+ * all required, so a caller cannot quietly render a table of medians and call
+ * it a leaderboard. A median with no volume behind it rewards the person who
+ * handled three easy ones; a median with no P90 hides the tail, which is where
+ * the customer actually feels the delay; and a median with no pending count
+ * rewards whoever has not started yet.
+ *
+ * A RANK IS WITHHELD BELOW THE MINIMUM VOLUME, and the reason is shown rather
+ * than the row being dropped. Somebody with four transactions is not last,
+ * they are unranked, and deleting them from the list is how a person
+ * disappears from their own performance review.
+ *
+ * The bar is a second encoding of the percentage beside it, never the only
+ * one: the figure is always printed.
+ */
+import CmsStatusPill from './CmsStatusPill.astro';
+
+interface Props {
+  /** 1-based, or null where the volume is below the comparative minimum. */
+  rank: number | null;
+  name: string;
+  /** Where this person's own records live, with the filter carried. */
+  href?: string;
+  /** Transactions handled. The denominator every other figure rests on. */
+  volume: number;
+  /** Median turnaround, already formatted. */
+  median: string;
+  /** The 90th percentile, already formatted. The tail the median hides. */
+  p90: string;
+  /** Percentage 0 to 100, or null where no denominator exists. */
+  compliance: number | null;
+  /** Still open with this person. */
+  pending: number;
+  /** The age of the oldest pending item, already formatted. */
+  oldestPending: string;
+  /** Stated where the rank is withheld, so the reader knows why. */
+  minimumVolume: number;
+  class?: string;
+}
+const {
+  rank,
+  name,
+  href,
+  volume,
+  median,
+  p90,
+  compliance,
+  pending,
+  oldestPending,
+  minimumVolume,
+  class: className,
+} = Astro.props;
+
+const tone =
+  compliance === null
+    ? 'neutral'
+    : compliance >= 95
+      ? 'positive'
+      : compliance >= 85
+        ? 'caution'
+        : 'negative';
+const state =
+  compliance === null
+    ? 'no denominator'
+    : compliance >= 95
+      ? 'Met'
+      : compliance >= 85
+        ? 'At Risk'
+        : 'Breached';
+---
+
+<div
+  class:list={['flex items-center gap-3 border-b border-cms-line py-2.5 last:border-0', className]}
+>
+  <span
+    class:list={[
+      'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-cms-caption font-semibold tabular-nums',
+      rank === null ? 'bg-cms-neutral-tint text-cms-muted' : 'bg-cms-royal-tint text-cms-royal',
+    ]}
+    aria-hidden={rank === null ? 'true' : undefined}
+  >
+    {rank ?? '-'}
+  </span>
+
+  <div class="min-w-0 flex-1">
+    <p class="truncate text-cms-body-sm font-medium text-cms-ink" title={name}>
+      {
+        href ? (
+          <a
+            href={href}
+            class="rounded-cms outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            {name}
+          </a>
+        ) : (
+          name
+        )
+      }
+    </p>
+    <p class="text-cms-caption text-cms-muted tabular-nums">
+      {volume.toLocaleString('en-KE')} handled &middot; median {median} &middot; P90 {p90} &middot; {
+        pending.toLocaleString('en-KE')
+      } pending, oldest {oldestPending}
+      {
+        rank === null && (
+          <span> &middot; unranked below {minimumVolume.toLocaleString('en-KE')} transactions</span>
+        )
+      }
+    </p>
+  </div>
+
+  <div class="w-24 shrink-0 text-right">
+    <CmsStatusPill
+      value={compliance === null ? 'Not available' : `${compliance}%`}
+      tone={tone}
+      state={state}
+    />
+    <span
+      class="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-cms-ink-100"
+      aria-hidden="true"
+    >
+      <span
+        class:list={[
+          'block h-full rounded-full',
+          tone === 'positive'
+            ? 'bg-cms-positive'
+            : tone === 'caution'
+              ? 'bg-cms-caution'
+              : tone === 'negative'
+                ? 'bg-cms-negative'
+                : 'bg-cms-neutral',
+        ]}
+        style={`width:${compliance === null ? 0 : Math.max(0, Math.min(100, compliance))}%`}></span>
+    </span>
+  </div>
+</div>

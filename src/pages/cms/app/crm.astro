@@ -144,18 +144,10 @@ function pageHref(target: number): string {
         </CmsPageHeader>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <CmsKpiCard label="Leads in your scope" value={String(indicators.total)} icon="crm" />
-          <CmsKpiCard
-            label="Captured in the last 7 days"
-            value={String(indicators.fresh)}
-            icon="clock"
-          />
-          <CmsKpiCard
-            label="Awaiting first contact"
-            value={String(indicators.needsFirstContact)}
-            icon="statusWarn"
-          />
-          <CmsKpiCard label="Qualified" value={String(indicators.qualified)} icon="statusOk" />
+          <CmsKpiCard label="Leads in your scope" value={String(indicators.total)} />
+          <CmsKpiCard label="Captured in the last 7 days" value={String(indicators.fresh)} />
+          <CmsKpiCard label="Awaiting first contact" value={String(indicators.needsFirstContact)} />
+          <CmsKpiCard label="Qualified" value={String(indicators.qualified)} />
         </div>
         <p class="text-cms-body-sm text-cms-muted">
           Each card is a count of a stated condition over the same leads the list can show. Awaiting

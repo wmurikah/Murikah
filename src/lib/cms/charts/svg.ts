@@ -61,6 +61,14 @@ export interface ChartOptions {
   height?: number;
   /** Drawn on the value axis, for a target or a threshold. */
   reference?: { value: number; label: string };
+  /**
+   * Write each series name at the end of its own line.
+   *
+   * A legend makes the reader hold a colour in their head and go looking for
+   * it. A label at the end of the line is read where the eye already is, and
+   * it survives greyscale, which a colour key does not.
+   */
+  endLabels?: boolean;
 }
 
 /** Above this many points a line carries no markers. See lineChart. */
@@ -124,6 +132,8 @@ function frame(
   height: number,
   ceiling: number,
   format: (v: number | null) => string,
+  /** Room reserved on the right for end labels, so the baseline stops short. */
+  gutter = 0,
 ): string {
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const baseY = PADDING.top + innerHeight;
@@ -137,14 +147,14 @@ function frame(
     })
     .join('');
   return (
-    `<line x1="${PADDING.left}" y1="${round(baseY)}" x2="${width - PADDING.right}" ` +
+    `<line x1="${PADDING.left}" y1="${round(baseY)}" x2="${width - PADDING.right - gutter}" ` +
     `y2="${round(baseY)}" stroke="var(--color-cms-line)" stroke-width="1" />` +
     labels
   );
 }
 
-function categoryLabels(labels: string[], width: number, height: number): string {
-  const inner = width - PADDING.left - PADDING.right;
+function categoryLabels(labels: string[], width: number, height: number, gutter = 0): string {
+  const inner = width - PADDING.left - PADDING.right - gutter;
   const step = inner / Math.max(labels.length, 1);
   // A label every nth category, so a year of weeks does not overprint itself.
   const stride = Math.max(1, Math.ceil(labels.length / 12));
@@ -165,14 +175,15 @@ function referenceLine(
   ceiling: number,
   width: number,
   height: number,
+  gutter = 0,
 ): string {
   if (reference === undefined) return '';
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const y = PADDING.top + innerHeight * (1 - Math.min(reference.value / ceiling, 1));
   return (
-    `<line x1="${PADDING.left}" y1="${round(y)}" x2="${width - PADDING.right}" y2="${round(y)}" ` +
+    `<line x1="${PADDING.left}" y1="${round(y)}" x2="${width - PADDING.right - gutter}" y2="${round(y)}" ` +
     `stroke="var(--color-cms-ink-600)" stroke-width="1" stroke-dasharray="4 3" />` +
-    `<text x="${width - PADDING.right}" y="${round(y - 5)}" text-anchor="end" font-size="11" ` +
+    `<text x="${width - PADDING.right - gutter}" y="${round(y - 5)}" text-anchor="end" font-size="11" ` +
     `fill="var(--color-cms-ink-600)">${escape(reference.label)}</text>`
   );
 }
@@ -271,10 +282,8 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   const unit = options.unit ?? 'units';
   const all = series.flatMap((one) => one.points.map((point) => point.value ?? 0));
   const ceiling = niceCeiling(Math.max(...all, 0));
-  const innerWidth = width - PADDING.left - PADDING.right;
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const count = Math.max(series[0]?.points.length ?? 0, 1);
-  const step = innerWidth / Math.max(count - 1, 1);
   // A dot on every point of a dense line is furniture: at thirty points the
   // markers merge into a thicker, noisier line and carry nothing the line did
   // not already say. Below the limit they are useful, because each one is a
@@ -282,6 +291,12 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   // itself and the numbers are in the table underneath, which is where an
   // exact value should be read anyway.
   const showMarkers = count <= MARKER_LIMIT;
+  // Room on the right for a name written at the end of its own line. Claimed
+  // only when the caller asked for it, so a single-series chart keeps the
+  // full plot width.
+  const labelGutter = options.endLabels === true && series.length > 0 ? 92 : 0;
+  const innerWidth = width - PADDING.left - PADDING.right - labelGutter;
+  const step = innerWidth / Math.max(count - 1, 1);
 
   const paths = series
     .map((one) => {
@@ -312,18 +327,43 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
     })
     .join('');
 
+  // The name of each series, written at the end of its own line.
+  //
+  // A legend is a lookup table: the reader holds a colour in their head,
+  // travels to the key, and travels back. At the end of the line the name is
+  // already where the eye finishes, and it still reads in greyscale and in
+  // print, which a colour key does not.
+  const endLabels =
+    labelGutter === 0
+      ? ''
+      : series
+          .map((one) => {
+            const last = [...one.points].reverse().find((point) => point.value !== null);
+            if (last === undefined || last.value === null) return '';
+            const index = one.points.lastIndexOf(last);
+            const x = PADDING.left + step * index;
+            const y = PADDING.top + innerHeight * (1 - last.value / ceiling);
+            return (
+              `<text x="${round(x + 8)}" y="${round(y + 4)}" font-size="11" ` +
+              `fill="var(--color-${one.token})">${escape(one.name)}</text>`
+            );
+          })
+          .join('');
+
   return {
     svg:
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
       `aria-label="${escape(altOf(series, unit, format))}" preserveAspectRatio="xMidYMid meet">` +
-      frame(width, height, ceiling, format) +
+      frame(width, height, ceiling, format, labelGutter) +
       paths +
       categoryLabels(
         (series[0]?.points ?? []).map((point) => point.label),
         width,
         height,
+        labelGutter,
       ) +
-      referenceLine(options.reference, ceiling, width, height) +
+      referenceLine(options.reference, ceiling, width, height, labelGutter) +
+      endLabels +
       `</svg>`,
     alt: altOf(series, unit, format),
     table: tableOf(series, format),
@@ -454,5 +494,117 @@ export function funnelChart(steps: ChartPoint[], options: ChartOptions = {}): Ch
   return {
     ...chart,
     table: { columns: ['Step', 'Records', 'Conversion from previous step'], rows: withRates },
+  };
+}
+
+/**
+ * A horizontal bar, for a ranked set of named categories.
+ *
+ * Vertical bars force a category name to be rotated, abbreviated or dropped
+ * once there are more than about six of them. Horizontal bars give the name a
+ * whole line to itself, so "Delivery delay at the depot" reads as words rather
+ * than as a truncation, and the value sits at the end of its own bar where the
+ * eye finishes rather than on an axis it has to travel back to.
+ *
+ * There is no value axis and there are no gridlines: the number is printed at
+ * the end of each bar, so an axis would be a second way of saying it.
+ */
+export function horizontalBarChart(series: ChartSeries, options: ChartOptions = {}): Chart {
+  const width = options.width ?? DEFAULT_WIDTH;
+  const format = options.format ?? defaultFormat;
+  const unit = options.unit ?? 'units';
+  const labelWidth = Math.min(220, Math.round(width * 0.32));
+  const valueWidth = 64;
+  const rowHeight = 30;
+  const barHeight = 14;
+  const height = options.height ?? series.points.length * rowHeight + 12;
+  const trackWidth = width - labelWidth - valueWidth - 16;
+  const ceiling = niceCeiling(Math.max(...series.points.map((p) => p.value ?? 0), 0));
+
+  const rows = series.points
+    .map((point, index) => {
+      const y = 6 + index * rowHeight;
+      const label =
+        `<text x="0" y="${round(y + barHeight)}" font-size="12" ` +
+        `fill="var(--color-cms-ink)">${escape(point.label)}</text>`;
+      if (point.value === null) {
+        return (
+          label +
+          `<text x="${labelWidth + 8}" y="${round(y + barHeight)}" font-size="11" ` +
+          `fill="var(--color-cms-muted)">Not available</text>`
+        );
+      }
+      const barWidth = Math.max(1, (point.value / ceiling) * trackWidth);
+      const bar =
+        `<rect x="${labelWidth + 8}" y="${round(y + 3)}" width="${round(barWidth)}" ` +
+        `height="${barHeight}" rx="2" fill="var(--color-${series.token})">` +
+        `<title>${escape(`${point.label}: ${format(point.value)}`)}</title></rect>`;
+      const value =
+        `<text x="${round(labelWidth + 16 + barWidth)}" y="${round(y + barHeight)}" ` +
+        `font-size="11" fill="var(--color-cms-muted)">${escape(format(point.value))}</text>`;
+      const drawn = point.href === undefined ? bar : `<a href="${escape(point.href)}">${bar}</a>`;
+      return label + drawn + value;
+    })
+    .join('');
+
+  return {
+    svg:
+      `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
+      `aria-label="${escape(`${series.name}. ${altOf([series], unit, format)}`)}" ` +
+      `preserveAspectRatio="xMinYMin meet">${rows}</svg>`,
+    alt: altOf([series], unit, format),
+    table: tableOf([series], format),
+  };
+}
+
+/**
+ * A sparkline: the shape of a trend, at the size of a line of text.
+ *
+ * It belongs inside a KPI card, where the figure is the answer and the
+ * direction is the context. There is no axis, no label and no marker except
+ * the last point, because at this size any of them would be noise rather than
+ * information. The numbers are still reachable: the card carries the same
+ * table every other chart does.
+ */
+export function sparkline(series: ChartSeries, options: ChartOptions = {}): Chart {
+  const width = options.width ?? 120;
+  const height = options.height ?? 28;
+  const format = options.format ?? defaultFormat;
+  const unit = options.unit ?? 'units';
+  const values = series.points.map((point) => point.value).filter((v): v is number => v !== null);
+  const top = Math.max(...values, 0);
+  const floor = Math.min(...values, 0);
+  const span = top - floor || 1;
+  const step = width / Math.max(series.points.length - 1, 1);
+
+  let path = '';
+  let open = false;
+  let lastX = 0;
+  let lastY = 0;
+  series.points.forEach((point, index) => {
+    if (point.value === null) {
+      open = false;
+      return;
+    }
+    const x = step * index;
+    const y = height - 2 - ((point.value - floor) / span) * (height - 4);
+    path += `${open ? 'L' : 'M'}${round(x)} ${round(y)} `;
+    open = true;
+    lastX = x;
+    lastY = y;
+  });
+
+  return {
+    svg:
+      `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" ` +
+      `aria-label="${escape(altOf([series], unit, format))}" preserveAspectRatio="none">` +
+      `<path d="${path.trim()}" fill="none" stroke="var(--color-${series.token})" ` +
+      `stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />` +
+      (values.length > 0
+        ? `<circle cx="${round(lastX)}" cy="${round(lastY)}" r="2" fill="var(--color-${series.token})" />`
+        : '') +
+      `</svg>`,
+    alt: altOf([series], unit, format),
+    table: tableOf([series], format),
   };
 }

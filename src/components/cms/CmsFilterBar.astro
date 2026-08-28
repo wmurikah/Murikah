@@ -1,0 +1,46 @@
+---
+/**
+ * The filter row: small labelled controls on one line, and a reset.
+ *
+ * IT IS NOT A CARD AND IT HAS NO HEADING. The panel it replaces was a bordered
+ * box with a title, which gave the controls the visual weight of a section and
+ * pushed the first real figure below the fold. A filter is a control strip, not
+ * content: it sits on the canvas, it is one row deep, and it wraps rather than
+ * growing a second bordered region.
+ *
+ * Every control keeps a persistent label. Shrinking a filter bar by deleting
+ * labels is the placeholder-only pattern, and it fails the moment a value is
+ * chosen and the label it replaced is gone.
+ *
+ * It is a GET form, so the filter lives in the URL: a view can be sent to
+ * somebody else, and the browser's back button does what it should. The reset
+ * is a link to the bare path rather than a button that clears fields, so it
+ * works with no JavaScript.
+ */
+interface Props {
+  /** Where the form submits, which is the page itself. */
+  action: string;
+  class?: string;
+}
+const { action, class: className } = Astro.props;
+---
+
+<form
+  method="get"
+  action={action}
+  class:list={['flex flex-wrap items-end gap-x-3 gap-y-2', className]}
+>
+  <slot />
+  <button
+    type="submit"
+    class="inline-flex h-9 items-center rounded-cms bg-cms-royal px-3.5 text-cms-caption font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+  >
+    Apply
+  </button>
+  <a
+    href={action}
+    class="inline-flex h-9 items-center rounded-cms px-2.5 text-cms-caption font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+  >
+    Reset
+  </a>
+</form>
