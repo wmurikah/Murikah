@@ -22,6 +22,8 @@ import { canUploadImportType, canViewImports } from '@/lib/cms/permissions';
 import {
   exceptionQueues,
   REPROCESSABLE,
+  FILE_STORAGE_CONNECTED,
+  NO_FILE_STORAGE_MESSAGE,
   listBatches,
   escapeForDisplay,
   IMPORT_TYPE_LABELS,
@@ -158,7 +160,7 @@ const rowTone = (status: string) =>
               <CmsButton id="cms-batch-revalidate" variant="ghost">
                 Revalidate unresolved rows
               </CmsButton>
-              {REPROCESSABLE.has(batch.status) && (
+              {REPROCESSABLE.has(batch.status) && FILE_STORAGE_CONNECTED && (
                 <CmsButton id="cms-batch-reprocess" variant="secondary" icon="data">
                   Reprocess
                 </CmsButton>
@@ -171,6 +173,19 @@ const rowTone = (status: string) =>
             </Fragment>
           )}
         </CmsPageHeader>
+
+        {/*
+         * A batch that cannot be recovered says so, here, without anybody
+         * having to press a button to find out. The action is absent rather
+         * than disabled-and-silent, and the sentence names what is missing.
+         */}
+        {REPROCESSABLE.has(batch.status) && !FILE_STORAGE_CONNECTED && (
+          <CmsErrorState
+            class="mb-4"
+            title="This batch cannot be reprocessed"
+            description={NO_FILE_STORAGE_MESSAGE}
+          />
+        )}
 
         <p
           id="cms-batch-message"

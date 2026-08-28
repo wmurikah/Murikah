@@ -14,23 +14,24 @@ database rather than from a record of intent.
 
 ## The register
 
-| #   | Script                                                    | What it does                                                                                     | Re-runnable                | Reversible                         | How to verify                                             |
-| --- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------- | ---------------------------------- | --------------------------------------------------------- |
-| 0   | `hass_cms_turso_v1_FINAL.sql` (not in this directory)     | The v2 baseline: every table, index and constraint, plus the demo seed                           | **No**                     | No                                 | `SELECT COUNT(*) FROM sqlite_master WHERE type='table'`   |
-| 1   | `organisation/01_add_organisation_permissions.sql`        | Organisation permission codes and grants                                                         | Yes                        | Yes, delete the rows               | The script's own `SELECT` returns the codes               |
-| 2   | `customers/02_add_customer_permissions.sql`               | Customer permission codes and grants                                                             | Yes                        | Yes                                | Its own `SELECT`                                          |
-| 3   | `crm/03_add_lead_permissions.sql`                         | Lead MANAGE and lead-source codes                                                                | Yes                        | Yes                                | Its own `SELECT`                                          |
-| 4   | `crm/04_add_opportunity_permissions.sql`                  | Opportunity codes                                                                                | Yes                        | Yes                                | Its own `SELECT`                                          |
-| 5   | `service/05_add_service_permissions.sql`                  | Service codes                                                                                    | Yes                        | Yes                                | Its own `SELECT`                                          |
-| 6   | `data/06_add_import_grants.sql`                           | Grants the finance roles the two upload codes                                                    | Yes                        | Yes                                | Its own `SELECT`                                          |
-| 7   | `portal/07_portal_prerequisites.sql`                      | `entity_attachments.customer_visible`, `portal_document_title`, `survey_invitations`             | **The two ALTERs are not** | **No**                             | Its own three-row `SELECT`; also in `/api/health`         |
-| 8   | `audit/08_audit_immutability.sql`                         | Two triggers making `audit_events` append-only                                                   | Yes                        | **No, in practice**                | Its own `SELECT`; also in `/api/health`                   |
-| 9   | `audit/09_add_audit_permissions.sql`                      | `AUDIT.EVENTS.SECURITY_VIEW` and `AUDIT.EVENTS.EXPORT`                                           | Yes                        | Yes                                | Its own `SELECT`                                          |
-| —   | `SO/PO source completeness rebuild` (run before phase 17) | Makes the commercial columns on the four order tables nullable                                   | **No**                     | No                                 | `/api/health` checks `purchase_order_lines.unit_cost`     |
-| —   | `production/10_production_cleanup.sql`                    | **Removes the demo seed. Never run without review.**                                             | No                         | **No**                             | See the script                                            |
-| —   | `production/11_validation_cleanup.sql`                    | **Removes the phase 30 validation dataset.** Only needed if the journeys were replayed by hand   | No                         | **No**                             | Its own step 9, every count zero                          |
-| —   | `teardown/00_inventory.sql`                               | Read-only. Counts every table before a teardown, so an operator sees what they are about to lose | Yes                        | Not applicable, it changes nothing | It is itself a `SELECT`                                   |
-| —   | `teardown/02_drop_all.sql`                                | **Drops every CMS table.** For rebuilding a development database, never production               | Yes                        | **No**                             | `SELECT COUNT(*) FROM sqlite_master` returns 0 CMS tables |
+| #   | Script                                                    | What it does                                                                                                                | Re-runnable                | Reversible                         | How to verify                                             |
+| --- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- | --------------------------------------------------------- |
+| 0   | `hass_cms_turso_v1_FINAL.sql` (not in this directory)     | The v2 baseline: every table, index and constraint, plus the demo seed                                                      | **No**                     | No                                 | `SELECT COUNT(*) FROM sqlite_master WHERE type='table'`   |
+| 1   | `organisation/01_add_organisation_permissions.sql`        | Organisation permission codes and grants                                                                                    | Yes                        | Yes, delete the rows               | The script's own `SELECT` returns the codes               |
+| 2   | `customers/02_add_customer_permissions.sql`               | Customer permission codes and grants                                                                                        | Yes                        | Yes                                | Its own `SELECT`                                          |
+| 3   | `crm/03_add_lead_permissions.sql`                         | Lead MANAGE and lead-source codes                                                                                           | Yes                        | Yes                                | Its own `SELECT`                                          |
+| 4   | `crm/04_add_opportunity_permissions.sql`                  | Opportunity codes                                                                                                           | Yes                        | Yes                                | Its own `SELECT`                                          |
+| 5   | `service/05_add_service_permissions.sql`                  | Service codes                                                                                                               | Yes                        | Yes                                | Its own `SELECT`                                          |
+| 6   | `data/06_add_import_grants.sql`                           | Grants the finance roles the two upload codes                                                                               | Yes                        | Yes                                | Its own `SELECT`                                          |
+| 7   | `portal/07_portal_prerequisites.sql`                      | `entity_attachments.customer_visible`, `portal_document_title`, `survey_invitations`                                        | **The two ALTERs are not** | **No**                             | Its own three-row `SELECT`; also in `/api/health`         |
+| 8   | `audit/08_audit_immutability.sql`                         | Two triggers making `audit_events` append-only                                                                              | Yes                        | **No, in practice**                | Its own `SELECT`; also in `/api/health`                   |
+| 9   | `audit/09_add_audit_permissions.sql`                      | `AUDIT.EVENTS.SECURITY_VIEW` and `AUDIT.EVENTS.EXPORT`                                                                      | Yes                        | Yes                                | Its own `SELECT`                                          |
+| —   | `executive/08_add_executive_permission.sql`               | **NUMBER AND ID COLLISION, see below.** `EXECUTIVE.DASHBOARD.VIEW`, so a holder lands on the executive dashboard at sign-in | Yes                        | Yes                                | Its own two `SELECT`s                                     |
+| —   | `SO/PO source completeness rebuild` (run before phase 17) | Makes the commercial columns on the four order tables nullable                                                              | **No**                     | No                                 | `/api/health` checks `purchase_order_lines.unit_cost`     |
+| —   | `production/10_production_cleanup.sql`                    | **Removes the demo seed. Never run without review.**                                                                        | No                         | **No**                             | See the script                                            |
+| —   | `production/11_validation_cleanup.sql`                    | **Removes the phase 30 validation dataset.** Only needed if the journeys were replayed by hand                              | No                         | **No**                             | Its own step 9, every count zero                          |
+| —   | `teardown/00_inventory.sql`                               | Read-only. Counts every table before a teardown, so an operator sees what they are about to lose                            | Yes                        | Not applicable, it changes nothing | It is itself a `SELECT`                                   |
+| —   | `teardown/02_drop_all.sql`                                | **Drops every CMS table.** For rebuilding a development database, never production                                          | Yes                        | **No**                             | `SELECT COUNT(*) FROM sqlite_master` returns 0 CMS tables |
 
 ## Rules
 
@@ -72,3 +73,23 @@ database rather than from a record of intent.
 
 Step 4 before step 5 is deliberate: verify the schema is complete while the
 demo data is still there to verify it against.
+
+## An unresolved collision: `executive/08_add_executive_permission.sql`
+
+This script was written while the audit scripts were in flight, and neither
+saw the other. It collides with them twice:
+
+- **File number.** It is numbered `08`, and so is `audit/08_audit_immutability.sql`.
+- **Permission id.** It claims `PERM-041`, and so does
+  `audit/09_add_audit_permissions.sql`, for `AUDIT.EVENTS.SECURITY_VIEW`.
+
+Both scripts use `INSERT OR IGNORE`, so **whichever runs second inserts nothing
+and reports nothing**. One of the two permissions would simply never exist, and
+the only symptom would be a person who cannot see a screen they were granted.
+
+WHICH ONE MOVES DEPENDS ON WHAT HAS ALREADY BEEN RUN, which is a fact about the
+live database rather than about this repository, so it is not decided here. If
+neither has been run, renumbering the executive script to `12` and its code to
+`PERM-042` is the smaller change: the audit scripts are referenced by
+`/api/health` and by the audit tests, and the executive one is referenced by
+nothing but itself.
