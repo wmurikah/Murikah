@@ -1,0 +1,51 @@
+---
+/**
+ * A small tinted chip carrying a figure that needs a judgement attached to it.
+ *
+ * The difference between this and CmsBadge is what goes inside. A badge
+ * carries a STATE, in words: Breached, Within SLA, Paused. A pill carries a
+ * FIGURE that a state has been read from: 94%, 12 orders, 3 days. Both exist
+ * because a table column of percentages needs the number, and needs the reader
+ * to see at a glance which of them is the problem.
+ *
+ * NEVER COLOUR ALONE. The figure is inside the pill, so the chip works in
+ * greyscale, in print and for a reader who cannot separate the tints. Where a
+ * figure alone would not say what the tint means, pass `state` and the words
+ * are appended for a screen reader without crowding the column.
+ */
+interface Props {
+  /** The figure, already formatted by the caller. */
+  value: string;
+  /** Which semantic ramp tints it. Status only, never decoration. */
+  tone?: 'neutral' | 'positive' | 'caution' | 'negative' | 'info';
+  /**
+   * The judgement the tint is making, for a screen reader.
+   *
+   * A sighted reader sees 94% on a green chip and reads "good". A screen
+   * reader hears "94%", and the tint is invisible to it, so the word goes in
+   * the accessible name rather than being left to the colour.
+   */
+  state?: string;
+  class?: string;
+}
+const { value, tone = 'neutral', state, class: className } = Astro.props;
+
+const tones = {
+  neutral: 'bg-cms-neutral-tint text-cms-neutral',
+  positive: 'bg-cms-positive-tint text-cms-positive',
+  caution: 'bg-cms-caution-tint text-cms-caution',
+  negative: 'bg-cms-negative-tint text-cms-negative',
+  info: 'bg-cms-info-tint text-cms-info',
+};
+---
+
+<span
+  class:list={[
+    'inline-flex items-center rounded-full px-2 py-0.5 text-cms-caption font-semibold whitespace-nowrap tabular-nums',
+    tones[tone],
+    className,
+  ]}
+>
+  {value}
+  {state && <span class="sr-only">, {state}</span>}
+</span>
