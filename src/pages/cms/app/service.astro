@@ -163,19 +163,11 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
         </CmsPageHeader>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <CmsKpiCard label="New" value={String(indicators.newCases)} icon="service" />
-          <CmsKpiCard
-            label="Assigned to me"
-            value={String(indicators.assignedToMe)}
-            icon="customers"
-          />
-          <CmsKpiCard label="In progress" value={String(indicators.inProgress)} icon="clock" />
-          <CmsKpiCard label="Waiting" value={String(indicators.waiting)} icon="statusWarn" />
-          <CmsKpiCard
-            label="Resolved today"
-            value={String(indicators.resolvedToday)}
-            icon="statusOk"
-          />
+          <CmsKpiCard label="New" value={String(indicators.newCases)} />
+          <CmsKpiCard label="Assigned to me" value={String(indicators.assignedToMe)} />
+          <CmsKpiCard label="In progress" value={String(indicators.inProgress)} />
+          <CmsKpiCard label="Waiting" value={String(indicators.waiting)} />
+          <CmsKpiCard label="Resolved today" value={String(indicators.resolvedToday)} />
         </div>
 
         <nav aria-label="Queues" class="flex flex-wrap gap-2">

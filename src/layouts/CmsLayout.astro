@@ -27,7 +27,8 @@ import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsOverlayScript from '@/components/cms/CmsOverlayScript.astro';
 import CmsSidebar from '@/components/cms/CmsSidebar.astro';
 import CmsTopBar from '@/components/cms/CmsTopBar.astro';
-import CmsWordmark from '@/components/cms/CmsWordmark.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsRailScript from '@/components/cms/CmsRailScript.astro';
 
 interface Props {
   title: string;
@@ -93,7 +94,7 @@ const DRAWER_ID = 'cms-nav-drawer';
     <title>{pageTitle}</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
-  <body class="min-h-full bg-cms-canvas text-cms-ink antialiased">
+  <body class="group/rail min-h-full bg-cms-canvas text-cms-ink antialiased">
     <a
       href="#cms-main"
       class="sr-only rounded-cms bg-cms-navy px-4 py-2 text-white focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50"
@@ -101,20 +102,82 @@ const DRAWER_ID = 'cms-nav-drawer';
       Skip to content
     </a>
 
+    {
+      /*
+      THE PIN IS READ BEFORE THE RAIL PAINTS. Setting it from a script at the
+      end of the body would show every pinned user a narrow rail that jumps
+      wide a moment later, on every page load. This runs inline, in document
+      order, before the rail exists, so the first frame is already correct.
+      A browser with no storage, or one refusing it, simply gets the default.
+    */
+    }
+    <script is:inline>
+      try {
+        if (localStorage.getItem('cms.rail.pinned') === '1') {
+          document.body.dataset.railPinned = 'true';
+        }
+      } catch {
+        /* Private mode, or storage refused. The default is a collapsed rail. */
+      }
+    </script>
+
     <div class="flex min-h-dvh">
-      {/* The persistent rail. Hidden below lg, where the drawer takes over. */}
-      <aside class="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col bg-cms-navy px-3 py-4 lg:flex">
-        <a
-          href="/app"
-          class="mb-5 flex min-h-10 items-center rounded-cms px-3 py-1 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
+      {
+        /*
+        THE RAIL COLLAPSES, AND THE PAGE DOES NOT MOVE WHEN IT OPENS.
+
+        Two elements, on purpose. The outer <aside> is the FOOTPRINT: 64px
+        wide, always, so it holds the same space in the flex row whatever the
+        panel is doing. The inner panel is absolutely positioned inside it and
+        is what grows to 256px, overlaying the content rather than pushing it.
+        A rail that reflowed the page every time a mouse passed the left edge
+        would be worse than a permanently wide one.
+
+        It expands on hover, on focus-within so a keyboard user tabbing in can
+        read the labels, and whenever it is pinned. On a touch device there is
+        no hover, so the pin button is the tap that opens it, and the choice
+        persists.
+
+        The width transition is 150ms, and global.css clamps every animation
+        and transition to 0.01ms under prefers-reduced-motion, so it snaps
+        rather than slides for anybody who asked for less movement.
+      */
+      }
+      <aside data-cms-rail class="sticky top-0 z-30 hidden h-dvh w-16 shrink-0 lg:block">
+        <div
+          class="absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden bg-cms-navy transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-64 focus-within:w-64 hover:w-64"
         >
-          <CmsWordmark tone="onNavy" size="md" />
-          <span class="sr-only">Go to home</span>
-        </a>
-        <CmsSidebar currentPath={currentPath} idPrefix="rail" permissions={permissions} />
-        <p class="mt-auto px-3 pt-4 text-cms-caption text-cms-rail-muted">
-          Customer Relationship, Service &amp; SLA
-        </p>
+          {
+            /*
+            LAID OUT AT THE EXPANDED WIDTH, ALWAYS. The panel above is what
+            narrows; this inner column stays 256px wide and is clipped by it.
+            Sizing the column itself would reflow every label as the rail moves,
+            and at 64px it would show the first letters of each word through the
+            clip, which reads as a rendering fault rather than a collapsed rail.
+
+            Every row leads with a 64px icon box, so the label begins exactly at
+            the clip and is either wholly visible or wholly hidden. The wordmark
+            moved to the top bar for the same reason: half of "Petroleum" is not
+            a brand.
+          */
+          }
+          <div class="flex h-full w-64 flex-col py-4">
+            <CmsSidebar currentPath={currentPath} idPrefix="rail" permissions={permissions} />
+            <div class="mt-auto pt-4">
+              <button
+                type="button"
+                data-cms-rail-pin
+                aria-pressed="false"
+                class="flex h-10 w-full items-center rounded-cms pr-3 text-cms-body-sm text-cms-rail-text outline-none hover:bg-cms-navy-soft hover:text-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
+              >
+                <span class="flex w-16 shrink-0 items-center justify-center">
+                  <CmsIcon name="chevronRight" size={18} />
+                </span>
+                <span class="whitespace-nowrap" data-cms-rail-pin-label>Keep open</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <div class="flex min-w-0 flex-1 flex-col">
@@ -137,5 +200,6 @@ const DRAWER_ID = 'cms-nav-drawer';
     </CmsDrawer>
 
     <CmsOverlayScript />
+    <CmsRailScript />
   </body>
 </html>
