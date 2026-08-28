@@ -66,7 +66,16 @@ export interface CmsAuthenticatedUser {
  */
 export type CmsAuthResult =
   /** Credentials accepted and a session exists. */
-  | { readonly status: 'success'; readonly user: CmsAuthenticatedUser }
+  | {
+      readonly status: 'success';
+      readonly user: CmsAuthenticatedUser;
+      /**
+       * Where the server says this user's session starts. Computed from their
+       * permissions on the server, never inferred here: this code has no
+       * permissions to inspect and must not guess at one.
+       */
+      readonly landing: string;
+    }
   /**
    * Email or password wrong. Deliberately carries no detail: which of the two
    * was wrong is not the caller's business and must never reach the screen.
@@ -149,6 +158,7 @@ export async function submitCredentials(credentials: CmsCredentials): Promise<Cm
   let body: {
     user?: { userId?: string; displayName?: string; email?: string; userType?: CmsUserType };
     mustChangePassword?: boolean;
+    landing?: string;
   };
   try {
     body = await response.json();
@@ -181,6 +191,17 @@ export async function submitCredentials(credentials: CmsCredentials): Promise<Cm
       email: user.email ?? credentials.email,
       userType: user.userType,
     },
+    // A same-origin, root-relative path or nothing. A destination read from a
+    // response and handed to location.assign is an open-redirect if it is
+    // allowed to be absolute, and this one never needs to be.
+    landing:
+      typeof body.landing === 'string' &&
+      body.landing.startsWith('/') &&
+      !body.landing.startsWith('//')
+        ? body.landing
+        : user.userType === 'EXTERNAL'
+          ? '/portal'
+          : '/app',
   };
 }
 

@@ -153,6 +153,7 @@ test('every outcome the service can return has a decided message', () => {
     {
       status: 'success',
       user: { userId: 'u1', displayName: 'A', email: 'a@b.co', userType: 'INTERNAL' },
+      landing: '/app',
     },
     { status: 'invalid_credentials' },
     { status: 'account_locked' },
