@@ -21,6 +21,7 @@ import {
   IMPORT_TYPES,
   MAX_UPLOAD_BYTES,
   type ImportType,
+  SOURCE_SYSTEM_FOR_IMPORT,
 } from '../../../../../lib/cms/import/uploadCentre.ts';
 import {
   invalid,
@@ -81,19 +82,19 @@ export const POST: APIRoute = async (context) => {
       },
     ]);
   }
-  const sourceSystemId = String(form.get('sourceSystemId') ?? '');
-  if (sourceSystemId === '') {
-    return invalid([{ field: 'sourceSystemId', message: 'Choose the source system.' }]);
-  }
-  const affiliateRaw = String(form.get('affiliateId') ?? '').trim();
-  if (importType === 'PURCHASE_ORDER' && affiliateRaw === '') {
-    return invalid([
-      {
-        field: 'affiliateId',
-        message: 'The purchase order extract carries no affiliate column, so choose one here.',
-      },
-    ]);
-  }
+  // THREE THINGS THE FORM NO LONGER ASKS FOR, BECAUSE THE FILE ANSWERS THEM.
+  //
+  // The source system follows from the data type: both extracts are Oracle
+  // EBS reports, and the form's old default of CRM Web Form was wrong for
+  // every upload it was applied to.
+  //
+  // The affiliate is read from the extract. The sales order file names it on
+  // every row in its first column; the purchase order file has no such column,
+  // which makes the batch Group scope rather than an incomplete form.
+  //
+  // The period is derived from the rows, in the importer, from the column each
+  // extract dates its documents by.
+  const sourceSystemId = SOURCE_SYSTEM_FOR_IMPORT[importType as ImportType];
 
   const connection = await connect();
   if ('response' in connection) return connection.response;
@@ -103,10 +104,10 @@ export const POST: APIRoute = async (context) => {
       {
         importType: importType as ImportType,
         sourceSystemId,
-        affiliateId: affiliateRaw === '' ? null : affiliateRaw,
+        affiliateId: null,
         filename: file.name,
-        reportingPeriodFrom: nullableField(form.get('reportingPeriodFrom')),
-        reportingPeriodTo: nullableField(form.get('reportingPeriodTo')),
+        reportingPeriodFrom: null,
+        reportingPeriodTo: null,
         bytes: new Uint8Array(await file.arrayBuffer()),
       },
       writeContext(context.request, auth.principal),
@@ -116,10 +117,5 @@ export const POST: APIRoute = async (context) => {
     return serverError('data.imports.upload', error);
   }
 };
-
-function nullableField(value: FormDataEntryValue | null): string | null {
-  const text = String(value ?? '').trim();
-  return text === '' ? null : text;
-}
 
 export const ALL: APIRoute = () => methodNotAllowed('GET or POST');

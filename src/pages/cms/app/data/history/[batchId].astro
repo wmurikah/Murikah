@@ -90,6 +90,20 @@ if (mayView) {
     loadFailed = true;
   }
 }
+/**
+ * Whether validation actually classified anything.
+ *
+ * A batch at VALIDATING has not finished; a REJECTED batch with no rows never
+ * got as far as classifying one. Either way the exception panel must say so
+ * rather than report a clean run. Read from the rows themselves, so it stays
+ * true whatever wrote the batch.
+ */
+const validationRan =
+  rows.length > 0 ||
+  batch?.status === 'READY' ||
+  batch?.status === 'IMPORTED' ||
+  batch?.status === 'PARTIAL';
+
 const mayCommit =
   batch !== undefined && canUploadImportType(permissions, batch.importType as ImportType);
 const statusTone = (status: string) =>
@@ -131,7 +145,6 @@ const rowTone = (status: string) =>
       <Fragment>
         <CmsPageHeader
           title={batch.filename}
-          description={`${IMPORT_TYPE_LABELS[batch.importType as ImportType] ?? batch.importType} from ${batch.sourceSystem}, uploaded by ${batch.uploadedBy} on ${batch.uploadedAt}.`}
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Data', href: '/app/data' },
@@ -161,13 +174,31 @@ const rowTone = (status: string) =>
         />
 
         <div class="grid gap-4 lg:grid-cols-2">
-          <CmsCard title="Overview" description="Rows and documents, counted separately.">
+          <CmsCard title="Overview">
             <dl class="text-cms-body-sm text-cms-muted">
               <div class="flex justify-between border-b border-cms-line py-1.5">
                 <dt>Status</dt>
                 <dd>
                   <CmsBadge tone={statusTone(batch.status)} label={batch.status.toLowerCase()} />
                 </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Data type</dt>
+                <dd class="text-cms-ink">
+                  {IMPORT_TYPE_LABELS[batch.importType as ImportType] ?? batch.importType}
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Source system</dt>
+                <dd class="text-cms-ink">{batch.sourceSystem}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Uploaded by</dt>
+                <dd class="text-cms-ink">{batch.uploadedBy}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Uploaded at</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.uploadedAt}</dd>
               </div>
               <div class="flex justify-between border-b border-cms-line py-1.5">
                 <dt>Rows received</dt>
@@ -196,12 +227,32 @@ const rowTone = (status: string) =>
             </dl>
           </CmsCard>
 
-          <CmsCard
-            title="Exception queues"
-            description="The rows are the record; these are a reading of them."
-          >
-            {queues.length === 0 ? (
-              <CmsEmptyState icon="data" title="No exceptions" description="Every row resolved." />
+          <CmsCard title="Exception queues">
+            {/*
+             * THREE STATES, BECAUSE TWO OF THEM ARE NOT THE SAME THING.
+             * A batch still validating, or one that was rejected before it
+             * classified a row, has no exceptions in the sense that nothing
+             * has been examined. Rendering that as "No exceptions. Every row
+             * resolved." tells the operator the run succeeded, on a batch
+             * where nothing ran, which is how the stuck validation looked
+             * like a clean one.
+             */}
+            {validationRan === false ? (
+              <CmsEmptyState
+                icon="data"
+                title="Not validated"
+                description={
+                  batch.status === 'VALIDATING'
+                    ? 'This batch is still validating. No row has been classified yet.'
+                    : 'This batch was rejected before any row was classified.'
+                }
+              />
+            ) : queues.length === 0 ? (
+              <CmsEmptyState
+                icon="check"
+                title="No exceptions"
+                description={`Validated. All ${batch.rowsReceived} rows resolved.`}
+              />
             ) : (
               <ul class="flex flex-col gap-2 text-cms-body-sm">
                 {queues.map((queue) => (

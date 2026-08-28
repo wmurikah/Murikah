@@ -191,3 +191,113 @@ export function minutesBetween(from: string | null, to: string | null): number |
   if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
   return Math.round((end - start) / 60000);
 }
+
+// ---- Change detection, in one read rather than one per row --------------------
+
+/** As many keys as SQLite will bind in one statement, with room to spare. */
+const KEY_CHUNK = 400;
+
+/**
+ * Every hash ever recorded against each of these source keys, outside this
+ * batch.
+ *
+ * WHY THIS IS NOT A PER-ROW QUERY. Both importers used to ask this question
+ * once per row, inside the row loop. On the sales order extract that is 1,386
+ * outbound subrequests for one validation; Cloudflare's Free plan allows 50
+ * per request, so the run died part-way through the loop and left the batch at
+ * VALIDATING with an empty row table and every count zero. Asking once for the
+ * whole key space costs a handful of reads whatever the extract's size, so a
+ * validation's cost follows the number of DISTINCT keys in chunks, not the
+ * number of rows.
+ *
+ * Chunked because a bind list has a limit, and returned as a map of key to the
+ * set of hashes seen for it, which is the membership test the callers make.
+ */
+export async function loadPriorHashes(
+  db: {
+    execute: (stmt: {
+      sql: string;
+      args: (string | number | null)[];
+    }) => Promise<{ rows: unknown[] }>;
+  },
+  keys: readonly string[],
+  excludeBatchId: string,
+): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  const distinct = [...new Set(keys)];
+  for (let start = 0; start < distinct.length; start += KEY_CHUNK) {
+    const slice = distinct.slice(start, start + KEY_CHUNK);
+    const placeholders = slice.map(() => '?').join(', ');
+    const result = await db.execute({
+      sql:
+        'SELECT DISTINCT source_record_key AS k, row_hash AS h FROM import_rows ' +
+        'WHERE import_batch_id <> ? AND source_record_key IN (' +
+        placeholders +
+        ')',
+      args: [excludeBatchId, ...slice],
+    });
+    for (const raw of result.rows) {
+      const row = raw as Record<string, unknown>;
+      const key = String(row.k);
+      const existing = out.get(key);
+      if (existing === undefined) out.set(key, new Set([String(row.h)]));
+      else existing.add(String(row.h));
+    }
+  }
+  return out;
+}
+
+// ---- Terminal states ---------------------------------------------------------
+
+/**
+ * Move a batch out of VALIDATING when the run cannot finish.
+ *
+ * VALIDATING IS NOT A RESTING PLACE. It means "a validation is in flight", and
+ * a batch that still reads VALIDATING an hour later is telling the operator
+ * something that is not true. Every exit from a validation therefore lands on
+ * READY, PARTIAL or REJECTED, including the exit where the run threw.
+ *
+ * The batch table has no column for a reason and this phase adds no schema, so
+ * the reason goes to `audit_events`, which the batch detail page already reads
+ * and which is where an auditor would look for it anyway.
+ */
+export async function rejectBatch(
+  db: {
+    execute: (stmt: { sql: string; args: (string | number | null)[] }) => Promise<unknown>;
+  },
+  batchId: string,
+  reason: string,
+  audit: { actorUserId: string; now: string; auditId: string },
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE import_batches SET status = 'REJECTED' WHERE import_batch_id = ?`,
+    args: [batchId],
+  });
+  await db.execute({
+    sql: `INSERT INTO audit_events
+            (audit_event_id, actor_user_id, event_type, entity_type, entity_id, action,
+             before_json, after_json, ip_address, user_agent, event_at)
+          VALUES (?, ?, 'IMPORT_REJECTED', 'IMPORT_BATCH', ?, 'VALIDATE', NULL, ?, NULL, ?, ?)`,
+    args: [
+      audit.auditId,
+      audit.actorUserId,
+      batchId,
+      JSON.stringify({ reason }),
+      'upload-centre',
+      audit.now,
+    ],
+  });
+}
+
+/**
+ * A failure, in words an operator can act on and with nothing leaked.
+ *
+ * The message goes on screen and into the audit trail, so it names what broke
+ * without carrying a stack trace or a row's contents into either.
+ */
+export function describeFailure(error: unknown): string {
+  if (error instanceof Error && error.message !== '') {
+    return error.message.length > 200 ? error.message.slice(0, 197) + '...' : error.message;
+  }
+  return 'The cause was not reported by the runtime.';
+}
