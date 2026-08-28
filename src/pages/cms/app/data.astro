@@ -72,22 +72,16 @@ if (mayView) {
         </CmsPageHeader>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <CmsKpiCard
-            label="Unresolved users"
-            value={String(quality.unresolvedUsers)}
-            icon="administration"
-          />
+          <CmsKpiCard label="Unresolved users" value={String(quality.unresolvedUsers)} />
           <CmsKpiCard
             label="Rows awaiting a customer"
             value={String(quality.unresolvedCustomerRows)}
-            icon="customers"
           />
           <CmsKpiCard
             label="Rows awaiting a product"
             value={String(quality.unresolvedProductRows)}
-            icon="orders"
           />
-          <CmsKpiCard label="Rejected rows" value={String(quality.rejectedRows)} icon="data" />
+          <CmsKpiCard label="Rejected rows" value={String(quality.rejectedRows)} />
         </div>
 
         <div class="mt-6 grid gap-4 lg:grid-cols-2">

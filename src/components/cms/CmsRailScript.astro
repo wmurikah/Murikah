@@ -1,0 +1,58 @@
+---
+/**
+ * The rail's pin: keep it open, and remember that choice.
+ *
+ * WHY THE STATE LIVES ON <body> RATHER THAN ON THE RAIL. It is set by an
+ * inline script in CmsLayout that runs before the rail has been parsed, so the
+ * first frame a pinned user sees is already wide; an attribute on an element
+ * that does not exist yet cannot do that. <body> also carries the `group`, so
+ * the rail's width is a plain Tailwind variant rather than a hand-written
+ * selector reaching up the tree.
+ *
+ * WHY localStorage AND NOT THE DATABASE. This is a per-browser display
+ * preference, and the alternative is a column on `users`, which is a schema
+ * change this phase may not make. The honest consequence, stated rather than
+ * hidden: the choice follows the browser, not the person, so the same user on
+ * a second machine starts collapsed again.
+ *
+ * TOUCH. On a device with no hover the panel never expands by pointing at it,
+ * so this button is how it opens: one tap opens and keeps it open, another
+ * closes it. That is the same control a mouse user pins with, which is why
+ * there is no separate touch handler to keep in step with this one.
+ */
+---
+
+<script>
+  const KEY = 'cms.rail.pinned';
+  const root = document.body;
+  const button = document.querySelector<HTMLButtonElement>('[data-cms-rail-pin]');
+  const label = document.querySelector<HTMLElement>('[data-cms-rail-pin-label]');
+
+  const paint = (pinned: boolean) => {
+    if (pinned) root.dataset.railPinned = 'true';
+    else delete root.dataset.railPinned;
+    if (button) button.setAttribute('aria-pressed', String(pinned));
+    // The control says what it will do next, not what it did. A pinned rail
+    // offers "Collapse"; a collapsed one offers "Keep open".
+    if (label) label.textContent = pinned ? 'Collapse' : 'Keep open';
+  };
+
+  let pinned = false;
+  try {
+    pinned = localStorage.getItem(KEY) === '1';
+  } catch {
+    // Storage refused. The rail still works; the choice just does not persist.
+  }
+  paint(pinned);
+
+  button?.addEventListener('click', () => {
+    pinned = !pinned;
+    paint(pinned);
+    try {
+      if (pinned) localStorage.setItem(KEY, '1');
+      else localStorage.removeItem(KEY);
+    } catch {
+      // Nothing to do: the rail is in the right state for this page either way.
+    }
+  });
+</script>
