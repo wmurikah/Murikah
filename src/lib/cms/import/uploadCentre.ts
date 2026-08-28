@@ -141,6 +141,38 @@ export function escapeForDisplay(value: string): string {
 
 // ---- Upload and validate -----------------------------------------------------
 
+/**
+ * WHICH SYSTEM AN EXTRACT COMES FROM IS NOT A QUESTION.
+ *
+ * Both extracts this product accepts are Oracle EBS reports. The form used to
+ * ask, and defaulted to CRM Web Form, so a sales order extract was routinely
+ * recorded as arriving from a web form. That is not cosmetic: `source_identities`
+ * resolves usernames against the source system, so the wrong value maps the
+ * wrong people, or nobody. Deriving it removes both the question and the
+ * default that was wrong more often than it was right.
+ */
+export const SOURCE_SYSTEM_FOR_IMPORT: Readonly<Record<ImportType, string>> = {
+  SALES_ORDER: 'SRC-ORACLE',
+  PURCHASE_ORDER: 'SRC-ORACLE',
+};
+
+/**
+ * Where a derived fact came from, so the preview can show the reasoning
+ * rather than a number that appeared from nowhere.
+ */
+export interface DerivationNote {
+  /** The affiliate the file named, or null for a Group-wide extract. */
+  affiliateLabel: string | null;
+  /** The column the affiliate was read from, or null where there is none. */
+  affiliateColumn: string | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+  /** The column the period was derived from. */
+  periodColumn: string;
+  /** Every distinct affiliate the file named. */
+  affiliates: string[];
+}
+
 export interface UploadRequest {
   importType: ImportType;
   sourceSystemId: string;
@@ -154,6 +186,8 @@ export interface UploadRequest {
 export type UploadStage = 'REJECTED' | 'DUPLICATE' | 'READY';
 
 export interface UploadOutcome {
+  /** What the file itself said, and which column said it. */
+  derivation: DerivationNote | null;
   stage: UploadStage;
   batchId: string | null;
   fileSha256: string | null;
@@ -231,6 +265,7 @@ export async function receiveUpload(
   ctx: WriteContext,
 ): Promise<UploadOutcome> {
   const empty: UploadOutcome = {
+    derivation: null,
     stage: 'REJECTED',
     batchId: null,
     fileSha256: null,
@@ -301,6 +336,17 @@ export async function receiveUpload(
     });
     await notifyExceptions(db, ctx, batchId, validation.unresolvedActors.length);
     return {
+      derivation: {
+        // The purchase order extract has no affiliate column: 29 headers and
+        // not one of them names an entity. A file that names no entity
+        // measures across all of them.
+        affiliateLabel: validation.affiliateId === null ? null : validation.affiliateId,
+        affiliateColumn: null,
+        periodFrom: validation.dateRange.from,
+        periodTo: validation.dateRange.to,
+        periodColumn: 'ORIGINAL_CREATION_DATE',
+        affiliates: [],
+      },
       stage: 'READY',
       batchId,
       fileSha256: validation.fileSha256,
@@ -324,6 +370,16 @@ export async function receiveUpload(
   }
 
   const validation: SoValidation = await validateSoWorkbook(db, input.bytes, uploadInput, ctx);
+  // The run did not finish. The batch is already REJECTED with its reason in
+  // the audit trail; the operator is told what happened rather than shown a
+  // batch that says it is still validating.
+  if (validation.rejectedReason !== null) {
+    return {
+      ...empty,
+      fileSha256: validation.fileSha256,
+      rejectedReason: validation.rejectedReason,
+    };
+  }
   if (validation.duplicateOfBatchId !== null) {
     return {
       ...empty,
@@ -358,6 +414,15 @@ export async function receiveUpload(
     validation.unresolvedCustomers.length;
   await notifyExceptions(db, ctx, batchId, exceptions);
   return {
+    derivation: {
+      affiliateLabel:
+        validation.affiliates.length === 1 ? (validation.affiliates[0] ?? null) : null,
+      affiliateColumn: 'AFFILIATE',
+      periodFrom: validation.dateRange.from,
+      periodTo: validation.dateRange.to,
+      periodColumn: 'CREATE_DATE_TIME',
+      affiliates: validation.affiliates,
+    },
     stage: 'READY',
     batchId,
     fileSha256: validation.fileSha256,
@@ -781,7 +846,23 @@ export async function listBatches(db: Client, limit = 50): Promise<BatchSummaryR
             b.status AS status,
             (SELECT COUNT(DISTINCT ir.source_record_key) FROM import_rows ir
               WHERE ir.import_batch_id = b.import_batch_id AND ir.source_record_key IS NOT NULL)
-              AS distinct_keys
+              AS distinct_keys,
+            -- DOCUMENTS, NOT KEYS. A sales order row's key is
+            -- affiliate|document|line, so counting distinct keys counts LINES:
+            -- SO-Ver1.xls has 1,386 rows over 662 orders and 1,252 distinct
+            -- line keys, and reporting 1,252 documents would overstate the
+            -- month by nearly a factor of two. The count validation actually
+            -- made is already recorded on its IMPORT_VALIDATED event, so it is
+            -- read back from there rather than re-derived from a key whose
+            -- grain differs per import type. Purchase order keys are the order
+            -- itself, so the fallback below is correct for them and for any
+            -- batch written before this event carried the figure.
+            (SELECT CAST(json_extract(ae.after_json, '$.uniqueDocuments') AS INTEGER)
+               FROM audit_events ae
+              WHERE ae.entity_type = 'IMPORT_BATCH'
+                AND ae.entity_id = b.import_batch_id
+                AND ae.event_type = 'IMPORT_VALIDATED'
+              ORDER BY ae.event_at DESC LIMIT 1) AS audited_documents
           FROM import_batches b
           LEFT JOIN source_systems ss ON ss.source_system_id = b.source_system_id
           LEFT JOIN users u ON u.user_id = b.uploaded_by_user_id
@@ -806,7 +887,10 @@ export async function listBatches(db: Client, limit = 50): Promise<BatchSummaryR
       rowsDuplicate: Number(row.rows_duplicate),
       rowsRejected: Number(row.rows_rejected),
       status: text(row.status),
-      uniqueDocuments: Number(row.distinct_keys),
+      uniqueDocuments:
+        row.audited_documents === null || row.audited_documents === undefined
+          ? Number(row.distinct_keys)
+          : Number(row.audited_documents),
     };
   });
 }

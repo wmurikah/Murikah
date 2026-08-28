@@ -20,8 +20,13 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { createTestDb, type TestClient } from './support/db.ts';
-import { seedHass } from './support/hassSeed.ts';
+import { seedHass, SEED } from './support/hassSeed.ts';
+import { validatePoWorkbook } from '../../src/lib/cms/import/poImport.ts';
+import { validateSoWorkbook } from '../../src/lib/cms/import/soImport.ts';
 import {
   countRoundTrips,
   SUBREQUEST_BUDGET,
@@ -94,6 +99,13 @@ import {
 } from '../../src/lib/cms/service/events.ts';
 
 const NOW = '2026-08-27 10:00:00';
+const here = dirname(fileURLToPath(import.meta.url));
+const IMPORT_CTX = {
+  actorUserId: SEED.admin,
+  ip: '10.0.0.10',
+  userAgent: 'HassCMS Test',
+  now: new Date('2026-08-27T10:00:00Z'),
+} as const;
 const USER = 'USR-CATH';
 /** Everything, so no section is composed away and every page is at full cost. */
 const PERMISSIONS = [
@@ -308,4 +320,124 @@ test('the executive dashboard does not get more expensive as affiliates are adde
   );
   assertWithinBudget('/app/executive at five affiliates', five.trips, five.statements);
   c.close();
+});
+
+/**
+ * The Upload Centre's two screens, held to the same budget as the analytics
+ * pages, and the validation that used to break it.
+ *
+ * WHAT THIS CAUGHT. Both importers asked "what hashes has this key had before"
+ * once per row, inside the row loop. PO-Ver1.xls is 45 rows and cost 57
+ * subrequests; SO-Ver1.xls is 1,386 rows and cost 1,403. Cloudflare's Free
+ * plan allows 50 per request, so validation died part-way through the loop and
+ * left the batch at VALIDATING with rows received recorded, no import_rows,
+ * and every classification count zero. Nothing in the suite could see that,
+ * because node has no subrequest limit.
+ */
+test('validating the purchase order extract stays well inside the platform limit', async () => {
+  const counted = countRoundTrips(await seeded());
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'PO-Ver1.xls')));
+  const result = await validatePoWorkbook(
+    counted.db as never,
+    bytes,
+    {
+      filename: 'PO-Ver1.xls',
+      uploadedBy: SEED.admin,
+      sourceSystemId: 'SRC-ORACLE',
+      affiliateId: null,
+    } as never,
+    IMPORT_CTX as never,
+  );
+  assert.equal(result.rowsReceived, 45);
+  assert.equal(result.uniqueOrders, 45, '45 rows must produce 45 documents');
+  assert.ok(
+    counted.roundTrips() <= CLOUDFLARE_FREE_SUBREQUEST_LIMIT,
+    `validating 45 rows cost ${counted.roundTrips()} subrequests, over the Free plan's ` +
+      `${CLOUDFLARE_FREE_SUBREQUEST_LIMIT}. It will die part-way through and leave the batch ` +
+      `at VALIDATING.`,
+  );
+});
+
+test('validating the sales order extract does not scale its cost with its rows', async () => {
+  const counted = countRoundTrips(await seeded());
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'SO-Ver1.xls')));
+  const result = await validateSoWorkbook(
+    counted.db as never,
+    bytes,
+    { filename: 'SO-Ver1.xls', uploadedBy: SEED.admin, sourceSystemId: 'SRC-ORACLE' } as never,
+    IMPORT_CTX as never,
+  );
+  assert.equal(result.rowsReceived, 1386);
+  assert.equal(result.uniqueDocuments, 662, '1,386 rows must produce 662 documents');
+  assert.ok(
+    counted.roundTrips() <= CLOUDFLARE_FREE_SUBREQUEST_LIMIT,
+    `validating 1,386 rows cost ${counted.roundTrips()} subrequests, over the Free plan's ` +
+      `${CLOUDFLARE_FREE_SUBREQUEST_LIMIT}. A validation's cost must not follow its row count.`,
+  );
+  // 30 times the rows of the purchase order extract, and nothing like 30 times
+  // the round trips: the cost follows the key space in chunks, not the rows.
+  assert.ok(counted.roundTrips() < 45, `expected far fewer than one trip per row`);
+});
+
+test('a validation that cannot finish leaves the batch REJECTED, never VALIDATING', async () => {
+  const client = await seeded();
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'SO-Ver1.xls')));
+  // Fail the write that lands the rows, after the batch row already exists.
+  const realBatch = client.batch.bind(client);
+  let calls = 0;
+  (client as unknown as { batch: unknown }).batch = async (stmts: never, mode: never) => {
+    calls += 1;
+    if (calls > 1) throw new Error('no such table: import_rows');
+    return realBatch(stmts, mode);
+  };
+  const result = await validateSoWorkbook(
+    client as never,
+    bytes,
+    { filename: 'corrupt.xls', uploadedBy: SEED.admin, sourceSystemId: 'SRC-ORACLE' } as never,
+    IMPORT_CTX as never,
+  );
+  assert.notEqual(result.rejectedReason, null, 'the operator must be told it failed');
+  const status = (
+    client.raw
+      .prepare(`SELECT status FROM import_batches WHERE import_batch_id = ?`)
+      .get(result.batchId) as Record<string, unknown>
+  ).status;
+  assert.equal(status, 'REJECTED', 'VALIDATING is not a resting place');
+  const audited = client.raw
+    .prepare(
+      `SELECT after_json FROM audit_events WHERE entity_id = ? AND event_type = 'IMPORT_REJECTED'`,
+    )
+    .get(result.batchId) as Record<string, unknown> | undefined;
+  assert.ok(audited !== undefined, 'the reason must be recorded, not only shown');
+  client.close();
+});
+
+test('nothing reaches a canonical table during validation', async () => {
+  const client = await seeded();
+  const count = (table: string) =>
+    Number(
+      (client.raw.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as Record<string, unknown>).n,
+    );
+  const before = {
+    salesOrders: count('sales_orders'),
+    salesOrderLines: count('sales_order_lines'),
+    purchaseOrders: count('purchase_orders'),
+  };
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'SO-Ver1.xls')));
+  await validateSoWorkbook(
+    client as never,
+    bytes,
+    { filename: 'SO-Ver1.xls', uploadedBy: SEED.admin, sourceSystemId: 'SRC-ORACLE' } as never,
+    IMPORT_CTX as never,
+  );
+  assert.deepEqual(
+    {
+      salesOrders: count('sales_orders'),
+      salesOrderLines: count('sales_order_lines'),
+      purchaseOrders: count('purchase_orders'),
+    },
+    before,
+    'validation is not a commit: no canonical row may be written by it',
+  );
+  client.close();
 });
