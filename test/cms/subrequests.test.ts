@@ -88,6 +88,20 @@ import {
   insights as serviceInsights,
 } from '../../src/lib/cms/repos/serviceAnalytics.ts';
 import {
+  systemHealth,
+  expiringAuthority,
+  accessReview,
+  authorityReview,
+} from '../../src/lib/cms/repos/controlCentre.ts';
+import {
+  listAuditEvents,
+  auditFilterOptions,
+  maySeeSecurityEvents,
+  securityEvents,
+  parseAuditFilter,
+} from '../../src/lib/cms/repos/auditTrail.ts';
+import { REPORTS } from '../../src/lib/cms/reports/catalogue.ts';
+import {
   resetCaseEventHandlers,
   resetLeadEventHandlers,
   resetSlaWiring,
@@ -308,4 +322,120 @@ test('the executive dashboard does not get more expensive as affiliates are adde
   );
   assertWithinBudget('/app/executive at five affiliates', five.trips, five.statements);
   c.close();
+});
+
+// ---------------------------------------------------------------------------
+// The pages that arrived without a guard
+//
+// This file was written for the five analytics pages and covered only those.
+// Build Prompt 26 added the control centre and the audit trail, and Build
+// Prompt 27 added the reporting centre, while other work was in flight; none
+// of them was ever counted. A page can be over the Cloudflare limit and
+// nobody finds out until somebody opens it, because node has no such limit.
+// They are counted here now, so the guard covers the application rather than
+// the five pages it happened to be written for.
+// ---------------------------------------------------------------------------
+
+/** The same instant as NOW, for the helpers that take a Date rather than a string. */
+const NOW_DATE = new Date(`${NOW.replace(' ', 'T')}Z`);
+const auditFilter = parseAuditFilter(new URLSearchParams(), NOW_DATE);
+
+test('/app/administration/health stays inside its subrequest budget', async () => {
+  // ASSERTED TO HAVE ACTUALLY RUN. A section that throws is caught by
+  // `runSection` and reported, and a page that failed costs nothing, so a
+  // budget test alone would pass loudest on a page that is broken. The result
+  // is checked before the count is trusted.
+  let ok = false;
+  let checks = 0;
+  const { trips, statements } = await cost(async (b) => {
+    const result = await runSection(b, 'control.health', (db) =>
+      Promise.all([systemHealth(db, NOW_DATE), expiringAuthority(db, NOW_DATE, 30)]),
+    );
+    ok = result.ok;
+    if (result.ok) checks = result.value[0].checks.length;
+  });
+  assert.ok(ok, 'the health section failed, so its cost of zero means nothing');
+  assert.ok(checks > 0, `expected the health checks to run, got ${checks}`);
+  assertWithinBudget('/app/administration/health', trips, statements);
+});
+
+test('/app/administration/access-review stays inside its subrequest budget', async () => {
+  const { trips, statements } = await cost((b) =>
+    runSection(b, 'control.accessReview', (db) =>
+      accessReview(db, NOW.slice(0, 10), { search: '' }),
+    ),
+  );
+  assertWithinBudget('/app/administration/access-review', trips, statements);
+});
+
+test('/app/administration/authority stays inside its subrequest budget', async () => {
+  const { trips, statements } = await cost((b) =>
+    runSection(b, 'control.authority', (db) =>
+      Promise.all([
+        authorityReview(db, {
+          processType: null,
+          countryId: null,
+          affiliateId: null,
+          businessUnitId: null,
+          effectiveOn: NOW.slice(0, 10),
+        }),
+        db.execute(`SELECT country_id AS id, country_name AS label FROM countries`),
+        db.execute(`SELECT affiliate_id AS id, affiliate_name AS label FROM affiliates`),
+        db.execute(
+          `SELECT business_unit_id AS id, business_unit_name AS label FROM business_units`,
+        ),
+      ]),
+    ),
+  );
+  assertWithinBudget('/app/administration/authority', trips, statements);
+});
+
+test('/app/administration/audit stays inside its subrequest budget', async () => {
+  const { trips, statements } = await cost((b) =>
+    runSection(b, 'audit.trail', (db) =>
+      Promise.all([
+        listAuditEvents(db, USER, auditFilter),
+        auditFilterOptions(db, USER),
+        maySeeSecurityEvents(db, USER),
+      ]),
+    ),
+  );
+  assertWithinBudget('/app/administration/audit', trips, statements);
+});
+
+test('/app/administration/audit/security stays inside its subrequest budget', async () => {
+  const { trips, statements } = await cost((b) =>
+    runSection(b, 'audit.security', async (db) => {
+      const allowed = await maySeeSecurityEvents(db, USER);
+      return allowed ? securityEvents(db, USER, auditFilter) : null;
+    }),
+  );
+  assertWithinBudget('/app/administration/audit/security', trips, statements);
+});
+
+/**
+ * The reporting centre, measured on its most expensive report rather than its
+ * cheapest. A budget proved on the smallest report proves nothing: the page is
+ * one select away from any of the others.
+ */
+test('/app/performance/reports stays inside its budget on every report', async () => {
+  const client = await seeded();
+  let worst = { id: '', trips: 0, statements: 0 };
+  for (const report of REPORTS) {
+    const { trips, statements } = await cost(
+      (b) =>
+        runSection(b, `report.${report.id}`, (db) =>
+          Promise.all([
+            report.run(db, USER, filter, NOW, PERMISSIONS),
+            db.execute(`SELECT affiliate_id AS value, affiliate_name AS label FROM affiliates`),
+          ]),
+        ),
+      client,
+    );
+    if (trips > worst.trips) worst = { id: report.id, trips, statements };
+    assertWithinBudget(`/app/performance/reports?report=${report.id}`, trips, statements);
+  }
+  console.log(
+    `[subrequests] the most expensive report is ${worst.id} at ${worst.trips} round trips`,
+  );
 });

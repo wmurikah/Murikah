@@ -257,6 +257,33 @@ export const ALLOW_ALL: Predicate = { sql: '1 = 1', args: [] };
  * team for a module that has no teams sees no rows and asks why, which is the
  * outcome that gets the configuration corrected.
  */
+/**
+ * Forget every scope this client has resolved. FOR THE TEST HARNESS ONLY.
+ *
+ * WHY IT EXISTS. Five suites hold ONE client for a whole test, grant a role,
+ * withhold a permission and re-resolve against the same connection. A request
+ * never does that: `getDb` builds a client per request and a permission does
+ * not change in the middle of one.
+ *
+ * WHAT IT ACTUALLY CLEARS, STATED PLAINLY. The memo above only engages for a
+ * client carrying the batcher's root symbol, so for the bare client a test
+ * uses there is usually nothing cached and this is a no-op. It is not
+ * decorative: a test that batches its reads DOES get a memo, and without this
+ * it would assert against an answer from before its own grant. Calling it is
+ * cheap and always correct; leaving it out is correct only until somebody
+ * batches.
+ *
+ * It is deliberately called nowhere in `src/`. A production caller reaching
+ * for this would be saying a permission changed mid-request; if that ever
+ * became true, the fix is a fresh client rather than a cache flush.
+ */
+export function forgetResolvedScopes(db: Client): void {
+  const root = (db as unknown as Record<symbol, unknown>)[Symbol.for('cms.rootClient')] as
+    | Client
+    | undefined;
+  scopeCache.delete(root ?? db);
+}
+
 export function scopePredicate(resolution: ScopeResolution, columns: ScopedColumns): Predicate {
   if (!resolution.granted) return DENY_ALL;
   if (resolution.group) return ALLOW_ALL;

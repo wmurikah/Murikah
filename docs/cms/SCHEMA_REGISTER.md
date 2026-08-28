@@ -26,6 +26,7 @@ database rather than from a record of intent.
 | 7   | `portal/07_portal_prerequisites.sql`                      | `entity_attachments.customer_visible`, `portal_document_title`, `survey_invitations`             | **The two ALTERs are not** | **No**                             | Its own three-row `SELECT`; also in `/api/health`         |
 | 8   | `audit/08_audit_immutability.sql`                         | Two triggers making `audit_events` append-only                                                   | Yes                        | **No, in practice**                | Its own `SELECT`; also in `/api/health`                   |
 | 9   | `audit/09_add_audit_permissions.sql`                      | `AUDIT.EVENTS.SECURITY_VIEW` and `AUDIT.EVENTS.EXPORT`                                           | Yes                        | Yes                                | Its own `SELECT`                                          |
+| 10  | `executive/08_add_executive_permission.sql`               | `EXECUTIVE.DASHBOARD.VIEW`, which decides who lands on the dashboard after sign-in               | Yes                        | Yes                                | Its own `SELECT`                                          |
 | —   | `SO/PO source completeness rebuild` (run before phase 17) | Makes the commercial columns on the four order tables nullable                                   | **No**                     | No                                 | `/api/health` checks `purchase_order_lines.unit_cost`     |
 | —   | `production/10_production_cleanup.sql`                    | **Removes the demo seed. Never run without review.**                                             | No                         | **No**                             | See the script                                            |
 | —   | `production/11_validation_cleanup.sql`                    | **Removes the phase 30 validation dataset.** Only needed if the journeys were replayed by hand   | No                         | **No**                             | Its own step 9, every count zero                          |
@@ -64,7 +65,7 @@ database rather than from a record of intent.
 ```
 1. hass_cms_turso_v1_FINAL.sql          (creates everything, seeds the demo)
 2. the SO/PO source completeness rebuild
-3. docs/cms/organisation/01 ... docs/cms/audit/09, in number order
+3. docs/cms/organisation/01 ... docs/cms/executive/08, in number order
 4. GET /api/health                       (expect status "ok")
 5. production/10_production_cleanup.sql  (production only, after review)
 6. pnpm db:cms:bootstrap-admin           (creates the first real administrator)
