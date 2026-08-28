@@ -21,6 +21,7 @@ import { getDb } from '@/lib/cms/db';
 import { canUploadImportType, canViewImports } from '@/lib/cms/permissions';
 import {
   exceptionQueues,
+  REPROCESSABLE,
   listBatches,
   escapeForDisplay,
   IMPORT_TYPE_LABELS,
@@ -157,6 +158,11 @@ const rowTone = (status: string) =>
               <CmsButton id="cms-batch-revalidate" variant="ghost">
                 Revalidate unresolved rows
               </CmsButton>
+              {REPROCESSABLE.has(batch.status) && (
+                <CmsButton id="cms-batch-reprocess" variant="secondary" icon="data">
+                  Reprocess
+                </CmsButton>
+              )}
               {batch.status === 'READY' && (
                 <CmsButton id="cms-batch-commit" variant="primary" icon="check">
                   Import valid records
@@ -386,6 +392,22 @@ const rowTone = (status: string) =>
           Object.entries(raw)
             .map(([key, value]) => pair(key, value))
             .join(''));
+  });
+
+  // Run the whole batch again from the stored file. Not offered on an
+  // IMPORTED batch, and the server refuses it there too.
+  document.getElementById('cms-batch-reprocess')?.addEventListener('click', async () => {
+    const message = document.getElementById('cms-batch-message');
+    if (message) message.textContent = 'Reprocessing';
+    const response = await fetch(`/api/data/imports/${batchId}/reprocess`, { method: 'POST' });
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const result = (body ?? {}) as Record<string, unknown>;
+    if (message) {
+      message.textContent = response.ok
+        ? `Reprocessed: ${String(result.previousStatus)} to ${String(result.newStatus)}.`
+        : String(result.reason ?? 'The batch could not be reprocessed.');
+    }
+    if (response.ok) window.location.reload();
   });
 
   document.getElementById('cms-batch-commit')?.addEventListener('click', async () => {
