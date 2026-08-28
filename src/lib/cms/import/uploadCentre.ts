@@ -1104,6 +1104,20 @@ export type StoredWorkbookLoader = (db: Client, batchId: string) => Promise<Uint
 
 export const storedWorkbookUnavailable: StoredWorkbookLoader = async () => null;
 
+/**
+ * Whether the stored workbook can be read back at all.
+ *
+ * False until a store is connected, and the screen uses it to say so BEFORE
+ * somebody presses Reprocess rather than after. An action that is offered,
+ * pressed, and then explains it was never going to work is a worse answer than
+ * one that says what it needs up front.
+ */
+export const FILE_STORAGE_CONNECTED = false;
+
+/** What to tell a person when a batch cannot be recovered. */
+export const NO_FILE_STORAGE_MESSAGE =
+  'This batch cannot be reprocessed: the uploaded workbook is not retrievable, because file storage is not connected to this environment. Upload the file again to replace it.';
+
 export interface ReprocessOutcome {
   ok: boolean;
   batchId: string;

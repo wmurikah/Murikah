@@ -47,7 +47,9 @@ export const prerender = false;
 const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayRead = canManageUsers(permissions);
 
-const TONES = ['neutral', 'success', 'warning', 'danger', 'info', 'accent'] as const;
+// The tones CmsBadge actually accepts. 'accent' was listed here and is not one
+// of them, so the showcase was claiming a state the component cannot render.
+const TONES = ['neutral', 'success', 'warning', 'danger', 'info'] as const;
 const VARIANTS = ['primary', 'secondary', 'subtle', 'ghost', 'danger'] as const;
 
 const iconNames = Object.keys(CMS_ICONS) as CmsIconName[];
@@ -55,7 +57,7 @@ const iconNames = Object.keys(CMS_ICONS) as CmsIconName[];
 const chart = barChart(
   {
     name: 'Orders by affiliate',
-    token: 'cms-royal',
+    token: 'cms-series-1',
     points: [
       { label: 'Kenya', value: 412 },
       { label: 'Uganda', value: 168 },
@@ -76,7 +78,6 @@ const diff = diffPayloads(
 <CmsLayout title="Design reference">
   <CmsPageHeader
     title="Design reference"
-    description="Every primitive in every state, rendered from the real components. Not a copy: if this page looks right, the application looks right."
     crumbs={[
       { label: 'Administration', href: '/app/administration' },
       { label: 'Design reference' },
@@ -206,15 +207,14 @@ const diff = diffPayloads(
 
         <CmsCard title="Indicators">
           <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <CmsKpiCard label="Orders" value="412" icon="orders" />
+            <CmsKpiCard label="Orders" value="412" />
             <CmsKpiCard
               label="Finance turnaround"
-              value="37"
-              unit="min"
-              trend={{ direction: 'down', value: '12 min', sentiment: 'good' }}
+              value="37 min"
+              context="Target 45 min"
+              tone="positive"
             />
-            <CmsKpiCard label="Unknown on purpose" />
-            <CmsKpiCard label="Loading" loading />
+            <CmsKpiCard label="Unknown on purpose" value="Not available" />
           </div>
         </CmsCard>
 
@@ -336,7 +336,7 @@ const diff = diffPayloads(
           <div class="flex flex-wrap items-center gap-4">
             <CmsAvatar name="Catherine Mwangi" />
             <CmsAvatar name="Gabriel Musembi" size="sm" />
-            <CmsAvatar name="Hassan Ali" tone="onNavy" class="bg-cms-navy" />
+            <CmsAvatar name="Hassan Ali" tone="onNavy" />
             <CmsTooltip
               id="ref-tooltip"
               text="Explains a control without hiding it behind hover alone: it opens on focus too."
