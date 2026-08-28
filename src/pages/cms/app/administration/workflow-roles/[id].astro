@@ -191,7 +191,7 @@ const pick = (list: Option[], empty: string) => [
         ) : (
           <ul class="flex flex-col gap-4">
             {assignments.map((assignment) => (
-              <li class="rounded-cms-lg border border-cms-line bg-cms-surface p-4 shadow-cms-card">
+              <li class="rounded-cms-lg border border-cms-line bg-cms-surface p-4">
                 <div class="flex flex-wrap items-baseline justify-between gap-2">
                   <h3 class="text-cms-card font-semibold text-cms-navy">
                     {assignment.displayName}
@@ -247,7 +247,7 @@ const pick = (list: Option[], empty: string) => [
                 </p>
 
                 {assignment.rules.length === 0 ? (
-                  <p class="mt-2 flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+                  <p class="mt-2 flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
                     <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
                     <span>
                       No authority rule. This approver is not limited by amount, currency or product
@@ -320,7 +320,7 @@ const pick = (list: Option[], empty: string) => [
                   id="cms-wfassign-form-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
                 <CmsSelect
                   id="wa-userId"
@@ -411,7 +411,7 @@ const pick = (list: Option[], empty: string) => [
                   id="cms-wfrule-form-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
                 <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
                   Every restriction is optional. Left empty, a field places no restriction at all:
@@ -516,7 +516,7 @@ const pick = (list: Option[], empty: string) => [
                   id="cms-wfend-form-error"
                   role="alert"
                   hidden
-                  class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
                 />
                 <p id="cms-wfend-form-note" hidden class="text-cms-body-sm text-cms-muted" />
                 <CmsInput

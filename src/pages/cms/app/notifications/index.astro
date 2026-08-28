@@ -84,7 +84,7 @@ const tone = (t: string) =>
       <Fragment>
         <CmsPageHeader
           title="Notifications"
-          description="In-app only: no email channel is configured for this product, and nothing here claims a message was sent anywhere else."
+          definition="In-app only. No email channel is configured for this product, and nothing here claims a message was sent anywhere else."
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'Notifications' }]}
         >
           {data.unread > 0 && (
@@ -123,11 +123,7 @@ const tone = (t: string) =>
         </CmsCard>
 
         {data.items.length === 0 ? (
-          <CmsEmptyState
-            icon="bell"
-            title="Nothing here"
-            description="Notifications about assignments, SLA warnings and overdue follow-ups appear as they happen."
-          />
+          <CmsEmptyState icon="bell" title="Nothing here" description="Nothing to read." />
         ) : (
           <ul class="flex flex-col gap-2">
             {data.items.map((n) => (

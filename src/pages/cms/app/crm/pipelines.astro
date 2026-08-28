@@ -58,7 +58,7 @@ if (mayManage) {
       <Fragment>
         <CmsPageHeader
           title="Pipelines"
-          description="Pipelines are not versioned. A stage in use is part of every deal's history: deactivate rather than remove, and open a new pipeline for a materially different process rather than reshaping this one."
+          definition="Pipelines are not versioned. A stage in use is part of every deal history, so deactivate rather than remove, and open a new pipeline for a materially different process rather than reshaping this one."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'CRM', href: '/app/crm' },
@@ -161,7 +161,7 @@ if (mayManage) {
               id="cms-pipeline-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <CmsInput id="p-pipelineName" name="pipelineName" label="Pipeline name" required />
             <CmsCheckbox id="p-active" name="active" label="Active" checked />
@@ -187,7 +187,7 @@ if (mayManage) {
               id="cms-stage-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <CmsInput id="s-stageName" name="stageName" label="Stage name" required />
             <CmsInput

@@ -133,6 +133,11 @@ async function cost(
 }
 
 function assertWithinBudget(page: string, trips: number, statements: number): void {
+  // Emitted as a TAP diagnostic rather than kept to itself, because a budget
+  // test that only says "pass" cannot answer the question a reviewer actually
+  // asks: did this change make the page more expensive? The number is the
+  // evidence, so the number is printed.
+  console.log(`[subrequests] ${page}: ${trips} round trips, ${statements} statements`);
   assert.ok(
     trips <= SUBREQUEST_BUDGET,
     `${page} costs ${trips} subrequests for ${statements} statements, over the budget of ` +
