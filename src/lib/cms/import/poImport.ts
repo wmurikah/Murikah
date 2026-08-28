@@ -52,6 +52,9 @@ import {
   minutesBetween,
   type HeaderClassification,
   type MappingReportLine,
+  loadPriorHashes,
+  rejectBatch,
+  describeFailure,
 } from './workbook.ts';
 import { verifyColumns } from './completeness.ts';
 import { insertSnapshot, PURCHASE_ORDER_SNAPSHOT } from './snapshots.ts';
@@ -163,7 +166,7 @@ export interface PoApproval {
 export interface NormalisedPoRow {
   sourceRowNumber: number;
   raw: Record<string, unknown>;
-  affiliateId: string;
+  affiliateId: string | null;
   purchaseNumber: string | null;
   description: string | null;
   nature: string | null;
@@ -201,7 +204,8 @@ export function readApprovals(raw: Record<string, unknown>): PoApproval[] {
 export async function normalisePoRow(
   raw: Record<string, unknown>,
   sourceRowNumber: number,
-  affiliateId: string,
+  /** Null for a Group-scope batch, which is what this extract always is. */
+  affiliateId: string | null,
 ): Promise<NormalisedPoRow> {
   const purchaseNumber = cellToIdentifier(raw['purchase Number']);
   const approvals = readApprovals(raw);
@@ -239,7 +243,15 @@ export async function normalisePoRow(
     approvals,
     // Identity only: the affiliate and the purchase number, and nothing that
     // changes. A line identifier joins this key when an extract has lines.
-    sourceKey: purchaseNumber === null ? null : `${affiliateId}|${purchaseNumber}`,
+    // The order's own identity where the file names no entity. A purchase
+    // number is unique in the source system, so qualifying it with an
+    // affiliate the extract never stated would only invent a distinction.
+    sourceKey:
+      purchaseNumber === null
+        ? null
+        : affiliateId === null
+          ? purchaseNumber
+          : `${affiliateId}|${purchaseNumber}`,
     rowHash: await hashCanonicalRow(canonical),
   };
 }
@@ -331,7 +343,10 @@ export function derivePoStatus(row: NormalisedPoRow): string {
  * is a deliberate group-wide mapping and answers everywhere, and an
  * affiliate-specific row always wins over it.
  */
-async function loadIdentities(db: Client, affiliateId: string): Promise<Map<string, string>> {
+async function loadIdentities(
+  db: Client,
+  affiliateId: string | null,
+): Promise<Map<string, string>> {
   const result = await db.execute({
     sql: `SELECT external_username, user_id, affiliate_id FROM source_identities
           WHERE active = 1 AND (affiliate_id = ? OR affiliate_id IS NULL)`,
@@ -421,25 +436,27 @@ export async function validatePoWorkbook(
     );
   }
 
-  // The affiliate is refused BEFORE a batch row exists, on purpose: were the
-  // file hash recorded against a rejected batch, the corrected re-upload of
-  // the same bytes would come back as an exact duplicate and could never be
-  // imported. Nothing is written, so the operator simply uploads again.
-  const affiliateId = input.affiliateId === null ? null : input.affiliateId.trim();
-  if (affiliateId === null || affiliateId === '') {
-    return emptyValidation({
-      rejectedReason:
-        'The upload has no affiliate. The purchase order extract carries no affiliate column, so it must be chosen on the upload form. Nothing was imported.',
+  // NO AFFILIATE COLUMN MEANS GROUP SCOPE, NOT A MISSING INPUT.
+  //
+  // The purchase order extract carries no affiliate column at all: all 29 of
+  // them are approval dates, approvers, variances and the order's own fields.
+  // This used to be refused, and the operator was asked to pick an affiliate
+  // the file never claimed, which invents a fact. A file that names no entity
+  // measures across all of them, so the batch is Group scope and says so.
+  //
+  // An affiliate may still be supplied, because a future extract might carry
+  // one; when it is, it is checked as before.
+  const affiliateId = input.affiliateId === null ? null : input.affiliateId.trim() || null;
+  if (affiliateId !== null) {
+    const known = await db.execute({
+      sql: `SELECT affiliate_id FROM affiliates WHERE affiliate_id = ? LIMIT 1`,
+      args: [affiliateId],
     });
-  }
-  const known = await db.execute({
-    sql: `SELECT affiliate_id FROM affiliates WHERE affiliate_id = ? LIMIT 1`,
-    args: [affiliateId],
-  });
-  if (known.rows[0] === undefined) {
-    return emptyValidation({
-      rejectedReason: `The affiliate ${affiliateId} is not configured. Nothing was imported.`,
-    });
+    if (known.rows[0] === undefined) {
+      return emptyValidation({
+        rejectedReason: `The affiliate ${affiliateId} is not configured. Nothing was imported.`,
+      });
+    }
   }
 
   const fileSha256 = await hashFile(buffer);
@@ -493,146 +510,181 @@ export async function validatePoWorkbook(
     ],
     'write',
   );
+  // FROM HERE THE BATCH ROW EXISTS, SO EVERY EXIT MUST LEAVE IT TERMINAL.
+  // A throw below used to leave the batch at VALIDATING for ever, with rows
+  // received recorded and nothing else, which is precisely the state the
+  // operator was looking at. Now it lands on REJECTED with the reason in the
+  // audit trail.
+  try {
+    const orders = new Set<string>();
+    const unresolvedActors = new Map<string, number>();
+    const natures = new Map<string, number>();
+    const levelCounts = new Map<number, number>();
+    const missingMandatory: { row: number; problem: string }[] = [];
+    let rowsNew = 0;
+    let rowsChanged = 0;
+    let rowsDuplicate = 0;
+    let rowsRejected = 0;
+    let from: string | null = null;
+    let to: string | null = null;
+    const seenInBatch = new Map<string, string[]>();
+    const statements: Stmt[] = [];
 
-  const orders = new Set<string>();
-  const unresolvedActors = new Map<string, number>();
-  const natures = new Map<string, number>();
-  const levelCounts = new Map<number, number>();
-  const missingMandatory: { row: number; problem: string }[] = [];
-  let rowsNew = 0;
-  let rowsChanged = 0;
-  let rowsDuplicate = 0;
-  let rowsRejected = 0;
-  let from: string | null = null;
-  let to: string | null = null;
-  const seenInBatch = new Map<string, string[]>();
-  const statements: Stmt[] = [];
-
-  for (let index = 0; index < sheet.rows.length; index++) {
-    const raw = sheet.rows[index] ?? {};
-    const row = await normalisePoRow(raw, index + 1, affiliateId);
-    if (row.nature !== null) natures.set(row.nature, (natures.get(row.nature) ?? 0) + 1);
-    if (row.createdAt !== null) {
-      if (from === null || row.createdAt < from) from = row.createdAt;
-      if (to === null || row.createdAt > to) to = row.createdAt;
+    // EVERY ROW NORMALISED FIRST, THEN ONE QUERY FOR THE PRIOR HASHES.
+    //
+    // This loop used to issue `SELECT DISTINCT row_hash` per row, inside the
+    // loop. Forty-five rows is forty-five outbound subrequests, and with the
+    // dozen the surrounding upload already spends, one validation of
+    // PO-Ver1.xls cost 57. Cloudflare's Free plan allows 50 per request, so the
+    // run died at the 51st, part-way through the loop: the batch row existed
+    // with status VALIDATING and rows_received 45, and the statements that
+    // write import_rows and set READY were never reached. That is the stuck
+    // validation, and this is its cause.
+    //
+    // Resolving the whole key space in one read costs one subrequest whatever
+    // the row count, so the cost of a validation no longer follows the size of
+    // the extract.
+    const normalised = [];
+    for (let index = 0; index < sheet.rows.length; index++) {
+      normalised.push(await normalisePoRow(sheet.rows[index] ?? {}, index + 1, affiliateId));
     }
+    const priorByKey = await loadPriorHashes(
+      db,
+      normalised.map((r) => r.sourceKey).filter((k): k is string => k !== null),
+      batchId,
+    );
 
-    let status: 'NEW' | 'CHANGED' | 'DUPLICATE' | 'REJECTED';
-    let error: string | null = null;
+    for (let index = 0; index < sheet.rows.length; index++) {
+      const raw = sheet.rows[index] ?? {};
+      const row = normalised[index]!;
+      if (row.nature !== null) natures.set(row.nature, (natures.get(row.nature) ?? 0) + 1);
+      if (row.createdAt !== null) {
+        if (from === null || row.createdAt < from) from = row.createdAt;
+        if (to === null || row.createdAt > to) to = row.createdAt;
+      }
 
-    if (row.sourceKey === null || row.createdAt === null) {
-      status = 'REJECTED';
-      error =
-        row.sourceKey === null
-          ? 'The row has no purchase number, so it has no identity.'
-          : 'The row has no original creation date.';
-      missingMandatory.push({ row: row.sourceRowNumber, problem: error });
-      rowsRejected += 1;
-    } else {
-      orders.add(row.sourceKey);
-      levelCounts.set(row.approvals.length, (levelCounts.get(row.approvals.length) ?? 0) + 1);
+      let status: 'NEW' | 'CHANGED' | 'DUPLICATE' | 'REJECTED';
+      let error: string | null = null;
 
-      // An unmapped actor never stops the purchase order importing. The order
-      // is a fact of its own; who approved it is a workflow detail that stays
-      // unassigned until an administrator maps the name, and the row is
-      // revalidated. Nothing here creates a user.
-      const actors = [row.createdBy, ...row.approvals.map((a) => a.approver)];
-      for (const actor of actors) {
-        if (actor !== null && !identities.has(actor.toUpperCase())) {
-          const key = actor.toUpperCase();
-          unresolvedActors.set(key, (unresolvedActors.get(key) ?? 0) + 1);
+      if (row.sourceKey === null || row.createdAt === null) {
+        status = 'REJECTED';
+        error =
+          row.sourceKey === null
+            ? 'The row has no purchase number, so it has no identity.'
+            : 'The row has no original creation date.';
+        missingMandatory.push({ row: row.sourceRowNumber, problem: error });
+        rowsRejected += 1;
+      } else {
+        orders.add(row.sourceKey);
+        levelCounts.set(row.approvals.length, (levelCounts.get(row.approvals.length) ?? 0) + 1);
+
+        // An unmapped actor never stops the purchase order importing. The order
+        // is a fact of its own; who approved it is a workflow detail that stays
+        // unassigned until an administrator maps the name, and the row is
+        // revalidated. Nothing here creates a user.
+        const actors = [row.createdBy, ...row.approvals.map((a) => a.approver)];
+        for (const actor of actors) {
+          if (actor !== null && !identities.has(actor.toUpperCase())) {
+            const key = actor.toUpperCase();
+            unresolvedActors.set(key, (unresolvedActors.get(key) ?? 0) + 1);
+          }
+        }
+
+        // Change detection against every hash ever seen for this key, the same
+        // rule the sales order extract forced: membership, not "the last one".
+        const priorHashes = new Set(priorByKey.get(row.sourceKey) ?? []);
+        for (const seen of seenInBatch.get(row.sourceKey) ?? []) priorHashes.add(seen);
+        const batchSeen = seenInBatch.get(row.sourceKey) ?? [];
+        batchSeen.push(row.rowHash);
+        seenInBatch.set(row.sourceKey, batchSeen);
+
+        if (priorHashes.size === 0) {
+          status = 'NEW';
+          rowsNew += 1;
+        } else if (priorHashes.has(row.rowHash)) {
+          status = 'DUPLICATE';
+          rowsDuplicate += 1;
+        } else {
+          status = 'CHANGED';
+          rowsChanged += 1;
         }
       }
 
-      // Change detection against every hash ever seen for this key, the same
-      // rule the sales order extract forced: membership, not "the last one".
-      const prior = await db.execute({
-        sql: `SELECT DISTINCT ir.row_hash FROM import_rows ir
-              WHERE ir.source_record_key = ? AND ir.import_batch_id <> ?`,
-        args: [row.sourceKey, batchId],
-      });
-      const priorHashes = new Set(
-        prior.rows.map((r) => String((r as Record<string, unknown>).row_hash)),
-      );
-      for (const seen of seenInBatch.get(row.sourceKey) ?? []) priorHashes.add(seen);
-      const batchSeen = seenInBatch.get(row.sourceKey) ?? [];
-      batchSeen.push(row.rowHash);
-      seenInBatch.set(row.sourceKey, batchSeen);
-
-      if (priorHashes.size === 0) {
-        status = 'NEW';
-        rowsNew += 1;
-      } else if (priorHashes.has(row.rowHash)) {
-        status = 'DUPLICATE';
-        rowsDuplicate += 1;
-      } else {
-        status = 'CHANGED';
-        rowsChanged += 1;
-      }
-    }
-
-    statements.push({
-      sql: `INSERT INTO import_rows
+      statements.push({
+        sql: `INSERT INTO import_rows
               (import_row_id, import_batch_id, source_row_number, source_record_key, entity_type,
                row_hash, row_status, error_message, raw_json)
             VALUES (?, ?, ?, ?, 'PURCHASE_ORDER', ?, ?, ?, ?)`,
-      args: [
-        newId('IROW'),
-        batchId,
-        row.sourceRowNumber,
-        row.sourceKey,
-        row.rowHash,
-        status,
-        error,
-        JSON.stringify(raw),
-      ],
-    });
-  }
+        args: [
+          newId('IROW'),
+          batchId,
+          row.sourceRowNumber,
+          row.sourceKey,
+          row.rowHash,
+          status,
+          error,
+          JSON.stringify(raw),
+        ],
+      });
+    }
 
-  for (const username of unresolvedActors.keys()) {
-    statements.push({
-      sql: `INSERT INTO unresolved_actors
+    for (const username of unresolvedActors.keys()) {
+      statements.push({
+        sql: `INSERT INTO unresolved_actors
               (unresolved_actor_id, import_batch_id, source_system_id, external_username,
                affiliate_id, status)
             VALUES (?, ?, ?, ?, ?, 'OPEN')`,
-      args: [newId('UACT'), batchId, input.sourceSystemId, username, affiliateId],
-    });
-  }
-  statements.push({
-    sql: `UPDATE import_batches SET rows_new = ?, rows_changed = ?, rows_exact_duplicate = ?,
+        args: [newId('UACT'), batchId, input.sourceSystemId, username, affiliateId],
+      });
+    }
+    statements.push({
+      sql: `UPDATE import_batches SET rows_new = ?, rows_changed = ?, rows_exact_duplicate = ?,
             rows_rejected = ?, reporting_period_from = ?, reporting_period_to = ?, status = 'READY'
           WHERE import_batch_id = ?`,
-    args: [rowsNew, rowsChanged, rowsDuplicate, rowsRejected, from, to, batchId],
-  });
-  for (let start = 0; start < statements.length; start += 200) {
-    await db.batch(statements.slice(start, start + 200), 'write');
-  }
+      args: [rowsNew, rowsChanged, rowsDuplicate, rowsRejected, from, to, batchId],
+    });
+    for (let start = 0; start < statements.length; start += 200) {
+      await db.batch(statements.slice(start, start + 200), 'write');
+    }
 
-  return {
-    batchId,
-    fileSha256,
-    rejectedReason: null,
-    duplicateOfBatchId: null,
-    affiliateId,
-    rowsReceived: sheet.rows.length,
-    uniqueOrders: orders.size,
-    rowsNew,
-    rowsChanged,
-    rowsDuplicate,
-    rowsRejected,
-    approvalLevelDistribution: Array.from({ length: MAX_APPROVAL_LEVELS }, (_unused, i) => ({
-      level: i + 1,
-      orders: levelCounts.get(i + 1) ?? 0,
-    })),
-    unresolvedActors: [...unresolvedActors.entries()].map(([username, rows]) => ({
-      username,
-      rows,
-    })),
-    natureDistribution: [...natures.entries()].map(([nature, rows]) => ({ nature, rows })),
-    missingMandatory,
-    report: buildMappingReport(PO_HEADER_CLASSIFICATION, sheet.headers, sheet.rows),
-    dateRange: { from, to },
-  };
+    return {
+      batchId,
+      fileSha256,
+      rejectedReason: null,
+      duplicateOfBatchId: null,
+      affiliateId,
+      rowsReceived: sheet.rows.length,
+      uniqueOrders: orders.size,
+      rowsNew,
+      rowsChanged,
+      rowsDuplicate,
+      rowsRejected,
+      approvalLevelDistribution: Array.from({ length: MAX_APPROVAL_LEVELS }, (_unused, i) => ({
+        level: i + 1,
+        orders: levelCounts.get(i + 1) ?? 0,
+      })),
+      unresolvedActors: [...unresolvedActors.entries()].map(([username, rows]) => ({
+        username,
+        rows,
+      })),
+      natureDistribution: [...natures.entries()].map(([nature, rows]) => ({ nature, rows })),
+      missingMandatory,
+      report: buildMappingReport(PO_HEADER_CLASSIFICATION, sheet.headers, sheet.rows),
+      dateRange: { from, to },
+    };
+  } catch (error) {
+    await rejectBatch(db, batchId, describeFailure(error), {
+      actorUserId: ctx.actorUserId,
+      now: toDbTimestamp(ctx.now),
+      auditId: newId('AEV'),
+    });
+    return emptyValidation({
+      fileSha256,
+      affiliateId,
+      rejectedReason:
+        'Validation could not be completed, so nothing was imported. ' + describeFailure(error),
+    });
+  }
 }
 
 // ---- Commit ------------------------------------------------------------------

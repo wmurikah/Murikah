@@ -50,25 +50,18 @@ const context = user ? organisationLine(user.assignment) : null;
 
   {
     /*
-    THE WORDMARK LIVES HERE NOW. It used to sit at the top of the navigation
-    rail, and the rail is 64 pixels wide until somebody points at it, so half of
-    "Petroleum" was being clipped by the panel edge on every page. Half a
-    wordmark is not a brand. Here it is always whole, and it is still the link
-    to the dashboard it always was.
+    Global search. Connected in phase 27, having been a disabled affordance
+    since phase 02.
+
+    THE RESULTS PANEL IS RENDERED FROM THE SERVER'S ANSWER AND NOTHING ELSE.
+    There is no client-side cache and no local index: every keystroke that
+    survives the debounce asks the endpoint, and the endpoint's queries carry
+    the caller's scope. A cached result would outlive the membership or scope
+    change that should have removed it.
   */
   }
-  <a
-    href="/app"
-    class="hidden shrink-0 rounded-cms px-1 outline-none focus-visible:ring-2 focus-visible:ring-focus lg:block"
-  >
-    <CmsWordmark tone="onLight" size="sm" />
-    <span class="sr-only">Go to the dashboard</span>
-  </a>
-
-  <!-- Search is an affordance in this phase: it shows where search will live
-       and is disabled rather than pretending to work. -->
-  <div class="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm">
-    <label for="cms-search" class="sr-only">Search</label>
+  <div class="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm" data-cms-search>
+    <label for="cms-search" class="sr-only">Search customers, orders, cases and more</label>
     <CmsIcon
       name="search"
       size={17}
@@ -77,14 +70,32 @@ const context = user ? organisationLine(user.assignment) : null;
     <input
       id="cms-search"
       type="search"
-      disabled
-      placeholder="Search is not connected yet"
+      autocomplete="off"
+      role="combobox"
+      aria-expanded="false"
+      aria-controls="cms-search-results"
       aria-describedby="cms-search-note"
-      class="h-10 w-full rounded-cms border border-cms-line bg-cms-canvas pr-3 pl-9 text-cms-body-sm text-cms-ink placeholder:text-cms-muted disabled:cursor-not-allowed"
+      placeholder="Search"
+      class="h-10 w-full rounded-cms border border-cms-line bg-cms-canvas pr-14 pl-9 text-cms-body-sm text-cms-ink placeholder:text-cms-muted focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
     />
+    <kbd
+      aria-hidden="true"
+      class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border border-cms-line bg-cms-surface px-1.5 py-0.5 text-cms-caption text-cms-muted"
+      >/</kbd
+    >
     <span id="cms-search-note" class="sr-only">
-      Search will be enabled when the customer and ticket modules are connected.
+      Press the forward slash key from anywhere to search. Results appear below as you type and are
+      grouped by record type. Only records you are permitted to see are searched.
     </span>
+    <div
+      id="cms-search-results"
+      role="listbox"
+      aria-label="Search results"
+      hidden
+      class="absolute top-full right-0 left-0 z-40 mt-1 max-h-[60vh] overflow-y-auto rounded-cms-lg border border-cms-line bg-cms-surface shadow-cms-pop"
+    >
+    </div>
+    <p aria-live="polite" class="sr-only" data-cms-search-status></p>
   </div>
 
   <div class="ms-auto flex items-center gap-1">
