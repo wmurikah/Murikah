@@ -47,7 +47,13 @@ export const prerender = false;
 const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayRead = canManageUsers(permissions);
 
-const TONES = ['neutral', 'success', 'warning', 'danger', 'info', 'accent'] as const;
+/*
+ * Five, not six. `accent` was retired from the badge in the design sweep: the
+ * brand accent means "this is the action", and a badge is never an action, so
+ * a sixth tone that meant nothing was one more colour competing with the five
+ * that do. This page kept listing it because it branched before that landed.
+ */
+const TONES = ['neutral', 'success', 'warning', 'danger', 'info'] as const;
 const VARIANTS = ['primary', 'secondary', 'subtle', 'ghost', 'danger'] as const;
 
 const iconNames = Object.keys(CMS_ICONS) as CmsIconName[];
@@ -55,7 +61,7 @@ const iconNames = Object.keys(CMS_ICONS) as CmsIconName[];
 const chart = barChart(
   {
     name: 'Orders by affiliate',
-    token: 'cms-royal',
+    token: 'cms-series-1',
     points: [
       { label: 'Kenya', value: 412 },
       { label: 'Uganda', value: 168 },
@@ -76,7 +82,6 @@ const diff = diffPayloads(
 <CmsLayout title="Design reference">
   <CmsPageHeader
     title="Design reference"
-    description="Every primitive in every state, rendered from the real components. Not a copy: if this page looks right, the application looks right."
     crumbs={[
       { label: 'Administration', href: '/app/administration' },
       { label: 'Design reference' },
