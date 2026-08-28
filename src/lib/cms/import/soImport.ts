@@ -38,6 +38,9 @@ import {
   minutesBetween,
   type HeaderTreatment,
   type MappingReportLine,
+  loadPriorHashes,
+  rejectBatch,
+  describeFailure,
 } from './workbook.ts';
 import { verifyColumns } from './completeness.ts';
 import { insertSnapshot, SALES_ORDER_SNAPSHOT } from './snapshots.ts';
@@ -238,6 +241,11 @@ export interface SoValidation {
   batchId: string | null;
   fileSha256: string;
   duplicateOfBatchId: string | null;
+  /**
+   * Set when the run could not finish. The batch is REJECTED by then, never
+   * left at VALIDATING, and this is what the operator is told.
+   */
+  rejectedReason: string | null;
   rowsReceived: number;
   uniqueDocuments: number;
   rowsNew: number;
@@ -325,6 +333,7 @@ export async function validateSoWorkbook(
       batchId: null,
       fileSha256,
       duplicateOfBatchId: text(existing.rows[0].import_batch_id),
+      rejectedReason: null,
       rowsReceived: 0,
       uniqueDocuments: 0,
       rowsNew: 0,
@@ -379,160 +388,207 @@ export async function validateSoWorkbook(
     ],
     'write',
   );
+  // FROM HERE THE BATCH ROW EXISTS, SO EVERY EXIT MUST LEAVE IT TERMINAL.
+  // A throw below used to leave the batch at VALIDATING for ever, with rows
+  // received recorded and nothing else. Now it lands on REJECTED with the
+  // reason in the audit trail.
+  try {
+    const documents = new Set<string>();
+    const unresolvedCustomers = new Map<string, { name: string | null; rows: number }>();
+    const unresolvedProducts = new Map<string, number>();
+    const unresolvedUsers = new Set<string>();
+    let rowsNew = 0;
+    let rowsChanged = 0;
+    let rowsDuplicate = 0;
+    let rowsUnresolved = 0;
+    let rowsRejected = 0;
+    let from: string | null = null;
+    let to: string | null = null;
+    const affiliates = new Set<string>();
+    const seenInBatch = new Map<string, string[]>();
+    const statements: Stmt[] = [];
 
-  const documents = new Set<string>();
-  const unresolvedCustomers = new Map<string, { name: string | null; rows: number }>();
-  const unresolvedProducts = new Map<string, number>();
-  const unresolvedUsers = new Set<string>();
-  let rowsNew = 0;
-  let rowsChanged = 0;
-  let rowsDuplicate = 0;
-  let rowsUnresolved = 0;
-  let rowsRejected = 0;
-  let from: string | null = null;
-  let to: string | null = null;
-  const affiliates = new Set<string>();
-  const seenInBatch = new Map<string, string[]>();
-  const statements: Stmt[] = [];
-
-  for (let index = 0; index < sheet.rows.length; index++) {
-    const raw = sheet.rows[index] ?? {};
-    const row = await normaliseRow(raw, index + 1);
-    if (row.affiliateText !== null) affiliates.add(row.affiliateText);
-    if (row.documentNumber !== null && row.affiliateId !== null) {
-      documents.add(`${row.affiliateId}|${row.documentNumber}`);
+    // EVERY ROW NORMALISED FIRST, THEN ONE READ FOR THE PRIOR HASHES.
+    //
+    // This loop used to ask `SELECT DISTINCT row_hash` once per row, inside the
+    // loop. On this extract that is 1,386 outbound subrequests for a single
+    // validation, against a Cloudflare Free plan that allows 50 per request, so
+    // the run died at the 51st: the batch row existed at VALIDATING with
+    // rows_received set, and the statements that write import_rows and set
+    // READY were never reached. Resolving the whole key space up front costs a
+    // few reads whatever the extract's size.
+    const normalised = [];
+    for (let index = 0; index < sheet.rows.length; index++) {
+      normalised.push(await normaliseRow(sheet.rows[index] ?? {}, index + 1));
     }
-    if (row.orderCreatedAt !== null) {
-      if (from === null || row.orderCreatedAt < from) from = row.orderCreatedAt;
-      if (to === null || row.orderCreatedAt > to) to = row.orderCreatedAt;
-    }
+    const priorByKey = await loadPriorHashes(
+      db,
+      normalised.map((r) => r.sourceKey).filter((k): k is string => k !== null),
+      batchId,
+    );
 
-    let status: 'NEW' | 'CHANGED' | 'DUPLICATE' | 'REJECTED' | 'UNRESOLVED';
-    let error: string | null = null;
+    for (let index = 0; index < sheet.rows.length; index++) {
+      const raw = sheet.rows[index] ?? {};
+      const row = normalised[index]!;
+      if (row.affiliateText !== null) affiliates.add(row.affiliateText);
+      if (row.documentNumber !== null && row.affiliateId !== null) {
+        documents.add(`${row.affiliateId}|${row.documentNumber}`);
+      }
+      if (row.orderCreatedAt !== null) {
+        if (from === null || row.orderCreatedAt < from) from = row.orderCreatedAt;
+        if (to === null || row.orderCreatedAt > to) to = row.orderCreatedAt;
+      }
 
-    if (row.sourceKey === null || row.orderCreatedAt === null) {
-      status = 'REJECTED';
-      error = 'The row lacks an identity (affiliate, document, line) or a creation timestamp.';
-      rowsRejected += 1;
-    } else {
-      const resolvedAccount =
-        row.customerCode === null ? null : (maps.accounts.get(row.customerCode) ?? null);
-      const resolvedProduct = resolveProduct(maps.products, row.orderedItem);
-      const problems: string[] = [];
-      if (resolvedAccount === null) {
-        problems.push(`unknown Oracle customer code ${row.customerCode ?? '(blank)'}`);
-        const key = row.customerCode ?? '(blank)';
-        const entry = unresolvedCustomers.get(key) ?? { name: row.customerName, rows: 0 };
-        entry.rows += 1;
-        unresolvedCustomers.set(key, entry);
-      }
-      if (resolvedProduct === null && row.orderedItem !== null) {
-        problems.push(`unmapped product ${row.orderedItem}`);
-        unresolvedProducts.set(row.orderedItem, (unresolvedProducts.get(row.orderedItem) ?? 0) + 1);
-      }
-      for (const actor of [row.createdBy, row.approver, row.creditReleasedBy]) {
-        if (actor !== null && !maps.identities.has(actor.toUpperCase())) {
-          unresolvedUsers.add(actor.toUpperCase());
+      let status: 'NEW' | 'CHANGED' | 'DUPLICATE' | 'REJECTED' | 'UNRESOLVED';
+      let error: string | null = null;
+
+      if (row.sourceKey === null || row.orderCreatedAt === null) {
+        status = 'REJECTED';
+        error = 'The row lacks an identity (affiliate, document, line) or a creation timestamp.';
+        rowsRejected += 1;
+      } else {
+        const resolvedAccount =
+          row.customerCode === null ? null : (maps.accounts.get(row.customerCode) ?? null);
+        const resolvedProduct = resolveProduct(maps.products, row.orderedItem);
+        const problems: string[] = [];
+        if (resolvedAccount === null) {
+          problems.push(`unknown Oracle customer code ${row.customerCode ?? '(blank)'}`);
+          const key = row.customerCode ?? '(blank)';
+          const entry = unresolvedCustomers.get(key) ?? { name: row.customerName, rows: 0 };
+          entry.rows += 1;
+          unresolvedCustomers.set(key, entry);
+        }
+        if (resolvedProduct === null && row.orderedItem !== null) {
+          problems.push(`unmapped product ${row.orderedItem}`);
+          unresolvedProducts.set(
+            row.orderedItem,
+            (unresolvedProducts.get(row.orderedItem) ?? 0) + 1,
+          );
+        }
+        for (const actor of [row.createdBy, row.approver, row.creditReleasedBy]) {
+          if (actor !== null && !maps.identities.has(actor.toUpperCase())) {
+            unresolvedUsers.add(actor.toUpperCase());
+          }
+        }
+
+        // Change detection at the line's own grain, against EVERY hash ever
+        // seen for this key: the extract genuinely repeats keys inside one
+        // file, sometimes with differing values, so "the last one" is not a
+        // stable comparison point. A row whose exact values have been seen
+        // before is a DUPLICATE; a known key with a new hash is CHANGED; an
+        // unknown key is NEW. A byte-level reformat can therefore never
+        // produce a false CHANGED, because its values have all been seen.
+        const priorHashes = new Set(priorByKey.get(row.sourceKey) ?? []);
+        for (const seen of seenInBatch.get(row.sourceKey) ?? []) priorHashes.add(seen);
+        const batchSeen = seenInBatch.get(row.sourceKey) ?? [];
+        batchSeen.push(row.rowHash);
+        seenInBatch.set(row.sourceKey, batchSeen);
+
+        if (problems.length > 0) {
+          status = 'UNRESOLVED';
+          error = problems.join('; ');
+          rowsUnresolved += 1;
+        } else if (priorHashes.size === 0) {
+          status = 'NEW';
+          rowsNew += 1;
+        } else if (priorHashes.has(row.rowHash)) {
+          status = 'DUPLICATE';
+          rowsDuplicate += 1;
+        } else {
+          status = 'CHANGED';
+          rowsChanged += 1;
         }
       }
 
-      // Change detection at the line's own grain, against EVERY hash ever
-      // seen for this key: the extract genuinely repeats keys inside one
-      // file, sometimes with differing values, so "the last one" is not a
-      // stable comparison point. A row whose exact values have been seen
-      // before is a DUPLICATE; a known key with a new hash is CHANGED; an
-      // unknown key is NEW. A byte-level reformat can therefore never
-      // produce a false CHANGED, because its values have all been seen.
-      const prior = await db.execute({
-        sql: `SELECT DISTINCT ir.row_hash FROM import_rows ir
-              WHERE ir.source_record_key = ? AND ir.import_batch_id <> ?`,
-        args: [row.sourceKey, batchId],
-      });
-      const priorHashes = new Set(
-        prior.rows.map((r) => String((r as Record<string, unknown>).row_hash)),
-      );
-      for (const seen of seenInBatch.get(row.sourceKey) ?? []) priorHashes.add(seen);
-      const batchSeen = seenInBatch.get(row.sourceKey) ?? [];
-      batchSeen.push(row.rowHash);
-      seenInBatch.set(row.sourceKey, batchSeen);
-
-      if (problems.length > 0) {
-        status = 'UNRESOLVED';
-        error = problems.join('; ');
-        rowsUnresolved += 1;
-      } else if (priorHashes.size === 0) {
-        status = 'NEW';
-        rowsNew += 1;
-      } else if (priorHashes.has(row.rowHash)) {
-        status = 'DUPLICATE';
-        rowsDuplicate += 1;
-      } else {
-        status = 'CHANGED';
-        rowsChanged += 1;
-      }
-    }
-
-    statements.push({
-      sql: `INSERT INTO import_rows
+      statements.push({
+        sql: `INSERT INTO import_rows
               (import_row_id, import_batch_id, source_row_number, source_record_key, entity_type,
                row_hash, row_status, error_message, raw_json)
             VALUES (?, ?, ?, ?, 'SALES_ORDER', ?, ?, ?, ?)`,
-      args: [
-        newId('IROW'),
-        batchId,
-        row.sourceRowNumber,
-        row.sourceKey,
-        row.rowHash,
-        status,
-        error,
-        JSON.stringify(raw),
-      ],
-    });
-  }
+        args: [
+          newId('IROW'),
+          batchId,
+          row.sourceRowNumber,
+          row.sourceKey,
+          row.rowHash,
+          status,
+          error,
+          JSON.stringify(raw),
+        ],
+      });
+    }
 
-  // Unresolved actors, once per username per batch, never a user created.
-  for (const username of unresolvedUsers) {
-    statements.push({
-      sql: `INSERT INTO unresolved_actors
+    // Unresolved actors, once per username per batch, never a user created.
+    for (const username of unresolvedUsers) {
+      statements.push({
+        sql: `INSERT INTO unresolved_actors
               (unresolved_actor_id, import_batch_id, source_system_id, external_username, status)
             VALUES (?, ?, ?, ?, 'OPEN')`,
-      args: [newId('UACT'), batchId, input.sourceSystemId, username],
-    });
-  }
-  statements.push({
-    sql: `UPDATE import_batches SET rows_new = ?, rows_changed = ?, rows_exact_duplicate = ?,
+        args: [newId('UACT'), batchId, input.sourceSystemId, username],
+      });
+    }
+    statements.push({
+      sql: `UPDATE import_batches SET rows_new = ?, rows_changed = ?, rows_exact_duplicate = ?,
             rows_rejected = ?, status = 'READY'
           WHERE import_batch_id = ?`,
-    args: [rowsNew, rowsChanged, rowsDuplicate, rowsRejected, batchId],
-  });
-  // Chunked writes: a workbook of any size lands in slices, never one giant
-  // statement array and never a whole table in memory at once.
-  for (let start = 0; start < statements.length; start += 200) {
-    await db.batch(statements.slice(start, start + 200), 'write');
-  }
+      args: [rowsNew, rowsChanged, rowsDuplicate, rowsRejected, batchId],
+    });
+    // Chunked writes: a workbook of any size lands in slices, never one giant
+    // statement array and never a whole table in memory at once.
+    for (let start = 0; start < statements.length; start += 200) {
+      await db.batch(statements.slice(start, start + 200), 'write');
+    }
 
-  return {
-    batchId,
-    fileSha256,
-    duplicateOfBatchId: null,
-    rowsReceived: sheet.rows.length,
-    uniqueDocuments: documents.size,
-    rowsNew,
-    rowsChanged,
-    rowsDuplicate,
-    rowsUnresolved,
-    rowsRejected,
-    unresolvedCustomers: [...unresolvedCustomers.entries()].map(([code, v]) => ({
-      code,
-      name: v.name,
-      rows: v.rows,
-    })),
-    unresolvedProducts: [...unresolvedProducts.entries()].map(([item, rows]) => ({ item, rows })),
-    unresolvedUsers: [...unresolvedUsers],
-    report: mappingReport(sheet.headers, sheet.rows),
-    dateRange: { from, to },
-    affiliates: [...affiliates],
-  };
+    return {
+      batchId,
+      fileSha256,
+      duplicateOfBatchId: null,
+      rejectedReason: null,
+      rowsReceived: sheet.rows.length,
+      uniqueDocuments: documents.size,
+      rowsNew,
+      rowsChanged,
+      rowsDuplicate,
+      rowsUnresolved,
+      rowsRejected,
+      unresolvedCustomers: [...unresolvedCustomers.entries()].map(([code, v]) => ({
+        code,
+        name: v.name,
+        rows: v.rows,
+      })),
+      unresolvedProducts: [...unresolvedProducts.entries()].map(([item, rows]) => ({ item, rows })),
+      unresolvedUsers: [...unresolvedUsers],
+      report: mappingReport(sheet.headers, sheet.rows),
+      dateRange: { from, to },
+      affiliates: [...affiliates],
+    };
+  } catch (error) {
+    await rejectBatch(db, batchId, describeFailure(error), {
+      actorUserId: ctx.actorUserId,
+      now: toDbTimestamp(ctx.now),
+      auditId: newId('AEV'),
+    });
+    return {
+      batchId,
+      fileSha256,
+      duplicateOfBatchId: null,
+      rejectedReason:
+        'Validation could not be completed, so nothing was imported. ' + describeFailure(error),
+      rowsReceived: sheet.rows.length,
+      uniqueDocuments: 0,
+      rowsNew: 0,
+      rowsChanged: 0,
+      rowsDuplicate: 0,
+      rowsUnresolved: 0,
+      rowsRejected: 0,
+      unresolvedCustomers: [],
+      unresolvedProducts: [],
+      unresolvedUsers: [],
+      report: [],
+      dateRange: { from: null, to: null },
+      affiliates: [],
+    };
+  }
 }
 
 // ---- Commit ------------------------------------------------------------------
