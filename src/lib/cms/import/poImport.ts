@@ -56,6 +56,12 @@ import {
   rejectBatch,
   describeFailure,
 } from './workbook.ts';
+import {
+  planLanding,
+  landingStatements,
+  clearLandingStatement,
+  PO_LANDING_TABLE,
+} from './landing.ts';
 import { verifyColumns } from './completeness.ts';
 import { insertSnapshot, PURCHASE_ORDER_SNAPSHOT } from './snapshots.ts';
 
@@ -387,6 +393,8 @@ export interface PoValidation {
   approvalLevelDistribution: { level: number; orders: number }[];
   unresolvedActors: { username: string; rows: number }[];
   natureDistribution: { nature: string; rows: number }[];
+  /** Headers with no column in the landing table. Kept in extra_json. */
+  unmappedColumns: string[];
   missingMandatory: { row: number; problem: string }[];
   report: MappingReportLine[];
   dateRange: { from: string | null; to: string | null };
@@ -408,6 +416,7 @@ function emptyValidation(overrides: Partial<PoValidation>): PoValidation {
     approvalLevelDistribution: [],
     unresolvedActors: [],
     natureDistribution: [],
+    unmappedColumns: [],
     missingMandatory: [],
     report: [],
     dateRange: { from: null, to: null },
@@ -419,6 +428,17 @@ export interface PoUploadInput {
   filename: string;
   uploadedBy: string;
   sourceSystemId: string;
+  /**
+   * Set only when reprocessing: the batch to run again, in place.
+   *
+   * HOW THIS SEPARATES THE TWO CASES. `UNIQUE(file_sha256)` and the duplicate
+   * check exist to answer one question: is somebody uploading a file that has
+   * been uploaded before? Reprocessing is not a second upload. It declares up
+   * front which batch it IS, so the question is never asked, no batch row is
+   * created and no file_objects row is written. The identity, the uploader,
+   * the upload timestamp and the file hash all stay exactly as they were.
+   */
+  reprocessBatchId?: string | null;
   /** Chosen on the Upload Centre form. The file carries no affiliate column. */
   affiliateId: string | null;
 }
@@ -460,10 +480,17 @@ export async function validatePoWorkbook(
   }
 
   const fileSha256 = await hashFile(buffer);
-  const existing = await db.execute({
-    sql: `SELECT import_batch_id FROM import_batches WHERE file_sha256 = ? LIMIT 1`,
-    args: [fileSha256],
-  });
+  // REPROCESSING IS NOT A SECOND UPLOAD, so the duplicate question is not put
+  // to it. An upload asks "have these bytes been seen before"; a reprocess has
+  // already said which batch it is and is running that batch again.
+  const reprocessOf = input.reprocessBatchId ?? null;
+  const existing: { rows: Record<string, unknown>[] } =
+    reprocessOf !== null
+      ? { rows: [] }
+      : await db.execute({
+          sql: `SELECT import_batch_id FROM import_batches WHERE file_sha256 = ? LIMIT 1`,
+          args: [fileSha256],
+        });
   if (existing.rows[0] !== undefined) {
     return emptyValidation({
       fileSha256,
@@ -474,40 +501,65 @@ export async function validatePoWorkbook(
 
   const sheet = parseWorkbook(buffer);
   const identities = await loadIdentities(db, affiliateId);
-  const batchId = newId('IMP');
+  const batchId = reprocessOf ?? newId('IMP');
   const now = toDbTimestamp(ctx.now);
 
-  await db.batch(
-    [
-      {
-        sql: `INSERT INTO file_objects (file_id, original_filename, storage_key, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_at)
+  // A reprocess keeps the batch it was given: the same identifier, uploader,
+  // upload timestamp and file hash. Only its rows are rebuilt, and the status
+  // is put back to VALIDATING for the duration of the run.
+  const creationStatements = [
+    {
+      sql: `INSERT INTO file_objects (file_id, original_filename, storage_key, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_at)
               VALUES (?, ?, ?, 'application/vnd.ms-excel', ?, ?, ?, ?)`,
-        args: [
-          newId('FILE'),
-          input.filename,
-          `imports/${batchId}/${input.filename}`,
-          buffer.byteLength,
-          fileSha256,
-          input.uploadedBy,
-          now,
-        ],
-      },
-      {
-        sql: `INSERT INTO import_batches
+      args: [
+        newId('FILE'),
+        input.filename,
+        `imports/${batchId}/${input.filename}`,
+        buffer.byteLength,
+        fileSha256,
+        input.uploadedBy,
+        now,
+      ],
+    },
+    {
+      sql: `INSERT INTO import_batches
                 (import_batch_id, source_system_id, import_type, original_filename, file_sha256,
                  uploaded_by_user_id, uploaded_at, rows_received, status)
               VALUES (?, ?, 'PURCHASE_ORDER', ?, ?, ?, ?, ?, 'VALIDATING')`,
-        args: [
-          batchId,
-          input.sourceSystemId,
-          input.filename,
-          fileSha256,
-          input.uploadedBy,
-          now,
-          sheet.rows.length,
+      args: [
+        batchId,
+        input.sourceSystemId,
+        input.filename,
+        fileSha256,
+        input.uploadedBy,
+        now,
+        sheet.rows.length,
+      ],
+    },
+  ];
+
+  await db.batch(
+    reprocessOf === null
+      ? creationStatements
+      : [
+          // The same batch, run again: its previous rows and landing go, the
+          // status returns to VALIDATING, and nothing about its identity moves.
+          {
+            sql: `DELETE FROM import_rows WHERE import_batch_id = ?`,
+            args: [batchId],
+          },
+          {
+            sql: `DELETE FROM unresolved_actors WHERE import_batch_id = ?`,
+            args: [batchId],
+          },
+          {
+            sql: `UPDATE import_batches
+                    SET status = 'VALIDATING', rows_received = ?, rows_new = 0, rows_changed = 0,
+                        rows_exact_duplicate = 0, rows_rejected = 0
+                  WHERE import_batch_id = ?`,
+            args: [sheet.rows.length, batchId],
+          },
         ],
-      },
-    ],
     'write',
   );
   // FROM HERE THE BATCH ROW EXISTS, SO EVERY EXIT MUST LEAVE IT TERMINAL.
@@ -553,6 +605,13 @@ export async function validatePoWorkbook(
       normalised.map((r) => r.sourceKey).filter((k): k is string => k !== null),
       batchId,
     );
+
+    // Which headers this database can hold in a column of their own, read from
+    // the live table rather than compiled in. One read.
+    const landing = await planLanding(db, PO_LANDING_TABLE, sheet.headers);
+    if (landing !== null) {
+      statements.push(clearLandingStatement(PO_LANDING_TABLE, batchId));
+    }
 
     for (let index = 0; index < sheet.rows.length; index++) {
       const raw = sheet.rows[index] ?? {};
@@ -628,6 +687,25 @@ export async function validatePoWorkbook(
       });
     }
 
+    // Every parsed row landed, on the queue the loop already built, so the
+    // landing costs no round trip of its own and writes nothing canonical.
+    if (landing !== null) {
+      statements.push(
+        ...landingStatements(
+          landing,
+          batchId,
+          normalised.map((row, index) => ({
+            sourceRowNumber: row.sourceRowNumber,
+            sourceRecordKey: row.sourceKey,
+            rowHash: row.rowHash,
+            raw: sheet.rows[index] ?? {},
+          })),
+          now,
+          newId,
+        ),
+      );
+    }
+
     for (const username of unresolvedActors.keys()) {
       statements.push({
         sql: `INSERT INTO unresolved_actors
@@ -668,6 +746,7 @@ export async function validatePoWorkbook(
         rows,
       })),
       natureDistribution: [...natures.entries()].map(([nature, rows]) => ({ nature, rows })),
+      unmappedColumns: landing === null ? [] : landing.unmapped,
       missingMandatory,
       report: buildMappingReport(PO_HEADER_CLASSIFICATION, sheet.headers, sheet.rows),
       dateRange: { from, to },

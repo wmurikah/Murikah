@@ -171,6 +171,12 @@ export interface DerivationNote {
   periodColumn: string;
   /** Every distinct affiliate the file named. */
   affiliates: string[];
+  /**
+   * Headers the landing table has no column for. Their values are kept in
+   * extra_json rather than dropped, and named here so a column that appears in
+   * next month's extract announces itself instead of vanishing.
+   */
+  unmappedColumns: string[];
 }
 
 export interface UploadRequest {
@@ -346,6 +352,7 @@ export async function receiveUpload(
         periodTo: validation.dateRange.to,
         periodColumn: 'ORIGINAL_CREATION_DATE',
         affiliates: [],
+        unmappedColumns: validation.unmappedColumns,
       },
       stage: 'READY',
       batchId,
@@ -422,6 +429,7 @@ export async function receiveUpload(
       periodTo: validation.dateRange.to,
       periodColumn: 'CREATE_DATE_TIME',
       affiliates: validation.affiliates,
+      unmappedColumns: validation.unmappedColumns,
     },
     stage: 'READY',
     batchId,
@@ -1070,4 +1078,130 @@ export async function dataQuality(db: Client): Promise<DataQuality> {
       };
     }),
   };
+}
+
+// ---- Reprocessing a batch that never finished --------------------------------
+
+/** The statuses a batch can be reprocessed from. IMPORTED is not one. */
+export const REPROCESSABLE = new Set(['VALIDATING', 'REJECTED', 'PARTIAL']);
+
+/** Whether this batch is sitting somewhere it should not be left. */
+export function isNonTerminal(status: string): boolean {
+  return status === 'VALIDATING';
+}
+
+/**
+ * Fetch the stored workbook for a batch.
+ *
+ * A SEAM, DELIBERATELY. `file_objects` records a `storage_key` and a hash but
+ * NOT the bytes, and this product has no file storage connected: the portal's
+ * own download path says so to the customer in as many words. Until a store
+ * exists, this returns null and a reprocess ends REJECTED with that as its
+ * recorded reason, which is a terminal state and an honest one. When a store
+ * is connected this function is the only thing that changes.
+ */
+export type StoredWorkbookLoader = (db: Client, batchId: string) => Promise<Uint8Array | null>;
+
+export const storedWorkbookUnavailable: StoredWorkbookLoader = async () => null;
+
+export interface ReprocessOutcome {
+  ok: boolean;
+  batchId: string;
+  previousStatus: string;
+  newStatus: string;
+  /** Present when the run could not be attempted or could not finish. */
+  reason: string | null;
+}
+
+/**
+ * Run an existing batch again, in place.
+ *
+ * THE SAME BATCH, NOT A NEW ONE. The identifier, the uploader, the upload
+ * timestamp and the file hash are all untouched; what is rebuilt is the rows,
+ * the landing and the counts. A batch stuck at VALIDATING is the case this
+ * exists for, and it must not require the operator to find the workbook again.
+ *
+ * NOTHING CANONICAL IS WRITTEN. A reprocess ends where a first run would end,
+ * at READY or PARTIAL or REJECTED. The commit stays a separate, deliberate act.
+ */
+export async function reprocessBatch(
+  db: Client,
+  batchId: string,
+  ctx: WriteContext,
+  loadWorkbook: StoredWorkbookLoader = storedWorkbookUnavailable,
+): Promise<ReprocessOutcome> {
+  const found = await db.execute({
+    sql: `SELECT status, import_type, original_filename, source_system_id
+          FROM import_batches WHERE import_batch_id = ? LIMIT 1`,
+    args: [batchId],
+  });
+  const row = found.rows[0] as Record<string, unknown> | undefined;
+  if (row === undefined) {
+    return {
+      ok: false,
+      batchId,
+      previousStatus: '',
+      newStatus: '',
+      reason: 'That batch does not exist.',
+    };
+  }
+  const previousStatus = String(row.status);
+  if (!REPROCESSABLE.has(previousStatus)) {
+    // An imported batch has written canonical rows. Running it again would
+    // mean deciding what to do with those, which is a different act with a
+    // different name, so it is refused here rather than half-attempted.
+    return {
+      ok: false,
+      batchId,
+      previousStatus,
+      newStatus: previousStatus,
+      reason:
+        previousStatus === 'IMPORTED'
+          ? 'That batch has already been imported. Reprocessing would not know what to do with the documents it created, so it is refused.'
+          : `A batch at ${previousStatus} cannot be reprocessed.`,
+    };
+  }
+
+  const bytes = await loadWorkbook(db, batchId);
+  if (bytes === null) {
+    const reason =
+      'The stored workbook could not be read: file storage is not connected to this environment, so the original bytes are not retrievable. Upload the file again.';
+    await db.execute({
+      sql: `UPDATE import_batches SET status = 'REJECTED' WHERE import_batch_id = ?`,
+      args: [batchId],
+    });
+    await writeAudit(db, ctx, 'IMPORT_REPROCESSED', batchId, 'VALIDATE', {
+      previousStatus,
+      newStatus: 'REJECTED',
+      reason,
+    });
+    return { ok: false, batchId, previousStatus, newStatus: 'REJECTED', reason };
+  }
+
+  const importType = String(row.import_type) as ImportType;
+  const filename = String(row.original_filename);
+  const sourceSystemId = String(row.source_system_id);
+  const uploadInput = {
+    filename,
+    uploadedBy: ctx.actorUserId,
+    sourceSystemId,
+    reprocessBatchId: batchId,
+  };
+
+  if (importType === 'PURCHASE_ORDER') {
+    await validatePoWorkbook(db, bytes, { ...uploadInput, affiliateId: null }, ctx);
+  } else {
+    await validateSoWorkbook(db, bytes, uploadInput, ctx);
+  }
+
+  const after = await db.execute({
+    sql: `SELECT status FROM import_batches WHERE import_batch_id = ? LIMIT 1`,
+    args: [batchId],
+  });
+  const newStatus = String((after.rows[0] as Record<string, unknown> | undefined)?.status ?? '');
+  await writeAudit(db, ctx, 'IMPORT_REPROCESSED', batchId, 'VALIDATE', {
+    previousStatus,
+    newStatus,
+  });
+  return { ok: newStatus !== 'REJECTED', batchId, previousStatus, newStatus, reason: null };
 }

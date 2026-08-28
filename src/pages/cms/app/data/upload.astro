@@ -237,6 +237,12 @@ const mayUpload = canUploadImports(permissions);
               `${String(derived.periodFrom ?? 'not dated')} to ${String(derived.periodTo ?? 'not dated')}`,
             );
 
+      // A column the landing table cannot hold is named, not swallowed. Its
+      // values are in extra_json either way.
+      const unmapped = ((derived?.unmappedColumns ?? []) as string[]).length
+        ? `<p class="mt-3 text-cms-body-sm text-cms-muted">Unmapped columns, kept in extra_json: ${(derived?.unmappedColumns as string[]).join(', ')}</p>`
+        : '';
+
       summary.innerHTML =
         scope +
         affiliatesSeen +
@@ -250,7 +256,8 @@ const mayUpload = canUploadImports(permissions);
         line('Rejected rows', String(counts.rowsRejected ?? 0)) +
         queue('Unresolved users', unresolvedUsers.length, 'users') +
         queue('Unresolved customers', unresolvedCustomers.length, 'customers') +
-        queue('Unresolved products', unresolvedProducts.length, 'products');
+        queue('Unresolved products', unresolvedProducts.length, 'products') +
+        unmapped;
       if (actions) actions.hidden = false;
     });
 
