@@ -1,12 +1,28 @@
 ---
 /**
- * The unauthenticated shell: a restrained navy brand panel beside the form on
- * desktop, a single column on mobile.
+ * The unauthenticated shell: a navy brand panel on the LEFT, the sign-in form
+ * on the RIGHT, a single column on mobile.
  *
- * The brand panel is decorative and comes second in the DOM, so a keyboard or
- * screen-reader user reaches the form first and does not have to travel past a
- * wall of marketing to sign in. The visual order is restored with `order` at
- * the lg breakpoint.
+ * THE BRAND IS ON THE LEFT AND THE TASK IS ON THE RIGHT. The eye enters at the
+ * top left, meets the brand, and travels to the work. The panels used to be the
+ * other way round, which put the brand at the end of the journey and the task
+ * at the start, so the first thing a person read was the thing they had already
+ * decided about.
+ *
+ * THE FORM SIDE IS THE WIDER OF THE TWO. It was `1fr` of brand against a form
+ * column capped at 34rem, which squeezed the work into a corner of a wide
+ * screen. The proportion is now roughly two to three in the form's favour, and
+ * the form column is capped generously rather than tightly, so it breathes
+ * vertically as well as horizontally.
+ *
+ * THE FORM STILL COMES FIRST IN THE DOM. The brand panel is decorative and is
+ * ordered visually with `order`, so a keyboard or screen-reader user reaches
+ * the form immediately and never travels past a wall of marketing to sign in.
+ * Reversing the visual order did not change that: it is the same trick pointing
+ * the other way.
+ *
+ * No image, no illustration, no gradient. The impression comes from proportion,
+ * type and restraint, and everything else is a download the user pays for.
  *
  * No marketing chrome, for the same reason as CmsLayout: this is the CMS host.
  */
@@ -31,30 +47,36 @@ const pageTitle = `${title} - Hass Petroleum`;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body class="min-h-full bg-cms-canvas text-cms-ink antialiased">
-    <div class="flex min-h-dvh flex-col lg:grid lg:grid-cols-[1fr_minmax(28rem,34rem)]">
+    <div class="flex min-h-dvh flex-col lg:grid lg:grid-cols-[minmax(20rem,2fr)_minmax(28rem,3fr)]">
       {/* The form. First in the DOM, second on screen from lg upwards. */}
-      <main class="flex flex-1 items-center justify-center px-5 py-10 sm:px-8 lg:order-2 lg:py-14">
-        <div class="w-full max-w-sm">
+      <main
+        class="flex flex-1 items-center justify-center px-5 py-10 sm:px-8 lg:order-2 lg:px-16 lg:py-16"
+      >
+        <div class="w-full max-w-md">
           <slot />
         </div>
       </main>
 
-      {/* The brand panel. Decorative: nothing here is the only copy of anything. */}
+      {
+        /*
+        The brand panel. Decorative: nothing here is the only copy of anything.
+
+        ONE IDEA AND A GREAT DEAL OF QUIET SPACE. It carries the wordmark, one
+        line of positioning and the system's name, and nothing else. On a small
+        screen it collapses to a slim band across the top so the form takes the
+        full width, which is why the positioning line is hidden below lg rather
+        than being allowed to push the form off the first screen.
+      */
+      }
       <aside
-        class="order-first flex flex-col justify-between gap-10 bg-cms-navy px-6 py-8 sm:px-10 lg:order-1 lg:py-14"
+        class="order-first flex flex-col justify-between gap-10 bg-cms-navy px-6 py-6 sm:px-10 lg:order-1 lg:px-14 lg:py-16"
         aria-hidden="true"
       >
         <CmsWordmark tone="onNavy" size="lg" />
-        <div class="hidden max-w-md flex-col gap-3 lg:flex">
-          <p class="text-cms-display font-semibold text-white">
-            One view of the customer, from first enquiry to closed ticket.
-          </p>
-          <p class="text-cms-body text-cms-rail-text">
-            Accounts, orders, service and the SLA clock in one place, so the answer to "where is it"
-            takes one screen rather than four.
-          </p>
-        </div>
-        <p class="text-cms-caption text-cms-rail-muted">
+        <p class="hidden max-w-sm text-cms-display font-semibold text-balance text-white lg:block">
+          One view of the customer, from first enquiry to closed ticket.
+        </p>
+        <p class="hidden text-cms-caption text-cms-rail-muted lg:block">
           Customer Relationship, Service &amp; SLA Management System
         </p>
       </aside>

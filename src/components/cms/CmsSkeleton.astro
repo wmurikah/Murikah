@@ -3,10 +3,17 @@
  * A loading placeholder shaped like the content it stands in for, so the page
  * does not reflow when the real thing arrives.
  *
- * The pulse comes from Tailwind's animate-pulse, which global.css already
- * clamps to 0.01ms under prefers-reduced-motion, so the shape still shows and
- * the movement stops. The whole block is aria-hidden and the region that owns
- * it announces "Loading" once, rather than every bar announcing itself.
+ * IT DOES NOT APPEAR FOR THE FIRST 200 MILLISECONDS. A response that comes back
+ * under the threshold that reads as instant needs no loading state at all, and
+ * showing one anyway produces a flash that is more distracting than the wait it
+ * was meant to cover. The delay lives in `--animate-cms-skeleton`, so it is one
+ * animation with a delay rather than a timer somebody has to remember to clear.
+ *
+ * The movement stops entirely under prefers-reduced-motion: global.css clamps
+ * the duration, the fill mode still applies, and the shape holds still.
+ *
+ * The whole block is aria-hidden and the region that owns it announces
+ * "Loading" once, rather than every bar announcing itself.
  */
 interface Props {
   variant?: 'text' | 'title' | 'block' | 'circle';
@@ -24,5 +31,5 @@ const shapes = {
 
 <span
   aria-hidden="true"
-  class:list={['block animate-pulse bg-cms-line', shapes[variant], className]}
+  class:list={['block animate-cms-skeleton bg-cms-ink-200 opacity-0', shapes[variant], className]}
   style={width ? `width:${width}` : undefined}></span>

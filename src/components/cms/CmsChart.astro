@@ -11,6 +11,7 @@
  * The KPI definition sits here too, because a chart without its denominator
  * and its date basis is a shape rather than a measurement.
  */
+import CmsDefinition from './CmsDefinition.astro';
 import type { Chart } from '@/lib/cms/charts/svg';
 
 interface Props {
@@ -36,13 +37,22 @@ function hash(value: string): number {
 }
 ---
 
-<figure class:list={['rounded-cms border border-cms-line bg-cms-surface p-4', className]}>
-  <figcaption class="mb-3">
+<figure class:list={['rounded-cms-lg bg-cms-surface p-4', className]}>
+  {
+    /*
+    THE DEFINITION IS ON DEMAND, NOT UNDER THE TITLE. It used to print as two
+    lines of body text above every chart, which is exactly the clutter that
+    makes a page of charts unreadable, and it is not what a sighted reader
+    needs at a glance. It is still one control away, and it is still in the
+    data table's caption below, where a screen reader reaches it in the normal
+    course of reading the numbers.
+  */
+  }
+  <figcaption class="mb-3 flex items-start justify-between gap-2">
     <h3 class="text-cms-body font-semibold text-cms-ink">
       {title}{unit && <span class="ml-1 font-normal text-cms-muted">({unit})</span>}
     </h3>
-    <p class="mt-0.5 text-cms-body-sm text-cms-muted">{definition}</p>
-    {coverage && <p class="mt-0.5 text-cms-body-sm text-cms-muted">Coverage: {coverage}</p>}
+    <CmsDefinition label={title} definition={definition} coverage={coverage} class="shrink-0" />
   </figcaption>
 
   <div class="overflow-x-auto">

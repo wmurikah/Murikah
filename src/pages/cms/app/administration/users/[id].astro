@@ -265,7 +265,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
                 <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
                 <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveTo ?? 'Open'}</td>
                 <td class="px-4 py-2.5">
-                  {row.isPrimary && <CmsBadge tone="accent" label="Primary" />}
+                  {row.isPrimary && <CmsBadge tone="info" label="Primary" />}
                 </td>
                 <td class="px-4 py-2.5">
                   <CmsBadge

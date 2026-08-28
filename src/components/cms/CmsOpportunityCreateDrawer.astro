@@ -54,7 +54,7 @@ const stagesByPipeline = Object.fromEntries(
     id="cms-opportunity-form-error"
     role="alert"
     hidden
-    class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
   >
   </p>
 
@@ -62,7 +62,7 @@ const stagesByPipeline = Object.fromEntries(
 
   <div class="flex flex-col gap-1.5">
     <label for="o-accountSearch" class="text-cms-body-sm font-medium text-cms-ink">
-      Account <span class="text-cms-danger">*</span>
+      Account <span class="text-cms-negative">*</span>
     </label>
     <input
       id="o-accountSearch"
@@ -75,7 +75,7 @@ const stagesByPipeline = Object.fromEntries(
       id="o-accountId-error"
       role="alert"
       data-field-error
-      class="hidden text-cms-caption text-cms-danger"
+      class="hidden text-cms-caption text-cms-negative"
     >
     </p>
     <ul
