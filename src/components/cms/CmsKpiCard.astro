@@ -1,17 +1,31 @@
 ---
 /**
- * A single measure.
+ * A single measure, at card size.
  *
  * The number is the loudest thing on the card and uses tabular figures, so a
  * row of these stays aligned as the values change rather than jittering. The
  * trend is never a bare coloured arrow: direction, the figure and a word all
  * appear together, so it survives greyscale and a screen reader.
  *
+ * IT LINKS TO THE RECORDS BEHIND IT. A figure a person cannot open is a figure
+ * they cannot act on, so `href` makes the number itself a link carrying the
+ * filter it was computed under. A card with no destination, or whose value is
+ * absent, renders as plain text: a link to a page that will show nothing is
+ * worse than no link, because it costs a click to find that out.
+ *
+ * ITS DEFINITION IS AVAILABLE, NOT PRINTED. The denominator and the date basis
+ * live behind the control beside the label, for the reason given in
+ * CmsDefinition.
+ *
+ * NO BORDER AND NO SHADOW. The surface is a lighter plane than the canvas, and
+ * that is the grouping. A card does not float.
+ *
  * `loading` renders the card's own skeleton at the same size, so the row does
  * not reflow when the numbers arrive.
  */
 import CmsIcon from './CmsIcon.astro';
 import CmsSkeleton from './CmsSkeleton.astro';
+import CmsDefinition from './CmsDefinition.astro';
 import type { CmsIconName } from './icons';
 
 interface Props {
@@ -19,6 +33,14 @@ interface Props {
   value?: string;
   unit?: string;
   icon?: CmsIconName;
+  /** Where the records behind this figure live, with the filter applied. */
+  href?: string;
+  /** What is being measured. */
+  definition?: string;
+  /** The population the figure was taken over. */
+  denominator?: string;
+  /** Which timestamp decides the period. */
+  dateBasis?: string;
   trend?: {
     direction: 'up' | 'down' | 'flat';
     value: string;
@@ -27,26 +49,51 @@ interface Props {
   loading?: boolean;
   class?: string;
 }
-const { label, value, unit, icon, trend, loading = false, class: className } = Astro.props;
+const {
+  label,
+  value,
+  unit,
+  icon,
+  href,
+  definition,
+  denominator,
+  dateBasis,
+  trend,
+  loading = false,
+  class: className,
+} = Astro.props;
 
 const sentiments = {
-  good: 'text-cms-success',
-  bad: 'text-cms-danger',
+  good: 'text-cms-positive',
+  bad: 'text-cms-negative',
   neutral: 'text-cms-muted',
 };
 const directionWord = { up: 'up', down: 'down', flat: 'unchanged' };
+
+const absent = value === undefined || value === 'Not available' || value === '';
+const drillable = href !== undefined && href !== '' && !absent && !loading;
+const hasDefinition = definition !== undefined || denominator !== undefined;
 ---
 
 <div
-  class:list={[
-    'flex flex-col gap-2 rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-4 shadow-cms-card',
-    className,
-  ]}
+  class:list={['flex flex-col gap-2 rounded-cms-lg bg-cms-surface px-4 py-4', className]}
   aria-busy={loading ? 'true' : undefined}
 >
-  <div class="flex items-center justify-between gap-2">
+  <div class="flex items-start justify-between gap-2">
     <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">{label}</p>
-    {icon && <CmsIcon name={icon} size={16} class="shrink-0 text-cms-muted" />}
+    <div class="flex shrink-0 items-center gap-1">
+      {
+        hasDefinition && (
+          <CmsDefinition
+            label={label}
+            definition={definition}
+            denominator={denominator}
+            dateBasis={dateBasis}
+          />
+        )
+      }
+      {icon && <CmsIcon name={icon} size={16} class="shrink-0 text-cms-muted" />}
+    </div>
   </div>
 
   {
@@ -59,7 +106,24 @@ const directionWord = { up: 'up', down: 'down', flat: 'unchanged' };
     ) : (
       <>
         <p class="flex items-baseline gap-1.5">
-          <span class="text-cms-kpi font-semibold text-cms-navy tabular-nums">{value}</span>
+          {drillable ? (
+            <a
+              href={href}
+              class="rounded-cms text-cms-kpi font-semibold text-cms-royal tabular-nums underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              {value}
+              <span class="sr-only">. Open the records behind this figure.</span>
+            </a>
+          ) : (
+            <span
+              class:list={[
+                'text-cms-kpi font-semibold tabular-nums',
+                absent ? 'text-cms-muted' : 'text-cms-ink',
+              ]}
+            >
+              {value ?? 'Not available'}
+            </span>
+          )}
           {unit && <span class="text-cms-body-sm text-cms-muted">{unit}</span>}
         </p>
         {trend && (

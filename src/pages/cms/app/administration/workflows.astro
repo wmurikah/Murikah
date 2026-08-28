@@ -128,7 +128,6 @@ const asOptions = (list: Option[]) => [
       <Fragment>
         <CmsPageHeader
           title="Workflows"
-          description="Who may approve what, and the stages a transaction passes through on its way there."
           crumbs={[
             { label: 'Administration', href: '/app/administration' },
             { label: 'Workflows' },
@@ -191,7 +190,7 @@ const asOptions = (list: Option[]) => [
               does not remove authority the assignment already granted.
             */}
             {unrestricted > 0 && (
-              <p class="flex items-start gap-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+              <p class="flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
                 <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
                 <span>
                   {unrestricted}{' '}
@@ -326,7 +325,7 @@ const asOptions = (list: Option[]) => [
                 id="cms-preview-error"
                 role="alert"
                 hidden
-                class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
               />
               <div class="grid gap-4 sm:grid-cols-2">
                 <CmsSelect
@@ -426,7 +425,7 @@ const asOptions = (list: Option[]) => [
                 id="cms-wfrole-form-error"
                 role="alert"
                 hidden
-                class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
               />
               <CmsInput
                 id="wr-roleCode"
@@ -474,7 +473,7 @@ const asOptions = (list: Option[]) => [
                 id="cms-wfdef-form-error"
                 role="alert"
                 hidden
-                class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
               />
               <CmsInput id="wd-workflowName" name="workflowName" label="Name" required />
               <CmsSelect

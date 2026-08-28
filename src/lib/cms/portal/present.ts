@@ -57,7 +57,7 @@ export function portalDateTime(value: string | null): string {
   return split.time === '' ? date : `${date} at ${split.time}`;
 }
 
-export type PortalTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent';
+export type PortalTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
 /**
  * The colour of an order status badge.

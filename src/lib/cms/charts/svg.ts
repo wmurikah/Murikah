@@ -63,17 +63,20 @@ export interface ChartOptions {
   reference?: { value: number; label: string };
 }
 
+/** Above this many points a line carries no markers. See lineChart. */
+const MARKER_LIMIT = 14;
+
 const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 240;
 const PADDING = { top: 16, right: 16, bottom: 34, left: 56 };
 
 /** The palette, in the order series are added. Tokens only, never a hex. */
 export const SERIES_TOKENS = [
-  'cms-royal',
-  'cms-lavender',
-  'cms-gold-ink',
-  'cms-info',
-  'cms-muted',
+  'cms-series-1',
+  'cms-series-2',
+  'cms-series-3',
+  'cms-series-4',
+  'cms-series-5',
 ] as const;
 
 const escape = (value: string): string =>
@@ -105,6 +108,17 @@ function niceCeiling(maximum: number): number {
   return step * magnitude;
 }
 
+/**
+ * The value axis: three labels and one baseline.
+ *
+ * IT USED TO DRAW THREE GRIDLINES. Every pixel that is not carrying
+ * information competes with the pixels that are, and a line across the middle
+ * of a chart carries none: the reader is not measuring against it, they are
+ * reading the shape and, when they want the number, the table underneath. The
+ * labels stay, because they say what the chart's range is; the baseline stays,
+ * because a series has to sit on something. The two rules in between have
+ * gone.
+ */
 function frame(
   width: number,
   height: number,
@@ -112,19 +126,21 @@ function frame(
   format: (v: number | null) => string,
 ): string {
   const innerHeight = height - PADDING.top - PADDING.bottom;
-  const ticks = [0, 0.5, 1];
-  return ticks
+  const baseY = PADDING.top + innerHeight;
+  const labels = [0, 0.5, 1]
     .map((fraction) => {
       const y = PADDING.top + innerHeight * (1 - fraction);
-      const value = ceiling * fraction;
       return (
-        `<line x1="${PADDING.left}" y1="${round(y)}" x2="${width - PADDING.right}" y2="${round(y)}" ` +
-        `stroke="var(--color-cms-line)" stroke-width="1" />` +
         `<text x="${PADDING.left - 8}" y="${round(y + 4)}" text-anchor="end" font-size="11" ` +
-        `fill="var(--color-cms-muted)">${escape(format(value))}</text>`
+        `fill="var(--color-cms-muted)">${escape(format(ceiling * fraction))}</text>`
       );
     })
     .join('');
+  return (
+    `<line x1="${PADDING.left}" y1="${round(baseY)}" x2="${width - PADDING.right}" ` +
+    `y2="${round(baseY)}" stroke="var(--color-cms-line)" stroke-width="1" />` +
+    labels
+  );
 }
 
 function categoryLabels(labels: string[], width: number, height: number): string {
@@ -155,9 +171,9 @@ function referenceLine(
   const y = PADDING.top + innerHeight * (1 - Math.min(reference.value / ceiling, 1));
   return (
     `<line x1="${PADDING.left}" y1="${round(y)}" x2="${width - PADDING.right}" y2="${round(y)}" ` +
-    `stroke="var(--color-cms-danger)" stroke-width="1" stroke-dasharray="4 3" />` +
+    `stroke="var(--color-cms-ink-600)" stroke-width="1" stroke-dasharray="4 3" />` +
     `<text x="${width - PADDING.right}" y="${round(y - 5)}" text-anchor="end" font-size="11" ` +
-    `fill="var(--color-cms-danger)">${escape(reference.label)}</text>`
+    `fill="var(--color-cms-ink-600)">${escape(reference.label)}</text>`
   );
 }
 
@@ -259,6 +275,13 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const count = Math.max(series[0]?.points.length ?? 0, 1);
   const step = innerWidth / Math.max(count - 1, 1);
+  // A dot on every point of a dense line is furniture: at thirty points the
+  // markers merge into a thicker, noisier line and carry nothing the line did
+  // not already say. Below the limit they are useful, because each one is a
+  // readable value with its own hover title. Above it the line speaks for
+  // itself and the numbers are in the table underneath, which is where an
+  // exact value should be read anyway.
+  const showMarkers = count <= MARKER_LIMIT;
 
   const paths = series
     .map((one) => {
@@ -274,10 +297,12 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
         const y = PADDING.top + innerHeight * (1 - point.value / ceiling);
         path += `${open ? 'L' : 'M'}${round(x)} ${round(y)} `;
         open = true;
-        marks.push(
-          `<circle cx="${round(x)}" cy="${round(y)}" r="2.5" fill="var(--color-${one.token})">` +
-            `<title>${escape(`${one.name}, ${point.label}: ${format(point.value)}`)}</title></circle>`,
-        );
+        if (showMarkers) {
+          marks.push(
+            `<circle cx="${round(x)}" cy="${round(y)}" r="2.5" fill="var(--color-${one.token})">` +
+              `<title>${escape(`${one.name}, ${point.label}: ${format(point.value)}`)}</title></circle>`,
+          );
+        }
       });
       return (
         `<path d="${path.trim()}" fill="none" stroke="var(--color-${one.token})" stroke-width="2" ` +
@@ -415,7 +440,7 @@ export function distributionChart(series: ChartSeries, options: ChartOptions = {
  */
 export function funnelChart(steps: ChartPoint[], options: ChartOptions = {}): Chart {
   const chart = distributionChart(
-    { name: 'Funnel step', token: 'cms-royal', points: steps },
+    { name: 'Funnel step', token: 'cms-series-1', points: steps },
     { ...options, unit: options.unit ?? 'records' },
   );
   const withRates = steps.map((step, index) => {

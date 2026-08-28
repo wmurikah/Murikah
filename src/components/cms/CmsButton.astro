@@ -4,11 +4,17 @@
  * because a link that looks like a button must still be a link for the keyboard
  * and for middle-click.
  *
- * Fitts's law is built in rather than documented: every size is at least 40px
- * tall (h-10), and the primary size is 44px (h-11). Hick-Hyman is served by the
- * variants, which are deliberately unequal: one `primary` on a screen, `subtle`
- * and `ghost` for everything else, so the dominant action is obvious without
- * anyone having to remember which one it was.
+ * Fitts's law is built in rather than documented. Every size is at least 40px
+ * tall, and THE PRIMARY VARIANT IS ALWAYS AT LEAST 44px whatever size it is
+ * given, because 44 is the AAA target figure and the primary action is the one
+ * a person performs fifty times a day. A secondary or ghost control is not
+ * held to 44: the requirement is for the dominant action, and inflating every
+ * toolbar to match would cost the density that makes a list page readable.
+ * Both are far above the 24px floor that WCAG 2.2 sets for any target at all.
+ *
+ * Hick-Hyman is served by the variants, which are deliberately unequal: one
+ * `primary` on a screen, `subtle` and `ghost` for everything else, so the
+ * dominant action is obvious without anyone having to remember which it was.
  *
  * The loading state keeps the label in place and swaps in a spinner, so the
  * button does not resize and the user is not left guessing what they pressed.
@@ -58,12 +64,12 @@ const sizes = {
 };
 
 const variants = {
-  primary: 'bg-cms-royal text-white hover:bg-cms-royal-deep active:bg-cms-royal-deep',
+  primary: 'min-h-11 bg-cms-royal text-white hover:bg-cms-royal-deep active:bg-cms-royal-deep',
   secondary:
-    'border border-cms-border bg-cms-surface text-cms-ink hover:bg-cms-royal-tint hover:border-cms-royal',
+    'border border-cms-border bg-cms-surface text-cms-ink hover:border-cms-royal hover:bg-cms-royal-tint',
   subtle: 'bg-cms-royal-tint text-cms-royal hover:bg-cms-info-tint',
   ghost: 'text-cms-muted hover:bg-cms-canvas hover:text-cms-ink',
-  danger: 'bg-cms-danger text-white hover:brightness-90',
+  danger: 'min-h-11 bg-cms-negative text-white hover:brightness-90',
 };
 
 const cls = [

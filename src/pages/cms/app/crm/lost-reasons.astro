@@ -55,7 +55,7 @@ if (mayManage) {
       <Fragment>
         <CmsPageHeader
           title="Lost reasons"
-          description="Every lost deal names one of these, so losses can be counted rather than read. Deactivate rather than delete: history points here."
+          definition="Every lost deal names one of these, so losses can be counted rather than read. Deactivate rather than delete: history points here."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'CRM', href: '/app/crm' },
@@ -123,7 +123,7 @@ if (mayManage) {
               id="cms-reason-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <CmsInput id="r-reasonName" name="reasonName" label="Reason" required />
             <CmsInput

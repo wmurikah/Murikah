@@ -70,7 +70,7 @@ if (mayManage) {
       <Fragment>
         <CmsPageHeader
           title="Lead sources"
-          description="Where leads come from. Sources are deactivated rather than deleted, so a lead captured under an old source keeps its own history."
+          definition="Sources are deactivated rather than deleted, so a lead captured under an old source keeps its own history."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'CRM', href: '/app/crm' },
@@ -135,7 +135,7 @@ if (mayManage) {
               id="cms-source-error"
               role="alert"
               hidden
-              class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
             />
             <CmsInput id="s-sourceName" name="sourceName" label="Source name" required />
             <CmsInput id="s-description" name="description" label="Description" />
