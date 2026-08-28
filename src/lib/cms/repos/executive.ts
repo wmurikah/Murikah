@@ -79,12 +79,16 @@ export interface DashboardComposition {
   purchaseOrders: boolean;
   service: boolean;
   freshness: boolean;
-  /** The rule itself, in words, for the interface to show. */
-  rule: string;
 }
 
-export const COMPOSITION_RULE =
-  'This page is composed from your permission codes: a section appears when you hold the permission its module requires, and the scope resolver then decides which records it counts. There is no page per person and no section keyed to a job title.';
+/*
+ * There used to be a COMPOSITION_RULE here: a paragraph explaining to the
+ * reader that the page is composed from their permission codes, naming the
+ * scope resolver, and shipped to the dashboard as body text. It described the
+ * implementation to somebody who had asked for their figures, so it has gone
+ * along with the `rule` field that carried it. The behaviour it described is
+ * unchanged and is tested; it is simply no longer narrated on screen.
+ */
 
 export function composeDashboard(permissions: readonly string[]): DashboardComposition {
   const commercial = canViewOpportunities(permissions);
@@ -101,7 +105,6 @@ export function composeDashboard(permissions: readonly string[]): DashboardCompo
     purchaseOrders,
     service,
     freshness: canViewImports(permissions) || salesOrders || purchaseOrders,
-    rule: COMPOSITION_RULE,
   };
 }
 

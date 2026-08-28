@@ -209,17 +209,37 @@ const diff = diffPayloads(
           </div>
         </CmsCard>
 
+        {/*
+          The KPI card in its four states, at the anatomy Build Prompt 32 gave
+          it: a coloured top rule taking the metric's own semantic reading, a
+          capitalised label, one figure, and a quiet line of context. The whole
+          card is the drill target where there is something behind it, and it
+          is plain text where there is not.
+
+          `icon`, `trend` and `loading` are gone from this component. The icon
+          beside a label that already says the word was decoration; the trend
+          was a second figure competing with the first; and the loading state
+          was for a page that fetches after paint, which none of these do.
+        */}
         <CmsCard title="Indicators">
           <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <CmsKpiCard label="Orders" value="412" icon="orders" />
+            <CmsKpiCard
+              label="Orders"
+              value="412"
+              context="Raised in this period"
+              href="/app/orders/sales"
+              definition="Sales orders raised in this period."
+              denominator="Sales orders in your scope"
+              dateBasis="Order created at"
+            />
             <CmsKpiCard
               label="Finance turnaround"
-              value="37"
-              unit="min"
-              trend={{ direction: 'down', value: '12 min', sentiment: 'good' }}
+              value="37 min"
+              context="Median, elapsed"
+              href="/app/orders/sales/performance"
             />
-            <CmsKpiCard label="Unknown on purpose" />
-            <CmsKpiCard label="Loading" loading />
+            <CmsKpiCard label="SLA compliance" value="96%" context="Within SLA" tone="positive" />
+            <CmsKpiCard label="Unknown on purpose" value="Not available" context="No denominator" />
           </div>
         </CmsCard>
 

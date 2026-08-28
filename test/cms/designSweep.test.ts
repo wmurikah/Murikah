@@ -398,54 +398,238 @@ test('a drillable figure is a real link with a focus ring', () => {
       /focus-visible:ring-2 focus-visible:ring-focus/,
       `${component} focus ring`,
     );
-    assert.match(source, /hover:underline/, `${component} changes on hover`);
+    assert.ok(
+      /hover:underline/.test(source) || /:hover_\[data-figure\]\]:underline/.test(source),
+      `${component} changes on hover`,
+    );
     assert.match(source, /Open the records behind this figure/, `${component} says so to a reader`);
   }
 });
 
-test('every figure on the executive dashboard carries a destination', () => {
-  const source = readFileSync('src/pages/cms/app/executive.astro', 'utf8');
-  const figures = [...source.matchAll(/label: '([^']+)',\n\s*value:/g)].map((m) => m[1]!);
-  assert.ok(figures.length >= 20, `expected the dashboard's figures, found ${figures.length}`);
+test('every figure on the dashboard carries a destination', () => {
+  // Every KPI card on the merged dashboard is a drill target. The card is the
+  // anchor, so this reads the props rather than looking for an <a>: a card
+  // with no `href` renders as text, which is correct for an absent value and
+  // wrong for a figure that has records behind it.
+  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  const cards = [...source.matchAll(/<CmsKpiCard\b([\s\S]*?)\/>/g)].map((m) => m[1]!);
+  assert.ok(cards.length >= 12, `expected the dashboard's cards, found ${cards.length}`);
+  const missing = cards
+    .filter((card) => !/\bhref=/.test(card))
+    .map((card) => /label=\{?"?([^"\n}]+)/.exec(card)?.[1] ?? 'unnamed');
+  assert.deepEqual(missing, [], `cards with no destination: ${missing.join(', ')}`);
 
-  // A figure object is the one carrying a denominator, which distinguishes it
-  // from a chart's data points, whose label and value mean something else.
-  const blocks = source
-    .split(/\{\s*\n\s*label: /)
-    .slice(1)
-    .map((block) => block.slice(0, block.indexOf('},')))
-    .filter((block) => block.includes('denominator:'));
-  assert.equal(blocks.length, figures.length, 'every figure object was found');
-  const missing = blocks
-    .filter((block) => !/href:/.test(block))
-    .map((block) => block.slice(0, block.indexOf('\n')));
-  assert.deepEqual(missing, [], `figures with no destination: ${missing.join(', ')}`);
-  console.log(`[drill] ${figures.length} dashboard figures, every one with a destination`);
+  // And the SLA measures, which are built in their own module and spread into
+  // a card, so the loop above cannot see their hrefs.
+  const sla = readFileSync('src/lib/cms/dashboard/sla.ts', 'utf8');
+  const measures = [...sla.matchAll(/label: '([^']+)',/g)].map((m) => m[1]!);
+  assert.ok(measures.length >= 5, `expected the SLA measures, found ${measures.length}`);
+  assert.equal(
+    (sla.match(/href: '\/app\//g) ?? []).length,
+    measures.length,
+    'every SLA measure declares a destination',
+  );
+  console.log(`[drill] ${cards.length} dashboard cards, ${measures.length} SLA measures`);
 });
 
 test('every dashboard destination carries the filter and the scope', () => {
-  const source = readFileSync('src/pages/cms/app/executive.astro', 'utf8');
   // Destinations are built by drillTo, which serialises the whole filter. A
   // bare path would drop the period the figure was computed under and show a
   // different population from the number that was clicked.
-  const hrefs = source
-    .split(/\{\s*\n\s*label: /)
-    .slice(1)
-    .map((block) => block.slice(0, block.indexOf('},')))
-    .filter((block) => block.includes('denominator:'))
-    .flatMap((block) => [...block.matchAll(/href:\s*([^,\n]+)/g)].map((m) => m[1]!.trim()));
-  assert.ok(hrefs.length > 20, `expected a destination per figure, found ${hrefs.length}`);
-  const bare = hrefs.filter(
-    (h) => h.startsWith("'/") || (h.startsWith('`/') && !h.includes('drillTo')),
-  );
+  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  const hrefs = [...source.matchAll(/href=\{([^}]+)\}/g)].map((m) => m[1]!.trim());
+  assert.ok(hrefs.length > 10, `expected the destinations, found ${hrefs.length}`);
+  const bare = hrefs.filter((h) => h.startsWith("'/") || h.startsWith('"/'));
   assert.deepEqual(bare, [], `destinations that lose the filter: ${bare.join(', ')}`);
-  for (const name of ['service', 'crm', 'sales', 'purchases']) {
+  for (const name of ['toService', 'toCrm', 'toSales', 'toPurchases']) {
     assert.match(
       source,
       new RegExp(`const ${name} = drillTo\\('/app/`),
       `the ${name} destination is built with drillTo`,
     );
   }
+});
+
+test('the SLA family switch is in the URL and costs no extra load', () => {
+  const sla = readFileSync('src/lib/cms/dashboard/sla.ts', 'utf8');
+  // The choice travels in a query parameter, so a view can be shared and the
+  // back button works.
+  assert.match(sla, /export const SLA_PARAM = 'sla'/);
+  assert.match(sla, /export function readSlaFamily\(params: URLSearchParams\)/);
+  // And the family is derived from a Dashboard the page already holds, rather
+  // than fetched: the module takes the loaded board, not a database client.
+  assert.match(sla, /export function slaFamilyView\(key: SlaFamilyKey, board: Dashboard\)/);
+  assert.ok(!/Client|db\.execute|execute\(/.test(sla), 'the SLA module issues no query');
+});
+
+test('the dashboard is one page: /app/executive redirects to it', () => {
+  const redirect = readFileSync('src/pages/cms/app/executive.astro', 'utf8');
+  assert.match(
+    redirect,
+    /Astro\.redirect\(`\/app\$\{Astro\.url\.search\}`, 301\)/,
+    'a permanent redirect that carries the query string',
+  );
+  // And it is gone from the navigation, so it is not a second page.
+  const nav = readFileSync('src/lib/cms/nav.ts', 'utf8');
+  assert.ok(!nav.includes("'/app/executive'"), 'the Executive entry is gone from the rail');
+  assert.ok(!nav.includes("label: 'Executive'"), 'and so is its label');
+});
+
+test('the six sections appear in order, each carrying three to five items', () => {
+  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  const order = [...source.matchAll(/<CmsSectionHeader\s+id="([a-z]+)"\s+title="([^"]+)"/g)].map(
+    (m) => m[2]!,
+  );
+  assert.deepEqual(
+    order,
+    ['SLA', 'Needs attention', 'Orders', 'Commercial', 'Service', 'Data freshness'],
+    'SLA leads, because it is the reason this system exists',
+  );
+  // Needs attention is capped at four, so a long exception list cannot turn the
+  // top of the dashboard into a wall nobody reads.
+  assert.match(source, /board\.attention\.slice\(0, 4\)/);
+});
+
+test('a section header cannot carry a description', () => {
+  // Structural, not a convention: there is no prop to pass, so the paragraph
+  // under a heading cannot come back one page at a time.
+  const header = readFileSync('src/components/cms/CmsSectionHeader.astro', 'utf8');
+  assert.ok(!/description\??:/.test(header), 'CmsSectionHeader takes no description');
+  assert.match(header, /<h2 id=\{id\}/, 'it renders an h2, so nothing is skipped');
+});
+
+test('one implementation of each dashboard component', () => {
+  // A second implementation of any of these is the defect this asserts against.
+  for (const [component, marker] of [
+    ['CmsKpiCard', 'text-cms-kpi'],
+    ['CmsStatusPill', 'rounded-full px-2 py-0.5'],
+    ['CmsDataTable', '<table'],
+    ['CmsLeaderboardRow', 'minimumVolume'],
+    ['CmsFilterBar', 'Reset'],
+    ['CmsSectionHeader', '<h2'],
+  ] as const) {
+    const path = `src/components/cms/${component}.astro`;
+    assert.match(
+      readFileSync(path, 'utf8'),
+      new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    );
+    // Nothing else in the CMS defines the same thing.
+    const duplicates = [...walk('src/components/cms', '.astro')].filter(
+      (other) => other !== path && other.toLowerCase().includes(component.toLowerCase().slice(3)),
+    );
+    assert.deepEqual(duplicates, [], `${component} has a near-duplicate: ${duplicates.join(', ')}`);
+  }
+});
+
+test('a leaderboard cannot be built on speed alone', () => {
+  // Every dimension the analytics phases require is a required prop, so a
+  // caller cannot render a table of medians and call it a ranking.
+  const row = readFileSync('src/components/cms/CmsLeaderboardRow.astro', 'utf8');
+  for (const required of [
+    'volume: number;',
+    'median: string;',
+    'p90: string;',
+    'compliance: number | null;',
+    'pending: number;',
+    'oldestPending: string;',
+    'minimumVolume: number;',
+  ]) {
+    assert.ok(row.includes(required), `${required} must be required, not optional`);
+  }
+  assert.match(row, /rank: number \| null;/, 'a rank can be withheld');
+  assert.match(row, /unranked below/, 'and the reason is shown rather than the row dropped');
+});
+
+test('the rail collapses, expands on focus, pins, and overlays rather than reflows', () => {
+  const layout = readFileSync('src/layouts/CmsLayout.astro', 'utf8');
+  // The footprint never changes: the outer aside is 64px whatever the panel does.
+  assert.match(
+    layout,
+    /data-cms-rail\s+class="sticky top-0 z-30 hidden h-dvh w-16 shrink-0 lg:block"/,
+  );
+  // The panel is absolutely positioned inside it, so expanding overlays.
+  assert.match(layout, /absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden/);
+  // And the content inside it is laid out at the EXPANDED width, so a label is
+  // wholly visible or wholly clipped rather than showing its first letters.
+  assert.match(layout, /<div class="flex h-full w-64 flex-col py-4">/);
+  assert.match(layout, /hover:w-64/, 'it expands on hover');
+  assert.match(layout, /focus-within:w-64/, 'and on keyboard focus');
+  assert.match(layout, /group-data-\[rail-pinned=true\]\/rail:w-64/, 'and when pinned');
+  assert.match(layout, /transition-\[width\] duration-150/, 'the motion is short');
+  // The pin is read before the rail paints, so a pinned user sees no jump.
+  assert.match(layout, /localStorage\.getItem\('cms\.rail\.pinned'\)/);
+
+  const script = readFileSync('src/components/cms/CmsRailScript.astro', 'utf8');
+  assert.match(script, /aria-pressed/, 'the pin reports its own state');
+  assert.match(script, /localStorage\.setItem\(KEY, '1'\)/, 'and the choice persists');
+
+  // Reduced motion is handled globally, which is why there is no per-component
+  // media query to forget.
+  const global = readFileSync('src/styles/global.css', 'utf8');
+  assert.match(global, /transition-duration: 0\.01ms !important/);
+});
+
+test('every colour a chart names survives the stylesheet build', () => {
+  // THE FAILURE THIS PREVENTS, WHICH ALREADY HAPPENED ONCE. Tailwind v4
+  // tree-shakes an @theme value that no utility class mentions. The chart
+  // module writes `fill="var(--color-cms-series-1)"` into an SVG string on the
+  // server, which Tailwind cannot see, so the token was dropped from the
+  // stylesheet and every chart in the application rendered black. There was no
+  // error and no warning: the build succeeded and the colour resolved to
+  // nothing.
+  //
+  // So a colour named in a chart must either be used as a class somewhere,
+  // which keeps it, or be declared in the `@theme static` block, which forces
+  // it out whatever else happens.
+  const svg = readFileSync('src/lib/cms/charts/svg.ts', 'utf8');
+  const named = new Set([...svg.matchAll(/var\(--color-(cms-[a-z0-9-]+)\)/g)].map((m) => m[1]!));
+  // The series ramp is referenced through a token name rather than inline.
+  for (const match of svg.matchAll(/'(cms-series-\d)'/g)) named.add(match[1]!);
+  assert.ok(named.size >= 6, `expected the chart's colours, found ${named.size}`);
+
+  const staticBlock = tokenSource.slice(tokenSource.indexOf('@theme static'));
+  const staticEnd = staticBlock.indexOf('\n}');
+  const statics = staticBlock.slice(0, staticEnd);
+
+  const classes = new Set<string>();
+  for (const path of CMS_SOURCE) {
+    for (const match of readFileSync(path, 'utf8').matchAll(
+      /\b(?:bg|text|border|ring|fill|stroke|from|to|via|divide|outline|decoration|accent)-(cms-[a-z0-9-]+)/g,
+    )) {
+      classes.add(match[1]!);
+    }
+  }
+
+  const atRisk = [...named].filter(
+    (name) => !statics.includes(`--color-${name}:`) && !classes.has(name),
+  );
+  assert.deepEqual(
+    atRisk,
+    [],
+    `these chart colours are neither used as a class nor declared @theme static, ` +
+      `so Tailwind will drop them and the chart will render black: ${atRisk.join(', ')}`,
+  );
+  console.log(`[charts] ${named.size} colours named, every one reaches the stylesheet`);
+});
+
+test('the four chart types the dashboard needs all exist', () => {
+  const svg = readFileSync('src/lib/cms/charts/svg.ts', 'utf8');
+  for (const fn of ['lineChart', 'barChart', 'horizontalBarChart', 'sparkline']) {
+    assert.match(svg, new RegExp(`export function ${fn}\\(`), `${fn} is missing`);
+  }
+  // A trend line labels its series at the end of the line rather than in a key.
+  assert.match(svg, /endLabels\?: boolean;/);
+  assert.match(svg, /fill="var\(--color-\$\{one\.token\}\)">\$\{escape\(one\.name\)\}/);
+  // A bar chart can carry a target line, and the line is labelled with a value.
+  assert.match(svg, /stroke-dasharray="4 3"/);
+  assert.match(svg, /escape\(reference\.label\)/);
+
+  // And the dashboard actually renders one of each of the three big ones.
+  const page = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  for (const fn of ['lineChart(', 'barChart(', 'horizontalBarChart(', 'sparkline(']) {
+    assert.ok(page.includes(fn), `the dashboard renders no ${fn.slice(0, -1)}`);
+  }
+  assert.match(page, /reference:/, 'the affiliate bars carry a target line');
 });
 
 // ---------------------------------------------------------------------------

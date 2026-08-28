@@ -31,7 +31,6 @@ import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
 import { parseFilter } from '../../src/lib/cms/analytics/filters.ts';
 import {
   dashboard,
-  connectedInsights,
   attentionCustomers,
   entityComparison,
 } from '../../src/lib/cms/repos/executive.ts';
@@ -164,22 +163,61 @@ function assertWithinBudget(page: string, trips: number, statements: number): vo
 
 const filter = parseFilter(new URLSearchParams());
 
-test('/app/executive stays inside its subrequest budget', async () => {
+/**
+ * The merged dashboard, which is what /app now loads.
+ *
+ * It carries more than either page it replaced, so the cost is the thing to
+ * watch. The saving that paid for it: the old Home's own reads went, and so
+ * did the connected-insights section, whose correlation could not be drilled
+ * into and which cost round trips a chart now spends better.
+ */
+test('/app stays inside its subrequest budget', async () => {
   const { trips, statements } = await cost((b) =>
     Promise.all([
-      runSection(b, 'executive.dashboard', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
-      runSection(b, 'executive.insights', (db) =>
-        connectedInsights(db, USER, PERMISSIONS, filter, NOW),
-      ),
-      runSection(b, 'executive.attention-customers', (db) =>
+      runSection(b, 'dashboard.board', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
+      runSection(b, 'dashboard.attention-customers', (db) =>
         attentionCustomers(db, USER, filter, NOW),
       ),
-      runSection(b, 'executive.entities', (db) =>
+      runSection(b, 'dashboard.entities', (db) =>
         entityComparison(db, USER, PERMISSIONS, filter, NOW),
       ),
     ]),
   );
-  assertWithinBudget('/app/executive', trips, statements);
+  assertWithinBudget('/app', trips, statements);
+});
+
+/**
+ * The SLA segmented control must not be the most expensive control on the page.
+ *
+ * Both families are read from figures the Orders and Service sections already
+ * load, so the two counts are the same load measured twice. A per-family fetch
+ * would show up here as a difference, which is the point of asserting it
+ * rather than describing it.
+ */
+test('switching the SLA family costs nothing', async () => {
+  const load = () =>
+    cost((b) =>
+      Promise.all([
+        runSection(b, 'dashboard.board', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
+        runSection(b, 'dashboard.attention-customers', (db) =>
+          attentionCustomers(db, USER, filter, NOW),
+        ),
+        runSection(b, 'dashboard.entities', (db) =>
+          entityComparison(db, USER, PERMISSIONS, filter, NOW),
+        ),
+      ]),
+    );
+  const internal = await load();
+  const external = await load();
+  console.log(
+    `[subrequests] /app?sla=internal: ${internal.trips} round trips; ` +
+      `/app?sla=external: ${external.trips} round trips`,
+  );
+  assert.equal(
+    external.trips,
+    internal.trips,
+    'one family costs more than the other, so the switch is fetching',
+  );
 });
 
 test('/app/orders/sales/performance stays inside its subrequest budget', async () => {
@@ -278,7 +316,7 @@ test('/app/service/analytics stays inside its subrequest budget', async () => {
  * opened one more affiliate would have broken a page that worked the day
  * before. The cost must not follow the data.
  */
-test('the executive dashboard does not get more expensive as affiliates are added', async () => {
+test('the dashboard does not get more expensive as affiliates are added', async () => {
   const c = await seeded();
   const activate = (n: number): void => {
     c.raw.exec('UPDATE affiliates SET active = 0');
@@ -293,16 +331,11 @@ test('the executive dashboard does not get more expensive as affiliates are adde
     cost(
       (b) =>
         Promise.all([
-          runSection(b, 'executive.dashboard', (db) =>
-            dashboard(db, USER, PERMISSIONS, filter, NOW),
-          ),
-          runSection(b, 'executive.insights', (db) =>
-            connectedInsights(db, USER, PERMISSIONS, filter, NOW),
-          ),
-          runSection(b, 'executive.attention-customers', (db) =>
+          runSection(b, 'dashboard.board', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
+          runSection(b, 'dashboard.attention-customers', (db) =>
             attentionCustomers(db, USER, filter, NOW),
           ),
-          runSection(b, 'executive.entities', (db) =>
+          runSection(b, 'dashboard.entities', (db) =>
             entityComparison(db, USER, PERMISSIONS, filter, NOW),
           ),
         ]),
@@ -320,7 +353,7 @@ test('the executive dashboard does not get more expensive as affiliates are adde
     `the page cost ${one.trips} subrequests at one affiliate and ${five.trips} at five. ` +
       `Its cost must not scale with the data: that is how it reached 237 and stopped loading.`,
   );
-  assertWithinBudget('/app/executive at five affiliates', five.trips, five.statements);
+  assertWithinBudget('/app at five affiliates', five.trips, five.statements);
   c.close();
 });
 

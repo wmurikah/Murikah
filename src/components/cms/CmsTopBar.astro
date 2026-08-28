@@ -15,6 +15,7 @@
 import CmsAvatar from './CmsAvatar.astro';
 import CmsDropdown from './CmsDropdown.astro';
 import CmsIcon from './CmsIcon.astro';
+import CmsWordmark from './CmsWordmark.astro';
 import CmsIconButton from './CmsIconButton.astro';
 import CmsMenuItem from './CmsMenuItem.astro';
 
@@ -46,6 +47,23 @@ const context = user ? organisationLine(user.assignment) : null;
   >
     <CmsIcon name="menu" size={20} />
   </button>
+
+  {
+    /*
+    THE WORDMARK LIVES HERE NOW. It used to sit at the top of the navigation
+    rail, and the rail is 64 pixels wide until somebody points at it, so half of
+    "Petroleum" was being clipped by the panel edge on every page. Half a
+    wordmark is not a brand. Here it is always whole, and it is still the link
+    to the dashboard it always was.
+  */
+  }
+  <a
+    href="/app"
+    class="hidden shrink-0 rounded-cms px-1 outline-none focus-visible:ring-2 focus-visible:ring-focus lg:block"
+  >
+    <CmsWordmark tone="onLight" size="sm" />
+    <span class="sr-only">Go to the dashboard</span>
+  </a>
 
   {
     /*
