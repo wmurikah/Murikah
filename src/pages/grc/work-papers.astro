@@ -128,248 +128,248 @@ const submittable = rows.filter(canSubmitRow);
 
 <GrcLayout title="Work papers">
   <div class="grc-work-paper-page">
-  <div class="grc-page-head">
-    <div>
-      <h1>Work papers</h1>
-      <p class="grc-lead">Audit observations for {grc.organizationName}.</p>
+    <div class="grc-page-head">
+      <div>
+        <h1>Work papers</h1>
+        <p class="grc-lead">Audit observations for {grc.organizationName}.</p>
+      </div>
+      {
+        canCreate && (
+          <a href="/work-papers/new" class="grc-btn grc-btn--primary">
+            New work paper
+          </a>
+        )
+      }
     </div>
+
+    <GrcAffiliateNotice subject="observations" />
+
     {
-      canCreate && (
-        <a href="/work-papers/new" class="grc-btn grc-btn--primary">
-          New work paper
-        </a>
+      done && (
+        <p class="grc-notice" role="status" style="margin-bottom:1rem">
+          {decodeURIComponent(done)}
+        </p>
       )
     }
-  </div>
+    {
+      error && (
+        <p class="grc-error" role="alert" style="margin-bottom:1rem">
+          {decodeURIComponent(error)}
+        </p>
+      )
+    }
 
-  <GrcAffiliateNotice subject="observations" />
+    {
+      !allowed ? (
+        <p class="grc-error" role="alert">
+          You do not have access to work papers.
+        </p>
+      ) : loadError ? (
+        <GrcErrorCard subject="The work papers list" />
+      ) : (
+        <>
+          <form method="get" class="grc-filters" role="search" aria-label="Filter work papers">
+            <div class="grc-field" style="min-width:14rem">
+              <label for="f-q">Search</label>
+              <input
+                type="search"
+                id="f-q"
+                name="q"
+                class="grc-input"
+                value={filters.q ?? ''}
+                placeholder="Observation or recommendation"
+              />
+            </div>
+            <div class="grc-field">
+              <label for="f-status">Status</label>
+              <select id="f-status" name="status" class="grc-select">
+                <option value="">All</option>
+                {statuses.map((sv) => (
+                  <option value={sv} selected={filters.status === sv}>
+                    {statusLabel(labels, sv)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="grc-field">
+              <label for="f-area">Audit area</label>
+              <select id="f-area" name="area" class="grc-select">
+                <option value="">All</option>
+                {areas.map((a) => (
+                  <option value={a.id} selected={filters.auditAreaId === a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="grc-field">
+              <label for="f-affiliate">Affiliate</label>
+              <select id="f-affiliate" name="affiliate" class="grc-select">
+                <option value="">All</option>
+                {affiliates.map((a) => (
+                  <option value={a.id} selected={filters.affiliateCode === a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="grc-field">
+              <label for="f-auditor">Auditor</label>
+              <select id="f-auditor" name="auditor" class="grc-select">
+                <option value="">All</option>
+                {auditors.map((a) => (
+                  <option value={a.id} selected={filters.assignedAuditorId === a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="grc-field">
+              <label for="f-risk">Risk rating</label>
+              <select id="f-risk" name="risk" class="grc-select">
+                <option value="">All</option>
+                {riskRatings.map((rr) => (
+                  <option value={rr} selected={filters.riskRating === rr}>
+                    {rr}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="grc-field" style="max-width:7rem">
+              <label for="f-year">Year</label>
+              <input
+                type="number"
+                id="f-year"
+                name="year"
+                class="grc-input"
+                value={filters.year ?? ''}
+              />
+            </div>
+            <button type="submit" class="grc-btn grc-btn--secondary">
+              Apply
+            </button>
+          </form>
 
-  {
-    done && (
-      <p class="grc-notice" role="status" style="margin-bottom:1rem">
-        {decodeURIComponent(done)}
-      </p>
-    )
-  }
-  {
-    error && (
-      <p class="grc-error" role="alert" style="margin-bottom:1rem">
-        {decodeURIComponent(error)}
-      </p>
-    )
-  }
-
-  {
-    !allowed ? (
-      <p class="grc-error" role="alert">
-        You do not have access to work papers.
-      </p>
-    ) : loadError ? (
-      <GrcErrorCard subject="The work papers list" />
-    ) : (
-      <>
-        <form method="get" class="grc-filters" role="search" aria-label="Filter work papers">
-          <div class="grc-field" style="min-width:14rem">
-            <label for="f-q">Search</label>
-            <input
-              type="search"
-              id="f-q"
-              name="q"
-              class="grc-input"
-              value={filters.q ?? ''}
-              placeholder="Observation or recommendation"
-            />
-          </div>
-          <div class="grc-field">
-            <label for="f-status">Status</label>
-            <select id="f-status" name="status" class="grc-select">
-              <option value="">All</option>
-              {statuses.map((sv) => (
-                <option value={sv} selected={filters.status === sv}>
-                  {statusLabel(labels, sv)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div class="grc-field">
-            <label for="f-area">Audit area</label>
-            <select id="f-area" name="area" class="grc-select">
-              <option value="">All</option>
-              {areas.map((a) => (
-                <option value={a.id} selected={filters.auditAreaId === a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div class="grc-field">
-            <label for="f-affiliate">Affiliate</label>
-            <select id="f-affiliate" name="affiliate" class="grc-select">
-              <option value="">All</option>
-              {affiliates.map((a) => (
-                <option value={a.id} selected={filters.affiliateCode === a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div class="grc-field">
-            <label for="f-auditor">Auditor</label>
-            <select id="f-auditor" name="auditor" class="grc-select">
-              <option value="">All</option>
-              {auditors.map((a) => (
-                <option value={a.id} selected={filters.assignedAuditorId === a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div class="grc-field">
-            <label for="f-risk">Risk rating</label>
-            <select id="f-risk" name="risk" class="grc-select">
-              <option value="">All</option>
-              {riskRatings.map((rr) => (
-                <option value={rr} selected={filters.riskRating === rr}>
-                  {rr}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div class="grc-field" style="max-width:7rem">
-            <label for="f-year">Year</label>
-            <input
-              type="number"
-              id="f-year"
-              name="year"
-              class="grc-input"
-              value={filters.year ?? ''}
-            />
-          </div>
-          <button type="submit" class="grc-btn grc-btn--secondary">
-            Apply
-          </button>
-        </form>
-
-        {rows.length === 0 ? (
-          <div class="grc-empty">
-            <p>
-              <strong>No work papers match.</strong> Adjust the filters, or create the first
-              observation.
-            </p>
-          </div>
-        ) : (
-          <form method="post" action="/api/work-papers/submit-batch" data-batch-submit>
-            {submittable.length > 0 && (
-              <div class="grc-actionbar" style="margin:0 0 0.75rem">
-                <p class="grc-lead" style="margin:0">
-                  Tick the drafts to release, then submit them together. Each one goes through the
-                  same review workflow as submitting it on its own.
-                </p>
-                <button type="submit" class="grc-btn grc-btn--primary" data-batch-button disabled>
-                  Submit selected for review
-                </button>
-              </div>
-            )}
-            {/* Column priority is declared here, where the table is written
+          {rows.length === 0 ? (
+            <div class="grc-empty">
+              <p>
+                <strong>No work papers match.</strong> Adjust the filters, or create the first
+                observation.
+              </p>
+            </div>
+          ) : (
+            <form method="post" action="/api/work-papers/submit-batch" data-batch-submit>
+              {submittable.length > 0 && (
+                <div class="grc-actionbar" style="margin:0 0 0.75rem">
+                  <p class="grc-lead" style="margin:0">
+                    Tick the drafts to release, then submit them together. Each one goes through the
+                    same review workflow as submitting it on its own.
+                  </p>
+                  <button type="submit" class="grc-btn grc-btn--primary" data-batch-button disabled>
+                    Submit selected for review
+                  </button>
+                </div>
+              )}
+              {/* Column priority is declared here, where the table is written
                 (Build Prompt 70). The five the reader came for always fit:
                 reference, observation, risk, status and updated. The affiliate,
                 the audit area and the auditor give way on a narrower screen and
                 reappear under the observation, so nothing is lost, it is simply
                 read where there is room. */}
-            <div class="grc-tablewrap grc-tablewrap--fit">
-              <table class="grc-table grc-table--responsive" aria-label="Observations">
-                <thead>
-                  <tr>
-                    {submittable.length > 0 && (
-                      <th scope="col" class="grc-nowrap">
-                        <span class="grc-vh">Select for submission</span>
-                      </th>
-                    )}
-                    <th scope="col" class="grc-nowrap">
-                      Reference
-                    </th>
-                    <th scope="col">Observation</th>
-                    <th scope="col" class="grc-col--secondary">
-                      Affiliate
-                    </th>
-                    <th scope="col" class="grc-col--secondary">
-                      Audit area
-                    </th>
-                    <th scope="col" class="grc-nowrap">
-                      Risk
-                    </th>
-                    <th scope="col" class="grc-col--secondary">
-                      Auditor
-                    </th>
-                    <th scope="col" class="grc-nowrap">
-                      Status
-                    </th>
-                    <th scope="col" class="grc-nowrap grc-col--tertiary">
-                      Updated
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
+              <div class="grc-tablewrap grc-tablewrap--fit">
+                <table class="grc-table grc-table--responsive" aria-label="Observations">
+                  <thead>
                     <tr>
                       {submittable.length > 0 && (
+                        <th scope="col" class="grc-nowrap">
+                          <span class="grc-vh">Select for submission</span>
+                        </th>
+                      )}
+                      <th scope="col" class="grc-nowrap">
+                        Reference
+                      </th>
+                      <th scope="col">Observation</th>
+                      <th scope="col" class="grc-col--secondary">
+                        Affiliate
+                      </th>
+                      <th scope="col" class="grc-col--secondary">
+                        Audit area
+                      </th>
+                      <th scope="col" class="grc-nowrap">
+                        Risk
+                      </th>
+                      <th scope="col" class="grc-col--secondary">
+                        Auditor
+                      </th>
+                      <th scope="col" class="grc-nowrap">
+                        Status
+                      </th>
+                      <th scope="col" class="grc-nowrap grc-col--tertiary">
+                        Updated
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr>
+                        {submittable.length > 0 && (
+                          <td>
+                            {canSubmitRow(r) ? (
+                              <input
+                                type="checkbox"
+                                name="work_paper_id"
+                                value={r.id}
+                                data-batch-row
+                                aria-label={`Submit ${r.reference} for review`}
+                              />
+                            ) : (
+                              <span class="grc-vh">Not available for batch submission</span>
+                            )}
+                          </td>
+                        )}
+                        <td class="grc-nowrap">
+                          <a href={`/work-papers/${r.id}`}>{r.reference}</a>
+                        </td>
                         <td>
-                          {canSubmitRow(r) ? (
-                            <input
-                              type="checkbox"
-                              name="work_paper_id"
-                              value={r.id}
-                              data-batch-row
-                              aria-label={`Submit ${r.reference} for review`}
-                            />
+                          {r.observationTitle || 'Untitled'}
+                          {/* What the collapsed columns said, on the line the
+                            observation already occupies. */}
+                          <span class="grc-cell__meta">
+                            {[
+                              r.affiliateName ?? r.affiliateCode,
+                              r.auditAreaName,
+                              r.assignedAuditorName,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        </td>
+                        <td class="grc-col--secondary">
+                          {r.affiliateName ?? r.affiliateCode ?? '-'}
+                        </td>
+                        <td class="grc-col--secondary">{r.auditAreaName ?? '-'}</td>
+                        <td class="grc-nowrap">
+                          {r.riskRating ? (
+                            <span class={riskClass(r.riskRating)}>{r.riskRating}</span>
                           ) : (
-                            <span class="grc-vh">Not available for batch submission</span>
+                            '-'
                           )}
                         </td>
-                      )}
-                      <td class="grc-nowrap">
-                        <a href={`/work-papers/${r.id}`}>{r.reference}</a>
-                      </td>
-                      <td>
-                        {r.observationTitle || 'Untitled'}
-                        {/* What the collapsed columns said, on the line the
-                            observation already occupies. */}
-                        <span class="grc-cell__meta">
-                          {[
-                            r.affiliateName ?? r.affiliateCode,
-                            r.auditAreaName,
-                            r.assignedAuditorName,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      </td>
-                      <td class="grc-col--secondary">
-                        {r.affiliateName ?? r.affiliateCode ?? '-'}
-                      </td>
-                      <td class="grc-col--secondary">{r.auditAreaName ?? '-'}</td>
-                      <td class="grc-nowrap">
-                        {r.riskRating ? (
-                          <span class={riskClass(r.riskRating)}>{r.riskRating}</span>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td class="grc-col--secondary">{r.assignedAuditorName ?? '-'}</td>
-                      <td class="grc-nowrap">
-                        <span class="grc-pill">{statusLabel(labels, r.status)}</span>
-                      </td>
-                      <td class="grc-num grc-col--tertiary">{fmtDate(r.updatedAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </form>
-        )}
-      </>
-    )
-  }
+                        <td class="grc-col--secondary">{r.assignedAuditorName ?? '-'}</td>
+                        <td class="grc-nowrap">
+                          <span class="grc-pill">{statusLabel(labels, r.status)}</span>
+                        </td>
+                        <td class="grc-num grc-col--tertiary">{fmtDate(r.updatedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </form>
+          )}
+        </>
+      )
+    }
   </div>
 </GrcLayout>
 
