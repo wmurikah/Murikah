@@ -50,6 +50,7 @@ import {
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { scheduleCacheStatsRollUp } from '@grc/cache';
 import { toCmsAppPath } from '@/lib/hosts/cms';
+import { applySecurityHeaders, isSameOrigin, crossOriginRefusal } from '@/lib/cms/security/headers';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb as getCmsDb } from '@/lib/cms/db';
 import { readSessionCookie as readCmsSessionCookie } from '@/lib/cms/auth/cookie';
@@ -374,8 +375,24 @@ export const onRequest = defineMiddleware(async (context, next) => {
       return response;
     };
 
+    // CSRF, before anything mutates. Section 0a puts this here rather than in
+    // the worker because the worker serves four products and this policy is
+    // the CMS's alone. SameSite=Lax already stops a cross-site POST carrying
+    // the cookie; this is the second line, because SameSite is one setting
+    // enforced by the client and a security control should not have exactly
+    // one of those.
+    if (!isSameOrigin(context.request, context.url)) {
+      const refused = crossOriginRefusal();
+      applySecurityHeaders(refused, { secure: isSecureRequest(context.request) });
+      return refused;
+    }
+
     const response = await guarded();
     if (principal) response.headers.set('cache-control', 'no-store');
+    // On every CMS response, signed in or not, including the sign-in page and
+    // every redirect. A policy that applied only to authenticated pages would
+    // leave the one page an unauthenticated attacker can reach unprotected.
+    applySecurityHeaders(response, { secure: isSecureRequest(context.request) });
     return response;
   }
 
