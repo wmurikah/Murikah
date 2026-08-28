@@ -10,7 +10,18 @@
  * scroll container is the table's own, so a wide table scrolls inside the page
  * instead of making the whole page scroll sideways.
  *
- * `numeric` right-aligns a column and gives it tabular figures.
+ * `numeric` right-aligns a column and gives it tabular figures, so digits line
+ * up down the column and the eye compares magnitudes without reading each one.
+ *
+ * THE HEAD STICKS ONCE THE TABLE IS LONG. A reader thirty rows down a table
+ * with no visible header is reading numbers with no labels, which is worse than
+ * not showing them. `stickyHead` turns it on; the scroll container gets a
+ * maximum height so there is something to stick against.
+ *
+ * NO BORDER AND NO SHADOW ROUND THE WHOLE THING. The surface is a lighter plane
+ * than the canvas and that tone step is what says "this is one region". The
+ * hairlines that survive are the ones between rows, which is where two things
+ * genuinely meet.
  */
 import CmsSkeleton from './CmsSkeleton.astro';
 
@@ -31,18 +42,14 @@ interface Props {
   /**
    * What an empty table says.
    *
-   * PHASE 28 FINDING, FIXED HERE. The default used to be "Nothing to show
-   * yet.", which tells a reader nothing and is very often untrue: on a
-   * filtered analytical table an empty result almost always means the filter
-   * excluded everything, not that nothing exists. A reader who takes
-   * "nothing yet" at face value concludes the business has no purchase
-   * orders, when in fact they picked a date range before the first import.
-   *
-   * So the default now says what an empty result does and does not mean, and
-   * a caller with something more specific passes it in one line rather than
-   * writing a slot.
+   * The default used to be "Nothing to show yet.", which on a filtered
+   * analytical table is usually untrue: it reads as "the business has no
+   * purchase orders" to somebody who picked the wrong dates. An empty result
+   * is not a claim that nothing exists, and the default now says so.
    */
   emptyMessage?: string;
+  /** Stick the header and cap the scroll height. For long tables only. */
+  stickyHead?: boolean;
   class?: string;
 }
 const {
@@ -52,28 +59,25 @@ const {
   loading = false,
   empty = false,
   rowCount = 4,
+  emptyMessage = 'No rows for this selection. An empty result is not a claim that nothing exists: check the filters and the date range.',
+  stickyHead = false,
   class: className,
 } = Astro.props;
 ---
 
-<div
-  class:list={[
-    'overflow-hidden rounded-cms-lg border border-cms-line bg-cms-surface shadow-cms-card',
-    className,
-  ]}
->
-  <div class="overflow-x-auto">
+<div class:list={['overflow-hidden rounded-cms-lg bg-cms-surface', className]}>
+  <div class:list={['overflow-x-auto', stickyHead ? 'max-h-[32rem] overflow-y-auto' : '']}>
     <table class="w-full border-collapse text-cms-body-sm">
       <caption class="sr-only">{caption}</caption>
       <thead>
-        <tr class="border-b border-cms-line bg-cms-canvas">
+        <tr class:list={['bg-cms-sunken', stickyHead ? 'sticky top-0 z-10' : '']}>
           {
             columns.map((column) => (
               <th
                 scope="col"
                 class:list={[
-                  'px-4 py-2.5 text-cms-caption font-semibold tracking-wide whitespace-nowrap text-cms-muted uppercase',
-                  column.numeric ? 'text-right' : 'text-left',
+                  'border-b border-cms-line px-4 py-2.5 text-cms-caption font-semibold tracking-wide whitespace-nowrap text-cms-muted uppercase',
+                  column.numeric ? 'text-right tabular-nums' : 'text-left',
                   column.secondary ? 'hidden sm:table-cell' : '',
                 ]}
               >
@@ -99,7 +103,10 @@ const {
         {
           !loading && empty && (
             <tr>
-              <td colspan={columns.length} class="px-4 py-10 text-center text-cms-muted">
+              <td
+                colspan={columns.length}
+                class="px-4 py-10 text-center text-cms-body-sm text-cms-muted"
+              >
                 <slot name="empty">{emptyMessage}</slot>
               </td>
             </tr>

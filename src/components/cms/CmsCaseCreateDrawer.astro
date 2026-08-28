@@ -40,13 +40,13 @@ const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriori
     id="cms-case-form-error"
     role="alert"
     hidden
-    class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
   >
   </p>
 
   <div class="flex flex-col gap-1.5">
     <label for="k-accountSearch" class="text-cms-body-sm font-medium text-cms-ink">
-      Customer <span class="text-cms-danger">*</span>
+      Customer <span class="text-cms-negative">*</span>
     </label>
     <input
       id="k-accountSearch"
@@ -59,7 +59,7 @@ const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriori
       id="k-accountId-error"
       role="alert"
       data-field-error
-      class="hidden text-cms-caption text-cms-danger"
+      class="hidden text-cms-caption text-cms-negative"
     >
     </p>
     <ul
@@ -105,7 +105,7 @@ const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriori
   <CmsInput id="k-subject" name="subject" label="Subject" required />
   <div class="flex flex-col gap-1.5">
     <label for="k-description" class="text-cms-body-sm font-medium text-cms-ink">
-      Description <span class="text-cms-danger">*</span>
+      Description <span class="text-cms-negative">*</span>
     </label>
     <textarea
       id="k-description"
@@ -118,7 +118,7 @@ const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriori
       id="k-description-error"
       role="alert"
       data-field-error
-      class="hidden text-cms-caption text-cms-danger"
+      class="hidden text-cms-caption text-cms-negative"
     >
     </p>
   </div>

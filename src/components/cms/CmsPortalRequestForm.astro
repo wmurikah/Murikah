@@ -36,7 +36,7 @@ const TYPES = [
     id="portal-request-error"
     role="alert"
     hidden
-    class="rounded-cms border border-cms-danger bg-cms-danger-tint px-3 py-2 text-cms-body-sm text-cms-danger"
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
   >
   </p>
 
@@ -64,13 +64,13 @@ const TYPES = [
     name="subject"
     label="In one line"
     value={about === null ? '' : `About order ${about}`}
-    placeholder="Late delivery on my last order"
+    placeholder="My last delivery arrived after the agreed date"
     required
   />
 
   <div class="flex flex-col gap-1.5">
     <label for="portal-description" class="text-cms-label font-medium text-cms-ink">
-      Tell us a little more <span class="text-cms-danger">*</span>
+      Tell us a little more <span class="text-cms-negative">*</span>
     </label>
     <textarea
       id="portal-description"

@@ -14,6 +14,7 @@
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsDefinition from '@/components/cms/CmsDefinition.astro';
 import CmsChart from '@/components/cms/CmsChart.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
@@ -142,17 +143,17 @@ const timeChart =
         [
           {
             name: 'Active handling',
-            token: 'cms-royal',
+            token: 'cms-series-1',
             points: [{ label: 'Measured cases', value: breakdown.activeHandlingMinutes }],
           },
           {
             name: 'Waiting on the customer',
-            token: 'cms-lavender',
+            token: 'cms-series-2',
             points: [{ label: 'Measured cases', value: breakdown.waitingCustomerMinutes }],
           },
           {
             name: 'Waiting internally',
-            token: 'cms-gold-ink',
+            token: 'cms-series-3',
             points: [{ label: 'Measured cases', value: breakdown.waitingInternalMinutes }],
           },
         ],
@@ -163,12 +164,12 @@ const volumeTrend = lineChart(
   [
     {
       name: 'Cases',
-      token: 'cms-royal',
+      token: 'cms-series-1',
       points: buckets.map((b) => ({ label: b.bucket, value: b.cases })),
     },
     {
       name: 'Complaints',
-      token: 'cms-gold-ink',
+      token: 'cms-series-3',
       points: buckets.map((b) => ({ label: b.bucket, value: b.complaints })),
     },
   ],
@@ -178,7 +179,7 @@ const volumeTrend = lineChart(
 const categoryChart = distributionChart(
   {
     name: 'Category',
-    token: 'cms-info',
+    token: 'cms-series-4',
     points: categories.slice(0, 10).map((row) => ({
       label: `${row.categoryName} / ${row.subcategoryName}`,
       value: row.cases,
@@ -209,7 +210,6 @@ const categoryChart = distributionChart(
       <Fragment>
         <CmsPageHeader
           title="Service analytics"
-          description="What customers experienced, what recurs, where the time went, and whether promises were kept."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Service', href: '/app/service' },
@@ -337,9 +337,19 @@ const categoryChart = distributionChart(
               coverage={`${breakdown.casesMeasured} of ${breakdown.totalCases} cases had a complete enough status history. ${breakdown.casesExcluded} were excluded rather than estimated.`}
             />
           )}
-          <CmsCard title="Reading this" description="What the bands do and do not mean.">
-            <p class="text-cms-body-sm text-cms-muted">{breakdown.wording}</p>
-            <dl class="mt-3 text-cms-body-sm">
+          {/*
+            It was titled "Reading this" and led with a paragraph explaining
+            the bands, which is an explanatory panel: the card is now named
+            after what it actually shows, and the explanation is on demand
+            beside the title, where a definition belongs.
+          */}
+          <CmsCard title="Where the time went">
+            <CmsDefinition
+              slot="actions"
+              label="Where the time went"
+              definition={breakdown.wording}
+            />
+            <dl class="text-cms-body-sm">
               <div class="flex justify-between border-b border-cms-line py-1.5">
                 <dt class="text-cms-muted">Waiting on the customer</dt>
                 <dd class="text-cms-ink tabular-nums">
@@ -505,7 +515,7 @@ const categoryChart = distributionChart(
             </p>
           </CmsCard>
 
-          <CmsCard title="Handoffs" description="How often a case moved, and where it went.">
+          <CmsCard title="Handoffs">
             <CmsDataTable
               caption="Handoffs"
               columns={[
@@ -539,7 +549,7 @@ const categoryChart = distributionChart(
           <h2 id="who" class="sr-only">
             Customers, entities and teams
           </h2>
-          <CmsCard title="Customers" description="Cases, satisfaction and repeats by customer.">
+          <CmsCard title="Customers">
             <CmsDataTable
               caption="Customers"
               columns={[
