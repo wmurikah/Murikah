@@ -122,7 +122,7 @@ const attention = [
     show: user ? canViewCases(user.permissions) : false,
   },
   {
-    label: 'Overdue follow-ups',
+    label: 'Follow-ups past due date',
     count: attentionOverdue,
     href: '/app/crm/activities',
     tone: 'warning' as const,
@@ -156,9 +156,9 @@ const attention = [
                 <a
                   href={item.href}
                   class:list={[
-                    'flex items-center justify-between rounded-cms-lg border bg-cms-surface px-4 py-4 shadow-cms-card transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
+                    'flex items-center justify-between rounded-cms-lg border bg-cms-surface px-4 py-4 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
                     item.count > 0 && item.tone === 'danger'
-                      ? 'border-cms-danger'
+                      ? 'border-cms-negative'
                       : 'border-cms-line',
                   ]}
                 >
@@ -235,7 +235,7 @@ const attention = [
               {workspaces.map((item) => (
                 <a
                   href={item.href}
-                  class="flex min-h-10 items-start gap-3 rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-4 shadow-cms-card transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                  class="flex min-h-10 items-start gap-3 rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-4 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
                 >
                   <span class="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-cms bg-cms-royal-tint text-cms-royal">
                     <CmsIcon name={item.icon} size={18} />

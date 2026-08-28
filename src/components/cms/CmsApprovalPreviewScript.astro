@@ -124,7 +124,7 @@
       if (stage.outcome === 'exception') {
         const warn = el(
           'p',
-          'mt-2 rounded-cms border border-cms-warning bg-cms-warning-tint px-3 py-2 text-cms-body-sm text-cms-ink',
+          'mt-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink',
           stage.exception?.message ?? 'No eligible approver.',
         );
         card.appendChild(warn);
@@ -155,7 +155,7 @@
           item.appendChild(
             el(
               'p',
-              'mt-1 text-cms-body-sm text-cms-warning',
+              'mt-1 text-cms-body-sm text-cms-caution',
               'This assignment carries no authority rule, so it is not limited by amount, currency or product.',
             ),
           );

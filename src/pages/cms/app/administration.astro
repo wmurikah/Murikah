@@ -123,7 +123,6 @@ const visible = sections.filter((section) => section.visible);
 <CmsLayout title="Administration">
   <CmsPageHeader
     title="Administration"
-    description="Configuration for the whole platform. Changes here reshape what everybody else sees."
     crumbs={[{ label: 'Home', href: '/app' }, { label: 'Administration' }]}
   />
 
@@ -141,7 +140,7 @@ const visible = sections.filter((section) => section.visible);
           section.ready && section.href ? (
             <a
               href={section.href}
-              class="flex flex-col gap-2 rounded-cms-lg border border-cms-line bg-cms-surface p-5 shadow-cms-card transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+              class="flex flex-col gap-2 rounded-cms-lg border border-cms-line bg-cms-surface p-5 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
             >
               <span class="flex items-center justify-between gap-2">
                 <span class="text-cms-card font-semibold text-cms-navy">{section.label}</span>
