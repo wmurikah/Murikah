@@ -55,7 +55,10 @@ if (mayManage) {
         description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
-      <CmsErrorState title="Roles could not be loaded" description="The database did not answer." />
+      <CmsErrorState
+        title="Roles could not be loaded"
+        description="Please try again in a moment."
+      />
     ) : (
       <Fragment>
         <CmsPageHeader
