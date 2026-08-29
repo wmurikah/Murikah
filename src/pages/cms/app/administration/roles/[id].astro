@@ -76,7 +76,7 @@ const total = modules.reduce((n, m) => n + m.totalCount, 0);
     ) : loadFailed ? (
       <CmsErrorState
         title="This role could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : !role ? (
       <CmsErrorState

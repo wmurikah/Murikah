@@ -158,12 +158,12 @@ const COMING: Readonly<Record<string, string>> = {
     ) : loadFailed ? (
       <CmsErrorState
         title="That account could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : account === null ? (
       <CmsErrorState
         title="No such account"
-        description="It may not exist, or it may sit outside your data scope. Those two look the same on purpose."
+        description="The account may have been removed, or you may not have access to it."
       />
     ) : (
       <Fragment>

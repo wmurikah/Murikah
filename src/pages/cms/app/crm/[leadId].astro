@@ -150,12 +150,12 @@ const facts =
     ) : loadFailed ? (
       <CmsErrorState
         title="This lead could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : lead === null ? (
       <CmsErrorState
         title="Lead not found"
-        description="Either it does not exist or it sits outside your data scope. The two are answered the same way on purpose, so this page never confirms that a record you may not see exists."
+        description="The lead may have been removed, or you may not have access to it."
       />
     ) : (
       <Fragment>

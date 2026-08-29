@@ -46,79 +46,70 @@ const sections: Section[] = [
   {
     label: 'Organisation',
     href: ORGANISATION_PATH,
-    description:
-      'Countries, affiliates, business units, departments and teams. The structures that drive visibility, assignments, approvals and reporting.',
+    description: 'Countries, affiliates, business units, departments and teams.',
     ready: true,
     visible: canViewOrganisation(permissions),
   },
   {
     label: 'Users',
     href: '/app/administration/users',
-    description:
-      'Accounts, organisational assignments, job titles, team membership and external account mappings.',
+    description: 'Accounts, assignments, job titles and team membership.',
     ready: true,
     visible: canManageUsers(permissions),
   },
   {
     label: 'Roles and permissions',
     href: '/app/administration/roles',
-    description: 'Access roles, the permission matrix, data scopes and who holds what.',
+    description: 'Roles, permissions, data scopes and assignments.',
     ready: true,
     visible: canManageRoles(permissions),
   },
   {
     label: 'Workflows',
     href: WORKFLOW_PATH,
-    description:
-      'Workflow roles and scoped approval authority, versioned approval chains, and the preview that answers who would approve a transaction before one exists.',
+    description: 'Approval roles, authority and versioned approval chains.',
     ready: true,
     visible: canViewWorkflows(permissions),
   },
   {
     label: 'Product catalogue',
     href: '/app/administration/catalogue',
-    description:
-      'One product master for the whole platform: groups, nested categories and the products beneath them. Orders, cases, SLA reporting and approval authority all read these same records.',
+    description: 'Product groups, categories, products and units of measure.',
     ready: true,
     visible: canManageCatalogue(permissions),
   },
   {
     label: 'Audit trail',
     href: '/app/administration/audit',
-    description:
-      'Who changed what, and when. Every row is evidence, and two database triggers refuse any attempt to alter or delete one, including by a system administrator.',
+    description: 'Review who changed what and when.',
     ready: true,
     visible: canViewAudit(permissions),
   },
   {
     label: 'System health',
     href: '/app/administration/health',
-    description:
-      'Configuration checks with a stated rule each, including the workflow roles nobody currently holds, which is how a transaction ends up with no approver.',
+    description: 'Review configuration health and unassigned workflow roles.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
   {
     label: 'Access review',
     href: '/app/administration/access-review',
-    description:
-      'Application access and approval authority, side by side and never merged. They are different things, and reading them as one list is how authority gets granted by accident.',
+    description: 'Review application access and approval authority.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
   {
     label: 'Design reference',
     href: '/app/administration/components',
-    description:
-      'Every interface primitive in every state, rendered from the real components. One page, no build tooling, so it cannot drift from what a user sees.',
+    description: 'Internal reference for interface components and states.',
     ready: true,
     visible: canManageUsers(permissions),
   },
   {
     label: 'Workflow authority review',
     href: '/app/administration/authority',
-    description:
-      'Who can approve this today. Assignments are effective-dated, so the configuration can look correct while nobody actually holds the authority any more.',
+    description: 'Review who currently holds approval authority.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
