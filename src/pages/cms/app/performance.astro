@@ -14,8 +14,8 @@ import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
@@ -97,6 +97,17 @@ const BUCKETS = [
   { key: 'active', label: 'Active' },
   { key: 'completed', label: 'Completed' },
 ];
+const performanceFilters = [
+  query.slaType && { key: 'slaType', label: titleCase(query.slaType) },
+  query.entityType && { key: 'entityType', label: titleCase(query.entityType) },
+  query.status && { key: 'status', label: titleCase(query.status) },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutPerformanceFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/performance?${next.toString()}`;
+};
 function bucketHref(key: string | null): string {
   const next = new URLSearchParams(params);
   if (key === null) next.delete('bucket');
@@ -111,23 +122,23 @@ function bucketHref(key: string | null): string {
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to the SLA monitor"
-        description="Ask a system administrator for the SLA.DASHBOARD.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="The monitor could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : tablesMissing.length > 0 ? (
       <CmsErrorState
-        title="The SLA runtime tables are missing"
-        description={`This database has no ${tablesMissing.join(' or ')}. The operator's prerequisite script has not been run against it, and the engine will not start until it has. Nothing is measured and nothing is faked in the meantime.`}
+        title="SLA monitoring is not available"
+        description="The required service configuration is incomplete. Contact your system administrator."
       />
     ) : (
       <Fragment>
         <CmsPageHeader
           title="SLA Monitor"
-          definition="Every timestamp here is the server clock. Breached at is the moment the promise broke, not the moment somebody noticed."
+          definition="Breached at is the moment the promise broke, not the moment somebody noticed."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Performance' },
@@ -161,8 +172,8 @@ function bucketHref(key: string | null): string {
           ))}
         </nav>
 
-        <CmsCard>
-          <form method="get" class="flex flex-wrap items-end gap-3">
+        <CmsFilterPanel action="/app/performance" activeCount={performanceFilters.length}>
+          <Fragment slot="primary">
             {query.bucket !== null && <input type="hidden" name="bucket" value={query.bucket} />}
             <CmsSelect
               id="f-slaType"
@@ -175,6 +186,8 @@ function bucketHref(key: string | null): string {
                 { value: 'EXTERNAL', label: 'External' },
               ]}
             />
+          </Fragment>
+          <Fragment slot="advanced">
             <CmsSelect
               id="f-entityType"
               name="entityType"
@@ -201,11 +214,19 @@ function bucketHref(key: string | null): string {
                 })),
               ]}
             />
-            <CmsButton type="submit" variant="secondary">
-              Apply
-            </CmsButton>
-          </form>
-        </CmsCard>
+          </Fragment>
+          <Fragment slot="chips">
+            {performanceFilters.map((chip) => (
+              <a
+                href={withoutPerformanceFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
 
         <CmsDataTable
           caption="SLA instances"
@@ -272,20 +293,36 @@ function bucketHref(key: string | null): string {
               </td>
             </tr>
           ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <div class="flex min-h-16 items-center gap-3 px-4 py-3">
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">
+                    {row.entityLabel ?? row.entityId}
+                  </span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {row.ruleName} · {variance(row)}
+                  </span>
+                </span>
+                {atRisk(row) ? (
+                  <CmsBadge tone="warning" icon="statusWarn" label="At risk" />
+                ) : (
+                  <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+                )}
+              </div>
+            ))}
+          </Fragment>
           <Fragment slot="empty">
             <CmsEmptyState
               icon="performance"
               title="Nothing in this bucket"
-              description="An SLA instance you cannot see here is outside your data scope."
+              description="Try another bucket or remove a filter."
             />
           </Fragment>
         </CmsDataTable>
 
         <p class="text-cms-body-sm text-cms-muted">
-          {page.total} instance{page.total === 1 ? '' : 's'} in scope. Detection runs on every entry
-          into the engine rather than on a timer, because a Worker has no always-on process: a
-          breach that happens while nothing is running is recorded, at its true target time, by the
-          next request that arrives.
+          {page.total} SLA instance{page.total === 1 ? '' : 's'}
         </p>
       </Fragment>
     )

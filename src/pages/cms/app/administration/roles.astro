@@ -52,10 +52,13 @@ if (mayManage) {
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to role administration"
-        description="Ask a system administrator for the ADMIN.ROLES.MANAGE permission. Nothing on this page is loaded without it."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
-      <CmsErrorState title="Roles could not be loaded" description="The database did not answer." />
+      <CmsErrorState
+        title="Roles could not be loaded"
+        description="Please try again in a moment."
+      />
     ) : (
       <Fragment>
         <CmsPageHeader
