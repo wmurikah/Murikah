@@ -61,9 +61,42 @@ export const CONTENT_SECURITY_POLICY = [
   'upgrade-insecure-requests',
 ].join('; ');
 
+/**
+ * A per-request nonce, for the one script that cannot be an external module.
+ *
+ * WHY A NONCE AND NOT A HASH. A hash changes every time the script does, so
+ * the next person to edit that block breaks the page and finds out from a
+ * browser console rather than from the build. A nonce is regenerated per
+ * response and never goes stale.
+ *
+ * WHY ONE SCRIPT NEEDS IT AT ALL. The rail's pinned state is read from
+ * localStorage and applied to the body BEFORE the rail paints. Deferring that
+ * to an external module means every pinned user sees a narrow rail widen a
+ * frame later, on every page load. That is the only script in the product with
+ * that constraint; everything else is a module Astro emits to a file.
+ */
+export function newCspNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes));
+}
+
+/**
+ * The policy, with the request's own nonce written into `script-src`.
+ *
+ * `'self'` still carries every bundled module. The nonce adds exactly one
+ * inline block per response and nothing else: no `unsafe-inline`, which would
+ * hand the same permission to anything that ever got reflected into the
+ * markup, and which is the whole reason this directive exists.
+ */
+export function contentSecurityPolicy(nonce: string): string {
+  return CONTENT_SECURITY_POLICY.replace("script-src 'self'", `script-src 'self' 'nonce-${nonce}'`);
+}
+
 export interface HeaderOptions {
   /** HSTS is sent only over https. On http it is meaningless and ignored. */
   readonly secure: boolean;
+  /** The request's nonce, when a page carries an inline script. */
+  readonly nonce?: string;
 }
 
 /**
@@ -74,7 +107,10 @@ export interface HeaderOptions {
  */
 export function applySecurityHeaders(response: Response, options: HeaderOptions): void {
   const headers = response.headers;
-  headers.set('content-security-policy', CONTENT_SECURITY_POLICY);
+  headers.set(
+    'content-security-policy',
+    options.nonce === undefined ? CONTENT_SECURITY_POLICY : contentSecurityPolicy(options.nonce),
+  );
   // A browser must not sniff a JSON response into HTML and run it.
   headers.set('x-content-type-options', 'nosniff');
   // The path of a CMS page can name a customer or an order, so a full URL
