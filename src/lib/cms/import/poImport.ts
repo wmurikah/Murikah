@@ -895,7 +895,8 @@ export async function commitPoBatch(
   if (batch.rows[0] === undefined) throw new Error(`Unknown import batch ${batchId}.`);
 
   const rowsResult = await db.execute({
-    sql: `SELECT import_row_id, source_row_number, source_record_key, row_status, raw_json
+    sql: `SELECT import_row_id, source_row_number, source_record_key, row_status, raw_json,
+                 imported_at
           FROM import_rows WHERE import_batch_id = ? ORDER BY source_row_number`,
     args: [batchId],
   });
@@ -911,6 +912,8 @@ export async function commitPoBatch(
       rows: NormalisedPoRow[];
       importRowIds: Map<number, string>;
       statuses: Map<number, string>;
+      /** Rows this batch has already written. They are never actioned twice. */
+      alreadyImported: Set<number>;
     }
   >();
   for (const raw of rowsResult.rows) {
@@ -925,10 +928,12 @@ export async function commitPoBatch(
       rows: [],
       importRowIds: new Map<number, string>(),
       statuses: new Map<number, string>(),
+      alreadyImported: new Set<number>(),
     };
     group.rows.push(row);
     group.importRowIds.set(row.sourceRowNumber, text(record.import_row_id));
     group.statuses.set(row.sourceRowNumber, text(record.row_status));
+    if (record.imported_at !== null) group.alreadyImported.add(row.sourceRowNumber);
     groups.set(key, group);
   }
 
@@ -988,7 +993,11 @@ export async function commitPoBatch(
   };
 
   for (const [sourceKey, group] of groups) {
+    // A row this batch has already written is never actioned again: see the
+    // note in soImport.ts. Without it a retry rewrites every order it already
+    // imported and reports having imported them all over again.
     const actionable = group.rows.filter((r) => {
+      if (group.alreadyImported.has(r.sourceRowNumber)) return false;
       const status = group.statuses.get(r.sourceRowNumber);
       return status === 'NEW' || status === 'CHANGED';
     });
@@ -1156,9 +1165,15 @@ export async function commitPoBatch(
       // the same database that refused it and appends the answer.
       const detail = await describeWriteFailure(db, statements, error);
       const reason = `The purchase order could not be written: ${detail}`.slice(0, 400);
+      // AND NOT ONE THAT WAS ALREADY REFUSED AT VALIDATION. A row rejected for
+      // being malformed carries its own reason, and overwriting it with a
+      // write failure would replace the true explanation with a later one
+      // that is not about this row at all. It also matters to a retry, which
+      // re-opens rejected rows: a validation rejection must stay rejected.
       const failures: Stmt[] = [...group.importRowIds.values()].map((importRowId) => ({
         sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
-              WHERE import_row_id = ? AND imported_at IS NULL`,
+              WHERE import_row_id = ? AND imported_at IS NULL
+                AND row_status <> 'REJECTED'`,
         args: [reason, importRowId],
       }));
       await db.batch(failures, 'write');

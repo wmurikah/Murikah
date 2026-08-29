@@ -14,6 +14,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import { getCmsEnv } from '@/lib/cms/env';
@@ -31,6 +32,8 @@ import {
   type ExceptionQueue,
   type ImportType,
 } from '@/lib/cms/import/uploadCentre';
+import { importProgress, dominantAction, type ImportProgress } from '@/lib/cms/import/progress';
+import { planBatchDeletion, type BatchDeletePlan } from '@/lib/cms/import/batchAdmin';
 
 export const prerender = false;
 
@@ -51,12 +54,19 @@ let batch: BatchSummaryRow | undefined;
 let queues: ExceptionQueue[] = [];
 let rows: RowLine[] = [];
 let audits: { eventType: string; action: string; at: string; after: string | null }[] = [];
+// RENDERED ON THE SERVER, EVERY LOAD. The island polls the same query, so a
+// refresh mid-run shows the same phase and the same counts, and the page is
+// complete with no JavaScript at all.
+let progress: ImportProgress | null = null;
+let deletion: BatchDeletePlan | null = null;
 let loadFailed = false;
 if (mayView) {
   try {
     const db = await getDb(getCmsEnv());
     batch = (await listBatches(db, 200)).find((candidate) => candidate.batchId === batchId);
     if (batch !== undefined) {
+      progress = await importProgress(db, batchId);
+      deletion = await planBatchDeletion(db, batchId);
       queues = await exceptionQueues(db, batchId);
       const rowResult = await db.execute({
         sql: `SELECT import_row_id, source_row_number, source_record_key, row_status,
@@ -125,6 +135,7 @@ const rowTone = (status: string) =>
       : status === 'CHANGED'
         ? 'info'
         : 'neutral';
+const action = dominantAction(batch?.status ?? '', batchId);
 ---
 
 <CmsLayout title="Import batch">
@@ -157,22 +168,96 @@ const rowTone = (status: string) =>
         >
           {mayCommit && (
             <Fragment slot="actions">
+              {/*
+                THREE DIFFERENT THINGS, LABELLED AS THREE DIFFERENT THINGS.
+                Revalidate re-checks rows against master data and writes no
+                record. Retry the import writes the records that are missing.
+                Delete removes the batch. They were one ghost button and a
+                commit button, which is how an operator presses the wrong one.
+                The destructive one is last, apart, and carries its own
+                confirmation.
+              */}
               <CmsButton id="cms-batch-revalidate" variant="ghost">
-                Revalidate unresolved rows
+                Revalidate
               </CmsButton>
-              {REPROCESSABLE.has(batch.status) && FILE_STORAGE_CONNECTED && (
-                <CmsButton id="cms-batch-reprocess" variant="secondary" icon="data">
-                  Reprocess
+              {action.action === 'retry' && (
+                <CmsButton id="cms-batch-retry" variant="primary" icon="data">
+                  Retry the import
                 </CmsButton>
               )}
-              {batch.status === 'READY' && (
+              {action.action === 'commit' && (
                 <CmsButton id="cms-batch-commit" variant="primary" icon="check">
-                  Import valid records
+                  {action.label}
+                </CmsButton>
+              )}
+              {action.href !== null && action.label !== null && (
+                <CmsButton variant="primary" href={action.href} icon="check">
+                  {action.label}
+                </CmsButton>
+              )}
+              {deletion?.permitted === true && (
+                <CmsButton
+                  id="cms-batch-delete"
+                  variant="danger"
+                  data-cms-modal-open="cms-batch-delete-confirm"
+                >
+                  Delete this batch
                 </CmsButton>
               )}
             </Fragment>
           )}
         </CmsPageHeader>
+
+        {/*
+          WHAT TO DO NEXT, BEFORE THE TABLE. The overview used to lead, which
+          told an operator arriving at a failed batch nothing they could act
+          on. One sentence for the state, the count beside it, and the phase
+          rendered from the server so a reload and the poll cannot disagree.
+        */}
+        <CmsCard title={progress?.label ?? batch.status} class="mb-4">
+          <p class="text-cms-body text-cms-ink">{action.sentence}</p>
+          {progress !== null && progress.done !== null && progress.total !== null && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted tabular-nums" data-cms-progress-count>
+              {progress.done} of {progress.total} {progress.unit}
+              {progress.percent === null ? '' : ` — ${progress.percent}%`}
+            </p>
+          )}
+          {progress !== null && progress.percent === null && progress.running && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted" data-cms-progress-note>
+              {progress.sentence}
+            </p>
+          )}
+          {action.retryUnavailable !== null && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted">{action.retryUnavailable}</p>
+          )}
+          {deletion?.permitted === false && deletion.refusal !== null && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted">{deletion.refusal}</p>
+          )}
+          <p
+            id="cms-batch-retry-figures"
+            role="status"
+            aria-live="polite"
+            class="mt-2 text-cms-body-sm text-cms-muted"
+          />
+          {/*
+            THE SAME FIGURES WITHOUT JAVASCRIPT. The numbers above came from
+            the server on this load, so they are already correct for a reader
+            with no scripting. What such a reader loses is the poll, so they
+            are given the one control that replaces it: a plain link back to
+            this page. It is not a fallback message, it is the mechanism.
+          */}
+          {progress?.running === true && (
+            <noscript>
+              <p class="mt-2 text-cms-body-sm text-cms-muted">
+                These figures were read when the page loaded.{' '}
+                <a class="underline" href={`/app/data/history/${encodeURIComponent(batchId)}`}>
+                  Reload for the current position
+                </a>
+                .
+              </p>
+            </noscript>
+          )}
+        </CmsCard>
 
         {/*
          * A batch that cannot be recovered says so, here, without anybody
@@ -353,6 +438,46 @@ const rowTone = (status: string) =>
           </CmsCard>
         </div>
 
+        {/*
+          THE CONFIRMATION STATES WHAT GOES AND WHAT STAYS. A destructive
+          dialog that only asks "are you sure?" is asking somebody to confirm
+          something they have not been told.
+        */}
+        {deletion?.permitted === true && (
+          <CmsModal
+            id="cms-batch-delete-confirm"
+            title="Delete this batch?"
+            description="This cannot be undone."
+          >
+            <div class="px-5 py-4 text-cms-body-sm">
+              <p class="font-semibold text-cms-ink">What goes</p>
+              <ul class="mt-1 mb-3 list-disc pl-5 text-cms-muted">
+                <li>This batch and its record in the history</li>
+                <li>{deletion.contents.rows} import rows</li>
+                <li>{deletion.contents.landedRows} landed extract rows</li>
+                <li>{deletion.contents.unresolvedActors} unresolved people</li>
+              </ul>
+              <p class="font-semibold text-cms-ink">What stays</p>
+              <ul class="mt-1 list-disc pl-5 text-cms-muted">
+                <li>Every sales order and purchase order already written</li>
+                <li>
+                  {deletion.footprint.accountsCreated} customers and{' '}
+                  {deletion.footprint.productsCreated} products created from this batch
+                </li>
+                <li>The audit trail, which is append-only and is never deleted</li>
+              </ul>
+            </div>
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <CmsButton id="cms-batch-delete-confirmed" variant="danger">
+                Delete the batch
+              </CmsButton>
+            </Fragment>
+          </CmsModal>
+        )}
+
         <CmsDrawer id="cms-row-drawer" tone="form" title="Import row">
           <div id="cms-row-body" class="text-cms-body-sm text-cms-muted">
             Loading.
@@ -408,6 +533,97 @@ const rowTone = (status: string) =>
             .map(([key, value]) => pair(key, value))
             .join(''));
   });
+
+  /**
+   * THE THREE FIGURES, FETCHED BEFORE THE RETRY RUNS.
+   *
+   * The operator decides with them in front of them. Asked on load rather than
+   * on press, so the number is on screen before a finger is near the button.
+   */
+  const retryButton = document.getElementById('cms-batch-retry');
+  const figures = document.getElementById('cms-batch-retry-figures');
+  if (retryButton && figures) {
+    void (async () => {
+      const response = await fetch(`/api/data/imports/${batchId}/retry`);
+      if (!response.ok) return;
+      const preview = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (preview === null) return;
+      const blocked = Number(preview.blocked ?? 0);
+      figures.textContent =
+        `${Number(preview.alreadyImported ?? 0)} already imported and will be skipped. ` +
+        `${Number(preview.willImport ?? 0)} will be imported. ` +
+        `${blocked} blocked.` +
+        (blocked === 0
+          ? ''
+          : ` ${((preview.blockedReasons as { reason?: string }[] | undefined) ?? [])
+              .map((entry) => entry.reason ?? '')
+              .join(' ')}`);
+    })();
+
+    retryButton.addEventListener('click', async () => {
+      const note = document.getElementById('cms-batch-message');
+      if (note) note.textContent = 'Retrying the import';
+      const response = await fetch(`/api/data/imports/${batchId}/retry`, { method: 'POST' });
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      const outcome = (payload ?? {}) as Record<string, unknown>;
+      if (note) {
+        note.textContent = response.ok
+          ? String(outcome.message ?? 'The retry finished.')
+          : 'The retry could not be run.';
+      }
+      if (response.ok && outcome.nothingChanged !== true) window.location.reload();
+    });
+  }
+
+  // The delete, behind its own confirmation. The button is only rendered when
+  // the server has already said the batch may be deleted, and the endpoint
+  // asks the same question again before it acts.
+  document.getElementById('cms-batch-delete-confirmed')?.addEventListener('click', async () => {
+    const note = document.getElementById('cms-batch-message');
+    const response = await fetch(`/api/data/imports/${batchId}/delete`, { method: 'POST' });
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const outcome = (payload ?? {}) as Record<string, unknown>;
+    if (response.ok && outcome.ok === true) {
+      window.location.assign('/app/data/history');
+      return;
+    }
+    (document.getElementById('cms-batch-delete-confirm') as HTMLDialogElement | null)?.close();
+    if (note) note.textContent = String(outcome.refusal ?? 'The batch could not be deleted.');
+  });
+
+  /**
+   * THE PROGRESS ISLAND, AND IT ONLY EXISTS WHILE SOMETHING IS RUNNING.
+   *
+   * The page already rendered the phase and the counts from the server, so
+   * this changes nothing about what a reader sees on load or after a refresh;
+   * it only keeps them current. It polls the one query the server rendered
+   * from, so the two cannot disagree, and it stops the moment the run does.
+   */
+  const progressCount = document.querySelector('[data-cms-progress-count]');
+  const progressNote = document.querySelector('[data-cms-progress-note]');
+  if (progressCount || progressNote) {
+    const poll = async () => {
+      const response = await fetch(`/api/data/imports/${batchId}/progress`);
+      if (!response.ok) return false;
+      const state = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (state === null) return false;
+      const done = state.done as number | null;
+      const total = state.total as number | null;
+      const percent = state.percent as number | null;
+      if (progressCount && done !== null && total !== null) {
+        progressCount.textContent =
+          `${done} of ${total} ${String(state.unit ?? '')}` +
+          (percent === null ? '' : ` \u2014 ${percent}%`);
+      }
+      if (progressNote) progressNote.textContent = String(state.sentence ?? '');
+      return state.running === true;
+    };
+    const tick = async () => {
+      if (await poll()) window.setTimeout(() => void tick(), 2000);
+      else window.location.reload();
+    };
+    window.setTimeout(() => void tick(), 2000);
+  }
 
   // Run the whole batch again from the stored file. Not offered on an
   // IMPORTED batch, and the server refuses it there too.
