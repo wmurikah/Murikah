@@ -23,7 +23,6 @@ import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { canViewSalesOrders } from '@/lib/cms/permissions';
 import { parseFilter, filterToQuery, drillTo } from '@/lib/cms/analytics/filters';
-import { formatDuration } from '@/lib/cms/analytics/stats';
 import {
   listSalesOrders,
   countSalesOrders,
@@ -79,7 +78,6 @@ if (mayView) {
 }
 
 const NOT_AVAILABLE = 'Not available';
-const stamp = (value: string | null) => value ?? NOT_AVAILABLE;
 const slaTone = (status: string | null) =>
   status === 'BREACHED'
     ? 'danger'
@@ -95,18 +93,18 @@ const slaTone = (status: string | null) =>
     !mayView ? (
       <CmsErrorState
         title="You do not have access to sales orders"
-        description="Ask a system administrator for the ORDERS.SALES_ORDER.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="Sales orders could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
         <CmsPageHeader
           title="Sales orders"
-          description={`${total.toLocaleString('en-KE')} orders match this filter. Values the source does not carry read "Not available", never zero.`}
+          description={`${total.toLocaleString('en-KE')} sales orders`}
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Orders', href: '/app/orders' },
@@ -137,17 +135,9 @@ const slaTone = (status: string | null) =>
           caption="Sales orders"
           columns={[
             { key: 'doc', label: 'Order' },
-            { key: 'customer', label: 'Customer' },
-            { key: 'affiliate', label: 'Affiliate' },
-            { key: 'bu', label: 'Business unit' },
             { key: 'created', label: 'Created' },
-            { key: 'products', label: 'Products' },
             { key: 'stage', label: 'Current stage' },
             { key: 'status', label: 'Status' },
-            { key: 'finance', label: 'Finance', numeric: true },
-            { key: 'credit', label: 'Credit', numeric: true },
-            { key: 'invoice', label: 'Invoice' },
-            { key: 'loading', label: 'Loading' },
             { key: 'sla', label: 'SLA' },
           ]}
           empty={rows.length === 0}
@@ -161,24 +151,17 @@ const slaTone = (status: string | null) =>
                 >
                   {row.documentNumber}
                 </a>
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[row.customerName, row.affiliateName, row.businessUnitName, row.productSummary]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               </td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.customerName}</td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.affiliateName}</td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.businessUnitName ?? NOT_AVAILABLE}</td>
               <td class="px-4 py-2.5 text-cms-muted">{row.orderCreatedAt}</td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.productSummary ?? NOT_AVAILABLE}</td>
               <td class="px-4 py-2.5 text-cms-muted">{row.currentStage ?? NOT_AVAILABLE}</td>
               <td class="px-4 py-2.5">
                 <CmsBadge tone="neutral" label={row.status.replace('_', ' ').toLowerCase()} />
               </td>
-              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
-                {formatDuration(row.financeMinutes)}
-              </td>
-              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
-                {!row.creditRequired ? 'Not required' : formatDuration(row.creditMinutes)}
-              </td>
-              <td class="px-4 py-2.5 text-cms-muted">{stamp(row.invoiceCreatedAt)}</td>
-              <td class="px-4 py-2.5 text-cms-muted">{stamp(row.loadingAuthorityAt)}</td>
               <td class="px-4 py-2.5">
                 <CmsBadge
                   tone={slaTone(row.slaStatus)}
@@ -187,6 +170,25 @@ const slaTone = (status: string | null) =>
               </td>
             </tr>
           ))}
+          <Fragment slot="mobile">
+            {rows.map((row) => (
+              <a
+                href={drillTo(`/app/orders/sales/${row.salesOrderId}`, filter)}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block font-semibold text-cms-ink">{row.documentNumber}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {row.customerName} · {row.currentStage ?? 'No open stage'}
+                  </span>
+                </span>
+                <CmsBadge
+                  tone={slaTone(row.slaStatus)}
+                  label={(row.slaStatus ?? NOT_AVAILABLE).toLowerCase()}
+                />
+              </a>
+            ))}
+          </Fragment>
           <Fragment slot="empty">
             <CmsEmptyState
               icon="orders"

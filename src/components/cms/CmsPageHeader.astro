@@ -63,12 +63,12 @@ const {
 } = Astro.props;
 ---
 
-<header class:list={['flex flex-col gap-3', className]}>
+<header class:list={['flex flex-col gap-4 pt-1', className]}>
   {crumbs && crumbs.length > 0 && <CmsBreadcrumb items={crumbs} />}
   <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div class="flex min-w-0 flex-col gap-1">
       <div class="flex items-start gap-1.5">
-        <h1 class="text-cms-page font-semibold text-cms-ink">{title}</h1>
+        <h1 class="text-cms-page font-semibold tracking-tight text-cms-ink">{title}</h1>
         {definition && <CmsDefinition label={title} definition={definition} class="mt-1" />}
       </div>
       {description && <p class="max-w-2xl text-cms-body-sm text-cms-muted">{description}</p>}

@@ -104,12 +104,12 @@ const pick = (list: Option[], empty: string) => [
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to workflow administration"
-        description="Ask a system administrator for ADMIN.WORKFLOWS.MANAGE or ADMIN.WORKFLOW_ROLES.MANAGE."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="That workflow could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : definition === null ? (
       <CmsErrorState

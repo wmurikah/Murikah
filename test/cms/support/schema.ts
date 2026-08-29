@@ -1367,6 +1367,63 @@ CREATE INDEX IF NOT EXISTS idx_entity_attachments_visible ON entity_attachments(
 -- them, which is the only evidence worth anything.
 -- ============================================================================
 
+CREATE TABLE IF NOT EXISTS auth_federated_identities (
+ federated_identity_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+ provider TEXT NOT NULL CHECK(provider IN ('GOOGLE','MICROSOFT','APPLE')), issuer TEXT NOT NULL,
+ provider_subject TEXT NOT NULL, provider_tenant_id TEXT, provider_email TEXT NOT NULL COLLATE NOCASE,
+ provider_email_verified INTEGER NOT NULL CHECK(provider_email_verified IN (0,1)),
+ status TEXT NOT NULL CHECK(status IN ('ACTIVE','REVOKED')), linked_at TEXT NOT NULL, last_login_at TEXT,
+ revoked_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE, UNIQUE(provider,issuer,provider_subject)
+);
+CREATE INDEX IF NOT EXISTS idx_auth_federated_user ON auth_federated_identities(user_id);
+CREATE TABLE IF NOT EXISTS auth_email_domain_policies (
+ domain_policy_id TEXT PRIMARY KEY, domain TEXT NOT NULL COLLATE NOCASE UNIQUE,
+ policy_type TEXT NOT NULL CHECK(policy_type IN ('INTERNAL_PROTECTED','SELF_REGISTRATION_BLOCKED')),
+ reason TEXT, active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)), created_by_user_id TEXT,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(created_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+INSERT INTO auth_email_domain_policies(domain_policy_id,domain,policy_type,reason) VALUES
+ ('DP-HASS','hasspetroleum.com','INTERNAL_PROTECTED','Employees require provisioning'),
+ ('DP-GMAIL','gmail.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-GOOGLEMAIL','googlemail.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-YAHOO','yahoo.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-HOTMAIL','hotmail.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-OUTLOOK','outlook.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-LIVE','live.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-ICLOUD','icloud.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-ME','me.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-MAC','mac.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-AOL','aol.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-PROTONMAIL','protonmail.com','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-PROTON','proton.me','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-PM','pm.me','SELF_REGISTRATION_BLOCKED','Consumer email'),
+ ('DP-APPLE-RELAY','privaterelay.appleid.com','SELF_REGISTRATION_BLOCKED','Private relay'),
+ ('DP-ICLOUD-PRIVATE','private.icloud.com','SELF_REGISTRATION_BLOCKED','Private relay');
+CREATE TABLE IF NOT EXISTS auth_oidc_transactions (
+ transaction_id TEXT PRIMARY KEY, provider TEXT NOT NULL CHECK(provider IN ('GOOGLE','MICROSOFT','APPLE')),
+ purpose TEXT NOT NULL CHECK(purpose IN ('SIGN_IN','REGISTER','LINK')), state_hash TEXT NOT NULL UNIQUE,
+ nonce_hash TEXT NOT NULL, pkce_verifier TEXT NOT NULL, return_path TEXT NOT NULL,
+ created_at TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT, CHECK(expires_at>=created_at)
+);
+CREATE TABLE IF NOT EXISTS customer_access_requests (
+ access_request_id TEXT PRIMARY KEY, user_id TEXT, identity_method TEXT NOT NULL CHECK(identity_method IN ('PASSWORD','GOOGLE','MICROSOFT')),
+ federated_identity_id TEXT, provider_issuer TEXT, provider_subject TEXT, email_at_request TEXT NOT NULL COLLATE NOCASE,
+ email_domain TEXT NOT NULL, requested_account_id TEXT, requested_contact_id TEXT, company_name TEXT, contact_name TEXT,
+ status TEXT NOT NULL CHECK(status IN ('PENDING','APPROVED','REJECTED','CANCELLED')), submitted_at TEXT NOT NULL,
+ identity_verified_at TEXT NOT NULL, reviewed_at TEXT, reviewed_by_user_id TEXT, decision_reason TEXT,
+ approved_membership_id TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+ FOREIGN KEY(federated_identity_id) REFERENCES auth_federated_identities(federated_identity_id) ON DELETE SET NULL,
+ FOREIGN KEY(requested_account_id) REFERENCES accounts(account_id) ON DELETE SET NULL,
+ FOREIGN KEY(requested_contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
+ FOREIGN KEY(reviewed_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+ FOREIGN KEY(approved_membership_id) REFERENCES customer_portal_memberships(portal_membership_id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_customer_access_pending_email ON customer_access_requests(email_at_request) WHERE status='PENDING';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_customer_access_pending_identity ON customer_access_requests(identity_method,provider_issuer,provider_subject) WHERE status='PENDING' AND provider_subject IS NOT NULL;
+
 CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_update
 BEFORE UPDATE ON audit_events
 BEGIN

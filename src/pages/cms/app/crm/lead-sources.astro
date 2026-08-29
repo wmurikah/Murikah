@@ -59,12 +59,12 @@ if (mayManage) {
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to lead sources"
-        description="Ask a system administrator for the CRM.LEAD_SOURCES.MANAGE permission. Reading leads does not include configuring the list behind them."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="Lead sources could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
