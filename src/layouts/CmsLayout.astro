@@ -119,7 +119,7 @@ const DRAWER_ID = 'cms-nav-drawer';
       A browser with no storage, or one refusing it, simply gets the default.
     */
     }
-    <script is:inline>
+    <script is:inline nonce={Astro.locals.cmsNonce}>
       try {
         const saved = localStorage.getItem('cms.rail.pinned');
         if (saved === '1' || (saved === null && matchMedia('(min-width: 1280px)').matches)) {

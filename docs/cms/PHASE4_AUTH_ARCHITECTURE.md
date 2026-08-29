@@ -35,28 +35,3 @@ Reset tokens contain 256 random bits. Only an HMAC is stored. Responses are gene
 ## Approval boundary
 
 Approval UI and mutation are deliberately pending: approval must select an existing account, authorized portal role and appropriate contact under business policy. Implementing a guess would risk cross-tenant access. Until that workflow is approved, requests remain pending and cannot create memberships.
-
-## Live Turso reconciliation
-
-**Reconciliation start:** `cf48dbbd63a516c1914f86ba36ef8b6430dad452`.
-
-The merged repository migration used `identity_id`, durable uniqueness on provider plus subject, and `request_id`/`email` request columns. The verified live database instead used `federated_identity_id`, an explicit issuer and lifecycle, uniqueness on provider + issuer + subject, and an `access_request_id` request model whose `user_id` was required. Live also introduced `auth_email_domain_policies` with 16 active policies, while the repository retained a shorter hard-coded list. These differences were confirmed drift, not equivalent aliases.
-
-### Canonical model and preservation
-
-| Table                        | Repository before reconciliation                                  | Verified live before reconciliation                                             | Canonical target                                                                                 | Preservation                                                                                                                 |
-| ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `auth_federated_identities`  | `identity_id`; provider + subject; one identity per user/provider | `federated_identity_id`; issuer; status/revocation; provider + issuer + subject | Verified live shape                                                                              | No rebuild; live had zero rows and its stronger shape is retained.                                                           |
-| `auth_email_domain_policies` | Hard-coded application sets                                       | 16 active policy rows                                                           | Verified live table is authoritative                                                             | All policy rows remain untouched.                                                                                            |
-| `customer_access_requests`   | Nullable user; pre-approval request; repository column names      | Required user and richer approval references                                    | `access_request_id`, nullable user, verified issuer/subject evidence, richer approval references | Create-copy-verify-rename operator script maps all existing live fields and provider evidence. Verified live count was zero. |
-| `auth_oidc_transactions`     | Short-lived state/nonce/PKCE table                                | Absent                                                                          | Repository security table with atomic consumption                                                | Created additively; no existing data to migrate.                                                                             |
-
-Provider identity is now `(provider, issuer, provider_subject)`. The issuer comes only from the cryptographically verified ID token; it is never inferred from email or domain. Multiple identities from the same provider may link to one user when issuers differ, while the canonical unique constraint prevents one external identity from belonging to two users.
-
-Domain classification queries the active live policy row through one server-side service. Normalization and confusable rejection remain pure. A policy query failure propagates and registration fails closed with a temporary-unavailability response.
-
-The signed registration grant now carries verified provider, issuer, subject and email. A pending request keeps that evidence but creates no `users`, `accounts`, or `customer_portal_memberships` row. The partial unique indexes prevent concurrent pending duplicates by normalized email and by verified provider identity. Tenant access remains impossible until the separately approved membership mutation exists.
-
-OIDC state and nonce remain keyed hashes. The short-lived PKCE verifier remains only in `auth_oidc_transactions`. Consumption is a single conditional `UPDATE … RETURNING`, so callback replay and concurrent callback attempts cannot both succeed.
-
-The live forward artifact is `PHASE4_LIVE_RECONCILIATION.sql`; the read-only before/after evidence block is `PHASE4_LIVE_VERIFICATION.sql`. The original `001` file remains documented history and must not be applied to the already-reconciled live database.

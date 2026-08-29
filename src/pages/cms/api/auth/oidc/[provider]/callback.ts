@@ -46,9 +46,7 @@ const callback: APIRoute = async ({ params, request, url }) => {
     const email = normalizeIdentityEmail(String(claims.email ?? '')),
       verified = claims.email_verified === true || claims.email_verified === 'true';
     if (!email || !verified) throw new Error('unverified_email');
-    const issuer = String(claims.iss ?? '');
-    if (!issuer) throw new Error('issuer_missing');
-    const policy = await classifyIdentityEmail(db, email);
+    const policy = classifyIdentityEmail(email);
     if (txn.purpose === 'REGISTER') {
       if (policy !== 'CORPORATE')
         return Response.redirect(
@@ -67,7 +65,6 @@ const callback: APIRoute = async ({ params, request, url }) => {
         await createRegistrationGrant(cmsEnv.sessionSecret, {
           email,
           provider: provider as 'GOOGLE' | 'MICROSOFT',
-          issuer,
           subject: String(claims.sub),
         }),
       );
@@ -75,7 +72,6 @@ const callback: APIRoute = async ({ params, request, url }) => {
     }
     const resolved = await resolveFederatedUser(db, {
       provider,
-      issuer,
       subject: String(claims.sub),
       email,
       emailVerified: verified,

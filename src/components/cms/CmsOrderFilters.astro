@@ -38,27 +38,6 @@ const activeCount = [
   filter.slaStatus,
   filter.creditRequired === 'ANY' ? null : filter.creditRequired,
 ].filter(Boolean).length;
-const chips = [
-  filter.from && { key: 'from', label: `From ${filter.from}` },
-  filter.to && { key: 'to', label: `To ${filter.to}` },
-  filter.affiliateId && {
-    key: 'affiliateId',
-    label: affiliates.find((item) => item.value === filter.affiliateId)?.label ?? 'Affiliate',
-  },
-  filter.status && { key: 'status', label: titleCase(filter.status) },
-  filter.slaStatus && { key: 'slaStatus', label: `SLA ${titleCase(filter.slaStatus)}` },
-  filter.creditRequired !== 'ANY' && {
-    key: 'creditRequired',
-    label: filter.creditRequired === 'YES' ? 'Credit required' : 'Credit not required',
-  },
-].filter(Boolean) as { key: string; label: string }[];
-const withoutFilter = (key: string) => {
-  const next = new URLSearchParams(Astro.url.searchParams);
-  next.delete(key);
-  next.delete('page');
-  const query = next.toString();
-  return query ? `${action}?${query}` : action;
-};
 ---
 
 <CmsFilterPanel action={action} activeCount={activeCount} label="Order filters">
@@ -152,15 +131,15 @@ const withoutFilter = (key: string) => {
   </Fragment>
   <Fragment slot="chips"
     >{
-      chips.map((chip) => (
+      activeCount > 0 && (
         <a
-          href={withoutFilter(chip.key)}
+          href={action}
           class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
-          {chip.label} <span aria-hidden="true">×</span>
-          <span class="sr-only">Remove filter</span>
+          Clear {activeCount} active {activeCount === 1 ? 'filter' : 'filters'}{' '}
+          <span aria-hidden="true">×</span>
         </a>
-      ))
+      )
     }</Fragment
   >
 </CmsFilterPanel>

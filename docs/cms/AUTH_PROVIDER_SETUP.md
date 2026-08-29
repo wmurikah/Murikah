@@ -15,14 +15,4 @@ Set Worker secrets with `wrangler secret put`; never put values in source:
 
 Google and Microsoft registration applications must request only OpenID, email and profile claims. Provider email must be verified. Apple is enabled for sign-in/linking, not initial registration. Validate every development, staging and production redirect URI in its provider console. Rotate secrets using Worker secret versions, then test login before retiring the previous value.
 
-## Database sequence
-
-Do **not** blindly apply `001_phase4_identity.sql` to a database that already has the verified live Phase 4 tables. `CREATE TABLE IF NOT EXISTS` does not reconcile column drift.
-
-For the verified live Turso database:
-
-1. Reconfirm the preconditions and row counts in `PHASE4_LIVE_VERIFICATION.sql`.
-2. Review and run `PHASE4_LIVE_RECONCILIATION.sql` once. It preserves existing live request rows while rebuilding only the additive request table and adding the OIDC transaction table.
-3. Run `PHASE4_LIVE_VERIFICATION.sql` again and require empty foreign-key results plus `ok` integrity.
-
-`001_phase4_identity.sql` remains as immutable migration history. Its application status outside the verified live database is unknown; operators must inventory a database before choosing a migration path.
+Apply `cms/db/migrations/001_phase4_identity.sql` to each CMS database before deploying the routes. The migration is SQLite/libSQL-compatible and additive.
