@@ -330,6 +330,69 @@ test('no page carries a static paragraph describing its own contents', () => {
   assert.deepEqual(offenders, [], `page descriptions still present:\n${offenders.join('\n')}`);
 });
 
+test('no user-facing text names a permission code, a query, a resolver or a scope', () => {
+  // THE GREP IS THE TEST. A page that explains its own permission model is
+  // telling a reader something they cannot act on, in vocabulary that belongs
+  // to the people who built it. Comments are exempt: this is about what is
+  // rendered, and the reasoning has to live somewhere.
+  const offenders: string[] = [];
+  // A PERMISSION CODE, NOT THE WORD. "You do not have permission to read the
+  // audit trail" is plain English and is the honest thing to say to somebody
+  // who was refused; `AUDIT.EVENTS.VIEW` is an internal identifier and is not.
+  // The same distinction applies to the rest: the machinery, never the idea.
+  const naming =
+    /[A-Z]{3,}\.[A-Z_]+\.[A-Z_]+|\bresolver\b|\bsubrequest|round trip|\bSQL\b|\.sql\b|scope resolver|\bpermission code\b/;
+  for (const path of CMS_SOURCE) {
+    if (!path.endsWith('.astro')) continue;
+    const source = readFileSync(path, 'utf8');
+    // Everything before the closing frontmatter fence is code, not text; and a
+    // line that is part of a block comment is reasoning, not a screen.
+    const body = source.slice(source.indexOf('---', 3) + 3);
+    let inComment = false;
+    for (const [index, line] of body.split('\n').entries()) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('{/*') || trimmed.startsWith('/*')) inComment = true;
+      if (inComment) {
+        if (trimmed.includes('*/')) inComment = false;
+        continue;
+      }
+      if (trimmed.startsWith('*') || trimmed.startsWith('//')) continue;
+      // A `permission` prop or variable is code; only rendered prose counts,
+      // which is text inside quotes or between tags.
+      const rendered = [...trimmed.matchAll(/"([^"]{12,})"|'([^']{12,})'|>([^<>{}]{12,})</g)].map(
+        (m) => m[1] ?? m[2] ?? m[3] ?? '',
+      );
+      for (const text of rendered) {
+        if (naming.test(text)) offenders.push(`${path}:${index + 1} ${text.slice(0, 90)}`);
+      }
+    }
+  }
+  console.log(`[verbosity] internals named in user-facing text: ${offenders.length}`);
+  assert.deepEqual(offenders, [], `user-facing text naming internals:\n${offenders.join('\n')}`);
+});
+
+test('the accent appears once per view', () => {
+  // THE ITEM THAT DIFFERS IS THE ITEM THAT IS REMEMBERED. Four highlights are
+  // no highlights, so a page gets one. The rail's active marker is the
+  // application's standing use of it and lives in the shell, not on a page.
+  const pages = [
+    'src/pages/cms/app/index.astro',
+    'src/pages/cms/app/orders/sales.astro',
+    'src/pages/cms/login.astro',
+  ];
+  const counts: string[] = [];
+  for (const path of pages) {
+    const source = readFileSync(path, 'utf8');
+    const used = (source.match(/\bcms-gold\b/g) ?? []).length;
+    counts.push(`  ${path.padEnd(40)} ${used}`);
+    assert.ok(used <= 1, `${path} uses the accent ${used} times`);
+  }
+  console.log(`[accent] uses per page\n${counts.join('\n')}`);
+  // And exactly once in the shell, where the current page is marked.
+  const sidebar = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
+  assert.equal((sidebar.match(/bg-cms-gold/g) ?? []).length, 1);
+});
+
 test('a KPI definition is available on demand and is never body text', () => {
   const definition = readFileSync('src/components/cms/CmsDefinition.astro', 'utf8');
   // Native <details>: no JavaScript, in the tab order, announces its state.
@@ -402,88 +465,109 @@ test('a drillable figure is a real link with a focus ring', () => {
   }
 });
 
-test('every figure on the dashboard carries a destination', () => {
-  // Every KPI card on the merged dashboard is a drill target. The card is the
-  // anchor, so this reads the props rather than looking for an <a>: a card
-  // with no `href` renders as text, which is correct for an absent value and
-  // wrong for a figure that has records behind it.
+test('every figure on Home carries a destination', () => {
+  // Home is charts and two leaderboards now, so the figures are table cells
+  // and chart points rather than KPI cards. The rule is unchanged: a number
+  // nobody can open is a number nobody can check.
   const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  const cards = [...source.matchAll(/<CmsKpiCard\b([\s\S]*?)\/>/g)].map((m) => m[1]!);
-  assert.ok(cards.length >= 12, `expected the dashboard's cards, found ${cards.length}`);
-  const missing = cards
-    .filter((card) => !/\bhref=/.test(card))
-    .map((card) => /label=\{?"?([^"\n}]+)/.exec(card)?.[1] ?? 'unnamed');
-  assert.deepEqual(missing, [], `cards with no destination: ${missing.join(', ')}`);
 
-  // And the SLA measures, which are built in their own module and spread into
-  // a card, so the loop above cannot see their hrefs.
-  const sla = readFileSync('src/lib/cms/dashboard/sla.ts', 'utf8');
-  const measures = [...sla.matchAll(/label: '([^']+)',/g)].map((m) => m[1]!);
-  assert.ok(measures.length >= 5, `expected the SLA measures, found ${measures.length}`);
-  assert.equal(
-    (sla.match(/href: '\/app\//g) ?? []).length,
-    measures.length,
-    'every SLA measure declares a destination',
-  );
-  console.log(`[drill] ${cards.length} dashboard cards, ${measures.length} SLA measures`);
+  // Every numeric cell renders {count(...)} or a duration. The countable ones
+  // must sit inside an anchor.
+  const counted = [...source.matchAll(/\{count\(([^)]*)\)\}/g)].map((m) => m[1]!);
+  assert.ok(counted.length >= 8, `expected Home's counts, found ${counted.length}`);
+  for (const figure of counted) {
+    const at = source.indexOf(`{count(${figure})}`);
+    const before = source.slice(Math.max(0, at - 400), at);
+    assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
+  }
+
+  // And the chart points, which carry their own href into the SVG.
+  assert.match(source, /href: link\(f\.fn\)/, 'every chart bar is a drill target');
+  console.log(`[drill] ${counted.length} linked figures on Home`);
 });
 
-test('every dashboard destination carries the filter and the scope', () => {
+test('every Home destination carries the filter and the scope', () => {
   // Destinations are built by drillTo, which serialises the whole filter. A
   // bare path would drop the period the figure was computed under and show a
   // different population from the number that was clicked.
   const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
   const hrefs = [...source.matchAll(/href=\{([^}]+)\}/g)].map((m) => m[1]!.trim());
-  assert.ok(hrefs.length > 10, `expected the destinations, found ${hrefs.length}`);
+  assert.ok(hrefs.length >= 6, `expected the destinations, found ${hrefs.length}`);
   const bare = hrefs.filter((h) => h.startsWith("'/") || h.startsWith('"/'));
   assert.deepEqual(bare, [], `destinations that lose the filter: ${bare.join(', ')}`);
-  for (const name of ['toService', 'toCrm', 'toSales', 'toPurchases']) {
+  for (const name of ['toSales', 'toPurchases']) {
     assert.match(
       source,
-      new RegExp(`const ${name} = drillTo\\('/app/`),
-      `the ${name} destination is built with drillTo`,
+      new RegExp(`const ${name} = \\(extra`),
+      `the ${name} destination is built from drillTo`,
     );
   }
+  assert.match(source, /drillTo\('\/app\/orders\/purchases', filter/);
+  assert.match(source, /drillTo\('\/app\/orders\/sales', filter/);
 });
 
-test('the SLA family switch is in the URL and costs no extra load', () => {
-  const sla = readFileSync('src/lib/cms/dashboard/sla.ts', 'utf8');
-  // The choice travels in a query parameter, so a view can be shared and the
-  // back button works.
-  assert.match(sla, /export const SLA_PARAM = 'sla'/);
-  assert.match(sla, /export function readSlaFamily\(params: URLSearchParams\)/);
-  // And the family is derived from a Dashboard the page already holds, rather
-  // than fetched: the module takes the loaded board, not a database client.
-  assert.match(sla, /export function slaFamilyView\(key: SlaFamilyKey, board: Dashboard\)/);
-  assert.ok(!/Client|db\.execute|execute\(/.test(sla), 'the SLA module issues no query');
-});
-
-test('the dashboard is one page: /app/executive redirects to it', () => {
-  const redirect = readFileSync('src/pages/cms/app/executive.astro', 'utf8');
-  assert.match(
-    redirect,
-    /Astro\.redirect\(`\/app\$\{Astro\.url\.search\}`, 301\)/,
-    'a permanent redirect that carries the query string',
-  );
-  // And it is gone from the navigation, so it is not a second page.
-  const nav = readFileSync('src/lib/cms/nav.ts', 'utf8');
-  assert.ok(!nav.includes("'/app/executive'"), 'the Executive entry is gone from the rail');
-  assert.ok(!nav.includes("label: 'Executive'"), 'and so is its label');
-});
-
-test('the six sections appear in order, each carrying three to five items', () => {
+test('Home leads with the two charts, then the two leaderboards', () => {
   const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+
+  // The charts come first, purchase orders then sales orders, and each
+  // leaderboard follows its own chart inside the same column. Reading the
+  // order out of the file is what proves the column reads downward: a grid
+  // that placed them side by side would interleave these four markers.
+  const marks = [
+    ...source.matchAll(
+      /title="(Purchase order approval|Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
+    ),
+  ].map((m) => m[1] ?? m[2]!);
+  assert.deepEqual(marks, [
+    'Purchase order approval',
+    'Purchase order approvers',
+    'Sales order approval',
+    'Sales order approvers',
+  ]);
+
+  // Everything that used to sit between them is gone; the one section left is
+  // the exception list, and it is below all four.
   const order = [...source.matchAll(/<CmsSectionHeader\s+id="([a-z]+)"\s+title="([^"]+)"/g)].map(
     (m) => m[2]!,
   );
-  assert.deepEqual(
-    order,
-    ['SLA', 'Needs attention', 'Orders', 'Commercial', 'Service', 'Data freshness'],
-    'SLA leads, because it is the reason this system exists',
+  assert.deepEqual(order, ['Needs attention']);
+  assert.ok(
+    source.indexOf('Needs attention') > source.indexOf('Sales order approvers'),
+    'the exceptions sit below the leaderboards',
   );
-  // Needs attention is capped at four, so a long exception list cannot turn the
-  // top of the dashboard into a wall nobody reads.
-  assert.match(source, /board\.attention\.slice\(0, 4\)/);
+
+  // Two columns that stack on a narrow screen, purchase orders first. The
+  // grid is one declaration, so the source order IS the stacked order.
+  assert.match(source, /grid gap-6 lg:grid-cols-2/);
+});
+
+test('the two leaderboards carry identical columns in identical order', () => {
+  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  // One COLUMNS constant, used by both tables. Two literals could drift; one
+  // cannot, and the eye moving between the tables depends on it.
+  assert.equal((source.match(/columns=\{COLUMNS\}/g) ?? []).length, 2);
+  const columns = /const COLUMNS = \[([\s\S]*?)\];/.exec(source)?.[1] ?? '';
+  const labels = [...columns.matchAll(/label: '([^']+)'/g)].map((m) => m[1]!);
+  assert.deepEqual(labels, [
+    'Person',
+    'Function',
+    'Volume',
+    'Average',
+    'Median',
+    'P90',
+    'Within SLA',
+    'Pending',
+    'Oldest pending',
+  ]);
+});
+
+test('a minimum volume before a rank is stated on the screen', () => {
+  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  assert.equal(
+    (source.match(/Ranked from \{MINIMUM_RANKED_VOLUME\}/g) ?? []).length,
+    2,
+    'both tables say what the threshold is',
+  );
 });
 
 test('a section header cannot carry a description', () => {
@@ -536,24 +620,52 @@ test('a leaderboard cannot be built on speed alone', () => {
   assert.match(row, /unranked below/, 'and the reason is shown rather than the row dropped');
 });
 
-test('the rail defaults open on large desktops and remains deliberately collapsible', () => {
+test('the rail is collapsed by default and opens four ways', () => {
   const layout = readFileSync('src/layouts/CmsLayout.astro', 'utf8');
-  assert.match(layout, /saved === null && matchMedia\('\(min-width: 1280px\)'\)\.matches/);
-  assert.match(layout, /group-data-\[rail-pinned=true\]\/rail:w-56 lg:block/);
+  // COLLAPSED AT EVERY WIDTH. It used to default to pinned above 1280px,
+  // which meant most people never met the rail this is about.
+  assert.ok(!/min-width: 1280px/.test(layout), 'no width test decides the default any more');
+  assert.match(layout, /localStorage\.getItem\('cms\.rail\.pinned'\) === '1'/);
   assert.match(layout, /absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden/);
   assert.match(layout, /<div class="flex h-full w-56 flex-col py-4">/);
   assert.match(layout, /hover:w-56/, 'it expands on hover');
   assert.match(layout, /focus-within:w-56/, 'and on keyboard focus');
+  assert.match(layout, /group-data-\[rail-touch=true\]\/rail:w-56/, 'and on a touch');
   assert.match(layout, /group-data-\[rail-pinned=true\]\/rail:w-56/, 'and when pinned');
   assert.match(layout, /transition-\[width\] duration-150/, 'the motion is short');
-  assert.match(layout, /localStorage\.getItem\('cms\.rail\.pinned'\)/);
 
   const script = readFileSync('src/components/cms/CmsRailScript.astro', 'utf8');
   assert.match(script, /aria-pressed/, 'the pin reports its own state');
-  assert.match(script, /localStorage\.setItem\(KEY, '0'\)/, 'and collapse explicitly persists');
+  assert.match(script, /localStorage\.setItem\(PIN_KEY, pinned \? '1' : '0'\)/);
+  // A hover-only control is a broken control on a tablet, so touch is its own
+  // path rather than something hover is expected to cover.
+  assert.match(script, /pointerType !== 'touch'/, 'touch is handled explicitly');
+  assert.match(script, /railTouch/, 'and it drives the same width state');
 
   const global = readFileSync('src/styles/global.css', 'utf8');
   assert.match(global, /transition-duration: 0\.01ms !important/);
+});
+
+test('the module groups collapse, persist, and open on the current page', () => {
+  const sidebar = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
+  // A native <details>, so the disclosure works with no JavaScript at all and
+  // announces its own state.
+  assert.match(sidebar, /<details/, 'a group is a native disclosure');
+  assert.match(sidebar, /open=\{holdsCurrent\}/, 'and the server decides which one is open');
+  assert.match(
+    sidebar,
+    /const holdsCurrent = group\.entries\.some\(\(item\) => isActive\(item\.href\)\)/,
+    'from the current path, not from a script',
+  );
+  // A group nobody may see is not rendered at all, rather than rendered empty.
+  assert.match(sidebar, /\.filter\(\(group\) => group\.entries\.length > 0\)/);
+  // A closed group must not empty the 64px rail, where there is no heading to
+  // explain the absence and no control to undo it.
+  assert.match(sidebar, /aside\[data-cms-rail\]\) \.cms-nav-group:not\(\[open\]\) > ul/);
+
+  const script = readFileSync('src/components/cms/CmsRailScript.astro', 'utf8');
+  assert.match(script, /cms\.rail\.groups/, 'the choice is remembered');
+  assert.match(script, /addEventListener\('toggle'/, 'from the element that changed');
 });
 
 // ---------------------------------------------------------------------------

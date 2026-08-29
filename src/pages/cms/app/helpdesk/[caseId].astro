@@ -134,7 +134,7 @@ const allowedMoves = found === null ? [] : [...(CASE_TRANSITIONS[found.status] ?
           description={`${found.accountName} · ${found.categoryName} / ${found.subcategoryName} · raised ${found.raisedAt}`}
           crumbs={[
             { label: 'Home', href: '/app' },
-            { label: 'Service', href: '/app/service' },
+            { label: 'Helpdesk', href: '/app/helpdesk' },
             { label: found.caseNumber },
           ]}
         >
@@ -244,10 +244,7 @@ const allowedMoves = found === null ? [] : [...(CASE_TRANSITIONS[found.status] ?
             )}
           </CmsCard>
 
-          <CmsCard
-            title="Communications"
-            description="All three directions are shown here. The customer portal receives a different shape whose SQL already excludes internal rows; nothing there depends on hiding."
-          >
+          <CmsCard title="Communications">
             {communications.length === 0 ? (
               <CmsEmptyState icon="service" title="Nothing recorded" />
             ) : (

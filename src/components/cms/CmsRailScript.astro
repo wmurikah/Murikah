@@ -1,6 +1,6 @@
 ---
 /**
- * The rail's pin: keep it open, and remember that choice.
+ * The rail's pin, the touch tap, and which module groups a person left open.
  *
  * WHY THE STATE LIVES ON <body> RATHER THAN ON THE RAIL. It is set by an
  * inline script in CmsLayout that runs before the rail has been parsed, so the
@@ -9,51 +9,113 @@
  * the rail's width is a plain Tailwind variant rather than a hand-written
  * selector reaching up the tree.
  *
- * WHY localStorage AND NOT THE DATABASE. This is a per-browser display
- * preference, and the alternative is a column on `users`, which is a schema
- * change this phase may not make. The honest consequence, stated rather than
- * hidden: the choice follows the browser, not the person, so the same user on
- * a second machine starts collapsed again.
+ * WHY localStorage AND NOT THE DATABASE. These are per-browser display
+ * preferences, and the alternative is a column on `users` or a preferences
+ * table, either of which is a schema change this phase may not make. The
+ * honest consequence, stated rather than hidden: the choice follows the
+ * browser, not the person, so the same user on a second machine starts from
+ * the defaults again.
  *
- * TOUCH. On a device with no hover the panel never expands by pointing at it,
- * so this button is how it opens: one tap opens and keeps it open, another
- * closes it. That is the same control a mouse user pins with, which is why
- * there is no separate touch handler to keep in step with this one.
+ * COLLAPSED IS THE DEFAULT AT EVERY WIDTH. It used to default to pinned above
+ * 1280px, which meant most people never saw the rail this phase is about. A
+ * person who wants it open presses the pin once and it is remembered.
+ *
+ * TOUCH IS ITS OWN PATH, BECAUSE HOVER IS NOT AVAILABLE THERE. A hover-only
+ * control is a broken control on a tablet: `hover:` never fires, and
+ * `focus-within` only fires once something inside has been reached, which is
+ * the thing the reader is trying to do. So a touch anywhere on the rail opens
+ * it, and a touch outside closes it again. Pointer events carry the input
+ * type, so this costs one listener and never fires for a mouse.
  */
 ---
 
 <script>
-  const KEY = 'cms.rail.pinned';
+  const PIN_KEY = 'cms.rail.pinned';
+  const GROUPS_KEY = 'cms.rail.groups';
   const root = document.body;
   const button = document.querySelector<HTMLButtonElement>('[data-cms-rail-pin]');
   const label = document.querySelector<HTMLElement>('[data-cms-rail-pin-label]');
+  const rail = document.querySelector<HTMLElement>('[data-cms-rail]');
 
   const paint = (pinned: boolean) => {
     if (pinned) root.dataset.railPinned = 'true';
     else delete root.dataset.railPinned;
     if (button) button.setAttribute('aria-pressed', String(pinned));
-    // The control says what it will do next, not what it did. A pinned rail
-    // offers "Collapse"; a collapsed one offers "Keep open".
     if (label) label.textContent = pinned ? 'Collapse' : 'Keep open';
   };
 
-  let pinned = matchMedia('(min-width: 1280px)').matches;
+  // COLLAPSED UNLESS THIS BROWSER SAID OTHERWISE. No width test: the rail is
+  // narrow by default on a 4K monitor and on a laptop alike.
+  let pinned = false;
   try {
-    const saved = localStorage.getItem(KEY);
-    if (saved !== null) pinned = saved === '1';
+    pinned = localStorage.getItem(PIN_KEY) === '1';
   } catch {
-    // Storage refused. The rail still works; the choice just does not persist.
+    /* A browser with storage disabled gets the default, which is collapsed. */
   }
   paint(pinned);
 
   button?.addEventListener('click', () => {
     pinned = !pinned;
     paint(pinned);
+    // A tap that pinned the rail should not leave the touch state behind to
+    // fight with it.
+    delete root.dataset.railTouch;
     try {
-      if (pinned) localStorage.setItem(KEY, '1');
-      else localStorage.setItem(KEY, '0');
+      localStorage.setItem(PIN_KEY, pinned ? '1' : '0');
     } catch {
-      // Nothing to do: the rail is in the right state for this page either way.
+      /* Not remembered. The rail still works for this page. */
     }
   });
+
+  // ---- Touch --------------------------------------------------------------
+  // Opens on tap, closes on a tap elsewhere. Not persisted: this is a gesture,
+  // not a preference, and the pin is how a preference is expressed.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if ((event as PointerEvent).pointerType !== 'touch') return;
+      const target = event.target as Node | null;
+      if (rail !== null && target !== null && rail.contains(target)) {
+        root.dataset.railTouch = 'true';
+        return;
+      }
+      delete root.dataset.railTouch;
+    },
+    { passive: true },
+  );
+
+  // ---- Module groups ------------------------------------------------------
+  // The server already decided which group is open, from the current path.
+  // This restores a person's own choice on top of that, and only for groups
+  // they have actually touched, so a first visit still opens the group the
+  // page is in.
+  const groups = Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-cms-nav-group]'));
+
+  const readState = (): Record<string, boolean> => {
+    try {
+      const raw = localStorage.getItem(GROUPS_KEY);
+      if (raw === null) return {};
+      const parsed: unknown = JSON.parse(raw);
+      return parsed !== null && typeof parsed === 'object'
+        ? (parsed as Record<string, boolean>)
+        : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const state = readState();
+  for (const group of groups) {
+    const name = group.dataset.cmsNavGroup ?? '';
+    const remembered = state[name];
+    if (typeof remembered === 'boolean') group.open = remembered;
+    group.addEventListener('toggle', () => {
+      state[name] = group.open;
+      try {
+        localStorage.setItem(GROUPS_KEY, JSON.stringify(state));
+      } catch {
+        /* Not remembered. The group still opens and closes. */
+      }
+    });
+  }
 </script>

@@ -122,12 +122,12 @@ function queueHref(key: string | null): string {
   if (key === null) next.delete('queue');
   else next.set('queue', key);
   next.delete('page');
-  return `/app/service?${next.toString()}`;
+  return `/app/helpdesk?${next.toString()}`;
 }
 function pageHref(target: number): string {
   const next = new URLSearchParams(params);
   next.set('page', String(target));
-  return `/app/service?${next.toString()}`;
+  return `/app/helpdesk?${next.toString()}`;
 }
 const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
 const activeFilters = [
@@ -165,11 +165,11 @@ const withoutServiceFilter = (key: string) => {
   const next = new URLSearchParams(params);
   next.delete(key);
   next.delete('page');
-  return `/app/service?${next.toString()}`;
+  return `/app/helpdesk?${next.toString()}`;
 };
 ---
 
-<CmsLayout title="Service">
+<CmsLayout title="Helpdesk">
   {
     !mayRead ? (
       <CmsErrorState
@@ -184,9 +184,9 @@ const withoutServiceFilter = (key: string) => {
     ) : (
       <Fragment>
         <CmsPageHeader
-          title="Service"
+          title="Helpdesk"
           definition="Ageing here is a fact in days. Whether a promise was kept is the SLA engine decision, and it is reported against the SLA vocabulary rather than as an age."
-          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Service' }]}
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Helpdesk' }]}
         >
           <Fragment slot="actions">
             {mayCreate && (
@@ -199,7 +199,7 @@ const withoutServiceFilter = (key: string) => {
         {mayCategories && (
           <div class="flex justify-end">
             <a
-              href="/app/service/categories"
+              href="/app/helpdesk/categories"
               class="rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
             >
               Manage categories
@@ -232,7 +232,7 @@ const withoutServiceFilter = (key: string) => {
           ))}
         </nav>
 
-        <CmsFilterPanel action="/app/service" activeCount={activeFilters}>
+        <CmsFilterPanel action="/app/helpdesk" activeCount={activeFilters}>
           <Fragment slot="primary">
             {query.queue !== null && <input type="hidden" name="queue" value={query.queue} />}
             <div>
@@ -351,7 +351,7 @@ const withoutServiceFilter = (key: string) => {
             <tr class="border-b border-cms-line last:border-0">
               <td class="px-4 py-2.5">
                 <a
-                  href={`/app/service/${row.caseId}`}
+                  href={`/app/helpdesk/${row.caseId}`}
                   class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
                 >
                   {row.subject}
@@ -384,7 +384,7 @@ const withoutServiceFilter = (key: string) => {
           <Fragment slot="mobile">
             {page.items.map((row) => (
               <a
-                href={`/app/service/${row.caseId}`}
+                href={`/app/helpdesk/${row.caseId}`}
                 class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
               >
                 <span class="min-w-0 flex-1">

@@ -141,7 +141,7 @@ export function slaFamilyView(key: SlaFamilyKey, board: Dashboard): SlaFamilyVie
       value: formatRate(service.firstResponseWithinSlaPercent),
       context: 'Within SLA',
       tone: complianceTone(service.firstResponseWithinSlaPercent),
-      href: '/app/service/analytics',
+      href: '/app/helpdesk/analytics',
       definition:
         'First-response SLA instances that were Met. An internal note is not a first response.',
       denominator: 'First-response SLA instances settled in this period',
@@ -152,7 +152,7 @@ export function slaFamilyView(key: SlaFamilyKey, board: Dashboard): SlaFamilyVie
       value: formatRate(service.resolutionWithinSlaPercent),
       context: 'Within SLA',
       tone: complianceTone(service.resolutionWithinSlaPercent),
-      href: '/app/service/analytics',
+      href: '/app/helpdesk/analytics',
       definition: 'Resolution SLA instances that were Met.',
       denominator: 'Resolution SLA instances settled in this period',
       dateBasis: 'SLA settled at',

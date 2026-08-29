@@ -289,10 +289,7 @@ const bottleneckChart = distributionChart(
           <h2 id="stages" class="sr-only">
             Stages
           </h2>
-          <CmsCard
-            title="Stage turnaround"
-            description="The stages these orders actually used. A level nobody used has no row here."
-          >
+          <CmsCard title="Stage turnaround">
             <CmsDataTable
               caption="Stage turnaround"
               columns={[
@@ -416,10 +413,7 @@ const bottleneckChart = distributionChart(
           <h2 id="mix" class="sr-only">
             What was bought
           </h2>
-          <CmsCard
-            title="What these orders were for"
-            description="Catalogue groups where the order has resolved lines, and the source's own classification where it does not."
-          >
+          <CmsCard title="What these orders were for">
             <CmsDataTable
               caption="Procurement mix"
               columns={[

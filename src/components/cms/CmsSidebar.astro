@@ -18,6 +18,21 @@
  * full white against the rail's muted text. Any one of those alone would fail
  * somebody.
  *
+ * THE GROUPS OPEN AND CLOSE, AND THEY DO IT WITHOUT JAVASCRIPT. Each group is
+ * a native `<details>`, so the disclosure works from the keyboard, is
+ * announced as one, and survives a page with no scripting at all. The `open`
+ * attribute is decided on the SERVER from the current path, which is what
+ * makes "only the group containing the current page is open by default" true
+ * on first paint rather than after a script runs. A small script then
+ * remembers a person's own choice; see CmsRailScript.
+ *
+ * A CLOSED GROUP MUST NOT EMPTY THE NARROW RAIL. At 64 pixels there are no
+ * group headings to see and no disclosure to press, so hiding a closed group's
+ * items would delete icons with nothing on screen explaining why. The style
+ * block below therefore re-shows every group's items while the rail is narrow,
+ * and lets the disclosure take effect only once the rail is wide enough to
+ * show what closed it. The drawer is always wide, so it always obeys.
+ *
  * Used twice per page, from one data model: as the rail from lg upwards, and
  * inside the mobile drawer below it. Both render this, so they cannot drift.
  */
@@ -44,28 +59,50 @@ const isActive = (href: string) =>
  * flush against the group that reshapes what everybody else can see.
  */
 const groups = [
-  { label: 'Work', items: ['Home', 'Customers', 'CRM', 'Service', 'Orders'] },
+  { label: 'Work', items: ['Home', 'Customers', 'CRM', 'Helpdesk', 'Orders'] },
   { label: 'Insights', items: ['Performance'] },
   { label: 'Operations', items: ['Data'] },
   { label: 'System', items: ['Administration'] },
 ] as const;
+
+/** The groups this caller may actually see, with an empty one dropped whole. */
+const rendered = groups
+  .map((group) => ({
+    label: group.label,
+    entries: entries.filter((item) => group.items.includes(item.label as never)),
+  }))
+  .filter((group) => group.entries.length > 0);
 ---
 
 <nav aria-label="Main" class="flex flex-col gap-0.5">
   {
-    groups.map((group) => {
-      const groupEntries = entries.filter((item) => group.items.includes(item.label as never));
-      if (groupEntries.length === 0) return null;
+    rendered.map((group) => {
+      // OPEN BECAUSE THE READER IS IN IT, decided here rather than in a script.
+      const holdsCurrent = group.entries.some((item) => isActive(item.href));
       return (
-        <section class="mb-3 last:mb-0" aria-labelledby={`${idPrefix}-${group.label}`}>
-          <p
+        <details
+          class="cms-nav-group mb-3 last:mb-0"
+          data-cms-nav-group={group.label}
+          open={holdsCurrent}
+        >
+          <summary
+            class="flex h-7 cursor-pointer list-none items-center rounded-cms text-[0.6875rem] font-semibold tracking-[0.12em] text-cms-rail-muted uppercase outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
             id={`${idPrefix}-${group.label}`}
-            class="ps-16 pb-1 text-[0.6875rem] font-semibold tracking-[0.12em] text-cms-rail-muted uppercase"
           >
-            {group.label}
-          </p>
+            {/*
+              The chevron sits in the same 64px icon column every row uses, so
+              the heading text begins exactly at the clip and the control is
+              never half-visible.
+            */}
+            <span class="flex w-16 shrink-0 items-center justify-center">
+              <span class="cms-nav-chevron inline-flex" aria-hidden="true">
+                <CmsIcon name="chevronRight" size={14} />
+              </span>
+            </span>
+            <span class="whitespace-nowrap">{group.label}</span>
+          </summary>
           <ul class="flex flex-col gap-0.5">
-            {groupEntries.map((item) => {
+            {group.entries.map((item) => {
               const active = isActive(item.href);
               return (
                 <li>
@@ -102,8 +139,47 @@ const groups = [
               );
             })}
           </ul>
-        </section>
+        </details>
       );
     })
   }
 </nav>
+
+<style>
+  /* The default disclosure triangle, removed in both spellings. */
+  .cms-nav-group > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* The chevron is the disclosure state, and it is not the only carrier: the
+     summary also reports `aria-expanded` to assistive technology by being a
+     native `<details>`. */
+  .cms-nav-group > summary .cms-nav-chevron {
+    transform: rotate(0deg);
+    transition: transform 150ms ease;
+  }
+  .cms-nav-group[open] > summary .cms-nav-chevron {
+    transform: rotate(90deg);
+  }
+
+  /* A CLOSED GROUP KEEPS ITS ICONS WHILE THE RAIL IS NARROW.
+     This overrides the user-agent rule that hides a closed `<details>`
+     content, and it is scoped to the rail: the drawer and any expanded state
+     fall straight back to the native behaviour. Author styles beat UA styles,
+     which is the whole mechanism. */
+  :global(aside[data-cms-rail]) .cms-nav-group:not([open]) > ul {
+    display: flex;
+  }
+  :global(aside[data-cms-rail]:hover) .cms-nav-group:not([open]) > ul,
+  :global(aside[data-cms-rail]:focus-within) .cms-nav-group:not([open]) > ul,
+  :global(body[data-rail-pinned='true'] aside[data-cms-rail]) .cms-nav-group:not([open]) > ul,
+  :global(body[data-rail-touch='true'] aside[data-cms-rail]) .cms-nav-group:not([open]) > ul {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cms-nav-group > summary .cms-nav-chevron {
+      transition: none;
+    }
+  }
+</style>

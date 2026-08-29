@@ -474,7 +474,7 @@ export async function portalHome(db: Client, scope: PortalScope): Promise<Portal
       .filter((row) => row.awaitingYourReply)
       .map((row) => ({
         label: `${row.caseNumber} is waiting for your reply`,
-        href: `/portal/service/${row.caseId}`,
+        href: `/portal/helpdesk/${row.caseId}`,
       })),
     recentUpdates: [
       ...orders
@@ -489,7 +489,7 @@ export async function portalHome(db: Client, scope: PortalScope): Promise<Portal
         .map((row) => ({
           at: row.lastUpdateAt as string,
           summary: `${row.caseNumber} was updated`,
-          href: `/portal/service/${row.caseId}`,
+          href: `/portal/helpdesk/${row.caseId}`,
         })),
     ]
       .sort((a, b) => b.at.localeCompare(a.at))

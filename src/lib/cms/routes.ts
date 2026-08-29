@@ -80,3 +80,31 @@ export function homeFor(userType: string, permissions: readonly string[] = []): 
  */
 export const EXPIRED_FLAG = 'expired';
 export const EXPIRED_MESSAGE = 'Your session has expired. Please sign in again.';
+
+/**
+ * Service became Helpdesk, and a link somebody sent last month must still work.
+ *
+ * PAGE PATHS ONLY, AND THAT IS THE DECISION. `/app/service/...` and
+ * `/portal/service/...` are addresses people bookmark, paste into messages and
+ * arrive at from an old email, so they are redirected permanently to the new
+ * name. `/api/service/...` is NOT renamed: nobody holds a link to an API path,
+ * every caller is in this repository, and a 301 does not carry a POST body, so
+ * renaming it would trade a real breakage for a cosmetic one. The database
+ * keeps `service_cases` and its siblings for the same reason: this is a
+ * presentation change.
+ *
+ * 301 rather than 302, because the move is permanent and a browser that
+ * remembers it saves the round trip.
+ */
+const RENAMED_PREFIXES: readonly (readonly [string, string])[] = [
+  ['/app/service', '/app/helpdesk'],
+  ['/portal/service', '/portal/helpdesk'],
+];
+
+export function renamedPath(appPath: string): string | null {
+  for (const [from, to] of RENAMED_PREFIXES) {
+    if (appPath === from) return to;
+    if (appPath.startsWith(from + '/')) return to + appPath.slice(from.length);
+  }
+  return null;
+}

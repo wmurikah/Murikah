@@ -76,7 +76,7 @@ const clean = health.checks.filter((check) => check.count === 0);
       <CmsEmptyState
         icon="administration"
         title="You do not have permission to see system health"
-        description="ADMIN.USERS.MANAGE or ADMIN.WORKFLOW_ROLES.MANAGE is needed."
+        description="Ask an administrator for access."
       />
     ) : loadFailed ? (
       <CmsErrorState
@@ -172,10 +172,7 @@ const clean = health.checks.filter((check) => check.count === 0);
           </CmsCard>
         )}
 
-        <CmsCard
-          title="Authority ending soon"
-          description="Nothing here is ever extended automatically."
-        >
+        <CmsCard title="Authority ending soon">
           {expiring.length === 0 ? (
             <p class="text-cms-body-sm text-cms-muted">
               No access role or approval authority ends in the next 30 days.
