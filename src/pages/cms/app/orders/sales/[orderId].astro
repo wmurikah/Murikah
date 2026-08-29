@@ -151,12 +151,53 @@ const NOT_AVAILABLE = 'Not available';
                     : formatDuration(detail.order.creditMinutes)}
                 </dd>
               </div>
-              <div class="flex justify-between py-1.5">
+              <div class="flex justify-between border-b border-cms-line py-1.5">
                 <dt class="text-cms-muted">Loaded</dt>
                 <dd class="text-cms-ink">{detail.order.loadedAt ?? NOT_AVAILABLE}</dd>
               </div>
+              {/*
+                LOADING AUTHORITIES, WHEN THERE WAS MORE THAN ONE.
+                An order line can be loaded more than once, and sales_orders
+                holds a single loading_authority_at, so the column records a
+                choice: the EARLIEST, which is how long the customer waited
+                for their first truck. Saying only the chosen timestamp on an
+                order loaded seven times would be true and misleading, so the
+                count sits beside it and the whole list is below.
+                A single-authority order shows nothing extra: a row reading
+                "1 loading authority" on 589 of 662 orders is noise.
+              */}
+              {detail.loadingAuthorities.length > 1 && (
+                <div class="flex justify-between py-1.5">
+                  <dt class="text-cms-muted">Loading authorities</dt>
+                  <dd class="text-cms-ink tabular-nums">
+                    {detail.loadingAuthorities.length} — earliest shown above
+                  </dd>
+                </div>
+              )}
             </dl>
           </CmsCard>
+
+          {detail.loadingAuthorities.length > 1 && (
+            <CmsCard
+              title="Loading authorities"
+              description="This order was loaded more than once. The earliest is the one the order carries; every one the extract recorded is here."
+            >
+              <ol class="flex flex-col gap-2">
+                {detail.loadingAuthorities.map((at, index) => (
+                  <li class="flex items-baseline justify-between gap-4 border-b border-cms-line pb-2 last:border-0 last:pb-0">
+                    <span class="text-cms-body-sm text-cms-muted">
+                      {index === 0 ? 'Earliest, on the order' : `Later load ${index}`}
+                    </span>
+                    <span class="text-cms-body-sm text-cms-ink tabular-nums">{at}</span>
+                  </li>
+                ))}
+              </ol>
+              <p class="mt-3 text-cms-body-sm text-cms-muted">
+                The extract repeats an order line once per event, so a line loaded several times
+                appears several times. These are the distinct authorities, not the row count.
+              </p>
+            </CmsCard>
+          )}
 
           <CmsCard title="Products">
             <CmsDataTable

@@ -331,8 +331,10 @@ test('a harmless Excel reformat produces zero CHANGED rows, and a real change pr
   );
   assert.notEqual(revalidated.batchId, null);
   assert.equal(revalidated.rowsChanged, 0);
-  // The resolvable rows now read as exact duplicates; the 18-line document's
-  // are among them.
+  // The resolvable rows now read as duplicates: an exact duplicate of a row
+  // already in the database, or a repeat of a line already described in this
+  // same file. Both are DUPLICATE, and the 18-row document's rows are among
+  // them either way.
   assert.equal(revalidated.rowsDuplicate >= 18, true);
 
   // A later extract adding an invoice timestamp: exactly the changed rows
@@ -365,7 +367,17 @@ test('a harmless Excel reformat produces zero CHANGED rows, and a real change pr
     { ...uploadInput, filename: 'SO-Ver1-later.xls' },
     CTX,
   );
-  assert.equal(editedValidation.rowsChanged, touched);
+  // CHANGED COUNTS ORDER LINES, NOT ROWS, AND THAT IS THE POINT OF THIS PHASE.
+  // The edit touched all 18 rows of the document, but those 18 rows describe
+  // only 7 distinct order lines: the extract repeats a line once per loading
+  // authority, credit-hold episode and invoice. The first row for each line is
+  // CHANGED against what the database holds; the other 11 are further events
+  // for a line this same file has already described, so they are DUPLICATE.
+  // Calling all 18 CHANGED, which is what happened before, said that a second
+  // loading of a truck was a change to the first one.
+  assert.equal(touched, 18, 'the edit really did touch every row of the document');
+  assert.equal(editedValidation.rowsChanged, doc.distinctLines);
+  assert.equal(editedValidation.rowsChanged, 7);
   const commit = await commitSoBatch(asClient(c), editedValidation.batchId ?? '', CTX);
   assert.equal(commit.documentsCreated, 0);
   assert.equal(commit.documentsUpdated, 1);
