@@ -12,9 +12,9 @@ import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
@@ -130,6 +130,43 @@ function pageHref(target: number): string {
   return `/app/service?${next.toString()}`;
 }
 const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
+const activeFilters = [
+  query.caseType,
+  query.caseCategoryId,
+  query.priority,
+  query.status,
+  query.assignedTeamId,
+  query.assignedUserId,
+  query.channel,
+  query.raisedFrom,
+  query.raisedTo,
+].filter(Boolean).length;
+const serviceFilterChips = [
+  query.caseType && { key: 'type', label: titleCase(query.caseType) },
+  query.caseCategoryId && {
+    key: 'category',
+    label: options.categories.find((o) => o.id === query.caseCategoryId)?.label ?? 'Category',
+  },
+  query.priority && { key: 'priority', label: titleCase(query.priority) },
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.assignedTeamId && {
+    key: 'team',
+    label: options.teams.find((o) => o.id === query.assignedTeamId)?.label ?? 'Team',
+  },
+  query.assignedUserId && {
+    key: 'user',
+    label: options.users.find((o) => o.id === query.assignedUserId)?.label ?? 'Assignee',
+  },
+  query.channel && { key: 'channel', label: titleCase(query.channel) },
+  query.raisedFrom && { key: 'from', label: `From ${query.raisedFrom}` },
+  query.raisedTo && { key: 'to', label: `To ${query.raisedTo}` },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutServiceFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/service?${next.toString()}`;
+};
 ---
 
 <CmsLayout title="Service">
@@ -137,10 +174,13 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to service cases"
-        description="Ask a system administrator for the SERVICE.CASES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
-      <CmsErrorState title="Cases could not be loaded" description="The database did not answer." />
+      <CmsErrorState
+        title="Cases could not be loaded"
+        description="Please try again in a moment."
+      />
     ) : (
       <Fragment>
         <CmsPageHeader
@@ -149,11 +189,6 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'Service' }]}
         >
           <Fragment slot="actions">
-            {mayCategories && (
-              <CmsButton variant="secondary" href="/app/service/categories">
-                Categories
-              </CmsButton>
-            )}
             {mayCreate && (
               <CmsButton variant="primary" icon="plus" data-cms-case-create>
                 New case
@@ -161,6 +196,16 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
             )}
           </Fragment>
         </CmsPageHeader>
+        {mayCategories && (
+          <div class="flex justify-end">
+            <a
+              href="/app/service/categories"
+              class="rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Manage categories
+            </a>
+          </div>
+        )}
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <CmsKpiCard label="New" value={String(indicators.newCases)} />
@@ -187,10 +232,10 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
           ))}
         </nav>
 
-        <CmsCard>
-          <form method="get" class="flex flex-wrap items-end gap-3">
+        <CmsFilterPanel action="/app/service" activeCount={activeFilters}>
+          <Fragment slot="primary">
             {query.queue !== null && <input type="hidden" name="queue" value={query.queue} />}
-            <div class="min-w-56 grow">
+            <div>
               <CmsInput
                 id="f-q"
                 name="q"
@@ -200,6 +245,8 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
                 hint="Case number, subject, customer or contact."
               />
             </div>
+          </Fragment>
+          <Fragment slot="advanced">
             <CmsSelect
               id="f-type"
               name="type"
@@ -275,23 +322,27 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
               type="date"
               value={query.raisedTo ?? ''}
             />
-            <CmsButton type="submit" variant="secondary">
-              Apply
-            </CmsButton>
-          </form>
-        </CmsCard>
+          </Fragment>
+          <Fragment slot="chips">
+            {serviceFilterChips.map((chip) => (
+              <a
+                href={withoutServiceFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
 
         <CmsDataTable
           caption="Service cases"
           columns={[
             { key: 'case', label: 'Case' },
-            { key: 'customer', label: 'Customer', secondary: true },
             { key: 'type', label: 'Type' },
-            { key: 'category', label: 'Category', secondary: true },
             { key: 'priority', label: 'Priority' },
             { key: 'status', label: 'Status' },
-            { key: 'team', label: 'Team', secondary: true },
-            { key: 'assignee', label: 'Assignee', secondary: true },
             { key: 'age', label: 'Age', numeric: true },
           ]}
           empty={page.items.length === 0}
@@ -308,34 +359,49 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
                 <span class="ms-2 text-cms-caption text-cms-muted tabular-nums">
                   {row.caseNumber}
                 </span>
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[
+                    row.accountName,
+                    row.categoryName,
+                    row.assignedUserName ?? row.assignedTeamName ?? 'Unassigned',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{row.accountName}</td>
               <td class="px-4 py-2.5 text-cms-muted">{titleCase(row.caseType)}</td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.categoryName} / {row.subcategoryName}
-              </td>
               <td class="px-4 py-2.5">
                 <CmsBadge tone={priorityTone(row.priority)} label={titleCase(row.priority)} />
               </td>
               <td class="px-4 py-2.5">
                 <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
               </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.assignedTeamName ?? 'Unassigned'}
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.assignedUserName ?? 'Unassigned'}
-              </td>
               <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
                 {ageDays(row.raisedAt)}d
               </td>
             </tr>
           ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <a
+                href={`/app/service/${row.caseId}`}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">{row.subject}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {row.caseNumber} · {row.accountName} · {ageDays(row.raisedAt)}d
+                  </span>
+                </span>
+                <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+              </a>
+            ))}
+          </Fragment>
           <Fragment slot="empty">
             <CmsEmptyState
               icon="service"
               title="No cases match"
-              description="Adjust the queue or the filters. A case you cannot see here is outside your data scope."
+              description="Try another queue or remove a filter."
             />
           </Fragment>
         </CmsDataTable>
@@ -354,7 +420,7 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
               Previous
             </a>
             <span class="text-cms-body-sm text-cms-muted">
-              Page {query.page} of {lastPage} · {page.total} in scope
+              Page {query.page} of {lastPage} · {page.total} cases
             </span>
             <a
               href={pageHref(Math.min(lastPage, query.page + 1))}
