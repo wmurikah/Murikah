@@ -26,7 +26,7 @@ const maySeePurchases = canViewPurchaseOrders(permissions);
     !maySeeSales && !maySeePurchases ? (
       <CmsErrorState
         title="You do not have access to orders"
-        description="Ask a system administrator for the ORDERS.SALES_ORDER.VIEW or ORDERS.PURCHASE_ORDER.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : (
       <Fragment>

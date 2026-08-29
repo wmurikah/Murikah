@@ -60,18 +60,16 @@ const absent = value === 'Not available' || value === '';
 const drillable = href !== undefined && href !== '' && !absent;
 const hasDefinition = definition !== undefined || denominator !== undefined;
 
-const rules = {
-  neutral: 'bg-cms-royal',
-  positive: 'bg-cms-positive',
-  caution: 'bg-cms-caution',
-  negative: 'bg-cms-negative',
-  info: 'bg-cms-info',
+const states = {
+  neutral: '',
+  positive: 'text-cms-positive',
+  caution: 'text-cms-caution',
+  negative: 'text-cms-negative',
+  info: 'text-cms-info',
 };
 ---
 
 <div class:list={['relative overflow-hidden rounded-cms bg-cms-surface', className]}>
-  <span class:list={['absolute inset-x-0 top-0 h-1', rules[tone]]} aria-hidden="true"></span>
-
   {
     hasDefinition && (
       <CmsDefinition
@@ -88,9 +86,9 @@ const rules = {
     drillable ? (
       <a
         href={href}
-        class="flex flex-col gap-1 px-4 pt-4 pb-3.5 outline-none focus-visible:ring-2 focus-visible:ring-focus [&:hover_[data-figure]]:underline"
+        class="flex flex-col gap-1 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-focus [&:hover_[data-figure]]:underline"
       >
-        <span class="pr-6 text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+        <span class:list={['pr-6 text-cms-body-sm font-medium', states[tone] || 'text-cms-muted']}>
           {label}
         </span>
         <span
@@ -104,8 +102,8 @@ const rules = {
         <span class="sr-only">Open the records behind this figure.</span>
       </a>
     ) : (
-      <div class="flex flex-col gap-1 px-4 pt-4 pb-3.5">
-        <span class="pr-6 text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+      <div class="flex flex-col gap-1 px-4 py-4">
+        <span class:list={['pr-6 text-cms-body-sm font-medium', states[tone] || 'text-cms-muted']}>
           {label}
         </span>
         <span

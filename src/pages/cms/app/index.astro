@@ -253,7 +253,7 @@ const nothingVisible =
   !composition.freshness;
 ---
 
-<CmsLayout title="Dashboard">
+<CmsLayout title="Dashboard" width="data">
   {
     connectionFailed || board === null ? (
       <CmsErrorState
@@ -266,7 +266,10 @@ const nothingVisible =
       />
     ) : (
       <Fragment>
-        <CmsPageHeader title={`Good day, ${user?.firstName ?? ''}`.trim()}>
+        <CmsPageHeader
+          title="Today"
+          description={`Good day${user?.firstName ? `, ${user.firstName}` : ''}. Here is what needs your attention.`}
+        >
           <CmsButton
             slot="actions"
             variant="secondary"
@@ -317,7 +320,7 @@ const nothingVisible =
           <Fragment>
             {/* ---- 1. SLA ------------------------------------------------ */}
             {sla !== null && (
-              <section aria-labelledby="sla" class="flex flex-col gap-3">
+              <section aria-labelledby="sla" class="order-2 flex flex-col gap-3">
                 <CmsSectionHeader id="sla" title="SLA">
                   {/*
                     A segmented control, built from two links rather than a
@@ -386,7 +389,7 @@ const nothingVisible =
 
             {/* ---- 2. Needs attention ------------------------------------ */}
             {composition?.needsAttention && (
-              <section aria-labelledby="attention" class="flex flex-col gap-3">
+              <section aria-labelledby="attention" class="order-1 flex flex-col gap-3">
                 <CmsSectionHeader id="attention" title="Needs attention" />
                 {board.attention.length === 0 ? (
                   <p class="rounded-cms bg-cms-surface p-4 text-cms-body-sm text-cms-muted">
@@ -410,7 +413,7 @@ const nothingVisible =
 
             {/* ---- 3. Orders --------------------------------------------- */}
             {(composition?.salesOrders || composition?.purchaseOrders) && (
-              <section aria-labelledby="orders" class="flex flex-col gap-3">
+              <section aria-labelledby="orders" class="order-3 flex flex-col gap-3">
                 <CmsSectionHeader id="orders" title="Orders" />
                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {board.salesOrders && (
@@ -517,7 +520,7 @@ const nothingVisible =
 
             {/* ---- 4. Commercial ----------------------------------------- */}
             {composition?.commercial && board.commercial && (
-              <section aria-labelledby="commercial" class="flex flex-col gap-3">
+              <section aria-labelledby="commercial" class="order-4 flex flex-col gap-3">
                 <CmsSectionHeader id="commercial" title="Commercial" />
                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <CmsKpiCard
@@ -577,7 +580,7 @@ const nothingVisible =
 
             {/* ---- 5. Service -------------------------------------------- */}
             {composition?.service && board.service && (
-              <section aria-labelledby="service" class="flex flex-col gap-3">
+              <section aria-labelledby="service" class="order-5 flex flex-col gap-3">
                 <CmsSectionHeader id="service" title="Service" />
                 <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <div class="grid gap-3 sm:grid-cols-2">
