@@ -117,7 +117,7 @@ const asOptions = (list: Option[]) => [
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to workflow administration"
-        description="Ask a system administrator for ADMIN.WORKFLOWS.MANAGE or ADMIN.WORKFLOW_ROLES.MANAGE. Nothing on this page is loaded without one of them."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
