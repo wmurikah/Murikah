@@ -68,8 +68,27 @@ try {
       />
     ) : (
       <CmsCard bodyClass="p-0">
-        <div class="overflow-x-auto">
-          <table class="w-full min-w-[40rem] border-collapse text-left">
+        <div class="divide-y divide-cms-line sm:hidden">
+          {orders.map((order) => (
+            <a
+              href={`/portal/orders/${order.salesOrderId}`}
+              class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-cms-body-sm font-semibold text-cms-ink">
+                  {order.documentNumber}
+                </span>
+                <span class="block text-cms-caption text-cms-muted">
+                  Placed {portalDate(order.orderCreatedAt)} ·{' '}
+                  {order.invoiceNumber ?? 'Not yet invoiced'}
+                </span>
+              </span>
+              <CmsBadge tone={orderTone(order.status)} label={order.status} />
+            </a>
+          ))}
+        </div>
+        <div class="hidden overflow-x-auto sm:block">
+          <table class="w-full border-collapse text-left">
             <caption class="sr-only">Your orders, most recent first</caption>
             <thead>
               <tr class="border-b border-cms-line">

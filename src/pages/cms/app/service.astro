@@ -177,7 +177,10 @@ const withoutServiceFilter = (key: string) => {
         description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
-      <CmsErrorState title="Cases could not be loaded" description="The database did not answer." />
+      <CmsErrorState
+        title="Cases could not be loaded"
+        description="Please try again in a moment."
+      />
     ) : (
       <Fragment>
         <CmsPageHeader
@@ -398,7 +401,7 @@ const withoutServiceFilter = (key: string) => {
             <CmsEmptyState
               icon="service"
               title="No cases match"
-              description="Adjust the queue or the filters. A case you cannot see here is outside your data scope."
+              description="Try another queue or remove a filter."
             />
           </Fragment>
         </CmsDataTable>
@@ -417,7 +420,7 @@ const withoutServiceFilter = (key: string) => {
               Previous
             </a>
             <span class="text-cms-body-sm text-cms-muted">
-              Page {query.page} of {lastPage} · {page.total} in scope
+              Page {query.page} of {lastPage} · {page.total} cases
             </span>
             <a
               href={pageHref(Math.min(lastPage, query.page + 1))}

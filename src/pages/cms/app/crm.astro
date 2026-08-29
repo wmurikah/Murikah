@@ -159,7 +159,10 @@ const withoutLeadFilter = (key: string) => {
         description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
-      <CmsErrorState title="Leads could not be loaded" description="The database did not answer." />
+      <CmsErrorState
+        title="Leads could not be loaded"
+        description="Please try again in a moment."
+      />
     ) : (
       <Fragment>
         <CmsPageHeader
@@ -368,7 +371,7 @@ const withoutLeadFilter = (key: string) => {
             <CmsEmptyState
               icon="crm"
               title="No leads match"
-              description="Adjust the search or the filters. A lead you cannot see here is one outside your data scope."
+              description="Try a different search or remove a filter."
             />
           </Fragment>
         </CmsDataTable>

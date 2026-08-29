@@ -136,12 +136,12 @@ const stageOptions =
     ) : loadFailed ? (
       <CmsErrorState
         title="This opportunity could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : opportunity === null ? (
       <CmsErrorState
         title="Opportunity not found"
-        description="Either it does not exist or it sits outside your data scope. The two are answered the same way on purpose."
+        description="The opportunity may have been removed, or you may not have access to it."
       />
     ) : (
       <Fragment>

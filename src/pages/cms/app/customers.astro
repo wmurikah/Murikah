@@ -125,7 +125,7 @@ const withoutCustomerFilter = (key: string) => {
     ) : loadFailed ? (
       <CmsErrorState
         title="Customers could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
@@ -307,7 +307,7 @@ const withoutCustomerFilter = (key: string) => {
             <CmsEmptyState
               icon="customers"
               title="No accounts match"
-              description="Adjust the search or the filters. A customer you cannot see here is one outside your data scope."
+              description="Try a different search or remove a filter."
             />
           </Fragment>
         </CmsDataTable>
