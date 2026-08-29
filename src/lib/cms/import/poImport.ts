@@ -63,6 +63,7 @@ import {
   PO_LANDING_TABLE,
 } from './landing.ts';
 import { verifyColumns } from './completeness.ts';
+import { describeWriteFailure } from './foreignKeys.ts';
 import { insertSnapshot, PURCHASE_ORDER_SNAPSHOT } from './snapshots.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
@@ -207,6 +208,53 @@ export function readApprovals(raw: Record<string, unknown>): PoApproval[] {
   return approvals;
 }
 
+/**
+ * The source record key, built and read back by ONE pair of functions.
+ *
+ * THIS IS THE FAULT THAT COST THREE BATCHES. The key used to be built two
+ * different ways — `AFF-KE|3988` when the operator named an affiliate, and
+ * a bare `3988` when they did not, which is what this extract always is,
+ * because the file has no affiliate column. Commit then recovered the
+ * affiliate with `key.split('|')[0]`, which for a bare key returns the
+ * purchase number. `9296` went into `purchase_orders.affiliate_id`, the
+ * foreign key to `affiliates` refused it, and every one of the 45 rows
+ * failed identically. It also poisoned the workflow lookup, so all 45 orders
+ * were reported as having no workflow definition.
+ *
+ * The shape is now unconditional: an affiliate slot, a separator, then the
+ * document. A Group-scope batch writes an EMPTY slot, which reads back as
+ * null, so the round trip is total and there is no branch that can be
+ * asymmetric. Nothing outside these two functions splits a key again.
+ */
+export function buildPoSourceKey(affiliateId: string | null, purchaseNumber: string): string {
+  return `${affiliateId ?? ''}|${purchaseNumber}`;
+}
+
+export interface PoSourceKeyParts {
+  /** Null for a Group-scope batch, which is what this extract always is. */
+  affiliateId: string | null;
+  documentNumber: string;
+}
+
+/**
+ * Read a key back.
+ *
+ * A key written before the format was made unconditional has no separator.
+ * Such a key is a Group-scope order whose document is the whole string, which
+ * is exactly what it always meant; reading it as an affiliate is the bug.
+ * Handling it here rather than migrating rows keeps the failed batches intact
+ * as evidence and lets a reprocess of one of them succeed.
+ */
+export function parsePoSourceKey(key: string): PoSourceKeyParts {
+  const separator = key.indexOf('|');
+  if (separator === -1) return { affiliateId: null, documentNumber: key };
+  const affiliate = key.slice(0, separator);
+  return {
+    affiliateId: affiliate === '' ? null : affiliate,
+    documentNumber: key.slice(separator + 1),
+  };
+}
+
 export async function normalisePoRow(
   raw: Record<string, unknown>,
   sourceRowNumber: number,
@@ -247,17 +295,11 @@ export async function normalisePoRow(
     authorizationStatus: canonical.authorizationStatus as string | null,
     sourceCreatedToSubmittedMinutes: cellToNumber(raw.TIME_DIFF_RAISEPO_TOAPROVALSUBMIT),
     approvals,
-    // Identity only: the affiliate and the purchase number, and nothing that
-    // changes. A line identifier joins this key when an extract has lines.
-    // The order's own identity where the file names no entity. A purchase
-    // number is unique in the source system, so qualifying it with an
-    // affiliate the extract never stated would only invent a distinction.
-    sourceKey:
-      purchaseNumber === null
-        ? null
-        : affiliateId === null
-          ? purchaseNumber
-          : `${affiliateId}|${purchaseNumber}`,
+    // Identity only: the affiliate slot and the purchase number, and nothing
+    // that changes. A line identifier joins this key when an extract has
+    // lines. Built through buildPoSourceKey so it can only ever be read back
+    // by parsePoSourceKey.
+    sourceKey: purchaseNumber === null ? null : buildPoSourceKey(affiliateId, purchaseNumber),
     rowHash: await hashCanonicalRow(canonical),
   };
 }
@@ -864,7 +906,8 @@ export async function commitPoBatch(
   const groups = new Map<
     string,
     {
-      affiliateId: string;
+      /** Null for a Group-scope batch. Read back through parsePoSourceKey. */
+      affiliateId: string | null;
       rows: NormalisedPoRow[];
       importRowIds: Map<number, string>;
       statuses: Map<number, string>;
@@ -874,7 +917,7 @@ export async function commitPoBatch(
     const record = raw as unknown as Record<string, unknown>;
     const key = record.source_record_key === null ? null : text(record.source_record_key);
     if (key === null) continue;
-    const affiliateId = key.split('|')[0] ?? '';
+    const { affiliateId } = parsePoSourceKey(key);
     const parsed = JSON.parse(text(record.raw_json)) as Record<string, unknown>;
     const row = await normalisePoRow(parsed, Number(record.source_row_number), affiliateId);
     const group = groups.get(key) ?? {
@@ -889,8 +932,11 @@ export async function commitPoBatch(
     groups.set(key, group);
   }
 
-  const identityCache = new Map<string, Map<string, string>>();
-  const identitiesFor = async (affiliateId: string) => {
+  // Keyed by the affiliate, with '' standing for Group scope: a Map key must
+  // be a value and null is one, but writing it explicitly keeps the cache and
+  // the lookup reading the same way.
+  const identityCache = new Map<string | null, Map<string, string>>();
+  const identitiesFor = async (affiliateId: string | null) => {
     const cached = identityCache.get(affiliateId);
     if (cached !== undefined) return cached;
     const loaded = await loadIdentities(db, affiliateId);
@@ -899,10 +945,14 @@ export async function commitPoBatch(
   };
 
   const definitionCache = new Map<
-    string,
+    string | null,
     { definitionId: string; stages: Map<number, StageRef> } | null
   >();
-  const definitionFor = async (affiliateId: string) => {
+  // A Group-scope batch passes null, and the query's `affiliate_id IS NULL`
+  // arm then finds the group-wide definition. Before the key round trip was
+  // fixed this was handed a purchase number, matched nothing, and reported
+  // all 45 orders as having no workflow definition.
+  const definitionFor = async (affiliateId: string | null) => {
     const cached = definitionCache.get(affiliateId);
     if (cached !== undefined) return cached;
     // An affiliate's own definition first, then a group-wide one, then the
@@ -954,9 +1004,13 @@ export async function commitPoBatch(
     }
 
     const identities = await identitiesFor(group.affiliateId);
+    // `IS` rather than `=`, because a Group-scope order's affiliate is NULL
+    // and `affiliate_id = NULL` is never true. With `=` the lookup found
+    // nothing on a re-upload, and every order would have been created a
+    // second time instead of being recognised as unchanged.
     const existing = await db.execute({
       sql: `SELECT purchase_order_id FROM purchase_orders
-            WHERE affiliate_id = ? AND document_number = ? LIMIT 1`,
+            WHERE affiliate_id IS ? AND document_number = ? LIMIT 1`,
       args: [group.affiliateId, head.purchaseNumber],
     });
     const existingId = existing.rows[0]?.purchase_order_id;
@@ -1095,7 +1149,13 @@ export async function commitPoBatch(
     try {
       await db.batch(statements, 'write');
     } catch (error) {
-      const reason = `The purchase order could not be written: ${String(error)}`.slice(0, 400);
+      // NAMED, NOT JUST REPORTED. A bare "FOREIGN KEY constraint failed" is
+      // what cost three batches and two days: it says nothing about which of
+      // the four keys on these two tables refused the write, which column
+      // carried the value, or what the value was. describeWriteFailure asks
+      // the same database that refused it and appends the answer.
+      const detail = await describeWriteFailure(db, statements, error);
+      const reason = `The purchase order could not be written: ${detail}`.slice(0, 400);
       const failures: Stmt[] = [...group.importRowIds.values()].map((importRowId) => ({
         sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
               WHERE import_row_id = ? AND imported_at IS NULL`,
@@ -1178,8 +1238,11 @@ export async function revalidatePoRows(
   });
 
   const statements: Stmt[] = [];
-  const identityCache = new Map<string, Map<string, string>>();
-  const identitiesFor = async (affiliateId: string) => {
+  // Keyed by the affiliate, with '' standing for Group scope: a Map key must
+  // be a value and null is one, but writing it explicitly keeps the cache and
+  // the lookup reading the same way.
+  const identityCache = new Map<string | null, Map<string, string>>();
+  const identitiesFor = async (affiliateId: string | null) => {
     const cached = identityCache.get(affiliateId);
     if (cached !== undefined) return cached;
     const loaded = await loadIdentities(db, affiliateId);

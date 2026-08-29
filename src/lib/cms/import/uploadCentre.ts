@@ -214,6 +214,21 @@ export interface UploadOutcome {
     rowsUnresolved: number;
     rowsRejected: number;
   } | null;
+  /**
+   * WHAT THE COMMIT WILL CREATE, SHOWN BEFORE IT DOES.
+   *
+   * The counts and the full lists, so nobody discovers 228 new accounts and
+   * 108 new products after the fact. This is a preview and nothing here has
+   * been written yet, so a person who does not like what they see can still
+   * stop. Every created product goes to the Unclassified category: the
+   * hierarchy drives approval routing, so a guessed category would route an
+   * order to the wrong approver.
+   */
+  accountsToCreate: { code: string; name: string | null; rows: number }[];
+  productsToCreate: { code: string; unitOfMeasure: string | null; rows: number }[];
+  /** Codes that matched with a different name. Flagged for review, never overwritten. */
+  nameMismatches: { code: string; storedName: string; fileName: string }[];
+  /** A person is still never created. This is for an administrator to map. */
   unresolvedUsers: string[];
   unresolvedProducts: { item: string; rows: number }[];
   unresolvedCustomers: { code: string; name: string | null; rows: number }[];
@@ -278,6 +293,9 @@ export async function receiveUpload(
     rejectedReason: null,
     duplicate: null,
     summary: null,
+    accountsToCreate: [],
+    productsToCreate: [],
+    nameMismatches: [],
     unresolvedUsers: [],
     unresolvedProducts: [],
     unresolvedCustomers: [],
@@ -368,6 +386,16 @@ export async function receiveUpload(
         rowsUnresolved: 0,
         rowsRejected: validation.rowsRejected,
       },
+      // A purchase order extract creates NO reference records at all. NATURE
+      // holds PRODUCT, LPG and LUBES, and Req Description carries a mixture of
+      // fuel, LPG, lubricants and general procurement such as `MGL 19021` and
+      // `TOP RICH-INV NO 11407`. None of that is a product code, and mapping
+      // general procurement into the petroleum catalogue would file stationery
+      // under liquefied petroleum gas. The extract has no line grain either,
+      // so nothing here ever reaches products.
+      accountsToCreate: [],
+      productsToCreate: [],
+      nameMismatches: [],
       unresolvedUsers: validation.unresolvedActors.map((a) => a.username),
       unresolvedProducts: [],
       unresolvedCustomers: [],
@@ -445,6 +473,9 @@ export async function receiveUpload(
       rowsUnresolved: validation.rowsUnresolved,
       rowsRejected: validation.rowsRejected,
     },
+    accountsToCreate: validation.accountsToCreate,
+    productsToCreate: validation.productsToCreate,
+    nameMismatches: validation.nameMismatches,
     unresolvedUsers: validation.unresolvedUsers,
     unresolvedProducts: validation.unresolvedProducts,
     unresolvedCustomers: validation.unresolvedCustomers,
@@ -526,8 +557,22 @@ export interface CommitOutcome {
   documentsSkipped: number;
   linesWritten: number;
   workflowEventsAppended: number;
+  /** Reference records this commit created, and the names it refused to overwrite. */
+  accountsCreated: number;
+  productsCreated: number;
+  nameMismatches: number;
   /** What did not import, and why, in words rather than a status word. */
   skippedReasons: { reason: string; rows: number }[];
+  /**
+   * What DID import but is incomplete, and why.
+   *
+   * Separate from skippedReasons because the two are different facts and the
+   * screen says so in different words: a skipped document is not in the
+   * database, while a note here is about something that is. Putting "imported
+   * without approval history" under a heading that reads "Not imported" would
+   * be a message that contradicts itself.
+   */
+  notes: { note: string; count: number }[];
 }
 
 /**
@@ -564,7 +609,26 @@ export async function commitBatch(
             documentsSkipped: result.ordersSkipped,
             linesWritten: result.linesWritten,
             workflowEventsAppended: result.stageEventsAppended,
+            // A purchase order import creates no reference records at all.
+            accountsCreated: 0,
+            productsCreated: 0,
+            nameMismatches: 0,
             skippedReasons: [],
+            notes:
+              result.ordersWithoutWorkflowDefinition === 0
+                ? []
+                : [
+                    {
+                      // NOT SILENT. These orders imported, but their approval
+                      // history did not, because no workflow definition matches
+                      // their scope. Saying so is the difference between a gap
+                      // somebody can act on and one they find months later.
+                      note:
+                        'Imported without approval history: no active PURCHASE_ORDER workflow ' +
+                        'definition matches this batch. Configure one and reprocess the batch.',
+                      count: result.ordersWithoutWorkflowDefinition,
+                    },
+                  ],
           };
         })()
       : await (async () => {
@@ -578,7 +642,21 @@ export async function commitBatch(
             documentsSkipped: result.documentsSkipped,
             linesWritten: result.linesWritten,
             workflowEventsAppended: result.workflowEventsAppended,
+            accountsCreated: result.accountsCreated,
+            productsCreated: result.productsCreated,
+            nameMismatches: result.nameMismatches,
             skippedReasons: [],
+            notes:
+              result.nameMismatches === 0
+                ? []
+                : [
+                    {
+                      note:
+                        'Customer codes matched an account whose stored name differs from the ' +
+                        'file. The stored name was kept; see Data → Created from import.',
+                      count: result.nameMismatches,
+                    },
+                  ],
           };
         })();
 
@@ -596,7 +674,11 @@ export async function commitBatch(
       documentsSkipped: outcome.documentsSkipped,
       linesWritten: outcome.linesWritten,
       workflowEventsAppended: outcome.workflowEventsAppended,
+      accountsCreated: outcome.accountsCreated,
+      productsCreated: outcome.productsCreated,
+      nameMismatches: outcome.nameMismatches,
       skippedReasons: outcome.skippedReasons,
+      notes: outcome.notes,
     },
   );
   return outcome;
