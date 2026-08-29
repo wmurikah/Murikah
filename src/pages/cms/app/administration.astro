@@ -14,7 +14,6 @@
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
-import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import {
   canManageCatalogue,
@@ -143,28 +142,29 @@ const visible = sections.filter((section) => section.visible);
         </p>
       </CmsCard>
     ) : (
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="overflow-hidden rounded-cms-lg border border-cms-line bg-cms-surface">
         {visible.map((section) =>
           section.ready && section.href ? (
             <a
               href={section.href}
-              class="flex flex-col gap-2 rounded-cms-lg border border-cms-line bg-cms-surface p-5 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+              class:list={[
+                'group flex items-center gap-4 border-b border-cms-line px-5 py-4 outline-none last:border-0 hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset',
+                section.label === 'Design reference' && 'bg-cms-canvas',
+              ]}
             >
-              <span class="flex items-center justify-between gap-2">
+              <span class="min-w-0 flex-1">
                 <span class="text-cms-card font-semibold text-cms-navy">{section.label}</span>
-                <CmsIcon name="chevronRight" size={17} class="text-cms-muted" />
+                <span class="mt-0.5 block max-w-3xl text-cms-body-sm text-cms-muted">
+                  {section.description}
+                </span>
               </span>
-              <span class="text-cms-body-sm text-cms-muted">{section.description}</span>
+              <CmsIcon
+                name="chevronRight"
+                size={17}
+                class="shrink-0 text-cms-muted group-hover:text-cms-royal"
+              />
             </a>
-          ) : (
-            <div class="flex flex-col gap-2 rounded-cms-lg border border-dashed border-cms-line bg-cms-canvas p-5">
-              <span class="flex items-center justify-between gap-2">
-                <span class="text-cms-card font-semibold text-cms-muted">{section.label}</span>
-                <CmsBadge tone="neutral" label="Not built yet" />
-              </span>
-              <span class="text-cms-body-sm text-cms-muted">{section.description}</span>
-            </div>
-          ),
+          ) : null,
         )}
       </div>
     )
