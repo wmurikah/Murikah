@@ -195,7 +195,7 @@ const categoryChart = distributionChart(
     !mayView ? (
       <CmsErrorState
         title="You do not have access to service analytics"
-        description="Ask a system administrator for the SERVICE.CASES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ||
       signals === null ||
@@ -204,7 +204,7 @@ const categoryChart = distributionChart(
       coverage === null ? (
       <CmsErrorState
         title="Service analytics could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>

@@ -50,12 +50,12 @@ if (mayView) {
     !mayView ? (
       <CmsErrorState
         title="You do not have access to the Upload Centre"
-        description="Ask a system administrator for the DATA.IMPORTS.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed || quality === null ? (
       <CmsErrorState
         title="The Upload Centre could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>

@@ -1,0 +1,16 @@
+---
+interface Props {
+  compact?: boolean;
+}
+const { compact = false } = Astro.props;
+---
+
+{
+  compact ? (
+    <span class="text-cms-muted" aria-label="Not available" title="Not available">
+      —
+    </span>
+  ) : (
+    <span class="text-cms-muted">Not available</span>
+  )
+}

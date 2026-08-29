@@ -178,8 +178,8 @@ const scores = [0, 1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(
           {!hasAccount ? (
             <p class="rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
               This lead has no account. An opportunity belongs to a customer, so attach one to the
-              lead first. The server refuses the conversion until then, and this panel says so
-              rather than letting you fill in a form that cannot be saved.
+              lead first before converting it rather than letting you fill in a form that cannot be
+              saved.
             </p>
           ) : (
             <p class="text-cms-body-sm text-cms-muted">

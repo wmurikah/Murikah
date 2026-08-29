@@ -185,12 +185,12 @@ const velocityChart = distributionChart(
     !mayView ? (
       <CmsErrorState
         title="You do not have access to CRM analytics"
-        description="Ask a system administrator for the CRM.OPPORTUNITIES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed || funnelResult === null || win === null || contact === null ? (
       <CmsErrorState
         title="CRM analytics could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
