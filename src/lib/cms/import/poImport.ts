@@ -63,6 +63,8 @@ import {
   PO_LANDING_TABLE,
 } from './landing.ts';
 import { verifyColumns } from './completeness.ts';
+import { decideDuplicate } from './contentHash.ts';
+import { alreadyCanonical } from './retry.ts';
 import { describeWriteFailure } from './foreignKeys.ts';
 import { insertSnapshot, PURCHASE_ORDER_SNAPSHOT } from './snapshots.ts';
 
@@ -424,6 +426,14 @@ export interface PoValidation {
   /** Set where the upload was refused before a batch existed, so the same file may be sent again. */
   rejectedReason: string | null;
   duplicateOfBatchId: string | null;
+  /** The workbook's data fingerprint, independent of how the file was saved. */
+  contentSha256: string | null;
+  /** Set where the bytes differ but every cell is the same as an earlier batch. */
+  resavedOfBatchId: string | null;
+  resavedFilename: string | null;
+  resavedUploadedAt: string | null;
+  /** Documents in this file that already exist in the canonical tables. */
+  documentsAlreadyImported: number;
   affiliateId: string | null;
   rowsReceived: number;
   uniqueOrders: number;
@@ -448,6 +458,11 @@ function emptyValidation(overrides: Partial<PoValidation>): PoValidation {
     fileSha256: null,
     rejectedReason: null,
     duplicateOfBatchId: null,
+    contentSha256: null,
+    resavedOfBatchId: null,
+    resavedFilename: null,
+    resavedUploadedAt: null,
+    documentsAlreadyImported: 0,
     affiliateId: null,
     rowsReceived: 0,
     uniqueOrders: 0,
@@ -526,20 +541,33 @@ export async function validatePoWorkbook(
   // to it. An upload asks "have these bytes been seen before"; a reprocess has
   // already said which batch it is and is running that batch again.
   const reprocessOf = input.reprocessBatchId ?? null;
-  const existing: { rows: Record<string, unknown>[] } =
-    reprocessOf !== null
-      ? { rows: [] }
-      : await db.execute({
-          sql: `SELECT import_batch_id FROM import_batches WHERE file_sha256 = ? LIMIT 1`,
-          args: [fileSha256],
-        });
-  if (existing.rows[0] !== undefined) {
+  // TWO QUESTIONS, ASKED IN ORDER. The bytes first, because a file uploaded
+  // unchanged should be told exactly that; then the data, which is what
+  // catches a workbook Excel has re-saved.
+  const seen = await decideDuplicate(db, buffer, {
+    importType: 'PURCHASE_ORDER',
+    reprocessBatchId: reprocessOf,
+    fileSha256,
+  });
+  if (seen.kind === 'bytes') {
     return emptyValidation({
       fileSha256,
       affiliateId,
-      duplicateOfBatchId: text(existing.rows[0].import_batch_id),
+      contentSha256: seen.contentSha256,
+      duplicateOfBatchId: seen.match?.batchId ?? null,
     });
   }
+  if (seen.kind === 'content') {
+    return emptyValidation({
+      fileSha256,
+      affiliateId,
+      contentSha256: seen.contentSha256,
+      resavedOfBatchId: seen.match?.batchId ?? null,
+      resavedFilename: seen.match?.filename ?? null,
+      resavedUploadedAt: seen.match?.uploadedAt ?? null,
+    });
+  }
+  const contentSha256 = seen.contentSha256;
 
   const sheet = parseWorkbook(buffer);
   const identities = await loadIdentities(db, affiliateId);
@@ -767,9 +795,29 @@ export async function validatePoWorkbook(
       await db.batch(statements.slice(start, start + 200), 'write');
     }
 
+    // HOW MUCH OF THIS FILE IS ALREADY IN THE SYSTEM. A genuinely different
+    // workbook still overlaps an earlier one: an extract re-run a week later
+    // repeats every order that has not closed. Saying so before the import
+    // runs is the difference between a considered decision and a surprise.
+    const documentsAlreadyImported = (
+      await alreadyCanonical(
+        db,
+        'PURCHASE_ORDER',
+        [...orders].map((key) => {
+          const parts = parsePoSourceKey(key);
+          return { affiliateId: parts.affiliateId, documentNumber: parts.documentNumber };
+        }),
+      )
+    ).size;
+
     return {
       batchId,
       fileSha256,
+      contentSha256,
+      resavedOfBatchId: null,
+      resavedFilename: null,
+      resavedUploadedAt: null,
+      documentsAlreadyImported,
       rejectedReason: null,
       duplicateOfBatchId: null,
       affiliateId,

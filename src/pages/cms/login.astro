@@ -17,11 +17,7 @@ const notice =
 <CmsAuthLayout title="Sign in">
   <div class="flex flex-col gap-6">
     <header>
-      <h1 class="text-cms-display font-semibold text-cms-ink">Welcome back</h1><p
-        class="mt-2 text-cms-body text-cms-muted"
-      >
-        Sign in to Customer Operations
-      </p>
+      <h1 class="text-cms-display font-semibold text-cms-ink">Sign in</h1>
     </header>
     {
       notice && (
@@ -33,23 +29,6 @@ const notice =
         </div>
       )
     }
-    <div class="grid gap-2.5" aria-label="Provider sign-in options">
-      <a
-        class="flex min-h-11 items-center justify-center rounded-cms border border-cms-border bg-cms-surface font-semibold outline-none hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus"
-        href="/api/auth/oidc/microsoft/start">Continue with Microsoft</a
-      >
-      <a
-        class="flex min-h-11 items-center justify-center rounded-cms border border-cms-border bg-cms-surface font-semibold outline-none hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus"
-        href="/api/auth/oidc/google/start">Continue with Google</a
-      >
-      <a
-        class="flex min-h-11 items-center justify-center rounded-cms bg-cms-ink font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        href="/api/auth/oidc/apple/start">Continue with Apple</a
-      >
-    </div>
-    <div class="flex items-center gap-3 text-cms-caption text-cms-muted">
-      <span class="h-px flex-1 bg-cms-line"></span>or<span class="h-px flex-1 bg-cms-line"></span>
-    </div>
     <form id="cms-login-form" class="flex flex-col gap-4" novalidate>
       <div class="min-h-14">
         <div

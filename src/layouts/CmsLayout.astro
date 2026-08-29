@@ -121,8 +121,7 @@ const DRAWER_ID = 'cms-nav-drawer';
     }
     <script is:inline nonce={Astro.locals.cmsNonce}>
       try {
-        const saved = localStorage.getItem('cms.rail.pinned');
-        if (saved === '1' || (saved === null && matchMedia('(min-width: 1280px)').matches)) {
+        if (localStorage.getItem('cms.rail.pinned') === '1') {
           document.body.dataset.railPinned = 'true';
         }
       } catch {
@@ -157,7 +156,7 @@ const DRAWER_ID = 'cms-nav-drawer';
         class="sticky top-0 z-30 hidden h-dvh w-16 shrink-0 transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-56 lg:block"
       >
         <div
-          class="absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden border-r border-white/10 bg-cms-navy transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-56 focus-within:w-56 hover:w-56"
+          class="absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden border-r border-white/10 bg-cms-navy transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-56 group-data-[rail-touch=true]/rail:w-56 focus-within:w-56 hover:w-56"
         >
           {
             /*

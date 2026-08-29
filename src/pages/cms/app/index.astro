@@ -1,82 +1,94 @@
 ---
 /**
- * The dashboard. One of them, at /app, and it is what a person lands on.
+ * Home, and it answers one question: where is time being lost right now?
  *
- * THERE USED TO BE TWO. A verbose Home carrying a profile card and a grid of
- * workspace tiles that duplicated the navigation rail, and an Executive page
- * carrying the figures. A person signing in met the one with no numbers on it
- * and had to go and find the other. They are merged here: Executive is a
- * redirect, its rail entry is gone, and this is the only dashboard.
+ * THE ORDER IS THE ARGUMENT. Two charts, then the two leaderboards that sit
+ * under their own chart, then the exceptions that need somebody today. A
+ * purchase order chart above a purchase order leaderboard, a sales order chart
+ * above a sales order leaderboard: the column reads downward, so the eye never
+ * has to carry a figure across the page to find who it belongs to.
  *
- * SLA FIRST, because it is the reason this system exists. The segmented
- * control at the top chooses Internal or External and lives in the URL, so a
- * view can be sent to somebody else and the browser's back button works.
+ * THE TWO PROCESSES ARE NEVER BLENDED. Different approvers, different targets,
+ * different volumes, and the same person may act in both. One table would let
+ * a fast purchase order level flatter a slow credit release, and would answer
+ * a question nobody asked. So there are two of everything, with identical
+ * columns in identical order, which is what lets the eye move between them.
  *
- * THE SWITCH COSTS NOTHING. Both families are read from figures the Orders and
- * Service sections already load, so choosing one does not fetch anything the
- * other did not. Fetching an "SLA payload" per family would have added round
- * trips to a page that is already at its budget.
+ * WHAT CAME OFF THIS PAGE. The Orders, Commercial, Service and Data freshness
+ * sections, and every KPI card in them. They were true and none of them
+ * changed what anybody did today: a person who wants order volumes opens
+ * Orders, which is one click away in the rail. What is left is the turnaround
+ * figures and the exceptions, because those are the two things a person can
+ * act on from here.
  *
- * COMPOSED FROM PERMISSIONS, AND IT DOES NOT SAY SO ON THE PAGE. A section
- * renders where the caller holds the permission its module requires and the
- * scope resolver decides what it counts. That is how the system works; it is
- * not something a manager needs read to them, and the paragraph that used to
- * explain it here has gone.
- *
- * WHAT WENT WITH THE OLD HOME. The profile card (the same facts are on the
- * account menu), the workspace tiles (the rail is the navigation), and the
- * personal SLA and follow-up counters, which cost four round trips and two
- * write sweeps on the landing page. The sweep still runs: on the SLA monitor,
- * on notifications, on both of their endpoints, and on every domain event
- * through the SLA wiring, so nothing stops being settled because this page
- * stopped doing it.
+ * EVERY FIGURE IS A LINK. A number on a dashboard that cannot be opened is a
+ * number nobody can check. The waiting count on each chart is the one whose
+ * destination holds exactly that many records, and it is exact by
+ * construction: the figure IS the destination's count, read through the same
+ * repository function with the same filter rather than a second query written
+ * to agree with it.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
-import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
-import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
-import CmsStatusPill from '@/components/cms/CmsStatusPill.astro';
-import CmsDataTable from '@/components/cms/CmsDataTable.astro';
-import CmsFilterBar from '@/components/cms/CmsFilterBar.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsChart from '@/components/cms/CmsChart.astro';
-import CmsBadge from '@/components/cms/CmsBadge.astro';
-import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
-import CmsInput from '@/components/cms/CmsInput.astro';
-import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
-import { parseFilter, drillTo, filterToQuery } from '@/lib/cms/analytics/filters';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import { attentionCustomers, type AttentionCustomer } from '@/lib/cms/repos/executive';
+import { countSalesOrders } from '@/lib/cms/repos/soPerformance';
+import { countPurchaseOrders } from '@/lib/cms/repos/poPerformance';
 import {
-  dashboard,
-  attentionCustomers,
-  entityComparison,
-  type Dashboard,
-  type AttentionCustomer,
-  type EntityComparisonRow,
-} from '@/lib/cms/repos/executive';
-import { lineChart, barChart, horizontalBarChart, sparkline } from '@/lib/cms/charts/svg';
+  approvalBoard,
+  windowStart,
+  MINIMUM_RANKED_VOLUME,
+  WINDOW_DAYS,
+  type ApprovalBoard,
+  type LeaderRow,
+} from '@/lib/cms/repos/approvalSla';
+import { horizontalBarChart, type ChartPoint } from '@/lib/cms/charts/svg';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
-import { SLA_FAMILIES, readSlaFamily, slaFamilyView } from '@/lib/cms/dashboard/sla';
 
 export const prerender = false;
 
 const principal = Astro.locals.cms;
 const user = principal?.user;
-const permissions = user?.permissions ?? [];
 const userId = user?.userId ?? '';
 const filter = parseFilter(Astro.url.searchParams);
 const now = toDbTimestamp(new Date());
-/** Internal or External, from the URL, so the view can be shared. */
-const family = readSlaFamily(Astro.url.searchParams);
+const since = windowStart(new Date());
 
-let board: Dashboard | null = null;
+/**
+ * WHERE EACH FUNCTION'S QUEUE LIVES, AS A STATUS.
+ *
+ * A sales order sitting at PENDING_FINANCE is waiting on finance approval, one
+ * at READY has been approved and not yet invoiced, and one at INVOICED is
+ * waiting for its loading authority. Each function therefore has exactly one
+ * status that means "waiting here", which is what makes the count and its
+ * destination the same question.
+ */
+const SO_WAITING: Readonly<Record<string, string>> = {
+  'Finance approval': 'PENDING_FINANCE',
+  'Credit release': 'PENDING_CREDIT',
+  Invoicing: 'READY',
+  'Loading authority': 'INVOICED',
+};
+const PO_WAITING_STATUS = 'IN_APPROVAL';
+/** The one sales order queue the page prints a figure for. */
+const SO_LEAD_WAITING = 'PENDING_FINANCE';
+
+let purchases: ApprovalBoard | null = null;
+let sales: ApprovalBoard | null = null;
+let soWaiting = 0;
+let poWaiting = 0;
 let customers: AttentionCustomer[] = [];
-let entities: EntityComparisonRow[] = [];
-let boardFailure: { traceId: string } | null = null;
+let failure: { traceId: string } | null = null;
 let connectionFailed = false;
 
 if (user) {
@@ -86,591 +98,315 @@ if (user) {
     // leaves as a single batch, which is how a dashboard of this size costs a
     // handful of round trips rather than one per figure.
     const batcher = createBatcher(db);
-    const [boardResult, customersResult, entitiesResult] = await Promise.all([
-      runSection(batcher, 'dashboard.board', (client) =>
-        dashboard(client, userId, permissions, filter, now),
+    // ONLY THE TWO FIGURES THE PAGE ACTUALLY SHOWS. Counting all four sales
+    // order queues cost three round trips nobody read: `countSalesOrders`
+    // resolves the scope before it counts, so each call is its own trip and
+    // cannot join the batch. The other three statuses are still the link
+    // targets for their rows; a link costs nothing.
+    const [po, so, attention, poCount, soCount] = await Promise.all([
+      runSection(batcher, 'home.purchases', (client) =>
+        approvalBoard(client, 'PURCHASE_ORDER', since),
       ),
-      runSection(batcher, 'dashboard.attention-customers', (client) =>
+      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', since)),
+      runSection(batcher, 'home.attention', (client) =>
         attentionCustomers(client, userId, filter, now),
       ),
-      runSection(batcher, 'dashboard.entities', (client) =>
-        entityComparison(client, userId, permissions, filter, now),
+      runSection(batcher, 'home.po-waiting', (client) =>
+        countPurchaseOrders(client, userId, { ...filter, status: PO_WAITING_STATUS }, now),
+      ),
+      runSection(batcher, 'home.so-waiting', (client) =>
+        countSalesOrders(client, userId, { ...filter, status: SO_LEAD_WAITING }, now),
       ),
     ]);
-    if (boardResult.ok) board = boardResult.value;
-    else boardFailure = { traceId: boardResult.traceId };
-    if (customersResult.ok) customers = customersResult.value;
-    if (entitiesResult.ok) entities = entitiesResult.value;
+    if (po.ok) purchases = po.value;
+    else failure = { traceId: po.traceId };
+    if (so.ok) sales = so.value;
+    else if (failure === null) failure = { traceId: so.traceId };
+    if (attention.ok) customers = attention.value;
+    if (poCount.ok) poWaiting = poCount.value;
+    if (soCount.ok) soWaiting = soCount.value;
   } catch (error) {
-    console.error('[cms.dashboard] no database connection', error);
+    console.error('[cms.home] no database connection', error);
     connectionFailed = true;
   }
 }
 
-const money = (value: number, currency: string) =>
-  `${currency} ${Math.round(value).toLocaleString('en-KE')}`;
 const count = (value: number) => value.toLocaleString('en-KE');
 
-/** The four module destinations, each carrying the whole filter. */
-const toService = drillTo('/app/service/analytics', filter);
-const toCrm = drillTo('/app/crm/analytics', filter);
-const toSales = drillTo('/app/orders/sales/performance', filter);
-const toPurchases = drillTo('/app/orders/purchases/performance', filter);
+/** The record list behind a purchase order function. */
+const toPurchases = (extra: Record<string, string | null> = {}) =>
+  drillTo('/app/orders/purchases', filter, extra);
+const toSales = (extra: Record<string, string | null> = {}) =>
+  drillTo('/app/orders/sales', filter, extra);
 
-/** A compliance percentage read as a state, so a pill can carry a judgement. */
-const slaTone = (percent: number | null) =>
-  percent === null
-    ? ('neutral' as const)
-    : percent >= 95
-      ? ('positive' as const)
-      : percent >= 85
-        ? ('caution' as const)
-        : ('negative' as const);
-const slaState = (percent: number | null) =>
-  percent === null
-    ? 'Not available'
-    : percent >= 95
-      ? 'Met'
-      : percent >= 85
-        ? 'At Risk'
-        : 'Breached';
+const chartOf = (board: ApprovalBoard | null, link: (fn: string) => string) =>
+  horizontalBarChart(
+    {
+      name: 'Median turnaround',
+      token: 'cms-series-1',
+      points: (board?.functions ?? []).map<ChartPoint>((f) => ({
+        label: f.fn,
+        value: f.medianMinutes,
+        marker: f.p90Minutes,
+        target: f.targetMinutes,
+        href: link(f.fn),
+      })),
+    },
+    { unit: 'minutes', format: formatDuration, height: 30 * (board?.functions.length ?? 1) + 12 },
+  );
 
-// ---- The SLA section, derived from figures the page already holds ---------
-const sla = board === null ? null : slaFamilyView(family, board);
+const purchaseChart = chartOf(purchases, () => toPurchases({ status: PO_WAITING_STATUS }));
+const salesChart = chartOf(sales, (fn) => toSales({ status: SO_WAITING[fn] ?? null }));
 
-// ---- Charts, every one drawn from data already loaded --------------------
-const trend = board?.salesOrders ?? null;
-const percent = (v: number | null) => (v === null ? 'Not available' : `${v}%`);
-
-const slaTrendChart =
-  trend === null || trend.trend.length === 0
-    ? null
-    : lineChart(
-        [
-          {
-            name: 'Sales order SLA',
-            token: 'cms-series-1',
-            points: trend.trend.map((row) => ({
-              label: row.bucket,
-              value: row.slaCompliancePercent,
-              href: toSales,
-            })),
-          },
-        ],
-        { unit: 'per cent', format: percent, endLabels: true, height: 200 },
-      );
-
-const volumeSpark =
-  trend === null || trend.trend.length === 0
-    ? undefined
-    : sparkline(
-        {
-          name: 'Sales orders raised',
-          token: 'cms-series-1',
-          points: trend.trend.map((row) => ({ label: row.bucket, value: row.orders })),
-        },
-        { unit: 'orders' },
-      );
+const COLUMNS = [
+  { key: 'person', label: 'Person' },
+  { key: 'function', label: 'Function' },
+  { key: 'volume', label: 'Volume', numeric: true },
+  { key: 'average', label: 'Average', numeric: true, secondary: true },
+  { key: 'median', label: 'Median', numeric: true },
+  { key: 'p90', label: 'P90', numeric: true },
+  { key: 'within', label: 'Within SLA', numeric: true, secondary: true },
+  { key: 'pending', label: 'Pending', numeric: true },
+  { key: 'oldest', label: 'Oldest pending', secondary: true },
+];
 
 /**
- * SLA by affiliate, with the group's own figure drawn across it.
+ * The definition every figure on this page shares, one control away.
  *
- * The reference line is the group compliance the Orders section already
- * reports, not an invented target: a dashed line at a number nobody agreed
- * would be a target this system made up, and every affiliate would be measured
- * against it. Drawn this way it answers the only question the chart is for,
- * which is who is above and below the line the group is actually running at.
+ * The measurement basis belongs somewhere a reader can reach it and nowhere it
+ * has to be read past: the bars are elapsed minutes and the dashed target is
+ * configured against a business calendar, which agree inside a working day and
+ * diverge across a weekend.
  */
-/**
- * Five affiliates all called "Hass Petroleum X" overlap into one grey smear
- * under the bars. The company name is the same on every one of them and is
- * therefore carrying nothing, so the chart drops it and the axis reads Kenya,
- * Uganda, Tanzania. The full name is still in the data table under the chart
- * and in the Affiliates table below it.
- */
-const shortAffiliate = (name: string) => name.replace(/^Hass Petroleum\s+/i, '');
-
-const affiliateChart =
-  entities.length === 0
-    ? null
-    : barChart(
-        {
-          name: 'Sales order SLA compliance by affiliate',
-          token: 'cms-series-1',
-          points: entities.map((row) => ({
-            label: shortAffiliate(row.affiliateName),
-            value: row.salesOrderSlaPercent,
-            href: drillTo('/app/orders/sales/performance', filter, {
-              affiliateId: row.affiliateId,
-            }),
-          })),
-        },
-        {
-          unit: 'per cent',
-          format: percent,
-          height: 220,
-          reference:
-            board?.salesOrders?.slaCompliancePercent == null
-              ? undefined
-              : {
-                  value: board.salesOrders.slaCompliancePercent,
-                  label: `Group ${board.salesOrders.slaCompliancePercent}%`,
-                },
-        },
-      );
-
-/**
- * Customers to look at, as a horizontal bar.
- *
- * Horizontal because a customer's name is words: "Sirikwa Haulage Limited"
- * rotated under a vertical bar is a truncation, and on its own line it is a
- * name. The bar is open cases, which is the count the reader acts on.
- */
-const customerChart =
-  customers.length === 0
-    ? null
-    : horizontalBarChart(
-        {
-          name: 'Open cases by customer',
-          token: 'cms-series-4',
-          points: customers.slice(0, 6).map((row) => ({
-            label: row.customerName,
-            value: row.openCases,
-            href: drillTo('/app/customers', filter, { accountId: row.accountId }),
-          })),
-        },
-        { unit: 'cases', format: (v) => (v === null ? 'Not available' : count(v)) },
-      );
-
-const composition = board?.composition ?? null;
-const nothingVisible =
-  composition !== null &&
-  !composition.needsAttention &&
-  !composition.commercial &&
-  !composition.salesOrders &&
-  !composition.purchaseOrders &&
-  !composition.service &&
-  !composition.freshness;
+const DEFINITION =
+  `Elapsed minutes from the start of a function to its completion, over the last ${WINDOW_DAYS} days. ` +
+  'Purchase order functions are the configured approval levels; sales order functions are finance ' +
+  'approval, credit release, invoicing and loading authority. Invoicing and loading authority record ' +
+  'no actor in the source extract. The dashed target is the configured SLA target for that function, ' +
+  'which is measured in business hours, so it and an elapsed figure agree within a working day and ' +
+  'diverge across a weekend. A person is listed from the first approval and ranked from ' +
+  `${MINIMUM_RANKED_VOLUME}.`;
 ---
 
-<CmsLayout title="Dashboard" width="data">
+<CmsLayout title="Home" width="data">
+  <CmsPageHeader title="Home" definition={DEFINITION} />
+
+  {connectionFailed && <CmsErrorState title="The dashboard could not be loaded" />}
   {
-    connectionFailed || board === null ? (
+    failure !== null && (
       <CmsErrorState
-        title="The dashboard could not be loaded"
-        description={
-          boardFailure
-            ? `The database did not answer. Quote reference ${boardFailure.traceId} when reporting this.`
-            : 'The database did not answer.'
-        }
+        title="The turnaround figures could not be loaded"
+        description={`Quote reference ${failure.traceId} to your administrator.`}
       />
-    ) : (
-      <Fragment>
-        <CmsPageHeader
-          title="Today"
-          description={`Good day${user?.firstName ? `, ${user.firstName}` : ''}. Here is what needs your attention.`}
-        >
-          <CmsButton
-            slot="actions"
-            variant="secondary"
-            href={`/api/orders/sales/export${filterToQuery(filter)}`}
-          >
-            Export
-          </CmsButton>
-        </CmsPageHeader>
-
-        {/*
-          The filter row: one line of small controls and a reset, on the canvas
-          rather than inside a bordered panel. The panel it replaces was a card
-          with a heading, which gave three date fields the weight of a section
-          and pushed the first real figure below the fold.
-        */}
-        <CmsFilterBar action="/app" class="-mt-1">
-          <input type="hidden" name="sla" value={family} />
-          <CmsInput
-            id="d-from"
-            name="from"
-            label="From"
-            type="date"
-            size="sm"
-            value={filter.from ?? ''}
-          />
-          <CmsInput id="d-to" name="to" label="To" type="date" size="sm" value={filter.to ?? ''} />
-          <CmsSelect
-            id="d-grain"
-            name="grain"
-            label="Trend"
-            size="sm"
-            value={filter.grain}
-            options={[
-              { value: 'DAY', label: 'Daily' },
-              { value: 'WEEK', label: 'Weekly' },
-              { value: 'MONTH', label: 'Monthly' },
-            ]}
-          />
-        </CmsFilterBar>
-
-        {nothingVisible ? (
-          <CmsEmptyState
-            icon="performance"
-            title="No dashboard sections are available to you yet"
-            description="Your access roles do not currently reach orders, opportunities, cases or imports. Contact your administrator."
-          />
-        ) : (
-          <Fragment>
-            {/* ---- 1. SLA ------------------------------------------------ */}
-            {sla !== null && (
-              <section aria-labelledby="sla" class="order-2 flex flex-col gap-3">
-                <CmsSectionHeader id="sla" title="SLA">
-                  {/*
-                    A segmented control, built from two links rather than a
-                    script: the choice is in the URL, so it survives a reload,
-                    a share and the back button, and it works with no
-                    JavaScript at all.
-                  */}
-                  <div
-                    slot="actions"
-                    role="group"
-                    aria-label="SLA family"
-                    class="inline-flex rounded-cms bg-cms-sunken p-0.5"
-                  >
-                    {SLA_FAMILIES.map((option) => (
-                      <a
-                        href={drillTo('/app', filter, { sla: option.key })}
-                        aria-current={option.key === family ? 'true' : undefined}
-                        class:list={[
-                          'inline-flex h-8 items-center rounded-cms px-3 text-cms-caption font-semibold outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                          option.key === family
-                            ? 'bg-cms-surface text-cms-ink'
-                            : 'text-cms-muted hover:text-cms-ink',
-                        ]}
-                      >
-                        {option.label}
-                      </a>
-                    ))}
-                  </div>
-                </CmsSectionHeader>
-
-                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {sla.measures.map((measure) => (
-                    <CmsKpiCard
-                      label={measure.label}
-                      value={measure.value}
-                      context={measure.context}
-                      tone={measure.tone}
-                      href={measure.href}
-                      definition={measure.definition}
-                      denominator={measure.denominator}
-                      dateBasis={measure.dateBasis}
-                    />
-                  ))}
-                </div>
-
-                <div class="grid gap-3 xl:grid-cols-2">
-                  {slaTrendChart && (
-                    <CmsChart
-                      title="Sales order SLA compliance over time"
-                      definition="Sales order SLA instances that were Met, by period."
-                      chart={slaTrendChart}
-                      unit="per cent"
-                    />
-                  )}
-                  {affiliateChart && (
-                    <CmsChart
-                      title="SLA compliance by affiliate"
-                      definition="Sales order SLA instances that were Met, per affiliate, against the group's own figure."
-                      chart={affiliateChart}
-                      unit="per cent"
-                    />
-                  )}
-                </div>
-              </section>
-            )}
-
-            {/* ---- 2. Needs attention ------------------------------------ */}
-            {composition?.needsAttention && (
-              <section aria-labelledby="attention" class="order-1 flex flex-col gap-3">
-                <CmsSectionHeader id="attention" title="Needs attention" />
-                {board.attention.length === 0 ? (
-                  <p class="rounded-cms bg-cms-surface p-4 text-cms-body-sm text-cms-muted">
-                    Nothing needs attention in this period.
-                  </p>
-                ) : (
-                  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    {board.attention.slice(0, 4).map((signal) => (
-                      <CmsKpiCard
-                        label={signal.label}
-                        value={count(signal.count)}
-                        tone={signal.count > 0 ? 'caution' : 'positive'}
-                        href={drillTo(signal.href, filter, signal.destination)}
-                        definition={signal.definition}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* ---- 3. Orders --------------------------------------------- */}
-            {(composition?.salesOrders || composition?.purchaseOrders) && (
-              <section aria-labelledby="orders" class="order-3 flex flex-col gap-3">
-                <CmsSectionHeader id="orders" title="Orders" />
-                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {board.salesOrders && (
-                    <Fragment>
-                      <CmsKpiCard
-                        label="Sales orders"
-                        value={count(board.salesOrders.orders)}
-                        context="Raised in this period"
-                        href={drillTo('/app/orders/sales', filter)}
-                        spark={volumeSpark}
-                        definition="Sales orders raised in this period."
-                        denominator="Sales orders in your scope"
-                        dateBasis="Order created at"
-                      />
-                      <CmsKpiCard
-                        label="Order to invoice"
-                        value={formatDuration(board.salesOrders.orderToInvoiceMedianMinutes)}
-                        context="Median, elapsed"
-                        href={toSales}
-                        definition="Median time from the order being created to its invoice being created."
-                        denominator="Orders that carried both timestamps"
-                        dateBasis="Order created at"
-                      />
-                    </Fragment>
-                  )}
-                  {board.purchaseOrders && (
-                    <Fragment>
-                      <CmsKpiCard
-                        label="Awaiting Oracle posting"
-                        value={count(board.purchaseOrders.awaitingOraclePosting)}
-                        context="Received, not yet posted"
-                        tone={
-                          board.purchaseOrders.awaitingOraclePosting > 0 ? 'caution' : 'positive'
-                        }
-                        href={drillTo('/app/orders/purchases', filter)}
-                        definition="Purchase orders physically received where Oracle has not yet been posted. Stock the yard has and the system does not."
-                        denominator="Purchase orders in your scope"
-                        dateBasis="Purchase order created at"
-                      />
-                      <CmsKpiCard
-                        label="Posting coverage"
-                        value={formatRate(board.purchaseOrders.postingCoveragePercent)}
-                        context="Of orders received"
-                        tone={slaTone(board.purchaseOrders.postingCoveragePercent)}
-                        href={toPurchases}
-                        definition="Received purchase orders that have an Oracle posting timestamp."
-                        denominator="Purchase orders physically received in this period"
-                        dateBasis="Purchase order created at"
-                      />
-                    </Fragment>
-                  )}
-                </div>
-
-                {entities.length > 0 && (
-                  <CmsDataTable
-                    caption="Affiliates"
-                    columns={[
-                      { key: 'affiliate', label: 'Affiliate' },
-                      { key: 'so', label: 'Sales order SLA', numeric: true },
-                      { key: 'po', label: 'Purchase order SLA', numeric: true },
-                      { key: 'cases', label: 'Cases', numeric: true },
-                      { key: 'exception', label: 'Key exception', secondary: true },
-                    ]}
-                    empty={false}
-                  >
-                    {entities.map((row) => (
-                      <tr class="border-b border-cms-line last:border-0 hover:bg-cms-sunken">
-                        <td class="px-4 py-2.5">
-                          <a
-                            href={drillTo('/app/orders/sales/performance', filter, {
-                              affiliateId: row.affiliateId,
-                            })}
-                            class="rounded-cms font-medium text-cms-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-                          >
-                            {row.affiliateName}
-                          </a>
-                        </td>
-                        <td class="px-4 py-2.5 text-right">
-                          <CmsStatusPill
-                            value={formatRate(row.salesOrderSlaPercent)}
-                            tone={slaTone(row.salesOrderSlaPercent)}
-                            state={slaState(row.salesOrderSlaPercent)}
-                          />
-                        </td>
-                        <td class="px-4 py-2.5 text-right">
-                          <CmsStatusPill
-                            value={formatRate(row.purchaseOrderSlaPercent)}
-                            tone={slaTone(row.purchaseOrderSlaPercent)}
-                            state={slaState(row.purchaseOrderSlaPercent)}
-                          />
-                        </td>
-                        <td class="px-4 py-2.5 text-right text-cms-ink tabular-nums">
-                          {count(row.cases)}
-                        </td>
-                        <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                          {row.keyException}
-                        </td>
-                      </tr>
-                    ))}
-                  </CmsDataTable>
-                )}
-              </section>
-            )}
-
-            {/* ---- 4. Commercial ----------------------------------------- */}
-            {composition?.commercial && board.commercial && (
-              <section aria-labelledby="commercial" class="order-4 flex flex-col gap-3">
-                <CmsSectionHeader id="commercial" title="Commercial" />
-                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <CmsKpiCard
-                    label="New leads"
-                    value={count(board.commercial.newLeads)}
-                    context="Captured in this period"
-                    href={toCrm}
-                    definition="Leads captured in this period."
-                    denominator="Leads in your scope"
-                    dateBasis="Lead captured at"
-                  />
-                  <CmsKpiCard
-                    label="Lead conversion"
-                    value={formatRate(board.commercial.conversionRatePercent)}
-                    context="Of leads that qualified"
-                    href={toCrm}
-                    definition="Leads that reached Converted."
-                    denominator="Leads that qualified"
-                    dateBasis="Lead captured at"
-                  />
-                  <CmsKpiCard
-                    label="Win rate"
-                    value={formatRate(board.commercial.winRatePercent)}
-                    context={`Of ${count(board.commercial.winRateDenominator)} decided`}
-                    href={toCrm}
-                    definition="Opportunities won, as a share of those decided. An open opportunity is not in the denominator: open is not lost."
-                    denominator="Opportunities won plus opportunities lost"
-                    dateBasis="Actual close date"
-                  />
-                  <CmsKpiCard
-                    label="Open opportunities"
-                    value={count(board.commercial.closingSoon)}
-                    context="Still open at period end"
-                    href={toCrm}
-                    definition="Opportunities still open at the end of the period."
-                    denominator="Opportunities in your scope"
-                    dateBasis="Expected close date"
-                  />
-                </div>
-                {board.commercial.openPipelineByCurrency.length > 0 && (
-                  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    {board.commercial.openPipelineByCurrency.map((row) => (
-                      <CmsKpiCard
-                        label={`Open pipeline (${row.currencyCode})`}
-                        value={money(row.openValue, row.currencyCode)}
-                        context={`Weighted ${money(row.weightedValue, row.currencyCode)}`}
-                        href={drillTo('/app/crm/analytics', filter, { currency: row.currencyCode })}
-                        definition="Value of opportunities still open, and the same value weighted by each stage probability. Never summed across currencies."
-                        denominator="Open opportunities in your scope"
-                        dateBasis="Expected close date"
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* ---- 5. Service -------------------------------------------- */}
-            {composition?.service && board.service && (
-              <section aria-labelledby="service" class="order-5 flex flex-col gap-3">
-                <CmsSectionHeader id="service" title="Service" />
-                <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                  <div class="grid gap-3 sm:grid-cols-2">
-                    <CmsKpiCard
-                      label="Open cases"
-                      value={count(board.service.openCases)}
-                      context="Not resolved, closed or cancelled"
-                      href={toService}
-                      definition="Cases not Resolved, Closed or Cancelled."
-                      denominator="Cases in your scope"
-                      dateBasis="Case raised at"
-                    />
-                    <CmsKpiCard
-                      label="First response"
-                      value={formatRate(board.service.firstResponseWithinSlaPercent)}
-                      context="Within SLA"
-                      tone={slaTone(board.service.firstResponseWithinSlaPercent)}
-                      href={toService}
-                      definition="First-response SLA instances that were Met. An internal note is not a first response."
-                      denominator="First-response SLA instances settled in this period"
-                      dateBasis="SLA settled at"
-                    />
-                    <CmsKpiCard
-                      label="Median resolution"
-                      value={formatDuration(board.service.medianResolutionElapsedMinutes)}
-                      context="Elapsed, not accountable"
-                      href={toService}
-                      definition="Median wall-clock time from a case being raised to it being resolved. Time waiting on the customer is still in it."
-                      denominator="Cases resolved in this period"
-                      dateBasis="Case resolved at"
-                    />
-                    <CmsKpiCard
-                      label="Satisfaction"
-                      value={
-                        board.service.satisfactionScore === null
-                          ? 'Not available'
-                          : String(board.service.satisfactionScore)
-                      }
-                      context={`${count(board.service.satisfactionResponses)} responses`}
-                      href={toService}
-                      definition="Mean survey score, on the scale the survey itself defines."
-                      denominator="Survey responses received in this period"
-                      dateBasis="Response received at"
-                    />
-                  </div>
-                  {customerChart && (
-                    <CmsChart
-                      title="Open cases by customer"
-                      definition="Customers with the most cases still open, in your scope."
-                      chart={customerChart}
-                      unit="cases"
-                    />
-                  )}
-                </div>
-              </section>
-            )}
-
-            {/* ---- 6. Data freshness ------------------------------------- */}
-            {composition?.freshness && board.freshness.length > 0 && (
-              <section aria-labelledby="freshness" class="flex flex-col gap-3">
-                <CmsSectionHeader id="freshness" title="Data freshness" />
-                <CmsDataTable
-                  caption="Data freshness"
-                  columns={[
-                    { key: 'source', label: 'Source' },
-                    { key: 'state', label: 'State' },
-                    { key: 'at', label: 'Last updated', numeric: true },
-                  ]}
-                  empty={false}
-                >
-                  {board.freshness.map((row) => (
-                    <tr class="border-b border-cms-line last:border-0">
-                      <td class="px-4 py-2 text-cms-ink">{row.source}</td>
-                      <td class="px-4 py-2">
-                        <CmsBadge
-                          tone={row.live ? 'success' : 'info'}
-                          label={row.live ? 'Live' : 'Imported'}
-                        />
-                      </td>
-                      <td class="px-4 py-2 text-right text-cms-muted tabular-nums">
-                        {row.lastImportedAt ?? 'Never'}
-                      </td>
-                    </tr>
-                  ))}
-                </CmsDataTable>
-              </section>
-            )}
-          </Fragment>
-        )}
-      </Fragment>
     )
   }
+
+  {
+    /*
+      TWO COLUMNS, EACH READ DOWNWARD. On a narrow screen they stack, purchase
+      orders first, and each leaderboard stays under its own chart because the
+      grid places them in that order rather than because a second layout says
+      so.
+    */
+  }
+  <div class="grid gap-6 lg:grid-cols-2">
+    <div class="flex flex-col gap-4">
+      <CmsChart
+        title="Purchase order approval"
+        definition={DEFINITION}
+        chart={purchaseChart}
+        unit="minutes"
+        coverage={`${count(purchases?.functions.reduce((n, f) => n + f.volume, 0) ?? 0)} approvals`}
+      />
+      <p class="text-cms-body-sm text-cms-muted">
+        <a
+          class="font-semibold text-cms-royal hover:underline"
+          href={toPurchases({ status: PO_WAITING_STATUS })}
+        >
+          {count(poWaiting)}
+        </a>{' '}
+        in approval
+      </p>
+      <CmsDataTable
+        caption="Purchase order approvers"
+        columns={COLUMNS}
+        empty={(purchases?.leaders.length ?? 0) === 0}
+        rowCount={purchases?.leaders.length ?? 0}
+        emptyMessage="No approvals completed in this window."
+      >
+        {
+          (purchases?.leaders ?? []).map((row: LeaderRow) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-3 py-2">{row.person ?? 'Not recorded'}</td>
+              <td class="px-3 py-2">{row.fn}</td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toPurchases({ status: PO_WAITING_STATUS })}
+                >
+                  {count(row.volume)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {formatDuration(row.meanMinutes)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.medianMinutes)}</td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.p90Minutes)}</td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {row.targetMinutes === null ? 'No target' : formatRate(row.withinTarget)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toPurchases({ status: PO_WAITING_STATUS, ownerId: row.userId })}
+                >
+                  {count(row.pending)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 sm:table-cell">
+                {row.oldestPendingAt ?? 'Nothing waiting'}
+              </td>
+            </tr>
+          ))
+        }
+      </CmsDataTable>
+      <p class="text-cms-caption text-cms-muted">
+        Ranked from {MINIMUM_RANKED_VOLUME} completed approvals.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-4">
+      <CmsChart
+        title="Sales order approval"
+        definition={DEFINITION}
+        chart={salesChart}
+        unit="minutes"
+        coverage={`${count(sales?.functions.reduce((n, f) => n + f.volume, 0) ?? 0)} completions`}
+      />
+      <p class="text-cms-body-sm text-cms-muted">
+        <a
+          class="font-semibold text-cms-royal hover:underline"
+          href={toSales({ status: SO_WAITING['Finance approval'] ?? null })}
+        >
+          {count(soWaiting)}
+        </a>{' '}
+        awaiting finance approval
+      </p>
+      <CmsDataTable
+        caption="Sales order approvers"
+        columns={COLUMNS}
+        empty={(sales?.leaders.length ?? 0) === 0}
+        rowCount={sales?.leaders.length ?? 0}
+        emptyMessage="No completions in this window."
+      >
+        {
+          (sales?.leaders ?? []).map((row: LeaderRow) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-3 py-2">{row.person ?? 'Not recorded'}</td>
+              <td class="px-3 py-2">{row.fn}</td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toSales({ status: SO_WAITING[row.fn] ?? null })}
+                >
+                  {count(row.volume)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {formatDuration(row.meanMinutes)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.medianMinutes)}</td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.p90Minutes)}</td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {row.targetMinutes === null ? 'No target' : formatRate(row.withinTarget)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toSales({ status: SO_WAITING[row.fn] ?? null, ownerId: row.userId })}
+                >
+                  {count(row.pending)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 sm:table-cell">
+                {row.oldestPendingAt ?? 'Nothing waiting'}
+              </td>
+            </tr>
+          ))
+        }
+      </CmsDataTable>
+      <p class="text-cms-caption text-cms-muted">
+        Ranked from {MINIMUM_RANKED_VOLUME} completed functions.
+      </p>
+    </div>
+  </div>
+
+  {
+    /*
+      THE ONLY OTHER THING ON THE PAGE, AND EVERY ROW OPENS. An exception that
+      cannot be drilled into is a worry rather than a task.
+    */
+  }
+  <section>
+    <CmsSectionHeader id="attention" title="Needs attention" />
+    {
+      customers.length === 0 ? (
+        <CmsEmptyState title="No customer is showing an exception." />
+      ) : (
+        <CmsCard>
+          <CmsDataTable
+            caption="Customers needing attention"
+            columns={[
+              { key: 'customer', label: 'Customer' },
+              { key: 'orders', label: 'Open orders', numeric: true },
+              { key: 'cases', label: 'Open cases', numeric: true },
+              { key: 'breaches', label: 'SLA breaches', numeric: true },
+              { key: 'manager', label: 'Account manager', secondary: true },
+            ]}
+            rowCount={customers.length}
+          >
+            {customers.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-3 py-2">
+                  <a
+                    class="font-medium text-cms-royal hover:underline"
+                    href={`/app/customers/${row.accountId}`}
+                  >
+                    {row.customerName}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums">
+                  <a
+                    class="text-cms-royal hover:underline"
+                    href={toSales({ accountId: row.accountId })}
+                  >
+                    {count(row.openOrders)}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums">
+                  <a
+                    class="text-cms-royal hover:underline"
+                    href={drillTo('/app/helpdesk', filter, { accountId: row.accountId })}
+                  >
+                    {count(row.openCases)}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums">
+                  <a
+                    class="text-cms-royal hover:underline"
+                    href={drillTo('/app/performance', filter, { accountId: row.accountId })}
+                  >
+                    {count(row.slaBreaches)}
+                  </a>
+                </td>
+                <td class="hidden px-3 py-2 sm:table-cell">
+                  {row.accountManager ?? 'Not assigned'}
+                </td>
+              </tr>
+            ))}
+          </CmsDataTable>
+        </CmsCard>
+      )
+    }
+  </section>
 </CmsLayout>

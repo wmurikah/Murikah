@@ -165,10 +165,7 @@ const stamp = (value: string | null): string => value ?? 'Never';
 
   {
     mayManage && (
-      <CmsCard
-        title="Invite a contact"
-        description="They receive their own sign-in. Never pass one person's sign-in to another."
-      >
+      <CmsCard title="Invite a contact">
         {roles.length === 0 ? (
           <p class="text-cms-body-sm text-cms-muted">
             No portal role is configured, so there is nothing to invite anybody into. An

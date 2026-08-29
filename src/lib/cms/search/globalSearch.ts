@@ -383,7 +383,7 @@ function hrefFor(group: SearchGroup, id: string, accountId: string): string {
     case 'OPPORTUNITY':
       return `/app/crm/opportunities/${id}`;
     case 'CASE':
-      return `/app/service/${id}`;
+      return `/app/helpdesk/${id}`;
     case 'SALES_ORDER':
       return `/app/orders/sales/${id}`;
     case 'PURCHASE_ORDER':

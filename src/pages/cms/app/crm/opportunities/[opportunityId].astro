@@ -272,10 +272,7 @@ const stageOptions =
             </dl>
           </CmsCard>
 
-          <CmsCard
-            title="Products"
-            description="From the catalogue only. There is no free-text product on an opportunity; early uncertainty belongs on the lead."
-          >
+          <CmsCard title="Products">
             {products.length === 0 ? (
               <CmsEmptyState
                 icon="crm"
@@ -338,10 +335,7 @@ const stageOptions =
           </CmsCard>
         </div>
 
-        <CmsCard
-          title="Stage history"
-          description="Every move, with the time spent in the previous stage computed. History is written in the same transaction as the move, so this list cannot disagree with the current stage."
-        >
+        <CmsCard title="Stage history">
           <ol class="flex flex-col gap-3">
             {history.map((step) => (
               <li class="flex items-start gap-3">
