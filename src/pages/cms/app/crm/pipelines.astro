@@ -47,12 +47,12 @@ if (mayManage) {
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to pipeline configuration"
-        description="Ask a system administrator for the CRM.PIPELINES.MANAGE permission. Editing deals does not include redefining the stages they move through."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="Pipelines could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
@@ -199,7 +199,7 @@ if (mayManage) {
               max="100"
               step="1"
               required
-              hint="Whole percent. Applied when a deal moves here without an explicit override. Stored as a fraction; the conversion happens on the server, once."
+              hint="Whole percent. Applied when a deal moves here without an explicit override. Used when a deal moves here without an override."
             />
             <CmsInput
               id="s-targetDays"
@@ -215,7 +215,7 @@ if (mayManage) {
               id="s-isLostStage"
               name="isLostStage"
               label="Lost stage"
-              hint="A stage may be won, or lost, or neither. Never both: the database would allow the contradiction and the server refuses it."
+              hint="A stage may be won, or lost, or neither. A stage cannot be both won and lost."
             />
             <CmsCheckbox id="s-active" name="active" label="Active" checked />
           </form>
