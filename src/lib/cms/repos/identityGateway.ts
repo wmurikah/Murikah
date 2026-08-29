@@ -111,7 +111,6 @@ export async function createCustomerAccessRequest(
     emailDomain: string;
     provider: 'PASSWORD' | 'GOOGLE' | 'MICROSOFT';
     providerSubject?: string | null;
-    providerIssuer?: string | null;
     companyName: string;
     contactName: string;
     now: Date;
@@ -119,64 +118,51 @@ export async function createCustomerAccessRequest(
     userAgent: string | null;
   },
 ): Promise<string> {
-  const accessRequestId = newId('CAR');
-  const stamp = toDbTimestamp(input.now);
-  const inserted = await db.execute({
-    sql: `INSERT INTO customer_access_requests(
-            access_request_id,user_id,identity_method,federated_identity_id,
-            provider_issuer,provider_subject,email_at_request,email_domain,
-            requested_account_id,requested_contact_id,company_name,contact_name,status,
-            submitted_at,identity_verified_at,reviewed_at,reviewed_by_user_id,
-            decision_reason,approved_membership_id,created_at,updated_at)
-          VALUES(?,NULL,?,NULL,?,?,?,?,NULL,NULL,?,?,'PENDING',?,?,NULL,NULL,NULL,NULL,?,?)
-          ON CONFLICT DO NOTHING
-          RETURNING access_request_id`,
-    args: [
-      accessRequestId,
-      input.provider,
-      input.providerIssuer ?? null,
-      input.providerSubject ?? null,
-      input.email,
-      input.emailDomain,
-      input.companyName,
-      input.contactName,
-      stamp,
-      stamp,
-      stamp,
-      stamp,
-    ],
+  const existing = await db.execute({
+    sql: `SELECT request_id FROM customer_access_requests WHERE email=? AND status='PENDING' LIMIT 1`,
+    args: [input.email],
   });
-  const createdId = inserted.rows[0]?.access_request_id;
-  if (!createdId) {
-    const existing = await db.execute({
-      sql: `SELECT access_request_id FROM customer_access_requests
-            WHERE email_at_request=? AND status='PENDING' LIMIT 1`,
-      args: [input.email],
-    });
-    if (!existing.rows[0]) throw new Error('customer_access_request_conflict');
-    return String(existing.rows[0].access_request_id);
-  }
-  await db.execute(
-    auditEventStmt({
-      actorUserId: null,
-      eventType: 'CUSTOMER_REGISTRATION_REQUESTED',
-      entityType: 'customer_access_requests',
-      entityId: String(createdId),
-      action: 'CREATE',
-      afterJson: JSON.stringify({ domain: input.emailDomain, provider: input.provider }),
-      ip: input.ip,
-      userAgent: input.userAgent,
-      now: input.now,
-    }),
+  if (existing.rows[0]) return String(existing.rows[0].request_id);
+  const requestId = newId('CAR');
+  await db.batch(
+    [
+      {
+        sql: `INSERT INTO customer_access_requests(request_id,user_id,email,email_domain,provider,provider_subject,requested_account_id,company_name,contact_name,status,submitted_at,created_at,updated_at)
+            VALUES(?,NULL,?,?,?,?,NULL,?,?,'PENDING',?,?,?)`,
+        args: [
+          requestId,
+          input.email,
+          input.emailDomain,
+          input.provider,
+          input.providerSubject ?? null,
+          input.companyName,
+          input.contactName,
+          toDbTimestamp(input.now),
+          toDbTimestamp(input.now),
+          toDbTimestamp(input.now),
+        ],
+      },
+      auditEventStmt({
+        actorUserId: null,
+        eventType: 'CUSTOMER_REGISTRATION_REQUESTED',
+        entityType: 'customer_access_requests',
+        entityId: requestId,
+        action: 'CREATE',
+        afterJson: JSON.stringify({ domain: input.emailDomain, provider: input.provider }),
+        ip: input.ip,
+        userAgent: input.userAgent,
+        now: input.now,
+      }),
+    ],
+    'write',
   );
-  return String(createdId);
+  return requestId;
 }
 
 export async function resolveFederatedUser(
   db: Client,
   input: {
     provider: IdentityProvider;
-    issuer: string;
     subject: string;
     email: string;
     emailVerified: boolean;
@@ -185,31 +171,23 @@ export async function resolveFederatedUser(
   },
 ) {
   const linked = await db.execute({
-    sql: `SELECT f.federated_identity_id,f.user_id,u.user_type,u.status AS user_status,
-                 u.email_verified_at,f.status AS identity_status
-          FROM auth_federated_identities f JOIN users u ON u.user_id=f.user_id
-          WHERE f.provider=? AND f.issuer=? AND f.provider_subject=? LIMIT 1`,
-    args: [input.provider, input.issuer, input.subject],
+    sql: `SELECT f.user_id,u.user_type,u.status,u.email_verified_at FROM auth_federated_identities f JOIN users u ON u.user_id=f.user_id WHERE f.provider=? AND f.provider_subject=? LIMIT 1`,
+    args: [input.provider, input.subject],
   });
   if (linked.rows[0]) {
     const row = linked.rows[0];
-    if (
-      String(row.user_status) !== 'ACTIVE' ||
-      String(row.identity_status) !== 'ACTIVE' ||
-      !row.email_verified_at
-    )
+    if (String(row.status) !== 'ACTIVE' || !row.email_verified_at)
       return { kind: 'ineligible' as const };
     await db.execute({
-      sql: `UPDATE auth_federated_identities
-            SET provider_email=?,provider_email_verified=?,provider_tenant_id=?,last_login_at=?,updated_at=?
-            WHERE federated_identity_id=?`,
+      sql: `UPDATE auth_federated_identities SET provider_email=?,provider_email_verified=?,provider_tenant_id=?,last_login_at=?,updated_at=? WHERE provider=? AND provider_subject=?`,
       args: [
         input.email,
         input.emailVerified ? 1 : 0,
         input.tenantId,
         toDbTimestamp(input.now),
         toDbTimestamp(input.now),
-        String(row.federated_identity_id),
+        input.provider,
+        input.subject,
       ],
     });
     return { kind: 'user' as const, userId: String(row.user_id), userType: String(row.user_type) };
@@ -231,24 +209,19 @@ export async function resolveFederatedUser(
     });
     if (!membership.rows[0]) return { kind: 'link_required' as const };
   }
-  const federatedIdentityId = newId('FID');
+  const identityId = newId('FID');
   await db.batch(
     [
       {
-        sql: `INSERT INTO auth_federated_identities(
-                federated_identity_id,user_id,provider,issuer,provider_subject,
-                provider_tenant_id,provider_email,provider_email_verified,status,
-                linked_at,last_login_at,revoked_at,created_at,updated_at)
-              VALUES(?,?,?,?,?,?,?,?, 'ACTIVE',?,?,NULL,?,?)`,
+        sql: `INSERT INTO auth_federated_identities(identity_id,user_id,provider,provider_subject,provider_email,provider_email_verified,provider_tenant_id,linked_at,last_login_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
         args: [
-          federatedIdentityId,
+          identityId,
           String(row.user_id),
           input.provider,
-          input.issuer,
           input.subject,
-          input.tenantId,
           input.email,
           1,
+          input.tenantId,
           toDbTimestamp(input.now),
           toDbTimestamp(input.now),
           toDbTimestamp(input.now),
@@ -259,9 +232,9 @@ export async function resolveFederatedUser(
         actorUserId: String(row.user_id),
         eventType: 'FEDERATED_IDENTITY_LINKED',
         entityType: 'auth_federated_identities',
-        entityId: federatedIdentityId,
+        entityId: identityId,
         action: 'LINK',
-        afterJson: JSON.stringify({ provider: input.provider, issuer: input.issuer }),
+        afterJson: JSON.stringify({ provider: input.provider }),
         ip: null,
         userAgent: null,
         now: input.now,
