@@ -85,10 +85,7 @@ if (mayView) {
         </div>
 
         <div class="mt-6 grid gap-4 lg:grid-cols-2">
-          <CmsCard
-            title="Recent imports"
-            description="Rows and documents are always reported separately."
-          >
+          <CmsCard title="Recent imports">
             {recent.length === 0 ? (
               <CmsEmptyState
                 icon="data"
@@ -120,10 +117,7 @@ if (mayView) {
             </div>
           </CmsCard>
 
-          <CmsCard
-            title="Partial imports"
-            description="A partial import says exactly what did not land and why."
-          >
+          <CmsCard title="Partial imports">
             {quality.recentPartialImports.length === 0 ? (
               <CmsEmptyState
                 icon="data"

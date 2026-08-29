@@ -149,10 +149,7 @@ const NOT_AVAILABLE = 'Not available';
             </dl>
           </CmsCard>
 
-          <CmsCard
-            title="Approval workflow"
-            description="The stages this order has. Nothing is drawn for a level it never used."
-          >
+          <CmsCard title="Approval workflow">
             <CmsDataTable
               caption="Approval stages"
               columns={[
@@ -247,10 +244,7 @@ const NOT_AVAILABLE = 'Not available';
             )}
           </CmsCard>
 
-          <CmsCard
-            title="Source history"
-            description="What each upload said, kept for reconciliation and never used as a metric."
-          >
+          <CmsCard title="Source history">
             {detail.snapshots.length === 0 ? (
               <p class="text-cms-body-sm text-cms-muted">
                 This order was not created by an import, so it has no source snapshots.
