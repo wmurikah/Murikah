@@ -37,13 +37,13 @@ const permissionLabel =
     description={item.summary}
     crumbs={[{ label: 'Home', href: '/' }, { label: item.label }]}
   >
-    <CmsBadge slot="actions" tone="neutral" label="Not built yet" />
+    <CmsBadge slot="actions" tone="neutral" label="Unavailable" />
   </CmsPageHeader>
 
   <CmsEmptyState
     icon={item.icon}
-    title={`${item.label} is not built yet`}
-    description="This destination exists so the navigation can be reviewed as a whole. The module arrives in a later phase."
+    title={`${item.label} is not available`}
+    description="This area is not available yet."
   />
 
   <CmsCard title="What this section will need" headingLevel="h2">

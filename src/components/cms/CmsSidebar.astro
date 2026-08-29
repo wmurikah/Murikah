@@ -43,57 +43,67 @@ const isActive = (href: string) =>
  * also the safer one: the group a person uses fifty times a day should not sit
  * flush against the group that reshapes what everybody else can see.
  */
-const ADMIN_LABEL = 'Administration';
+const groups = [
+  { label: 'Work', items: ['Home', 'Customers', 'CRM', 'Service', 'Orders'] },
+  { label: 'Insights', items: ['Performance'] },
+  { label: 'Operations', items: ['Data'] },
+  { label: 'System', items: ['Administration'] },
+] as const;
 ---
 
 <nav aria-label="Main" class="flex flex-col gap-0.5">
-  <p
-    id={`${idPrefix}-nav-heading`}
-    class="ps-16 pt-2 pb-1.5 text-cms-caption font-semibold tracking-wider text-cms-rail-muted uppercase"
-  >
-    Workspace
-  </p>
-  <ul class="flex flex-col gap-0.5">
-    {
-      entries.map((item) => {
-        const active = isActive(item.href);
-        return (
-          <li>
-            {item.label === ADMIN_LABEL && (
-              <hr class="mx-3 my-2 border-0 border-t border-cms-navy-soft" aria-hidden="true" />
-            )}
-            <a
-              href={item.href}
-              aria-current={active ? 'page' : undefined}
-              class:list={[
-                'relative flex h-10 items-center rounded-cms pr-3 text-cms-body-sm',
-                'transition-colors duration-150 outline-none',
-                'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy',
-                active
-                  ? 'bg-cms-navy-deep font-semibold text-white'
-                  : 'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white',
-              ]}
-            >
-              {/*
+  {
+    groups.map((group) => {
+      const groupEntries = entries.filter((item) => group.items.includes(item.label as never));
+      if (groupEntries.length === 0) return null;
+      return (
+        <section class="mb-3 last:mb-0" aria-labelledby={`${idPrefix}-${group.label}`}>
+          <p
+            id={`${idPrefix}-${group.label}`}
+            class="ps-16 pb-1 text-[0.6875rem] font-semibold tracking-[0.12em] text-cms-rail-muted uppercase"
+          >
+            {group.label}
+          </p>
+          <ul class="flex flex-col gap-0.5">
+            {groupEntries.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <li>
+                  <a
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    class:list={[
+                      'relative flex h-10 items-center rounded-cms pr-3 text-cms-body-sm',
+                      'transition-colors duration-150 outline-none',
+                      'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy',
+                      active
+                        ? 'bg-cms-navy-deep font-semibold text-white'
+                        : 'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white',
+                    ]}
+                  >
+                    {/*
                 The active marker is absolute at the leading edge so it is
                 visible whether the rail is 64px or 256px, and the icon box is
                 exactly the collapsed width so the label starts at the clip.
               */}
-              <span
-                class:list={[
-                  'absolute inset-y-2 start-1 w-0.5 rounded-full',
-                  active ? 'bg-cms-gold' : 'bg-transparent',
-                ]}
-                aria-hidden="true"
-              />
-              <span class="flex w-16 shrink-0 items-center justify-center">
-                <CmsIcon name={item.icon} size={18} />
-              </span>
-              <span class="whitespace-nowrap">{item.label}</span>
-            </a>
-          </li>
-        );
-      })
-    }
-  </ul>
+                    <span
+                      class:list={[
+                        'absolute inset-y-2 start-1 w-0.5 rounded-full',
+                        active ? 'bg-cms-gold' : 'bg-transparent',
+                      ]}
+                      aria-hidden="true"
+                    />
+                    <span class="flex w-16 shrink-0 items-center justify-center">
+                      <CmsIcon name={item.icon} size={18} />
+                    </span>
+                    <span class="whitespace-nowrap">{item.label}</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      );
+    })
+  }
 </nav>

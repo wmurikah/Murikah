@@ -16,9 +16,11 @@ import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsUnavailable from '@/components/cms/CmsUnavailable.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
@@ -105,6 +107,48 @@ function pageHref(target: number): string {
   next.set('page', String(target));
   return `/app/crm?${next.toString()}`;
 }
+const activeFilters = [
+  query.status,
+  query.leadSourceId,
+  query.ownerUserId,
+  query.businessUnitId,
+  query.campaignId,
+  query.firstContact === 'all' ? null : query.firstContact,
+  query.capturedFrom,
+  query.capturedTo,
+].filter(Boolean).length;
+const leadFilterChips = [
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.leadSourceId && {
+    key: 'source',
+    label: options.sources.find((o) => o.id === query.leadSourceId)?.label ?? 'Source',
+  },
+  query.ownerUserId && {
+    key: 'owner',
+    label: options.owners.find((o) => o.id === query.ownerUserId)?.label ?? 'Owner',
+  },
+  query.businessUnitId && {
+    key: 'unit',
+    label:
+      options.businessUnits.find((o) => o.id === query.businessUnitId)?.label ?? 'Business unit',
+  },
+  query.campaignId && {
+    key: 'campaign',
+    label: options.campaigns.find((o) => o.id === query.campaignId)?.label ?? 'Campaign',
+  },
+  query.firstContact !== 'all' && {
+    key: 'contact',
+    label: query.firstContact === 'pending' ? 'First contact pending' : 'First contact recorded',
+  },
+  query.capturedFrom && { key: 'from', label: `From ${query.capturedFrom}` },
+  query.capturedTo && { key: 'to', label: `To ${query.capturedTo}` },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutLeadFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/crm?${next.toString()}`;
+};
 ---
 
 <CmsLayout title="Leads">
@@ -112,10 +156,13 @@ function pageHref(target: number): string {
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to leads"
-        description="Ask a system administrator for the CRM.LEADS.VIEW permission. Nothing on this page is loaded without it."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
-      <CmsErrorState title="Leads could not be loaded" description="The database did not answer." />
+      <CmsErrorState
+        title="Leads could not be loaded"
+        description="Please try again in a moment."
+      />
     ) : (
       <Fragment>
         <CmsPageHeader
@@ -124,17 +171,6 @@ function pageHref(target: number): string {
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'CRM' }, { label: 'Leads' }]}
         >
           <Fragment slot="actions">
-            <CmsButton variant="secondary" href="/app/crm/opportunities">
-              Opportunities
-            </CmsButton>
-            <CmsButton variant="secondary" href="/app/crm/activities">
-              My Work
-            </CmsButton>
-            {maySources && (
-              <CmsButton variant="secondary" href="/app/crm/lead-sources">
-                Lead sources
-              </CmsButton>
-            )}
             {mayCreate && (
               <CmsButton variant="primary" icon="plus" data-cms-lead-create>
                 New lead
@@ -142,6 +178,26 @@ function pageHref(target: number): string {
             )}
           </Fragment>
         </CmsPageHeader>
+        <div class="flex items-end justify-between gap-3">
+          <CmsTabs
+            label="CRM"
+            current="/app/crm"
+            tabs={[
+              { label: 'Leads', href: '/app/crm' },
+              { label: 'Opportunities', href: '/app/crm/opportunities' },
+              { label: 'Activities', href: '/app/crm/activities' },
+            ]}
+            class="min-w-0 flex-1"
+          />
+          {maySources && (
+            <a
+              href="/app/crm/lead-sources"
+              class="mb-2 shrink-0 rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Lead sources
+            </a>
+          )}
+        </div>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <CmsKpiCard label="Leads in your scope" value={String(indicators.total)} />
@@ -154,18 +210,18 @@ function pageHref(target: number): string {
           first contact means no first contact has been recorded, not that anyone is late.
         </p>
 
-        <CmsCard>
-          <form method="get" class="flex flex-wrap items-end gap-3">
-            <div class="min-w-56 grow">
-              <CmsInput
-                id="f-q"
-                name="q"
-                label="Search"
-                type="search"
-                value={query.search}
-                hint="Lead number, title, description, product interest or account name. Case does not matter."
-              />
-            </div>
+        <CmsFilterPanel action="/app/crm" activeCount={activeFilters}>
+          <div slot="primary">
+            <CmsInput
+              id="f-q"
+              name="q"
+              label="Search"
+              type="search"
+              value={query.search}
+              hint="Lead number, title, description, product interest or account name. Case does not matter."
+            />
+          </div>
+          <Fragment slot="advanced">
             <CmsSelect
               id="f-status"
               name="status"
@@ -229,20 +285,24 @@ function pageHref(target: number): string {
               type="date"
               value={query.capturedTo ?? ''}
             />
-            <CmsButton type="submit" variant="secondary">
-              Apply
-            </CmsButton>
-          </form>
-        </CmsCard>
+          </Fragment>
+          <Fragment slot="chips">
+            {leadFilterChips.map((chip) => (
+              <a
+                href={withoutLeadFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
 
         <CmsDataTable
           caption="Leads"
           columns={[
             { key: 'lead', label: 'Lead' },
-            { key: 'number', label: 'Number', secondary: true },
-            { key: 'account', label: 'Account', secondary: true },
-            { key: 'source', label: 'Source', secondary: true },
-            { key: 'owner', label: 'Owner', secondary: true },
             { key: 'value', label: 'Estimated value', numeric: true },
             { key: 'age', label: 'Age', numeric: true },
             { key: 'status', label: 'Status' },
@@ -263,37 +323,23 @@ function pageHref(target: number): string {
                     No first contact recorded
                   </span>
                 )}
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[row.leadNumber, row.accountName, row.sourceName, row.ownerName]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted tabular-nums sm:table-cell">
-                {row.leadNumber}
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {/*
-                  Not available, never a dash that reads as a name. A lead with
-                  no account is ordinary at this stage.
-                */}
-                {row.accountName === null ? (
-                  'Not available'
-                ) : (
-                  <a
-                    href={`/app/customers/${row.accountId}`}
-                    class="rounded-cms underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-                  >
-                    {row.accountName}
-                  </a>
-                )}
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{row.sourceName}</td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{row.ownerName}</td>
               <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
                 {/*
                   Estimated value is genuinely unknown on most early leads. Zero
                   would say the customer is worth nothing, which is a different
                   claim from nobody having estimated yet.
                 */}
-                {row.estimatedValue === null
-                  ? 'Not available'
-                  : `${row.currencyCode ?? ''} ${row.estimatedValue.toLocaleString('en-KE')}`.trim()}
+                {row.estimatedValue === null ? (
+                  <CmsUnavailable compact />
+                ) : (
+                  `${row.currencyCode ?? ''} ${row.estimatedValue.toLocaleString('en-KE')}`.trim()
+                )}
               </td>
               <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
                 {ageInDays(row.capturedAt, now)} days
@@ -303,11 +349,29 @@ function pageHref(target: number): string {
               </td>
             </tr>
           ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <a
+                href={`/app/crm/${row.leadId}`}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">{row.title}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {[row.accountName, row.ownerName, `${ageInDays(row.capturedAt, now)} days`]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+              </a>
+            ))}
+          </Fragment>
           <Fragment slot="empty">
             <CmsEmptyState
               icon="crm"
               title="No leads match"
-              description="Adjust the search or the filters. A lead you cannot see here is one outside your data scope."
+              description="Try a different search or remove a filter."
             />
           </Fragment>
         </CmsDataTable>
@@ -315,8 +379,7 @@ function pageHref(target: number): string {
         {page.total > 0 && (
           <div class="flex flex-wrap items-center justify-between gap-3">
             <p class="text-cms-body-sm text-cms-muted">
-              Showing {from} to {to} of {page.total}. Searching, filtering and paging all happen on
-              the server, so the whole lead list is never sent to the browser.
+              {from}–{to} of {page.total} leads
             </p>
             {lastPage > 1 && (
               <nav aria-label="Pages" class="flex items-center gap-2">
