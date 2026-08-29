@@ -132,6 +132,19 @@ const mayUpload = canUploadImports(permissions);
   if (form && validate && summary) {
     let batchId = '';
 
+    /**
+     * The trace id an error response carries, from `{ error: { traceId } }`.
+     *
+     * Null where the server did not issue one, which is every refusal it
+     * could describe in words. Only an unexpected throw gets an id, and that
+     * is exactly the case where the sentence on screen cannot say enough.
+     */
+    const traceOf = (body: unknown): string | null => {
+      const error = (body as { error?: { traceId?: unknown } } | null)?.error;
+      const traceId = error?.traceId;
+      return typeof traceId === 'string' && traceId !== '' ? traceId : null;
+    };
+
     const showError = (message: string) => {
       if (!errorBox) return;
       errorBox.textContent = message;
@@ -247,11 +260,23 @@ const mayUpload = canUploadImports(permissions);
         scope +
         affiliatesSeen +
         period +
+        // THE FOUR FIGURES, SIDE BY SIDE. A row is not a document, a document
+        // is not an order line, and a repeated line is not a repeated loading.
+        // Showing only the first two is what let a commit write one order line
+        // 134 times with whichever row arrived last winning.
         line('Rows received', String(counts.rowsReceived ?? 0)) +
         line('Documents', String(counts.uniqueDocuments ?? 0)) +
+        line('Order lines', String(counts.orderLines ?? 0)) +
+        line(
+          'Additional loading events',
+          `${String(counts.additionalLoadingEvents ?? 0)} beyond one per order`,
+        ) +
         line('New rows', String(counts.rowsNew ?? 0)) +
         line('Changed rows', String(counts.rowsChanged ?? 0)) +
-        line('Exact duplicate rows', String(counts.rowsDuplicate ?? 0)) +
+        line(
+          'Repeat rows',
+          `${String(counts.rowsDuplicate ?? 0)} (a further event for a line already described)`,
+        ) +
         line('Rows needing a mapping', String(counts.rowsUnresolved ?? 0)) +
         line('Rejected rows', String(counts.rowsRejected ?? 0)) +
         queue('Unresolved users', unresolvedUsers.length, 'users') +
@@ -268,7 +293,16 @@ const mayUpload = canUploadImports(permissions);
       const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
       if (progress) progress.textContent = '';
       if (!response.ok) {
-        showError('The import could not be completed.');
+        // THE TRACE ID TRAVELS. The sentence stays general because a database
+        // error can name a customer or an Oracle code, but the id is what a
+        // person quotes to get the table, the constraint and the values out
+        // of the log. "The import could not be completed." on its own is what
+        // cost a day, three times.
+        showError(
+          traceOf(body) === null
+            ? 'The import could not be completed. Nothing was changed.'
+            : `The import could not be completed. Quote reference ${traceOf(body)} to your administrator.`,
+        );
         return;
       }
       const result = (body ?? {}) as Record<string, unknown>;
@@ -288,6 +322,10 @@ const mayUpload = canUploadImports(permissions);
         // accounts should say so on the screen that ran it.
         line('Customers created', String(result?.accountsCreated ?? 0)) +
         line('Products created', String(result?.productsCreated ?? 0)) +
+        line(
+          'Additional loading events recorded',
+          `${String(result?.additionalLoadingEvents ?? 0)} (the earliest reached the order; every one is on its page)`,
+        ) +
         (notes.length === 0
           ? ''
           : `<p class="mt-3 text-cms-body-sm text-cms-muted">Imported, with a note:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${notes
