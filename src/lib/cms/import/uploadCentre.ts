@@ -208,6 +208,20 @@ export interface UploadOutcome {
   summary: {
     rowsReceived: number;
     uniqueDocuments: number;
+    /**
+     * FOUR FIGURES, NOT TWO, AND NONE OF THEM DERIVED FROM ANOTHER.
+     *
+     * Rows, documents, order lines and additional loading events are four
+     * different facts about one file, and the real extract makes that obvious:
+     * 1,386 rows describe 662 documents over 1,252 order lines carrying 100
+     * loading authorities beyond the first. A preview that showed only rows
+     * and documents was how a commit came to write one order line 134 times
+     * with the last row winning.
+     *
+     * Zero on a purchase order preview, which has no line grain at all.
+     */
+    orderLines: number;
+    additionalLoadingEvents: number;
     rowsNew: number;
     rowsChanged: number;
     rowsDuplicate: number;
@@ -380,6 +394,11 @@ export async function receiveUpload(
       summary: {
         rowsReceived: validation.rowsReceived,
         uniqueDocuments: validation.uniqueOrders,
+        // The purchase order extract has no line grain and no loading column,
+        // which Build Prompt 33 established and this reports rather than
+        // leaving a reader to wonder why two figures are missing.
+        orderLines: 0,
+        additionalLoadingEvents: 0,
         rowsNew: validation.rowsNew,
         rowsChanged: validation.rowsChanged,
         rowsDuplicate: validation.rowsDuplicate,
@@ -467,6 +486,8 @@ export async function receiveUpload(
     summary: {
       rowsReceived: validation.rowsReceived,
       uniqueDocuments: validation.uniqueDocuments,
+      orderLines: validation.orderLines,
+      additionalLoadingEvents: validation.additionalLoadingEvents,
       rowsNew: validation.rowsNew,
       rowsChanged: validation.rowsChanged,
       rowsDuplicate: validation.rowsDuplicate,
@@ -561,6 +582,8 @@ export interface CommitOutcome {
   accountsCreated: number;
   productsCreated: number;
   nameMismatches: number;
+  /** Loading authorities beyond the first, per order, that this commit recorded. */
+  additionalLoadingEvents: number;
   /** What did not import, and why, in words rather than a status word. */
   skippedReasons: { reason: string; rows: number }[];
   /**
@@ -613,6 +636,7 @@ export async function commitBatch(
             accountsCreated: 0,
             productsCreated: 0,
             nameMismatches: 0,
+            additionalLoadingEvents: 0,
             skippedReasons: [],
             notes:
               result.ordersWithoutWorkflowDefinition === 0
@@ -645,6 +669,7 @@ export async function commitBatch(
             accountsCreated: result.accountsCreated,
             productsCreated: result.productsCreated,
             nameMismatches: result.nameMismatches,
+            additionalLoadingEvents: result.additionalLoadingEvents,
             skippedReasons: [],
             notes:
               result.nameMismatches === 0
@@ -677,6 +702,7 @@ export async function commitBatch(
       accountsCreated: outcome.accountsCreated,
       productsCreated: outcome.productsCreated,
       nameMismatches: outcome.nameMismatches,
+      additionalLoadingEvents: outcome.additionalLoadingEvents,
       skippedReasons: outcome.skippedReasons,
       notes: outcome.notes,
     },
