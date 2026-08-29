@@ -37,15 +37,18 @@ const href = `/app/administration/audit?entityType=${encodeURIComponent(entityTy
 
 {
   visible && (
-    <a
-      href={href}
-      class:list={[
-        'inline-flex min-h-9 items-center rounded-cms border border-cms-border px-3 text-cms-body-sm font-medium text-cms-royal',
-        'outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus',
-        className,
-      ]}
-    >
-      {label}
-    </a>
+    <details class:list={['relative', className]}>
+      <summary class="inline-flex min-h-9 cursor-pointer list-none items-center rounded-cms px-3 text-cms-body-sm font-medium text-cms-muted outline-none hover:bg-cms-sunken hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus">
+        More <span class="sr-only">record actions</span>
+      </summary>
+      <div class="absolute right-0 z-30 mt-1 min-w-48 rounded-cms border border-cms-line bg-cms-surface p-1 shadow-cms-overlay">
+        <a
+          href={href}
+          class="block rounded-cms px-3 py-2 text-cms-body-sm text-cms-ink outline-none hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {label}
+        </a>
+      </div>
+    </details>
   )
 }

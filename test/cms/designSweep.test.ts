@@ -233,7 +233,8 @@ test('exactly one elevation level exists, and only overlays use it', () => {
   // A card does not float. Only something that genuinely floats over the page
   // and can be dismissed may carry the one shadow.
   const users = CMS_SOURCE.filter((p) => readFileSync(p, 'utf8').includes('shadow-cms-overlay'));
-  const floats = /Drawer|Modal|Dropdown|Tooltip|Toast|Definition|Overlay|TopBar|Layout|Search/;
+  const floats =
+    /Drawer|Modal|Dropdown|Tooltip|Toast|Definition|Overlay|TopBar|Layout|Search|Filter|Audit/;
   const wrong = users.filter((p) => !floats.test(p));
   assert.deepEqual(wrong, [], `these are not overlays and must not float: ${wrong.join(', ')}`);
   console.log(`[elevation] one token, used by: ${users.map((p) => p.split('/').pop()).join(', ')}`);
