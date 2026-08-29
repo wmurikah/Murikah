@@ -12,7 +12,7 @@ const { action, activeCount = 0, label = 'Filters' } = Astro.props;
 <div class="flex flex-col gap-2">
   <form method="get" action={action} class="flex flex-wrap items-end gap-2">
     <div class="min-w-56 flex-1"><slot name="primary" /></div>
-    <details class="group relative" data-cms-filter-disclosure>
+    <details class="group relative">
       <summary
         class="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-cms border border-cms-border bg-cms-surface px-3.5 text-cms-body-sm font-semibold text-cms-ink outline-none hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus"
       >
@@ -51,13 +51,3 @@ const { action, activeCount = 0, label = 'Filters' } = Astro.props;
     )
   }
 </div>
-
-<script>
-  document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    const open = document.querySelector<HTMLDetailsElement>('[data-cms-filter-disclosure][open]');
-    if (!open) return;
-    open.open = false;
-    open.querySelector<HTMLElement>('summary')?.focus();
-  });
-</script>
