@@ -62,9 +62,23 @@ const {
   stickyHead = false,
   class: className,
 } = Astro.props;
+const hasMobileRows = Astro.slots.has('mobile');
 ---
 
-<div class:list={['overflow-hidden rounded-cms-lg bg-cms-surface', className]}>
+{
+  hasMobileRows && (
+    <div class="divide-y divide-cms-line bg-cms-surface sm:hidden">
+      <slot name="mobile" />
+    </div>
+  )
+}
+<div
+  class:list={[
+    'overflow-hidden rounded-cms-lg bg-cms-surface',
+    hasMobileRows && 'hidden sm:block',
+    className,
+  ]}
+>
   <div class:list={['overflow-x-auto', stickyHead ? 'max-h-[32rem] overflow-y-auto' : '']}>
     <table class="w-full border-collapse text-cms-body-sm">
       <caption class="sr-only">{caption}</caption>
@@ -75,7 +89,7 @@ const {
               <th
                 scope="col"
                 class:list={[
-                  'border-b border-cms-line px-4 py-2.5 text-cms-caption font-semibold tracking-wide whitespace-nowrap text-cms-muted uppercase',
+                  'border-b border-cms-line px-4 py-2.5 text-cms-caption font-semibold whitespace-nowrap text-cms-muted',
                   column.numeric ? 'text-right tabular-nums' : 'text-left',
                   column.secondary ? 'hidden sm:table-cell' : '',
                 ]}

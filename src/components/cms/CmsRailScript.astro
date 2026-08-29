@@ -37,9 +37,10 @@
     if (label) label.textContent = pinned ? 'Collapse' : 'Keep open';
   };
 
-  let pinned = false;
+  let pinned = matchMedia('(min-width: 1280px)').matches;
   try {
-    pinned = localStorage.getItem(KEY) === '1';
+    const saved = localStorage.getItem(KEY);
+    if (saved !== null) pinned = saved === '1';
   } catch {
     // Storage refused. The rail still works; the choice just does not persist.
   }
@@ -50,7 +51,7 @@
     paint(pinned);
     try {
       if (pinned) localStorage.setItem(KEY, '1');
-      else localStorage.removeItem(KEY);
+      else localStorage.setItem(KEY, '0');
     } catch {
       // Nothing to do: the rail is in the right state for this page either way.
     }

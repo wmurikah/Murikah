@@ -71,7 +71,7 @@ const total = modules.reduce((n, m) => n + m.totalCount, 0);
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to role administration"
-        description="Ask a system administrator for the ADMIN.ROLES.MANAGE permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState

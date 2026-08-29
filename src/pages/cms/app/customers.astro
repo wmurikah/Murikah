@@ -15,8 +15,9 @@ import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import CmsUnavailable from '@/components/cms/CmsUnavailable.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
@@ -80,6 +81,38 @@ function pageHref(target: number): string {
   next.set('page', String(target));
   return `/app/customers?${next.toString()}`;
 }
+const activeFilters = [
+  query.accountType,
+  query.status,
+  query.countryId,
+  query.affiliateId,
+  query.accountManagerUserId,
+  query.segment,
+].filter(Boolean).length;
+const customerFilterChips = [
+  query.accountType && { key: 'type', label: titleCase(query.accountType) },
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.countryId && {
+    key: 'country',
+    label: options.countries.find((o) => o.id === query.countryId)?.label ?? 'Country',
+  },
+  query.affiliateId && {
+    key: 'affiliate',
+    label: options.affiliates.find((o) => o.id === query.affiliateId)?.label ?? 'Affiliate',
+  },
+  query.accountManagerUserId && {
+    key: 'manager',
+    label:
+      options.managers.find((o) => o.id === query.accountManagerUserId)?.label ?? 'Account manager',
+  },
+  query.segment && { key: 'segment', label: query.segment },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutCustomerFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/customers?${next.toString()}`;
+};
 ---
 
 <CmsLayout title="Customers">
@@ -87,7 +120,7 @@ function pageHref(target: number): string {
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to customers"
-        description="Ask a system administrator for the CUSTOMERS.ACCOUNTS.VIEW permission. Nothing on this page is loaded without it."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
@@ -108,18 +141,18 @@ function pageHref(target: number): string {
           )}
         </CmsPageHeader>
 
-        <CmsCard>
-          <form method="get" class="flex flex-wrap items-end gap-3">
-            <div class="min-w-56 grow">
-              <CmsInput
-                id="f-q"
-                name="q"
-                label="Search"
-                type="search"
-                value={query.search}
-                hint="Account name, account code, Oracle code, tax PIN, email or phone. Case does not matter."
-              />
-            </div>
+        <CmsFilterPanel action="/app/customers" activeCount={activeFilters}>
+          <div slot="primary">
+            <CmsInput
+              id="f-q"
+              name="q"
+              label="Search"
+              type="search"
+              value={query.search}
+              hint="Account name, account code, Oracle code, tax PIN, email or phone. Case does not matter."
+            />
+          </div>
+          <Fragment slot="advanced">
             <CmsSelect
               id="f-type"
               name="type"
@@ -173,22 +206,25 @@ function pageHref(target: number): string {
                 ]}
               />
             )}
-            <CmsButton type="submit" variant="secondary">
-              Apply
-            </CmsButton>
-          </form>
-        </CmsCard>
+          </Fragment>
+          <Fragment slot="chips">
+            {customerFilterChips.map((chip) => (
+              <a
+                href={withoutCustomerFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
 
         <CmsDataTable
           caption="Customer accounts"
           columns={[
             { key: 'account', label: 'Account' },
-            { key: 'code', label: 'Account code', secondary: true },
-            { key: 'oracle', label: 'Oracle code', secondary: true },
-            { key: 'type', label: 'Type' },
-            { key: 'country', label: 'Country', secondary: true },
-            { key: 'affiliate', label: 'Affiliate', secondary: true },
-            { key: 'manager', label: 'Account manager', secondary: true },
+            { key: 'type', label: 'Relationship' },
             { key: 'terms', label: 'Credit terms', numeric: true },
             { key: 'status', label: 'Status' },
           ]}
@@ -196,7 +232,7 @@ function pageHref(target: number): string {
         >
           {page.items.map((row) => (
             <tr class="border-b border-cms-line last:border-0">
-              <td class="px-4 py-2.5">
+              <td class="px-4 py-3">
                 <a
                   href={`/app/customers/${row.accountId}`}
                   class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
@@ -206,12 +242,11 @@ function pageHref(target: number): string {
                 {row.segment !== null && (
                   <span class="ms-2 text-cms-caption text-cms-muted">{row.segment}</span>
                 )}
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.accountCode ?? 'Not available'}
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.oracleCustomerCode ?? 'Not available'}
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[row.countryName, row.affiliateName, row.accountManagerName]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               </td>
               <td class="px-4 py-2.5">
                 <CmsBadge
@@ -219,20 +254,13 @@ function pageHref(target: number): string {
                   label={titleCase(row.accountType)}
                 />
               </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{row.countryName}</td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.affiliateName ?? 'Not available'}
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.accountManagerName ?? 'Unassigned'}
-              </td>
               <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
                 {/*
                   Not available, never 0. A zero credit-days would say this
                   customer trades strictly cash, which is a commercial fact
                   nobody has recorded.
                 */}
-                {row.creditDays === null ? 'Not available' : `${row.creditDays} days`}
+                {row.creditDays === null ? <CmsUnavailable compact /> : `${row.creditDays} days`}
               </td>
               <td class="px-4 py-2.5">
                 <CmsBadge
@@ -248,6 +276,33 @@ function pageHref(target: number): string {
               </td>
             </tr>
           ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <a
+                href={`/app/customers/${row.accountId}`}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">{row.accountName}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {[row.countryName, row.segment, row.accountManagerName]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                <CmsBadge
+                  tone={
+                    row.status === 'ACTIVE'
+                      ? 'success'
+                      : row.status === 'BLOCKED'
+                        ? 'danger'
+                        : 'neutral'
+                  }
+                  label={titleCase(row.status)}
+                />
+              </a>
+            ))}
+          </Fragment>
           <Fragment slot="empty">
             <CmsEmptyState
               icon="customers"
@@ -260,8 +315,7 @@ function pageHref(target: number): string {
         {page.total > 0 && (
           <div class="flex flex-wrap items-center justify-between gap-3">
             <p class="text-cms-body-sm text-cms-muted">
-              Showing {from} to {to} of {page.total}. Searching, filtering and paging all happen on
-              the server, so the whole customer list is never sent to the browser.
+              {from}–{to} of {page.total} customers
             </p>
             {lastPage > 1 && (
               <nav aria-label="Pages" class="flex items-center gap-2">
