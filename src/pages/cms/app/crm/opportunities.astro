@@ -128,7 +128,7 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to opportunities"
-        description="Ask a system administrator for the CRM.OPPORTUNITIES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
