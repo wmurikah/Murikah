@@ -49,6 +49,15 @@ import {
   SO_LANDING_TABLE,
 } from './landing.ts';
 import { verifyColumns } from './completeness.ts';
+import {
+  planMasterData,
+  createMasterData,
+  normaliseProductCode,
+  type AccountRequest,
+  type ProductRequest,
+  type MasterDataPlan,
+  type NameMismatch,
+} from './masterData.ts';
 import { insertSnapshot, SALES_ORDER_SNAPSHOT } from './snapshots.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
@@ -259,8 +268,26 @@ export interface SoValidation {
   rowsDuplicate: number;
   rowsUnresolved: number;
   rowsRejected: number;
+  /**
+   * Customers and products the extract names that do not exist yet.
+   *
+   * These are no longer refusals. Under the rule this phase adopts they are
+   * what the commit WILL CREATE, and they are reported here so a person sees
+   * the counts and the lists before committing: nobody should discover 228
+   * new accounts after the fact. A preview is only a preview if it can still
+   * be stopped, so nothing below is written at validation.
+   */
+  accountsToCreate: { code: string; name: string | null; rows: number }[];
+  productsToCreate: { code: string; unitOfMeasure: string | null; rows: number }[];
+  /** A code that matched with a different name. Flagged, never overwritten. */
+  nameMismatches: { code: string; storedName: string; fileName: string }[];
+  /**
+   * What genuinely cannot be resolved and is not creatable: a blank customer
+   * code names no customer, so there is nothing to create.
+   */
   unresolvedCustomers: { code: string; name: string | null; rows: number }[];
   unresolvedProducts: { item: string; rows: number }[];
+  /** Still never created. A user is an identity, not a reference record. */
   unresolvedUsers: string[];
   report: MappingReportLine[];
   dateRange: { from: string | null; to: string | null };
@@ -372,6 +399,9 @@ export async function validateSoWorkbook(
       rowsDuplicate: 0,
       rowsUnresolved: 0,
       rowsRejected: 0,
+      accountsToCreate: [],
+      productsToCreate: [],
+      nameMismatches: [],
       unresolvedCustomers: [],
       unresolvedProducts: [],
       unresolvedUsers: [],
@@ -484,6 +514,42 @@ export async function validateSoWorkbook(
       batchId,
     );
 
+    // WHAT THIS FILE WOULD CREATE, PLANNED BUT NOT CREATED.
+    //
+    // The customers and products an extract names for the first time are no
+    // longer refusals; they are records the commit will create. Planning them
+    // here does two things: it lets a row whose customer does not exist YET
+    // count as importable rather than unresolved, which is what left all
+    // 1,386 rows of the real file in the exception queue; and it produces the
+    // counts and lists the preview puts in front of a person before they
+    // commit. Nothing is written at validation.
+    const accountRowCounts = new Map<string, number>();
+    const productRowCounts = new Map<string, number>();
+    const accountRequests: AccountRequest[] = [];
+    const productRequests: ProductRequest[] = [];
+    for (const row of normalised) {
+      if (row.customerCode !== null) {
+        accountRowCounts.set(row.customerCode, (accountRowCounts.get(row.customerCode) ?? 0) + 1);
+        accountRequests.push({
+          code: row.customerCode,
+          name: row.customerName,
+          affiliateId: row.affiliateId,
+        });
+      }
+      if (row.orderedItem !== null) {
+        const code = normaliseProductCode(row.orderedItem);
+        productRowCounts.set(code, (productRowCounts.get(code) ?? 0) + 1);
+        // The sales order extract has all 31 of its headers classified and
+        // none of them is a unit of measure, so this is always null here and
+        // the stated default applies. It is passed rather than omitted so a
+        // future extract that does carry one needs no change at this site.
+        productRequests.push({ code, unitOfMeasure: null });
+      }
+    }
+    const plan = await planMasterData(db, accountRequests, productRequests);
+    const willCreateAccounts = new Set(plan.accountsToCreate.map((a) => a.code));
+    const willCreateProducts = new Set(plan.productsToCreate.map((p) => p.code));
+
     // The landing plan: which of this extract's headers this database can hold
     // in a column of their own, and which have to go to extra_json. One read.
     const landing = await planLanding(db, SO_LANDING_TABLE, sheet.headers);
@@ -516,19 +582,35 @@ export async function validateSoWorkbook(
           row.customerCode === null ? null : (maps.accounts.get(row.customerCode) ?? null);
         const resolvedProduct = resolveProduct(maps.products, row.orderedItem);
         const problems: string[] = [];
+        // A CODE THE COMMIT WILL CREATE IS NOT A PROBLEM. Only a row that
+        // names no customer at all is, because a blank code names nothing to
+        // create and nothing to look up.
         if (resolvedAccount === null) {
-          problems.push(`unknown Oracle customer code ${row.customerCode ?? '(blank)'}`);
-          const key = row.customerCode ?? '(blank)';
-          const entry = unresolvedCustomers.get(key) ?? { name: row.customerName, rows: 0 };
-          entry.rows += 1;
-          unresolvedCustomers.set(key, entry);
+          if (row.customerCode === null) {
+            problems.push('the row names no Oracle customer code');
+            const entry = unresolvedCustomers.get('(blank)') ?? { name: row.customerName, rows: 0 };
+            entry.rows += 1;
+            unresolvedCustomers.set('(blank)', entry);
+          } else if (!willCreateAccounts.has(row.customerCode)) {
+            // Planned but not creatable: the affiliate named no country, and
+            // accounts.country_id cannot be NULL. Reported, never guessed.
+            problems.push(`unknown Oracle customer code ${row.customerCode}`);
+            const entry = unresolvedCustomers.get(row.customerCode) ?? {
+              name: row.customerName,
+              rows: 0,
+            };
+            entry.rows += 1;
+            unresolvedCustomers.set(row.customerCode, entry);
+          }
         }
         if (resolvedProduct === null && row.orderedItem !== null) {
-          problems.push(`unmapped product ${row.orderedItem}`);
-          unresolvedProducts.set(
-            row.orderedItem,
-            (unresolvedProducts.get(row.orderedItem) ?? 0) + 1,
-          );
+          if (!willCreateProducts.has(normaliseProductCode(row.orderedItem))) {
+            problems.push(`unmapped product ${row.orderedItem}`);
+            unresolvedProducts.set(
+              row.orderedItem,
+              (unresolvedProducts.get(row.orderedItem) ?? 0) + 1,
+            );
+          }
         }
         for (const actor of [row.createdBy, row.approver, row.creditReleasedBy]) {
           if (actor !== null && !maps.identities.has(actor.toUpperCase())) {
@@ -639,6 +721,21 @@ export async function validateSoWorkbook(
       rowsDuplicate,
       rowsUnresolved,
       rowsRejected,
+      accountsToCreate: plan.accountsToCreate.map((a) => ({
+        code: a.code,
+        name: a.name,
+        rows: accountRowCounts.get(a.code) ?? 0,
+      })),
+      productsToCreate: plan.productsToCreate.map((p) => ({
+        code: p.code,
+        unitOfMeasure: p.unitOfMeasure,
+        rows: productRowCounts.get(p.code) ?? 0,
+      })),
+      nameMismatches: plan.nameMismatches.map((m) => ({
+        code: m.code,
+        storedName: m.storedName,
+        fileName: m.fileName,
+      })),
       unresolvedCustomers: [...unresolvedCustomers.entries()].map(([code, v]) => ({
         code,
         name: v.name,
@@ -670,6 +767,9 @@ export async function validateSoWorkbook(
       rowsDuplicate: 0,
       rowsUnresolved: 0,
       rowsRejected: 0,
+      accountsToCreate: [],
+      productsToCreate: [],
+      nameMismatches: [],
       unresolvedCustomers: [],
       unresolvedProducts: [],
       unresolvedUsers: [],
@@ -684,6 +784,10 @@ export async function validateSoWorkbook(
 // ---- Commit ------------------------------------------------------------------
 
 export interface SoCommitResult {
+  /** Reference records this commit created, and the names it refused to overwrite. */
+  accountsCreated: number;
+  productsCreated: number;
+  nameMismatches: number;
   documentsCreated: number;
   documentsUpdated: number;
   documentsUnchanged: number;
@@ -761,13 +865,52 @@ async function isolateDocument(
  * because the extract's approval columns are the finance approval the
  * business described, and the stage code names that meaning explicitly.
  */
+/**
+ * Plan and create the reference records a batch's rows name.
+ *
+ * Kept beside the commit rather than inside it because it is a distinct act
+ * with its own rule: it decides what to CREATE, while the commit decides what
+ * to write. Recomputing the plan against the live tables is what makes a
+ * second upload of the same file a no-op, which is criterion 9.
+ */
+async function createMasterDataForBatch(
+  db: Client,
+  rows: readonly unknown[],
+  batchId: string,
+  ctx: WriteContext,
+  now: string,
+): Promise<{
+  accounts: Map<string, string>;
+  products: Map<string, string>;
+  nameMismatches: readonly NameMismatch[];
+}> {
+  const accountRequests: AccountRequest[] = [];
+  const productRequests: ProductRequest[] = [];
+  for (const raw of rows) {
+    const record = raw as Record<string, unknown>;
+    const parsed = JSON.parse(text(record.raw_json)) as Record<string, unknown>;
+    const row = await normaliseRow(parsed, Number(record.source_row_number));
+    if (row.customerCode !== null) {
+      accountRequests.push({
+        code: row.customerCode,
+        name: row.customerName,
+        affiliateId: row.affiliateId,
+      });
+    }
+    if (row.orderedItem !== null) {
+      productRequests.push({ code: normaliseProductCode(row.orderedItem), unitOfMeasure: null });
+    }
+  }
+  const plan: MasterDataPlan = await planMasterData(db, accountRequests, productRequests);
+  return createMasterData(db, plan, batchId, ctx, now);
+}
+
 export async function commitSoBatch(
   db: Client,
   batchId: string,
   ctx: WriteContext,
 ): Promise<SoCommitResult> {
   const now = toDbTimestamp(ctx.now);
-  const maps = await loadResolutionMaps(db);
   const result: SoCommitResult = {
     documentsCreated: 0,
     documentsUpdated: 0,
@@ -775,6 +918,9 @@ export async function commitSoBatch(
     documentsSkipped: 0,
     linesWritten: 0,
     workflowEventsAppended: 0,
+    accountsCreated: 0,
+    productsCreated: 0,
+    nameMismatches: 0,
   };
 
   const rowsResult = await db.execute({
@@ -782,6 +928,22 @@ export async function commitSoBatch(
           WHERE import_batch_id = ? ORDER BY source_row_number`,
     args: [batchId],
   });
+
+  // ---- The reference records this batch names for the first time ------------
+  //
+  // BEFORE ANY ORDER IS WRITTEN, because a sales order's account_id and a
+  // line's product_id are foreign keys: an order whose customer is created
+  // halfway through the run would fail on the rows that came first. The plan
+  // is recomputed here rather than carried from validation, so a record
+  // somebody created by hand in between is found and not duplicated, and a
+  // second upload of the same file creates nothing at all.
+  const created = await createMasterDataForBatch(db, rowsResult.rows, batchId, ctx, now);
+  result.accountsCreated = created.accounts.size;
+  result.productsCreated = created.products.size;
+  result.nameMismatches = created.nameMismatches.length;
+
+  // Read AFTER the creation, so the maps contain what was just created.
+  const maps = await loadResolutionMaps(db);
 
   const groups = new Map<
     string,

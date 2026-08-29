@@ -273,6 +273,7 @@ const mayUpload = canUploadImports(permissions);
       }
       const result = (body ?? {}) as Record<string, unknown>;
       const skipped = (result?.skippedReasons ?? []) as { reason: string; rows: number }[];
+      const notes = (result?.notes ?? []) as { note: string; count: number }[];
       const status = String(result?.status ?? '');
       summary.innerHTML =
         line('Outcome', status === 'PARTIAL' ? 'Partial' : 'Complete') +
@@ -282,6 +283,16 @@ const mayUpload = canUploadImports(permissions);
         line('Documents not imported', String(result?.documentsSkipped ?? 0)) +
         line('Lines written', String(result?.linesWritten ?? 0)) +
         line('Workflow events appended', String(result?.workflowEventsAppended ?? 0)) +
+        // The reference records this commit created. Shown beside the document
+        // counts rather than tucked away, because an upload that writes 228
+        // accounts should say so on the screen that ran it.
+        line('Customers created', String(result?.accountsCreated ?? 0)) +
+        line('Products created', String(result?.productsCreated ?? 0)) +
+        (notes.length === 0
+          ? ''
+          : `<p class="mt-3 text-cms-body-sm text-cms-muted">Imported, with a note:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${notes
+              .map((entry) => `<li>${entry.count}: ${entry.note}</li>`)
+              .join('')}</ul>`) +
         (skipped.length === 0
           ? ''
           : `<p class="mt-3 text-cms-body-sm text-cms-muted">Not imported, and why:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${skipped
