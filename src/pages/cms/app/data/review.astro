@@ -1,0 +1,219 @@
+---
+/**
+ * Data → Created from import.
+ *
+ * Every account and product an upload created, and every account whose code
+ * matched a row carrying a different name.
+ *
+ * WHY THIS SCREEN EXISTS. The rule changed: an entity an extract names for
+ * the first time is now created rather than refused, because the first real
+ * sales order file named 228 customers and 111 products, and asking somebody
+ * to key 339 records before the first import is a wall rather than a
+ * safeguard. Creating them silently would be worse than refusing them, so
+ * every one is created, marked as having come from an import, and listed
+ * here. This is the "listed for review" half of that rule, and without it the
+ * change would just be an upload that quietly writes master data.
+ *
+ * WHAT NEEDS A PERSON. A created product is in `Unclassified`: the category
+ * was not guessed, because the product hierarchy drives approval routing and
+ * a wrong category sends an order to the wrong approver. A name mismatch is
+ * here because a customer renamed in Oracle and a code reused for a different
+ * customer look identical from a spreadsheet, and only a person can tell them
+ * apart; the stored name was kept and the file's name is shown beside it.
+ *
+ * NO USER IS EVER ON THIS SCREEN. An unmapped person is an unresolved actor,
+ * on the exceptions screen, and is mapped to somebody who already exists.
+ * That rule did not move.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewImports } from '@/lib/cms/permissions';
+import { listCreatedFromImport, type ImportOrigin } from '@/lib/cms/import/masterData';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewImports(permissions);
+
+let accounts: ImportOrigin[] = [];
+let products: ImportOrigin[] = [];
+let mismatches: ImportOrigin[] = [];
+let loadFailed = false;
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const created = await listCreatedFromImport(db);
+    accounts = created.accounts;
+    products = created.products;
+    mismatches = created.mismatches;
+  } catch (error) {
+    console.error('[cms.data.review] load failed', error);
+    loadFailed = true;
+  }
+}
+const total = accounts.length + products.length + mismatches.length;
+---
+
+<CmsLayout title="Created from import">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to import records"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The review queue could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Created from import"
+          definition="Accounts and products an upload created, awaiting review. A created product is unclassified on purpose: the category was not guessed."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Data', href: '/app/data' },
+            { label: 'Created from import' },
+          ]}
+        />
+
+        <div class="mb-6 grid gap-4 sm:grid-cols-3">
+          <CmsCard title="Awaiting review" description="Everything an import created or flagged.">
+            <p class="text-cms-display font-semibold text-cms-ink tabular-nums">{total}</p>
+          </CmsCard>
+          <CmsCard title="Accounts" description="Created from a customer code the file named.">
+            <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+              {accounts.length}
+            </p>
+          </CmsCard>
+          <CmsCard title="Products" description="All unclassified until somebody files them.">
+            <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+              {products.length}
+            </p>
+          </CmsCard>
+        </div>
+
+        <h2 class="mb-3 text-cms-card font-semibold text-cms-navy">Accounts</h2>
+        <CmsDataTable
+          caption="Accounts created from an import"
+          columns={[
+            { key: 'code', label: 'Oracle customer code' },
+            { key: 'name', label: 'Account name' },
+            { key: 'batch', label: 'Created by batch' },
+            { key: 'at', label: 'Created' },
+          ]}
+          empty={accounts.length === 0}
+        >
+          {accounts.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">{row.code}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.name}</td>
+              <td class="px-4 py-2.5 text-cms-muted">
+                <a
+                  href={`/app/data/history/${row.importBatchId}`}
+                  class="text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.importBatchId}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.createdAt}</td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="data"
+              title="No accounts created from an import"
+              description="Every customer an extract has named already existed."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        <h2 class="mt-8 mb-3 text-cms-card font-semibold text-cms-navy">Products</h2>
+        <p class="mb-3 text-cms-body-sm text-cms-muted">
+          Every one of these is in the Unclassified category. The product hierarchy drives the
+          approval rules, so a guessed category would route an order to the wrong approver.
+        </p>
+        <CmsDataTable
+          caption="Products created from an import"
+          columns={[
+            { key: 'code', label: 'Product code' },
+            { key: 'category', label: 'Category' },
+            { key: 'batch', label: 'Created by batch' },
+            { key: 'at', label: 'Created' },
+          ]}
+          empty={products.length === 0}
+        >
+          {products.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">{row.code}</td>
+              <td class="px-4 py-2.5 text-cms-muted">Unclassified</td>
+              <td class="px-4 py-2.5 text-cms-muted">
+                <a
+                  href={`/app/data/history/${row.importBatchId}`}
+                  class="text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.importBatchId}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.createdAt}</td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="data"
+              title="No products created from an import"
+              description="Every item an extract has named already existed in the catalogue."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        <h2 class="mt-8 mb-3 text-cms-card font-semibold text-cms-navy">Name mismatches</h2>
+        <p class="mb-3 text-cms-body-sm text-cms-muted">
+          The code matched an account whose stored name is different. Nothing was overwritten: a
+          customer renamed in Oracle and a code reused for a different customer are different
+          events, and only a person can tell them apart.
+        </p>
+        <CmsDataTable
+          caption="Accounts whose name differs from the file"
+          columns={[
+            { key: 'code', label: 'Oracle customer code' },
+            { key: 'file', label: 'Name in the file' },
+            { key: 'batch', label: 'Seen in batch' },
+            { key: 'at', label: 'Seen' },
+          ]}
+          empty={mismatches.length === 0}
+        >
+          {mismatches.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">{row.code}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.name}</td>
+              <td class="px-4 py-2.5 text-cms-muted">
+                <a
+                  href={`/app/data/history/${row.importBatchId}`}
+                  class="text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.importBatchId}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.createdAt}</td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="data"
+              title="No name mismatches"
+              description="Every matched customer code carried the name this product already holds."
+            />
+          </Fragment>
+        </CmsDataTable>
+      </Fragment>
+    )
+  }
+</CmsLayout>
