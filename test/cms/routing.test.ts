@@ -297,9 +297,26 @@ test('the shell ships the handler its drawer trigger depends on', { skip: skip()
 
   assert.match(page.body, /data-cms-modal-open="cms-nav-drawer"/, 'the trigger must be rendered');
   assert.match(page.body, /<dialog id="cms-nav-drawer"/, 'the drawer must be rendered');
+
   // cmsOverlaysBound is the guard the handler sets on first run, so finding it
-  // proves the listener itself reached the page rather than only its markup.
-  assert.match(page.body, /cmsOverlaysBound/, 'the overlay handler must reach the page');
+  // proves the listener itself ships rather than only its markup.
+  //
+  // IT IS FETCHED, NOT READ OUT OF THE HTML. This used to search the page body,
+  // which passed only while the build was inlining the script INTO the body,
+  // and that inlining is what `script-src 'self'` refused to execute: the
+  // assertion was quietly proving the bug. Scripts are now emitted as modules,
+  // so the honest question is whether the module the page references is served
+  // and contains the handler.
+  const sources = [...page.body.matchAll(/<script[^>]*\bsrc="(\/_astro\/[^"]+)"/g)].map(
+    (match) => match[1] as string,
+  );
+  assert.ok(sources.length > 0, 'the shell must reference at least one module');
+  let bound = false;
+  for (const src of sources) {
+    const asset = await worker.call('GET', src);
+    if (asset.status === 200 && /cmsOverlaysBound/.test(asset.body)) bound = true;
+  }
+  assert.ok(bound, `the overlay handler must reach the page; checked ${sources.join(', ')}`);
 });
 
 test('the apex, engr and grc hosts are unaffected', { skip: skip() }, async () => {

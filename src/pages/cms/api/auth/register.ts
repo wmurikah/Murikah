@@ -24,12 +24,8 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ ok: false, message: 'Check the information and try again.' }, 400);
   }
   let verified;
-  let cmsEnv;
-  let db;
   try {
-    cmsEnv = getCmsEnv();
-    db = await getDb(cmsEnv);
-    verified = await verifyRegistrationGrant(cmsEnv.sessionSecret, String(body.grant ?? ''));
+    verified = await verifyRegistrationGrant(getCmsEnv().sessionSecret, String(body.grant ?? ''));
   } catch {
     return json(
       { ok: false, message: 'Verify your company identity with Microsoft or Google first.' },
@@ -37,12 +33,7 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
   const email = normalizeIdentityEmail(verified.email);
-  let policy;
-  try {
-    policy = email ? await classifyIdentityEmail(db, email) : null;
-  } catch {
-    return json({ ok: false, message: 'Registration is temporarily unavailable.' }, 503);
-  }
+  const policy = email ? classifyIdentityEmail(email) : null;
   if (!email || policy === 'CONSUMER')
     return json({ ok: false, message: 'Customer access requires a company email address.' }, 400);
   if (policy === 'INTERNAL_PROTECTED')
@@ -63,12 +54,12 @@ export const POST: APIRoute = async ({ request }) => {
   if (!companyName || !contactName)
     return json({ ok: false, message: 'Enter your name and company.' }, 400);
   try {
-    await createCustomerAccessRequest(db, {
+    const cmsEnv = getCmsEnv();
+    await createCustomerAccessRequest(await getDb(cmsEnv), {
       email,
       emailDomain: emailDomain(email),
       provider: verified.provider,
       providerSubject: verified.subject,
-      providerIssuer: verified.issuer,
       companyName,
       contactName,
       now: new Date(),

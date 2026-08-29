@@ -5,12 +5,7 @@ const key = (secret: string) => new TextEncoder().encode(secret);
 
 export async function createRegistrationGrant(
   secret: string,
-  input: {
-    email: string;
-    provider: Exclude<IdentityProvider, 'APPLE'>;
-    issuer: string;
-    subject: string;
-  },
+  input: { email: string; provider: Exclude<IdentityProvider, 'APPLE'>; subject: string },
 ) {
   return new SignJWT(input)
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
@@ -30,7 +25,6 @@ export async function verifyRegistrationGrant(secret: string, token: string) {
   });
   if (
     typeof payload.email !== 'string' ||
-    typeof payload.issuer !== 'string' ||
     typeof payload.subject !== 'string' ||
     (payload.provider !== 'GOOGLE' && payload.provider !== 'MICROSOFT')
   )
@@ -38,7 +32,6 @@ export async function verifyRegistrationGrant(secret: string, token: string) {
   return {
     email: payload.email,
     provider: payload.provider as 'GOOGLE' | 'MICROSOFT',
-    issuer: payload.issuer,
     subject: payload.subject,
   };
 }

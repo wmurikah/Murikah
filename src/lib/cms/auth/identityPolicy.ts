@@ -1,4 +1,18 @@
-import type { Client } from '@libsql/client/web';
+const PROTECTED_INTERNAL_DOMAINS = new Set(['hasspetroleum.com']);
+
+const CONSUMER_EMAIL_DOMAINS = new Set([
+  'aol.com',
+  'gmail.com',
+  'googlemail.com',
+  'hotmail.com',
+  'icloud.com',
+  'live.com',
+  'me.com',
+  'outlook.com',
+  'proton.me',
+  'protonmail.com',
+  'yahoo.com',
+]);
 
 export type EmailPolicy = 'INTERNAL_PROTECTED' | 'CONSUMER' | 'CORPORATE';
 
@@ -18,20 +32,15 @@ export function emailDomain(email: string): string {
   return email.slice(email.lastIndexOf('@') + 1);
 }
 
-export async function classifyIdentityEmail(
-  db: Client,
-  value: string,
-): Promise<EmailPolicy | null> {
+export function classifyIdentityEmail(value: string): EmailPolicy | null {
   const email = normalizeIdentityEmail(value);
   if (!email) return null;
   const domain = emailDomain(email);
-  const result = await db.execute({
-    sql: `SELECT policy_type FROM auth_email_domain_policies
-          WHERE domain=? AND active=1 LIMIT 1`,
-    args: [domain],
-  });
-  const policy = result.rows[0]?.policy_type;
-  if (policy === 'INTERNAL_PROTECTED') return 'INTERNAL_PROTECTED';
-  if (policy === 'SELF_REGISTRATION_BLOCKED') return 'CONSUMER';
+  if (PROTECTED_INTERNAL_DOMAINS.has(domain)) return 'INTERNAL_PROTECTED';
+  if (CONSUMER_EMAIL_DOMAINS.has(domain)) return 'CONSUMER';
   return 'CORPORATE';
+}
+
+export function maySelfRegister(value: string): boolean {
+  return classifyIdentityEmail(value) === 'CORPORATE';
 }

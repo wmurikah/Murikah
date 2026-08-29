@@ -1,6 +1,3 @@
--- HISTORICAL PHASE 4 MIGRATION — DO NOT APPLY TO THE VERIFIED LIVE TURSO DATABASE.
--- Its Phase 4 tables differ from the manually applied live schema. Use the
--- reviewed live reconciliation artifact documented in AUTH_PROVIDER_SETUP.md.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS auth_federated_identities (

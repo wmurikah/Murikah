@@ -33,14 +33,15 @@ export async function createOidcTransaction(
 
 export async function consumeOidcTransaction(db: Client, stateHash: string, now: Date) {
   const result = await db.execute({
-    sql: `UPDATE auth_oidc_transactions
-          SET consumed_at=?
-          WHERE state_hash=? AND consumed_at IS NULL AND expires_at>?
-          RETURNING provider,purpose,nonce_hash,pkce_verifier,return_path`,
-    args: [toDbTimestamp(now), stateHash, toDbTimestamp(now)],
+    sql: `SELECT transaction_id,provider,purpose,nonce_hash,pkce_verifier,return_path FROM auth_oidc_transactions WHERE state_hash=? AND consumed_at IS NULL AND expires_at>? LIMIT 1`,
+    args: [stateHash, toDbTimestamp(now)],
   });
   const row = result.rows[0];
   if (!row) return null;
+  await db.execute({
+    sql: `UPDATE auth_oidc_transactions SET consumed_at=? WHERE transaction_id=? AND consumed_at IS NULL`,
+    args: [toDbTimestamp(now), String(row.transaction_id)],
+  });
   return {
     provider: String(row.provider) as IdentityProvider,
     purpose: String(row.purpose) as OidcPurpose,
