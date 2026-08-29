@@ -1022,7 +1022,10 @@ CREATE TABLE IF NOT EXISTS sales_order_lines (
 CREATE TABLE IF NOT EXISTS purchase_orders (
     purchase_order_id TEXT PRIMARY KEY,
     document_number TEXT NOT NULL,
-    affiliate_id TEXT NOT NULL,
+    -- NULLABLE, matching the live schema. A purchase order extract carries no
+    -- affiliate column at all, so a Group-wide order genuinely has none, and
+    -- the previous NOT NULL is what pushed the importer into inventing one.
+    affiliate_id TEXT,
     business_unit_id TEXT,
     supplier_name TEXT,
     po_created_at TEXT NOT NULL,
@@ -1036,8 +1039,17 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (affiliate_id) REFERENCES affiliates(affiliate_id) ON DELETE RESTRICT,
     FOREIGN KEY (business_unit_id) REFERENCES business_units(business_unit_id) ON DELETE SET NULL,
+    -- Keeps an affiliate-scoped document unique within its affiliate. It does
+    -- NOT constrain the Group-wide rows: SQLite treats NULLs as distinct in a
+    -- unique index, so (NULL,'9296') twice would not conflict here.
     UNIQUE(affiliate_id, document_number)
 );
+
+-- The Group-wide half of the same rule, which the UNIQUE above cannot express.
+-- Without this a re-upload of one file would create a second copy of all 45
+-- orders instead of recognising them.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_purchase_orders_group_document
+    ON purchase_orders(document_number) WHERE affiliate_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS purchase_order_lines (
     purchase_order_line_id TEXT PRIMARY KEY,

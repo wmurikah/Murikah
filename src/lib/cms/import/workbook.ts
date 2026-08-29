@@ -47,65 +47,27 @@ export function parseWorkbook(buffer: ArrayBuffer | Uint8Array): ParsedSheet {
   return { sheetName, headers: headerRow.filter((h) => h !== ''), rows };
 }
 
-/** Days between 1899-12-30 (Excel's epoch) and 1970-01-01. */
-const EXCEL_EPOCH_OFFSET_DAYS = 25569;
-
 /**
- * An Excel day serial to "YYYY-MM-DD HH:MM:SS". Serials carry float noise
- * (46144.502337962964 is 12:03:22 and a bit), so the result is rounded to
- * the nearest second, which is the precision the source data actually has.
+ * THE TYPE CONVERSION LIVES IN ./cells.ts AND IS RE-EXPORTED HERE.
+ *
+ * One module, both importers, so the two cannot drift: the rules about
+ * identifiers keeping their leading zeros, blank cells becoming NULL rather
+ * than '', and an absent quantity never becoming 0, are decisions about the
+ * data rather than about the workbook reader. They are re-exported from this
+ * module because every importer already imports it, so no call site had to
+ * change to gain the single implementation.
  */
-export function excelSerialToTimestamp(serial: number): string {
-  const ms = Math.round((serial - EXCEL_EPOCH_OFFSET_DAYS) * 86400 * 1000);
-  const rounded = Math.round(ms / 1000) * 1000;
-  const date = new Date(rounded);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const y = date.getUTCFullYear();
-  const mo = pad(date.getUTCMonth() + 1);
-  const d = pad(date.getUTCDate());
-  const h = pad(date.getUTCHours());
-  const mi = pad(date.getUTCMinutes());
-  const se = pad(date.getUTCSeconds());
-  return y + '-' + mo + '-' + d + ' ' + h + ':' + mi + ':' + se;
-}
-
-/** A cell that should be a timestamp, whatever shape Excel gave it. */
-export function cellToTimestamp(value: unknown): string | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'number' && Number.isFinite(value)) return excelSerialToTimestamp(value);
-  const text = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/.test(text)) {
-    return text.length === 10 ? text + ' 00:00:00' : text.replace('T', ' ');
-  }
-  return null;
-}
-
-/**
- * A cell that identifies something: 3988 and "3988.0" and " 3988 " are all
- * the document "3988". Without this, every re-upload creates a new order.
- */
-export function cellToIdentifier(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Number.isInteger(value) ? String(value) : String(value).replace(/\.0+$/, '');
-  }
-  const text = String(value).trim();
-  if (text === '') return null;
-  if (/^\d+\.0+$/.test(text)) return text.replace(/\.0+$/, '');
-  return text;
-}
-
-export function cellToText(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return text === '' ? null : text;
-}
-
-export function cellToNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
+export {
+  excelSerialToTimestamp,
+  cellToTimestamp,
+  cellToIdentifier,
+  cellToText,
+  cellToNumber,
+  absentNumber,
+  absentText,
+  nullIfBlank,
+  type DbTimestamp,
+} from './cells.ts';
 
 /**
  * The canonical row hash. Keys sorted, values normalised to one
