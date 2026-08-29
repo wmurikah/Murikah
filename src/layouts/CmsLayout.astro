@@ -34,8 +34,15 @@ import CmsRailScript from '@/components/cms/CmsRailScript.astro';
 interface Props {
   title: string;
   notificationCount?: number;
+  width?: 'focus' | 'detail' | 'standard' | 'data';
 }
-const { title, notificationCount } = Astro.props;
+const { title, notificationCount, width = 'standard' } = Astro.props;
+const contentWidths = {
+  focus: 'max-w-[760px]',
+  detail: 'max-w-[1140px]',
+  standard: 'max-w-[1280px]',
+  data: 'max-w-[1600px]',
+};
 
 // The live unread count, fetched here so every page's bell is real without
 // per-page work. A page may still pass its own count (the notifications page
@@ -114,7 +121,8 @@ const DRAWER_ID = 'cms-nav-drawer';
     }
     <script is:inline>
       try {
-        if (localStorage.getItem('cms.rail.pinned') === '1') {
+        const saved = localStorage.getItem('cms.rail.pinned');
+        if (saved === '1' || (saved === null && matchMedia('(min-width: 1280px)').matches)) {
           document.body.dataset.railPinned = 'true';
         }
       } catch {
@@ -144,9 +152,12 @@ const DRAWER_ID = 'cms-nav-drawer';
         rather than slides for anybody who asked for less movement.
       */
       }
-      <aside data-cms-rail class="sticky top-0 z-30 hidden h-dvh w-16 shrink-0 lg:block">
+      <aside
+        data-cms-rail
+        class="sticky top-0 z-30 hidden h-dvh w-16 shrink-0 transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-56 lg:block"
+      >
         <div
-          class="absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden bg-cms-navy transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-64 focus-within:w-64 hover:w-64"
+          class="absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden border-r border-white/10 bg-cms-navy transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-56 focus-within:w-56 hover:w-56"
         >
           {
             /*
@@ -162,7 +173,7 @@ const DRAWER_ID = 'cms-nav-drawer';
             a brand.
           */
           }
-          <div class="flex h-full w-64 flex-col py-4">
+          <div class="flex h-full w-56 flex-col py-4">
             <CmsSidebar currentPath={currentPath} idPrefix="rail" permissions={permissions} />
             <div class="mt-auto pt-4">
               <button
@@ -189,7 +200,7 @@ const DRAWER_ID = 'cms-nav-drawer';
           notificationPreview={bellPreview}
         />
         <main id="cms-main" class="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
+          <div class:list={['mx-auto flex w-full flex-col gap-8', contentWidths[width]]}>
             <slot />
           </div>
         </main>

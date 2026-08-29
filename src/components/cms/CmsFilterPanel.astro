@@ -1,0 +1,53 @@
+---
+import CmsIcon from './CmsIcon.astro';
+
+interface Props {
+  action: string;
+  activeCount?: number;
+  label?: string;
+}
+const { action, activeCount = 0, label = 'Filters' } = Astro.props;
+---
+
+<div class="flex flex-col gap-2">
+  <form method="get" action={action} class="flex flex-wrap items-end gap-2">
+    <div class="min-w-56 flex-1"><slot name="primary" /></div>
+    <details class="group relative">
+      <summary
+        class="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-cms border border-cms-border bg-cms-surface px-3.5 text-cms-body-sm font-semibold text-cms-ink outline-none hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        <CmsIcon name="filter" size={16} />
+        {label}{activeCount > 0 ? ` ${activeCount}` : ''}
+      </summary>
+      <div
+        class="absolute right-0 z-30 mt-2 w-[min(38rem,calc(100vw-2rem))] rounded-cms-lg border border-cms-line bg-cms-surface p-4 shadow-cms-overlay"
+      >
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><slot name="advanced" /></div>
+        <div class="mt-4 flex items-center justify-end gap-2 border-t border-cms-line pt-3">
+          <a
+            href={action}
+            class="inline-flex min-h-10 items-center rounded-cms px-3 text-cms-body-sm font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+            >Reset</a
+          >
+          <button
+            type="submit"
+            class="inline-flex min-h-10 items-center rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+            >Apply filters</button
+          >
+        </div>
+      </div>
+    </details>
+    <button
+      type="submit"
+      class="inline-flex min-h-11 items-center rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+      >Search</button
+    >
+  </form>
+  {
+    activeCount > 0 && (
+      <div class="flex flex-wrap gap-2" aria-label="Active filters">
+        <slot name="chips" />
+      </div>
+    )
+  }
+</div>
