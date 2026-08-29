@@ -62,7 +62,7 @@ export interface TestClient {
  * nothing and the failure is loud.
  */
 function returnsRows(sql: string): boolean {
-  if (/^\s*(select|pragma|explain)/i.test(sql)) return true;
+  if (/^\s*(select|pragma|explain)/i.test(sql) || /\breturning\b/i.test(sql)) return true;
   if (!/^\s*with\b/i.test(sql)) return false;
   return !/\b(insert|update|delete)\s/i.test(sql.replace(/--[^\n]*/g, ''));
 }

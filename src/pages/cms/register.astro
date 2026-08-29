@@ -1,0 +1,65 @@
+---
+import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+export const prerender = false;
+const verified = Astro.url.searchParams.get('verified') === '1';
+const email = Astro.url.searchParams.get('email') ?? '';
+const grant = Astro.url.searchParams.get('grant') ?? '';
+---
+
+<CmsAuthLayout title="Create customer access"
+  ><div class="flex flex-col gap-6">
+    <header>
+      <h1 class="text-cms-display font-semibold">Create customer access</h1><p
+        class="mt-2 text-cms-body text-cms-muted"
+      >
+        Use your company identity. Access begins only after Hass approval.
+      </p>
+    </header><div class="grid gap-2.5">
+      <a
+        href="/api/auth/oidc/microsoft/start?purpose=REGISTER"
+        class="flex min-h-11 items-center justify-center rounded-cms border border-cms-border bg-cms-surface font-semibold"
+        >Continue with Microsoft</a
+      ><a
+        href="/api/auth/oidc/google/start?purpose=REGISTER"
+        class="flex min-h-11 items-center justify-center rounded-cms border border-cms-border bg-cms-surface font-semibold"
+        >Continue with Google</a
+      >
+    </div><form id="register" class="flex flex-col gap-4">
+      <input type="hidden" name="grant" value={grant} />
+      <p role="alert" data-message class="min-h-6 text-cms-body-sm"></p><CmsInput
+        id="register-email"
+        name="email"
+        label="Work email"
+        type="email"
+        value={email}
+        readonly={verified}
+        disabled={!verified}
+        required
+      /><CmsInput id="contact-name" name="contactName" label="Your name" required /><CmsInput
+        id="company-name"
+        name="companyName"
+        label="Company"
+        required
+      /><CmsButton type="submit" variant="primary" size="lg" full disabled={!verified}
+        >Request access</CmsButton
+      >
+    </form><p class="text-cms-body-sm text-cms-muted">
+      Already have access? <a href="/login" class="font-semibold text-cms-royal">Sign in</a>
+    </p>
+  </div></CmsAuthLayout
+>
+<script>
+  document.querySelector<HTMLFormElement>('#register')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget as HTMLFormElement))),
+    });
+    const data = (await response.json()) as { ok: boolean; message: string };
+    const message = document.querySelector<HTMLElement>('[data-message]');
+    if (message) message.textContent = data.message;
+  });
+</script>
