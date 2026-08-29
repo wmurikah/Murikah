@@ -142,12 +142,12 @@ const bottleneckChart = distributionChart(
     !mayView ? (
       <CmsErrorState
         title="You do not have access to purchase order performance"
-        description="Ask a system administrator for the ORDERS.PURCHASE_ORDER.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed || durationSet === null ? (
       <CmsErrorState
         title="Performance could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>

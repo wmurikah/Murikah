@@ -72,18 +72,18 @@ const NOT_AVAILABLE = 'Not available';
     !mayView ? (
       <CmsErrorState
         title="You do not have access to purchase orders"
-        description="Ask a system administrator for the ORDERS.PURCHASE_ORDER.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="Purchase orders could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
         <CmsPageHeader
           title="Purchase orders"
-          description={`${total.toLocaleString('en-KE')} orders match this filter. Supplier, currency and value are absent from the imported extract and read "Not available", never zero.`}
+          description={`${total.toLocaleString('en-KE')} purchase orders`}
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Orders', href: '/app/orders' },
@@ -111,15 +111,10 @@ const NOT_AVAILABLE = 'Not available';
           caption="Purchase orders"
           columns={[
             { key: 'doc', label: 'PO number' },
-            { key: 'affiliate', label: 'Affiliate' },
-            { key: 'bu', label: 'Business unit' },
-            { key: 'supplier', label: 'Supplier' },
-            { key: 'product', label: 'Product' },
             { key: 'created', label: 'Created' },
             { key: 'stage', label: 'Current stage' },
             { key: 'approver', label: 'Approver' },
             { key: 'status', label: 'Status' },
-            { key: 'received', label: 'Physical receipt' },
             { key: 'posted', label: 'Oracle posting' },
             { key: 'sla', label: 'SLA' },
           ]}
@@ -134,18 +129,18 @@ const NOT_AVAILABLE = 'Not available';
                 >
                   {row.documentNumber}
                 </a>
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[row.affiliateName, row.businessUnitName, row.supplierName, row.productSummary]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               </td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.affiliateName}</td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.businessUnitName ?? NOT_AVAILABLE}</td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.supplierName ?? NOT_AVAILABLE}</td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.productSummary ?? NOT_AVAILABLE}</td>
               <td class="px-4 py-2.5 text-cms-muted">{row.poCreatedAt}</td>
               <td class="px-4 py-2.5 text-cms-muted">{row.currentStage ?? 'No open stage'}</td>
               <td class="px-4 py-2.5 text-cms-muted">{row.currentApprover ?? NOT_AVAILABLE}</td>
               <td class="px-4 py-2.5">
                 <CmsBadge tone="neutral" label={row.status.replace('_', ' ').toLowerCase()} />
               </td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.physicalReceivedAt ?? NOT_AVAILABLE}</td>
               <td class="px-4 py-2.5">
                 {row.awaitingOraclePosting ? (
                   <CmsBadge tone="warning" label="Awaiting posting" />
@@ -167,6 +162,29 @@ const NOT_AVAILABLE = 'Not available';
               </td>
             </tr>
           ))}
+          <Fragment slot="mobile">
+            {rows.map((row) => (
+              <a
+                href={drillTo(`/app/orders/purchases/${row.purchaseOrderId}`, filter)}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block font-semibold text-cms-ink">{row.documentNumber}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {row.affiliateName} · {row.currentStage ?? 'No open stage'}
+                  </span>
+                </span>
+                <CmsBadge
+                  tone={row.awaitingOraclePosting ? 'warning' : 'neutral'}
+                  label={
+                    row.awaitingOraclePosting
+                      ? 'Awaiting posting'
+                      : row.status.replace('_', ' ').toLowerCase()
+                  }
+                />
+              </a>
+            ))}
+          </Fragment>
           <Fragment slot="empty">
             <CmsEmptyState
               icon="orders"
