@@ -50,7 +50,12 @@ import {
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { scheduleCacheStatsRollUp } from '@grc/cache';
 import { toCmsAppPath } from '@/lib/hosts/cms';
-import { applySecurityHeaders, isSameOrigin, crossOriginRefusal } from '@/lib/cms/security/headers';
+import {
+  applySecurityHeaders,
+  isSameOrigin,
+  crossOriginRefusal,
+  newCspNonce,
+} from '@/lib/cms/security/headers';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb as getCmsDb } from '@/lib/cms/db';
 import { readSessionCookie as readCmsSessionCookie } from '@/lib/cms/auth/cookie';
@@ -298,6 +303,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (pathname === '/cms' || pathname.startsWith('/cms/')) {
     const appPath = toCmsAppPath(pathname);
     context.locals.cmsPath = appPath;
+    // One nonce per response, minted before anything renders, so the layout
+    // can stamp it on the rail's inline script and the header can name the
+    // same value. A hash would go stale the next time that script is edited.
+    const nonce = newCspNonce();
+    context.locals.cmsNonce = nonce;
 
     const isApi = isCmsApiPath(appPath);
     let anonymousReason: string = 'no_cookie';
@@ -383,7 +393,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // one of those.
     if (!isSameOrigin(context.request, context.url)) {
       const refused = crossOriginRefusal();
-      applySecurityHeaders(refused, { secure: isSecureRequest(context.request) });
+      applySecurityHeaders(refused, { secure: isSecureRequest(context.request), nonce });
       return refused;
     }
 
@@ -392,7 +402,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // On every CMS response, signed in or not, including the sign-in page and
     // every redirect. A policy that applied only to authenticated pages would
     // leave the one page an unauthenticated attacker can reach unprotected.
-    applySecurityHeaders(response, { secure: isSecureRequest(context.request) });
+    applySecurityHeaders(response, { secure: isSecureRequest(context.request), nonce });
     return response;
   }
 
