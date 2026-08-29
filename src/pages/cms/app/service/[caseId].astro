@@ -113,17 +113,17 @@ const allowedMoves = found === null ? [] : [...(CASE_TRANSITIONS[found.status] ?
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to service cases"
-        description="Ask a system administrator for the SERVICE.CASES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="This case could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : found === null ? (
       <CmsErrorState
         title="Case not found"
-        description="Either it does not exist or it sits outside your data scope. Assignment alone does not grant access; the two are answered the same way on purpose."
+        description="The case may have been removed, or you may not have access to it."
       />
     ) : (
       <Fragment>

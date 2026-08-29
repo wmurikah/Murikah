@@ -15,8 +15,9 @@ import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
@@ -121,6 +122,31 @@ function pageHref(target: number): string {
   return `/app/crm/opportunities?${next.toString()}`;
 }
 const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
+const opportunityFilters = [
+  query.pipelineId && {
+    key: 'pipeline',
+    label: options.pipelines.find((o) => o.id === query.pipelineId)?.label ?? 'Pipeline',
+  },
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.ownerUserId && {
+    key: 'owner',
+    label: options.owners.find((o) => o.id === query.ownerUserId)?.label ?? 'Owner',
+  },
+  query.businessUnitId && {
+    key: 'unit',
+    label:
+      options.businessUnits.find((o) => o.id === query.businessUnitId)?.label ?? 'Business unit',
+  },
+  query.currencyCode && { key: 'currency', label: query.currencyCode },
+  query.closeFrom && { key: 'closeFrom', label: `Closing from ${query.closeFrom}` },
+  query.closeTo && { key: 'closeTo', label: `Closing to ${query.closeTo}` },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutOpportunityFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/crm/opportunities?${next.toString()}`;
+};
 ---
 
 <CmsLayout title="Opportunities">
@@ -128,18 +154,18 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to opportunities"
-        description="Ask a system administrator for the CRM.OPPORTUNITIES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="Opportunities could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
         <CmsPageHeader
           title="Opportunities"
-          definition="Probability is shown as a percentage and stored as a fraction. The conversion happens in exactly one place."
+          definition="Probability shows the current confidence assigned to the opportunity."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'CRM', href: '/app/crm' },
@@ -147,12 +173,6 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
           ]}
         >
           <Fragment slot="actions">
-            <CmsButton variant={view === 'list' ? 'secondary' : 'ghost'} href={viewHref('list')}>
-              List
-            </CmsButton>
-            <CmsButton variant={view === 'board' ? 'secondary' : 'ghost'} href={viewHref('board')}>
-              Pipeline
-            </CmsButton>
             {mayEdit && (
               <CmsButton variant="primary" icon="plus" data-cms-opportunity-create>
                 New opportunity
@@ -160,11 +180,53 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
             )}
           </Fragment>
         </CmsPageHeader>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <CmsTabs
+            label="CRM"
+            current="/app/crm/opportunities"
+            tabs={[
+              { label: 'Leads', href: '/app/crm' },
+              { label: 'Opportunities', href: '/app/crm/opportunities' },
+              { label: 'Activities', href: '/app/crm/activities' },
+            ]}
+            class="min-w-0 flex-1"
+          />
+          <div
+            role="group"
+            aria-label="Opportunity view"
+            class="mb-1 inline-flex self-start rounded-cms bg-cms-sunken p-0.5"
+          >
+            <a
+              href={viewHref('list')}
+              aria-current={view === 'list' ? 'true' : undefined}
+              class:list={[
+                'inline-flex min-h-9 items-center rounded-cms px-3 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                view === 'list'
+                  ? 'bg-cms-surface text-cms-ink'
+                  : 'text-cms-muted hover:text-cms-ink',
+              ]}
+            >
+              List
+            </a>
+            <a
+              href={viewHref('board')}
+              aria-current={view === 'board' ? 'true' : undefined}
+              class:list={[
+                'inline-flex min-h-9 items-center rounded-cms px-3 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                view === 'board'
+                  ? 'bg-cms-surface text-cms-ink'
+                  : 'text-cms-muted hover:text-cms-ink',
+              ]}
+            >
+              Pipeline
+            </a>
+          </div>
+        </div>
 
-        <CmsCard>
-          <form method="get" class="flex flex-wrap items-end gap-3">
+        <CmsFilterPanel action="/app/crm/opportunities" activeCount={opportunityFilters.length}>
+          <Fragment slot="primary">
             <input type="hidden" name="view" value={view} />
-            <div class="min-w-56 grow">
+            <div>
               <CmsInput
                 id="f-q"
                 name="q"
@@ -174,6 +236,8 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
                 hint="Opportunity number, title or account name."
               />
             </div>
+          </Fragment>
+          <Fragment slot="advanced">
             <CmsSelect
               id="f-pipeline"
               name="pipeline"
@@ -231,11 +295,19 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
               type="date"
               value={query.closeTo ?? ''}
             />
-            <CmsButton type="submit" variant="secondary">
-              Apply
-            </CmsButton>
-          </form>
-        </CmsCard>
+          </Fragment>
+          <Fragment slot="chips">
+            {opportunityFilters.map((chip) => (
+              <a
+                href={withoutOpportunityFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
 
         {view === 'board' && summary !== null ? (
           <Fragment>
@@ -288,9 +360,9 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
               ))}
             </div>
             <p class="text-cms-body-sm text-cms-muted">
-              {summary.wonCount} won and {summary.lostCount} lost in this pipeline, within your
-              scope. The board shows open deals on the current page of results; the list view
-              paginates the rest.
+              {summary.wonCount} won and {summary.lostCount} lost in this pipeline, for this
+              pipeline. The board shows open deals on the current page; use List to review all
+              results.
             </p>
           </Fragment>
         ) : (
@@ -299,13 +371,9 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
               caption="Opportunities"
               columns={[
                 { key: 'title', label: 'Opportunity' },
-                { key: 'number', label: 'Number', secondary: true },
-                { key: 'account', label: 'Account', secondary: true },
                 { key: 'stage', label: 'Stage' },
                 { key: 'value', label: 'Value', numeric: true },
                 { key: 'probability', label: 'Probability', numeric: true },
-                { key: 'close', label: 'Est. close', secondary: true },
-                { key: 'owner', label: 'Owner', secondary: true },
                 { key: 'status', label: 'Status' },
               ]}
               empty={page.items.length === 0}
@@ -319,17 +387,16 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
                     >
                       {row.title}
                     </a>
-                  </td>
-                  <td class="hidden px-4 py-2.5 text-cms-muted tabular-nums sm:table-cell">
-                    {row.opportunityNumber}
-                  </td>
-                  <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                    <a
-                      href={`/app/customers/${row.accountId}`}
-                      class="rounded-cms underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-                    >
-                      {row.accountName}
-                    </a>
+                    <span class="mt-1 block text-cms-caption text-cms-muted">
+                      {[
+                        row.opportunityNumber,
+                        row.accountName,
+                        row.ownerName,
+                        row.estimatedCloseDate,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
                   </td>
                   <td class="px-4 py-2.5 text-cms-muted">{row.currentStageName}</td>
                   <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
@@ -338,20 +405,32 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
                   <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
                     {fractionToPercentLabel(row.probability)}
                   </td>
-                  <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                    {row.estimatedCloseDate ?? 'Not available'}
-                  </td>
-                  <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{row.ownerName}</td>
                   <td class="px-4 py-2.5">
                     <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
                   </td>
                 </tr>
               ))}
+              <Fragment slot="mobile">
+                {page.items.map((row) => (
+                  <a
+                    href={`/app/crm/opportunities/${row.opportunityId}`}
+                    class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+                  >
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate font-semibold text-cms-ink">{row.title}</span>
+                      <span class="block truncate text-cms-caption text-cms-muted">
+                        {row.accountName} · {row.ownerName} · {row.currentStageName}
+                      </span>
+                    </span>
+                    <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+                  </a>
+                ))}
+              </Fragment>
               <Fragment slot="empty">
                 <CmsEmptyState
                   icon="crm"
                   title="No opportunities match"
-                  description="Adjust the filters. A deal you cannot see here is outside your data scope."
+                  description="Try a different search or remove a filter."
                 />
               </Fragment>
             </CmsDataTable>
@@ -370,7 +449,7 @@ const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
                   Previous
                 </a>
                 <span class="text-cms-body-sm text-cms-muted">
-                  Page {query.page} of {lastPage} · {page.total} in scope
+                  Page {query.page} of {lastPage} · {page.total} opportunities
                 </span>
                 <a
                   href={pageHref(Math.min(lastPage, query.page + 1))}

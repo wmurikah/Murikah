@@ -18,6 +18,7 @@
  * last five events and quietly imply there were only five.
  */
 import { canViewAudit } from '@/lib/cms/permissions';
+import CmsDropdown from './CmsDropdown.astro';
 
 interface Props {
   /** The `audit_events.entity_type` value this record is written under. */
@@ -37,15 +38,20 @@ const href = `/app/administration/audit?entityType=${encodeURIComponent(entityTy
 
 {
   visible && (
-    <a
-      href={href}
-      class:list={[
-        'inline-flex min-h-9 items-center rounded-cms border border-cms-border px-3 text-cms-body-sm font-medium text-cms-royal',
-        'outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus',
-        className,
-      ]}
+    <CmsDropdown
+      id={`audit-${entityType}-${entityId}`}
+      label="More record actions"
+      class={className}
     >
-      {label}
-    </a>
+      <span slot="trigger" class="text-cms-body-sm font-medium text-cms-muted">
+        More
+      </span>
+      <a
+        href={href}
+        class="block rounded-cms px-3 py-2 text-cms-body-sm text-cms-ink outline-none hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        {label}
+      </a>
+    </CmsDropdown>
   )
 }

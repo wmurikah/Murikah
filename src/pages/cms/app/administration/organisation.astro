@@ -195,12 +195,12 @@ function references(pairs: [number, string][]): string {
     !mayView ? (
       <CmsErrorState
         title="You do not have access to the organisation settings"
-        description="Ask a system administrator for the ADMIN.ORGANISATION.VIEW permission. Nothing on this page is loaded without it."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="The organisation data could not be loaded"
-        description="The database did not answer. Try again in a moment; if it keeps happening, quote the time to your administrator."
+        description="Please try again. Contact your administrator if the problem continues."
       />
     ) : (
       <Fragment>
