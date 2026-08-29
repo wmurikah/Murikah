@@ -205,24 +205,40 @@ test('the sales order file goes upload, validate, review, commit, and the record
   const stated = (await listBatches(asClient(c), 5)).find((b) => b.batchId === outcome.batchId);
   assert.equal(stated?.reportingPeriodFrom, '2026-06-01');
   assert.equal(stated?.reportingPeriodTo, '2026-06-30');
-  assert.ok(outcome.unresolvedCustomers.length > 0, 'the first real month is mostly exceptions');
+  // THE FIRST REAL MONTH USED TO BE ALMOST ENTIRELY EXCEPTIONS. It is now a
+  // preview of what the commit will create, which is the point of the rule
+  // change: 228 customers and 108 products named up front, with their lists,
+  // so nobody discovers them afterwards.
+  assert.equal(outcome.unresolvedCustomers.length, 0);
+  // 228 distinct customers in the file; mapSoMasterData created one of them by
+  // hand above, so the preview names the other 227. A record somebody keyed in
+  // is never offered for creation a second time.
+  assert.equal(outcome.accountsToCreate.length, 227);
+  assert.ok(outcome.productsToCreate.length > 0);
+  assert.ok(
+    outcome.accountsToCreate.every((a) => a.code !== ''),
+    'the preview carries the list, not just a count',
+  );
 
   // Validation wrote nothing canonical: the order table is exactly as it was.
   const afterValidation = await c.execute('SELECT COUNT(*) AS n FROM sales_orders');
   assert.equal(Number(afterValidation.rows[0]?.n), Number(ordersBefore.rows[0]?.n));
 
   const batchId = outcome.batchId ?? '';
+  // The only queue left is the one for PEOPLE, which is the rule that did not
+  // change: an unmapped approver is still an administrator's decision.
   const queues = await exceptionQueues(asClient(c), batchId);
-  assert.ok(queues.some((q) => q.queue === 'Unresolved customer'));
+  assert.equal(
+    queues.some((q) => q.queue === 'Unresolved customer'),
+    false,
+  );
 
   const committed = await commitBatch(asClient(c), batchId, CTX);
-  assert.equal(committed.status, 'PARTIAL', 'most documents have no mapped customer yet');
-  assert.ok(committed.documentsCreated >= 1);
-  assert.ok(committed.documentsSkipped > 0);
-  assert.ok(
-    committed.skippedReasons.length > 0,
-    'PARTIAL states what did not import and why, never only "Upload successful"',
-  );
+  assert.equal(committed.status, 'IMPORTED', 'nothing waits behind master data any more');
+  assert.equal(committed.documentsCreated, 662);
+  assert.equal(committed.documentsSkipped, 0);
+  assert.equal(committed.accountsCreated, 227);
+  assert.ok(committed.productsCreated > 0);
 
   const order = await c.execute({
     sql: `SELECT sales_order_id, status, currency_code, order_value FROM sales_orders WHERE document_number = ?`,
@@ -238,7 +254,7 @@ test('the sales order file goes upload, validate, review, commit, and the record
     args: [batchId],
   });
   const types = audits.rows.map((r) => String(r.event_type));
-  assert.deepEqual(types, ['IMPORT_UPLOADED', 'IMPORT_VALIDATED', 'IMPORT_PARTIAL']);
+  assert.deepEqual(types, ['IMPORT_UPLOADED', 'IMPORT_VALIDATED', 'IMPORT_COMMITTED']);
   for (const row of audits.rows) {
     const after = String(row.after_json ?? '');
     assert.ok(
@@ -421,44 +437,33 @@ test('a name mapped once is recognised on the next upload, with no re-upload of 
   assert.equal(Number(later.rows[0]?.n), 1);
 });
 
-test('revalidation reprocesses only eligible rows and keeps the batch provenance', async () => {
+test('revalidation keeps every row and its provenance, and has nothing left to resolve', async () => {
+  // WHAT THIS TEST USED TO PROVE, AND WHY IT CHANGED. It mapped one customer
+  // and one product by hand, revalidated, and watched a few rows move out of
+  // UNRESOLVED while the rest kept waiting. That queue no longer forms: a
+  // customer code the file names is created at commit, so the real extract
+  // produces no unresolved row at all. Revalidation is still the mechanism
+  // that reopens a batch after master data changes, and what it must never do
+  // is lose or renumber a row, so that is what is asserted here.
   const c = await db();
   const outcome = await receiveUpload(asClient(c), soUpload(new Uint8Array(SO_FILE)), CTX);
   const batchId = outcome.batchId ?? '';
-  const before = await c.execute({
-    sql: `SELECT row_status, COUNT(*) AS n FROM import_rows WHERE import_batch_id = ? GROUP BY row_status`,
-    args: [batchId],
-  });
-  const unresolvedBefore = Number(
-    before.rows.find((r) => String(r.row_status) === 'UNRESOLVED')?.n ?? 0,
-  );
-  assert.ok(unresolvedBefore > 0);
 
-  // The administrator maps one customer, and nothing else changes.
-  const anyCode = await c.execute({
-    sql: `SELECT source_record_key, raw_json FROM import_rows
-          WHERE import_batch_id = ? AND row_status = 'UNRESOLVED' LIMIT 1`,
+  const before = await c.execute({
+    sql: `SELECT COUNT(*) AS n FROM import_rows
+          WHERE import_batch_id = ? AND row_status = 'UNRESOLVED'`,
     args: [batchId],
   });
-  const raw = JSON.parse(String(anyCode.rows[0]?.raw_json)) as Record<string, unknown>;
-  await c.execute({
-    sql: `INSERT INTO accounts (account_id, account_name, account_type, oracle_customer_code,
-            country_id, affiliate_id, status, created_at, updated_at)
-          VALUES ('ACC-LATE', 'Late Mapped Customer', 'CUSTOMER', ?, 'CTR-KE', 'AFF-KE',
-                  'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    args: [String(raw.CUSTOMER_CODE)],
-  });
-  await c.execute({
-    sql: `INSERT INTO products (product_id, product_code, product_name, product_category_id,
-            unit_of_measure, active, created_at)
-          VALUES ('PROD-LATE', ?, 'Late mapped item', 'PC-LUBE', 'UNIT', 1, CURRENT_TIMESTAMP)`,
-    args: [String(raw.ORDERED_ITEM)],
-  });
+  assert.equal(
+    Number(before.rows[0]?.n),
+    0,
+    'no row waits behind a customer or a product any more',
+  );
 
   const result = await revalidateBatch(asClient(c), batchId, CTX);
-  assert.equal(result.rowsExamined, unresolvedBefore, 'only the unresolved rows are examined');
-  assert.ok(result.rowsResolved > 0);
-  assert.ok(result.rowsStillUnresolved > 0, 'rows without a mapping keep waiting');
+  assert.equal(result.rowsExamined, 0, 'only unresolved rows are examined, and there are none');
+  assert.equal(result.rowsResolved, 0);
+  assert.equal(result.rowsStillUnresolved, 0);
 
   const after = await c.execute({
     sql: `SELECT COUNT(*) AS n FROM import_rows WHERE import_batch_id = ?`,
@@ -470,11 +475,6 @@ test('revalidation reprocesses only eligible rows and keeps the batch provenance
     args: [batchId],
   });
   assert.equal(Number(stillMine.rows[0]?.n), 1, 'provenance is untouched');
-
-  const reprocessed = await c.execute(
-    `SELECT COUNT(*) AS n FROM audit_events WHERE event_type = 'IMPORT_ROW_REPROCESSED'`,
-  );
-  assert.equal(Number(reprocessed.rows[0]?.n), 1);
 });
 
 test('the row inspector hides source values from a reader without the module', async () => {
@@ -527,9 +527,11 @@ test('no file is deleted, and the quality panel counts what is waiting', async (
   assert.equal(Number(file.rows[0]?.size_bytes), SO_FILE.byteLength);
 
   const quality = await dataQuality(asClient(c));
-  assert.ok(quality.unresolvedCustomerRows > 0);
-  assert.equal(quality.recentPartialImports.length, 1);
-  assert.equal(quality.recentPartialImports[0]?.batchId, outcome.batchId);
+  // Nothing is waiting on a customer, and the commit is whole rather than
+  // partial, which is the visible consequence of the rule change: the panel
+  // that used to count 1,386 waiting rows now counts none.
+  assert.equal(quality.unresolvedCustomerRows, 0);
+  assert.equal(quality.recentPartialImports.length, 0);
 });
 
 test('a rejected upload writes nothing at all', async () => {
