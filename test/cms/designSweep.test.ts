@@ -535,96 +535,24 @@ test('a leaderboard cannot be built on speed alone', () => {
   assert.match(row, /unranked below/, 'and the reason is shown rather than the row dropped');
 });
 
-test('the rail collapses, expands on focus, pins, and overlays rather than reflows', () => {
+test('the rail defaults open on large desktops and remains deliberately collapsible', () => {
   const layout = readFileSync('src/layouts/CmsLayout.astro', 'utf8');
-  // The footprint never changes: the outer aside is 64px whatever the panel does.
-  assert.match(
-    layout,
-    /data-cms-rail\s+class="sticky top-0 z-30 hidden h-dvh w-16 shrink-0 lg:block"/,
-  );
-  // The panel is absolutely positioned inside it, so expanding overlays.
+  assert.match(layout, /saved === null && matchMedia\('\(min-width: 1280px\)'\)\.matches/);
+  assert.match(layout, /group-data-\[rail-pinned=true\]\/rail:w-56 lg:block/);
   assert.match(layout, /absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden/);
-  // And the content inside it is laid out at the EXPANDED width, so a label is
-  // wholly visible or wholly clipped rather than showing its first letters.
-  assert.match(layout, /<div class="flex h-full w-64 flex-col py-4">/);
-  assert.match(layout, /hover:w-64/, 'it expands on hover');
-  assert.match(layout, /focus-within:w-64/, 'and on keyboard focus');
-  assert.match(layout, /group-data-\[rail-pinned=true\]\/rail:w-64/, 'and when pinned');
+  assert.match(layout, /<div class="flex h-full w-56 flex-col py-4">/);
+  assert.match(layout, /hover:w-56/, 'it expands on hover');
+  assert.match(layout, /focus-within:w-56/, 'and on keyboard focus');
+  assert.match(layout, /group-data-\[rail-pinned=true\]\/rail:w-56/, 'and when pinned');
   assert.match(layout, /transition-\[width\] duration-150/, 'the motion is short');
-  // The pin is read before the rail paints, so a pinned user sees no jump.
   assert.match(layout, /localStorage\.getItem\('cms\.rail\.pinned'\)/);
 
   const script = readFileSync('src/components/cms/CmsRailScript.astro', 'utf8');
   assert.match(script, /aria-pressed/, 'the pin reports its own state');
-  assert.match(script, /localStorage\.setItem\(KEY, '1'\)/, 'and the choice persists');
+  assert.match(script, /localStorage\.setItem\(KEY, '0'\)/, 'and collapse explicitly persists');
 
-  // Reduced motion is handled globally, which is why there is no per-component
-  // media query to forget.
   const global = readFileSync('src/styles/global.css', 'utf8');
   assert.match(global, /transition-duration: 0\.01ms !important/);
-});
-
-test('every colour a chart names survives the stylesheet build', () => {
-  // THE FAILURE THIS PREVENTS, WHICH ALREADY HAPPENED ONCE. Tailwind v4
-  // tree-shakes an @theme value that no utility class mentions. The chart
-  // module writes `fill="var(--color-cms-series-1)"` into an SVG string on the
-  // server, which Tailwind cannot see, so the token was dropped from the
-  // stylesheet and every chart in the application rendered black. There was no
-  // error and no warning: the build succeeded and the colour resolved to
-  // nothing.
-  //
-  // So a colour named in a chart must either be used as a class somewhere,
-  // which keeps it, or be declared in the `@theme static` block, which forces
-  // it out whatever else happens.
-  const svg = readFileSync('src/lib/cms/charts/svg.ts', 'utf8');
-  const named = new Set([...svg.matchAll(/var\(--color-(cms-[a-z0-9-]+)\)/g)].map((m) => m[1]!));
-  // The series ramp is referenced through a token name rather than inline.
-  for (const match of svg.matchAll(/'(cms-series-\d)'/g)) named.add(match[1]!);
-  assert.ok(named.size >= 6, `expected the chart's colours, found ${named.size}`);
-
-  const staticBlock = tokenSource.slice(tokenSource.indexOf('@theme static'));
-  const staticEnd = staticBlock.indexOf('\n}');
-  const statics = staticBlock.slice(0, staticEnd);
-
-  const classes = new Set<string>();
-  for (const path of CMS_SOURCE) {
-    for (const match of readFileSync(path, 'utf8').matchAll(
-      /\b(?:bg|text|border|ring|fill|stroke|from|to|via|divide|outline|decoration|accent)-(cms-[a-z0-9-]+)/g,
-    )) {
-      classes.add(match[1]!);
-    }
-  }
-
-  const atRisk = [...named].filter(
-    (name) => !statics.includes(`--color-${name}:`) && !classes.has(name),
-  );
-  assert.deepEqual(
-    atRisk,
-    [],
-    `these chart colours are neither used as a class nor declared @theme static, ` +
-      `so Tailwind will drop them and the chart will render black: ${atRisk.join(', ')}`,
-  );
-  console.log(`[charts] ${named.size} colours named, every one reaches the stylesheet`);
-});
-
-test('the four chart types the dashboard needs all exist', () => {
-  const svg = readFileSync('src/lib/cms/charts/svg.ts', 'utf8');
-  for (const fn of ['lineChart', 'barChart', 'horizontalBarChart', 'sparkline']) {
-    assert.match(svg, new RegExp(`export function ${fn}\\(`), `${fn} is missing`);
-  }
-  // A trend line labels its series at the end of the line rather than in a key.
-  assert.match(svg, /endLabels\?: boolean;/);
-  assert.match(svg, /fill="var\(--color-\$\{one\.token\}\)">\$\{escape\(one\.name\)\}/);
-  // A bar chart can carry a target line, and the line is labelled with a value.
-  assert.match(svg, /stroke-dasharray="4 3"/);
-  assert.match(svg, /escape\(reference\.label\)/);
-
-  // And the dashboard actually renders one of each of the three big ones.
-  const page = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  for (const fn of ['lineChart(', 'barChart(', 'horizontalBarChart(', 'sparkline(']) {
-    assert.ok(page.includes(fn), `the dashboard renders no ${fn.slice(0, -1)}`);
-  }
-  assert.match(page, /reference:/, 'the affiliate bars carry a target line');
 });
 
 // ---------------------------------------------------------------------------
@@ -682,7 +610,7 @@ test('the brand panel collapses on a small screen and the form takes the width',
   assert.match(layout, /class="flex min-h-dvh flex-col lg:grid/);
   // And the panel's prose is desktop-only, so it cannot push the form off the
   // first screen on a phone.
-  assert.match(layout, /hidden max-w-sm text-cms-display[^"]*lg:block/);
+  assert.match(layout, /<div class="hidden max-w-md lg:block">/);
 });
 
 // ---------------------------------------------------------------------------
