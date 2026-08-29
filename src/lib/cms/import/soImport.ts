@@ -927,9 +927,15 @@ async function isolateDocuments(
   const statements: Stmt[] = [];
   for (const document of documents) {
     for (const importRowId of document.importRowIds.values()) {
+      // AND NOT ONE THAT WAS ALREADY REFUSED AT VALIDATION. A row rejected for
+      // being malformed carries its own reason, and overwriting it with a
+      // write failure would replace the true explanation with a later one that
+      // is not about this row at all. It also matters to a retry, which
+      // re-opens rejected rows: a validation rejection must stay rejected.
       statements.push({
         sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
-              WHERE import_row_id = ? AND imported_at IS NULL`,
+              WHERE import_row_id = ? AND imported_at IS NULL
+                AND row_status <> 'REJECTED'`,
         args: [reason.slice(0, 400), importRowId],
       });
     }
@@ -1114,8 +1120,8 @@ export async function commitSoBatch(
   };
 
   const rowsResult = await db.execute({
-    sql: `SELECT import_row_id, source_row_number, row_status, raw_json FROM import_rows
-          WHERE import_batch_id = ? ORDER BY source_row_number`,
+    sql: `SELECT import_row_id, source_row_number, row_status, raw_json, imported_at
+          FROM import_rows WHERE import_batch_id = ? ORDER BY source_row_number`,
     args: [batchId],
   });
 
@@ -1137,7 +1143,12 @@ export async function commitSoBatch(
 
   const groups = new Map<
     string,
-    DocumentGroup & { importRowIds: Map<number, string>; statuses: Map<number, string> }
+    DocumentGroup & {
+      importRowIds: Map<number, string>;
+      statuses: Map<number, string>;
+      /** Rows this batch has already written. They are never actioned twice. */
+      alreadyImported: Set<number>;
+    }
   >();
   for (const raw of rowsResult.rows) {
     const record = raw as unknown as Record<string, unknown>;
@@ -1151,10 +1162,12 @@ export async function commitSoBatch(
       rows: [],
       importRowIds: new Map<number, string>(),
       statuses: new Map<number, string>(),
+      alreadyImported: new Set<number>(),
     };
     group.rows.push(row);
     group.importRowIds.set(row.sourceRowNumber, text(record.import_row_id));
     group.statuses.set(row.sourceRowNumber, text(record.row_status));
+    if (record.imported_at !== null) group.alreadyImported.add(row.sourceRowNumber);
     groups.set(key, group);
   }
 
@@ -1268,7 +1281,15 @@ export async function commitSoBatch(
   const planned: PlannedDocument[] = [];
 
   for (const [key, group] of groups) {
+    // A ROW THAT HAS ALREADY LANDED IS NEVER ACTIONED AGAIN. `imported_at` is
+    // the record that this batch wrote this row, and re-actioning it would
+    // rewrite a canonical record that is already correct and mint a fresh
+    // snapshot version for it. That is what made a retry of a PARTIAL batch
+    // report importing 662 documents when three needed importing: the other
+    // 659 were re-written for nothing. A commit is now idempotent at the row
+    // level, which is what lets a retry press safely.
     const actionable = group.rows.filter((r) => {
+      if (group.alreadyImported.has(r.sourceRowNumber)) return false;
       const status = group.statuses.get(r.sourceRowNumber);
       return status === 'NEW' || status === 'CHANGED';
     });
@@ -1584,7 +1605,13 @@ export async function commitSoBatch(
   // guessing, name the constraint from the failure already in hand, and mark
   // the rest without pretending each was examined.
   const WRITE_CHUNK = 400;
-  const MAX_INDIVIDUAL_RETRIES = 24;
+  // EIGHT, AND THE NUMBER IS THE PLATFORM'S NOT A TASTE. A retry of a failed
+  // batch re-enters this path by definition, and the whole request has already
+  // spent about 36 subrequests by the time it gets here. Cloudflare allows 50.
+  // Twenty-four individual retries would put the worst case at 60 and kill the
+  // request mid-flight — which is the exact failure this control exists to
+  // recover from, reproduced by the recovery.
+  const MAX_INDIVIDUAL_RETRIES = 8;
 
   const chunks: PlannedDocument[][] = [];
   let current: PlannedDocument[] = [];
