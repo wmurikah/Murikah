@@ -22,6 +22,7 @@ import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsDefinition from '@/components/cms/CmsDefinition.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import { getCmsEnv } from '@/lib/cms/env';
@@ -62,6 +63,7 @@ const SEVERITY = {
 
 const findings = health.checks.filter((check) => check.count > 0);
 const clean = health.checks.filter((check) => check.count === 0);
+const shortRule = (rule: string) => rule.split(/(?<=[.!?])\s/, 1)[0] ?? rule;
 ---
 
 <CmsLayout title="System health">
@@ -123,9 +125,16 @@ const clean = health.checks.filter((check) => check.count === 0);
                   {check.count}
                 </span>
               </div>
-              <p class="mt-2 max-w-prose text-cms-body-sm text-cms-muted">
-                <span class="font-semibold text-cms-ink">The rule:</span> {check.rule}
-              </p>
+              <div class="mt-2 flex max-w-prose items-start gap-2 text-cms-body-sm text-cms-muted">
+                <p class="line-clamp-1 min-w-0">
+                  <span class="font-semibold text-cms-ink">The rule:</span> {shortRule(check.rule)}
+                </p>
+                <CmsDefinition
+                  label={`${check.title} rule`}
+                  definition={check.rule}
+                  class="shrink-0"
+                />
+              </div>
               {check.examples.length > 0 && (
                 <ul class="mt-3 flex flex-col gap-1.5 border-t border-cms-line pt-3">
                   {check.examples.map((example) => (
