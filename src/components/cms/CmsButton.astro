@@ -33,6 +33,13 @@ interface Props {
   loading?: boolean;
   full?: boolean;
   id?: string;
+  /**
+   * The form this button submits, by id, when it does not sit inside it.
+   *
+   * A modal keeps its actions in a fixed foot while the body scrolls, so the
+   * submit is a sibling of the form rather than a child. `form=` is the
+   * platform's answer to exactly that, and it is why the foot can stay put.
+   */
   form?: string;
   class?: string;
   'aria-label'?: string;

@@ -1,0 +1,317 @@
+---
+/**
+ * Editing a customer, under the customer record.
+ *
+ * IT IS HERE AND NOT IN ADMINISTRATION, because that is where somebody is
+ * standing when they notice a wrong name. Sending them to a separate screen to
+ * fix a phone number they are looking at is how a wrong phone number stays
+ * wrong.
+ *
+ * ONE FORM, PERSISTENT LABELS, INLINE VALIDATION. Every label stays visible
+ * once a value is chosen, which is what a placeholder-only field loses at
+ * exactly the moment somebody needs it. A field message appears under its own
+ * field and the first invalid field takes focus, so a rejected save says which
+ * field and why rather than colouring the form red.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TWO UNIQUE CODES ARE NOT IN THIS FORM
+ * ---------------------------------------------------------------------------
+ *
+ * `oracle_customer_code` and `account_code` are edited by CmsAccountCodesForm,
+ * through their own route, with their own confirmation and their own audit
+ * event. The reason is not tidiness. The Oracle code is the key the importer
+ * matches an extract row on: changing it does not alter this customer's
+ * history, it changes where every FUTURE import lands, and the effect does not
+ * appear until the next extract arrives. The moment it shares a submit with a
+ * corrected phone number it shares that submit's confirmation, and the
+ * confirmation appropriate to a phone number is no confirmation at all.
+ *
+ * ---------------------------------------------------------------------------
+ * CREDIT TERMS ARE GATED SEPARATELY
+ * ---------------------------------------------------------------------------
+ *
+ * A credit limit says what the business will carry for this customer, and not
+ * every reader of a customer record needs to know it. Without
+ * CUSTOMERS.CREDIT_TERMS.VIEW the two fields are ABSENT and the form SAYS they
+ * are absent — a blank field would read as "this customer has no credit terms",
+ * which is a false statement about the business rather than a true one about
+ * the reader's access. The values are not sent either, so a submit from a
+ * caller who cannot see them cannot blank them.
+ */
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import type { AccountRow, Option } from '@/lib/cms/repos/accountAdmin';
+import { ACCOUNT_TYPES, ACCOUNT_STATUSES, STATUS_MEANING } from '@/lib/cms/admin/accountInput';
+
+interface Props {
+  account: AccountRow;
+  countries: Option[];
+  affiliates: Option[];
+  managers: Option[];
+  segments: string[];
+  /** Whether this caller may see and change the credit limit and credit days. */
+  maySeeCreditTerms: boolean;
+}
+const { account, countries, affiliates, managers, segments, maySeeCreditTerms } = Astro.props;
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((option) => ({ value: option.id, label: option.label })),
+];
+---
+
+<form
+  id="cms-account-edit"
+  novalidate
+  class="flex flex-col gap-4"
+  data-account-id={account.accountId}
+  data-credit-visible={maySeeCreditTerms ? '1' : '0'}
+>
+  <p
+    id="cms-account-edit-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+  >
+  </p>
+  <p
+    id="cms-account-edit-saved"
+    role="status"
+    hidden
+    class="rounded-cms border border-cms-positive bg-cms-positive-tint px-3 py-2 text-cms-body-sm text-cms-positive"
+  >
+  </p>
+
+  <div class="grid gap-4 sm:grid-cols-2">
+    <CmsInput
+      id="e-accountName"
+      name="accountName"
+      label="Account name"
+      required
+      value={account.accountName}
+    />
+    <CmsSelect
+      id="e-accountType"
+      name="accountType"
+      label="Type"
+      required
+      value={account.accountType}
+      options={ACCOUNT_TYPES.map((type) => ({ value: type, label: titleCase(type) }))}
+    />
+    <CmsInput id="e-industry" name="industry" label="Industry" value={account.industry ?? ''} />
+    <CmsSelect
+      id="e-segment"
+      name="segment"
+      label="Segment"
+      value={account.segment ?? ''}
+      options={[
+        { value: '', label: 'No segment' },
+        ...segments.map((segment) => ({ value: segment, label: segment })),
+      ]}
+    />
+    <CmsSelect
+      id="e-countryId"
+      name="countryId"
+      label="Country"
+      required
+      value={account.countryId}
+      options={pick(countries, 'Choose a country')}
+    />
+    <CmsSelect
+      id="e-affiliateId"
+      name="affiliateId"
+      label="Affiliate"
+      value={account.affiliateId ?? ''}
+      options={pick(affiliates, 'No affiliate')}
+      hint="Must sit in the country chosen above."
+    />
+    <CmsInput id="e-phone" name="phone" label="Phone" value={account.phone ?? ''} />
+    <CmsInput id="e-email" name="email" label="Email" type="email" value={account.email ?? ''} />
+    <CmsInput id="e-website" name="website" label="Website" value={account.website ?? ''} />
+    <CmsInput id="e-taxPin" name="taxPin" label="Tax PIN" value={account.taxPin ?? ''} />
+    <CmsInput
+      id="e-customerSince"
+      name="customerSince"
+      label="Customer since"
+      type="date"
+      value={account.customerSince ?? ''}
+    />
+    <CmsSelect
+      id="e-accountManagerUserId"
+      name="accountManagerUserId"
+      label="Account manager"
+      value={account.accountManagerUserId ?? ''}
+      options={pick(managers, 'Not assigned')}
+    />
+  </div>
+
+  <CmsInput id="e-address" name="address" label="Address" value={account.address ?? ''} />
+
+  {
+    maySeeCreditTerms ? (
+      <div class="grid gap-4 sm:grid-cols-2">
+        <CmsInput
+          id="e-creditLimit"
+          name="creditLimit"
+          label="Credit limit"
+          type="number"
+          value={account.creditLimit === null ? '' : String(account.creditLimit)}
+          hint="Leave blank for no recorded limit. Zero means no credit at all, which is a different statement."
+        />
+        <CmsInput
+          id="e-creditDays"
+          name="creditDays"
+          label="Credit days"
+          type="number"
+          value={account.creditDays === null ? '' : String(account.creditDays)}
+        />
+      </div>
+    ) : (
+      <p class="rounded-cms border border-cms-line bg-cms-sunken px-3 py-2 text-cms-body-sm text-cms-muted">
+        This customer's credit limit and credit days are recorded and are not shown to you. They are
+        commercially sensitive and need the credit terms permission. Saving this form leaves them
+        exactly as they are.
+      </p>
+    )
+  }
+
+  <CmsSelect
+    id="e-status"
+    name="status"
+    label="Status"
+    required
+    value={account.status}
+    options={ACCOUNT_STATUSES.map((status) => ({ value: status, label: titleCase(status) }))}
+    hint={STATUS_MEANING[account.status]}
+  />
+
+  <div class="flex flex-wrap items-center gap-2">
+    <button
+      type="submit"
+      data-cms-account-save
+      class="inline-flex h-9 items-center rounded-cms bg-cms-royal px-3.5 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Save changes
+    </button>
+    <a
+      href={`/app/customers/${account.accountId}`}
+      class="inline-flex h-9 items-center rounded-cms px-3 text-cms-body-sm font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Cancel
+    </a>
+  </div>
+</form>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+    holderAccountId?: string;
+    holderAccountName?: string;
+  }
+
+  const form = document.getElementById('cms-account-edit') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-account-edit-error');
+  const savedBox = document.getElementById('cms-account-edit-saved');
+
+  if (form) {
+    const accountId = form.dataset.accountId ?? '';
+    // WITHOUT THE CREDIT PERMISSION THE TWO FIELDS ARE NOT SENT AT ALL, so a
+    // caller who cannot see them cannot blank them by saving the form.
+    const creditVisible = form.dataset.creditVisible === '1';
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+      if (savedBox) {
+        savedBox.hidden = true;
+        savedBox.textContent = '';
+      }
+    };
+
+    const paint = (fields: FieldError[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        const element = field instanceof HTMLElement ? field : null;
+        if (!element || !element.id) continue;
+        element.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${element.id}-error`);
+        if (!message) continue;
+        message.textContent = item.message;
+        // A COLLISION NAMES THE HOLDER AND LINKS TO IT, because the next action
+        // is almost always to open the other record.
+        if (item.holderAccountId) {
+          const link = document.createElement('a');
+          link.href = `/app/customers/${item.holderAccountId}`;
+          link.className = 'ms-1 font-semibold underline underline-offset-2';
+          link.textContent = 'Open it';
+          message.appendChild(link);
+        }
+        message.classList.remove('hidden');
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    const payload = (): Record<string, unknown> => {
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value !== 'string') continue;
+        if (!creditVisible && (name === 'creditLimit' || name === 'creditDays')) continue;
+        body[name] = value;
+      }
+      return body;
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      const save = form.querySelector<HTMLButtonElement>('[data-cms-account-save]');
+      if (save) save.disabled = true;
+      try {
+        const response = await fetch(`/api/customers/accounts/${accountId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload()),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          fields?: FieldError[];
+          message?: string;
+        };
+        if (response.ok) {
+          if (savedBox) {
+            savedBox.textContent =
+              'Saved. Every change is recorded in this customer’s audit trail.';
+            savedBox.hidden = false;
+          }
+          return;
+        }
+        if (Array.isArray(data.fields) && data.fields.length > 0) {
+          paint(data.fields);
+          return;
+        }
+        if (errorBox) {
+          errorBox.textContent = data.message ?? 'That could not be saved. Try again.';
+          errorBox.hidden = false;
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.textContent = 'That could not be saved. Check your connection and try again.';
+          errorBox.hidden = false;
+        }
+      } finally {
+        if (save) save.disabled = false;
+      }
+    });
+  }
+</script>

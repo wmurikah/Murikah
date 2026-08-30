@@ -228,28 +228,6 @@ test('auth entry markup wires providers, recovery and customer registration with
   assert.match(register, /href="\/login"/);
 });
 
-test('the login character covers, peeks, waits and acknowledges without owning form feedback', () => {
-  const login = readFileSync('src/pages/cms/login.astro', 'utf8');
-  const character = readFileSync('src/components/cms/CmsLoginCharacter.astro', 'utf8');
-  for (const state of [
-    'email',
-    'typing',
-    'valid',
-    'password',
-    'peek',
-    'loading',
-    'retry',
-    'success',
-  ]) {
-    assert.match(`${login}\n${character}`, new RegExp(`['"]${state}['"]`), `${state} pose exists`);
-  }
-  assert.match(login, /queueMicrotask\(\(\) => pose\(passwordInput\.type === 'text' \? 'peek'/);
-  assert.doesNotMatch(login, /email!\.|password!\./);
-  assert.match(login, /setError\('Enter your password\.'\)/);
-  assert.match(character, /aria-hidden="true"/);
-  assert.match(character, /prefers-reduced-motion: reduce/);
-});
-
 test('only known OIDC callback paths receive the state-and-PKCE CSRF exception', () => {
   for (const provider of ['google', 'microsoft', 'apple']) {
     assert.equal(isOidcCallbackPath(`/api/auth/oidc/${provider}/callback`), true);

@@ -1,0 +1,312 @@
+---
+/**
+ * The period control. One compact row, one implementation, five pages.
+ *
+ * WHAT IT REPLACED. Two `dd/mm/yyyy` boxes and a Trend dropdown inside a
+ * bordered panel with a heading. Three equally weighted choices before the
+ * first glance, two of which had to be typed, and a grain that the period
+ * already answers. This is a row on the canvas, not a card, and it has no
+ * description.
+ *
+ * IT WORKS WITH NO JAVASCRIPT, AND THAT IS WHY THE DRILL IS LINKS. Choosing a
+ * year navigates to `?period=2026`, which is both the selection and the next
+ * level of the drill: the component renders 2026's months because the period
+ * says 2026. Choosing a month gives that month and offers its days. Nobody
+ * types a date, nothing is held in memory, and every step of the drill is a
+ * real URL that can be shared. The panel is a native `<details>`, so it opens
+ * from the keyboard and is announced as a disclosure; `pick=1` on each link is
+ * what keeps it open across the navigation the drill is made of.
+ *
+ * THE EMPTY PERIODS ARE MARKED BEFORE THEY ARE CLICKED. A year or a month with
+ * nothing in it is dimmed and carries "no data" in its accessible name, so the
+ * mark is not colour alone. That is the most useful thing on the control and it
+ * costs one query, which the page has already run.
+ *
+ * A PERIOD IS NOT A FILTER. It never widens what a caller may see; the scope
+ * resolver decides that on every query.
+ */
+import CmsIcon from './CmsIcon.astro';
+import {
+  PRESETS,
+  drillDays,
+  drillMonths,
+  drillPosition,
+  drillYears,
+  type DataCalendar,
+  type ResolvedPeriod,
+} from '@/lib/cms/analytics/period';
+
+interface Props {
+  /** The page itself. Every link is this path with a different period. */
+  action: string;
+  /** The period actually being shown, after any fallback. */
+  period: ResolvedPeriod;
+  /** Which years, months and days hold data. One query, already run. */
+  calendar: DataCalendar;
+  /** Today, injected so the component never reads a clock of its own. */
+  today: Date;
+  /** Whether the disclosure is open, from `?pick=1`. */
+  open?: boolean;
+  /**
+   * Anything else the page carries in its URL and must not lose when a period
+   * is chosen. The reports page carries which report; the order pages carry
+   * their status and affiliate.
+   */
+  keep?: Record<string, string | null>;
+  /**
+   * The one line the page says when it moved off an empty default, and the
+   * control that goes back. Both come from `choosePeriod`, so every page words
+   * it identically and no page can forget to say it.
+   */
+  notice?: string | null;
+  revertHref?: string | null;
+  revertLabel?: string | null;
+  class?: string;
+}
+const {
+  action,
+  period,
+  calendar,
+  today,
+  open = false,
+  keep = {},
+  notice = null,
+  revertHref = null,
+  revertLabel = null,
+  class: className,
+} = Astro.props;
+
+/** Whatever the page carries in its URL, with the empties dropped. */
+const carried: Record<string, string> = Object.fromEntries(
+  Object.entries(keep).filter(([, v]) => v !== null && v !== '') as [string, string][],
+);
+
+const at = drillPosition(period, today);
+const years = drillYears(calendar, today);
+const months = drillMonths(at.year, calendar);
+const days = drillDays(at.month, calendar);
+
+/** A link to this page at another period token, keeping the drill open. */
+const to = (token: string) =>
+  `${action}?${new URLSearchParams({ ...carried, period: token, pick: '1' }).toString()}`;
+
+/** The same, but closing the drill: what a preset does. */
+const pick = (token: string) =>
+  `${action}?${new URLSearchParams({ ...carried, period: token }).toString()}`;
+
+const selected = (token: string) => period.key === token;
+
+/**
+ * The shared cell styling. A cell that holds nothing is dimmed AND says so,
+ * because dimming alone is colour carrying meaning and somebody would miss it.
+ */
+const cell = (has: boolean, isOn: boolean) =>
+  [
+    'inline-flex h-8 min-w-8 items-center justify-center rounded-cms px-2 text-cms-caption',
+    'outline-none focus-visible:ring-2 focus-visible:ring-focus',
+    isOn
+      ? 'bg-cms-royal font-semibold text-white'
+      : has
+        ? 'font-medium text-cms-ink hover:bg-cms-royal-tint hover:text-cms-royal'
+        : 'text-cms-muted/60 hover:bg-cms-canvas',
+  ].join(' ');
+
+const mark = (has: boolean, label: string) => (has ? label : `${label}, no data`);
+---
+
+<div class:list={['flex flex-col gap-2', className]} data-cms-period={period.key}>
+  {
+    /*
+      THE ACTIVE PERIOD IS ON THE PAGE, not only inside the control. Nobody
+      should have to open a control to find out what they are looking at.
+    */
+  }
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <span class="text-cms-body-sm text-cms-muted">Period</span>
+    <span class="text-cms-body-sm font-semibold text-cms-ink" data-cms-period-label>
+      {period.label}
+    </span>
+
+    <details class="relative" open={open}>
+      <summary
+        class="inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-cms border border-cms-line px-2.5 text-cms-caption font-medium text-cms-ink outline-none hover:border-cms-royal hover:text-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        Change
+        <span class="cms-period-chevron inline-flex" aria-hidden="true">
+          <CmsIcon name="chevronDown" size={14} />
+        </span>
+      </summary>
+
+      <div
+        class="absolute start-0 z-20 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-cms border border-cms-line bg-cms-surface p-3 shadow-cms-overlay"
+      >
+        {/* PRESETS FIRST, because they cover almost every use. */}
+        <div class="flex flex-wrap gap-1.5">
+          {
+            PRESETS.filter((preset) => preset.key !== 'custom').map((preset) => (
+              <a
+                href={pick(preset.key)}
+                aria-current={selected(preset.key) ? 'true' : undefined}
+                class={cell(true, selected(preset.key))}
+              >
+                {preset.label}
+              </a>
+            ))
+          }
+        </div>
+
+        <div class="mt-3 border-t border-cms-line pt-3">
+          <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">Year</p>
+          <div class="mt-1.5 flex flex-wrap gap-1">
+            {
+              years.map((year) => (
+                <a
+                  href={to(year.key)}
+                  aria-label={mark(year.hasData, year.key)}
+                  aria-current={period.key === year.key ? 'true' : undefined}
+                  class={cell(year.hasData, period.key === year.key)}
+                >
+                  {year.key}
+                </a>
+              ))
+            }
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+            Month in {at.year}
+          </p>
+          <div class="mt-1.5 grid grid-cols-6 gap-1">
+            {
+              months.map((month) => (
+                <a
+                  href={to(month.key)}
+                  aria-label={mark(month.hasData, `${month.label} ${at.year}`)}
+                  aria-current={period.key === month.key ? 'true' : undefined}
+                  class={cell(month.hasData, period.key === month.key)}
+                >
+                  {month.label.slice(0, 3)}
+                </a>
+              ))
+            }
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+            Day in {at.month}
+          </p>
+          <div class="mt-1.5 grid grid-cols-7 gap-1">
+            {
+              days.map((day) => (
+                <a
+                  href={to(day.key)}
+                  aria-label={mark(day.hasData, `${day.label} ${at.month}`)}
+                  aria-current={period.key === day.key ? 'true' : undefined}
+                  class={cell(day.hasData, period.key === day.key)}
+                >
+                  {day.label}
+                </a>
+              ))
+            }
+          </div>
+        </div>
+
+        {
+          /*
+            CUSTOM IS LAST AND IT IS THE ONLY PLACE ANYBODY TYPES A DATE. It is
+            also where a grain override would go if a case ever genuinely needs
+            one, rather than in front of everybody.
+          */
+        }
+        <form method="get" action={action} class="mt-3 border-t border-cms-line pt-3">
+          {
+            Object.entries(keep)
+              .filter(([, value]) => value !== null && value !== '')
+              .map(([name, value]) => <input type="hidden" name={name} value={value as string} />)
+          }
+          <input type="hidden" name="period" value="custom" />
+          <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+            Custom
+          </p>
+          <div class="mt-1.5 flex flex-wrap items-end gap-2">
+            <label class="flex flex-col gap-1">
+              <span class="text-cms-caption text-cms-muted">From</span>
+              <input
+                type="date"
+                name="from"
+                value={period.preset === 'custom' ? (period.from ?? '') : ''}
+                class="h-8 rounded-cms border border-cms-line bg-cms-surface px-2 text-cms-caption text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-cms-caption text-cms-muted">To</span>
+              <input
+                type="date"
+                name="to"
+                value={period.preset === 'custom' ? (period.to ?? '') : ''}
+                class="h-8 rounded-cms border border-cms-line bg-cms-surface px-2 text-cms-caption text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              />
+            </label>
+            <button
+              type="submit"
+              class="inline-flex h-8 items-center rounded-cms bg-cms-royal px-3 text-cms-caption font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Apply
+            </button>
+          </div>
+        </form>
+      </div>
+    </details>
+
+    <slot />
+  </div>
+
+  {
+    /*
+      THE FALLBACK, SAID OUT LOUD. Rendering an empty chart while the data sits
+      three months back, and saying nothing, is the failure this whole control
+      exists to remove. The sentence names both periods and the way back is a
+      real link, not an instruction to go and find the control.
+    */
+  }
+  {
+    notice !== null && (
+      <p class="text-cms-body-sm text-cms-muted" data-cms-period-notice>
+        {notice}
+        {revertHref !== null && (
+          <>
+            {' '}
+            <a
+              class="font-semibold text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              href={revertHref}
+            >
+              {revertLabel ?? 'Show it anyway'}
+            </a>
+          </>
+        )}
+      </p>
+    )
+  }
+
+  <slot name="notice" />
+</div>
+
+<style>
+  details > summary::-webkit-details-marker {
+    display: none;
+  }
+  details > summary .cms-period-chevron {
+    transform: rotate(0deg);
+    transition: transform 150ms ease;
+  }
+  details[open] > summary .cms-period-chevron {
+    transform: rotate(180deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    details > summary .cms-period-chevron {
+      transition: none;
+    }
+  }
+</style>
