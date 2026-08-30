@@ -152,6 +152,20 @@ export class SmokeServer {
     this.cookies.clear();
   }
 
+  /**
+   * Take a copy of the cookie jar, and put one back. Two signed-in actors in one
+   * test need their own jars: proving that an access change reaches a session
+   * that is already open means holding that session while another one changes
+   * the matrix underneath it.
+   */
+  exportCookies(): Map<string, string> {
+    return new Map(this.cookies);
+  }
+
+  importCookies(jar: Map<string, string>): void {
+    this.cookies = new Map(jar);
+  }
+
   private storeCookies(setCookie: string | string[] | undefined): void {
     const list = typeof setCookie === 'string' ? [setCookie] : (setCookie ?? []);
     for (const raw of list) {
