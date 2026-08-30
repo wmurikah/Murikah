@@ -2,6 +2,8 @@
 import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsLoginCharacter from '@/components/cms/CmsLoginCharacter.astro';
+import CmsAuthProviders from '@/components/cms/CmsAuthProviders.astro';
 import { EXPIRED_FLAG, EXPIRED_MESSAGE } from '@/lib/cms/routes';
 export const prerender = false;
 const notice =
@@ -15,9 +17,14 @@ const notice =
 ---
 
 <CmsAuthLayout title="Sign in">
+  <CmsLoginCharacter slot="brand-character" />
   <div class="flex flex-col gap-6">
-    <header>
-      <h1 class="text-cms-display font-semibold text-cms-ink">Sign in</h1>
+    <header class="space-y-1.5">
+      <p class="text-cms-label font-semibold tracking-[0.12em] text-cms-gold-ink uppercase">
+        HASS Petroleum
+      </p>
+      <h1 class="text-cms-display font-semibold text-cms-ink">Welcome back</h1>
+      <p class="text-cms-body-sm text-cms-muted">Sign in to customer operations.</p>
     </header>
     {
       notice && (
@@ -29,6 +36,11 @@ const notice =
         </div>
       )
     }
+    <CmsAuthProviders purpose="SIGN_IN" apple />
+    <div class="flex items-center gap-3 text-cms-caption text-cms-muted" aria-hidden="true">
+      <span class="h-px flex-1 bg-cms-line"></span><span>or use your work email</span><span
+        class="h-px flex-1 bg-cms-line"></span>
+    </div>
     <form id="cms-login-form" class="flex flex-col gap-4" novalidate>
       <div class="min-h-14">
         <div
@@ -70,19 +82,21 @@ const notice =
           autocomplete="current-password"
           required
           revealable
-        /><a
-          href="/forgot-password"
-          class="self-start text-cms-body-sm font-semibold text-cms-royal">Forgot password?</a
-        ><CmsButton type="submit" variant="primary" size="lg" full id="cms-login-submit"
+        /><CmsButton type="submit" variant="primary" size="lg" full id="cms-login-submit"
           >Sign in</CmsButton
         >
       </section>
     </form>
-    <p class="text-cms-body-sm text-cms-muted">
-      New customer? <a href="/register" class="font-semibold text-cms-royal"
-        >Create customer access</a
+    <div class="flex flex-wrap items-center justify-between gap-3 text-cms-body-sm">
+      <a href="/forgot-password" class="font-semibold text-cms-royal hover:underline"
+        >Forgot password?</a
       >
-    </p>
+      <span class="text-cms-muted"
+        >New customer? <a href="/register" class="font-semibold text-cms-royal hover:underline"
+          >Create customer access</a
+        ></span
+      >
+    </div>
   </div>
 </CmsAuthLayout>
 <script>
@@ -94,11 +108,30 @@ const notice =
     passwordStep = document.querySelector<HTMLElement>('[data-password-step]'),
     errorBox = document.querySelector<HTMLElement>('#cms-login-error'),
     error = errorBox?.querySelector<HTMLElement>('[data-error-text]');
+  const character = document.querySelector<HTMLElement>('[data-cms-login-character]');
+  let settle = 0;
+  const pose = (state: string) => {
+    if (character) character.dataset.state = state;
+  };
   const setError = (message: string) => {
     if (error) error.textContent = message;
     if (errorBox) errorBox.toggleAttribute('data-empty', !message);
   };
   const valid = () => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim());
+  email?.addEventListener('focus', () => pose('email'));
+  email?.addEventListener('input', () => {
+    pose(valid() ? 'valid' : 'typing');
+    window.clearTimeout(settle);
+    settle = window.setTimeout(() => pose(valid() ? 'valid' : 'email'), 240);
+  });
+  email?.addEventListener('blur', () => pose('rest'));
+  password?.addEventListener('focus', () => pose(password.type === 'text' ? 'peek' : 'password'));
+  password?.addEventListener('blur', () => pose('rest'));
+  document.querySelector('[data-reveal-for="cms-password"]')?.addEventListener('click', () => {
+    // CmsInput owns the type toggle. Read its result after every click
+    // listener has run so the character always mirrors the visible state.
+    queueMicrotask(() => pose(password?.type === 'text' ? 'peek' : 'password'));
+  });
   document.querySelector('#cms-continue')?.addEventListener('click', () => {
     if (!valid()) {
       setError('Enter a complete work email address.');
@@ -110,7 +143,8 @@ const notice =
     if (passwordStep) passwordStep.hidden = false;
     const selected = document.querySelector('[data-selected-email]');
     if (selected) selected.textContent = email!.value.trim();
-    password?.focus();
+    pose('success');
+    window.setTimeout(() => password?.focus(), 120);
   });
   document.querySelector('[data-change-email]')?.addEventListener('click', () => {
     if (passwordStep) passwordStep.hidden = true;
@@ -119,15 +153,28 @@ const notice =
   });
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!email || !password || !password.value) return;
+    if (!email || !password) return;
+    if (!password.value) {
+      setError('Enter your password.');
+      password.focus();
+      pose('password');
+      return;
+    }
     const submit = document.querySelector<HTMLButtonElement>('#cms-login-submit');
     if (submit) {
       submit.disabled = true;
       submit.textContent = 'Signing in…';
     }
+    pose('loading');
     const result = await submitCredentials({ email: email.value.trim(), password: password.value });
-    if (result.status === 'success') location.assign(result.landing);
-    else setError(authResultMessage(result) ?? 'Sign-in could not be completed. Try again.');
+    if (result.status === 'success') {
+      pose('success');
+      window.setTimeout(() => location.assign(result.landing), 140);
+    } else {
+      pose('retry');
+      setError(authResultMessage(result) ?? 'Sign-in could not be completed. Try again.');
+      window.setTimeout(() => pose('password'), 260);
+    }
     password.value = '';
     if (submit) {
       submit.disabled = false;

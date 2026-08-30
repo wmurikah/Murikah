@@ -65,6 +65,8 @@ import { resolveSession as resolveCmsSession } from '@/lib/cms/auth/loginFlow';
 import { clearSessionCookie as clearCmsCookie, isSecureRequest } from '@/lib/cms/auth/cookie';
 import {
   isPublicPath as isCmsPublicPath,
+  isCmsAuthEntryPage,
+  isOidcCallbackPath,
   isApiPath as isCmsApiPath,
   isAppPath,
   isPortalPath,
@@ -356,7 +358,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         // Signed in. Send each user type to its own surface, and keep them
         // there. The sign-in page is not somewhere a signed-in user belongs.
         const home = homeFor(principal.user.userType, principal.user.permissions);
-        if (appPath === LOGIN_PATH) return context.redirect(home, 302);
+        if (isCmsAuthEntryPage(appPath)) return context.redirect(home, 302);
         if (appPath === '/') return context.redirect(home, 302);
         if (principal.user.userType === 'EXTERNAL' && isAppPath(appPath)) {
           // Never rendered, not merely hidden.
@@ -401,7 +403,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // the cookie; this is the second line, because SameSite is one setting
     // enforced by the client and a security control should not have exactly
     // one of those.
-    if (!isSameOrigin(context.request, context.url)) {
+    // Apple returns its authorization response with `form_post`, which is
+    // necessarily cross-origin. This one callback family is authenticated by
+    // the consumed OIDC state, nonce and PKCE verifier; every other mutating
+    // CMS request still requires same-origin.
+    if (!isOidcCallbackPath(appPath) && !isSameOrigin(context.request, context.url)) {
       const refused = crossOriginRefusal();
       applySecurityHeaders(refused, { secure: isSecureRequest(context.request), nonce });
       return refused;
