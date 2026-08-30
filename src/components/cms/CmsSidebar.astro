@@ -69,9 +69,20 @@ const isActive = (href: string) =>
  * does not look as though it might.
  */
 const groups = [
-  { label: null, items: ['Home', 'Customers', 'CRM', 'Helpdesk', 'Orders'] },
+  { label: null, items: ['Home', 'CRM', 'Helpdesk', 'Orders'] },
   { label: 'Insights', items: ['Performance'] },
-  { label: 'Operations', items: ['Data'] },
+  /*
+   * CUSTOMERS SITS WITH DATA, IMMEDIATELY BEFORE IT.
+   *
+   * It was in the landing group, which is the set of things somebody opens
+   * fifty times a day without thinking. A customer master record is not that:
+   * it is maintained, not consulted, and it belongs beside the other thing this
+   * organisation maintains. Being in a collapsible group is the point rather
+   * than a side effect — it follows Operations' collapse state, and it is
+   * hidden entirely from anybody without the customer permission, which
+   * `visibleNav` already decides from the resolved codes.
+   */
+  { label: 'Operations', items: ['Customers', 'Data'] },
   { label: 'System', items: ['Administration'] },
 ] as const;
 
@@ -79,7 +90,13 @@ const groups = [
 const rendered = groups
   .map((group) => ({
     label: group.label,
-    entries: entries.filter((item) => group.items.includes(item.label as never)),
+    // ORDERED BY THE GROUP, NOT BY THE NAVIGATION MODEL. Filtering `entries`
+    // would leave the order to CMS_NAV, so moving an item between groups would
+    // silently reorder it. The group lists its items in the order it wants
+    // them, and that is the order they render in.
+    entries: group.items
+      .map((label) => entries.find((item) => item.label === label))
+      .filter((item): item is (typeof entries)[number] => item !== undefined),
   }))
   .filter((group) => group.entries.length > 0);
 ---
