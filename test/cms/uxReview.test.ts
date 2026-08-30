@@ -13,9 +13,10 @@ import { join } from 'node:path';
 import { createTestDb, type TestClient } from './support/db.ts';
 import { seedHass } from './support/hassSeed.ts';
 import { resolveScope, forgetResolvedScopes } from '../../src/lib/cms/auth/rbac.ts';
+import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
+import { countRoundTrips } from './support/subrequestBudget.ts';
 import { CMS_NAV, visibleNav, navItemAllowed } from '../../src/lib/cms/nav.ts';
 
-const asClient = (c: TestClient) => c as unknown as Parameters<typeof resolveScope>[0];
 
 function walk(dir: string, ext: string): string[] {
   const out: string[] = [];
@@ -31,58 +32,91 @@ const CMS_PAGES = walk('src/pages/cms', '.astro');
 const CMS_COMPONENTS = walk('src/components/cms', '.astro');
 const read = (path: string): string => readFileSync(path, 'utf8');
 
+/**
+ * A seeded database for the scope tests.
+ *
+ * IT WAS MISSING. This file arrived on `main` calling `db()` with no such
+ * helper anywhere in it, which the merge hid: the file also imported a symbol
+ * that no longer existed, so it failed to compile and nobody reached the
+ * runtime error underneath. It is defined here now, matching the one the
+ * subrequest budget test uses, including the two permission rows those tests
+ * resolve against: they live in the operator's numbered scripts rather than in
+ * the seed, so a test that needs them has to insert them.
+ */
+async function db(): Promise<TestClient> {
+  const c = createTestDb();
+  await seedHass(c);
+  await c.execute(`INSERT OR IGNORE INTO permissions (permission_id, module_name, resource_name, action_name, description) VALUES
+    ('PERM-031','CUSTOMERS','ACCOUNTS','VIEW','View customer accounts and their contacts'),
+    ('PERM-036','CRM','OPPORTUNITIES','VIEW','View opportunities and the pipeline')`);
+  await c.execute(`INSERT OR IGNORE INTO role_permissions (role_permission_id, role_id, permission_id, allowed, created_at)
+    SELECT 'RP-ADMIN-' || permission_id, 'ROLE-ADMIN', permission_id, 1, CURRENT_TIMESTAMP
+    FROM permissions WHERE permission_id IN ('PERM-031','PERM-036')`);
+  return c;
+}
+
 // ---------------------------------------------------------------------------
 // §5 The scope memo: the performance fix, and its security property
 // ---------------------------------------------------------------------------
 
-test('the scope memo answers from cache within one client and never across two', async () => {
+/**
+ * THESE TWO TESTS WERE REWRITTEN WHEN #175 AND #176 MET ON `main`.
+ *
+ * Two branches independently added a per-request scope memo and the merge kept
+ * one of them. The surviving implementation is the narrower and better of the
+ * two: it engages only for a client carrying the batcher's root symbol, which
+ * is what every page render uses, and deliberately does NOT memoise a bare
+ * client. The consequence is worth stating, because it is a safety property
+ * rather than an accident: code that resolves scope outside a batch, which
+ * includes every write path that grants a role and then re-reads, is never
+ * served an answer from before its own grant.
+ *
+ * The properties below are the ones the measurement was about and they are
+ * unchanged. They are now asserted through the batcher, because that is the
+ * only place the memo exists and therefore the only place it can be wrong.
+ */
+test('the scope memo answers from cache within one request and never across two', async () => {
   const c = await db();
   const other = await db();
 
-  let queries = 0;
-  const counting = (inner: TestClient): TestClient =>
-    ({
-      ...inner,
-      async execute(stmt: never) {
-        queries += 1;
-        return inner.execute(stmt);
-      },
-    }) as TestClient;
+  // One request: a batcher over one client, exactly as a page render builds it.
+  const countedOne = countRoundTrips(c);
+  const batcherOne = createBatcher(countedOne.db as never);
 
-  const one = counting(c) as unknown as Parameters<typeof resolveScope>[0];
+  const [first, second, differentPermission, differentUser] = await runSection(
+    batcherOne,
+    'memo',
+    async (client) => {
+      const a = await resolveScope(client, 'USR-CATH', 'CUSTOMERS.ACCOUNTS.VIEW');
+      const beforeRepeat = countedOne.statements();
+      const b = await resolveScope(client, 'USR-CATH', 'CUSTOMERS.ACCOUNTS.VIEW');
+      const repeatCost = countedOne.statements() - beforeRepeat;
 
-  const first = await resolveScope(one, 'USR-CATH', 'CUSTOMERS.ACCOUNTS.VIEW');
-  const after = queries;
-  const second = await resolveScope(one, 'USR-CATH', 'CUSTOMERS.ACCOUNTS.VIEW');
-  assert.equal(queries, after, 'the second resolution issued no query');
-  assert.deepEqual(second, first);
-
-  // A DIFFERENT PERMISSION IS A DIFFERENT KEY. The measured saving came from
-  // eight helpers asking the same question; it must never come from one
-  // helper receiving another's answer.
-  await resolveScope(one, 'USR-CATH', 'ORDERS.SALES_ORDER.VIEW');
-  assert.equal(queries > after, true, 'a different permission is resolved afresh');
-
-  // A DIFFERENT USER IS A DIFFERENT KEY. Serving a Group user's resolution to
-  // a country user is a breach, not a performance bug.
-  const beforeUser = queries;
-  const uganda = await resolveScope(one, 'USR-FMUG', 'CUSTOMERS.ACCOUNTS.VIEW');
-  assert.equal(queries > beforeUser, true, 'a different user is resolved afresh');
-  assert.equal(uganda.userId, 'USR-FMUG', 'and the answer is about that user');
-  assert.notEqual(uganda.userId, first.userId);
-
-  // A DIFFERENT CLIENT IS A DIFFERENT REQUEST. `getDb` builds one per
-  // request, so nothing memoised can outlive the request that memoised it.
-  let otherQueries = 0;
-  const two = {
-    ...other,
-    async execute(stmt: never) {
-      otherQueries += 1;
-      return other.execute(stmt);
+      // A DIFFERENT PERMISSION IS A DIFFERENT KEY. The measured saving came
+      // from eight helpers asking the same question; it must never come from
+      // one helper receiving another's answer.
+      const orders = await resolveScope(client, 'USR-CATH', 'ORDERS.SALES_ORDER.VIEW');
+      // A DIFFERENT USER IS A DIFFERENT KEY. Serving a Group user's
+      // resolution to a country user is a breach, not a performance bug.
+      const uganda = await resolveScope(client, 'USR-FMUG', 'CUSTOMERS.ACCOUNTS.VIEW');
+      assert.equal(repeatCost, 0, 'the second resolution of the same key issued no statement');
+      return [a, b, orders, uganda];
     },
-  } as unknown as Parameters<typeof resolveScope>[0];
-  await resolveScope(two, 'USR-CATH', 'CUSTOMERS.ACCOUNTS.VIEW');
-  assert.equal(otherQueries, 1, 'a fresh client resolves from the database');
+  ).then((r) => (r.ok ? r.value : Promise.reject(new Error('section failed'))));
+
+  assert.deepEqual(second, first, 'the cached answer is the same answer');
+  assert.equal(differentPermission.permission, 'ORDERS.SALES_ORDER.VIEW');
+  assert.equal(differentUser.userId, 'USR-FMUG', 'a different user gets their own answer');
+  assert.notEqual(differentUser.userId, first.userId);
+
+  // A DIFFERENT REQUEST IS A DIFFERENT CLIENT. `getDb` builds one per request,
+  // so nothing memoised can outlive the request that memoised it.
+  const countedTwo = countRoundTrips(other);
+  const batcherTwo = createBatcher(countedTwo.db as never);
+  await runSection(batcherTwo, 'memo', (client) =>
+    resolveScope(client, 'USR-CATH', 'CUSTOMERS.ACCOUNTS.VIEW'),
+  );
+  assert.ok(countedTwo.statements() > 0, 'a fresh request resolves from the database');
 
   c.close();
   other.close();
@@ -90,10 +124,17 @@ test('the scope memo answers from cache within one client and never across two',
 
 test('a permission granted after a resolution is seen by the next request', async () => {
   const c = await db();
-  const client = asClient(c);
 
-  const before = await resolveScope(client, 'USR-CATH', 'AUDIT.EVENTS.SECURITY_VIEW');
-  assert.equal(before.granted, false, 'the code does not exist yet');
+  const grantedIn = async (batcher: ReturnType<typeof createBatcher>) => {
+    const result = await runSection(batcher, 'grant', (client) =>
+      resolveScope(client, 'USR-CATH', 'AUDIT.EVENTS.SECURITY_VIEW'),
+    );
+    if (!result.ok) throw new Error('section failed');
+    return result.value.granted;
+  };
+
+  const requestOne = createBatcher(c as never);
+  assert.equal(await grantedIn(requestOne), false, 'the code does not exist yet');
 
   await c.execute(`INSERT OR IGNORE INTO permissions
       (permission_id, module_name, resource_name, action_name, description)
@@ -102,27 +143,22 @@ test('a permission granted after a resolution is seen by the next request', asyn
       (role_permission_id, role_id, permission_id, allowed, created_at)
     VALUES ('RP-ADM-041','ROLE-ADMIN','PERM-041',1,CURRENT_TIMESTAMP)`);
 
-  // Within the same notional request the answer is unchanged, which is
-  // correct: a permission does not change halfway through rendering a page.
-  const sameRequest = await resolveScope(client, 'USR-CATH', 'AUDIT.EVENTS.SECURITY_VIEW');
-  assert.equal(sameRequest.granted, false);
+  // Within the same request the answer is unchanged, which is correct: a
+  // permission does not change halfway through rendering a page.
+  assert.equal(await grantedIn(requestOne), false, 'the same request is consistent with itself');
 
-  // The next request sees it.
-  forgetResolvedScopes(client);
-  const nextRequest = await resolveScope(client, 'USR-CATH', 'AUDIT.EVENTS.SECURITY_VIEW');
-  assert.equal(nextRequest.granted, true);
+  // THE NEXT REQUEST. In production that is a new client, because `getDb`
+  // builds one per request and the memo is keyed on it. The harness holds ONE
+  // connection for the whole test, so a second batcher over it is still the
+  // same request as far as the memo is concerned; clearing the memo for that
+  // client is how the harness expresses the request boundary, and it is the
+  // only reason `forgetResolvedScopes` is exported at all.
+  forgetResolvedScopes(c as never);
+  const requestTwo = createBatcher(c as never);
+  assert.equal(await grantedIn(requestTwo), true, 'the next request sees the grant');
+
   c.close();
 });
-
-async function db(): Promise<TestClient> {
-  const c = createTestDb();
-  await seedHass(c);
-  return c;
-}
-
-// ---------------------------------------------------------------------------
-// §2 Navigation
-// ---------------------------------------------------------------------------
 
 test('no empty parent menu is shown to a user with no child permission', () => {
   // Every entry either requires no permission, or requires codes that a
