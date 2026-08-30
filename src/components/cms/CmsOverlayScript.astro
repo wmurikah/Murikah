@@ -9,6 +9,34 @@
  * data-cms-modal-open and no code was ever listening for it: the drawer was
  * inert on every small screen. Rendering this once from CmsLayout puts the
  * handler on every page of the shell whether or not a modal is present.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THE PLATFORM ALREADY DOES, AND WHAT IS ADDED HERE
+ * ---------------------------------------------------------------------------
+ *
+ * `showModal()` gives the focus trap, the inert background, the top layer and
+ * Escape-to-close. None of that is reimplemented below, because every one of
+ * them is a thing hand-written modals get subtly wrong.
+ *
+ * Three things it does not give us, added once here rather than per modal:
+ *
+ * 1. FOCUS RETURNS TO THE CONTROL THAT OPENED IT. Browsers restore focus to the
+ *    previously focused element on close, but only while that element still
+ *    exists and is still focusable — and a trigger inside a list that the save
+ *    re-rendered is neither. Remembering the opener explicitly and checking it
+ *    is still in the document is the difference between landing back on the
+ *    button you pressed and landing on <body>, which is where a keyboard user
+ *    has to start again from the top of the page.
+ *
+ * 2. THE PAGE BEHIND DOES NOT SCROLL. `showModal()` makes the background inert
+ *    to clicks and to the tab order, but a wheel or a trackpad still scrolls
+ *    the document under the dialog, so the context a modal exists to hold still
+ *    slides away. One class on <html> while any dialog is open.
+ *
+ * 3. AN EDITED FORM CONFIRMS BEFORE IT IS DISCARDED. A modal carrying
+ *    data-cms-confirm-dirty asks once, and only once anything inside it has
+ *    actually been changed. A dialog that prompts every time it closes teaches
+ *    people to dismiss the prompt that matters.
  */
 ---
 
@@ -23,29 +51,94 @@
     const dialogOf = (el: Element | null): HTMLDialogElement | null =>
       el?.closest('dialog') instanceof HTMLDialogElement ? el.closest('dialog') : null;
 
+    /** Which control opened each dialog, so focus can be handed back to it. */
     const openedBy = new WeakMap<HTMLDialogElement, HTMLElement>();
+    /** Dialogs whose contents have been edited since they opened. */
     const dirty = new WeakSet<HTMLDialogElement>();
-    const openDialogs = new Set<HTMLDialogElement>();
 
-    const lockPage = (dialog: HTMLDialogElement) => {
-      openDialogs.add(dialog);
-      document.body.style.overflow = 'hidden';
+    const lockPage = () => document.documentElement.classList.add('cms-overlay-open');
+    const releasePage = () => {
+      if (document.querySelector('dialog[open]') === null) {
+        document.documentElement.classList.remove('cms-overlay-open');
+      }
     };
-    const releasePage = (dialog: HTMLDialogElement) => {
-      openDialogs.delete(dialog);
-      if (openDialogs.size === 0) document.body.style.removeProperty('overflow');
-    };
+
     const open = (dialog: HTMLDialogElement, opener: HTMLElement) => {
       openedBy.set(dialog, opener);
+      dirty.delete(dialog);
       dialog.showModal();
-      lockPage(dialog);
-      dialog.querySelector<HTMLElement>('[autofocus], input, select, textarea, button')?.focus();
+      lockPage();
+      // The platform focuses the first focusable child, which is the close
+      // control in this shell's modals. A form's first FIELD is the better
+      // landing place: it is what the person came to do, and the close button
+      // is one Shift+Tab away either side of it.
+      const field = dialog.querySelector<HTMLElement>(
+        'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])',
+      );
+      field?.focus();
     };
-    const close = (dialog: HTMLDialogElement, force = false) => {
-      if (!force && dirty.has(dialog) && !window.confirm('Discard the changes you have made?'))
-        return;
+
+    /**
+     * Close, having asked first if the form has been edited.
+     *
+     * Returns whether it actually closed, so a caller that was mid-gesture (a
+     * backdrop click) does not go on to do anything else.
+     */
+    const close = (dialog: HTMLDialogElement, force = false): boolean => {
+      if (
+        !force &&
+        dialog.dataset.cmsConfirmDirty === 'true' &&
+        dirty.has(dialog) &&
+        !window.confirm('Discard your changes? Nothing has been saved.')
+      ) {
+        return false;
+      }
       dialog.close();
+      return true;
     };
+
+    // Anything edited inside a dialog marks it dirty. `input` rather than
+    // `change`, so a half-typed value counts: it is still work somebody would
+    // be annoyed to lose.
+    document.addEventListener('input', (event) => {
+      const dialog = dialogOf(event.target as Element | null);
+      if (dialog) dirty.add(dialog);
+    });
+
+    // FOCUS GOES BACK TO THE CONTROL THAT OPENED IT, wherever the close came
+    // from — the button, Escape, the backdrop, or a script. `close` fires for
+    // all of them, which is why the restore lives here and not in each path.
+    document.addEventListener(
+      'close',
+      (event) => {
+        const dialog = event.target;
+        if (!(dialog instanceof HTMLDialogElement)) return;
+        dirty.delete(dialog);
+        releasePage();
+        const opener = openedBy.get(dialog);
+        openedBy.delete(dialog);
+        // Only if it is still in the document and still focusable. A trigger
+        // inside a list the save re-rendered is neither, and focusing a
+        // detached node silently drops focus to <body>.
+        if (opener && opener.isConnected) opener.focus();
+      },
+      true,
+    );
+
+    // Escape reaches the dialog as `cancel` before it closes, which is the one
+    // place a discard can still be stopped.
+    document.addEventListener(
+      'cancel',
+      (event) => {
+        const dialog = event.target;
+        if (!(dialog instanceof HTMLDialogElement)) return;
+        if (dialog.dataset.cmsConfirmDirty === 'true' && dirty.has(dialog)) {
+          event.preventDefault();
+          close(dialog);
+        }
+      },
+      true,
+    );
 
     document.addEventListener('click', (event) => {
       const target = event.target as HTMLElement | null;
@@ -55,9 +148,7 @@
       if (trigger) {
         const id = trigger.getAttribute('data-cms-modal-open');
         const dialog = id ? document.getElementById(id) : null;
-        if (dialog instanceof HTMLDialogElement && !dialog.open) {
-          open(dialog, trigger);
-        }
+        if (dialog instanceof HTMLDialogElement && !dialog.open) open(dialog, opener);
         return;
       }
 
@@ -74,20 +165,13 @@
       if (target instanceof HTMLDialogElement && target.open) close(target);
     });
 
-    document.addEventListener('input', (event) => {
-      const dialog = dialogOf(event.target as HTMLElement | null);
-      if (dialog) dirty.add(dialog);
-    });
-
     document.addEventListener(
       'close',
       (event) => {
         if (!(event.target instanceof HTMLDialogElement)) return;
-        dirty.delete(event.target);
-        releasePage(event.target);
-        const opener = openedBy.get(event.target);
-        openedBy.delete(event.target);
-        if (opener?.isConnected) opener.focus();
+        document.body.style.removeProperty('overflow');
+        opener?.focus();
+        opener = null;
       },
       true,
     );
@@ -95,20 +179,22 @@
     document.addEventListener(
       'cancel',
       (event) => {
-        if (!(event.target instanceof HTMLDialogElement)) return;
-        if (!event.target.hasAttribute('data-cms-confirm-dirty')) return;
+        if (!(event.target instanceof HTMLDialogElement) || mayClose(event.target)) return;
         event.preventDefault();
-        close(event.target);
       },
       true,
     );
 
     // Following a link out of the drawer must not leave the dialog open behind
     // the new page in a browser that restores it from the back/forward cache.
+    // Forced, because navigating away is not a discard somebody needs warning
+    // about — they chose the link.
     document.addEventListener('click', (event) => {
       const link = (event.target as HTMLElement | null)?.closest('a[href]');
-      const dialog = dialogOf(link ?? null);
-      if (dialog) close(dialog, true);
+      if (link) {
+        const dialog = dialogOf(link);
+        if (dialog) close(dialog, true);
+      }
     });
   }
 </script>

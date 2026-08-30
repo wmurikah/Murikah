@@ -21,6 +21,7 @@
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsUserEditForm from '@/components/cms/CmsUserEditForm.astro';
 import CmsAuditTable from '@/components/cms/CmsAuditTable.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
@@ -68,6 +69,7 @@ const viewerUserId = Astro.locals.cms?.user.userId ?? '';
 
 const TABS = [
   'overview',
+  'edit',
   'assignments',
   'teams',
   'roles',
@@ -132,6 +134,7 @@ const statusTone = (status: string) =>
 
 const tabs = [
   { label: 'Overview', href: href('overview') },
+  { label: 'Edit', href: href('edit') },
   { label: 'Assignments', href: href('assignments'), count: assignments.length },
   { label: 'Teams', href: href('teams'), count: teams.length },
   { label: 'Roles', href: href('roles'), count: roles.length },
@@ -211,6 +214,25 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
         </CmsCard>
 
         <CmsTabs tabs={tabs} current={href(tab)} label="User sections" />
+
+        {tab === 'edit' && user !== null && (
+          <Fragment>
+            {/*
+              NO PAGE DESCRIPTION. The tab is called Edit and the fields name
+              themselves. What DOES belong on the screen is the consequence of
+              changing an address, and that appears next to the address rather
+              than in a paragraph at the top nobody reads.
+            */}
+            <CmsCard>
+              <CmsUserEditForm user={user} />
+            </CmsCard>
+            <p class="text-cms-body-sm text-cms-muted">
+              Roles and assignments are not edited here. The Roles tab stays read-only, which is
+              also the simplest protection against somebody editing their own access from a profile
+              screen.
+            </p>
+          </Fragment>
+        )}
 
         {tab === 'overview' && (
           <CmsCard>

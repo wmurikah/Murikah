@@ -1,0 +1,285 @@
+---
+/**
+ * Editing a user, under the user record.
+ *
+ * THREE RULES THE DATABASE ALREADY IMPLIES, AND THIS SCREEN RESPECTS.
+ *
+ * 1. CHANGING AN EMAIL CLEARS VERIFICATION AND MOVES THE STATUS, IN ONE
+ *    OPERATION. `users` carries CHECK(status != 'ACTIVE' OR email_verified_at
+ *    IS NOT NULL), so clearing verification while leaving the status at ACTIVE
+ *    is a row the database will not hold. Doing the two in sequence would leave
+ *    a window where the row violates its own CHECK and the update would be
+ *    rejected halfway with the address already changed. `updateUser` therefore
+ *    writes the address, clears `email_verified_at`, moves the status to
+ *    INVITED and issues a fresh verification token in ONE batch.
+ *
+ *    The screen says this before the submit rather than after it, because "this
+ *    signs them out and they must verify again" is the kind of consequence
+ *    somebody needs while deciding, not while apologising. The status control
+ *    is disabled the moment the address is edited, because the status is no
+ *    longer the reader's to choose: the database decides it.
+ *
+ *    INVITED rather than SUSPENDED, and the difference matters: SUSPENDED reads
+ *    as an administrative sanction and would show that way in every list, which
+ *    would be a false statement about somebody whose only act was to change
+ *    their address.
+ *
+ * 2. EMAIL AND EMPLOYEE NUMBER ARE UNIQUE, AND A COLLISION NAMES THE HOLDER.
+ *    `emailClash` and `employeeClash` already return "That email address
+ *    already belongs to Gabriel Otieno" rather than a constraint error, and
+ *    this form paints it under the field it belongs to.
+ *
+ * 3. `user_id` IS NEVER EDITABLE. Everything in the system points at it:
+ *    assignments, roles, audit events, workflow stage instances, account
+ *    managers. It is rendered as text with its own explanation, and there is no
+ *    input for it to be typed into — which is a stronger guarantee than a
+ *    disabled field, because a disabled field is one attribute away from being
+ *    editable and a paragraph is not.
+ *
+ * ROLES ARE NOT IN THIS FORM. The Roles tab stays read-only, which is also the
+ * simplest protection against somebody editing their own access from a profile
+ * screen.
+ */
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import type { UserRow } from '@/lib/cms/repos/userAdmin';
+import { USER_STATUSES } from '@/lib/cms/admin/userInput';
+import { STATUS_AFTER_EMAIL_CHANGE } from '@/lib/cms/repos/userAdmin';
+
+interface Props {
+  user: UserRow;
+}
+const { user } = Astro.props;
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+---
+
+<form id="cms-user-edit" novalidate class="flex flex-col gap-4" data-user-id={user.userId}>
+  <p
+    id="cms-user-edit-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+  >
+  </p>
+  <p
+    id="cms-user-edit-saved"
+    role="status"
+    hidden
+    class="rounded-cms border border-cms-positive bg-cms-positive-tint px-3 py-2 text-cms-body-sm text-cms-positive"
+  >
+  </p>
+
+  {
+    /*
+      THE IDENTIFIER, AS TEXT. There is no input, so there is nothing to enable.
+    */
+  }
+  <div class="rounded-cms border border-cms-line bg-cms-sunken px-3 py-2">
+    <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">User ID</p>
+    <p class="mt-0.5 font-mono text-cms-body-sm text-cms-ink">{user.userId}</p>
+    <p class="mt-1 text-cms-caption text-cms-muted">
+      Permanent. Every assignment, role, audit event and approval in the system points at this, so
+      it cannot be changed here or anywhere else.
+    </p>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2">
+    <CmsInput
+      id="u-firstName"
+      name="firstName"
+      label="First name"
+      required
+      value={user.firstName}
+    />
+    <CmsInput id="u-lastName" name="lastName" label="Last name" required value={user.lastName} />
+    <CmsInput
+      id="u-displayName"
+      name="displayName"
+      label="Display name"
+      required
+      value={user.displayName}
+      hint="What appears on approvals, leaderboards and the audit trail."
+    />
+    <CmsInput
+      id="u-employeeNo"
+      name="employeeNo"
+      label="Employee number"
+      value={user.employeeNo ?? ''}
+      hint="Unique across every user. Leave blank if there is none."
+    />
+    <CmsInput id="u-email" name="email" label="Email" type="email" required value={user.email} />
+    <CmsInput id="u-phone" name="phone" label="Phone" value={user.phone ?? ''} />
+    <CmsInput id="u-timezone" name="timezone" label="Timezone" required value={user.timezone} />
+    <CmsInput id="u-locale" name="locale" label="Locale" required value={user.locale} />
+  </div>
+
+  {
+    /*
+      THE CONSEQUENCE, BEFORE THE SUBMIT. Hidden until the address is actually
+      edited, so it is a statement about what is about to happen rather than a
+      standing warning nobody reads.
+    */
+  }
+  <p
+    id="cms-user-email-warning"
+    hidden
+    class="rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink"
+  >
+    Changing this address signs {user.displayName} out and requires them to verify the new one. The account
+    moves to {titleCase(STATUS_AFTER_EMAIL_CHANGE)} and a fresh invitation is issued, all in the same
+    operation — the database will not hold an active account with an unverified address, so the status
+    is not a separate choice.
+  </p>
+
+  <CmsSelect
+    id="u-status"
+    name="status"
+    label="Status"
+    required
+    value={user.status}
+    options={USER_STATUSES.map((status) => ({ value: status, label: titleCase(status) }))}
+    hint={user.emailVerifiedAt === null
+      ? 'This address is not verified, so the account cannot be made active until it is.'
+      : undefined}
+  />
+
+  <div class="flex flex-wrap items-center gap-2">
+    <button
+      type="submit"
+      data-cms-user-save
+      class="inline-flex h-9 items-center rounded-cms bg-cms-royal px-3.5 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Save changes
+    </button>
+    <a
+      href={`/app/administration/users/${user.userId}`}
+      class="inline-flex h-9 items-center rounded-cms px-3 text-cms-body-sm font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Cancel
+    </a>
+  </div>
+</form>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const form = document.getElementById('cms-user-edit') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-user-edit-error');
+  const savedBox = document.getElementById('cms-user-edit-saved');
+  const emailWarning = document.getElementById('cms-user-email-warning');
+
+  if (form) {
+    const userId = form.dataset.userId ?? '';
+    const email = form.querySelector<HTMLInputElement>('#u-email');
+    // `getElementById` plus an instance check rather than a generic
+    // `querySelector<HTMLSelectElement>`: the DOM lib's `Element.remove()`
+    // returns void while `HTMLSelectElement.remove(index)` returns void too but
+    // with an incompatible signature, so the generic does not satisfy the
+    // `Element` constraint. The narrow is exact and costs nothing.
+    const statusNode = document.getElementById('u-status');
+    const status = statusNode instanceof HTMLSelectElement ? statusNode : null;
+    const originalEmail = email?.value ?? '';
+
+    /**
+     * THE STATUS STOPS BEING THE READER'S TO CHOOSE the moment the address is
+     * edited, because the database decides it: an account with an unverified
+     * address cannot be ACTIVE, so the write moves it and any choice made here
+     * would be silently overridden. A disabled control that says why is honest;
+     * a live control whose value is ignored is not.
+     */
+    const reflect = () => {
+      const changing = (email?.value ?? '') !== originalEmail && (email?.value ?? '') !== '';
+      if (emailWarning) emailWarning.hidden = !changing;
+      if (status) {
+        status.disabled = changing;
+        status.setAttribute('aria-disabled', changing ? 'true' : 'false');
+      }
+    };
+    email?.addEventListener('input', reflect);
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      for (const box of [errorBox, savedBox]) {
+        if (box) {
+          box.hidden = true;
+          box.textContent = '';
+        }
+      }
+    };
+
+    const paint = (fields: FieldError[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        const element = field instanceof HTMLElement ? field : null;
+        if (!element || !element.id) continue;
+        element.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${element.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      const save = form.querySelector<HTMLButtonElement>('[data-cms-user-save]');
+      if (save) save.disabled = true;
+      // A disabled control sends no value, so the status is read directly:
+      // the server moves it anyway on an email change, and sending the current
+      // one keeps the payload complete for every other case.
+      const body: Record<string, unknown> = { status: status?.value ?? '' };
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string') body[name] = value;
+      }
+      try {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          fields?: FieldError[];
+          message?: string;
+          emailChanged?: boolean;
+        };
+        if (response.ok) {
+          if (savedBox) {
+            savedBox.textContent = data.emailChanged
+              ? 'Saved. The address changed, so verification was cleared, the account moved to Invited and a fresh invitation was issued.'
+              : 'Saved. Every change is recorded in this user’s audit trail.';
+            savedBox.hidden = false;
+          }
+          return;
+        }
+        if (Array.isArray(data.fields) && data.fields.length > 0) {
+          paint(data.fields);
+          return;
+        }
+        if (errorBox) {
+          errorBox.textContent = data.message ?? 'That could not be saved. Try again.';
+          errorBox.hidden = false;
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.textContent = 'That could not be saved. Check your connection and try again.';
+          errorBox.hidden = false;
+        }
+      } finally {
+        if (save) save.disabled = false;
+      }
+    });
+  }
+</script>

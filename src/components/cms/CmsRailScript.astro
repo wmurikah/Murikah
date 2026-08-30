@@ -35,6 +35,7 @@
   const root = document.body;
   const button = document.querySelector<HTMLButtonElement>('[data-cms-rail-pin]');
   const label = document.querySelector<HTMLElement>('[data-cms-rail-pin-label]');
+  const note = document.querySelector<HTMLElement>('[data-cms-rail-pin-note]');
   const rail = document.querySelector<HTMLElement>('[data-cms-rail]');
 
   const paint = (pinned: boolean) => {
@@ -42,6 +43,10 @@
     else delete root.dataset.railPinned;
     if (button) button.setAttribute('aria-pressed', String(pinned));
     if (label) label.textContent = pinned ? 'Collapse' : 'Keep open';
+    // WHETHER A CHOICE IS IN FORCE, said out loud. A rail pinned in this
+    // browser months ago is indistinguishable from a rail that will not
+    // collapse, and the second reading is the one people reach for.
+    if (note) note.textContent = pinned ? 'Kept open in this browser' : '';
   };
 
   // COLLAPSED UNLESS THIS BROWSER SAID OTHERWISE. No width test: the rail is
