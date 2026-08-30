@@ -14,8 +14,7 @@ import { toDbTimestamp } from '../auth/session.ts';
 import type { WriteContext } from '../admin/guard.ts';
 
 const text = (v: unknown): string => String(v ?? '');
-const maybeText = (v: unknown): string | null =>
-  v === null || v === undefined ? null : String(v);
+const maybeText = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
 
 export const CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
 export type Channel = (typeof CHANNELS)[number];
@@ -71,10 +70,7 @@ export async function listConnections(db: Client): Promise<ChannelConnection[]> 
   return found.rows.map(rowToConnection);
 }
 
-export async function getConnection(
-  db: Client,
-  id: string,
-): Promise<ChannelConnection | null> {
+export async function getConnection(db: Client, id: string): Promise<ChannelConnection | null> {
   const found = await db.execute({
     sql: `${SELECT} WHERE channel_connection_id = ?`,
     args: [id],
@@ -125,10 +121,7 @@ export function validateConnection(input: ConnectionInput): FieldError[] {
         'Give the name of the Worker secret, in capitals and underscores. This is the name, ' +
         'not the key.',
     });
-  if (
-    input.webhookSecretName !== null &&
-    !/^[A-Z][A-Z0-9_]{2,63}$/.test(input.webhookSecretName)
-  )
+  if (input.webhookSecretName !== null && !/^[A-Z][A-Z0-9_]{2,63}$/.test(input.webhookSecretName))
     errors.push({
       field: 'webhookSecretName',
       message: 'Leave blank, or give the name of the Worker secret in capitals and underscores.',

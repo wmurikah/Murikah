@@ -37,10 +37,8 @@ import { getConnection } from './channels.ts';
 import { createCase } from '../repos/serviceAdmin.ts';
 
 const text = (v: unknown): string => String(v ?? '');
-const maybeText = (v: unknown): string | null =>
-  v === null || v === undefined ? null : String(v);
-const maybeNum = (v: unknown): number | null =>
-  v === null || v === undefined ? null : Number(v);
+const maybeText = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+const maybeNum = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 
 /**
  * The confidence at or above which a connection with `auto_create_case` on
@@ -65,8 +63,7 @@ export const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export const REVIEW_STATUSES = ['PENDING', 'ACCEPTED', 'CORRECTED', 'REJECTED'] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
-export const NO_PROVIDER_NOTE =
-  'No classifier is configured, so messages are queued unclassified.';
+export const NO_PROVIDER_NOTE = 'No classifier is configured, so messages are queued unclassified.';
 
 export interface IncomingMessage {
   readonly channelConnectionId: string;
@@ -93,10 +90,7 @@ export interface IngestResult {
  * rather than by a check this code performs and a competing request invalidates
  * a microsecond later.
  */
-export async function ingestMessage(
-  db: Client,
-  message: IncomingMessage,
-): Promise<IngestResult> {
+export async function ingestMessage(db: Client, message: IncomingMessage): Promise<IngestResult> {
   const id = newId('CHM');
   await db.execute({
     sql: `INSERT INTO channel_messages
@@ -514,8 +508,7 @@ export async function reviewClassification(
   const categoryId =
     (corrected ? decision.categoryId : null) ?? maybeText(row.suggested_case_category_id);
   const priority = (corrected ? decision.priority : null) ?? maybeText(row.suggested_priority);
-  const accountId =
-    (corrected ? decision.accountId : null) ?? maybeText(row.suggested_account_id);
+  const accountId = (corrected ? decision.accountId : null) ?? maybeText(row.suggested_account_id);
 
   if (accountId === null || categoryId === null) {
     return {
