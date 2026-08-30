@@ -43,6 +43,18 @@ interface Section {
 
 const sections: Section[] = [
   {
+    label: 'AI',
+    href: '/app/administration/ai',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
+    label: 'Channels',
+    href: '/app/administration/channels',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
     label: 'Organisation',
     href: ORGANISATION_PATH,
     ready: true,

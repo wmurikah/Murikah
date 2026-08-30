@@ -98,6 +98,17 @@ const context = user ? organisationLine(user.assignment) : null;
   </div>
 
   <div class="ms-auto flex items-center gap-1">
+    {
+      /*
+        Opens the assistant, which is rendered by the shell and reads nothing
+        until this is pressed. A real control: it opens a real panel.
+      */
+    }
+    {
+      principal !== null && (
+        <CmsIconButton icon="chat" label="Open the assistant" data-cms-modal-open="cms-assistant" />
+      )
+    }
     <CmsDropdown id="cms-notifications" label="Notifications">
       <span
         slot="trigger"
