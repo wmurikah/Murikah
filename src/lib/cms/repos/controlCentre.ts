@@ -312,7 +312,7 @@ async function suspendedPortalMemberships(db: Client): Promise<HealthCheck> {
     severity: 'INFORMATION',
     count: rows.length,
     examples: rows,
-    href: '/app/customers',
+    href: '/app/operations/customers',
   };
 }
 

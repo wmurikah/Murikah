@@ -144,9 +144,9 @@
       const target = event.target as HTMLElement | null;
       if (!target) return;
 
-      const opener = target.closest<HTMLElement>('[data-cms-modal-open]');
-      if (opener) {
-        const id = opener.getAttribute('data-cms-modal-open');
+      const trigger = target.closest<HTMLElement>('[data-cms-modal-open]');
+      if (trigger) {
+        const id = trigger.getAttribute('data-cms-modal-open');
         const dialog = id ? document.getElementById(id) : null;
         if (dialog instanceof HTMLDialogElement && !dialog.open) open(dialog, opener);
         return;
@@ -164,6 +164,26 @@
       // outside.
       if (target instanceof HTMLDialogElement && target.open) close(target);
     });
+
+    document.addEventListener(
+      'close',
+      (event) => {
+        if (!(event.target instanceof HTMLDialogElement)) return;
+        document.body.style.removeProperty('overflow');
+        opener?.focus();
+        opener = null;
+      },
+      true,
+    );
+
+    document.addEventListener(
+      'cancel',
+      (event) => {
+        if (!(event.target instanceof HTMLDialogElement) || mayClose(event.target)) return;
+        event.preventDefault();
+      },
+      true,
+    );
 
     // Following a link out of the drawer must not leave the dialog open behind
     // the new page in a browser that restores it from the back/forward cache.

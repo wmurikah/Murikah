@@ -63,6 +63,7 @@ const SEVERITY = {
 
 const findings = health.checks.filter((check) => check.count > 0);
 const clean = health.checks.filter((check) => check.count === 0);
+const shortRule = (rule: string) => rule.split(/(?<=[.!?])\s/, 1)[0] ?? rule;
 ---
 
 <CmsLayout title="System health">
