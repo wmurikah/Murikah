@@ -1,0 +1,288 @@
+---
+/**
+ * Administration → Workflow Authority Review.
+ *
+ * IT ANSWERS ONE QUESTION DIRECTLY: who can approve this today.
+ *
+ * "Today" is the substance of it. A workflow role assignment is
+ * effective-dated, so the configuration can look perfectly correct while
+ * nobody actually holds the authority any more: a date passed on Friday and
+ * from Monday the stage has nobody. Reading the rows without the dates in
+ * mind is exactly how that goes unnoticed, so the date is a filter with a
+ * default of today rather than a column somebody might scan past.
+ *
+ * A GROUP assignment answers for every geography, and a country assignment
+ * answers for the affiliates inside that country, because that is the
+ * hierarchy the scope resolver uses. This screen reads it the same way rather
+ * than inventing a second one.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
+import { authorityReview, type AuthorityReviewRow } from '@/lib/cms/repos/controlCentre';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canManageUsers(permissions) || canManageWorkflowRoles(permissions);
+const params = Astro.url.searchParams;
+const today = toDbTimestamp(new Date()).slice(0, 10);
+
+const processType = params.get('processType') ?? '';
+const countryId = params.get('countryId') ?? '';
+const affiliateId = params.get('affiliateId') ?? '';
+const businessUnitId = params.get('businessUnitId') ?? '';
+const asAtRaw = params.get('effectiveOn');
+const showAll = asAtRaw === 'all';
+const effectiveOn = showAll ? null : asAtRaw !== null && asAtRaw !== '' ? asAtRaw : today;
+
+let rows: AuthorityReviewRow[] = [];
+let countries: { id: string; label: string }[] = [];
+let affiliates: { id: string; label: string }[] = [];
+let businessUnits: { id: string; label: string }[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const [reviewed, countryRows, affiliateRows, unitRows] = await Promise.all([
+      authorityReview(db, {
+        processType: processType === '' ? null : processType,
+        countryId: countryId === '' ? null : countryId,
+        affiliateId: affiliateId === '' ? null : affiliateId,
+        businessUnitId: businessUnitId === '' ? null : businessUnitId,
+        effectiveOn,
+      }),
+      db.execute(
+        `SELECT country_id AS id, country_name AS label FROM countries ORDER BY country_name`,
+      ),
+      db.execute(
+        `SELECT affiliate_id AS id, affiliate_name AS label FROM affiliates ORDER BY affiliate_name`,
+      ),
+      db.execute(
+        `SELECT business_unit_id AS id, business_unit_name AS label FROM business_units ORDER BY business_unit_name`,
+      ),
+    ]);
+    rows = reviewed;
+    const list = (result: { rows: unknown[] }) =>
+      result.rows.map((raw) => {
+        const row = raw as Record<string, unknown>;
+        return { id: String(row.id), label: String(row.label) };
+      });
+    countries = list(countryRows);
+    affiliates = list(affiliateRows);
+    businessUnits = list(unitRows);
+  } catch (error) {
+    console.error('[cms.control.authority] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const PROCESSES = [
+  { value: '', label: 'Any process' },
+  { value: 'SALES_ORDER', label: 'Sales order' },
+  { value: 'PURCHASE_ORDER', label: 'Purchase order' },
+  { value: 'CREDIT_EXCEPTION', label: 'Credit exception' },
+  { value: 'LEAD', label: 'Lead' },
+  { value: 'OPPORTUNITY', label: 'Opportunity' },
+  { value: 'CASE', label: 'Case' },
+];
+const money = (value: number | null): string =>
+  value === null ? 'no limit' : value.toLocaleString('en-KE');
+---
+
+<CmsLayout title="Workflow authority review">
+  <CmsPageHeader
+    title="Workflow authority review"
+    crumbs={[
+      { label: 'Administration', href: '/app/administration' },
+      { label: 'Workflow authority' },
+    ]}
+  />
+
+  {
+    !mayRead ? (
+      <CmsEmptyState
+        icon="administration"
+        title="You do not have permission to review workflow authority"
+        description="Ask an administrator for access."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Workflow authority could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <CmsCard title="Ask the question">
+          <form method="get" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <CmsSelect
+              id="processType"
+              name="processType"
+              label="Process"
+              value={processType}
+              options={PROCESSES}
+            />
+            <CmsSelect
+              id="countryId"
+              name="countryId"
+              label="Country"
+              value={countryId}
+              options={[
+                { value: '', label: 'Any country' },
+                ...countries.map((row) => ({ value: row.id, label: row.label })),
+              ]}
+            />
+            <CmsSelect
+              id="affiliateId"
+              name="affiliateId"
+              label="Affiliate"
+              value={affiliateId}
+              options={[
+                { value: '', label: 'Any affiliate' },
+                ...affiliates.map((row) => ({ value: row.id, label: row.label })),
+              ]}
+            />
+            <CmsSelect
+              id="businessUnitId"
+              name="businessUnitId"
+              label="Business unit"
+              value={businessUnitId}
+              options={[
+                { value: '', label: 'Any business unit' },
+                ...businessUnits.map((row) => ({ value: row.id, label: row.label })),
+              ]}
+            />
+            <CmsInput
+              id="effectiveOn"
+              name="effectiveOn"
+              label="In force on"
+              type="date"
+              value={showAll ? '' : (effectiveOn ?? today)}
+              hint="Defaults to today. Clear it and tick below to include history."
+            />
+            <label class="flex items-center gap-2 self-end text-cms-body-sm text-cms-ink">
+              <input
+                type="checkbox"
+                name="effectiveOn"
+                value="all"
+                checked={showAll}
+                class="h-4 w-4 rounded border-cms-border text-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+              />
+              Include expired and future assignments
+            </label>
+            <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
+              <CmsButton type="submit" variant="primary" icon="filter">
+                Apply
+              </CmsButton>
+              <CmsButton href="/app/administration/authority" variant="secondary">
+                Reset
+              </CmsButton>
+            </div>
+          </form>
+        </CmsCard>
+
+        <p class="text-cms-body-sm text-cms-muted">
+          {rows.length} {rows.length === 1 ? 'assignment' : 'assignments'}
+          {showAll ? ', including expired and future ones' : `, in force on ${effectiveOn}`}.
+        </p>
+
+        {rows.length === 0 ? (
+          <CmsEmptyState
+            icon="statusWarn"
+            title="Nobody holds this authority"
+            description="For the process, geography and date you asked about, no active assignment exists. A transaction reaching that stage would have no approver."
+          />
+        ) : (
+          <CmsCard bodyClass="p-0">
+            <div class="overflow-x-auto px-4 py-3">
+              <table class="w-full min-w-[52rem] border-collapse text-left">
+                <caption class="sr-only">Workflow authority assignments</caption>
+                <thead>
+                  <tr class="border-b border-cms-line">
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      Workflow role
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      Person
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      Scope
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                      Effective
+                    </th>
+                    <th scope="col" class="py-2 text-cms-label font-semibold text-cms-muted">
+                      Authority rules
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr class="border-b border-cms-line align-top last:border-0">
+                      <td class="py-3 pr-3">
+                        <span class="block text-cms-body-sm font-medium text-cms-ink">
+                          {row.workflowRoleName}
+                        </span>
+                        {row.processType !== null && (
+                          <span class="block text-cms-caption text-cms-muted">
+                            {row.processType}
+                          </span>
+                        )}
+                      </td>
+                      <td class="py-3 pr-3">
+                        <span class="block text-cms-body-sm text-cms-ink">{row.displayName}</span>
+                        {row.userStatus !== 'ACTIVE' && (
+                          <CmsBadge tone="warning" label={row.userStatus} />
+                        )}
+                      </td>
+                      <td class="py-3 pr-3">
+                        <CmsBadge
+                          tone={row.scopeType === 'GROUP' ? 'warning' : 'neutral'}
+                          label={row.scopeLabel}
+                        />
+                      </td>
+                      <td class="py-3 pr-3 text-cms-body-sm text-cms-muted tabular-nums">
+                        {row.effectiveFrom} to {row.effectiveTo ?? 'no end date'}
+                        {!row.effectiveToday && (
+                          <span class="mt-0.5 block">
+                            <CmsBadge tone="neutral" label="Not in force on this date" />
+                          </span>
+                        )}
+                      </td>
+                      <td class="py-3 text-cms-body-sm text-cms-muted">
+                        {row.rules.length === 0 ? (
+                          'No value rule'
+                        ) : (
+                          <ul class="flex flex-col gap-0.5">
+                            {row.rules.map((rule) => (
+                              <li>
+                                {rule.processType}
+                                {rule.currency === null ? '' : ` in ${rule.currency}`}: from{' '}
+                                {money(rule.minAmount)} to {money(rule.maxAmount)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CmsCard>
+        )}
+      </div>
+    )
+  }
+</CmsLayout>

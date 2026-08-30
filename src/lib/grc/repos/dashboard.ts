@@ -29,6 +29,12 @@ import { C, cols } from '@grc/schema/columns';
 import { CACHE_TTL, cacheKeys, cached } from '@grc/cache';
 import { NOT_OVERDUE_STATUSES } from '@grc/reports/reportModel';
 import { isAuditeeRole } from '@grc/dashboard/roleNav';
+import {
+  affiliatePredicate,
+  affiliateScopeKey,
+  type AffiliateScope,
+  type ScopePredicate,
+} from '@grc/auth/affiliateScope';
 
 const WP = cols(C.work_papers);
 const WPa = cols(C.work_papers, 'wp');
@@ -38,6 +44,10 @@ const RESP = cols(C.work_paper_responsibles, 'r');
 const AFF = cols(C.affiliates, 'aff');
 const USR = cols(C.users, 'u');
 const AA = cols(C.audit_areas, 'aa');
+// The requirements loop, for the sidebar's "waiting on me" badge (Build Prompt 60).
+const R = cols(C.work_paper_requirements, 'r');
+const RO = cols(C.requirement_owners, 'o');
+const RS = cols(C.requirement_submissions, 'sub');
 
 // Seeded action-plan status literals the analytics buckets match. 'Not Implemented'
 // is a seed value distinct from the workflow enum (AP_STATUS); 'Verified' and
@@ -51,6 +61,8 @@ export interface DashboardScope {
   roleCode: string;
   isPlatformOwner: boolean;
   perms: string[];
+  /** The affiliate confinement in force, from locals.grc.affiliateScope. */
+  affiliateScope: AffiliateScope;
 }
 
 /** An auditee (and not a platform owner) sees only their own items. */
@@ -64,7 +76,17 @@ function auditeeScoped(scope: DashboardScope): boolean {
  * every other role sees the same organisation-wide figures and shares one entry.
  */
 function scopeKey(scope: DashboardScope): string {
-  return auditeeScoped(scope) ? `user=${scope.userId}` : 'org';
+  // The affiliate confinement is part of the key, not an afterthought: two
+  // viewers with different confinement see genuinely different figures, and a
+  // shared cache entry would hand one of them the other's totals. This is the
+  // same reason an auditee-scoped read is keyed to its user.
+  const base = auditeeScoped(scope) ? `user=${scope.userId}` : 'org';
+  return `${base}:${affiliateScopeKey(scope.affiliateScope)}`;
+}
+
+/** The confinement predicate for a work-paper alias in this file's queries. */
+function confineWp(scope: DashboardScope, alias = 'wp'): ScopePredicate {
+  return affiliatePredicate(scope.affiliateScope, cols(C.work_papers, alias).affiliate_code);
 }
 
 const s = (v: unknown): string | null => (v == null ? null : String(v));
@@ -111,6 +133,7 @@ async function readDashboardStats(
   scope: DashboardScope,
 ): Promise<DashboardStats> {
   const auditee = auditeeScoped(scope);
+  const wpConfine = confineWp(scope);
 
   // Work papers and pending review.
   let workPapers = 0;
@@ -121,17 +144,18 @@ async function readDashboardStats(
              WHERE ${WPa.organization_id} = ?
                AND EXISTS (SELECT 1 FROM work_paper_responsibles r
                             WHERE ${RESP.work_paper_id} = ${WPa.work_paper_id}
-                              AND ${RESP.user_id} = ?)`,
-      args: [organizationId, scope.userId],
+                              AND ${RESP.user_id} = ?)${wpConfine.clause}`,
+      args: [organizationId, scope.userId, ...wpConfine.args],
     });
     workPapers = num(res.rows[0]?.total);
     pendingReview = 0;
   } else {
+    const bare = affiliatePredicate(scope.affiliateScope, WP.affiliate_code);
     const res = await db.execute({
       sql: `SELECT COUNT(*) AS total,
                    SUM(CASE WHEN ${WP.status} = 'Submitted' THEN 1 ELSE 0 END) AS pending
-              FROM work_papers WHERE ${WP.organization_id} = ?`,
-      args: [organizationId],
+              FROM work_papers WHERE ${WP.organization_id} = ?${bare.clause}`,
+      args: [organizationId, ...bare.args],
     });
     workPapers = num(res.rows[0]?.total);
     pendingReview = num(res.rows[0]?.pending);
@@ -144,6 +168,9 @@ async function readDashboardStats(
     apWhere += ` AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?`;
     apArgs.push(ownerLike(scope.userId));
   }
+  const apConfine = affiliatePredicate(scope.affiliateScope, AP.affiliate_code);
+  apWhere += apConfine.clause;
+  apArgs.push(...apConfine.args);
   const apRes = await db.execute({
     sql: `SELECT COUNT(*) AS total,
                  SUM(CASE WHEN ${overdueClause('action_plans')} THEN 1 ELSE 0 END) AS overdue
@@ -186,20 +213,23 @@ export async function getPendingReviews(
   // Auditees do not have a review queue.
   if (auditeeScoped(scope)) return { toReview: [], toVerify: [], responsesToReview: [] };
 
+  const wpBare = affiliatePredicate(scope.affiliateScope, WP.affiliate_code);
+  const apBare = affiliatePredicate(scope.affiliateScope, AP.affiliate_code);
+  const wpAliasBare = confineWp(scope);
   const [review, verify, responses] = await Promise.all([
     db.execute({
       sql: `SELECT ${WP.work_paper_id} AS id, ${WP.work_paper_ref} AS reference,
                    ${WP.observation_title} AS title, ${WP.risk_rating} AS risk
-              FROM work_papers WHERE ${WP.organization_id} = ? AND ${WP.status} = 'Submitted'
+              FROM work_papers WHERE ${WP.organization_id} = ? AND ${WP.status} = 'Submitted'${wpBare.clause}
           ORDER BY ${WP.updated_at} DESC LIMIT 10`,
-      args: [organizationId],
+      args: [organizationId, ...wpBare.args],
     }),
     db.execute({
       sql: `SELECT ${AP.action_plan_id} AS id, COALESCE(${AP.action_ref}, ${AP.action_number}) AS reference,
                    ${AP.action_description} AS title
-              FROM action_plans WHERE ${AP.organization_id} = ? AND ${AP.status} = 'Pending Verification'
+              FROM action_plans WHERE ${AP.organization_id} = ? AND ${AP.status} = 'Pending Verification'${apBare.clause}
           ORDER BY ${AP.updated_at} DESC LIMIT 10`,
-      args: [organizationId],
+      args: [organizationId, ...apBare.args],
     }),
     db.execute({
       sql: `SELECT ${WPa.work_paper_id} AS id, ${WPa.work_paper_ref} AS reference,
@@ -208,9 +238,9 @@ export async function getPendingReviews(
               FROM work_papers wp
               LEFT JOIN affiliates aff ON ${AFF.affiliate_code} = ${WPa.affiliate_code}
                    AND ${AFF.organization_id} = ${WPa.organization_id}
-             WHERE ${WPa.organization_id} = ? AND ${WPa.status} = 'Response Received'
+             WHERE ${WPa.organization_id} = ? AND ${WPa.status} = 'Response Received'${wpAliasBare.clause}
           ORDER BY ${WPa.updated_at} DESC LIMIT 10`,
-      args: [organizationId],
+      args: [organizationId, ...wpAliasBare.args],
     }),
   ]);
 
@@ -262,6 +292,9 @@ export async function getDueThisWeek(
     where += ` AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?`;
     args.push(ownerLike(scope.userId));
   }
+  const dueConfine = affiliatePredicate(scope.affiliateScope, AP.affiliate_code);
+  where += dueConfine.clause;
+  args.push(...dueConfine.args);
   const res = await db.execute({
     sql: `SELECT ${AP.action_plan_id} AS id, COALESCE(${AP.action_ref}, ${AP.action_number}) AS reference,
                  ${AP.action_description} AS title, ${AP.due_date}, ${AP.owner_names} AS owners
@@ -303,12 +336,18 @@ export async function getRecentActivity(
       ` AND ${RESP.user_id} = ?)`;
     wpArgs.push(scope.userId);
   }
+  const wpConfine = confineWp(scope);
+  wpWhere += wpConfine.clause;
+  wpArgs.push(...wpConfine.args);
   const apArgs: InArgs = [organizationId];
   let apWhere = `${AP.organization_id} = ?`;
   if (auditee) {
     apWhere += ` AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?`;
     apArgs.push(ownerLike(scope.userId));
   }
+  const apConfine = affiliatePredicate(scope.affiliateScope, AP.affiliate_code);
+  apWhere += apConfine.clause;
+  apArgs.push(...apConfine.args);
 
   const [wpRes, apRes] = await Promise.all([
     db.execute({
@@ -368,16 +407,19 @@ export interface TeamPerformance {
 export async function getTeamPerformance(
   db: Client,
   organizationId: string,
+  scope: DashboardScope,
 ): Promise<TeamPerformance> {
+  // Both halves aggregate through work_papers wp, so one predicate covers them.
+  const confine = confineWp(scope);
   const [productivity, affiliates] = await Promise.all([
     db.execute({
       sql: `SELECT ${USR.full_name} AS auditor, COUNT(*) AS n
               FROM work_papers wp
               JOIN users u ON ${USR.user_id} = ${WPa.assigned_auditor_id}
-             WHERE ${WPa.organization_id} = ? AND ${WPa.assigned_auditor_id} IS NOT NULL
+             WHERE ${WPa.organization_id} = ? AND ${WPa.assigned_auditor_id} IS NOT NULL${confine.clause}
           GROUP BY ${WPa.assigned_auditor_id}
           ORDER BY n DESC LIMIT 10`,
-      args: [organizationId],
+      args: [organizationId, ...confine.args],
     }),
     // Action plans have no affiliate of their own: join through the work paper (GAP-507).
     db.execute({
@@ -389,10 +431,10 @@ export async function getTeamPerformance(
                    AND ${WPa.organization_id} = ${APa.organization_id}
               LEFT JOIN affiliates aff ON ${AFF.affiliate_code} = ${WPa.affiliate_code}
                    AND ${AFF.organization_id} = ${WPa.organization_id}
-             WHERE ${APa.organization_id} = ?
+             WHERE ${APa.organization_id} = ?${confine.clause}
           GROUP BY ${WPa.affiliate_code}
           ORDER BY (open + closed) DESC LIMIT 10`,
-      args: [...NOT_OVERDUE_STATUSES, ...NOT_OVERDUE_STATUSES, organizationId],
+      args: [...NOT_OVERDUE_STATUSES, ...NOT_OVERDUE_STATUSES, organizationId, ...confine.args],
     }),
   ]);
 
@@ -444,17 +486,19 @@ export async function getIssuesPerArea(
   db: Client,
   organizationId: string,
   year: number,
+  scope: DashboardScope,
 ): Promise<ChartDatum[]> {
+  const confine = confineWp(scope);
   const res = await db.execute({
     sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
                  ${WPa.audit_area_id} AS area_id, COUNT(*) AS n
             FROM work_papers wp
             JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
                  AND ${AA.organization_id} = ${WPa.organization_id}
-           WHERE ${WPa.organization_id} = ? AND ${WPa.year} = ?
+           WHERE ${WPa.organization_id} = ? AND ${WPa.year} = ?${confine.clause}
         GROUP BY ${WPa.audit_area_id}
         ORDER BY n DESC`,
-    args: [organizationId, year],
+    args: [organizationId, year, ...confine.args],
   });
   return res.rows.map((r) => ({
     label: String(r.code ?? r.name ?? 'Unassigned'),
@@ -468,7 +512,9 @@ export async function getRiskPerArea(
   db: Client,
   organizationId: string,
   year: number,
+  scope: DashboardScope,
 ): Promise<GroupedBarData> {
+  const confine = confineWp(scope);
   const res = await db.execute({
     sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
                  ${WPa.audit_area_id} AS area_id,
@@ -479,10 +525,10 @@ export async function getRiskPerArea(
             FROM work_papers wp
             JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
                  AND ${AA.organization_id} = ${WPa.organization_id}
-           WHERE ${WPa.organization_id} = ? AND ${WPa.year} = ?
+           WHERE ${WPa.organization_id} = ? AND ${WPa.year} = ?${confine.clause}
         GROUP BY ${WPa.audit_area_id}
         ORDER BY ${AA.area_code}`,
-    args: [organizationId, year],
+    args: [organizationId, year, ...confine.args],
   });
   const rows: GroupedBarRow[] = res.rows
     .map((r) => ({
@@ -508,7 +554,9 @@ export async function getNotImplementedHighRisk(
   db: Client,
   organizationId: string,
   year: number,
+  scope: DashboardScope,
 ): Promise<ChartDatum[]> {
+  const confine = confineWp(scope);
   const res = await db.execute({
     sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
                  ${WPa.audit_area_id} AS area_id, COUNT(*) AS n
@@ -518,10 +566,10 @@ export async function getNotImplementedHighRisk(
             JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
                  AND ${AA.organization_id} = ${WPa.organization_id}
            WHERE ${APa.organization_id} = ? AND ${APa.status} = ?
-             AND UPPER(${WPa.risk_rating}) IN ('HIGH', 'EXTREME') AND ${WPa.year} = ?
+             AND UPPER(${WPa.risk_rating}) IN ('HIGH', 'EXTREME') AND ${WPa.year} = ?${confine.clause}
         GROUP BY ${WPa.audit_area_id}
         ORDER BY n DESC`,
-    args: [organizationId, NOT_IMPLEMENTED, year],
+    args: [organizationId, NOT_IMPLEMENTED, year, ...confine.args],
   });
   return res.rows.map((r) => ({
     label: String(r.code ?? r.name ?? 'Unassigned'),
@@ -535,7 +583,9 @@ export async function getActionPlanStatusPerArea(
   db: Client,
   organizationId: string,
   year: number,
+  scope: DashboardScope,
 ): Promise<GroupedBarData> {
+  const confine = confineWp(scope);
   const res = await db.execute({
     sql: `SELECT ${AA.area_code} AS code, ${AA.area_name} AS name,
                  ${WPa.audit_area_id} AS area_id,
@@ -547,10 +597,10 @@ export async function getActionPlanStatusPerArea(
                  AND ${WPa.organization_id} = ${APa.organization_id}
             JOIN audit_areas aa ON ${AA.audit_area_id} = ${WPa.audit_area_id}
                  AND ${AA.organization_id} = ${WPa.organization_id}
-           WHERE ${APa.organization_id} = ? AND ${WPa.year} = ?
+           WHERE ${APa.organization_id} = ? AND ${WPa.year} = ?${confine.clause}
         GROUP BY ${WPa.audit_area_id}
         ORDER BY ${AA.area_code}`,
-    args: [NOT_IMPLEMENTED, NOT_DUE, organizationId, year],
+    args: [NOT_IMPLEMENTED, NOT_DUE, organizationId, year, ...confine.args],
   });
   const rows: GroupedBarRow[] = res.rows
     .map((r) => ({
@@ -582,12 +632,19 @@ export async function getDashboardCharts(
   db: Client,
   organizationId: string,
   year: number,
+  scope: DashboardScope,
 ): Promise<DashboardCharts> {
   return cached(
     db,
-    cacheKeys.dashboard(organizationId, 'charts', `year=${year}`),
+    // The confinement is in the key: a confined viewer's charts are different
+    // figures, and must never be served from an unconfined viewer's entry.
+    cacheKeys.dashboard(
+      organizationId,
+      'charts',
+      `year=${year}:${affiliateScopeKey(scope.affiliateScope)}`,
+    ),
     CACHE_TTL.dashboard,
-    () => readDashboardCharts(db, organizationId, year),
+    () => readDashboardCharts(db, organizationId, year, scope),
   );
 }
 
@@ -595,18 +652,26 @@ async function readDashboardCharts(
   db: Client,
   organizationId: string,
   year: number,
+  scope: DashboardScope,
 ): Promise<DashboardCharts> {
   const [issuesPerArea, riskPerArea, notImplementedHighRisk, actionPlanStatusPerArea] =
     await Promise.all([
-      getIssuesPerArea(db, organizationId, year),
-      getRiskPerArea(db, organizationId, year),
-      getNotImplementedHighRisk(db, organizationId, year),
-      getActionPlanStatusPerArea(db, organizationId, year),
+      getIssuesPerArea(db, organizationId, year, scope),
+      getRiskPerArea(db, organizationId, year, scope),
+      getNotImplementedHighRisk(db, organizationId, year, scope),
+      getActionPlanStatusPerArea(db, organizationId, year, scope),
     ]);
   return { issuesPerArea, riskPerArea, notImplementedHighRisk, actionPlanStatusPerArea };
 }
 
 export interface SidebarCounts {
+  /**
+   * Work papers awaiting this person's action (Build Prompt 62): their own
+   * drafts and the findings sent back to them, plus, for a reviewer, what is
+   * waiting on their review. It was the organisation's submitted count, which
+   * badged an auditor with a number that was nobody's to act on but the head of
+   * audit's.
+   */
   pendingReview: number;
   myOverdue: number;
   myWorkPapers: number;
@@ -614,6 +679,13 @@ export interface SidebarCounts {
   myObservations: number;
   responsesToReview: number;
   approvedQueue: number;
+  /**
+   * Requirements waiting on this person (Build Prompt 60): the ones they own
+   * and have not answered, plus the answers waiting on them as the finding's
+   * auditor. One badge, because a module has one entry, and both halves are the
+   * same question: is anything here mine to act on?
+   */
+  myRequirements: number;
 }
 
 /** The sidebar badge counts (getSidebarCounts): organisation queues, and the signed-in user's own. */
@@ -621,12 +693,24 @@ export async function getSidebarCounts(
   db: Client,
   organizationId: string,
   userId: string,
+  scope: AffiliateScope,
+  /**
+   * Whether this person reviews findings. A badge says "this many are yours to
+   * act on", and what is yours depends on which side of the review you are on
+   * (Build Prompt 62): a reviewer's queue is what has been submitted to them, an
+   * auditor's is what has been sent back to them.
+   */
+  reviewer = false,
 ): Promise<SidebarCounts> {
   return cached(
     db,
-    cacheKeys.dashboard(organizationId, 'sidebar', `user=${userId}`),
+    cacheKeys.dashboard(
+      organizationId,
+      'sidebar',
+      `user=${userId}:${affiliateScopeKey(scope)}:reviewer=${reviewer ? 1 : 0}`,
+    ),
     CACHE_TTL.dashboard,
-    () => readSidebarCounts(db, organizationId, userId),
+    () => readSidebarCounts(db, organizationId, userId, scope, reviewer),
   );
 }
 
@@ -634,12 +718,20 @@ async function readSidebarCounts(
   db: Client,
   organizationId: string,
   userId: string,
+  scope: AffiliateScope,
+  reviewer: boolean,
 ): Promise<SidebarCounts> {
   const like = ownerLike(userId);
-  const [wp, ap] = await Promise.all([
+  const wpConfine = affiliatePredicate(scope, cols(C.work_papers, 'wp').affiliate_code);
+  const apConfine = affiliatePredicate(scope, AP.affiliate_code);
+  const [wp, ap, req] = await Promise.all([
     db.execute({
       sql: `SELECT
-              SUM(CASE WHEN ${WPa.status} = 'Submitted' THEN 1 ELSE 0 END) AS pending_review,
+              SUM(CASE
+                    WHEN ${WPa.assigned_auditor_id} = ?
+                     AND ${WPa.status} IN ('Draft', 'Revision Required') THEN 1
+                    WHEN ? = 1 AND ${WPa.status} IN ('Submitted', 'Under Review') THEN 1
+                    ELSE 0 END) AS pending_review,
               SUM(CASE WHEN ${WPa.prepared_by_id} = ? THEN 1 ELSE 0 END) AS my_work_papers,
               SUM(CASE WHEN ${WPa.status} = 'Response Received' THEN 1 ELSE 0 END) AS responses_to_review,
               SUM(CASE WHEN ${WPa.status} = 'Sent to Auditee' AND EXISTS (
@@ -648,15 +740,42 @@ async function readSidebarCounts(
               SUM(CASE WHEN ${WPa.status} = 'Approved' AND EXISTS (
                     SELECT 1 FROM work_paper_responsibles r WHERE ${RESP.work_paper_id} = ${WPa.work_paper_id}
                       ) THEN 1 ELSE 0 END) AS approved_queue
-            FROM work_papers wp WHERE ${WPa.organization_id} = ?`,
-      args: [userId, userId, organizationId],
+            FROM work_papers wp WHERE ${WPa.organization_id} = ?${wpConfine.clause}`,
+      args: [userId, reviewer ? 1 : 0, userId, userId, organizationId, ...wpConfine.args],
     }),
     db.execute({
       sql: `SELECT
               SUM(CASE WHEN (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ? THEN 1 ELSE 0 END) AS my_action_plans,
               SUM(CASE WHEN (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ? AND ${overdueClause('action_plans')} THEN 1 ELSE 0 END) AS my_overdue
-            FROM action_plans WHERE ${AP.organization_id} = ?`,
-      args: [like, like, ...NOT_OVERDUE_STATUSES, organizationId],
+            FROM action_plans WHERE ${AP.organization_id} = ?${apConfine.clause}`,
+      args: [like, like, ...NOT_OVERDUE_STATUSES, organizationId, ...apConfine.args],
+    }),
+    // Requirements this person still has to act on: an open one they own with
+    // nothing provided or a further question outstanding, or one of their own
+    // findings with a round waiting to be read. A closed requirement is nobody's
+    // move, so it never shows.
+    db.execute({
+      sql: `SELECT COUNT(*) AS mine
+              FROM work_paper_requirements r
+             WHERE ${R.organization_id} = ? AND ${R.deleted_at} IS NULL
+               AND ${R.closed_at} IS NULL
+               AND (
+                 (EXISTS (SELECT 1 FROM requirement_owners o
+                           WHERE ${RO.requirement_id} = ${R.requirement_id} AND ${RO.user_id} = ?)
+                  AND COALESCE((SELECT ${RS.review_status} FROM requirement_submissions sub
+                                 WHERE ${RS.requirement_id} = ${R.requirement_id}
+                              ORDER BY COALESCE(${RS.round_number}, 0) DESC,
+                                       ${RS.submitted_at} DESC LIMIT 1), 'MORE_INFO') = 'MORE_INFO')
+                 OR
+                 (EXISTS (SELECT 1 FROM work_papers wp
+                           WHERE wp.work_paper_id = ${R.work_paper_id}
+                             AND wp.assigned_auditor_id = ?)
+                  AND (SELECT ${RS.review_status} FROM requirement_submissions sub
+                        WHERE ${RS.requirement_id} = ${R.requirement_id}
+                     ORDER BY COALESCE(${RS.round_number}, 0) DESC,
+                              ${RS.submitted_at} DESC LIMIT 1) = 'PENDING')
+               )`,
+      args: [organizationId, userId, userId],
     }),
   ]);
 
@@ -670,6 +789,7 @@ async function readSidebarCounts(
     approvedQueue: num(w.approved_queue),
     myActionPlans: num(a.my_action_plans),
     myOverdue: num(a.my_overdue),
+    myRequirements: num(req.rows[0]?.mine),
   };
 }
 
@@ -678,13 +798,15 @@ export async function hasMyOverdue(
   db: Client,
   organizationId: string,
   userId: string,
+  scope: AffiliateScope,
 ): Promise<boolean> {
+  const confine = affiliatePredicate(scope, AP.affiliate_code);
   const res = await db.execute({
     sql: `SELECT 1 FROM action_plans
            WHERE ${AP.organization_id} = ? AND (',' || IFNULL(${AP.owner_ids}, '') || ',') LIKE ?
-             AND ${overdueClause('action_plans')}
+             AND ${overdueClause('action_plans')}${confine.clause}
            LIMIT 1`,
-    args: [organizationId, ownerLike(userId), ...NOT_OVERDUE_STATUSES],
+    args: [organizationId, ownerLike(userId), ...NOT_OVERDUE_STATUSES, ...confine.args],
   });
   return res.rows.length > 0;
 }

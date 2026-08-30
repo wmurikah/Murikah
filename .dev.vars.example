@@ -23,5 +23,36 @@ TURSO_GRC_DATABASE_URL="libsql://hassaudit-your-org.turso.io"
 TURSO_GRC_AUTH_TOKEN="your-hassaudit-auth-token"
 GRC_SESSION_SECRET="base64-encoded-32-byte-secret"
 
+# --- CMS (cms.murikah.com), its own Turso database ---
+# Runtime secrets only, never committed. In production set them as Cloudflare
+# secrets (wrangler secret put ...). The CMS in the middle of these names is
+# load-bearing: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN above belong to the
+# marketing site and point at a different database (leads, subscribers,
+# demo_sessions), so reading those would attach authentication to the wrong
+# database. CMS_SESSION_SECRET is 32+ random bytes, base64 encoded, and is the
+# HMAC key for session-token hashes; it is distinct from engr's and grc's.
+TURSO_CMS_DATABASE_URL=""
+TURSO_CMS_AUTH_TOKEN=""
+CMS_SESSION_SECRET=""
+# Set to exactly "development" to have the CMS show a new user's invitation link
+# to the administrator who created them. There is no mail sender for this
+# product yet, so this is how the invitation flow is walked end to end locally.
+# Leave it empty in production: with it unset, an invitation that cannot be
+# delivered fails loudly instead of creating a user nobody can sign in as.
+CMS_INVITE_LINKS=""
+
+# --- GRC evidence storage connectors, OPTIONAL (grc/docs/storage-setup.md) ---
+# The platform's own OAuth application registrations, the same for every
+# customer. What is per-organisation (the refresh token, or the R2 keys) is
+# sealed in the database, never here. Leave a pair unset and that provider is
+# simply not offered on /settings/storage. Cloudflare R2 needs nothing here:
+# a customer supplies its own account, bucket and keys on the settings screen.
+GDRIVE_CLIENT_ID=""
+GDRIVE_CLIENT_SECRET=""
+SHAREPOINT_CLIENT_ID=""
+SHAREPOINT_CLIENT_SECRET=""
+DROPBOX_CLIENT_ID=""
+DROPBOX_CLIENT_SECRET=""
+
 # --- Public site URL (canonical/OG fallback for non-production environments) ---
 PUBLIC_SITE_URL="http://localhost:4321"

@@ -1,0 +1,35 @@
+---
+/**
+ * A loading placeholder shaped like the content it stands in for, so the page
+ * does not reflow when the real thing arrives.
+ *
+ * IT DOES NOT APPEAR FOR THE FIRST 200 MILLISECONDS. A response that comes back
+ * under the threshold that reads as instant needs no loading state at all, and
+ * showing one anyway produces a flash that is more distracting than the wait it
+ * was meant to cover. The delay lives in `--animate-cms-skeleton`, so it is one
+ * animation with a delay rather than a timer somebody has to remember to clear.
+ *
+ * The movement stops entirely under prefers-reduced-motion: global.css clamps
+ * the duration, the fill mode still applies, and the shape holds still.
+ *
+ * The whole block is aria-hidden and the region that owns it announces
+ * "Loading" once, rather than every bar announcing itself.
+ */
+interface Props {
+  variant?: 'text' | 'title' | 'block' | 'circle';
+  width?: string;
+  class?: string;
+}
+const { variant = 'text', width, class: className } = Astro.props;
+const shapes = {
+  text: 'h-3.5 rounded',
+  title: 'h-5 rounded',
+  block: 'h-24 rounded-cms',
+  circle: 'h-9 w-9 rounded-full',
+};
+---
+
+<span
+  aria-hidden="true"
+  class:list={['block animate-cms-skeleton bg-cms-ink-200 opacity-0', shapes[variant], className]}
+  style={width ? `width:${width}` : undefined}></span>

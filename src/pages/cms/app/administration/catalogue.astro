@@ -1,0 +1,650 @@
+---
+/**
+ * Administration → Product Catalogue.
+ *
+ * A split view: the hierarchy on the left, the selected item on the right. The
+ * whole tree comes from one query, and the selection is a URL parameter, so an
+ * administrator can bookmark a category, open one in a new browser tab and
+ * reload without losing their place. No client-side selection state exists.
+ *
+ * THE TREE IS `details` AND `summary`.
+ * Expanding and collapsing is the browser's own behaviour, so it works with no
+ * JavaScript at all, is keyboard operable and is announced correctly by a
+ * screen reader without any ARIA written here. It did not justify a React
+ * island and it did not justify a tree package: **there is no React island in
+ * this phase and no hydration directive anywhere in it.**
+ *
+ * NO PRODUCT, GROUP OR CATEGORY NAME IS WRITTEN INTO THIS FILE.
+ * `PETROLEUM`, `AGO`, `LPG` and the rest are rows. An administrator creates a
+ * group and it appears here, in the selectors and in the authority rule form
+ * with no code change, which is what makes this a catalogue rather than a
+ * hard-coded list.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsCatalogueTree from '@/components/cms/CmsCatalogueTree.astro';
+import CmsWorkflowFormScript from '@/components/cms/CmsWorkflowFormScript.astro';
+import CmsCatalogueScript from '@/components/cms/CmsCatalogueScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageCatalogue } from '@/lib/cms/permissions';
+import {
+  categoryImpact,
+  getCategory,
+  getGroup,
+  groupImpact,
+  hierarchy,
+  knownUnits,
+  listCategories,
+  listGroups,
+  listProducts,
+  type CategoryRow,
+  type DeactivationImpact,
+  type GroupRow,
+  type Hierarchy,
+  type ProductPage,
+} from '@/lib/cms/repos/catalogueAdmin';
+import { readProductQuery } from '@/lib/cms/admin/catalogueInput';
+import { MAX_CATEGORY_DEPTH, UOM_HINT } from '@/lib/cms/catalogue/model';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageCatalogue(permissions);
+
+const params = Astro.url.searchParams;
+const selectedGroupId = params.get('group');
+const selectedCategoryId = params.get('category');
+const search = params.get('q') ?? '';
+
+let tree: Hierarchy | null = null;
+let groups: GroupRow[] = [];
+let categories: CategoryRow[] = [];
+let products: ProductPage = { items: [], total: 0, page: 1, pageSize: 25 };
+let units: string[] = [];
+let selectedGroup: GroupRow | null = null;
+let selectedCategory: CategoryRow | null = null;
+let impact: DeactivationImpact | null = null;
+let loadFailed = false;
+
+if (mayManage) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [tree, groups, categories, products, units] = await Promise.all([
+      hierarchy(db),
+      listGroups(db),
+      listCategories(db),
+      listProducts(db, readProductQuery(params)),
+      knownUnits(db),
+    ]);
+    if (selectedCategoryId !== null) {
+      selectedCategory = await getCategory(db, selectedCategoryId);
+      if (selectedCategory !== null) {
+        selectedGroup = await getGroup(db, selectedCategory.productGroupId);
+        impact = await categoryImpact(db, selectedCategoryId);
+      }
+    } else if (selectedGroupId !== null) {
+      selectedGroup = await getGroup(db, selectedGroupId);
+      if (selectedGroup !== null) impact = await groupImpact(db, selectedGroupId);
+    }
+  } catch (error) {
+    console.error('[cms.catalogue] load failed', error);
+    loadFailed = true;
+  }
+}
+
+/** Categories that may still take a child, given the depth limit. */
+const parentOptions = [
+  { value: '', label: 'Directly under the group' },
+  ...categories
+    .filter((category) => category.depth < MAX_CATEGORY_DEPTH)
+    .map((category) => ({
+      value: category.productCategoryId,
+      label: `${category.groupName} → ${category.categoryName} (${category.categoryCode})`,
+    })),
+];
+const groupOptions = groups.map((group) => ({
+  value: group.productGroupId,
+  label: `${group.groupName} (${group.groupCode})`,
+}));
+const categoryOptions = categories.map((category) => ({
+  value: category.productCategoryId,
+  label: `${category.groupName} → ${category.categoryName} (${category.categoryCode})`,
+}));
+
+const selectionTitle =
+  selectedCategory !== null
+    ? selectedCategory.categoryName
+    : selectedGroup !== null
+      ? selectedGroup.groupName
+      : null;
+---
+
+<CmsLayout title="Product catalogue">
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to the product catalogue"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed || tree === null ? (
+      <CmsErrorState
+        title="The catalogue could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Product catalogue"
+          definition="One product master for the whole platform. Leads, opportunities, orders, cases, SLA reporting and approval authority all read these same records, so a product added here is available everywhere at once."
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Product catalogue' },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsButton
+              variant="ghost"
+              icon="plus"
+              data-cms-wf-open="cms-group-drawer"
+              data-endpoint="/api/admin/product-groups"
+              data-method="POST"
+              data-title="New product group"
+              data-values="{}"
+            >
+              Group
+            </CmsButton>
+            <CmsButton
+              variant="ghost"
+              icon="plus"
+              data-cms-wf-open="cms-category-drawer"
+              data-endpoint="/api/admin/product-categories"
+              data-method="POST"
+              data-title="New category"
+              data-values={JSON.stringify({
+                productGroupId:
+                  selectedCategory?.productGroupId ?? selectedGroup?.productGroupId ?? '',
+                parentCategoryId: selectedCategory?.productCategoryId ?? '',
+                sortOrder: 100,
+              })}
+            >
+              Category
+            </CmsButton>
+            <CmsButton
+              variant="primary"
+              icon="plus"
+              data-cms-wf-open="cms-product-drawer"
+              data-endpoint="/api/admin/products"
+              data-method="POST"
+              data-title="New product"
+              data-values={JSON.stringify({
+                productCategoryId: selectedCategory?.productCategoryId ?? '',
+                unitOfMeasure: selectedCategory?.defaultUom ?? '',
+              })}
+            >
+              Product
+            </CmsButton>
+          </Fragment>
+        </CmsPageHeader>
+
+        <p class="flex items-start gap-2 rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+          <CmsIcon name="statusInfo" size={15} class="mt-0.5 shrink-0" />
+          <span>
+            {tree.counts.groups} groups, {tree.counts.categories} categories and{' '}
+            {tree.counts.products} products, loaded in one query. Categories go {tree.maxDepth}{' '}
+            levels deep beneath a group. Retiring a group or a category takes everything beneath it
+            out of new selections and changes nothing about the children's own status, so
+            reactivating it restores exactly what was there.
+          </span>
+        </p>
+
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+          <CmsCard title="Hierarchy" class="lg:sticky lg:top-4">
+            {tree.groups.length === 0 ? (
+              <CmsEmptyState
+                icon="data"
+                title="The catalogue is empty"
+                description="Create the first product group. Categories sit beneath it, and products beneath those."
+              />
+            ) : (
+              <CmsCatalogueTree
+                groups={tree.groups}
+                selectedGroupId={selectedGroupId}
+                selectedCategoryId={selectedCategoryId}
+              />
+            )}
+          </CmsCard>
+
+          <div class="flex flex-col gap-4">
+            {selectionTitle === null ? (
+              <CmsCard>
+                <p class="text-cms-body-sm text-cms-muted">
+                  Choose a group or a category on the left to see its detail, what references it,
+                  and what a deactivation would reach.
+                </p>
+              </CmsCard>
+            ) : (
+              <CmsCard title={selectionTitle}>
+                <dl class="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <dt class="text-cms-caption text-cms-muted">Code</dt>
+                    <dd class="text-cms-body text-cms-ink">
+                      {selectedCategory?.categoryCode ?? selectedGroup?.groupCode}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-cms-caption text-cms-muted">
+                      {selectedCategory === null ? 'Sort order' : 'Sits under'}
+                    </dt>
+                    <dd class="text-cms-body text-cms-ink">
+                      {selectedCategory === null
+                        ? selectedGroup?.sortOrder
+                        : (selectedCategory.parentCategoryName ?? selectedCategory.groupName)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-cms-caption text-cms-muted">Status</dt>
+                    <dd class="flex flex-wrap items-center gap-1">
+                      <CmsBadge
+                        tone={
+                          (selectedCategory?.active ?? selectedGroup?.active)
+                            ? 'success'
+                            : 'neutral'
+                        }
+                        label={
+                          (selectedCategory?.active ?? selectedGroup?.active)
+                            ? 'Active'
+                            : 'Inactive'
+                        }
+                      />
+                      {selectedCategory !== null &&
+                        selectedCategory.active &&
+                        !selectedCategory.available && (
+                          <CmsBadge tone="warning" label="Unavailable: a parent is inactive" />
+                        )}
+                    </dd>
+                  </div>
+                </dl>
+
+                {impact !== null && (
+                  <p class="mt-3 flex items-start gap-2 rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+                    <CmsIcon name="statusInfo" size={15} class="mt-0.5 shrink-0" />
+                    <span>
+                      Retiring this takes {impact.categories}{' '}
+                      {impact.categories === 1 ? 'category' : 'categories'} and {impact.products}{' '}
+                      {impact.products === 1 ? 'product' : 'products'} out of new selections.
+                      {impact.authorityRules > 0
+                        ? ` ${impact.authorityRules} approval authority ${impact.authorityRules === 1 ? 'rule references' : 'rules reference'} it, and ${impact.authorityRules === 1 ? 'that rule keeps its reference' : 'those rules keep their references'}: nothing here deletes a row.`
+                        : ' No approval authority rule references it.'}
+                    </span>
+                  </p>
+                )}
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                  {selectedCategory !== null ? (
+                    <CmsButton
+                      variant="secondary"
+                      data-cms-wf-open="cms-category-drawer"
+                      data-endpoint={`/api/admin/product-categories/${selectedCategory.productCategoryId}`}
+                      data-method="PATCH"
+                      data-title="Edit category"
+                      data-note={`Renaming a category never recreates it, so every approval authority rule that references it still does afterwards.`}
+                      data-values={JSON.stringify({
+                        productGroupId: selectedCategory.productGroupId,
+                        parentCategoryId: selectedCategory.parentCategoryId ?? '',
+                        categoryCode: selectedCategory.categoryCode,
+                        categoryName: selectedCategory.categoryName,
+                        defaultUom: selectedCategory.defaultUom ?? '',
+                        description: selectedCategory.description ?? '',
+                        sortOrder: selectedCategory.sortOrder,
+                        active: selectedCategory.active,
+                      })}
+                    >
+                      Edit this category
+                    </CmsButton>
+                  ) : (
+                    selectedGroup !== null && (
+                      <CmsButton
+                        variant="secondary"
+                        data-cms-wf-open="cms-group-drawer"
+                        data-endpoint={`/api/admin/product-groups/${selectedGroup.productGroupId}`}
+                        data-method="PATCH"
+                        data-title="Edit group"
+                        data-note="Renaming a group never recreates it, so every approval authority rule that references it still does afterwards."
+                        data-values={JSON.stringify({
+                          groupCode: selectedGroup.groupCode,
+                          groupName: selectedGroup.groupName,
+                          description: selectedGroup.description ?? '',
+                          sortOrder: selectedGroup.sortOrder,
+                          active: selectedGroup.active,
+                        })}
+                      >
+                        Edit this group
+                      </CmsButton>
+                    )
+                  )}
+                </div>
+              </CmsCard>
+            )}
+
+            <CmsCard title="Products">
+              <form method="get" class="mb-3 flex flex-wrap items-end gap-2">
+                {selectedGroupId !== null && (
+                  <input type="hidden" name="group" value={selectedGroupId} />
+                )}
+                {selectedCategoryId !== null && (
+                  <input type="hidden" name="category" value={selectedCategoryId} />
+                )}
+                <div class="min-w-48 grow">
+                  <CmsInput
+                    id="cat-q"
+                    name="q"
+                    label="Search"
+                    type="search"
+                    value={search}
+                    hint="Product code or name, or a category or group code or name. Case does not matter."
+                  />
+                </div>
+                <CmsSelect
+                  id="cat-availability"
+                  name="availability"
+                  label="Availability"
+                  value={params.get('availability') ?? 'all'}
+                  options={[
+                    { value: 'all', label: 'Everything' },
+                    { value: 'available', label: 'Selectable now' },
+                    { value: 'unavailable', label: 'Not selectable' },
+                  ]}
+                />
+                <CmsButton type="submit" variant="secondary">
+                  Search
+                </CmsButton>
+              </form>
+
+              <CmsDataTable
+                caption="Products"
+                columns={[
+                  { key: 'product', label: 'Product' },
+                  { key: 'category', label: 'Category', secondary: true },
+                  { key: 'group', label: 'Group', secondary: true },
+                  { key: 'uom', label: 'Unit' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'actions', label: 'Actions' },
+                ]}
+                empty={products.items.length === 0}
+              >
+                {products.items.map((product) => (
+                  <tr class="border-b border-cms-line last:border-0">
+                    <td class="px-4 py-2.5">
+                      <span class="font-medium text-cms-ink">{product.productName}</span>
+                      <span class="ms-2 text-cms-caption text-cms-muted">
+                        {product.productCode}
+                      </span>
+                    </td>
+                    <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                      {product.categoryName}
+                    </td>
+                    <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                      {product.groupName}
+                    </td>
+                    <td class="px-4 py-2.5 text-cms-muted">{product.unitOfMeasure}</td>
+                    <td class="px-4 py-2.5">
+                      {product.available ? (
+                        <CmsBadge tone="success" label="Selectable" />
+                      ) : product.active ? (
+                        <CmsBadge tone="warning" label="Parent retired" />
+                      ) : (
+                        <CmsBadge tone="neutral" label="Retired" />
+                      )}
+                    </td>
+                    <td class="px-4 py-2.5">
+                      <button
+                        type="button"
+                        class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                        data-cms-wf-open="cms-product-drawer"
+                        data-endpoint={`/api/admin/products/${product.productId}`}
+                        data-method="PATCH"
+                        data-title="Edit product"
+                        data-values={JSON.stringify({
+                          productCode: product.productCode,
+                          productName: product.productName,
+                          productCategoryId: product.productCategoryId,
+                          unitOfMeasure: product.unitOfMeasure,
+                          active: product.active,
+                        })}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                <Fragment slot="empty">
+                  <CmsEmptyState
+                    icon="data"
+                    title="No products match"
+                    description="Adjust the search, or add a product to a category."
+                  />
+                </Fragment>
+              </CmsDataTable>
+
+              {products.total > products.pageSize && (
+                <p class="mt-3 text-cms-body-sm text-cms-muted">
+                  Showing {products.items.length} of {products.total} products
+                </p>
+              )}
+            </CmsCard>
+          </div>
+        </div>
+
+        <CmsDrawer id="cms-group-drawer" tone="form" title="Product group">
+          <form
+            id="cms-group-form"
+            data-cms-wf-form="cms-group-drawer"
+            novalidate
+            class="flex flex-col gap-4"
+          >
+            <p
+              id="cms-group-form-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <p id="cms-group-form-note" hidden class="text-cms-body-sm text-cms-muted" />
+            <CmsInput
+              id="g-groupCode"
+              name="groupCode"
+              label="Group code"
+              required
+              hint="Short and stable. It cannot be changed later, because import files and reports quote it."
+            />
+            <CmsInput id="g-groupName" name="groupName" label="Group name" required />
+            <CmsInput id="g-description" name="description" label="Description" />
+            <CmsInput
+              id="g-sortOrder"
+              name="sortOrder"
+              label="Sort order"
+              type="number"
+              min="0"
+              value="100"
+              hint="Lower appears first in the tree and in every selector."
+            />
+            <CmsCheckbox
+              id="g-active"
+              name="active"
+              label="Active"
+              checked
+              hint="Retiring a group takes its categories and products out of new selections and leaves their own status untouched."
+            />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              form="cms-group-form"
+              data-cms-wf-save
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+
+        <CmsDrawer id="cms-category-drawer" tone="form" title="Category">
+          <form
+            id="cms-category-form"
+            data-cms-wf-form="cms-category-drawer"
+            novalidate
+            class="flex flex-col gap-4"
+          >
+            <p
+              id="cms-category-form-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <p id="cms-category-form-note" hidden class="text-cms-body-sm text-cms-muted" />
+            <CmsSelect
+              id="c-productGroupId"
+              name="productGroupId"
+              label="Product group"
+              required
+              options={groupOptions}
+            />
+            <CmsSelect
+              id="c-parentCategoryId"
+              name="parentCategoryId"
+              label="Parent category"
+              options={parentOptions}
+              hint={`Leave it directly under the group, or choose a parent. A subcategory must sit in the same group as its parent, and categories go ${MAX_CATEGORY_DEPTH} levels deep.`}
+            />
+            <CmsInput
+              id="c-categoryCode"
+              name="categoryCode"
+              label="Category code"
+              required
+              hint="Unique across the whole catalogue, not per group: no two groups can both hold a category with the same code."
+            />
+            <CmsInput
+              id="c-categoryName"
+              name="categoryName"
+              label="Category name"
+              required
+              hint="Names need not be unique. Two groups may both hold a category called Diesel."
+            />
+            <CmsInput
+              id="c-defaultUom"
+              name="defaultUom"
+              label="Default unit of measure"
+              hint={`Pre-fills the unit on a new product in this category. ${units.length > 0 ? `In use: ${units.join(', ')}.` : ''}`}
+            />
+            <CmsInput id="c-description" name="description" label="Description" />
+            <CmsInput
+              id="c-sortOrder"
+              name="sortOrder"
+              label="Sort order"
+              type="number"
+              min="0"
+              value="100"
+            />
+            <CmsCheckbox id="c-active" name="active" label="Active" checked />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              form="cms-category-form"
+              data-cms-wf-save
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+
+        <CmsDrawer id="cms-product-drawer" tone="form" title="Product">
+          <form
+            id="cms-product-form"
+            data-cms-wf-form="cms-product-drawer"
+            novalidate
+            class="flex flex-col gap-4"
+          >
+            <p
+              id="cms-product-form-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <p id="cms-product-form-note" hidden class="text-cms-body-sm text-cms-muted" />
+            {/*
+              Group first, then category. The category list narrows to the chosen
+              group as you go, rather than offering one flat list of every
+              category in the catalogue.
+            */}
+            <CmsSelect
+              id="p-groupFilter"
+              name="groupFilter"
+              label="Product group"
+              options={[{ value: '', label: 'Every group' }, ...groupOptions]}
+              hint="Narrows the category list. It is not saved on the product: a product attaches to a category, and the group is reached through it."
+            />
+            <CmsSelect
+              id="p-productCategoryId"
+              name="productCategoryId"
+              label="Category"
+              required
+              options={categoryOptions}
+            />
+            <CmsInput id="p-productCode" name="productCode" label="Product code" required />
+            <CmsInput id="p-productName" name="productName" label="Product name" required />
+            <CmsInput
+              id="p-unitOfMeasure"
+              name="unitOfMeasure"
+              label="Unit of measure"
+              required
+              hint={UOM_HINT}
+            />
+            <CmsCheckbox id="p-active" name="active" label="Active" checked />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              form="cms-product-form"
+              data-cms-wf-save
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+
+        <CmsWorkflowFormScript />
+        <CmsCatalogueScript
+          categories={categories.map((category) => ({
+            id: category.productCategoryId,
+            groupId: category.productGroupId,
+            defaultUom: category.defaultUom,
+          }))}
+        />
+      </Fragment>
+    )
+  }
+</CmsLayout>

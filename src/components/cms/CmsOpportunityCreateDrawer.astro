@@ -1,0 +1,334 @@
+---
+/**
+ * The direct-creation form for an opportunity.
+ *
+ * Most opportunities arrive through lead conversion, which preserves lead_id.
+ * This form is the authorised exception for business that skipped the lead
+ * stage. The account lookup is server-scoped exactly as the lead drawer's is:
+ * nobody attaches a deal to a customer they may not see, and the server
+ * re-checks whatever id the form submits.
+ *
+ * Probability is collected as a whole percent and sent as
+ * `probabilityPercent`; the validator converts to the stored fraction in the
+ * one place that conversion lives. Left empty, the stage default applies.
+ */
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import type { PipelineRow } from '@/lib/cms/repos/opportunityAdmin';
+
+interface Option {
+  id: string;
+  label: string;
+}
+interface Props {
+  pipelines: PipelineRow[];
+  businessUnits: Option[];
+  owners: Option[];
+}
+const { pipelines, businessUnits, owners } = Astro.props;
+
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+/**
+ * The stage options per pipeline, serialised for the script so the stage
+ * picker follows the pipeline picker without a network call. Only active,
+ * non-terminal stages are offered: creating a deal directly into Won would
+ * skip the facts the won move requires.
+ */
+const stagesByPipeline = Object.fromEntries(
+  pipelines
+    .filter((p) => p.active)
+    .map((p) => [
+      p.pipelineId,
+      p.stages
+        .filter((s) => s.active && !s.isWonStage && !s.isLostStage)
+        .map((s) => ({ id: s.pipelineStageId, label: s.stageName })),
+    ]),
+);
+---
+
+<form id="cms-opportunity-form" novalidate class="flex flex-col gap-4">
+  <p
+    id="cms-opportunity-form-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+  >
+  </p>
+
+  <CmsInput id="o-title" name="title" label="Title" required />
+
+  <div class="flex flex-col gap-1.5">
+    <label for="o-accountSearch" class="text-cms-body-sm font-medium text-cms-ink">
+      Account <span class="text-cms-negative">*</span>
+    </label>
+    <input
+      id="o-accountSearch"
+      type="search"
+      autocomplete="off"
+      placeholder="Search customers by name or code"
+      class="h-10 w-full rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    />
+    <p
+      id="o-accountId-error"
+      role="alert"
+      data-field-error
+      class="hidden text-cms-caption text-cms-negative"
+    >
+    </p>
+    <ul
+      id="o-accountResults"
+      hidden
+      class="flex flex-col gap-1 rounded-cms border border-cms-line p-1"
+    >
+    </ul>
+    <p id="o-accountChosen" hidden class="text-cms-body-sm text-cms-ink"></p>
+    <input type="hidden" id="o-accountId" name="accountId" value="" />
+  </div>
+
+  <CmsSelect
+    id="o-pipelineId"
+    name="pipelineId"
+    label="Pipeline"
+    required
+    options={pick(
+      pipelines.filter((p) => p.active).map((p) => ({ id: p.pipelineId, label: p.pipelineName })),
+      'Choose a pipeline',
+    )}
+  />
+  <CmsSelect
+    id="o-initialStageId"
+    name="initialStageId"
+    label="Initial stage"
+    options={[{ value: '', label: 'First stage of the pipeline' }]}
+    hint="Won and lost stages are not offered here. A deal is closed by moving it, with the facts that closing requires."
+  />
+  <CmsSelect
+    id="o-ownerUserId"
+    name="ownerUserId"
+    label="Owner"
+    required
+    options={pick(owners, 'Choose an owner')}
+  />
+  <CmsSelect
+    id="o-businessUnitId"
+    name="businessUnitId"
+    label="Business unit"
+    options={pick(businessUnits, 'None')}
+  />
+  <CmsInput
+    id="o-estimatedValue"
+    name="estimatedValue"
+    label="Estimated value"
+    type="number"
+    min="0"
+    step="any"
+    required
+    hint="Required on an opportunity, unlike a lead: pursuing a deal means committing to a number."
+  />
+  <CmsInput id="o-currencyCode" name="currencyCode" label="Currency" required value="KES" />
+  <CmsInput
+    id="o-probabilityPercent"
+    name="probabilityPercent"
+    label="Probability %"
+    type="number"
+    min="0"
+    max="100"
+    step="1"
+    hint="Whole percent, 0 to 100. Leave empty to take the stage default."
+  />
+  <CmsInput
+    id="o-estimatedCloseDate"
+    name="estimatedCloseDate"
+    label="Estimated close date"
+    type="date"
+  />
+</form>
+
+<script
+  is:inline
+  data-cms-stages
+  type="application/json"
+  set:html={JSON.stringify(stagesByPipeline)}
+/>
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+  interface AccountHit {
+    accountId: string;
+    accountName: string;
+    accountCode: string | null;
+  }
+
+  const form = document.getElementById('cms-opportunity-form') as HTMLFormElement | null;
+  const drawer = document.getElementById('cms-opportunity-drawer') as HTMLDialogElement | null;
+  const save = document.querySelector<HTMLButtonElement>('[data-cms-opportunity-save]');
+  const errorBox = document.getElementById('cms-opportunity-form-error');
+  const search = document.getElementById('o-accountSearch') as HTMLInputElement | null;
+  const results = document.getElementById('o-accountResults');
+  const chosen = document.getElementById('o-accountChosen');
+  const accountId = document.getElementById('o-accountId') as HTMLInputElement | null;
+  const pipeline = document.getElementById('o-pipelineId') as HTMLSelectElement | null;
+  const stage = document.getElementById('o-initialStageId') as HTMLSelectElement | null;
+  const stagesNode = document.querySelector('[data-cms-stages]');
+
+  if (form && drawer && save && search && results && chosen && accountId && pipeline && stage) {
+    const stagesByPipeline = JSON.parse(stagesNode?.textContent ?? '{}') as Record<
+      string,
+      { id: string; label: string }[]
+    >;
+
+    const syncStages = () => {
+      const list = stagesByPipeline[pipeline.value] ?? [];
+      stage.replaceChildren(new Option('First stage of the pipeline', ''));
+      for (const s of list) stage.appendChild(new Option(s.label, s.id));
+    };
+    pipeline.addEventListener('change', syncStages);
+    syncStages();
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+    const paint = (fields: FieldError[]) => {
+      for (const item of fields) {
+        const message = document.getElementById(`o-${item.field}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+        const field = form.elements.namedItem(item.field);
+        if (field instanceof HTMLElement) field.setAttribute('aria-invalid', 'true');
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+      if (errorBox && fields[0]) {
+        errorBox.hidden = false;
+        errorBox.textContent = fields[0].message;
+      }
+    };
+
+    const resetAccount = () => {
+      accountId.value = '';
+      chosen.hidden = true;
+      chosen.textContent = '';
+      results.hidden = true;
+      results.replaceChildren();
+    };
+    const choose = (hit: AccountHit) => {
+      accountId.value = hit.accountId;
+      chosen.hidden = false;
+      chosen.textContent = `For ${hit.accountName}${hit.accountCode === null ? '' : ` (${hit.accountCode})`}.`;
+      results.hidden = true;
+      results.replaceChildren();
+      search.value = hit.accountName;
+    };
+
+    let lookup = 0;
+    const runLookup = async (term: string) => {
+      const ticket = ++lookup;
+      if (term.trim().length < 2) {
+        results.hidden = true;
+        results.replaceChildren();
+        return;
+      }
+      try {
+        const response = await fetch(
+          `/api/customers/accounts?q=${encodeURIComponent(term)}&page=1`,
+          {
+            credentials: 'same-origin',
+          },
+        );
+        if (!response.ok || ticket !== lookup) return;
+        const answer = (await response.json()) as { items?: AccountHit[] };
+        results.replaceChildren();
+        for (const hit of (answer.items ?? []).slice(0, 8)) {
+          const row = document.createElement('li');
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className =
+            'w-full rounded-cms px-2 py-1.5 text-start text-cms-body-sm text-cms-ink outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus';
+          button.textContent =
+            hit.accountCode === null ? hit.accountName : `${hit.accountName} · ${hit.accountCode}`;
+          button.addEventListener('click', () => choose(hit));
+          row.appendChild(button);
+          results.appendChild(row);
+        }
+        results.hidden = results.childElementCount === 0;
+      } catch {
+        results.hidden = true;
+      }
+    };
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    search.addEventListener('input', () => {
+      if (accountId.value !== '') resetAccount();
+      if (timer !== null) clearTimeout(timer);
+      const term = search.value;
+      timer = setTimeout(() => void runLookup(term), 200);
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      save.disabled = true;
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string') body[name] = value;
+      }
+      try {
+        const response = await fetch('/api/crm/opportunities', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          const created = (await response.json()) as { opportunityId?: string };
+          window.location.href = created.opportunityId
+            ? `/app/crm/opportunities/${created.opportunityId}`
+            : '/app/crm/opportunities';
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (answer?.error?.fields?.length) paint(answer.error.fields);
+        else if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.message ?? 'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-cms-opportunity-create]')) return;
+      clear();
+      form.reset();
+      resetAccount();
+      syncStages();
+      drawer.showModal();
+      form.querySelector<HTMLElement>('input')?.focus();
+    });
+  }
+</script>

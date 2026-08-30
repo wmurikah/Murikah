@@ -1,0 +1,535 @@
+---
+/**
+ * Administration → Workflows.
+ *
+ * Three tabs, three real URLs: the workflow roles that carry approval
+ * authority, the versioned definitions that say what stages a transaction goes
+ * through, and the approval preview that lets a configuration be checked before
+ * anything runs on it.
+ *
+ * No workflow role name, stage code or approver name is written into this file.
+ * Everything rendered comes from the tables, so a role an operator adds appears
+ * here with no code change, which is what makes this configuration rather than
+ * source.
+ *
+ * The page authorises for itself. The navigation filter that decides whether a
+ * link to it appears is presentation, and hiding a link stops nobody typing the
+ * URL, so the permission is checked here before a row is read and again in
+ * every endpoint behind it.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsWorkflowFormScript from '@/components/cms/CmsWorkflowFormScript.astro';
+import CmsApprovalPreviewScript from '@/components/cms/CmsApprovalPreviewScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import {
+  canManageWorkflowRoles,
+  canManageWorkflows,
+  canViewWorkflows,
+} from '@/lib/cms/permissions';
+import {
+  listDefinitions,
+  listWorkflowRoles,
+  workflowOptions,
+  type Option,
+  type WorkflowDefinitionRow,
+  type WorkflowRoleRow,
+} from '@/lib/cms/repos/workflowAdmin';
+import { PROCESS_TYPES } from '@/lib/cms/workflow/model';
+import {
+  resolveWorkflowTab,
+  workflowTabHref,
+  WORKFLOW_TABS,
+} from '@/lib/cms/admin/workflowWorkspace';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewWorkflows(permissions);
+const mayManageRoles = canManageWorkflowRoles(permissions);
+const mayManageWorkflows = canManageWorkflows(permissions);
+
+const tab = resolveWorkflowTab(Astro.url.searchParams.get('tab'));
+
+let roles: WorkflowRoleRow[] = [];
+let definitions: WorkflowDefinitionRow[] = [];
+let options: {
+  countries: Option[];
+  affiliates: Option[];
+  businessUnits: Option[];
+  productCategories: Option[];
+} = { countries: [], affiliates: [], businessUnits: [], productCategories: [] };
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const [loadedRoles, loadedDefinitions, loadedOptions] = await Promise.all([
+      listWorkflowRoles(db),
+      listDefinitions(db),
+      workflowOptions(db),
+    ]);
+    roles = loadedRoles;
+    definitions = loadedDefinitions;
+    options = loadedOptions;
+  } catch (error) {
+    console.error('[cms.workflows] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const unrestricted = roles.reduce((total, role) => total + role.unrestrictedAssignmentCount, 0);
+
+const processOptions = [
+  { value: '', label: 'Any process' },
+  ...PROCESS_TYPES.map((value) => ({
+    value,
+    label: value.toLowerCase().replace(/_/g, ' '),
+  })),
+];
+const definitionProcessOptions = PROCESS_TYPES.map((value) => ({
+  value,
+  label: value.toLowerCase().replace(/_/g, ' '),
+}));
+const blank = { value: '', label: 'Not restricted' };
+const asOptions = (list: Option[]) => [
+  blank,
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+---
+
+<CmsLayout title="Workflows">
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to workflow administration"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Workflow configuration could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Workflows"
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Workflows' },
+          ]}
+        >
+          {tab.key === 'roles' && mayManageRoles && (
+            <CmsButton
+              slot="actions"
+              variant="primary"
+              icon="plus"
+              data-cms-wf-open="cms-wfrole-drawer"
+              data-endpoint="/api/admin/workflow-roles"
+              data-method="POST"
+              data-title="New workflow role"
+              data-values="{}"
+            >
+              New workflow role
+            </CmsButton>
+          )}
+          {tab.key === 'definitions' && mayManageWorkflows && (
+            <CmsButton
+              slot="actions"
+              variant="primary"
+              icon="plus"
+              data-cms-wf-open="cms-wfdef-drawer"
+              data-endpoint="/api/admin/workflows"
+              data-method="POST"
+              data-title="New workflow"
+              data-values="{}"
+            >
+              New workflow
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <CmsTabs
+          label="Workflow configuration"
+          current={workflowTabHref(tab.key)}
+          tabs={WORKFLOW_TABS.map((entry) => ({
+            label: entry.label,
+            href: workflowTabHref(entry.key),
+            count:
+              entry.key === 'roles'
+                ? roles.length
+                : entry.key === 'definitions'
+                  ? definitions.length
+                  : undefined,
+          }))}
+        />
+
+        <p class="text-cms-body-sm text-cms-muted">{tab.summary}</p>
+
+        {tab.key === 'roles' && (
+          <Fragment>
+            {/*
+              Section 6's warning, made visible rather than left for somebody to
+              discover from an approval. An assignment with no authority rule is
+              an approver with no amount, currency or product limit, because a
+              rule table is a restriction mechanism and an absent restriction
+              does not remove authority the assignment already granted.
+            */}
+            {unrestricted > 0 && (
+              <p class="flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+                <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
+                <span>
+                  {unrestricted}{' '}
+                  {unrestricted === 1 ? 'live assignment carries' : 'live assignments carry'} no
+                  authority rule, so{' '}
+                  {unrestricted === 1 ? 'that approver is' : 'those approvers are'} not limited by
+                  amount, currency or product. Open a role to see which.
+                </span>
+              </p>
+            )}
+
+            <CmsDataTable
+              caption="Workflow roles"
+              columns={[
+                { key: 'role', label: 'Role' },
+                { key: 'process', label: 'Process' },
+                { key: 'assignments', label: 'Approvers', numeric: true },
+                { key: 'unrestricted', label: 'No rule', numeric: true },
+                { key: 'status', label: 'Status' },
+              ]}
+              empty={roles.length === 0}
+            >
+              {roles.map((role) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5">
+                    <a
+                      href={`/app/administration/workflow-roles/${role.workflowRoleId}`}
+                      class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {role.roleName}
+                    </a>
+                    <span class="ms-2 text-cms-caption text-cms-muted">{role.roleCode}</span>
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {role.processType === null
+                      ? 'Any process'
+                      : role.processType.toLowerCase().replace(/_/g, ' ')}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {role.assignmentCount}
+                  </td>
+                  <td class="px-4 py-2.5 text-right tabular-nums">
+                    {role.unrestrictedAssignmentCount > 0 ? (
+                      <CmsBadge tone="warning" label={String(role.unrestrictedAssignmentCount)} />
+                    ) : (
+                      <span class="text-cms-muted">0</span>
+                    )}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge
+                      tone={role.active ? 'success' : 'neutral'}
+                      label={role.active ? 'Active' : 'Inactive'}
+                    />
+                  </td>
+                </tr>
+              ))}
+              <Fragment slot="empty">
+                <CmsEmptyState
+                  icon="administration"
+                  title="No workflow roles"
+                  description="A workflow role names an approval responsibility, such as finance approval on a sales order. Create the first one."
+                />
+              </Fragment>
+            </CmsDataTable>
+          </Fragment>
+        )}
+
+        {tab.key === 'definitions' && (
+          <CmsDataTable
+            caption="Workflow definitions"
+            columns={[
+              { key: 'name', label: 'Workflow' },
+              { key: 'process', label: 'Process' },
+              { key: 'applies', label: 'Applies to', secondary: true },
+              { key: 'version', label: 'Version', numeric: true },
+              { key: 'stages', label: 'Stages', numeric: true },
+              { key: 'instances', label: 'In use', numeric: true },
+              { key: 'status', label: 'Status' },
+            ]}
+            empty={definitions.length === 0}
+          >
+            {definitions.map((definition) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5">
+                  <a
+                    href={`/app/administration/workflows/${definition.workflowDefinitionId}`}
+                    class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {definition.workflowName}
+                  </a>
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {definition.processType.toLowerCase().replace(/_/g, ' ')}
+                </td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                  {definition.businessUnitId ??
+                    definition.affiliateId ??
+                    definition.countryId ??
+                    'Everywhere'}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {definition.versionNo}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {definition.stageCount}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {definition.instanceCount}
+                </td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={definition.active ? 'success' : 'neutral'}
+                    label={definition.active ? 'Active' : 'Retired'}
+                  />
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="administration"
+                title="No workflows"
+                description="A workflow definition says what stages a transaction passes through. Create the first one."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab.key === 'preview' && (
+          <CmsCard>
+            <form id="cms-preview-form" novalidate class="flex flex-col gap-4">
+              <p
+                id="cms-preview-error"
+                role="alert"
+                hidden
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+              />
+              <div class="grid gap-4 sm:grid-cols-2">
+                <CmsSelect
+                  id="p-processType"
+                  name="processType"
+                  label="Process"
+                  required
+                  options={definitionProcessOptions}
+                />
+                <CmsInput
+                  id="p-eventDate"
+                  name="eventDate"
+                  label="Date"
+                  type="date"
+                  hint="Authority is tested as it stood on this day."
+                />
+                <CmsSelect
+                  id="p-countryId"
+                  name="countryId"
+                  label="Country"
+                  options={asOptions(options.countries)}
+                />
+                <CmsSelect
+                  id="p-affiliateId"
+                  name="affiliateId"
+                  label="Affiliate"
+                  options={asOptions(options.affiliates)}
+                />
+                <CmsSelect
+                  id="p-businessUnitId"
+                  name="businessUnitId"
+                  label="Business unit"
+                  options={asOptions(options.businessUnits)}
+                />
+                <CmsInput
+                  id="p-amount"
+                  name="amount"
+                  label="Amount"
+                  type="number"
+                  hint="Leave empty for a transaction with no value."
+                />
+                <CmsInput
+                  id="p-currencyCode"
+                  name="currencyCode"
+                  label="Currency"
+                  hint="Three letters, such as KES. Leave empty for none."
+                />
+              </div>
+
+              <fieldset class="flex flex-col gap-2">
+                <legend class="text-cms-body-sm font-medium text-cms-ink">Order lines</legend>
+                <p class="text-cms-body-sm text-cms-muted">
+                  A rule that restricts by product is tested against every line, so an order that
+                  spans two product groups matches only an approver with no product restriction.
+                  Tick the products this transaction carries.
+                </p>
+                <div class="grid gap-2 sm:grid-cols-2">
+                  {options.productCategories.map((category) => (
+                    <label class="flex items-center gap-2 text-cms-body-sm text-cms-ink">
+                      <input
+                        type="checkbox"
+                        name="line"
+                        value={category.id}
+                        data-category-id={category.id}
+                        data-group-id={category.parentId ?? ''}
+                        class="size-4 rounded border-cms-border text-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                      />
+                      {category.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div>
+                <button
+                  type="submit"
+                  id="cms-preview-run"
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Show the approvers
+                </button>
+              </div>
+            </form>
+            <div id="cms-preview-output" class="mt-5" />
+          </CmsCard>
+        )}
+
+        {tab.key === 'roles' && mayManageRoles && (
+          <CmsDrawer id="cms-wfrole-drawer" tone="form" title="Workflow role">
+            <form
+              id="cms-wfrole-form"
+              data-cms-wf-form="cms-wfrole-drawer"
+              novalidate
+              class="flex flex-col gap-4"
+            >
+              <p
+                id="cms-wfrole-form-error"
+                role="alert"
+                hidden
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+              />
+              <CmsInput
+                id="wr-roleCode"
+                name="roleCode"
+                label="Code"
+                required
+                hint="Short and stable, such as SO_FINANCE_APPROVER. It cannot be changed later."
+              />
+              <CmsInput id="wr-roleName" name="roleName" label="Name" required />
+              <CmsSelect
+                id="wr-processType"
+                name="processType"
+                label="Process"
+                options={processOptions}
+                hint="Leave as any process for a role that spans more than one."
+              />
+              <CmsInput id="wr-description" name="description" label="Description" />
+              <CmsCheckbox id="wr-active" name="active" label="Active" checked />
+            </form>
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <button
+                type="submit"
+                form="cms-wfrole-form"
+                data-cms-wf-save
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Save
+              </button>
+            </Fragment>
+          </CmsDrawer>
+        )}
+
+        {tab.key === 'definitions' && mayManageWorkflows && (
+          <CmsDrawer id="cms-wfdef-drawer" tone="form" title="Workflow">
+            <form
+              id="cms-wfdef-form"
+              data-cms-wf-form="cms-wfdef-drawer"
+              novalidate
+              class="flex flex-col gap-4"
+            >
+              <p
+                id="cms-wfdef-form-error"
+                role="alert"
+                hidden
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+              />
+              <CmsInput id="wd-workflowName" name="workflowName" label="Name" required />
+              <CmsSelect
+                id="wd-processType"
+                name="processType"
+                label="Process"
+                required
+                options={definitionProcessOptions}
+              />
+              <CmsSelect
+                id="wd-countryId"
+                name="countryId"
+                label="Country"
+                options={asOptions(options.countries)}
+                hint="Leave unrestricted to apply everywhere."
+              />
+              <CmsSelect
+                id="wd-affiliateId"
+                name="affiliateId"
+                label="Affiliate"
+                options={asOptions(options.affiliates)}
+              />
+              <CmsSelect
+                id="wd-businessUnitId"
+                name="businessUnitId"
+                label="Business unit"
+                options={asOptions(options.businessUnits)}
+              />
+              <CmsInput
+                id="wd-effectiveFrom"
+                name="effectiveFrom"
+                label="Effective from"
+                type="date"
+              />
+              <CmsInput id="wd-effectiveTo" name="effectiveTo" label="Effective to" type="date" />
+              <CmsCheckbox id="wd-active" name="active" label="Active" checked />
+            </form>
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <button
+                type="submit"
+                form="cms-wfdef-form"
+                data-cms-wf-save
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Save
+              </button>
+            </Fragment>
+          </CmsDrawer>
+        )}
+
+        {(mayManageRoles || mayManageWorkflows) && <CmsWorkflowFormScript />}
+        {tab.key === 'preview' && <CmsApprovalPreviewScript />}
+      </Fragment>
+    )
+  }
+</CmsLayout>

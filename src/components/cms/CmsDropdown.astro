@@ -1,0 +1,58 @@
+---
+/**
+ * A menu built on <details> and <summary>.
+ *
+ * Native disclosure gives keyboard operation, Escape and the open state for
+ * free, with no focus-management code to get wrong and no island to hydrate.
+ * The only script is the two behaviours the element does not provide: close on
+ * outside click, and close on Escape when focus is inside the panel.
+ *
+ * The trigger is a slot so a caller can put an avatar, a label or an icon in
+ * it. `align` decides which edge the panel hangs from, so a menu at the right
+ * of the top bar does not push the page wider.
+ */
+interface Props {
+  id: string;
+  label: string;
+  align?: 'start' | 'end';
+  class?: string;
+}
+const { id, label, align = 'end', class: className } = Astro.props;
+---
+
+<details data-cms-dropdown id={id} class:list={['relative', className]}>
+  <summary
+    class="flex h-10 cursor-pointer list-none items-center gap-2 rounded-cms px-2 outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus [&::-webkit-details-marker]:hidden"
+    aria-label={label}
+  >
+    <slot name="trigger" />
+  </summary>
+  <div
+    class:list={[
+      'absolute z-40 mt-1 min-w-56 rounded-cms-lg border border-cms-line bg-cms-surface p-1.5 shadow-cms-overlay',
+      align === 'end' ? 'right-0' : 'left-0',
+    ]}
+  >
+    <slot />
+  </div>
+</details>
+
+<script>
+  // Close any open dropdown when the click lands outside it.
+  document.addEventListener('click', (event) => {
+    const target = event.target as Node | null;
+    document.querySelectorAll<HTMLDetailsElement>('[data-cms-dropdown][open]').forEach((menu) => {
+      if (target && !menu.contains(target)) menu.open = false;
+    });
+  });
+
+  // Escape closes the dropdown that contains focus and returns focus to its
+  // trigger, which is what a keyboard user expects and what <details> omits.
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const open = document.querySelector<HTMLDetailsElement>('[data-cms-dropdown][open]');
+    if (!open) return;
+    open.open = false;
+    open.querySelector<HTMLElement>('summary')?.focus();
+  });
+</script>

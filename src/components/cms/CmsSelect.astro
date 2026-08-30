@@ -1,0 +1,122 @@
+---
+/**
+ * A native <select> with the same label, hint and error treatment as CmsInput.
+ * Native on purpose: it is the control every platform already knows how to open
+ * with a keyboard, and on a phone it becomes the system picker. A custom
+ * listbox would be more code, worse on touch, and a fresh set of ARIA bugs.
+ *
+ * A shell, as the brief asks: options in, value out, nothing clever.
+ */
+import CmsIcon from './CmsIcon.astro';
+
+export interface CmsSelectOption {
+  value: string;
+  label: string;
+}
+
+interface Props {
+  id: string;
+  name: string;
+  label: string;
+  options: CmsSelectOption[];
+  value?: string;
+  hint?: string;
+  error?: string;
+  required?: boolean;
+  disabled?: boolean;
+  /**
+   * `sm` is the compact filter-bar control: 36px rather than 44px.
+   *
+   * ONE IMPLEMENTATION, TWO SIZES. A second small-select component would be a
+   * second set of label, hint and error behaviour to keep in step, and the
+   * first thing to drift would be the part nobody looks at, which is the error
+   * association. A filter control is never a page's primary action, so it is
+   * not held to the 44px figure; it is still far above the 24px floor.
+   */
+  size?: 'sm' | 'md';
+  class?: string;
+}
+const {
+  id,
+  name,
+  label,
+  options,
+  value,
+  hint,
+  error,
+  required = false,
+  disabled = false,
+  size = 'md',
+  class: className,
+} = Astro.props;
+const hintId = hint ? `${id}-hint` : undefined;
+const errorId = `${id}-error`;
+// The error is always described and always present, matching CmsInput. A select
+// in a drawer is validated on the server like every other field, and a message
+// that arrives on the client has nowhere to go if the paragraph only exists
+// when the server rendered one. Build Prompt 05's create-and-edit drawer is the
+// first caller that needed it; the two components now behave the same way.
+const describedBy = [hintId, errorId].filter(Boolean).join(' ');
+---
+
+<div class={['flex flex-col gap-1.5', className].filter(Boolean).join(' ')}>
+  <label for={id} class="text-cms-label font-semibold text-cms-ink">{label}</label>
+  <div class="relative">
+    <select
+      id={id}
+      name={name}
+      required={required}
+      disabled={disabled}
+      aria-describedby={describedBy || undefined}
+      aria-invalid={error ? 'true' : undefined}
+      class:list={[
+        size === 'sm'
+          ? 'h-9 w-full appearance-none rounded-cms border bg-cms-surface px-2.5 pr-8 text-cms-body-sm'
+          : 'h-11 w-full appearance-none rounded-cms border bg-cms-surface px-3 pr-10 text-cms-body',
+        'text-cms-ink transition-colors duration-150 outline-none',
+        'focus-visible:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
+        'disabled:cursor-not-allowed disabled:bg-cms-canvas disabled:text-cms-muted',
+        error ? 'border-cms-negative' : 'border-cms-border',
+      ]}
+    >
+      {
+        options.map((option) => (
+          <option value={option.value} selected={option.value === value}>
+            {option.label}
+          </option>
+        ))
+      }
+    </select>
+    <CmsIcon
+      name="chevronDown"
+      size={18}
+      class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-cms-muted"
+    />
+  </div>
+  {
+    hint && (
+      <p id={hintId} class="text-cms-caption text-cms-muted">
+        {hint}
+      </p>
+    )
+  }
+  {/* Always present so a message added on the client is announced. */}
+  <p
+    id={errorId}
+    role="alert"
+    data-field-error
+    class:list={[
+      'flex items-start gap-1.5 text-cms-caption font-medium text-cms-negative',
+      error ? '' : 'hidden',
+    ]}
+  >
+    {
+      error && (
+        <>
+          <CmsIcon name="statusBreach" size={14} class="mt-px shrink-0" />
+          <span>{error}</span>
+        </>
+      )
+    }
+  </p>
+</div>

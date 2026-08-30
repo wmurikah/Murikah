@@ -1,0 +1,48 @@
+---
+/**
+ * A measure's definition, its population and its date basis, on demand.
+ *
+ * ONE IMPLEMENTATION, USED EVERYWHERE. A KPI card, a figure in a list and a
+ * chart caption all owe the reader the same three facts, and three separate
+ * versions of this disclosure would drift into three different answers to the
+ * same question.
+ *
+ * A native <details>, so it needs no JavaScript, is in the tab order, takes a
+ * focus ring and announces its own expanded state. The panel is the one thing
+ * on a page that genuinely floats, which is what the application's single
+ * elevation level is reserved for.
+ */
+import CmsIcon from './CmsIcon.astro';
+
+interface Props {
+  /** The measure this describes, used for the control's accessible name. */
+  label: string;
+  /** What is being measured. */
+  definition?: string;
+  /** The population the figure was taken over. */
+  denominator?: string;
+  /** Which timestamp decides the period. */
+  dateBasis?: string;
+  /** Coverage, where a duration is measured over part of the population. */
+  coverage?: string;
+  class?: string;
+}
+const { label, definition, denominator, dateBasis, coverage, class: className } = Astro.props;
+---
+
+<details class:list={['relative', className]}>
+  <summary
+    class="inline-flex h-6 w-6 shrink-0 cursor-pointer list-none items-center justify-center rounded-full text-cms-muted outline-none hover:bg-cms-ink-100 hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+    aria-label={`What ${label} measures`}
+  >
+    <CmsIcon name="statusInfo" size={14} />
+  </summary>
+  <div
+    class="absolute end-0 z-20 mt-1 w-64 rounded-cms bg-cms-surface p-3 text-cms-caption shadow-cms-overlay"
+  >
+    {definition && <p class="text-cms-ink">{definition}</p>}
+    {denominator && <p class="mt-1.5 text-cms-muted">Population: {denominator}</p>}
+    {dateBasis && <p class="mt-1 text-cms-muted">Dated by: {dateBasis}</p>}
+    {coverage && <p class="mt-1 text-cms-muted">Coverage: {coverage}</p>}
+  </div>
+</details>

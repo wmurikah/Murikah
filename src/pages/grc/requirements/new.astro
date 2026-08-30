@@ -1,0 +1,161 @@
+---
+export const prerender = false;
+
+/**
+ * Raise a requirement (Build Prompt 58). Gate: REQUIREMENTS.manage.
+ *
+ * The observation is optional and sits last (Build Prompt 69). An auditor asks for
+ * the March reconciliations because they are testing something; whether those
+ * reconciliations are evidence for a observation, and which one, is knowable once
+ * they arrive. Requiring the link up front produced observations raised early as a
+ * peg to hang the request on, and requests kept in email entirely. Audit links
+ * it later, from the requirement's own page, or never.
+ *
+ * The owners are chosen the same way action plan owners are, several at a time,
+ * because a single ask routinely spans two departments, and a copy list beside
+ * them for the people who need to know it was asked without owing an answer.
+ *
+ * Arriving from a observation (`?work_paper=`) preselects it, so the auditor reading
+ * a work paper does not have to find it again in a list.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
+import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const allowed = grc.isPlatformOwner || grc.perms.includes('REQUIREMENTS.manage');
+const presetWorkPaper = Astro.url.searchParams.get('work_paper') ?? '';
+const failed = Astro.url.searchParams.get('error');
+const today = new Date().toISOString().slice(0, 10);
+
+let workPapers: WorkPaperOption[] = [];
+let users: Option[] = [];
+let loadError = false;
+if (allowed) {
+  loadError = !(await guardPageLoad('requirements.new', async () => {
+    const db = await getDb(getGrcEnv());
+    [workPapers, users] = await Promise.all([
+      listWorkPaperOptions(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+    ]);
+  }));
+}
+---
+
+<GrcLayout title="New requirement">
+  <div class="grc-page-head">
+    <div>
+      <h1>New requirement</h1>
+      <p class="grc-lead">
+        Ask the business for information. A observation can be linked to it later, once it is clear
+        what the information supports.
+      </p>
+    </div>
+    <a href="/requirements" class="grc-btn grc-btn--secondary">Back to requirements</a>
+  </div>
+
+  {
+    failed && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {decodeURIComponent(failed)}
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have permission to raise requirements.
+      </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="The requirement form" />
+    ) : (
+      <form method="post" action="/api/requirements" class="grc-panel">
+        <div class="grc-field">
+          <label for="description">What is required (required)</label>
+          <textarea
+            id="description"
+            name="description"
+            class="grc-textarea"
+            rows="4"
+            maxlength="2000"
+            required
+            placeholder="The bank reconciliation for March, signed by the preparer and the reviewer."
+          />
+        </div>
+
+        <div class="grc-field">
+          <label for="requested">Requested on</label>
+          <input type="date" id="requested" name="requested_date" class="grc-input" value={today} />
+        </div>
+
+        <div class="grc-field">
+          <label for="due">Due by</label>
+          <input type="date" id="due" name="due_date" class="grc-input" />
+        </div>
+
+        <div class="grc-field">
+          <label for="owners">Owners (required)</label>
+          <select id="owners" name="owner_ids" class="grc-select" multiple size="6" required>
+            {users.map((u) => (
+              <option value={u.id}>{u.label}</option>
+            ))}
+          </select>
+          <p class="grc-field__hint">
+            Everyone named here is asked for it and can upload against it. Hold Ctrl or Cmd to
+            select more than one.
+          </p>
+        </div>
+
+        <div class="grc-field">
+          <label for="cc">Copy to</label>
+          <select id="cc" name="cc_ids" class="grc-select" multiple size="4">
+            {users.map((u) => (
+              <option value={u.id}>{u.label}</option>
+            ))}
+          </select>
+          <p class="grc-field__hint">
+            They get the same email and can read it, and they upload nothing. Somebody named as both
+            is treated as an owner.
+          </p>
+        </div>
+
+        {/* The observation, last and optional (Build Prompt 69). It sits at the
+            foot of the form because it is the thing an auditor least often
+            knows at this point: they are asking for the March reconciliations
+            because they are testing something, and whether those turn out to be
+            evidence for a observation is answerable once they arrive. */}
+        <div class="grc-field">
+          <label for="work-paper">Link to a observation (optional)</label>
+          <select id="work-paper" name="work_paper_id" class="grc-select">
+            <option value="">Not yet, link it later</option>
+            {workPapers.map((w) => (
+              <option value={w.id} selected={presetWorkPaper === w.id}>
+                {w.label}
+              </option>
+            ))}
+          </select>
+          <p class="grc-field__hint">
+            Leave this alone unless you already know. Audit can link the requirement to a
+            observation at any time afterwards, and the owner never sees it either way.
+          </p>
+        </div>
+
+        <div class="grc-actionbar">
+          <button type="submit" class="grc-btn grc-btn--primary">
+            Raise requirement
+          </button>
+          <a href="/requirements" class="grc-btn grc-btn--secondary">
+            Cancel
+          </a>
+        </div>
+      </form>
+    )
+  }
+</GrcLayout>

@@ -1,0 +1,394 @@
+---
+/**
+ * Opportunity detail.
+ *
+ * The facts, the product lines with their reconciliation, and the stage
+ * history as a readable sequence with the time in each stage computed for the
+ * reader. Nobody subtracts timestamps here.
+ *
+ * THE HEADER VALUE IS NEVER SILENTLY OVERWRITTEN.
+ * Lines inform. Where the line sum and the header estimate disagree, the
+ * variance is shown with both figures, and changing the header is an explicit
+ * edit. A partial line sum says how many lines carry no value.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsOpportunityActions from '@/components/cms/CmsOpportunityActions.astro';
+import CmsActivitySection from '@/components/cms/CmsActivitySection.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import {
+  canViewOpportunities,
+  canEditOpportunities,
+  canManageAccounts,
+} from '@/lib/cms/permissions';
+import {
+  getOpportunity,
+  getPipeline,
+  listProductLines,
+  listStageHistory,
+  opportunityOptions,
+  reconcileLines,
+  type OpportunityRow,
+  type PipelineRow,
+  type ProductLineRow,
+  type StageHistoryRow,
+  type OpportunityOptions,
+} from '@/lib/cms/repos/opportunityAdmin';
+import { fractionToPercentLabel } from '@/lib/cms/crm/probability';
+import { listEntityActivities, type ActivityPage } from '@/lib/cms/repos/activityAdmin';
+import { listContacts, type ContactRow } from '@/lib/cms/repos/accountAdmin';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewOpportunities(permissions);
+const mayEdit = canEditOpportunities(permissions);
+const mayManageAccounts = canManageAccounts(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const opportunityId = Astro.params.opportunityId ?? '';
+
+let opportunity: OpportunityRow | null = null;
+let products: ProductLineRow[] = [];
+let history: StageHistoryRow[] = [];
+let pipeline: PipelineRow | null = null;
+let options: OpportunityOptions = {
+  pipelines: [],
+  businessUnits: [],
+  owners: [],
+  currencies: [],
+  lostReasons: [],
+  products: [],
+};
+let activities: ActivityPage | null = null;
+let contacts: ContactRow[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    opportunity = await getOpportunity(db, userId, opportunityId);
+    if (opportunity !== null) {
+      [products, history, pipeline, options, activities] = await Promise.all([
+        listProductLines(db, opportunityId),
+        listStageHistory(db, opportunityId),
+        getPipeline(db, opportunity.pipelineId),
+        opportunityOptions(db),
+        listEntityActivities(db, userId, 'OPPORTUNITY', opportunityId, {
+          activityType: null,
+          ownerUserId: null,
+          state: 'all',
+          from: null,
+          to: null,
+          search: '',
+          page: 1,
+        }),
+      ]);
+      contacts = (await listContacts(db, userId, opportunity.accountId, false)) ?? [];
+    }
+  } catch (error) {
+    console.error('[cms.crm.opportunity] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const reconciliation =
+  opportunity === null ? null : reconcileLines(opportunity.estimatedValue, products);
+const money = (value: number, currency: string) => `${currency} ${value.toLocaleString('en-KE')}`;
+const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase();
+const statusTone = (status: string) =>
+  status === 'WON' ? 'success' : status === 'LOST' ? 'danger' : 'info';
+
+/** Minutes as a phrase a person reads without doing arithmetic. */
+function spell(minutes: number | null): string {
+  if (minutes === null) return 'Not available';
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)} h`;
+  return `${Math.round(minutes / (60 * 24))} days`;
+}
+
+const stageOptions =
+  pipeline === null
+    ? []
+    : pipeline.stages
+        .filter((s) => s.active)
+        .map((s) => ({
+          id: s.pipelineStageId,
+          label: s.stageName,
+          isWon: s.isWonStage,
+          isLost: s.isLostStage,
+        }));
+---
+
+<CmsLayout title={opportunity?.title ?? 'Opportunity'}>
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to opportunities"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="This opportunity could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : opportunity === null ? (
+      <CmsErrorState
+        title="Opportunity not found"
+        description="The opportunity may have been removed, or you may not have access to it."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          auditEntityType="OPPORTUNITY"
+          auditEntityId={opportunityId}
+          title={opportunity.title}
+          description={`${opportunity.pipelineName} · ${opportunity.currentStageName}`}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'Opportunities', href: '/app/crm/opportunities' },
+            { label: opportunity.opportunityNumber },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsBadge tone={statusTone(opportunity.status)} label={titleCase(opportunity.status)} />
+            {mayEdit && opportunity.status === 'OPEN' && (
+              <CmsButton variant="primary" data-cms-opp-move>
+                Move stage
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+
+        {opportunity.status === 'LOST' && (
+          <CmsCard title="Lost">
+            <p class="text-cms-body-sm text-cms-ink">
+              {opportunity.lostReasonName ?? 'No reason recorded'}
+              {opportunity.lostNotes !== null && `: ${opportunity.lostNotes}`}
+            </p>
+            <p class="mt-1 text-cms-body-sm text-cms-muted">
+              Closed {opportunity.actualCloseDate ?? 'date not recorded'}.
+            </p>
+          </CmsCard>
+        )}
+        {opportunity.status === 'WON' && (
+          <CmsCard title="Won">
+            <p class="text-cms-body-sm text-cms-ink">
+              {opportunity.wonAmount === null
+                ? 'Amount not recorded'
+                : money(opportunity.wonAmount, opportunity.currencyCode)}
+              , closed {opportunity.actualCloseDate ?? 'date not recorded'}.
+            </p>
+          </CmsCard>
+        )}
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <CmsCard title="The deal">
+            <dl class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Number</dt>
+                <dd class="text-cms-body-sm text-cms-ink tabular-nums">
+                  {opportunity.opportunityNumber}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Account</dt>
+                <dd class="text-cms-body-sm">
+                  <a
+                    href={`/app/customers/${opportunity.accountId}`}
+                    class="rounded-cms text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {opportunity.accountName}
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Estimated value</dt>
+                <dd class="text-cms-body-sm text-cms-ink tabular-nums">
+                  {money(opportunity.estimatedValue, opportunity.currencyCode)}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Probability</dt>
+                <dd class="text-cms-body-sm text-cms-ink tabular-nums">
+                  {fractionToPercentLabel(opportunity.probability)}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Weighted value</dt>
+                <dd class="text-cms-body-sm text-cms-ink tabular-nums">
+                  {money(
+                    Math.round(opportunity.estimatedValue * opportunity.probability),
+                    opportunity.currencyCode,
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Owner</dt>
+                <dd class="text-cms-body-sm text-cms-ink">{opportunity.ownerName}</dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Business unit</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {opportunity.businessUnitName ?? 'Not available'}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Estimated close</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {opportunity.estimatedCloseDate ?? 'Not available'}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">From lead</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {opportunity.leadId === null ? (
+                    'Created directly'
+                  ) : (
+                    <a
+                      href={`/app/crm/${opportunity.leadId}`}
+                      class="rounded-cms text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      View the originating lead
+                    </a>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-cms-caption text-cms-muted">Stage target</dt>
+                <dd class="text-cms-body-sm text-cms-ink">
+                  {opportunity.stageTargetDays === null
+                    ? 'No target configured'
+                    : `${opportunity.stageTargetDays} days`}
+                </dd>
+              </div>
+            </dl>
+          </CmsCard>
+
+          <CmsCard title="Products">
+            {products.length === 0 ? (
+              <CmsEmptyState
+                icon="crm"
+                title="No product lines"
+                description="Add the products this deal would supply."
+              />
+            ) : (
+              <ul class="flex flex-col gap-2">
+                {products.map((line) => (
+                  <li class="flex items-start justify-between gap-3 rounded-cms border border-cms-line px-3 py-2">
+                    <div>
+                      <p class="text-cms-body-sm font-medium text-cms-ink">{line.productName}</p>
+                      <p class="text-cms-caption text-cms-muted">
+                        {line.expectedQuantity.toLocaleString('en-KE')}
+                        {line.unitOfMeasure !== null && ` ${line.unitOfMeasure}`}
+                        {line.unitPrice !== null && ` at ${line.unitPrice.toLocaleString('en-KE')}`}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-cms-body-sm text-cms-muted tabular-nums">
+                        {line.estimatedLineValue === null
+                          ? 'Not available'
+                          : money(line.estimatedLineValue, opportunity!.currencyCode)}
+                      </span>
+                      {mayEdit && opportunity!.status === 'OPEN' && (
+                        <button
+                          type="button"
+                          data-cms-opp-line-remove={line.opportunityProductId}
+                          class="rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-negative outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {reconciliation !== null && reconciliation.lineValueSum !== null && (
+              <p class="mt-3 border-t border-cms-line pt-3 text-cms-body-sm text-cms-muted">
+                Lines with a value sum to{' '}
+                {money(reconciliation.lineValueSum, opportunity.currencyCode)}
+                {reconciliation.linesWithoutValue > 0 &&
+                  ` (${reconciliation.linesWithoutValue} more line${reconciliation.linesWithoutValue === 1 ? '' : 's'} carry no value)`}
+                . The commercial estimate stays{' '}
+                {money(opportunity.estimatedValue, opportunity.currencyCode)}
+                {reconciliation.variance !== 0 &&
+                  reconciliation.variance !== null &&
+                  `, a difference of ${money(Math.abs(reconciliation.variance), opportunity.currencyCode)}`}
+                . Nothing overwrites the agreed figure silently.
+              </p>
+            )}
+            {mayEdit && opportunity.status === 'OPEN' && (
+              <div class="mt-3">
+                <CmsButton variant="secondary" data-cms-opp-line-add>
+                  Add product
+                </CmsButton>
+              </div>
+            )}
+          </CmsCard>
+        </div>
+
+        <CmsCard title="Stage history">
+          <ol class="flex flex-col gap-3">
+            {history.map((step) => (
+              <li class="flex items-start gap-3">
+                <span
+                  class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-cms-royal"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p class="text-cms-body-sm text-cms-ink">
+                    {step.fromStageName === null
+                      ? `Created in ${step.toStageName}`
+                      : `${step.fromStageName} to ${step.toStageName}`}
+                    {step.fromStageName !== null && (
+                      <span class="ms-2 text-cms-caption text-cms-muted">
+                        after {spell(step.durationInPreviousStageMinutes)} in {step.fromStageName}
+                      </span>
+                    )}
+                  </p>
+                  <p class="text-cms-caption text-cms-muted">
+                    {step.changedAt} · {step.changedByName}
+                    {step.reason !== null && ` · ${step.reason}`}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </CmsCard>
+
+        <CmsActivitySection
+          entityType="OPPORTUNITY"
+          entityId={opportunity.opportunityId}
+          activities={activities?.items ?? []}
+          total={activities?.total ?? 0}
+          contacts={contacts
+            .filter((ct) => ct.active)
+            .map((ct) => ({ id: ct.contactId, label: ct.fullName }))}
+          owners={options.owners}
+          currentUserId={userId}
+        />
+
+        {mayEdit && (
+          <CmsOpportunityActions
+            opportunityId={opportunity.opportunityId}
+            currentStageId={opportunity.currentStageId}
+            accountType={opportunity.accountType}
+            mayManageAccounts={mayManageAccounts}
+            stages={stageOptions}
+            lostReasons={options.lostReasons}
+            products={options.products}
+            estimatedValue={opportunity.estimatedValue}
+          />
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

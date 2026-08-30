@@ -1,61 +1,137 @@
 ---
-export const prerender = false;
-
-/**
- * Staff sign-in. Email and password; the endpoint routes to the staff shell (or
- * the TOTP step when MFA is on). One generic message on failure, so it never
- * reveals whether the email or the password was wrong. The Murikah two-pane
- * layout carries the brand.
- */
 import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
-
-const grc = Astro.locals.cms;
-if (grc) return Astro.redirect('/');
-const failed = Astro.url.searchParams.get('error') === '1';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import { EXPIRED_FLAG, EXPIRED_MESSAGE } from '@/lib/cms/routes';
+export const prerender = false;
+const notice =
+  Astro.url.searchParams.get(EXPIRED_FLAG) === '1'
+    ? EXPIRED_MESSAGE
+    : Astro.url.searchParams.get('reason') === 'not_provisioned'
+      ? 'Your Hass Petroleum account has not been provisioned. Contact your system administrator.'
+      : Astro.url.searchParams.has('provider_error')
+        ? "We couldn't complete provider sign-in. Try again or use another sign-in method."
+        : null;
 ---
 
-<CmsAuthLayout title="Staff sign in" sub="Sign in to the staff workspace.">
-  <h1>Staff sign in</h1>
-  <p class="cms-authcard__lead">Access your customer, order and support workspace.</p>
-
-  {
-    failed && (
-      <p class="cms-error" role="alert" style="margin-bottom:1rem">
-        That email and password did not match. Please try again.
-      </p>
-    )
-  }
-
-  <form method="post" action="/api/auth/login">
-    <input type="hidden" name="user_type" value="STAFF" />
-    <div class="cms-field">
-      <label for="email">Email</label>
-      <input
-        type="email"
-        id="email"
-        name="email"
-        class="cms-input"
-        autocomplete="username"
-        required
-        aria-invalid={failed ? 'true' : undefined}
-      />
-    </div>
-    <div class="cms-field">
-      <label for="password">Password</label>
-      <input
-        type="password"
-        id="password"
-        name="password"
-        class="cms-input"
-        autocomplete="current-password"
-        required
-        aria-invalid={failed ? 'true' : undefined}
-      />
-    </div>
-    <button type="submit" class="cms-btn cms-btn--primary">Sign in</button>
-  </form>
-
-  <p class="cms-field__hint" style="margin-top:1rem">
-    Are you a customer? <a href="/portal/login">Use the customer portal</a>.
-  </p>
+<CmsAuthLayout title="Sign in">
+  <div class="flex flex-col gap-6">
+    <header>
+      <h1 class="text-cms-display font-semibold text-cms-ink">Sign in</h1>
+    </header>
+    {
+      notice && (
+        <div
+          role="status"
+          class="rounded-cms border border-cms-caution-border bg-cms-caution-tint px-3.5 py-3 text-cms-body-sm"
+        >
+          {notice}
+        </div>
+      )
+    }
+    <form id="cms-login-form" class="flex flex-col gap-4" novalidate>
+      <div class="min-h-14">
+        <div
+          id="cms-login-error"
+          role="alert"
+          aria-live="assertive"
+          class="flex max-h-14 items-start gap-2.5 overflow-y-auto rounded-cms border border-cms-negative-border bg-cms-negative-tint px-3.5 py-3 text-cms-body-sm text-cms-negative data-[empty]:invisible"
+          data-empty
+        >
+          <span data-error-text></span>
+        </div>
+      </div>
+      <section data-email-step>
+        <CmsInput
+          id="cms-email"
+          name="email"
+          label="Work email"
+          type="email"
+          autocomplete="username"
+          inputmode="email"
+          required
+          autofocus
+        /><CmsButton type="button" variant="primary" size="lg" full id="cms-continue" class="mt-4"
+          >Continue</CmsButton
+        >
+      </section>
+      <section data-password-step hidden class="flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <strong data-selected-email class="truncate text-cms-body-sm"></strong><button
+            type="button"
+            data-change-email
+            class="text-cms-body-sm font-semibold text-cms-royal">Change</button
+          >
+        </div><CmsInput
+          id="cms-password"
+          name="password"
+          label="Password"
+          type="password"
+          autocomplete="current-password"
+          required
+          revealable
+        /><a
+          href="/forgot-password"
+          class="self-start text-cms-body-sm font-semibold text-cms-royal">Forgot password?</a
+        ><CmsButton type="submit" variant="primary" size="lg" full id="cms-login-submit"
+          >Sign in</CmsButton
+        >
+      </section>
+    </form>
+    <p class="text-cms-body-sm text-cms-muted">
+      New customer? <a href="/register" class="font-semibold text-cms-royal"
+        >Create customer access</a
+      >
+    </p>
+  </div>
 </CmsAuthLayout>
+<script>
+  import { submitCredentials, authResultMessage } from '@/lib/cms/auth/client';
+  const form = document.querySelector<HTMLFormElement>('#cms-login-form'),
+    email = document.querySelector<HTMLInputElement>('#cms-email'),
+    password = document.querySelector<HTMLInputElement>('#cms-password'),
+    emailStep = document.querySelector<HTMLElement>('[data-email-step]'),
+    passwordStep = document.querySelector<HTMLElement>('[data-password-step]'),
+    errorBox = document.querySelector<HTMLElement>('#cms-login-error'),
+    error = errorBox?.querySelector<HTMLElement>('[data-error-text]');
+  const setError = (message: string) => {
+    if (error) error.textContent = message;
+    if (errorBox) errorBox.toggleAttribute('data-empty', !message);
+  };
+  const valid = () => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim());
+  document.querySelector('#cms-continue')?.addEventListener('click', () => {
+    if (!valid()) {
+      setError('Enter a complete work email address.');
+      email?.focus();
+      return;
+    }
+    setError('');
+    if (emailStep) emailStep.hidden = true;
+    if (passwordStep) passwordStep.hidden = false;
+    const selected = document.querySelector('[data-selected-email]');
+    if (selected) selected.textContent = email!.value.trim();
+    password?.focus();
+  });
+  document.querySelector('[data-change-email]')?.addEventListener('click', () => {
+    if (passwordStep) passwordStep.hidden = true;
+    if (emailStep) emailStep.hidden = false;
+    email?.focus();
+  });
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!email || !password || !password.value) return;
+    const submit = document.querySelector<HTMLButtonElement>('#cms-login-submit');
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = 'Signing in…';
+    }
+    const result = await submitCredentials({ email: email.value.trim(), password: password.value });
+    if (result.status === 'success') location.assign(result.landing);
+    else setError(authResultMessage(result) ?? 'Sign-in could not be completed. Try again.');
+    password.value = '';
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Sign in';
+    }
+  });
+</script>

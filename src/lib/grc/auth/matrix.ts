@@ -1,88 +1,28 @@
 /**
  * The RBAC permission matrix, ported from PermissionService.gs. The model is a
  * matrix, not a permission-code list: a role grants module and action pairs. This
- * module is the pure core (no imports, so node strips types and unit-tests it):
- * the modules and actions, the two source aliases, the matrix check, the page map
- * and the backward-compatible legacy-code derivation.
+ * module is the pure core (its only import is the module catalogue beside it, so
+ * node strips types and unit-tests it): the modules and actions, the two source
+ * aliases, the matrix check, the page map and the backward-compatible legacy-code
+ * derivation.
  *
  * A user has one role (users.role_code); there is no user_roles junction. The
  * grants live in role_permissions(role_code, module_code, action_code, is_allowed).
  *
- * This module is the single source for the modules and actions the matrix can
- * express (Build Prompt 43). `role_permissions.module_code` and `.action_code`
- * reference the `permission_modules` and `permission_actions` lookup tables, and
- * foreign keys are on (src/lib/grc/db.ts), so writing a grant for a module the
- * lookup table does not hold fails the whole save. The two lists had drifted
- * from the seeded reference data, which is what broke every role save; the seed
- * (grc/test/smoke/seed.ts) and the save's lookup reconciliation
- * (repos/permissionsAdmin.ts) now both read PERMISSION_MODULES and
- * PERMISSION_ACTIONS from here, so there is one list and it cannot drift again.
+ * The module and action lists are derived from `permissionModules.ts` rather
+ * than restated here, so the code's list, the reference rows the save creates
+ * and the smoke seed all come from one place and cannot drift apart again.
  */
+import { PERMISSION_ACTIONS, PERMISSION_MODULES } from './permissionModules.ts';
+
+export * from './permissionModules.ts';
 
 export type PermissionMatrix = Record<string, Record<string, boolean>>;
 
-export interface PermissionModule {
-  code: string;
-  name: string;
-  description: string;
-}
-
-/**
- * Every module the matrix can express, with the label its `permission_modules`
- * row carries. Each one is read by a real gate:
- *
- *   WORK_PAPER, ACTION_PLAN, AUDITEE_RESPONSE  the module CRUD and workflow
- *   AUDIT_WORKBENCH                            the dashboard (DASHBOARD.view)
- *   REPORT                                     reports, exports and analytics
- *   AI_ASSIST                                  the AI drafting and validation
- *   USER                                       the Users screen and its endpoint
- *   CONFIG                                     every Setup surface and the queue
- *   AUDIT_LOG                                  the activity trail
- *
- * The seeded reference data also carried NOTIFICATION and SETUP, which no gate
- * has ever read: notifications are user-scoped and self-gating, and the Setup
- * surfaces gate on CONFIG. They are deliberately not listed here, so the matrix
- * neither shows nor writes them. Rows for them in a live lookup table are left
- * alone rather than deleted: reference data that predates this build is not this
- * endpoint's to remove, and an unread lookup row grants nothing.
- */
-export const PERMISSION_MODULES: readonly PermissionModule[] = [
-  { code: 'WORK_PAPER', name: 'Work papers', description: 'Audit findings and their workflow' },
-  {
-    code: 'ACTION_PLAN',
-    name: 'Action plans',
-    description: 'Remediation plans and their workflow',
-  },
-  {
-    code: 'AUDITEE_RESPONSE',
-    name: 'Auditee responses',
-    description: 'Management responses to findings',
-  },
-  { code: 'AUDIT_WORKBENCH', name: 'Audit workbench', description: 'The dashboard and its queues' },
-  { code: 'REPORT', name: 'Reports', description: 'Board reporting, exports and analytics' },
-  { code: 'AI_ASSIST', name: 'AI assistance', description: 'AI drafting and validation' },
-  { code: 'USER', name: 'Users', description: 'User administration' },
-  { code: 'CONFIG', name: 'Configuration', description: 'Setup, settings and the send queue' },
-  { code: 'AUDIT_LOG', name: 'Audit log', description: 'The activity and audit trail' },
-] as const;
-
-export interface PermissionAction {
-  code: string;
-  name: string;
-}
-
-/** Every action the matrix can express, with its `permission_actions` label. */
-export const PERMISSION_ACTIONS: readonly PermissionAction[] = [
-  { code: 'read', name: 'Read' },
-  { code: 'create', name: 'Create' },
-  { code: 'update', name: 'Update' },
-  { code: 'delete', name: 'Delete' },
-  { code: 'approve', name: 'Approve' },
-  { code: 'export', name: 'Export' },
-] as const;
-
+/** Every module code, in display order, from the single module catalogue. */
 export const MODULES: readonly string[] = PERMISSION_MODULES.map((m) => m.code);
 
+/** Every action code, in display order, from the same catalogue. */
 export const ACTIONS: readonly string[] = PERMISSION_ACTIONS.map((a) => a.code);
 
 // The two source aliases, applied before lookup: action `view` maps to `read`,
@@ -120,6 +60,13 @@ export interface PagePermission {
  * Sections with only identity- or row-scoped access carry no entry and pass:
  * the dashboard (self-gates in the shell), notifications (user-scoped),
  * change-password, and settings/provision (platform owner, not a role grant).
+ *
+ * `NOTIFICATION` and `SETUP` are wired here (Build Prompt 43). Both are held by
+ * the live `permission_modules` table and were read by nothing, so reconciling
+ * the code's list to the database left two modules an administrator could grant
+ * to no effect. They are added as alternatives beside the `CONFIG.read` that
+ * already opened those sections, never in place of it, so a role that could
+ * reach a screen before can still reach it.
  */
 export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
   'work-papers': [{ module: 'WORK_PAPER', action: 'read' }],
@@ -139,15 +86,34 @@ export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
     { module: 'WORK_PAPER', action: 'read' },
     { module: 'REPORT', action: 'read' },
   ],
-  'send-queue': [{ module: 'CONFIG', action: 'read' }],
+  // The send queue is the notification queue, so the notification grant opens it.
+  'send-queue': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'NOTIFICATION', action: 'read' },
+  ],
   settings: [
     { module: 'CONFIG', action: 'read' },
     { module: 'USER', action: 'read' },
+    { module: 'SETUP', action: 'read' },
   ],
-  'settings/general': [{ module: 'CONFIG', action: 'read' }],
-  'settings/affiliates': [{ module: 'CONFIG', action: 'read' }],
-  'settings/audit-universe': [{ module: 'CONFIG', action: 'read' }],
-  'settings/dropdowns': [{ module: 'CONFIG', action: 'read' }],
+  // The four organisation-level setup screens: the SETUP grant is what names
+  // them, and CONFIG.read still opens them as it always did.
+  'settings/general': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
+  'settings/affiliates': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
+  'settings/audit-universe': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
+  'settings/dropdowns': [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ],
   'settings/access-control': [{ module: 'CONFIG', action: 'read' }],
   'settings/ai': [{ module: 'CONFIG', action: 'read' }],
   'settings/email': [{ module: 'CONFIG', action: 'read' }],
@@ -158,11 +124,23 @@ export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
  * The map slug for an app path: the first segment, or the first two under
  * /settings ('/settings/users' stays distinct from the settings home). Returns
  * '' for the root.
+ *
+ * One finding's response thread is its own slug, and deliberately unmapped
+ * (Build Prompt 68). The auditee loop's whole premise is that people act by
+ * being NAMED rather than by holding a grant: a depot supervisor asked to draft
+ * a response holds no audit permission at all, and a central map keyed on
+ * permissions can only ever refuse them. So the thread gates on identity, on
+ * the page: it resolves the reader's standing on that one finding and shows
+ * "not shared with you" to anybody without it, exactly as a requirement's own
+ * page does for its owners. The section index above it keeps its grant, because
+ * a queue of everybody's findings is a different thing from one finding
+ * somebody was named on.
  */
 export function pageSlugForPath(appPath: string): string {
   const segments = appPath.split('/').filter((s) => s !== '');
   if (segments.length === 0) return '';
   if (segments[0] === 'settings' && segments.length > 1) return `settings/${segments[1]}`;
+  if (segments[0] === 'auditee-responses' && segments.length > 1) return 'auditee-responses/thread';
   return segments[0];
 }
 
@@ -180,6 +158,58 @@ export interface MatrixRow {
   moduleCode: string;
   actionCode: string;
   isAllowed: boolean;
+}
+
+/** A role_permissions row with the organisation it belongs to. */
+export interface ScopedMatrixRow extends MatrixRow {
+  organizationId: string;
+  /** `scope_to_affiliate`, the role's affiliate confinement (Build Prompt 45). */
+  scopeToAffiliate: boolean;
+}
+
+/** Which rows a matrix was built from: the organisation's own, or the defaults. */
+export interface ScopedMatrixRows {
+  rows: MatrixRow[];
+  /** True when the organisation has no rows of its own and inherits the defaults. */
+  inherited: boolean;
+  /**
+   * Whether this role is confined to its user's affiliate. The flag is stored on
+   * every grant row for the role, since `role_permissions` is the tenant-scoped
+   * table and `roles` is not, so it is read as "any row set" rather than "all
+   * rows set": the save writes the whole row set atomically and cannot leave
+   * them disagreeing, and a hand-edited database then fails closed.
+   */
+  scopeToAffiliate: boolean;
+}
+
+/**
+ * Choose between an organisation's own grants and the platform defaults
+ * (Build Prompt 44).
+ *
+ * The rule is all-or-nothing per role, deliberately: if the organisation holds
+ * any row for this role, those rows are the answer and the defaults are ignored
+ * entirely. The alternative, merging cell by cell, would mean an administrator
+ * who unticks a cell cannot tell whether they have revoked it or merely fallen
+ * back to a default that grants it, and an access-control screen a reviewer
+ * cannot read is worse than a coarse one. Falling back whole keeps the screen
+ * answerable: either these are your organisation's grants, or these are the
+ * platform's, and the screen says which.
+ *
+ * An empty `organizationId` (a platform owner inside no instance) resolves the
+ * defaults, which is what they are looking at from above the customers.
+ */
+export function selectScopedRows(
+  rows: ScopedMatrixRow[],
+  organizationId: string,
+  platformDefaultOrg: string,
+): ScopedMatrixRows {
+  const own = organizationId === '' ? [] : rows.filter((r) => r.organizationId === organizationId);
+  const chosen = own.length > 0 ? own : rows.filter((r) => r.organizationId === platformDefaultOrg);
+  return {
+    rows: chosen,
+    inherited: own.length === 0,
+    scopeToAffiliate: chosen.some((r) => r.scopeToAffiliate),
+  };
 }
 
 /** Build the nested matrix from role_permissions rows. */
@@ -217,6 +247,11 @@ const LEGACY_MAP: Array<{ code: string; module: string; action: string }> = [
   { code: 'WORK_PAPERS.submit', module: 'WORK_PAPER', action: 'update' },
   { code: 'WORK_PAPERS.approve', module: 'WORK_PAPER', action: 'approve' },
   { code: 'WORK_PAPERS.send', module: 'WORK_PAPER', action: 'approve' },
+  // Sending a finding with no evidence attached is a judgement, not a loophole,
+  // so it follows the grant of the person whose act sending is: the head of
+  // audit (Build Prompt 62). It was read by the evidence gate and mapped to
+  // nobody, so the override the refusal offers existed only in its wording.
+  { code: 'WORK_PAPERS.evidence_override', module: 'WORK_PAPER', action: 'approve' },
   { code: 'REQUIREMENTS.manage', module: 'WORK_PAPER', action: 'update' },
   { code: 'ACTION_PLANS.view', module: 'ACTION_PLAN', action: 'read' },
   { code: 'ACTION_PLANS.create', module: 'ACTION_PLAN', action: 'create' },
@@ -233,7 +268,15 @@ const LEGACY_MAP: Array<{ code: string; module: string; action: string }> = [
   { code: 'USERS.manage', module: 'USER', action: 'read' },
 ];
 
-/** The legacy permission codes a matrix grants (for perms.includes call sites). */
+/**
+ * The legacy permission codes a matrix grants (for perms.includes call sites).
+ *
+ * It asks the matrix through `canMatrix`, exactly as every other gate does, so
+ * the aliases apply here too (Build Prompt 55). Reading the matrix raw here
+ * while every other caller canonicalised meant the same grant could answer yes
+ * to `can(update, WORK_PAPER)` and no to the derived `WORK_PAPERS.edit`, which
+ * is not a difference any reviewer of a role matrix could have predicted.
+ */
 export function deriveLegacyPerms(matrix: PermissionMatrix): string[] {
-  return LEGACY_MAP.filter((l) => matrix[l.module]?.[l.action] === true).map((l) => l.code);
+  return LEGACY_MAP.filter((l) => canMatrix(matrix, l.action, l.module)).map((l) => l.code);
 }

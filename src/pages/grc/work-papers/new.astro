@@ -13,7 +13,7 @@ import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
-import { storageConfigured } from '@grc/storage';
+import { storageConfiguredFor } from '@grc/storage';
 import { guardPageLoad } from '@grc/pageGuard';
 import {
   listAuditAreas,
@@ -35,9 +35,9 @@ const hasAi = aiEnabled((f) => grc.hasFeature(f));
 
 const allowed = can(Astro.locals, 'create', 'WORK_PAPER');
 const failed = Astro.url.searchParams.get('error');
-// Evidence staged on this form binds to the finding on save; without storage
+// Evidence staged on this form binds to the observation on save; without storage
 // the section simply does not render.
-const draftToken = storageConfigured() ? crypto.randomUUID() : null;
+const draftToken = (await storageConfiguredFor(grc.organizationId)) ? crypto.randomUUID() : null;
 
 let areas: Option[] = [];
 let affiliates: Option[] = [];
@@ -63,7 +63,7 @@ if (allowed) {
   <div class="grc-page-head">
     <div>
       <h1>New work paper</h1>
-      <p class="grc-lead">Record a finding as a draft.</p>
+      <p class="grc-lead">Record a observation as a draft.</p>
     </div>
     <a href="/work-papers" class="grc-btn grc-btn--secondary">Back to list</a>
   </div>
@@ -84,7 +84,8 @@ if (allowed) {
         )}
         <WorkPaperForm
           action="/api/work-papers"
-          submitLabel="Create draft"
+          submitLabel="Save as draft"
+          offerSubmit={true}
           areas={areas}
           affiliates={affiliates}
           auditors={auditors}

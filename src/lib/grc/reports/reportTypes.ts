@@ -116,6 +116,8 @@ export interface Badge {
   tone?: Tone;
 }
 
+import type { FindingSource } from './findingCards';
+
 export type ReportBlock =
   | { kind: 'kpis'; items: Kpi[] }
   | { kind: 'table'; title?: string; columns: string[]; rows: Cell[][] }
@@ -135,7 +137,14 @@ export type ReportBlock =
   /** An analytical paragraph: the "summary" half of summary-plus-proof. */
   | { kind: 'narrative'; text: string }
   /** A numbered list, for an observation's recommendations. */
-  | { kind: 'list'; title?: string; items: string[]; ordered?: boolean };
+  | { kind: 'list'; title?: string; items: string[]; ordered?: boolean }
+  /**
+   * One finding, drawn as the header strip and cards the work paper's own
+   * screen uses (Build Prompt 67). The arrangement is decided once in
+   * `findingCards.ts` and rendered by the preview and by Word, so a board pack
+   * and the screen it was approved from are the same document.
+   */
+  | { kind: 'finding'; source: FindingSource };
 
 export interface ReportHeader {
   organisation: string;

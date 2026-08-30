@@ -1,0 +1,246 @@
+---
+/**
+ * Data → Exceptions → Unresolved Users.
+ *
+ * The names an extract used that this product does not recognise. An
+ * administrator maps one to an EXISTING person, which writes a source
+ * identity and closes the exception. Every later upload then recognises the
+ * same name with nobody touching it again, which is the whole point:
+ * nobody should resolve the same mapping every month.
+ *
+ * THIS SCREEN CREATES NOBODY. A name in a spreadsheet is not an account.
+ * A genuinely new colleague is created in user administration, where an
+ * email address is mandatory, and mapped here afterwards.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers, canViewImports } from '@/lib/cms/permissions';
+import { listUnresolvedActors, type UnresolvedActorRow } from '@/lib/cms/import/uploadCentre';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewImports(permissions);
+const mayMap = canManageUsers(permissions);
+
+let actors: UnresolvedActorRow[] = [];
+let people: { value: string; label: string }[] = [];
+let loadFailed = false;
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    actors = await listUnresolvedActors(db);
+    if (mayMap) {
+      const users = await db.execute(
+        `SELECT user_id, display_name, email, employee_no FROM users
+         WHERE status = 'ACTIVE' AND user_type = 'INTERNAL' ORDER BY display_name`,
+      );
+      people = users.rows.map((row) => ({
+        value: String(row.user_id),
+        label: `${String(row.display_name)} (${String(row.email)}${row.employee_no === null ? '' : `, ${String(row.employee_no)}`})`,
+      }));
+    }
+  } catch (error) {
+    console.error('[cms.data.exceptions] load failed', error);
+    loadFailed = true;
+  }
+}
+---
+
+<CmsLayout title="Unresolved users">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to import exceptions"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The exceptions could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Unresolved users"
+          definition="These are source-system names this product does not recognise. Map one to a person who already exists; nobody is created here."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Data', href: '/app/data' },
+            { label: 'Exceptions' },
+          ]}
+        />
+        <p
+          id="cms-actor-message"
+          role="status"
+          aria-live="polite"
+          class="mb-4 text-cms-body-sm text-cms-muted"
+        />
+
+        <CmsDataTable
+          caption="Unresolved users"
+          columns={[
+            { key: 'username', label: 'Source name' },
+            { key: 'source', label: 'Source system' },
+            { key: 'affiliate', label: 'Affiliate' },
+            { key: 'batch', label: 'First seen' },
+            { key: 'rows', label: 'Rows affected', numeric: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          empty={actors.length === 0}
+        >
+          {actors.map((actor) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">{actor.username}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{actor.sourceSystem}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{actor.affiliateId ?? 'Not available'}</td>
+              <td class="px-4 py-2.5 text-cms-muted">
+                <a
+                  href={`/app/data/history/${actor.firstSeenBatchId}`}
+                  class="text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {actor.firstSeenAt}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {actor.affectedRows}
+              </td>
+              <td class="px-4 py-2.5">
+                {mayMap ? (
+                  <button
+                    type="button"
+                    data-cms-actor-map={actor.unresolvedActorId}
+                    data-actor-name={actor.username}
+                    class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    Map to a person
+                  </button>
+                ) : (
+                  <span class="text-cms-body-sm text-cms-muted">Needs user administration</span>
+                )}
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="administration"
+              title="No unresolved users"
+              description="Every source name in every batch has a home."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        {mayMap && (
+          <CmsDrawer id="cms-actor-drawer" tone="form" title="Map a source name">
+            <form id="cms-actor-form" novalidate class="flex flex-col gap-4">
+              <p
+                id="cms-actor-error"
+                role="alert"
+                hidden
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+              />
+              <p class="text-cms-body-sm text-cms-muted">
+                Mapping <span id="cms-actor-name" class="font-medium text-cms-ink" />. If the person
+                does not exist yet, create them in user administration first: an account needs an
+                email address, which a spreadsheet name does not carry.
+              </p>
+              <CmsSelect
+                id="actor-userId"
+                name="userId"
+                label="Person"
+                required
+                options={[{ value: '', label: 'Choose a person' }, ...people]}
+              />
+              <CmsCheckbox
+                id="actor-revalidate"
+                name="revalidate"
+                label="Revalidate the affected rows now"
+                checked
+              />
+            </form>
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <button
+                type="submit"
+                form="cms-actor-form"
+                data-cms-actor-save
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Map
+              </button>
+            </Fragment>
+          </CmsDrawer>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  const drawer = document.getElementById('cms-actor-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-actor-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-actor-error');
+  const nameLabel = document.getElementById('cms-actor-name');
+  const message = document.getElementById('cms-actor-message');
+  let actorId = '';
+
+  document.addEventListener('click', (event) => {
+    const target = (event.target as HTMLElement | null)?.closest('[data-cms-actor-map]');
+    if (!target || !drawer || !form) return;
+    actorId = target.getAttribute('data-cms-actor-map') ?? '';
+    if (nameLabel) nameLabel.textContent = target.getAttribute('data-actor-name') ?? '';
+    if (errorBox) errorBox.hidden = true;
+    form.reset();
+    drawer.showModal();
+  });
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (errorBox) errorBox.hidden = true;
+    const userId =
+      (document.getElementById('actor-userId') as HTMLSelectElement | null)?.value ?? '';
+    const revalidate =
+      (document.getElementById('actor-revalidate') as HTMLInputElement | null)?.checked ?? false;
+    if (userId === '') {
+      if (errorBox) {
+        errorBox.textContent = 'Choose the person this name belongs to.';
+        errorBox.hidden = false;
+      }
+      return;
+    }
+    const response = await fetch(`/api/data/unresolved-actors/${actorId}/map`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId, revalidate }),
+    });
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok) {
+      const errors = (payload?.errors ?? []) as { message: string }[];
+      if (errorBox) {
+        errorBox.textContent = errors[0]?.message ?? 'The mapping could not be made.';
+        errorBox.hidden = false;
+      }
+      return;
+    }
+    drawer?.close();
+    const revalidated = payload?.revalidated as Record<string, unknown> | null;
+    if (message) {
+      message.textContent =
+        revalidated === null || revalidated === undefined
+          ? 'The name is mapped. Later uploads will recognise it.'
+          : `The name is mapped. ${String(revalidated.rowsExamined)} rows examined, ${String(revalidated.rowsResolved)} resolved.`;
+    }
+    window.setTimeout(() => window.location.reload(), 1500);
+  });
+</script>

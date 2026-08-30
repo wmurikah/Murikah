@@ -1,0 +1,557 @@
+---
+/**
+ * Administration → Workflows → a workflow role.
+ *
+ * The assignments that give people approval authority under this role, and the
+ * authority rules that restrict each assignment.
+ *
+ * WHAT AN EMPTY FIELD MEANS IS SPELLED OUT.
+ * A rule with no currency applies to every currency, and a rule with no product
+ * applies to every product. The screen writes that as a sentence rather than
+ * showing a blank the administrator has to interpret one way or the other, and
+ * the sentence comes from `describeRule` in the repository so the list here,
+ * the drawer and the preview cannot describe one rule three different ways.
+ *
+ * AN ASSIGNMENT WITH NO RULE AT ALL IS FLAGGED.
+ * Under the rule this product applies, an assignment with no rule is an
+ * approver with no amount, currency or product limit, because a rule table is a
+ * restriction mechanism and an absent restriction does not remove authority the
+ * assignment already granted. Somebody who created the assignment and meant to
+ * add a limit should see the reach they actually granted.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsWorkflowFormScript from '@/components/cms/CmsWorkflowFormScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageWorkflowRoles, canViewWorkflows } from '@/lib/cms/permissions';
+import {
+  getWorkflowRole,
+  listAssignmentsForRole,
+  listRulesForAssignment,
+  workflowOptions,
+  type AuthorityRuleRow,
+  type Option,
+  type WorkflowAssignmentRow,
+  type WorkflowRoleRow,
+} from '@/lib/cms/repos/workflowAdmin';
+import { AUTHORITY_PROCESS_TYPES, WORKFLOW_SCOPE_TYPES } from '@/lib/cms/workflow/model';
+import { SCOPE_LABELS, WORKFLOW_PATH } from '@/lib/cms/admin/workflowWorkspace';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewWorkflows(permissions);
+const mayManage = canManageWorkflowRoles(permissions);
+const roleId = Astro.params.id ?? '';
+
+let role: WorkflowRoleRow | null = null;
+let assignments: (WorkflowAssignmentRow & { rules: AuthorityRuleRow[] })[] = [];
+let options: {
+  users: Option[];
+  countries: Option[];
+  affiliates: Option[];
+  businessUnits: Option[];
+  productGroups: Option[];
+  productCategories: Option[];
+} = {
+  users: [],
+  countries: [],
+  affiliates: [],
+  businessUnits: [],
+  productGroups: [],
+  productCategories: [],
+};
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    role = await getWorkflowRole(db, roleId);
+    if (role !== null) {
+      const rows = await listAssignmentsForRole(db, roleId);
+      const withRules: (WorkflowAssignmentRow & { rules: AuthorityRuleRow[] })[] = [];
+      for (const row of rows) {
+        withRules.push({ ...row, rules: await listRulesForAssignment(db, row.assignmentId) });
+      }
+      assignments = withRules;
+      options = await workflowOptions(db);
+    }
+  } catch (error) {
+    console.error('[cms.workflowRole] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const scopeOptions = WORKFLOW_SCOPE_TYPES.map((value) => ({
+  value,
+  label: SCOPE_LABELS[value] ?? value,
+}));
+const ruleProcessOptions = AUTHORITY_PROCESS_TYPES.map((value) => ({
+  value,
+  label: value.toLowerCase().replace(/_/g, ' '),
+}));
+const blank = { value: '', label: 'Any' };
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+---
+
+<CmsLayout title={role?.roleName ?? 'Workflow role'}>
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to workflow administration"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="That workflow role could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : role === null ? (
+      <CmsErrorState
+        title="No such workflow role"
+        description="It may have been removed, or the address may be wrong."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={role.roleName}
+          description={
+            role.description ??
+            'The approval responsibility this role carries, and who carries it where.'
+          }
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Workflows', href: WORKFLOW_PATH },
+            { label: role.roleName },
+          ]}
+        >
+          {mayManage && (
+            <CmsButton
+              slot="actions"
+              variant="primary"
+              icon="plus"
+              data-cms-wf-open="cms-wfassign-drawer"
+              data-endpoint={`/api/admin/workflow-roles/${role.workflowRoleId}/assignments`}
+              data-method="POST"
+              data-title="Assign this workflow role"
+              data-values="{}"
+            >
+              Assign someone
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <CmsCard>
+          <dl class="grid gap-3 sm:grid-cols-3">
+            <div>
+              <dt class="text-cms-caption text-cms-muted">Code</dt>
+              <dd class="text-cms-body text-cms-ink">{role.roleCode}</dd>
+            </div>
+            <div>
+              <dt class="text-cms-caption text-cms-muted">Process</dt>
+              <dd class="text-cms-body text-cms-ink">
+                {role.processType === null
+                  ? 'Any process'
+                  : role.processType.toLowerCase().replace(/_/g, ' ')}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-cms-caption text-cms-muted">Status</dt>
+              <dd>
+                <CmsBadge
+                  tone={role.active ? 'success' : 'neutral'}
+                  label={role.active ? 'Active' : 'Inactive'}
+                />
+              </dd>
+            </div>
+          </dl>
+        </CmsCard>
+
+        {assignments.length === 0 ? (
+          <CmsEmptyState
+            icon="administration"
+            title="Nobody holds this workflow role"
+            description="A stage configured for it will raise a configuration exception rather than assign anybody. Assign somebody with a scope."
+          />
+        ) : (
+          <ul class="flex flex-col gap-4">
+            {assignments.map((assignment) => (
+              <li class="rounded-cms-lg border border-cms-line bg-cms-surface p-4">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 class="text-cms-card font-semibold text-cms-navy">
+                    {assignment.displayName}
+                    <span class="ms-2 text-cms-body-sm font-normal text-cms-muted">
+                      {SCOPE_LABELS[assignment.scopeType] ?? assignment.scopeType}
+                      {assignment.scopeTargetName === null ? '' : `: ${assignment.scopeTargetName}`}
+                    </span>
+                  </h3>
+                  <div class="flex items-center gap-2">
+                    <CmsBadge
+                      tone={assignment.active ? 'success' : 'neutral'}
+                      label={assignment.active ? 'Active' : 'Ended'}
+                    />
+                    {mayManage && (
+                      <Fragment>
+                        <button
+                          type="button"
+                          class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                          data-cms-wf-open="cms-wfrule-drawer"
+                          data-endpoint={`/api/admin/workflow-assignments/${assignment.assignmentId}/authority-rules`}
+                          data-method="POST"
+                          data-title="New authority rule"
+                          data-values="{}"
+                        >
+                          Add a rule
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                          data-cms-wf-open="cms-wfend-drawer"
+                          data-endpoint={`/api/admin/workflow-assignments/${assignment.assignmentId}`}
+                          data-method="PATCH"
+                          data-title="End this assignment"
+                          data-values={JSON.stringify({
+                            effectiveTo: assignment.effectiveTo ?? '',
+                            active: assignment.active,
+                          })}
+                          data-note="Ending an assignment leaves it in place with an end date, so who held authority and when stays readable. A replacement is a new assignment, not an edit to this one."
+                        >
+                          End
+                        </button>
+                      </Fragment>
+                    )}
+                  </div>
+                </div>
+
+                <p class="mt-1 text-cms-body-sm text-cms-muted">
+                  Priority {assignment.priority}, effective from {assignment.effectiveFrom}
+                  {assignment.effectiveTo === null
+                    ? ' with no end date'
+                    : ` to ${assignment.effectiveTo}`}
+                  .
+                </p>
+
+                {assignment.rules.length === 0 ? (
+                  <p class="mt-2 flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+                    <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
+                    <span>
+                      No authority rule. This approver is not limited by amount, currency or product
+                      for any process this role covers. Add a rule to restrict them.
+                    </span>
+                  </p>
+                ) : (
+                  <ul class="mt-2 flex flex-col gap-2">
+                    {assignment.rules.map((rule) => (
+                      <li class="rounded-cms border border-cms-line px-3 py-2">
+                        <div class="flex flex-wrap items-baseline justify-between gap-2">
+                          <span class="text-cms-body-sm font-medium text-cms-ink">
+                            {rule.processType.toLowerCase().replace(/_/g, ' ')}
+                          </span>
+                          <span class="flex items-center gap-2">
+                            <CmsBadge
+                              tone={rule.active ? 'success' : 'neutral'}
+                              label={rule.active ? 'Active' : 'Inactive'}
+                            />
+                            {mayManage && (
+                              <button
+                                type="button"
+                                class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                                data-cms-wf-open="cms-wfrule-drawer"
+                                data-endpoint={`/api/admin/authority-rules/${rule.ruleId}`}
+                                data-method="PATCH"
+                                data-title="Edit authority rule"
+                                data-values={JSON.stringify({
+                                  processType: rule.processType,
+                                  currencyCode: rule.currencyCode ?? '',
+                                  minAmount: rule.minAmount ?? '',
+                                  maxAmount: rule.maxAmount ?? '',
+                                  productGroupId: rule.productGroupId ?? '',
+                                  productCategoryId: rule.productCategoryId ?? '',
+                                  rulePriority: rule.rulePriority,
+                                  effectiveFrom: rule.effectiveFrom,
+                                  effectiveTo: rule.effectiveTo ?? '',
+                                  active: rule.active,
+                                })}
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                        <p class="text-cms-body-sm text-cms-muted">{rule.summary}</p>
+                        <p class="text-cms-caption text-cms-muted">
+                          Rule priority {rule.rulePriority}, effective from {rule.effectiveFrom}
+                          {rule.effectiveTo === null ? '' : ` to ${rule.effectiveTo}`}.
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {mayManage && (
+          <Fragment>
+            <CmsDrawer id="cms-wfassign-drawer" tone="form" title="Assignment">
+              <form
+                id="cms-wfassign-form"
+                data-cms-wf-form="cms-wfassign-drawer"
+                novalidate
+                class="flex flex-col gap-4"
+              >
+                <p
+                  id="cms-wfassign-form-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+                />
+                <CmsSelect
+                  id="wa-userId"
+                  name="userId"
+                  label="Person"
+                  required
+                  options={pick(options.users, 'Choose a person')}
+                />
+                <CmsSelect
+                  id="wa-scopeType"
+                  name="scopeType"
+                  label="Scope"
+                  required
+                  options={scopeOptions}
+                  hint="Group means everywhere. The more specific scope always wins over a wider one."
+                />
+                <div data-scope-field="COUNTRY AFFILIATE BUSINESS_UNIT">
+                  <CmsSelect
+                    id="wa-countryId"
+                    name="countryId"
+                    label="Country"
+                    options={pick(options.countries, 'Choose a country')}
+                  />
+                </div>
+                <div data-scope-field="AFFILIATE BUSINESS_UNIT">
+                  <CmsSelect
+                    id="wa-affiliateId"
+                    name="affiliateId"
+                    label="Affiliate"
+                    options={pick(options.affiliates, 'Choose an affiliate')}
+                  />
+                </div>
+                <div data-scope-field="BUSINESS_UNIT">
+                  <CmsSelect
+                    id="wa-businessUnitId"
+                    name="businessUnitId"
+                    label="Business unit"
+                    options={pick(options.businessUnits, 'Choose a business unit')}
+                  />
+                </div>
+                <CmsInput
+                  id="wa-priority"
+                  name="priority"
+                  label="Priority"
+                  type="number"
+                  min="0"
+                  value="100"
+                  hint="Lower wins when two approvers sit at the same scope. An exact tie leaves both eligible."
+                />
+                <CmsInput
+                  id="wa-effectiveFrom"
+                  name="effectiveFrom"
+                  label="Effective from"
+                  type="date"
+                />
+                <CmsInput
+                  id="wa-effectiveTo"
+                  name="effectiveTo"
+                  label="Effective to"
+                  type="date"
+                  hint="Leave empty for an open-ended assignment. A temporary acting approver is an assignment with both dates set, beside the substantive one."
+                />
+                <CmsCheckbox id="wa-active" name="active" label="Active" checked />
+              </form>
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  form="cms-wfassign-form"
+                  data-cms-wf-save
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </Fragment>
+            </CmsDrawer>
+
+            <CmsDrawer id="cms-wfrule-drawer" tone="form" title="Authority rule">
+              <form
+                id="cms-wfrule-form"
+                data-cms-wf-form="cms-wfrule-drawer"
+                novalidate
+                class="flex flex-col gap-4"
+              >
+                <p
+                  id="cms-wfrule-form-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+                />
+                <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+                  Every restriction is optional. Left empty, a field places no restriction at all:
+                  no currency means every currency, no amount means any value, and no product means
+                  every product. A rule restricted to a product group matches only a transaction
+                  whose every line is inside it.
+                </p>
+                <CmsSelect
+                  id="ru-processType"
+                  name="processType"
+                  label="Process"
+                  required
+                  options={ruleProcessOptions}
+                  hint="Leads, opportunities and cases cannot carry a rule. They resolve on assignment and scope alone."
+                />
+                <CmsInput
+                  id="ru-currencyCode"
+                  name="currencyCode"
+                  label="Currency"
+                  hint="Three letters. Empty means every currency."
+                />
+                <CmsInput
+                  id="ru-minAmount"
+                  name="minAmount"
+                  label="Minimum amount"
+                  type="number"
+                  min="0"
+                  hint="Empty means no lower bound."
+                />
+                <CmsInput
+                  id="ru-maxAmount"
+                  name="maxAmount"
+                  label="Maximum amount"
+                  type="number"
+                  min="0"
+                  hint="Empty means no ceiling."
+                />
+                <CmsSelect
+                  id="ru-productGroupId"
+                  name="productGroupId"
+                  label="Product group"
+                  options={[
+                    blank,
+                    ...options.productGroups.map((o) => ({
+                      value: o.id,
+                      label: o.label,
+                    })),
+                  ]}
+                />
+                <CmsSelect
+                  id="ru-productCategoryId"
+                  name="productCategoryId"
+                  label="Product category"
+                  options={[
+                    blank,
+                    ...options.productCategories.map((o) => ({
+                      value: o.id,
+                      label: o.label,
+                    })),
+                  ]}
+                />
+                <CmsInput
+                  id="ru-rulePriority"
+                  name="rulePriority"
+                  label="Rule priority"
+                  type="number"
+                  min="0"
+                  value="100"
+                />
+                <CmsInput
+                  id="ru-effectiveFrom"
+                  name="effectiveFrom"
+                  label="Effective from"
+                  type="date"
+                />
+                <CmsInput id="ru-effectiveTo" name="effectiveTo" label="Effective to" type="date" />
+                <CmsCheckbox id="ru-active" name="active" label="Active" checked />
+              </form>
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  form="cms-wfrule-form"
+                  data-cms-wf-save
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </Fragment>
+            </CmsDrawer>
+
+            <CmsDrawer id="cms-wfend-drawer" tone="form" title="End this assignment">
+              <form
+                id="cms-wfend-form"
+                data-cms-wf-form="cms-wfend-drawer"
+                novalidate
+                class="flex flex-col gap-4"
+              >
+                <p
+                  id="cms-wfend-form-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+                />
+                <p id="cms-wfend-form-note" hidden class="text-cms-body-sm text-cms-muted" />
+                <CmsInput
+                  id="we-effectiveTo"
+                  name="effectiveTo"
+                  label="Effective to"
+                  type="date"
+                  hint="The last day this person holds the authority."
+                />
+                <CmsCheckbox
+                  id="we-active"
+                  name="active"
+                  label="Still active"
+                  hint="Clearing this stops the assignment being considered at all, whatever the dates say."
+                />
+              </form>
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  form="cms-wfend-form"
+                  data-cms-wf-save
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </Fragment>
+            </CmsDrawer>
+
+            <CmsWorkflowFormScript />
+          </Fragment>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

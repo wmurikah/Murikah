@@ -27,7 +27,7 @@ import { getMfaRecord, type MfaMethod } from '@grc/repos/mfa';
 import { withEmailDefault } from '@grc/auth/mfaRecord';
 import { authenticatorAllowedForRole, MFA_AUTHENTICATOR_ROLES_KEY } from '@grc/auth/mfaPolicy';
 import { getConfigValues } from '@grc/repos/orgConfig';
-import { GRC_MFA_SETUP_PATH } from '@grc/routing';
+import { GRC_MFA_SETUP_PATH, safeNextPath } from '@grc/routing';
 
 if (Astro.locals.grc) return Astro.redirect('/');
 
@@ -37,6 +37,9 @@ const errorText = errorParam && errorParam !== '1' ? errorParam : '';
 const sent = Astro.url.searchParams.get('sent') === '1';
 const sendError = Astro.url.searchParams.get('senderror') === '1';
 const setupIntent = Astro.url.searchParams.get('setup') === '1';
+// The page the visitor was opening before sign-in, carried through the step so
+// verification lands there (Build Prompt 53).
+const next = safeNextPath(Astro.url.searchParams.get('next'));
 
 let method: MfaMethod = 'email';
 let maskedEmail = '';
@@ -125,6 +128,7 @@ try {
 
   <form method="post" action="/api/auth/mfa/verify">
     {setupIntent && <input type="hidden" name="next" value={GRC_MFA_SETUP_PATH} />}
+    {!setupIntent && next && <input type="hidden" name="next" value={next} />}
     <div class="grc-field">
       <label for="code">Verification code</label>
       <input

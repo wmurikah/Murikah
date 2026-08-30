@@ -1,5 +1,11 @@
 /**
- * Background migration of Drive-backed evidence to R2. For each eligible file
+ * Background migration of Drive-backed evidence to the platform's own R2
+ * bucket. This is the legacy path: it moves evidence that predates the
+ * per-organisation storage connectors (Build Prompt 51) out of the shared Drive
+ * credential, and deliberately does not resolve an organisation's connector,
+ * because a customer's own bucket is not this job's to write into.
+ *
+ * For each eligible file
  * (its entity not under an active legal hold), it reads the bytes from Drive
  * through the seam, computes the content hash, writes the object to the tenant R2
  * key, and switches files.storage_backend to 'r2' with the new key and hash,
@@ -9,7 +15,12 @@
  */
 import type { Client } from '@libsql/client/web';
 import { listDriveFilesToMigrate, markMigratedToR2 } from '../repos/governance';
-import { openObject, putObject, storageConfigured, driveConfigured } from '../storage';
+import {
+  legacyBackend,
+  putLegacyObject,
+  legacyStorageConfigured,
+  driveConfigured,
+} from '../storage';
 import { buildObjectKey, sha256Hex, CONTENT_HASH_ALGO } from './keys';
 
 export interface MigrationResult {
@@ -22,7 +33,7 @@ export interface MigrationResult {
 export async function runEvidenceMigration(db: Client, limit: number): Promise<MigrationResult> {
   // Nothing to do until both the R2 write backend and the Drive read credential
   // are configured; leaving either absent keeps the app fully working.
-  if (!storageConfigured() || !driveConfigured()) {
+  if (!legacyStorageConfigured() || !driveConfigured()) {
     return { attempted: 0, migrated: 0, failed: 0 };
   }
 
@@ -32,7 +43,7 @@ export async function runEvidenceMigration(db: Client, limit: number): Promise<M
 
   for (const f of files) {
     try {
-      const stream = await openObject({ backend: 'drive', key: f.driveFileId });
+      const stream = await legacyBackend('drive').get({ backend: 'drive', key: f.driveFileId });
       const buffer = await new Response(stream).arrayBuffer();
       const hash = await sha256Hex(buffer);
       const key = buildObjectKey({
@@ -42,7 +53,7 @@ export async function runEvidenceMigration(db: Client, limit: number): Promise<M
         fileId: f.fileId,
         fileName: f.fileName,
       });
-      await putObject({
+      await putLegacyObject({
         key,
         contentType: f.mimeType ?? 'application/octet-stream',
         body: buffer,

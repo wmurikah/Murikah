@@ -1,0 +1,58 @@
+---
+/**
+ * A dialog built on the native <dialog> element.
+ *
+ * showModal() gives the focus trap, the inert background, the top layer and
+ * Escape-to-close from the platform, so none of that has to be written or
+ * maintained here.
+ *
+ * Opened by any element carrying data-cms-modal-open="<id>", so a trigger can
+ * live anywhere on the page without this component knowing about it. The
+ * handler that listens for it is deliberately not in this file: Astro ships a
+ * component's script only when the component is rendered, and a page with a
+ * drawer but no modal would then have a trigger and nothing listening. It
+ * lives in CmsOverlayScript, which CmsLayout renders once per page.
+ */
+import CmsIconButton from './CmsIconButton.astro';
+
+interface Props {
+  id: string;
+  title: string;
+  description?: string;
+  class?: string;
+}
+const { id, title, description, class: className } = Astro.props;
+const titleId = `${id}-title`;
+const descId = description ? `${id}-desc` : undefined;
+---
+
+<dialog
+  id={id}
+  aria-labelledby={titleId}
+  aria-describedby={descId}
+  class:list={[
+    'w-[min(32rem,calc(100vw-2rem))] rounded-cms-lg border border-cms-line bg-cms-surface p-0',
+    'text-cms-ink shadow-cms-overlay backdrop:bg-cms-navy/45',
+    className,
+  ]}
+>
+  <div class="flex items-start justify-between gap-4 border-b border-cms-line px-5 py-4">
+    <div class="flex flex-col gap-1">
+      <h2 id={titleId} class="text-cms-section font-semibold text-cms-navy">{title}</h2>
+      {
+        description && (
+          <p id={descId} class="text-cms-body-sm text-cms-muted">
+            {description}
+          </p>
+        )
+      }
+    </div>
+    <CmsIconButton icon="close" label="Close dialogue" data-testid={`${id}-close`} class="-mr-2" />
+  </div>
+  <div class="px-5 py-4 text-cms-body-sm">
+    <slot />
+  </div>
+  <div class="flex justify-end gap-2 border-t border-cms-line px-5 py-4">
+    <slot name="actions" />
+  </div>
+</dialog>

@@ -2,11 +2,24 @@
 export const prerender = false;
 
 /**
- * Settings home. Links to the configuration screens: access control (the
- * permission matrix), managed dropdowns (control fields and the audit
- * universe), and AI settings. Gated on the matrix (CONFIG or USER read), so
- * the access-control screen can delegate setup to other roles; a platform
- * owner always passes.
+ * Settings home: every configuration screen, in three groups (Build Prompt 52).
+ *
+ * The list had grown to ten cards in one flat grid, and the sidebar repeated
+ * four of them beside a generic "Settings" entry, so the same screen could be
+ * reached by two differently-named links and neither read as canonical. The
+ * grouping here and in `dashboard/roleNav.ts` is the same one, in the same
+ * order, so a person learns the shape once:
+ *
+ * - **Organisation** is who and what the audit covers: the units, the universe,
+ *   the people and what they may do.
+ * - **Configuration** is how the application behaves: its vocabularies, its
+ *   deadlines, and the outside services it is connected to.
+ * - **Platform** is what belongs to Murikah Labs rather than to the customer,
+ *   and shows only for the platform owner.
+ *
+ * Nothing was dropped: every screen that was reachable before is reachable
+ * here, once. Gated on the matrix (CONFIG or USER read), so the access-control
+ * screen can delegate setup to other roles; a platform owner always passes.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import { can } from '@grc/auth/rbac';
@@ -16,54 +29,100 @@ if (!grc) return Astro.redirect('/login');
 const allowed =
   grc.isPlatformOwner || can(Astro.locals, 'read', 'CONFIG') || can(Astro.locals, 'read', 'USER');
 
-const cards = [
+interface Card {
+  href: string;
+  title: string;
+  body: string;
+}
+interface CardGroup {
+  title: string;
+  lead: string;
+  cards: Card[];
+}
+
+const groups: CardGroup[] = [
   {
-    href: '/settings/users',
-    title: 'Users',
-    body: 'The people who can sign in, their roles, affiliates and passwords.',
+    title: 'Organisation',
+    lead: 'Who the audit covers, and what they may do.',
+    cards: [
+      {
+        href: '/settings/affiliates',
+        title: 'Affiliates',
+        body: 'The business units a work paper or action plan can be scoped to.',
+      },
+      {
+        href: '/settings/audit-universe',
+        title: 'Audit universe',
+        body: 'Audit areas and their sub-areas, which seed the work-paper templates.',
+      },
+      {
+        href: '/settings/users',
+        title: 'Users',
+        body: 'The people who can sign in, their roles, affiliates and passwords.',
+      },
+      {
+        href: '/settings/access-control',
+        title: 'Roles',
+        body: 'The permission matrix for each role, and the pages it unlocks.',
+      },
+    ],
   },
   {
-    href: '/settings/affiliates',
-    title: 'Affiliates',
-    body: 'The business units a work paper or action plan can be scoped to.',
-  },
-  {
-    href: '/settings/audit-universe',
-    title: 'Audit universe',
-    body: 'Audit areas and their sub-areas, which seed the work-paper templates.',
-  },
-  {
-    href: '/settings/access-control',
-    title: 'Access control',
-    body: 'The permission matrix for each role, and the pages it unlocks.',
-  },
-  {
-    href: '/settings/dropdowns',
-    title: 'Dropdowns',
-    body: 'The control-field vocabularies: risk ratings, classification, type and frequency.',
-  },
-  {
-    href: '/settings/general',
-    title: 'General settings',
-    body: 'Workflow deadlines, reminder cadence and notification sender defaults.',
-  },
-  {
-    href: '/settings/ai',
-    title: 'AI settings',
-    body: 'The AI assistance providers, model and evaluation defaults.',
-  },
-  {
-    href: '/settings/email',
-    title: 'Email',
-    body: 'The Outlook mailbox notifications send from, and its connection state.',
+    title: 'Configuration',
+    lead: 'How the application behaves, and what it is connected to.',
+    cards: [
+      {
+        href: '/settings/general',
+        title: 'General settings',
+        body: 'Workflow deadlines, reminder cadence and notification sender defaults.',
+      },
+      {
+        href: '/settings/dropdowns',
+        title: 'Dropdowns',
+        body: 'The control-field vocabularies: risk ratings, classification, type and frequency.',
+      },
+      {
+        href: '/settings/email',
+        title: 'Email',
+        body: 'The Outlook mailbox notifications send from, and its connection state.',
+      },
+      {
+        href: '/settings/storage',
+        title: 'Evidence storage',
+        body: 'Where evidence is kept: your own R2 bucket, Google Drive, SharePoint or Dropbox.',
+      },
+      {
+        href: '/settings/ai',
+        title: 'AI settings',
+        body: 'The AI assistance providers, model and evaluation defaults.',
+      },
+      {
+        href: '/send-queue',
+        title: 'Send queue',
+        body: 'The notifications waiting to go out, and any that could not be delivered.',
+      },
+    ],
   },
 ];
-// Provisioning a new customer organisation is a platform-owner action.
+
+// Provisioning a new customer organisation is a platform-owner action, so the
+// group appears only for them rather than showing a card that would refuse.
 if (grc.isPlatformOwner) {
-  cards.push({
-    href: '/settings/provision',
-    title: 'Provision organisation',
-    body: 'Create a customer organisation, seeded with its config, dropdowns, admin and trial.',
+  groups.push({
+    title: 'Platform',
+    lead: 'Murikah Labs administration, across every customer.',
+    cards: [
+      {
+        href: '/platform',
+        title: 'All organisations',
+        body: 'Every customer instance, its plan and its state, with the switcher into each.',
+      },
+      {
+        href: '/settings/provision',
+        title: 'Provision organisation',
+        body: 'Create a customer organisation, seeded with its config, dropdowns, admin and trial.',
+      },
+    ],
   });
 }
 ---
@@ -82,14 +141,22 @@ if (grc.isPlatformOwner) {
         Settings are restricted to administrators.
       </p>
     ) : (
-      <div class="grc-cards">
-        {cards.map((c) => (
-          <a href={c.href} class="grc-card grc-card--link">
-            <p class="grc-card__label">{c.title}</p>
-            <p class="grc-card__note">{c.body}</p>
-          </a>
-        ))}
-      </div>
+      groups.map((g) => (
+        <section class="grc-panel" aria-labelledby={`settings-${g.title.toLowerCase()}`}>
+          <h2 id={`settings-${g.title.toLowerCase()}`}>{g.title}</h2>
+          <p class="grc-lead" style="margin:0 0 0.75rem">
+            {g.lead}
+          </p>
+          <div class="grc-cards">
+            {g.cards.map((c) => (
+              <a href={c.href} class="grc-card grc-card--link">
+                <p class="grc-card__label">{c.title}</p>
+                <p class="grc-card__note">{c.body}</p>
+              </a>
+            ))}
+          </div>
+        </section>
+      ))
     )
   }
 </GrcLayout>

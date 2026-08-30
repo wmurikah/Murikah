@@ -1,0 +1,198 @@
+---
+/**
+ * The compact top bar: the drawer trigger on small screens, a search affordance,
+ * notifications, and the account menu.
+ *
+ * Deliberately thin. The page's own title and actions live in CmsPageHeader,
+ * below this, so the top bar carries only what is true on every page. That
+ * keeps the number of equally weighted choices at the top of the screen small,
+ * which is the Hick-Hyman point.
+ *
+ * The account and notification menus are <details> disclosures, so they work
+ * with a keyboard and cost no JavaScript beyond the shared outside-click
+ * handler in CmsDropdown.
+ */
+import CmsAvatar from './CmsAvatar.astro';
+import CmsDropdown from './CmsDropdown.astro';
+import CmsIcon from './CmsIcon.astro';
+import CmsWordmark from './CmsWordmark.astro';
+import CmsIconButton from './CmsIconButton.astro';
+import CmsMenuItem from './CmsMenuItem.astro';
+
+import type { CmsIdentity } from '@/lib/cms/repos/identity';
+import { organisationLine } from '@/lib/cms/organisation';
+
+interface Props {
+  drawerId: string;
+  /** The resolved principal from the middleware guard. Null when signed out. */
+  principal?: { user: CmsIdentity } | null;
+  notificationCount?: number;
+  notificationPreview?: { title: string; createdAt: string }[];
+}
+const { drawerId, principal = null, notificationCount = 0, notificationPreview = [] } = Astro.props;
+const user = principal?.user ?? null;
+// Job title and organisational context come from the primary assignment, which
+// an EXTERNAL user does not have at all, so both are optional everywhere.
+const context = user ? organisationLine(user.assignment) : null;
+---
+
+<div
+  class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-cms-line bg-cms-surface/95 px-3 backdrop-blur-sm sm:px-5"
+>
+  <button
+    type="button"
+    data-cms-modal-open={drawerId}
+    aria-label="Open navigation"
+    class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-cms text-cms-muted outline-none hover:bg-cms-canvas hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus lg:hidden"
+  >
+    <CmsIcon name="menu" size={20} />
+  </button>
+
+  {
+    /*
+    Global search. Connected in phase 27, having been a disabled affordance
+    since phase 02.
+
+    THE RESULTS PANEL IS RENDERED FROM THE SERVER'S ANSWER AND NOTHING ELSE.
+    There is no client-side cache and no local index: every keystroke that
+    survives the debounce asks the endpoint, and the endpoint's queries carry
+    the caller's scope. A cached result would outlive the membership or scope
+    change that should have removed it.
+  */
+  }
+  <div class="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm" data-cms-search>
+    <label for="cms-search" class="sr-only">Search customers, orders, cases and more</label>
+    <CmsIcon
+      name="search"
+      size={17}
+      class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cms-muted"
+    />
+    <input
+      id="cms-search"
+      type="search"
+      autocomplete="off"
+      role="combobox"
+      aria-expanded="false"
+      aria-controls="cms-search-results"
+      aria-describedby="cms-search-note"
+      placeholder="Search"
+      class="h-10 w-full rounded-cms border border-cms-line bg-cms-canvas pr-14 pl-9 text-cms-body-sm text-cms-ink placeholder:text-cms-muted focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+    />
+    <kbd
+      aria-hidden="true"
+      class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border border-cms-line bg-cms-surface px-1.5 py-0.5 text-cms-caption text-cms-muted"
+      >/</kbd
+    >
+    <span id="cms-search-note" class="sr-only">
+      Press the forward slash key from anywhere to search.
+    </span>
+    <div
+      id="cms-search-results"
+      role="listbox"
+      aria-label="Search results"
+      hidden
+      class="absolute top-full right-0 left-0 z-40 mt-1 max-h-[60vh] overflow-y-auto rounded-cms-lg border border-cms-line bg-cms-surface shadow-cms-overlay"
+    >
+    </div>
+    <p aria-live="polite" class="sr-only" data-cms-search-status></p>
+  </div>
+
+  <div class="ms-auto flex items-center gap-1">
+    {
+      /*
+        Opens the assistant, which is rendered by the shell and reads nothing
+        until this is pressed. A real control: it opens a real panel.
+      */
+    }
+    {
+      principal !== null && (
+        <CmsIconButton icon="chat" label="Open the assistant" data-cms-modal-open="cms-assistant" />
+      )
+    }
+    <CmsDropdown id="cms-notifications" label="Notifications">
+      <span
+        slot="trigger"
+        class="relative inline-flex h-10 w-10 items-center justify-center text-cms-muted"
+      >
+        <CmsIcon name="bell" size={19} />
+        {
+          notificationCount > 0 && (
+            <span class="absolute top-1.5 right-1.5 min-w-4 rounded-full bg-cms-negative px-1 text-[0.625rem] leading-4 font-semibold text-white">
+              {notificationCount}
+            </span>
+          )
+        }
+        <span class="sr-only">
+          Notifications{notificationCount > 0 ? `, ${notificationCount} unread` : ''}
+        </span>
+      </span>
+      {
+        notificationPreview.length === 0 ? (
+          <p class="px-2.5 py-4 text-center text-cms-body-sm text-cms-muted">
+            Nothing needs your attention right now.
+          </p>
+        ) : (
+          <ul class="flex flex-col">
+            {notificationPreview.map((item) => (
+              <li class="border-b border-cms-line px-2.5 py-2 last:border-0">
+                <p class="text-cms-body-sm text-cms-ink">{item.title}</p>
+                <p class="text-cms-caption text-cms-muted">{item.createdAt}</p>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+      <a
+        href="/app/notifications"
+        class="block border-t border-cms-line px-2.5 py-2 text-center text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        View notifications
+      </a>
+    </CmsDropdown>
+
+    {
+      user ? (
+        <CmsDropdown id="cms-account" label="Account menu">
+          <span slot="trigger" class="flex items-center gap-2">
+            <CmsAvatar name={user.displayName} size="sm" />
+            <span class="hidden min-w-0 flex-col text-left sm:flex">
+              <span class="truncate text-cms-body-sm font-semibold text-cms-ink">
+                {user.displayName}
+              </span>
+              <span class="truncate text-cms-caption text-cms-muted">
+                {user.assignment?.jobTitle ??
+                  (user.userType === 'EXTERNAL' ? 'Customer portal' : 'No assignment')}
+              </span>
+            </span>
+            <CmsIcon name="chevronDown" size={15} class="text-cms-muted" />
+          </span>
+
+          <div class="border-b border-cms-line px-2.5 pt-1.5 pb-2.5">
+            <p class="text-cms-body-sm font-semibold text-cms-ink">{user.displayName}</p>
+            <p class="truncate text-cms-caption text-cms-muted">{user.email}</p>
+            {user.assignment?.jobTitle && (
+              <p class="mt-1 text-cms-caption text-cms-muted">{user.assignment.jobTitle}</p>
+            )}
+            {context && <p class="text-cms-caption text-cms-muted">{context}</p>}
+          </div>
+
+          <p class="px-2.5 py-2 text-cms-caption text-cms-muted">Account and profile settings</p>
+
+          {/*
+            A POST form, never a link. Sign-out on GET can be triggered by any
+            third-party page that can make your browser issue a request, and a
+            forced sign-out is a real if minor nuisance. The form also carries
+            the Origin header the CSRF check requires.
+          */}
+          <form method="post" action="/api/auth/logout" class="border-t border-cms-line pt-1.5">
+            <CmsMenuItem icon="logout" tone="danger" type="submit">
+              Sign out
+            </CmsMenuItem>
+          </form>
+        </CmsDropdown>
+      ) : (
+        <CmsIconButton icon="logout" label="Sign in" href="/login" />
+      )
+    }
+  </div>
+</div>

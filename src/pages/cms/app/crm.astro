@@ -1,0 +1,446 @@
+---
+/**
+ * CRM → Leads.
+ *
+ * The lead list. Search, filters, sort and paging all happen in the database
+ * with the scope predicate as the first clause of the WHERE, so the total
+ * beside the list counts exactly the leads this person may open.
+ *
+ * The four cards at the top come from `leadIndicators`, which runs the same
+ * scope predicate as the list. They are counts of a stated condition, never a
+ * score: "needs first contact" means `first_contact_at IS NULL` and nothing
+ * more. A card that used a different predicate from the list would advertise a
+ * lead that returns 404, which is the failure section 0d names.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsUnavailable from '@/components/cms/CmsUnavailable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsLeadCreateDrawer from '@/components/cms/CmsLeadCreateDrawer.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewLeads, canCreateLeads, canManageLeadSources } from '@/lib/cms/permissions';
+import {
+  ageInDays,
+  leadIndicators,
+  leadOptions,
+  listLeads,
+  LEAD_STATUSES,
+  type LeadIndicators,
+  type LeadOptions,
+  type LeadPage,
+} from '@/lib/cms/repos/leadAdmin';
+import { readLeadQuery } from '@/lib/cms/admin/leadInput';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewLeads(permissions);
+const mayCreate = canCreateLeads(permissions);
+const maySources = canManageLeadSources(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+const params = Astro.url.searchParams;
+const query = readLeadQuery(params);
+
+let page: LeadPage = { items: [], total: 0, page: 1, pageSize: 25 };
+let indicators: LeadIndicators = { total: 0, fresh: 0, needsFirstContact: 0, qualified: 0 };
+let options: LeadOptions = {
+  sources: [],
+  campaigns: [],
+  businessUnits: [],
+  owners: [],
+  pipelines: [],
+};
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [page, indicators, options] = await Promise.all([
+      listLeads(db, userId, query),
+      leadIndicators(db, userId),
+      leadOptions(db),
+    ]);
+  } catch (error) {
+    console.error('[cms.crm.leads] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const now = new Date();
+const blank = (label: string) => ({ value: '', label });
+const asOptions = (list: { id: string; label: string }[], empty: string) => [
+  blank(empty),
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+const statusTone = (status: string) =>
+  status === 'CONVERTED'
+    ? 'success'
+    : status === 'DISQUALIFIED'
+      ? 'danger'
+      : status === 'QUALIFIED'
+        ? 'info'
+        : 'neutral';
+
+const from = (query.page - 1) * page.pageSize + 1;
+const to = Math.min(query.page * page.pageSize, page.total);
+const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
+
+/** Keep every filter when moving between pages. */
+function pageHref(target: number): string {
+  const next = new URLSearchParams(params);
+  next.set('page', String(target));
+  return `/app/crm?${next.toString()}`;
+}
+const activeFilters = [
+  query.status,
+  query.leadSourceId,
+  query.ownerUserId,
+  query.businessUnitId,
+  query.campaignId,
+  query.firstContact === 'all' ? null : query.firstContact,
+  query.capturedFrom,
+  query.capturedTo,
+].filter(Boolean).length;
+const leadFilterChips = [
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.leadSourceId && {
+    key: 'source',
+    label: options.sources.find((o) => o.id === query.leadSourceId)?.label ?? 'Source',
+  },
+  query.ownerUserId && {
+    key: 'owner',
+    label: options.owners.find((o) => o.id === query.ownerUserId)?.label ?? 'Owner',
+  },
+  query.businessUnitId && {
+    key: 'unit',
+    label:
+      options.businessUnits.find((o) => o.id === query.businessUnitId)?.label ?? 'Business unit',
+  },
+  query.campaignId && {
+    key: 'campaign',
+    label: options.campaigns.find((o) => o.id === query.campaignId)?.label ?? 'Campaign',
+  },
+  query.firstContact !== 'all' && {
+    key: 'contact',
+    label: query.firstContact === 'pending' ? 'First contact pending' : 'First contact recorded',
+  },
+  query.capturedFrom && { key: 'from', label: `From ${query.capturedFrom}` },
+  query.capturedTo && { key: 'to', label: `To ${query.capturedTo}` },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutLeadFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/crm?${next.toString()}`;
+};
+---
+
+<CmsLayout title="Leads">
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to leads"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Leads could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Leads"
+          definition="A lead may sit against an existing customer or against nobody at all, which is why an account is optional here and required at conversion."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'CRM' }, { label: 'Leads' }]}
+        >
+          <Fragment slot="actions">
+            {mayCreate && (
+              <CmsButton variant="primary" icon="plus" data-cms-lead-create>
+                New lead
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+        <div class="flex items-end justify-between gap-3">
+          <CmsTabs
+            label="CRM"
+            current="/app/crm"
+            tabs={[
+              { label: 'Leads', href: '/app/crm' },
+              { label: 'Opportunities', href: '/app/crm/opportunities' },
+              { label: 'Activities', href: '/app/crm/activities' },
+            ]}
+            class="min-w-0 flex-1"
+          />
+          {maySources && (
+            <a
+              href="/app/crm/lead-sources"
+              class="mb-2 shrink-0 rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Lead sources
+            </a>
+          )}
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <CmsKpiCard label="Leads in your scope" value={String(indicators.total)} />
+          <CmsKpiCard label="Captured in the last 7 days" value={String(indicators.fresh)} />
+          <CmsKpiCard label="Awaiting first contact" value={String(indicators.needsFirstContact)} />
+          <CmsKpiCard label="Qualified" value={String(indicators.qualified)} />
+        </div>
+        <p class="text-cms-body-sm text-cms-muted">
+          Each card is a count of a stated condition over the same leads the list can show. Awaiting
+          first contact means no first contact has been recorded, not that anyone is late.
+        </p>
+
+        <CmsFilterPanel action="/app/crm" activeCount={activeFilters}>
+          <div slot="primary">
+            <CmsInput
+              id="f-q"
+              name="q"
+              label="Search"
+              type="search"
+              value={query.search}
+              hint="Lead number, title, description, product interest or account name. Case does not matter."
+            />
+          </div>
+          <Fragment slot="advanced">
+            <CmsSelect
+              id="f-status"
+              name="status"
+              label="Status"
+              value={query.status ?? ''}
+              options={[
+                blank('Every status'),
+                ...LEAD_STATUSES.map((s) => ({ value: s, label: titleCase(s) })),
+              ]}
+            />
+            <CmsSelect
+              id="f-source"
+              name="source"
+              label="Source"
+              value={query.leadSourceId ?? ''}
+              options={asOptions(options.sources, 'Every source')}
+            />
+            <CmsSelect
+              id="f-owner"
+              name="owner"
+              label="Owner"
+              value={query.ownerUserId ?? ''}
+              options={asOptions(options.owners, 'Anyone')}
+            />
+            <CmsSelect
+              id="f-unit"
+              name="unit"
+              label="Business unit"
+              value={query.businessUnitId ?? ''}
+              options={asOptions(options.businessUnits, 'Every unit')}
+            />
+            <CmsSelect
+              id="f-campaign"
+              name="campaign"
+              label="Campaign"
+              value={query.campaignId ?? ''}
+              options={asOptions(options.campaigns, 'Every campaign')}
+            />
+            <CmsSelect
+              id="f-contact"
+              name="contact"
+              label="First contact"
+              value={query.firstContact}
+              options={[
+                { value: 'all', label: 'Either' },
+                { value: 'pending', label: 'Not yet recorded' },
+                { value: 'done', label: 'Recorded' },
+              ]}
+            />
+            <CmsInput
+              id="f-from"
+              name="from"
+              label="Captured from"
+              type="date"
+              value={query.capturedFrom ?? ''}
+            />
+            <CmsInput
+              id="f-to"
+              name="to"
+              label="Captured to"
+              type="date"
+              value={query.capturedTo ?? ''}
+            />
+          </Fragment>
+          <Fragment slot="chips">
+            {leadFilterChips.map((chip) => (
+              <a
+                href={withoutLeadFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
+
+        <CmsDataTable
+          caption="Leads"
+          columns={[
+            { key: 'lead', label: 'Lead' },
+            { key: 'value', label: 'Estimated value', numeric: true },
+            { key: 'age', label: 'Age', numeric: true },
+            { key: 'status', label: 'Status' },
+          ]}
+          empty={page.items.length === 0}
+        >
+          {page.items.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={`/app/crm/${row.leadId}`}
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.title}
+                </a>
+                {row.firstContactAt === null && row.status === 'NEW' && (
+                  <span class="ms-2 text-cms-caption text-cms-muted">
+                    No first contact recorded
+                  </span>
+                )}
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[row.leadNumber, row.accountName, row.sourceName, row.ownerName]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {/*
+                  Estimated value is genuinely unknown on most early leads. Zero
+                  would say the customer is worth nothing, which is a different
+                  claim from nobody having estimated yet.
+                */}
+                {row.estimatedValue === null ? (
+                  <CmsUnavailable compact />
+                ) : (
+                  `${row.currencyCode ?? ''} ${row.estimatedValue.toLocaleString('en-KE')}`.trim()
+                )}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {ageInDays(row.capturedAt, now)} days
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <a
+                href={`/app/crm/${row.leadId}`}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">{row.title}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {[row.accountName, row.ownerName, `${ageInDays(row.capturedAt, now)} days`]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+              </a>
+            ))}
+          </Fragment>
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="crm"
+              title="No leads match"
+              description="Try a different search or remove a filter."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        {page.total > 0 && (
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-cms-body-sm text-cms-muted">
+              {from}–{to} of {page.total} leads
+            </p>
+            {lastPage > 1 && (
+              <nav aria-label="Pages" class="flex items-center gap-2">
+                <a
+                  href={pageHref(Math.max(1, query.page - 1))}
+                  aria-disabled={query.page === 1 ? 'true' : undefined}
+                  class:list={[
+                    'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-focus',
+                    query.page === 1
+                      ? 'pointer-events-none text-cms-muted opacity-50'
+                      : 'text-cms-royal hover:bg-cms-canvas',
+                  ]}
+                >
+                  Previous
+                </a>
+                <span class="text-cms-body-sm text-cms-muted">
+                  Page {query.page} of {lastPage}
+                </span>
+                <a
+                  href={pageHref(Math.min(lastPage, query.page + 1))}
+                  aria-disabled={query.page === lastPage ? 'true' : undefined}
+                  class:list={[
+                    'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-focus',
+                    query.page === lastPage
+                      ? 'pointer-events-none text-cms-muted opacity-50'
+                      : 'text-cms-royal hover:bg-cms-canvas',
+                  ]}
+                >
+                  Next
+                </a>
+              </nav>
+            )}
+          </div>
+        )}
+
+        {mayCreate && (
+          <CmsDrawer id="cms-lead-drawer" tone="form" title="New lead">
+            <CmsLeadCreateDrawer
+              sources={options.sources}
+              campaigns={options.campaigns}
+              businessUnits={options.businessUnits}
+              owners={options.owners}
+            />
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <button
+                type="submit"
+                form="cms-lead-form"
+                data-cms-lead-save
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Create lead
+              </button>
+            </Fragment>
+          </CmsDrawer>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

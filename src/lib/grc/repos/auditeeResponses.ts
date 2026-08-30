@@ -15,6 +15,7 @@
 import type { Client, InStatement } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
 import { RESPONSE_STATUS, RESPONSE_TYPE } from '@grc/workflow/responseRounds';
+import { affiliatePredicate, UNCONFINED, type AffiliateScope } from '@grc/auth/affiliateScope';
 
 const AR = cols(C.auditee_responses);
 const WP = cols(C.work_papers);
@@ -51,9 +52,13 @@ export async function listAuditeeFindings(
   organizationId: string,
   userId: string,
   statuses: string[],
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<AuditeeFinding[]> {
   if (statuses.length === 0) return [];
   const placeholders = statuses.map(() => '?').join(', ');
+  // auditee_responses carries no affiliate of its own; the finding it hangs off
+  // does, and that is what bounds it (Build Prompt 45).
+  const confine = affiliatePredicate(scope, `wp.${WP.affiliate_code}`);
   const res = await db.execute({
     sql: `SELECT wp.${WP.work_paper_id} AS id, wp.${WP.work_paper_ref} AS reference,
                  wp.${WP.observation_title} AS observation_title,
@@ -78,10 +83,10 @@ export async function listAuditeeFindings(
                OR EXISTS (SELECT 1 FROM work_paper_cc_recipients c
                            WHERE c.${CC.work_paper_id} = wp.${WP.work_paper_id}
                              AND c.${CC.user_id} = ?)
-             )
+             )${confine.clause}
         ORDER BY wp.${WP.sent_to_auditee_date} ASC, wp.${WP.work_paper_ref} ASC
            LIMIT 200`,
-    args: [organizationId, ...statuses, userId, userId],
+    args: [organizationId, ...statuses, userId, userId, ...confine.args],
   });
   return res.rows.map((r) => ({
     workPaperId: String(r.id),
@@ -116,6 +121,8 @@ export interface ResponseRow {
   reviewDate: string | null;
   reviewComments: string | null;
   actionPlanIds: string | null;
+  /** The finding's auditee stage, so a decision knows where to leave it. */
+  auditeeStage: string | null;
 }
 
 const RESPONSE_SELECT = `SELECT ar.${AR.response_id} AS response_id, ar.${AR.work_paper_id} AS work_paper_id,
@@ -128,7 +135,8 @@ const RESPONSE_SELECT = `SELECT ar.${AR.response_id} AS response_id, ar.${AR.wor
                  ar.${AR.submitted_date} AS submitted_date,
                  ar.${AR.reviewed_by_name} AS reviewed_by_name, ar.${AR.review_date} AS review_date,
                  ar.${AR.review_comments} AS review_comments,
-                 ar.${AR.action_plan_ids} AS action_plan_ids
+                 ar.${AR.action_plan_ids} AS action_plan_ids,
+                 wp.${WP.auditee_stage} AS auditee_stage
             FROM auditee_responses ar
             JOIN work_papers wp ON wp.${WP.work_paper_id} = ar.${AR.work_paper_id}
                  AND wp.${WP.organization_id} = ar.${AR.organization_id}`;
@@ -152,6 +160,7 @@ function toResponseRow(r: Record<string, unknown>): ResponseRow {
     reviewDate: s(r.review_date),
     reviewComments: s(r.review_comments),
     actionPlanIds: s(r.action_plan_ids),
+    auditeeStage: s(r.auditee_stage),
   };
 }
 
@@ -160,14 +169,16 @@ export async function listReviewQueue(
   db: Client,
   organizationId: string,
   limit = 200,
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<ResponseRow[]> {
+  const confine = affiliatePredicate(scope, `wp.${WP.affiliate_code}`);
   const res = await db.execute({
     sql: `${RESPONSE_SELECT}
            WHERE ar.${AR.organization_id} = ? AND ar.${AR.deleted_at} IS NULL
-             AND ar.${AR.status} = ?
+             AND ar.${AR.status} = ?${confine.clause}
         ORDER BY ar.${AR.submitted_date} ASC
            LIMIT ${Math.max(1, Math.min(limit, 500))}`,
-    args: [organizationId, RESPONSE_STATUS.SUBMITTED],
+    args: [organizationId, RESPONSE_STATUS.SUBMITTED, ...confine.args],
   });
   return res.rows.map((r) => toResponseRow(r as Record<string, unknown>));
 }

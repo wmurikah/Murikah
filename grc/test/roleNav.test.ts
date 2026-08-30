@@ -73,6 +73,22 @@ test('an auditee sees the auditee section and the dashboard, not setup or report
   assert.ok(!paths.includes('/reports'));
 });
 
+test('requirements show for both sides of the ask', () => {
+  // Build Prompt 58. The auditor raises them and the owner provides them, so the
+  // entry is offered to the audit side and the auditee side alike. Being asked
+  // for a document is a row naming you, not a grant, and the screen scopes
+  // itself to what the reader owns.
+  const auditor = buildNav(ctx({ roleCode: 'AUDITOR', perms: ['WORK_PAPERS.view'] }));
+  assert.ok(hrefs(auditor).includes('/requirements'));
+
+  const auditee = buildNav(ctx({ roleCode: 'UNIT_MANAGER', perms: ['ACTION_PLANS.view'] }));
+  assert.ok(hrefs(auditee).includes('/requirements'), 'an owner needs somewhere to provide it');
+
+  // A board member holds neither side and is offered neither.
+  const board = buildNav(ctx({ roleCode: 'BOARD_MEMBER', perms: [] }));
+  assert.ok(!hrefs(board).includes('/requirements'));
+});
+
 test('board reports show for a board member', () => {
   const nav = buildNav(ctx({ roleCode: 'BOARD_MEMBER', perms: [] }));
   assert.ok(hrefs(nav).includes('/reports'));
@@ -148,4 +164,98 @@ test('empty nav groups are dropped', () => {
     nav.map((g) => g.label),
     ['Overview'],
   );
+});
+
+// The settings navigation, grouped and de-duplicated (Build Prompt 52). The
+// list had grown to a flat Setup group that repeated four screens the settings
+// grid also listed, with the send queue under the same bell as Notifications.
+test('administration is grouped, and no screen is listed twice', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: true }));
+  assert.deepEqual(
+    nav.map((g) => g.label),
+    ['Overview', 'Audit', 'Organisation', 'Configuration', 'Platform'],
+  );
+
+  // The point of the change: one canonical link per screen, nothing repeated.
+  const paths = hrefs(nav);
+  const seen = new Set<string>();
+  const repeated = paths.filter((p) => (seen.has(p) ? true : (seen.add(p), false)));
+  assert.deepEqual(repeated, [], `every screen is listed once, repeated: ${repeated.join(', ')}`);
+});
+
+test('grouping drops nothing: every destination the flat nav offered is still there', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: true }));
+  const paths = hrefs(nav);
+  // The Setup group as it stood before the regrouping, plus the settings screens
+  // that were reachable only through the grid.
+  for (const href of [
+    '/settings/affiliates',
+    '/settings/audit-universe',
+    '/settings/users',
+    '/settings/access-control',
+    '/send-queue',
+    '/settings',
+    '/settings/ai',
+    '/settings/general',
+    '/settings/dropdowns',
+    '/settings/email',
+    '/settings/storage',
+    '/settings/provision',
+  ]) {
+    assert.ok(paths.includes(href), `${href} must stay reachable from the navigation`);
+  }
+});
+
+test('each administration screen sits in the group it belongs to', () => {
+  const nav = buildNav(ctx({ isPlatformOwner: true, hasAi: true, instanceSelected: true }));
+  const group = (label: string): string[] =>
+    nav.find((g) => g.label === label)?.items.map((i) => i.href) ?? [];
+
+  // Who and what the audit covers.
+  assert.deepEqual(group('Organisation'), [
+    '/settings/affiliates',
+    '/settings/audit-universe',
+    '/settings/users',
+    '/settings/access-control',
+  ]);
+  // How the application behaves, evidence storage included (Build Prompt 51).
+  assert.ok(group('Configuration').includes('/settings/storage'));
+  assert.ok(group('Configuration').includes('/settings/email'));
+  assert.ok(group('Configuration').includes('/settings/general'));
+  assert.ok(group('Configuration').includes('/settings/dropdowns'));
+  // What belongs to Murikah Labs, not to the customer.
+  assert.deepEqual(group('Platform'), ['/platform', '/settings/provision']);
+});
+
+test('Notifications is not a sidebar destination; the modules carry the counts', () => {
+  // Build Prompt 60. The entry listed what every module already knew, so a
+  // person checked two places for one fact. What is waiting now shows as a
+  // count on the module it is waiting in, and the bell in the sidebar head
+  // still opens the centre for the history.
+  const nav = buildNav(ctx({ isPlatformOwner: true, instanceSelected: true }));
+  const items = nav.flatMap((g) => g.items);
+  assert.ok(
+    !items.some((i) => i.href === '/notifications'),
+    'the standalone Notifications entry is gone',
+  );
+  assert.ok(
+    items.some((i) => i.href === '/send-queue'),
+    'the send queue, which is a different thing, stays',
+  );
+
+  const badged = new Map(items.filter((i) => i.countKey).map((i) => [i.href, i]));
+  for (const href of ['/work-papers', '/action-plans', '/requirements', '/auditee-responses']) {
+    const item = badged.get(href);
+    assert.ok(item, `${href} must carry a pending count`);
+    assert.equal(item.alert, true, `${href} shows it as an alert, not as decoration`);
+  }
+  assert.equal(badged.get('/requirements')?.countKey, 'myRequirements');
+  assert.equal(badged.get('/work-papers')?.countKey, 'pendingReview');
+});
+
+test('an admin who is not the platform owner gets no platform group', () => {
+  const nav = buildNav(ctx({ roleCode: 'SUPER_ADMIN', perms: ['CONFIG.view'] }));
+  assert.ok(!nav.some((g) => g.label === 'Platform'));
+  // The configuration screens are still theirs.
+  assert.ok(hrefs(nav).includes('/settings/storage'));
 });

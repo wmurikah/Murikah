@@ -1,0 +1,328 @@
+---
+/**
+ * The stage move, as one modal and one script.
+ *
+ * The form carries the current stage as `expectedStageId`, which is the
+ * optimistic concurrency token: the server refuses the move if the record has
+ * moved since this page rendered, and the person is told to reload rather
+ * than silently overwriting someone else's move.
+ *
+ * The won and lost fields appear only when the chosen destination carries the
+ * matching flag, so the form asks for exactly the facts that closing needs
+ * and nothing else. The add-product modal lives here too, because both are
+ * for people who hold the edit permission and nobody else is sent this code.
+ */
+import CmsModal from './CmsModal.astro';
+import CmsButton from './CmsButton.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+
+interface StageOption {
+  id: string;
+  label: string;
+  isWon: boolean;
+  isLost: boolean;
+}
+interface Option {
+  id: string;
+  label: string;
+}
+interface Props {
+  opportunityId: string;
+  currentStageId: string;
+  accountType: string;
+  mayManageAccounts: boolean;
+  stages: StageOption[];
+  lostReasons: Option[];
+  products: Option[];
+  estimatedValue: number;
+}
+const {
+  opportunityId,
+  currentStageId,
+  accountType,
+  mayManageAccounts,
+  stages,
+  lostReasons,
+  products,
+  estimatedValue,
+} = Astro.props;
+
+const destinations = stages.filter((s) => s.id !== currentStageId);
+---
+
+<div data-cms-opp-id={opportunityId} data-cms-opp-stage={currentStageId}>
+  <CmsModal id="cms-opp-move-modal" title="Move stage">
+    <form id="cms-opp-move-form" novalidate class="flex flex-col gap-4">
+      <p
+        id="cms-opp-move-error"
+        role="alert"
+        hidden
+        class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+      >
+      </p>
+      <input type="hidden" name="expectedStageId" value={currentStageId} />
+      <CmsSelect
+        id="m-toStageId"
+        name="toStageId"
+        label="Destination stage"
+        required
+        options={[
+          { value: '', label: 'Choose a stage' },
+          ...destinations.map((s) => ({
+            value: s.id,
+            label: s.isWon ? `${s.label} (won)` : s.isLost ? `${s.label} (lost)` : s.label,
+          })),
+        ]}
+      />
+      <div data-cms-move-open>
+        <CmsInput
+          id="m-probabilityPercent"
+          name="probabilityPercent"
+          label="Probability %"
+          type="number"
+          min="0"
+          max="100"
+          step="1"
+          hint="Whole percent. Leave empty to take the destination stage's default."
+        />
+      </div>
+      <div data-cms-move-won hidden class="flex flex-col gap-4">
+        <CmsInput
+          id="m-wonAmount"
+          name="wonAmount"
+          label="Won amount"
+          type="number"
+          min="0"
+          step="any"
+          value={String(estimatedValue)}
+          hint="What was actually won. It may differ from the estimate."
+        />
+        {
+          accountType === 'PROSPECT' && mayManageAccounts && (
+            <label class="flex items-start gap-2 text-cms-body-sm text-cms-ink">
+              <input type="checkbox" name="markAccountCustomer" value="1" class="mt-0.5" />
+              <span>
+                Mark the account as a customer. It is currently a prospect. The Oracle customer code
+                stays empty: winning commercially does not create an Oracle master record.
+              </span>
+            </label>
+          )
+        }
+      </div>
+      <div data-cms-move-lost hidden class="flex flex-col gap-4">
+        <CmsSelect
+          id="m-lostReasonId"
+          name="lostReasonId"
+          label="Lost reason"
+          options={[
+            { value: '', label: 'Choose a reason' },
+            ...lostReasons.map((r) => ({ value: r.id, label: r.label })),
+          ]}
+          hint="From the configured list, so losses can be analysed. Detail goes in the notes."
+        />
+        <div class="flex flex-col gap-1.5">
+          <label for="m-lostNotes" class="text-cms-body-sm font-medium text-cms-ink">Notes</label>
+          <textarea
+            id="m-lostNotes"
+            name="lostNotes"
+            rows="2"
+            class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          ></textarea>
+        </div>
+      </div>
+      <div data-cms-move-close hidden>
+        <CmsInput
+          id="m-actualCloseDate"
+          name="actualCloseDate"
+          label="Actual close date"
+          type="date"
+        />
+      </div>
+      <CmsInput
+        id="m-reason"
+        name="reason"
+        label="Reason for the move"
+        hint="Optional. Kept in the stage history."
+      />
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-opp-move-save>Move</CmsButton>
+    </Fragment>
+  </CmsModal>
+
+  <CmsModal id="cms-opp-line-modal" title="Add product">
+    <form id="cms-opp-line-form" novalidate class="flex flex-col gap-4">
+      <p
+        id="cms-opp-line-error"
+        role="alert"
+        hidden
+        class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+      >
+      </p>
+      <CmsSelect
+        id="l-productId"
+        name="productId"
+        label="Product"
+        required
+        options={[
+          { value: '', label: 'Choose from the catalogue' },
+          ...products.map((p) => ({ value: p.id, label: p.label })),
+        ]}
+      />
+      <CmsInput
+        id="l-expectedQuantity"
+        name="expectedQuantity"
+        label="Expected quantity"
+        type="number"
+        min="0"
+        step="any"
+        required
+      />
+      <CmsInput
+        id="l-unitPrice"
+        name="unitPrice"
+        label="Unit price"
+        type="number"
+        min="0"
+        step="any"
+        hint="Leave empty when not yet agreed. Empty is not zero."
+      />
+      <CmsInput
+        id="l-estimatedLineValue"
+        name="estimatedLineValue"
+        label="Line value"
+        type="number"
+        min="0"
+        step="any"
+      />
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-opp-line-save>Add</CmsButton>
+    </Fragment>
+  </CmsModal>
+</div>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-cms-opp-id]');
+  const opportunityId = root?.dataset.cmsOppId ?? '';
+
+  if (opportunityId !== '') {
+    const moveModal = document.getElementById('cms-opp-move-modal') as HTMLDialogElement | null;
+    const lineModal = document.getElementById('cms-opp-line-modal') as HTMLDialogElement | null;
+    const moveForm = document.getElementById('cms-opp-move-form') as HTMLFormElement | null;
+    const lineForm = document.getElementById('cms-opp-line-form') as HTMLFormElement | null;
+    const moveError = document.getElementById('cms-opp-move-error');
+    const lineError = document.getElementById('cms-opp-line-error');
+    const destination = document.getElementById('m-toStageId') as HTMLSelectElement | null;
+
+    // Show the fields the chosen destination needs: won facts, lost facts, a
+    // close date for either, the probability only for an open destination.
+    const sync = () => {
+      const label = destination?.selectedOptions[0]?.textContent ?? '';
+      const isWon = label.includes('(won)');
+      const isLost = label.includes('(lost)');
+      document.querySelector<HTMLElement>('[data-cms-move-won]')?.toggleAttribute('hidden', !isWon);
+      document
+        .querySelector<HTMLElement>('[data-cms-move-lost]')
+        ?.toggleAttribute('hidden', !isLost);
+      document
+        .querySelector<HTMLElement>('[data-cms-move-close]')
+        ?.toggleAttribute('hidden', !isWon && !isLost);
+      document
+        .querySelector<HTMLElement>('[data-cms-move-open]')
+        ?.toggleAttribute('hidden', isWon || isLost);
+    };
+    destination?.addEventListener('change', sync);
+
+    const submit = async (
+      form: HTMLFormElement,
+      url: string,
+      method: string,
+      errorBox: HTMLElement | null,
+    ) => {
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string' && value !== '') body[name] = value;
+      }
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.fields?.map((f) => f.message).join(' ') ??
+            answer?.error?.message ??
+            'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      }
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-cms-opp-move]')) {
+        if (moveError) moveError.hidden = true;
+        sync();
+        moveModal?.showModal();
+        return;
+      }
+      if (target?.closest('[data-cms-opp-line-add]')) {
+        if (lineError) lineError.hidden = true;
+        lineForm?.reset();
+        lineModal?.showModal();
+        return;
+      }
+      if (target?.closest('[data-cms-opp-move-save]') && moveForm) {
+        void submit(
+          moveForm,
+          `/api/crm/opportunities/${encodeURIComponent(opportunityId)}/stage`,
+          'POST',
+          moveError,
+        );
+        return;
+      }
+      if (target?.closest('[data-cms-opp-line-save]') && lineForm) {
+        void submit(
+          lineForm,
+          `/api/crm/opportunities/${encodeURIComponent(opportunityId)}/products`,
+          'POST',
+          lineError,
+        );
+        return;
+      }
+      const remove = target?.closest<HTMLElement>('[data-cms-opp-line-remove]');
+      if (remove) {
+        const lineId = remove.dataset.cmsOppLineRemove ?? '';
+        void fetch(
+          `/api/crm/opportunities/${encodeURIComponent(opportunityId)}/products/${encodeURIComponent(lineId)}`,
+          { method: 'DELETE', credentials: 'same-origin' },
+        ).then((response) => {
+          if (response.ok) window.location.reload();
+        });
+      }
+    });
+  }
+</script>

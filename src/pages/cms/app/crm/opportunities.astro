@@ -1,0 +1,495 @@
+---
+/**
+ * CRM → Opportunities.
+ *
+ * Two views of the same scoped data: a pipeline board grouped by stage, and a
+ * list for analytical work. The toggle is a URL parameter, so a shared link
+ * carries the view. The kanban is not forced on anyone: the list carries the
+ * same filters and more columns.
+ *
+ * MONEY ON THIS PAGE IS PER CURRENCY.
+ * The stage totals group by currency and are labelled. There is no grand
+ * total anywhere, because KES and USD are not addable and no FX table exists.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsOpportunityCreateDrawer from '@/components/cms/CmsOpportunityCreateDrawer.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewOpportunities, canEditOpportunities } from '@/lib/cms/permissions';
+import {
+  listOpportunities,
+  opportunityOptions,
+  pipelineSummary,
+  listPipelines,
+  type OpportunityPage,
+  type OpportunityOptions,
+  type PipelineSummary,
+  type PipelineRow,
+} from '@/lib/cms/repos/opportunityAdmin';
+import { readOpportunityQuery } from '@/lib/cms/admin/opportunityInput';
+import { fractionToPercentLabel } from '@/lib/cms/crm/probability';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewOpportunities(permissions);
+const mayEdit = canEditOpportunities(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+const params = Astro.url.searchParams;
+const query = readOpportunityQuery(params);
+const view = params.get('view') === 'board' ? 'board' : 'list';
+
+let page: OpportunityPage = { items: [], total: 0, page: 1, pageSize: 25 };
+let options: OpportunityOptions = {
+  pipelines: [],
+  businessUnits: [],
+  owners: [],
+  currencies: [],
+  lostReasons: [],
+  products: [],
+};
+let pipelines: PipelineRow[] = [];
+let summary: PipelineSummary | null = null;
+let boardPipelineId = '';
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [page, options, pipelines] = await Promise.all([
+      listOpportunities(db, userId, query),
+      opportunityOptions(db),
+      listPipelines(db),
+    ]);
+    boardPipelineId = query.pipelineId ?? options.pipelines[0]?.id ?? '';
+    if (view === 'board' && boardPipelineId !== '') {
+      summary = await pipelineSummary(db, userId, boardPipelineId);
+    }
+  } catch (error) {
+    console.error('[cms.crm.opportunities] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const blank = (label: string) => ({ value: '', label });
+const asOptions = (list: { id: string; label: string }[], empty: string) => [
+  blank(empty),
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const statusTone = (status: string) =>
+  status === 'WON' ? 'success' : status === 'LOST' ? 'danger' : 'info';
+const money = (value: number, currency: string) => `${currency} ${value.toLocaleString('en-KE')}`;
+
+/** Board columns: open opportunities of the chosen pipeline, grouped by stage. */
+const boardStages =
+  summary === null ? [] : summary.stages.filter((s) => !s.isWonStage && !s.isLostStage);
+const boardItems = new Map<string, typeof page.items>();
+if (view === 'board') {
+  for (const item of page.items) {
+    if (item.pipelineId !== boardPipelineId || item.status !== 'OPEN') continue;
+    const list = boardItems.get(item.currentStageId) ?? [];
+    list.push(item);
+    boardItems.set(item.currentStageId, list);
+  }
+}
+
+function viewHref(target: 'board' | 'list'): string {
+  const next = new URLSearchParams(params);
+  next.set('view', target);
+  if (target === 'board' && query.pipelineId === null && boardPipelineId !== '') {
+    next.set('pipeline', boardPipelineId);
+  }
+  return `/app/crm/opportunities?${next.toString()}`;
+}
+function pageHref(target: number): string {
+  const next = new URLSearchParams(params);
+  next.set('page', String(target));
+  return `/app/crm/opportunities?${next.toString()}`;
+}
+const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
+const opportunityFilters = [
+  query.pipelineId && {
+    key: 'pipeline',
+    label: options.pipelines.find((o) => o.id === query.pipelineId)?.label ?? 'Pipeline',
+  },
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.ownerUserId && {
+    key: 'owner',
+    label: options.owners.find((o) => o.id === query.ownerUserId)?.label ?? 'Owner',
+  },
+  query.businessUnitId && {
+    key: 'unit',
+    label:
+      options.businessUnits.find((o) => o.id === query.businessUnitId)?.label ?? 'Business unit',
+  },
+  query.currencyCode && { key: 'currency', label: query.currencyCode },
+  query.closeFrom && { key: 'closeFrom', label: `Closing from ${query.closeFrom}` },
+  query.closeTo && { key: 'closeTo', label: `Closing to ${query.closeTo}` },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutOpportunityFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/crm/opportunities?${next.toString()}`;
+};
+---
+
+<CmsLayout title="Opportunities">
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to opportunities"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Opportunities could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Opportunities"
+          definition="Probability shows the current confidence assigned to the opportunity."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'Opportunities' },
+          ]}
+        >
+          <Fragment slot="actions">
+            {mayEdit && (
+              <CmsButton variant="primary" icon="plus" data-cms-opportunity-create>
+                New opportunity
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <CmsTabs
+            label="CRM"
+            current="/app/crm/opportunities"
+            tabs={[
+              { label: 'Leads', href: '/app/crm' },
+              { label: 'Opportunities', href: '/app/crm/opportunities' },
+              { label: 'Activities', href: '/app/crm/activities' },
+            ]}
+            class="min-w-0 flex-1"
+          />
+          <div
+            role="group"
+            aria-label="Opportunity view"
+            class="mb-1 inline-flex self-start rounded-cms bg-cms-sunken p-0.5"
+          >
+            <a
+              href={viewHref('list')}
+              aria-current={view === 'list' ? 'true' : undefined}
+              class:list={[
+                'inline-flex min-h-9 items-center rounded-cms px-3 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                view === 'list'
+                  ? 'bg-cms-surface text-cms-ink'
+                  : 'text-cms-muted hover:text-cms-ink',
+              ]}
+            >
+              List
+            </a>
+            <a
+              href={viewHref('board')}
+              aria-current={view === 'board' ? 'true' : undefined}
+              class:list={[
+                'inline-flex min-h-9 items-center rounded-cms px-3 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                view === 'board'
+                  ? 'bg-cms-surface text-cms-ink'
+                  : 'text-cms-muted hover:text-cms-ink',
+              ]}
+            >
+              Pipeline
+            </a>
+          </div>
+        </div>
+
+        <CmsFilterPanel action="/app/crm/opportunities" activeCount={opportunityFilters.length}>
+          <Fragment slot="primary">
+            <input type="hidden" name="view" value={view} />
+            <div>
+              <CmsInput
+                id="f-q"
+                name="q"
+                label="Search"
+                type="search"
+                value={query.search}
+                hint="Opportunity number, title or account name."
+              />
+            </div>
+          </Fragment>
+          <Fragment slot="advanced">
+            <CmsSelect
+              id="f-pipeline"
+              name="pipeline"
+              label="Pipeline"
+              value={query.pipelineId ?? ''}
+              options={asOptions(options.pipelines, 'Every pipeline')}
+            />
+            <CmsSelect
+              id="f-status"
+              name="status"
+              label="Status"
+              value={query.status ?? ''}
+              options={[
+                blank('Every status'),
+                { value: 'OPEN', label: 'Open' },
+                { value: 'WON', label: 'Won' },
+                { value: 'LOST', label: 'Lost' },
+              ]}
+            />
+            <CmsSelect
+              id="f-owner"
+              name="owner"
+              label="Owner"
+              value={query.ownerUserId ?? ''}
+              options={asOptions(options.owners, 'Anyone')}
+            />
+            <CmsSelect
+              id="f-unit"
+              name="unit"
+              label="Business unit"
+              value={query.businessUnitId ?? ''}
+              options={asOptions(options.businessUnits, 'Every unit')}
+            />
+            <CmsSelect
+              id="f-currency"
+              name="currency"
+              label="Currency"
+              value={query.currencyCode ?? ''}
+              options={[
+                blank('Every currency'),
+                ...options.currencies.map((code) => ({ value: code, label: code })),
+              ]}
+            />
+            <CmsInput
+              id="f-closeFrom"
+              name="closeFrom"
+              label="Closing from"
+              type="date"
+              value={query.closeFrom ?? ''}
+            />
+            <CmsInput
+              id="f-closeTo"
+              name="closeTo"
+              label="Closing to"
+              type="date"
+              value={query.closeTo ?? ''}
+            />
+          </Fragment>
+          <Fragment slot="chips">
+            {opportunityFilters.map((chip) => (
+              <a
+                href={withoutOpportunityFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
+
+        {view === 'board' && summary !== null ? (
+          <Fragment>
+            <div class="flex gap-4 overflow-x-auto pb-2">
+              {boardStages.map((stage) => (
+                <section class="w-72 shrink-0 rounded-cms border border-cms-line bg-cms-canvas p-3">
+                  <h2 class="flex items-baseline justify-between text-cms-body-sm font-semibold text-cms-ink">
+                    {stage.stageName}
+                    <span class="text-cms-caption font-normal text-cms-muted">{stage.count}</span>
+                  </h2>
+                  {/* Value per currency, never one number across currencies. */}
+                  <ul class="mt-1 flex flex-col text-cms-caption text-cms-muted">
+                    {stage.byCurrency.map((line) => (
+                      <li class="tabular-nums">
+                        {money(line.value, line.currencyCode)}
+                        <span class="ms-1">
+                          (weighted {money(Math.round(line.weighted), line.currencyCode)})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <ul class="mt-3 flex flex-col gap-2">
+                    {(boardItems.get(stage.stageId) ?? []).map((item) => (
+                      <li>
+                        <a
+                          href={`/app/crm/opportunities/${item.opportunityId}`}
+                          class="block rounded-cms border border-cms-line bg-cms-surface px-3 py-2 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          <p class="text-cms-body-sm font-medium text-cms-ink">{item.title}</p>
+                          <p class="text-cms-caption text-cms-muted">{item.accountName}</p>
+                          <p class="mt-1 flex items-center justify-between text-cms-caption text-cms-muted">
+                            <span class="tabular-nums">
+                              {money(item.estimatedValue, item.currencyCode)}
+                            </span>
+                            <span>{fractionToPercentLabel(item.probability)}</span>
+                          </p>
+                          {item.estimatedCloseDate !== null && (
+                            <p class="text-cms-caption text-cms-muted">
+                              Close {item.estimatedCloseDate}
+                            </p>
+                          )}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                  {(boardItems.get(stage.stageId) ?? []).length === 0 && (
+                    <p class="mt-3 text-cms-caption text-cms-muted">Nothing in this stage.</p>
+                  )}
+                </section>
+              ))}
+            </div>
+            <p class="text-cms-body-sm text-cms-muted">
+              {summary.wonCount} won and {summary.lostCount} lost in this pipeline, for this
+              pipeline. The board shows open deals on the current page; use List to review all
+              results.
+            </p>
+          </Fragment>
+        ) : (
+          <Fragment>
+            <CmsDataTable
+              caption="Opportunities"
+              columns={[
+                { key: 'title', label: 'Opportunity' },
+                { key: 'stage', label: 'Stage' },
+                { key: 'value', label: 'Value', numeric: true },
+                { key: 'probability', label: 'Probability', numeric: true },
+                { key: 'status', label: 'Status' },
+              ]}
+              empty={page.items.length === 0}
+            >
+              {page.items.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5">
+                    <a
+                      href={`/app/crm/opportunities/${row.opportunityId}`}
+                      class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {row.title}
+                    </a>
+                    <span class="mt-1 block text-cms-caption text-cms-muted">
+                      {[
+                        row.opportunityNumber,
+                        row.accountName,
+                        row.ownerName,
+                        row.estimatedCloseDate,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">{row.currentStageName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {money(row.estimatedValue, row.currencyCode)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {fractionToPercentLabel(row.probability)}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+                  </td>
+                </tr>
+              ))}
+              <Fragment slot="mobile">
+                {page.items.map((row) => (
+                  <a
+                    href={`/app/crm/opportunities/${row.opportunityId}`}
+                    class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+                  >
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate font-semibold text-cms-ink">{row.title}</span>
+                      <span class="block truncate text-cms-caption text-cms-muted">
+                        {row.accountName} · {row.ownerName} · {row.currentStageName}
+                      </span>
+                    </span>
+                    <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+                  </a>
+                ))}
+              </Fragment>
+              <Fragment slot="empty">
+                <CmsEmptyState
+                  icon="crm"
+                  title="No opportunities match"
+                  description="Try a different search or remove a filter."
+                />
+              </Fragment>
+            </CmsDataTable>
+
+            {page.total > 0 && lastPage > 1 && (
+              <nav aria-label="Pages" class="flex items-center gap-2">
+                <a
+                  href={pageHref(Math.max(1, query.page - 1))}
+                  class:list={[
+                    'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    query.page === 1
+                      ? 'pointer-events-none text-cms-muted opacity-50'
+                      : 'text-cms-royal hover:bg-cms-canvas',
+                  ]}
+                >
+                  Previous
+                </a>
+                <span class="text-cms-body-sm text-cms-muted">
+                  Page {query.page} of {lastPage} · {page.total} opportunities
+                </span>
+                <a
+                  href={pageHref(Math.min(lastPage, query.page + 1))}
+                  class:list={[
+                    'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    query.page === lastPage
+                      ? 'pointer-events-none text-cms-muted opacity-50'
+                      : 'text-cms-royal hover:bg-cms-canvas',
+                  ]}
+                >
+                  Next
+                </a>
+              </nav>
+            )}
+          </Fragment>
+        )}
+
+        {mayEdit && (
+          <CmsDrawer id="cms-opportunity-drawer" tone="form" title="New opportunity">
+            <CmsOpportunityCreateDrawer
+              pipelines={pipelines}
+              businessUnits={options.businessUnits}
+              owners={options.owners}
+            />
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <button
+                type="submit"
+                form="cms-opportunity-form"
+                data-cms-opportunity-save
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Create opportunity
+              </button>
+            </Fragment>
+          </CmsDrawer>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

@@ -4,7 +4,7 @@
  * row when present, else the inline branded layout), writes a notification_queue
  * row (batch_type, priority, channel email, recipient, payload, related entity,
  * rendered subject and body, status PENDING, attempts 0, max_attempts 5), mirrors
- * an in_app_notifications row so the bell updates, and writes is_cc rows for any
+ * an in_app_notifications row for the notification centre, and writes is_cc rows for any
  * explicit CC and for the Head of Audit on the key events. Every write is scoped
  * to the acting organisation and is best-effort, so a schema difference never
  * breaks the triggering transition. Column names follow

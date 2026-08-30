@@ -1,0 +1,145 @@
+---
+/**
+ * The shared analytics filter, as a form.
+ *
+ * It submits with GET, so the filter lands in the URL and the view can be
+ * shared or bookmarked, and every drill-down from here carries the same
+ * query string. One filter object, parsed in one place, applied by every
+ * analytical query behind this page.
+ */
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import type { AnalyticsFilter } from '@/lib/cms/analytics/filters';
+
+interface Props {
+  filter: AnalyticsFilter;
+  affiliates: { value: string; label: string }[];
+  statuses: string[];
+  action: string;
+  /** Purchase order pages have no credit column, so they hide that control. */
+  showCredit?: boolean;
+  /**
+   * Hides the status control, for a page whose report has no status
+   * dimension. Absent rather than empty: a control that does nothing is
+   * worse than no control, because somebody sets it and concludes the page
+   * is broken when the numbers do not move.
+   */
+  showStatus?: boolean;
+}
+const { filter, affiliates, statuses, action, showCredit = true, showStatus = true } = Astro.props;
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace('_', ' ');
+const activeCount = [
+  filter.from,
+  filter.to,
+  filter.affiliateId,
+  filter.status,
+  filter.slaStatus,
+  filter.creditRequired === 'ANY' ? null : filter.creditRequired,
+].filter(Boolean).length;
+---
+
+<CmsFilterPanel action={action} activeCount={activeCount} label="Order filters">
+  {
+    /*
+    Extra hidden fields from the caller. A GET form replaces the whole query
+    string, so a page carrying its own parameter (the reports page carries
+    which report) must put it back or submitting the filter would navigate
+    away from the thing being filtered.
+  */
+  }
+  <Fragment slot="primary"
+    ><slot /><CmsInput
+      id="f-from"
+      name="from"
+      label="Created from"
+      type="date"
+      value={filter.from ?? ''}
+    /></Fragment
+  >
+  <Fragment slot="advanced">
+    <CmsInput id="f-to" name="to" label="To" type="date" value={filter.to ?? ''} />
+    <CmsSelect
+      id="f-affiliate"
+      name="affiliateId"
+      label="Affiliate"
+      value={filter.affiliateId ?? ''}
+      options={[{ value: '', label: 'All affiliates' }, ...affiliates]}
+    />
+    {
+      showStatus && (
+        <CmsSelect
+          id="f-status"
+          name="status"
+          label="Status"
+          value={filter.status ?? ''}
+          options={[
+            { value: '', label: 'Any status' },
+            ...statuses.map((status) => ({ value: status, label: titleCase(status) })),
+          ]}
+        />
+      )
+    }
+    <CmsSelect
+      id="f-sla"
+      name="slaStatus"
+      label="SLA"
+      value={filter.slaStatus ?? ''}
+      options={[
+        { value: '', label: 'Any SLA state' },
+        { value: 'RUNNING', label: 'Running' },
+        { value: 'AT_RISK', label: 'At risk' },
+        { value: 'BREACHED', label: 'Breached' },
+        { value: 'MET', label: 'Met' },
+      ]}
+    />
+    {
+      showCredit && (
+        <CmsSelect
+          id="f-credit"
+          name="creditRequired"
+          label="Credit approval"
+          value={filter.creditRequired}
+          options={[
+            { value: 'ANY', label: 'Any' },
+            { value: 'YES', label: 'Required' },
+            { value: 'NO', label: 'Not required' },
+          ]}
+        />
+      )
+    }
+    <CmsSelect
+      id="f-grain"
+      name="grain"
+      label="Trend grain"
+      value={filter.grain}
+      options={[
+        { value: 'DAY', label: 'Daily' },
+        { value: 'WEEK', label: 'Weekly' },
+        { value: 'MONTH', label: 'Monthly' },
+      ]}
+    />
+    <CmsInput
+      id="f-min-volume"
+      name="minVolume"
+      label="Minimum volume to rank"
+      type="number"
+      value={String(filter.minVolume)}
+      hint="Below this, figures are shown without a comparative rank."
+    />
+  </Fragment>
+  <Fragment slot="chips"
+    >{
+      activeCount > 0 && (
+        <a
+          href={action}
+          class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          Clear {activeCount} active {activeCount === 1 ? 'filter' : 'filters'}{' '}
+          <span aria-hidden="true">×</span>
+        </a>
+      )
+    }</Fragment
+  >
+</CmsFilterPanel>

@@ -132,6 +132,15 @@ const INSTANCE_FREE_PATHS = new Set([
   // reads the hit rate and flushes a tenant's namespace from above them all.
   GRC_CACHE_PATH,
   '/api/platform/cache',
+  // Access control is reachable from above the instances too (Build Prompt 44).
+  // The permission matrix is tenant data now, and the rows an organisation
+  // inherits until it saves its own are the platform defaults: editing those is
+  // something only the owner does, and only while inside no instance. Inside an
+  // instance the same screen edits that instance's own grants. An instance admin
+  // is pinned to their organisation and is never in the instance-free state, so
+  // this widens nothing for them.
+  '/settings/access-control',
+  '/api/access-control',
   '/change-password',
   '/api/auth/change-password',
   '/mfa',
@@ -165,3 +174,42 @@ export function grcMarketingRedirect(pathname: string, search: string): string |
 }
 
 export const GRC_HOST = GRC_APEX;
+
+/**
+ * The destination to return to after signing in, or null when there is none to
+ * trust (Build Prompt 53).
+ *
+ * The digest email links a reviewer straight at the review queue, and someone
+ * reading it on a phone at seven in the morning is rarely still signed in. So
+ * the guard sends them to `/login?next=...` and the sign-in lands them where
+ * they were going rather than on a dashboard they then have to navigate out of.
+ *
+ * That parameter is attacker-controllable, which is the whole reason this is one
+ * small pure function with its own tests rather than a check inlined at the
+ * three places that need it. Only a root-relative path within this app is ever
+ * returned:
+ *
+ * - it must begin with a single `/`, so no absolute URL and no scheme;
+ * - `//host` and `/\host` are protocol-relative URLs to another origin in every
+ *   browser, and are refused;
+ * - whitespace and control characters are refused, so nothing can be smuggled
+ *   into a Location header;
+ * - a public path (the sign-in screen itself, the reset flow) is refused, so a
+ *   loop back to `/login?next=/login` cannot be built;
+ * - anything else, including an empty value, yields null and the caller falls
+ *   back to the role's own landing page.
+ */
+export function safeNextPath(raw: unknown): string | null {
+  const value = typeof raw === 'string' ? raw : '';
+  if (value === '' || value.length > 512) return null;
+  if (!value.startsWith('/')) return null;
+  // Protocol-relative: `//evil.example` and the backslash variant browsers
+  // normalise to it.
+  if (value.startsWith('//') || value.startsWith('/\\')) return null;
+  // Whitespace or a control character in a location is never a path this app
+  // produced, and CR or LF would split the header.
+  if (/[\u0000-\u0020]/.test(value)) return null;
+  const path = value.split(/[?#]/)[0];
+  if (isGrcPublicPath(path)) return null;
+  return value;
+}

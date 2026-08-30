@@ -1,0 +1,378 @@
+---
+/**
+ * The new-lead form.
+ *
+ * THE ACCOUNT IS OPTIONAL HERE AND REQUIRED AT CONVERSION.
+ * A lead is early interest. It may arrive from a stand at a trade fair with a
+ * company name and nothing else, and forcing a customer record at that moment
+ * is how prospects get invented in the customer master. So the account is a
+ * lookup that may be left empty, and `convertLead` is the point that refuses to
+ * proceed without one.
+ *
+ * The account lookup asks /api/customers/accounts, which applies the caller's
+ * own data scope. Nobody can attach a lead to a customer they may not see, and
+ * the create endpoint checks the account again on the server rather than
+ * trusting whatever id the form submits.
+ *
+ * The contact list is loaded only after an account is chosen, from that
+ * account's own contacts, because a contact belongs to exactly one account and
+ * the server refuses a pairing that does not match.
+ *
+ * A component, so Astro ships this script only where it is rendered: a person
+ * who may read leads but not create one is never sent the create behaviour.
+ */
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+
+interface Option {
+  id: string;
+  label: string;
+}
+interface Props {
+  sources: Option[];
+  campaigns: Option[];
+  businessUnits: Option[];
+  owners: Option[];
+}
+const { sources, campaigns, businessUnits, owners } = Astro.props;
+
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+---
+
+<form id="cms-lead-form" novalidate class="flex flex-col gap-4">
+  <p
+    id="cms-lead-form-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+  >
+  </p>
+
+  <CmsInput id="l-title" name="title" label="Title" required hint="What the enquiry is about." />
+
+  <CmsSelect
+    id="l-leadSourceId"
+    name="leadSourceId"
+    label="Source"
+    required
+    options={pick(sources, 'Choose a source')}
+    hint="Where this lead came from. Only active sources are offered."
+  />
+  <CmsSelect
+    id="l-ownerUserId"
+    name="ownerUserId"
+    label="Owner"
+    required
+    options={pick(owners, 'Choose an owner')}
+  />
+  <CmsSelect
+    id="l-businessUnitId"
+    name="businessUnitId"
+    label="Business unit"
+    options={pick(businessUnits, 'None')}
+  />
+  <CmsSelect
+    id="l-campaignId"
+    name="campaignId"
+    label="Campaign"
+    options={pick(campaigns, 'None')}
+  />
+
+  {/* The account lookup. Server-scoped, and never required. */}
+  <div class="flex flex-col gap-1.5">
+    <label for="l-accountSearch" class="text-cms-body-sm font-medium text-cms-ink"> Account </label>
+    <input
+      id="l-accountSearch"
+      type="search"
+      autocomplete="off"
+      placeholder="Search customers by name or code"
+      class="h-10 w-full rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    />
+    <p class="text-cms-caption text-cms-muted">
+      Optional. Leave it empty when the enquiry is from a company we do not hold yet. An account is
+      required only at conversion.
+    </p>
+    <p
+      id="l-accountId-error"
+      role="alert"
+      data-field-error
+      class="hidden text-cms-caption text-cms-negative"
+    >
+    </p>
+    <ul
+      id="l-accountResults"
+      hidden
+      class="flex flex-col gap-1 rounded-cms border border-cms-line p-1"
+    >
+    </ul>
+    <p id="l-accountChosen" hidden class="text-cms-body-sm text-cms-ink"></p>
+    <input type="hidden" id="l-accountId" name="accountId" value="" />
+  </div>
+
+  <CmsSelect
+    id="l-primaryContactId"
+    name="primaryContactId"
+    label="Primary contact"
+    options={[{ value: '', label: 'Choose an account first' }]}
+    hint="Only contacts on the chosen account are offered."
+  />
+
+  <CmsInput
+    id="l-productInterest"
+    name="productInterest"
+    label="Product interest"
+    hint="Free text at this stage: AGO bulk supply, LPG for an industrial kitchen. Priced products belong on the opportunity."
+  />
+  <CmsInput
+    id="l-estimatedVolume"
+    name="estimatedVolume"
+    label="Estimated volume"
+    type="number"
+    min="0"
+    step="any"
+    hint="Leave empty when nobody has estimated. Empty is not zero."
+  />
+  <CmsInput
+    id="l-estimatedValue"
+    name="estimatedValue"
+    label="Estimated value"
+    type="number"
+    min="0"
+    step="any"
+  />
+  <CmsInput
+    id="l-currencyCode"
+    name="currencyCode"
+    label="Currency"
+    hint="Three letters, for example KES. Required only when a value is given."
+  />
+  <CmsInput
+    id="l-capturedAt"
+    name="capturedAt"
+    label="Captured on"
+    type="date"
+    hint="When the enquiry actually reached us. Defaults to today and may not be in the future."
+  />
+
+  <div class="flex flex-col gap-1.5">
+    <label for="l-description" class="text-cms-body-sm font-medium text-cms-ink">Description</label>
+    <textarea
+      id="l-description"
+      name="description"
+      rows="3"
+      class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    ></textarea>
+    <p
+      id="l-description-error"
+      role="alert"
+      data-field-error
+      class="hidden text-cms-caption text-cms-negative"
+    >
+    </p>
+  </div>
+</form>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+  interface AccountHit {
+    accountId: string;
+    accountName: string;
+    accountCode: string | null;
+  }
+  interface ContactHit {
+    contactId: string;
+    fullName: string;
+    isPrimary: boolean;
+  }
+
+  const form = document.getElementById('cms-lead-form') as HTMLFormElement | null;
+  const drawer = document.getElementById('cms-lead-drawer') as HTMLDialogElement | null;
+  const save = document.querySelector<HTMLButtonElement>('[data-cms-lead-save]');
+  const errorBox = document.getElementById('cms-lead-form-error');
+  const search = document.getElementById('l-accountSearch') as HTMLInputElement | null;
+  const results = document.getElementById('l-accountResults');
+  const chosen = document.getElementById('l-accountChosen');
+  const accountId = document.getElementById('l-accountId') as HTMLInputElement | null;
+  const contacts = document.getElementById('l-primaryContactId') as HTMLSelectElement | null;
+
+  if (form && drawer && save && search && results && chosen && accountId && contacts) {
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    const paint = (fields: FieldError[]) => {
+      for (const item of fields) {
+        const message = document.getElementById(`l-${item.field}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+        const field = form.elements.namedItem(item.field);
+        if (field instanceof HTMLElement) field.setAttribute('aria-invalid', 'true');
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    const setContactOptions = (list: ContactHit[]) => {
+      contacts.replaceChildren();
+      const none = document.createElement('option');
+      none.value = '';
+      none.textContent = list.length === 0 ? 'No contacts on this account' : 'None';
+      contacts.appendChild(none);
+      for (const contact of list) {
+        const option = document.createElement('option');
+        option.value = contact.contactId;
+        option.textContent = contact.isPrimary ? `${contact.fullName} (primary)` : contact.fullName;
+        contacts.appendChild(option);
+      }
+    };
+
+    const resetAccount = () => {
+      accountId.value = '';
+      chosen.hidden = true;
+      chosen.textContent = '';
+      results.hidden = true;
+      results.replaceChildren();
+      setContactOptions([]);
+      contacts.replaceChildren(new Option('Choose an account first', ''));
+    };
+
+    const loadContacts = async (id: string) => {
+      setContactOptions([]);
+      try {
+        const response = await fetch(`/api/customers/accounts/${encodeURIComponent(id)}/contacts`, {
+          credentials: 'same-origin',
+        });
+        if (!response.ok) return;
+        const answer = (await response.json()) as { items?: ContactHit[] };
+        setContactOptions(answer.items ?? []);
+      } catch {
+        // The contact list is a convenience. A lead with an account and no
+        // contact is valid, so a failed lookup must not block the create.
+      }
+    };
+
+    const choose = (hit: AccountHit) => {
+      accountId.value = hit.accountId;
+      chosen.hidden = false;
+      chosen.textContent = `Attached to ${hit.accountName}${hit.accountCode === null ? '' : ` (${hit.accountCode})`}.`;
+      results.hidden = true;
+      results.replaceChildren();
+      search.value = hit.accountName;
+      void loadContacts(hit.accountId);
+    };
+
+    let lookup = 0;
+    const runLookup = async (term: string) => {
+      const ticket = ++lookup;
+      if (term.trim().length < 2) {
+        results.hidden = true;
+        results.replaceChildren();
+        return;
+      }
+      try {
+        const response = await fetch(
+          `/api/customers/accounts?q=${encodeURIComponent(term)}&page=1`,
+          { credentials: 'same-origin' },
+        );
+        if (!response.ok || ticket !== lookup) return;
+        const answer = (await response.json()) as { items?: AccountHit[] };
+        const items = (answer.items ?? []).slice(0, 8);
+        results.replaceChildren();
+        for (const hit of items) {
+          const row = document.createElement('li');
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className =
+            'w-full rounded-cms px-2 py-1.5 text-start text-cms-body-sm text-cms-ink outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus';
+          button.textContent =
+            hit.accountCode === null ? hit.accountName : `${hit.accountName} · ${hit.accountCode}`;
+          button.addEventListener('click', () => choose(hit));
+          row.appendChild(button);
+          results.appendChild(row);
+        }
+        results.hidden = items.length === 0;
+      } catch {
+        results.hidden = true;
+      }
+    };
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    search.addEventListener('input', () => {
+      // Typing again after a choice detaches it, so the hidden id can never
+      // disagree with what the box says.
+      if (accountId.value !== '') resetAccount();
+      if (timer !== null) clearTimeout(timer);
+      const term = search.value;
+      timer = setTimeout(() => void runLookup(term), 200);
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      save.disabled = true;
+
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string') body[name] = value;
+      }
+
+      try {
+        const response = await fetch('/api/crm/leads', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          const created = (await response.json()) as { leadId?: string };
+          window.location.href = created.leadId ? `/app/crm/${created.leadId}` : '/app/crm';
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (answer?.error?.fields?.length) paint(answer.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.message ?? 'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-cms-lead-create]')) return;
+      clear();
+      form.reset();
+      resetAccount();
+      search.value = '';
+      drawer.showModal();
+      form.querySelector<HTMLElement>('input')?.focus();
+    });
+  }
+</script>

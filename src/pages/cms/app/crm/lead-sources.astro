@@ -1,0 +1,267 @@
+---
+/**
+ * CRM → Lead sources.
+ *
+ * The configurable list behind the Source field on every lead. Small, and it
+ * has to be here: a hard-coded source list would mean a code change every time
+ * marketing runs something new, and would leave the leads captured under the
+ * old list uncodeable.
+ *
+ * A SOURCE IS DEACTIVATED, NEVER DELETED.
+ * `leads.lead_source_id` is NOT NULL with ON DELETE RESTRICT, and rightly so:
+ * where a lead came from is the one thing about it nobody can reconstruct
+ * afterwards. So this screen has no delete. Setting a source inactive takes it
+ * out of the picker and leaves every lead already carrying it exactly as it is.
+ * The count beside each row is how many that would be.
+ *
+ * The script is page level rather than in a component, unlike the lead create
+ * drawer. That is not an oversight: the whole page requires
+ * CRM.LEAD_SOURCES.MANAGE, so there is no read-only visitor here to withhold
+ * the write behaviour from. Somebody without the permission is served the error
+ * state, and the script finds none of its elements and does nothing.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageLeadSources } from '@/lib/cms/permissions';
+import { listLeadSources, type LeadSourceRow } from '@/lib/cms/repos/leadAdmin';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageLeadSources(permissions);
+
+let sources: LeadSourceRow[] = [];
+let loadFailed = false;
+
+if (mayManage) {
+  try {
+    sources = await listLeadSources(await getDb(getCmsEnv()));
+  } catch (error) {
+    console.error('[cms.crm.leadSources] load failed', error);
+    loadFailed = true;
+  }
+}
+---
+
+<CmsLayout title="Lead sources">
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to lead sources"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Lead sources could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Lead sources"
+          definition="Sources are deactivated rather than deleted, so a lead captured under an old source keeps its own history."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'Lead sources' },
+          ]}
+        >
+          <CmsButton slot="actions" variant="primary" icon="plus" data-cms-source-new>
+            New source
+          </CmsButton>
+        </CmsPageHeader>
+
+        <CmsDataTable
+          caption="Lead sources"
+          columns={[
+            { key: 'name', label: 'Source' },
+            { key: 'description', label: 'Description', secondary: true },
+            { key: 'leads', label: 'Leads', numeric: true },
+            { key: 'state', label: 'State' },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          empty={sources.length === 0}
+        >
+          {sources.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">{row.sourceName}</td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.description ?? 'Not available'}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.leadCount}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.active ? 'success' : 'neutral'}
+                  label={row.active ? 'Active' : 'Inactive'}
+                />
+              </td>
+              <td class="px-4 py-2.5">
+                <button
+                  type="button"
+                  data-cms-source-edit={row.leadSourceId}
+                  data-cms-source-name={row.sourceName}
+                  data-cms-source-description={row.description ?? ''}
+                  data-cms-source-active={row.active ? '1' : '0'}
+                  class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  Edit
+                </button>
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="crm"
+              title="No lead sources yet"
+              description="Add the first one. Every lead must name where it came from, so at least one source has to exist before a lead can be captured."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        <CmsDrawer id="cms-source-drawer" tone="form" title="Lead source">
+          <form id="cms-source-form" novalidate class="flex flex-col gap-4">
+            <p
+              id="cms-source-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <CmsInput id="s-sourceName" name="sourceName" label="Source name" required />
+            <CmsInput id="s-description" name="description" label="Description" />
+            <CmsCheckbox id="s-active" name="active" label="Active" checked />
+            <p class="text-cms-caption text-cms-muted">
+              Inactive takes this source out of the picker on new leads. Leads already carrying it
+              are untouched, and there is no delete because removing it would orphan them.
+            </p>
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              form="cms-source-form"
+              data-cms-source-save
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const form = document.getElementById('cms-source-form') as HTMLFormElement | null;
+  const drawer = document.getElementById('cms-source-drawer') as HTMLDialogElement | null;
+  const save = document.querySelector<HTMLButtonElement>('[data-cms-source-save]');
+  const errorBox = document.getElementById('cms-source-error');
+  const name = document.getElementById('s-sourceName') as HTMLInputElement | null;
+  const description = document.getElementById('s-description') as HTMLInputElement | null;
+  const active = document.getElementById('s-active') as HTMLInputElement | null;
+
+  if (form && drawer && save && name && description && active) {
+    // Empty for a new source, set for an edit. The only difference between the
+    // two requests, so one form serves both rather than two that drift apart.
+    let editing = '';
+
+    const open = () => {
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+      drawer.showModal();
+      name.focus();
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+
+      if (target?.closest('[data-cms-source-new]')) {
+        editing = '';
+        name.value = '';
+        description.value = '';
+        active.checked = true;
+        open();
+        return;
+      }
+
+      const edit = target?.closest<HTMLElement>('[data-cms-source-edit]');
+      if (edit) {
+        editing = edit.dataset.cmsSourceEdit ?? '';
+        name.value = edit.dataset.cmsSourceName ?? '';
+        description.value = edit.dataset.cmsSourceDescription ?? '';
+        active.checked = edit.dataset.cmsSourceActive === '1';
+        open();
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      save.disabled = true;
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+
+      const body = {
+        sourceName: name.value,
+        description: description.value,
+        active: active.checked,
+      };
+
+      try {
+        const response = await fetch(
+          editing === ''
+            ? '/api/crm/lead-sources'
+            : `/api/crm/lead-sources/${encodeURIComponent(editing)}`,
+          {
+            method: editing === '' ? 'POST' : 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(body),
+          },
+        );
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.fields?.[0]?.message ??
+            answer?.error?.message ??
+            'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+  }
+</script>

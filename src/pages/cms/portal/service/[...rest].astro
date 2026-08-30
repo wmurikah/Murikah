@@ -1,0 +1,21 @@
+---
+/**
+ * Service became Helpdesk, and this is what keeps an old link working.
+ *
+ * WHY A ROUTE FILE AND NOT ONLY A MIDDLEWARE RULE. The rule is in the
+ * middleware, where one prefix covers every sub-path; but Astro does not run
+ * middleware for a path that matches no route, which was measured rather than
+ * assumed: `/portal/service` returned a bare 404 carrying no content security
+ * policy header, so nothing in `src/middleware.ts` had run. A rest parameter
+ * matches zero or more segments, so this one file keeps `/portal/service` and
+ * everything beneath it routable, which is what lets the rule fire.
+ *
+ * The redirect is repeated here rather than left to the middleware alone, so
+ * the file is not inert if that rule is ever removed. Both call `renamedPath`,
+ * so there is one rule and two places that obey it.
+ */
+import { renamedPath } from '@/lib/cms/routes';
+export const prerender = false;
+const from = Astro.locals.cmsPath ?? '/portal/service';
+return Astro.redirect((renamedPath(from) ?? '/portal/helpdesk') + Astro.url.search, 301);
+---

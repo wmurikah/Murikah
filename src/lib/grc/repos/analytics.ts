@@ -17,6 +17,11 @@ import {
   IMPLEMENTED_STATUSES,
   percent,
 } from '@grc/reports/reportModel';
+import { affiliatePredicate, UNCONFINED, type AffiliateScope } from '@grc/auth/affiliateScope';
+import { C, cols } from '@grc/schema/columns';
+
+const WPC = cols(C.work_papers);
+const APC = cols(C.action_plans);
 
 export interface NamedCount {
   label: string;
@@ -57,49 +62,59 @@ export async function getPortfolio(
   organizationId: string,
   labels: Map<string, string>,
   now: Date,
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<Portfolio> {
+  // Affiliate confinement (Build Prompt 45). Every aggregate here is a count a
+  // confined viewer must not see beyond their own affiliate, including the
+  // by-affiliate breakdown, which would otherwise name every other affiliate
+  // and its volume.
+  const wpC = affiliatePredicate(scope, WPC.affiliate_code);
+  const wpAliasC = affiliatePredicate(scope, cols(C.work_papers, 'wp').affiliate_code);
+  const apC = affiliatePredicate(scope, APC.affiliate_code);
   const [wpStatus, wpRisk, wpAff, apAgg, apStatus, wpTrend, apTrend] = await Promise.all([
     db.execute({
-      sql: `SELECT status, COUNT(*) AS n FROM work_papers WHERE organization_id = ? GROUP BY status`,
-      args: [organizationId],
+      sql: `SELECT status, COUNT(*) AS n FROM work_papers
+             WHERE organization_id = ?${wpC.clause} GROUP BY status`,
+      args: [organizationId, ...wpC.args],
     }),
     db.execute({
       sql: `SELECT risk_rating AS risk, COUNT(*) AS n FROM work_papers
-             WHERE organization_id = ? GROUP BY risk_rating`,
-      args: [organizationId],
+             WHERE organization_id = ?${wpC.clause} GROUP BY risk_rating`,
+      args: [organizationId, ...wpC.args],
     }),
     db.execute({
       sql: `SELECT COALESCE(aff.affiliate_name, 'Unassigned') AS affiliate, COUNT(*) AS n
               FROM work_papers wp
               LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                    AND aff.organization_id = wp.organization_id
-             WHERE wp.organization_id = ?
+             WHERE wp.organization_id = ?${wpAliasC.clause}
           GROUP BY wp.affiliate_code ORDER BY n DESC LIMIT 10`,
-      args: [organizationId],
+      args: [organizationId, ...wpAliasC.args],
     }),
     db.execute({
       sql: `SELECT COUNT(*) AS total,
                    SUM(CASE WHEN due_date IS NOT NULL AND date(due_date) < date('now')
                              AND status NOT IN (${settled}) THEN 1 ELSE 0 END) AS overdue,
                    SUM(CASE WHEN status IN (${implemented}) THEN 1 ELSE 0 END) AS implemented
-              FROM action_plans WHERE organization_id = ?`,
-      args: [...NOT_OVERDUE_STATUSES, ...IMPLEMENTED_STATUSES, organizationId],
+              FROM action_plans WHERE organization_id = ?${apC.clause}`,
+      args: [...NOT_OVERDUE_STATUSES, ...IMPLEMENTED_STATUSES, organizationId, ...apC.args],
     }),
     db.execute({
-      sql: `SELECT status, COUNT(*) AS n FROM action_plans WHERE organization_id = ? GROUP BY status`,
-      args: [organizationId],
+      sql: `SELECT status, COUNT(*) AS n FROM action_plans
+             WHERE organization_id = ?${apC.clause} GROUP BY status`,
+      args: [organizationId, ...apC.args],
     }),
     db.execute({
       sql: `SELECT substr(created_at, 1, 7) AS m, COUNT(*) AS n FROM work_papers
              WHERE organization_id = ? AND created_at IS NOT NULL
-               AND date(created_at) >= date('now', '-6 months') GROUP BY m`,
-      args: [organizationId],
+               AND date(created_at) >= date('now', '-6 months')${wpC.clause} GROUP BY m`,
+      args: [organizationId, ...wpC.args],
     }),
     db.execute({
       sql: `SELECT substr(created_at, 1, 7) AS m, COUNT(*) AS n FROM action_plans
              WHERE organization_id = ? AND created_at IS NOT NULL
-               AND date(created_at) >= date('now', '-6 months') GROUP BY m`,
-      args: [organizationId],
+               AND date(created_at) >= date('now', '-6 months')${apC.clause} GROUP BY m`,
+      args: [organizationId, ...apC.args],
     }),
   ]);
 

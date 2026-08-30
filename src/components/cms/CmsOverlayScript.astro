@@ -1,0 +1,57 @@
+---
+/**
+ * The one delegated handler that opens and closes every <dialog> in the shell:
+ * the navigation drawer and any modal.
+ *
+ * It lives in its own component because Astro only ships a component's script
+ * when that component is rendered. The handler used to sit in CmsModal, which
+ * nothing rendered, so the drawer trigger in CmsTopBar carried
+ * data-cms-modal-open and no code was ever listening for it: the drawer was
+ * inert on every small screen. Rendering this once from CmsLayout puts the
+ * handler on every page of the shell whether or not a modal is present.
+ */
+---
+
+<script>
+  // Delegated once per document. The guard matters because this script would
+  // otherwise register a second listener if the component were ever rendered
+  // twice, and showModal() on an already-open dialog throws.
+  const FLAG = 'cmsOverlaysBound';
+  if (!(FLAG in document.documentElement.dataset)) {
+    document.documentElement.dataset[FLAG] = 'true';
+
+    const dialogOf = (el: Element | null): HTMLDialogElement | null =>
+      el?.closest('dialog') instanceof HTMLDialogElement ? el.closest('dialog') : null;
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      const opener = target.closest<HTMLElement>('[data-cms-modal-open]');
+      if (opener) {
+        const id = opener.getAttribute('data-cms-modal-open');
+        const dialog = id ? document.getElementById(id) : null;
+        if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+        return;
+      }
+
+      // The close control, and any element that asks to close its own dialog.
+      if (target.closest('[data-testid$="-close"], [data-cms-modal-close]')) {
+        dialogOf(target)?.close();
+        return;
+      }
+
+      // A click on the backdrop lands on the dialog element itself, never on
+      // its contents, so this closes only when the pointer was genuinely
+      // outside.
+      if (target instanceof HTMLDialogElement && target.open) target.close();
+    });
+
+    // Following a link out of the drawer must not leave the dialog open behind
+    // the new page in a browser that restores it from the back/forward cache.
+    document.addEventListener('click', (event) => {
+      const link = (event.target as HTMLElement | null)?.closest('a[href]');
+      if (link) dialogOf(link)?.close();
+    });
+  }
+</script>

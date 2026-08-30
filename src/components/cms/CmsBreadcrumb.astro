@@ -1,0 +1,47 @@
+---
+/**
+ * The trail back.
+ *
+ * This exists for interruption recovery specifically. Someone who leaves this
+ * application mid-task and comes back twenty minutes later needs to see where
+ * they are without reconstructing it, and the breadcrumb is the cheapest way to
+ * show it. The last crumb is the current page and is not a link, marked
+ * aria-current="page".
+ */
+import CmsIcon from './CmsIcon.astro';
+
+export interface CmsCrumb {
+  label: string;
+  href?: string;
+}
+
+interface Props {
+  items: CmsCrumb[];
+  class?: string;
+}
+const { items, class: className } = Astro.props;
+---
+
+<nav aria-label="Breadcrumb" class={className}>
+  <ol class="flex flex-wrap items-center gap-1 text-cms-caption text-cms-muted">
+    {
+      items.map((item, index) => (
+        <li class="flex items-center gap-1">
+          {index > 0 && <CmsIcon name="chevronRight" size={13} class="text-cms-muted/70" />}
+          {item.href && index < items.length - 1 ? (
+            <a
+              href={item.href}
+              class="rounded px-0.5 outline-none hover:text-cms-royal hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              {item.label}
+            </a>
+          ) : (
+            <span aria-current="page" class="font-medium text-cms-ink">
+              {item.label}
+            </span>
+          )}
+        </li>
+      ))
+    }
+  </ol>
+</nav>

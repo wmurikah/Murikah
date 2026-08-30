@@ -1,0 +1,17 @@
+---
+/**
+ * `/app/executive` is now `/app`.
+ *
+ * There was a Home with no numbers on it and an Executive page with all of
+ * them, and a person signing in met the first and had to go and find the
+ * second. They are one dashboard now, and this file exists only so that a
+ * bookmark, a link in an email or a drill destination written before the merge
+ * still lands somewhere.
+ *
+ * 301 rather than 302: the move is permanent, and a permanent redirect lets a
+ * browser stop asking. The query string is carried through, so a shared link
+ * that named a period, an affiliate or an SLA family keeps all of it.
+ */
+export const prerender = false;
+return Astro.redirect(`/app${Astro.url.search}`, 301);
+---

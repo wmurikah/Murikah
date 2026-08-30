@@ -4,6 +4,22 @@ Work papers and their action plans carry evidence files. This note records the
 decision taken and how the storage seam is implemented, so the choice is explicit
 rather than inferred by whoever wires the first upload.
 
+> **Superseded in part by Build Prompt 51.** Where evidence goes is now an
+> organisation's own choice, not the deployment's: each customer configures
+> Cloudflare R2, Google Drive, SharePoint/OneDrive or Dropbox on
+> `/settings/storage`, with its credentials sealed against that organisation in
+> `storage_connections`. See `grc/docs/storage-setup.md` for the connectors and
+> `grc/docs/deploy.md` for migration 004.
+>
+> What this note still describes accurately is everything below the provider:
+> the tenant-scoped keys, the content hashing, the governed deletion path, and
+> the legacy backends. The env-configured R2 bucket and the read-only Drive
+> credential remain, and are what keep evidence attached before the connectors
+> existed readable: a stored object records which backend holds it and is
+> resolved by that, never by whichever provider is active now. The Drive-to-R2
+> background migration is likewise unchanged, and moves legacy evidence into the
+> platform bucket rather than into a customer's own account.
+
 ## The decision
 
 New evidence is stored in **Cloudflare R2**, the native object store in the

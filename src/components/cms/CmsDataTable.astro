@@ -1,0 +1,138 @@
+---
+/**
+ * A table shell: real <table> markup, a scroll container, and the three states
+ * a table is actually in (rows, loading, empty).
+ *
+ * A shell rather than a data grid. It takes columns and pre-rendered rows and
+ * has no sorting, paging, selection or virtualisation, because none of that has
+ * a consumer yet and a speculative grid is the most expensive thing to unpick
+ * later. What it does fix now is the part that is painful to retrofit: the
+ * scroll container is the table's own, so a wide table scrolls inside the page
+ * instead of making the whole page scroll sideways.
+ *
+ * `numeric` right-aligns a column and gives it tabular figures, so digits line
+ * up down the column and the eye compares magnitudes without reading each one.
+ *
+ * THE HEAD STICKS ONCE THE TABLE IS LONG. A reader thirty rows down a table
+ * with no visible header is reading numbers with no labels, which is worse than
+ * not showing them. `stickyHead` turns it on; the scroll container gets a
+ * maximum height so there is something to stick against.
+ *
+ * NO BORDER AND NO SHADOW ROUND THE WHOLE THING. The surface is a lighter plane
+ * than the canvas and that tone step is what says "this is one region". The
+ * hairlines that survive are the ones between rows, which is where two things
+ * genuinely meet.
+ */
+import CmsSkeleton from './CmsSkeleton.astro';
+
+export interface CmsColumn {
+  key: string;
+  label: string;
+  numeric?: boolean;
+  /** Hide below the sm breakpoint, for columns that are context, not content. */
+  secondary?: boolean;
+}
+
+interface Props {
+  caption: string;
+  columns: CmsColumn[];
+  loading?: boolean;
+  empty?: boolean;
+  rowCount?: number;
+  /**
+   * What an empty table says.
+   *
+   * The default used to be "Nothing to show yet.", which on a filtered
+   * analytical table is usually untrue: it reads as "the business has no
+   * purchase orders" to somebody who picked the wrong dates. An empty result
+   * is not a claim that nothing exists, and the default now says so.
+   */
+  emptyMessage?: string;
+  /** Stick the header and cap the scroll height. For long tables only. */
+  stickyHead?: boolean;
+  class?: string;
+}
+const {
+  caption,
+  columns,
+  loading = false,
+  empty = false,
+  rowCount = 4,
+  stickyHead = false,
+  class: className,
+} = Astro.props;
+const hasMobileRows = Astro.slots.has('mobile');
+---
+
+{
+  hasMobileRows && (
+    <div class="divide-y divide-cms-line bg-cms-surface sm:hidden">
+      <slot name="mobile" />
+    </div>
+  )
+}
+<div
+  class:list={[
+    'overflow-hidden rounded-cms-lg bg-cms-surface',
+    hasMobileRows && 'hidden sm:block',
+    className,
+  ]}
+>
+  <div class:list={['overflow-x-auto', stickyHead ? 'max-h-[32rem] overflow-y-auto' : '']}>
+    <table class="w-full border-collapse text-cms-body-sm">
+      <caption class="sr-only">{caption}</caption>
+      <thead>
+        <tr class:list={['bg-cms-sunken', stickyHead ? 'sticky top-0 z-10' : '']}>
+          {
+            columns.map((column) => (
+              <th
+                scope="col"
+                class:list={[
+                  'border-b border-cms-line px-4 py-2.5 text-cms-caption font-semibold whitespace-nowrap text-cms-muted',
+                  column.numeric ? 'text-right tabular-nums' : 'text-left',
+                  column.secondary ? 'hidden sm:table-cell' : '',
+                ]}
+              >
+                {column.label}
+              </th>
+            ))
+          }
+        </tr>
+      </thead>
+      <tbody>
+        {
+          loading &&
+            Array.from({ length: rowCount }).map(() => (
+              <tr class="border-b border-cms-line last:border-0">
+                {columns.map((column) => (
+                  <td class:list={['px-4 py-3', column.secondary ? 'hidden sm:table-cell' : '']}>
+                    <CmsSkeleton variant="text" width={column.numeric ? '3rem' : '70%'} />
+                  </td>
+                ))}
+              </tr>
+            ))
+        }
+        {
+          !loading && empty && (
+            <tr>
+              <td
+                colspan={columns.length}
+                class="px-4 py-10 text-center text-cms-body-sm text-cms-muted"
+              >
+                <slot name="empty">{emptyMessage}</slot>
+              </td>
+            </tr>
+          )
+        }
+        {!loading && !empty && <slot />}
+      </tbody>
+    </table>
+  </div>
+  {
+    loading && (
+      <p class="sr-only" role="status">
+        Loading {caption}
+      </p>
+    )
+  }
+</div>

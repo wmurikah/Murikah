@@ -76,6 +76,24 @@ export default defineConfig({
   vite: {
     // Tailwind CSS v4 via the first-party Vite plugin (not @astrojs/tailwind).
     plugins: [tailwindcss()],
+    build: {
+      /**
+       * NEVER INLINE A SCRIPT INTO THE MARKUP.
+       *
+       * Vite inlines an emitted asset below 4 KB by default. For a stylesheet
+       * or a small image that is a saved request; for a script it is a Content
+       * Security Policy violation, because this product serves
+       * `script-src 'self'` with no `unsafe-inline`. Two of the sign-in page's
+       * script chunks were under the threshold, so the build inlined them, the
+       * browser refused to execute them, and the submit handler never ran: the
+       * form fell back to a native POST, the page re-rendered with no message,
+       * and no request ever reached /api/auth/login.
+       *
+       * The predicate excludes scripts only. Images and fonts keep the
+       * threshold, so nothing else about the build changes.
+       */
+      assetsInlineLimit: (filePath: string) => (/\.m?js$/.test(filePath) ? false : undefined),
+    },
   },
 
   // Instant subsequent navigations (Doherty Threshold) with negligible JS:

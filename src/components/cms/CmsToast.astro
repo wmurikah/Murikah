@@ -1,0 +1,64 @@
+---
+/**
+ * A transient message. Rendered server-side into a live region so an
+ * announcement is not tied to client-side state, and dismissible.
+ *
+ * aria-live is polite for a confirmation and assertive for a failure, because
+ * a save that worked should not interrupt what someone is reading, and a save
+ * that did not should.
+ */
+import CmsIcon from './CmsIcon.astro';
+import CmsIconButton from './CmsIconButton.astro';
+import type { CmsIconName } from './icons';
+
+interface Props {
+  tone?: 'success' | 'warning' | 'danger' | 'info';
+  title: string;
+  description?: string;
+  class?: string;
+}
+const { tone = 'info', title, description, class: className } = Astro.props;
+
+const tones = {
+  success: 'border-cms-positive/30 bg-cms-positive-tint text-cms-positive',
+  warning: 'border-cms-caution/30 bg-cms-caution-tint text-cms-caution',
+  danger: 'border-cms-negative/30 bg-cms-negative-tint text-cms-negative',
+  info: 'border-cms-info/30 bg-cms-info-tint text-cms-info',
+};
+const glyphs: Record<string, CmsIconName> = {
+  success: 'statusOk',
+  warning: 'statusWarn',
+  danger: 'statusBreach',
+  info: 'statusInfo',
+};
+---
+
+<div
+  role={tone === 'danger' ? 'alert' : 'status'}
+  aria-live={tone === 'danger' ? 'assertive' : 'polite'}
+  data-cms-toast
+  class:list={[
+    'flex w-full max-w-md items-start gap-3 rounded-cms-lg border px-4 py-3',
+    tones[tone],
+    className,
+  ]}
+>
+  <CmsIcon name={glyphs[tone] ?? 'statusInfo'} size={18} class="mt-0.5 shrink-0" />
+  <div class="min-w-0 flex-1">
+    <p class="text-cms-body-sm font-semibold">{title}</p>
+    {description && <p class="mt-0.5 text-cms-body-sm text-cms-ink">{description}</p>}
+  </div>
+  <CmsIconButton
+    icon="close"
+    label="Dismiss notification"
+    data-cms-toast-close
+    class="-mt-1 -mr-2"
+  />
+</div>
+
+<script>
+  document.addEventListener('click', (event) => {
+    const close = (event.target as HTMLElement | null)?.closest('[data-cms-toast-close]');
+    if (close) close.closest('[data-cms-toast]')?.remove();
+  });
+</script>

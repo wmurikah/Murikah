@@ -1,0 +1,199 @@
+---
+/**
+ * Orders → Purchase Orders → Operations.
+ *
+ * SUPPLIER, CURRENCY AND VALUE ARE ABSENT ON EVERY IMPORTED ORDER, because
+ * the extract carries none of them. "Not available" is therefore the normal
+ * reading of those columns rather than an exception, and a zero would be a
+ * claim about the business that the source does not support.
+ *
+ * The column that matters most to the yard is the last one: an order that
+ * has been received physically but not posted to Oracle is stock the system
+ * does not know it has.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewPurchaseOrders } from '@/lib/cms/permissions';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import {
+  listPurchaseOrders,
+  countPurchaseOrders,
+  type PurchaseOrderRow,
+} from '@/lib/cms/repos/poPerformance';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewPurchaseOrders(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let rows: PurchaseOrderRow[] = [];
+let total = 0;
+let affiliates: { value: string; label: string }[] = [];
+let loadFailed = false;
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const [listed, counted, affiliateRows] = await Promise.all([
+      listPurchaseOrders(db, userId, filter, now, 200),
+      countPurchaseOrders(db, userId, filter, now),
+      db.execute(
+        `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
+      ),
+    ]);
+    rows = listed;
+    total = counted;
+    affiliates = affiliateRows.rows.map((row) => ({
+      value: String(row.affiliate_id),
+      label: String(row.affiliate_name),
+    }));
+  } catch (error) {
+    console.error('[cms.orders.purchases] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const NOT_AVAILABLE = 'Not available';
+---
+
+<CmsLayout title="Purchase orders">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to purchase orders"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Purchase orders could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Purchase orders"
+          description={`${total.toLocaleString('en-KE')} purchase orders`}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Orders', href: '/app/orders' },
+            { label: 'Purchase orders' },
+          ]}
+        >
+          <CmsButton
+            slot="actions"
+            variant="ghost"
+            href={drillTo('/app/orders/purchases/performance', filter)}
+          >
+            Performance
+          </CmsButton>
+        </CmsPageHeader>
+
+        <CmsOrderFilters
+          filter={filter}
+          affiliates={affiliates}
+          statuses={['CREATED', 'IN_APPROVAL', 'APPROVED', 'RECEIVED', 'POSTED', 'CANCELLED']}
+          action="/app/orders/purchases"
+          showCredit={false}
+        />
+
+        <CmsDataTable
+          caption="Purchase orders"
+          columns={[
+            { key: 'doc', label: 'PO number' },
+            { key: 'created', label: 'Created' },
+            { key: 'stage', label: 'Current stage' },
+            { key: 'approver', label: 'Approver' },
+            { key: 'status', label: 'Status' },
+            { key: 'posted', label: 'Oracle posting' },
+            { key: 'sla', label: 'SLA' },
+          ]}
+          empty={rows.length === 0}
+        >
+          {rows.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={drillTo(`/app/orders/purchases/${row.purchaseOrderId}`, filter)}
+                  class="font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.documentNumber}
+                </a>
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[row.affiliateName, row.businessUnitName, row.supplierName, row.productSummary]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.poCreatedAt}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.currentStage ?? 'No open stage'}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.currentApprover ?? NOT_AVAILABLE}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone="neutral" label={row.status.replace('_', ' ').toLowerCase()} />
+              </td>
+              <td class="px-4 py-2.5">
+                {row.awaitingOraclePosting ? (
+                  <CmsBadge tone="warning" label="Awaiting posting" />
+                ) : (
+                  <span class="text-cms-muted">{row.oracleStockPostedAt ?? NOT_AVAILABLE}</span>
+                )}
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={
+                    row.slaStatus === 'BREACHED'
+                      ? 'danger'
+                      : row.slaStatus === 'MET'
+                        ? 'success'
+                        : 'neutral'
+                  }
+                  label={(row.slaStatus ?? NOT_AVAILABLE).toLowerCase()}
+                />
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="mobile">
+            {rows.map((row) => (
+              <a
+                href={drillTo(`/app/orders/purchases/${row.purchaseOrderId}`, filter)}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block font-semibold text-cms-ink">{row.documentNumber}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {row.affiliateName} · {row.currentStage ?? 'No open stage'}
+                  </span>
+                </span>
+                <CmsBadge
+                  tone={row.awaitingOraclePosting ? 'warning' : 'neutral'}
+                  label={
+                    row.awaitingOraclePosting
+                      ? 'Awaiting posting'
+                      : row.status.replace('_', ' ').toLowerCase()
+                  }
+                />
+              </a>
+            ))}
+          </Fragment>
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="orders"
+              title="No purchase orders match this filter"
+              description="Widen the date range or clear a filter."
+            />
+          </Fragment>
+        </CmsDataTable>
+      </Fragment>
+    )
+  }
+</CmsLayout>

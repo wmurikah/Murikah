@@ -1,0 +1,225 @@
+---
+/**
+ * The behaviour behind every workflow configuration drawer.
+ *
+ * One script rather than four, because the four drawers in this phase differ in
+ * their fields and in nothing else: each opens with values, posts JSON to an
+ * endpoint, paints field messages against the fields the server named, and
+ * reloads. Writing that four times would be four chances for one of them to
+ * lose the field-message painting, which is invisible until somebody submits
+ * something the server refuses.
+ *
+ * A trigger carries the whole intent in data attributes:
+ *   data-cms-wf-open="<drawer id>"   the drawer to open
+ *   data-endpoint="/api/..."         where the form posts
+ *   data-method="POST" | "PATCH"     which verb
+ *   data-values='{"a":"b"}'          the values to fill in
+ *   data-title="Edit rule"           the drawer heading
+ *   data-note="..."                  an optional consequence line
+ *
+ * FIELD MESSAGES GO WHERE THE FIELD ALREADY POINTS.
+ * Every input rendered by the Build Prompt 02 primitives carries an
+ * `aria-describedby` pointing at `{id}-error`, and that element is always
+ * present. This fills it and unhides it. It never removes and re-creates it,
+ * because removing it breaks the association the screen reader relies on and
+ * leaves an orphan paragraph nothing points at.
+ *
+ * A component, so Astro ships it only where it is rendered. A page-level
+ * `<script>` is hoisted whatever markup surrounds it, which would send drawer
+ * behaviour to somebody who may only read.
+ */
+---
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const forms = document.querySelectorAll<HTMLFormElement>('[data-cms-wf-form]');
+  if (forms.length > 0) {
+    // One entry per drawer, so two drawers on one page cannot confuse their
+    // submit targets with each other.
+    const state = new Map<string, { endpoint: string; method: string }>();
+
+    const clear = (form: HTMLFormElement) => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      const box = document.getElementById(`${form.id}-error`);
+      if (box) {
+        box.hidden = true;
+        box.textContent = '';
+      }
+    };
+
+    const paint = (form: HTMLFormElement, fields: FieldError[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        const element = field instanceof HTMLElement ? field : null;
+        if (!element || !element.id) continue;
+        element.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${element.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    /**
+     * The form's values as JSON.
+     *
+     * Every unchecked checkbox is sent explicitly as false. FormData omits
+     * them, and an omitted boolean reads on the server as "leave it alone",
+     * which is how a box somebody deliberately cleared silently stays ticked.
+     */
+    const payload = (form: HTMLFormElement): Record<string, unknown> => {
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string') body[name] = value;
+      }
+      form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
+        if (box.name !== '') body[box.name] = box.checked;
+      });
+      return body;
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      const trigger = target?.closest<HTMLElement>('[data-cms-wf-open]');
+      if (!trigger) return;
+
+      const drawerId = trigger.dataset.cmsWfOpen ?? '';
+      const drawer = document.getElementById(drawerId) as HTMLDialogElement | null;
+      const form = document.querySelector<HTMLFormElement>(`[data-cms-wf-form="${drawerId}"]`);
+      if (!drawer || !form) return;
+
+      state.set(drawerId, {
+        endpoint: trigger.dataset.endpoint ?? '',
+        method: trigger.dataset.method ?? 'POST',
+      });
+
+      clear(form);
+      form.reset();
+
+      let values: Record<string, unknown> = {};
+      try {
+        values = JSON.parse(trigger.dataset.values ?? '{}') as Record<string, unknown>;
+      } catch {
+        values = {};
+      }
+      for (const [name, value] of Object.entries(values)) {
+        const field = form.elements.namedItem(name);
+        if (field instanceof HTMLInputElement) {
+          if (field.type === 'checkbox') field.checked = value === true;
+          else field.value = value === null || value === undefined ? '' : String(value);
+        } else if (field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+          field.value = value === null || value === undefined ? '' : String(value);
+        }
+      }
+
+      const heading = document.getElementById(`${drawerId}-title`);
+      if (heading && trigger.dataset.title) heading.textContent = trigger.dataset.title;
+      const note = document.getElementById(`${form.id}-note`);
+      if (note) {
+        const text = trigger.dataset.note ?? '';
+        note.hidden = text === '';
+        note.textContent = text;
+      }
+
+      // Fields the scope or the assignment type does not use are hidden, so a
+      // GROUP assignment never shows an affiliate box the database would refuse
+      // a value in.
+      form.dispatchEvent(new CustomEvent('cms-wf-opened', { detail: values }));
+      drawer.showModal();
+      form.querySelector<HTMLElement>('input, select')?.focus();
+    });
+
+    forms.forEach((form) => {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const drawerId = form.dataset.cmsWfForm ?? '';
+        const target = state.get(drawerId);
+        if (!target || target.endpoint === '') return;
+
+        const button = form.querySelector<HTMLButtonElement>('[data-cms-wf-save]');
+        clear(form);
+        if (button) button.disabled = true;
+        const box = document.getElementById(`${form.id}-error`);
+        try {
+          const response = await fetch(target.endpoint, {
+            method: target.method,
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload(form)),
+          });
+          if (response.ok) {
+            window.location.reload();
+            return;
+          }
+          const answer = (await response.json().catch(() => null)) as {
+            error?: { message?: string; fields?: FieldError[] };
+          } | null;
+          if (answer?.error?.fields?.length) paint(form, answer.error.fields);
+          if (box) {
+            box.hidden = false;
+            box.textContent =
+              answer?.error?.message ?? 'That could not be saved. Please try again.';
+          }
+        } catch {
+          if (box) {
+            box.hidden = false;
+            box.textContent = 'There was a problem reaching the server. Check your connection.';
+          }
+        } finally {
+          if (button) button.disabled = false;
+        }
+      });
+    });
+
+    /**
+     * Show only the scope target the chosen scope uses.
+     *
+     * The database's CHECK insists that a GROUP row carries no country,
+     * affiliate or business unit, so offering those boxes on a GROUP scope
+     * invites a refusal the operator cannot see coming.
+     */
+    const scopeFields = document.querySelectorAll<HTMLElement>('[data-scope-field]');
+    if (scopeFields.length > 0) {
+      const applyScope = (scope: string) => {
+        scopeFields.forEach((field) => {
+          const uses = (field.dataset.scopeField ?? '').split(' ');
+          field.hidden = !uses.includes(scope);
+        });
+      };
+      document.querySelectorAll('select[name="scopeType"]').forEach((node) => {
+        if (!(node instanceof HTMLSelectElement)) return;
+        node.addEventListener('change', () => applyScope(node.value));
+        node.form?.addEventListener('cms-wf-opened', () => applyScope(node.value));
+        applyScope(node.value);
+      });
+    }
+
+    const assignmentFields = document.querySelectorAll<HTMLElement>('[data-assignment-field]');
+    if (assignmentFields.length > 0) {
+      const applyAssignment = (type: string) => {
+        assignmentFields.forEach((field) => {
+          const uses = (field.dataset.assignmentField ?? '').split(' ');
+          field.hidden = !uses.includes(type);
+        });
+      };
+      document.querySelectorAll('select[name="assignmentType"]').forEach((node) => {
+        if (!(node instanceof HTMLSelectElement)) return;
+        node.addEventListener('change', () => applyAssignment(node.value));
+        node.form?.addEventListener('cms-wf-opened', () => applyAssignment(node.value));
+        applyAssignment(node.value);
+      });
+    }
+  }
+</script>
