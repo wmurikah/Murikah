@@ -1397,6 +1397,156 @@ CREATE TABLE IF NOT EXISTS customer_access_requests (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_customer_access_pending_email ON customer_access_requests(email) WHERE status='PENDING';
 
+-- ---------------------------------------------------------------------------
+-- The assistant and the message channels (register script 10).
+--
+-- COPIED FROM THE LIVE DDL, NOT WRITTEN FROM WHAT THE CODE WANTS. The operator
+-- ran the script by hand and the file was never committed, so this mirror was
+-- taken from SELECT sql FROM sqlite_master against production on 30 August
+-- 2026. That direction is the whole point: a mirror written from the
+-- application's expectations agrees with the application by construction and
+-- proves nothing, which is how src/lib/grc/ai/service.ts came to insert
+-- provider_id, organization_id and provider into an ai_providers whose
+-- real columns are provider_code and display_name (GRC-AUD-009). Every
+-- CHECK, every foreign key and every index below is verbatim.
+--
+-- NO KEY COLUMN ANYWHERE, AND THAT IS THE DESIGN. ai_providers.secret_name
+-- and channel_connections.secret_name name a Worker secret; they never hold
+-- one. A key in a row is readable by anyone with the Turso token, lands in
+-- every backup and copy, and cannot be rotated without an UPDATE against
+-- production.
+
+CREATE TABLE IF NOT EXISTS ai_providers (
+    ai_provider_id TEXT PRIMARY KEY,
+    provider_name TEXT NOT NULL UNIQUE,
+    provider_type TEXT NOT NULL CHECK(provider_type IN ('ANTHROPIC','OPENAI','AZURE_OPENAI','GOOGLE','OTHER')),
+    base_url TEXT,
+    model TEXT NOT NULL,
+    secret_name TEXT NOT NULL,
+    max_output_tokens INTEGER CHECK(max_output_tokens IS NULL OR max_output_tokens > 0),
+    temperature REAL CHECK(temperature IS NULL OR (temperature >= 0 AND temperature <= 2)),
+    purpose TEXT NOT NULL CHECK(purpose IN ('ASSISTANT','CLASSIFICATION','BOTH')),
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    last_verified_at TEXT,
+    last_verify_status TEXT CHECK(last_verify_status IS NULL OR last_verify_status IN ('OK','UNAUTHORISED','UNREACHABLE','ERROR')),
+    created_by_user_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS ix_ai_providers_purpose ON ai_providers(purpose, active);
+
+CREATE TABLE IF NOT EXISTS bot_conversations (
+    bot_conversation_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    ai_provider_id TEXT,
+    title TEXT,
+    entity_type TEXT,
+    entity_id TEXT,
+    status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','CLOSED')),
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_message_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (ai_provider_id) REFERENCES ai_providers(ai_provider_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS ix_bot_conv_user ON bot_conversations(user_id, last_message_at);
+
+CREATE TABLE IF NOT EXISTS bot_messages (
+    bot_message_id TEXT PRIMARY KEY,
+    bot_conversation_id TEXT NOT NULL,
+    sequence_no INTEGER NOT NULL CHECK(sequence_no > 0),
+    role TEXT NOT NULL CHECK(role IN ('USER','ASSISTANT','SYSTEM','TOOL')),
+    content TEXT NOT NULL,
+    model TEXT,
+    input_tokens INTEGER CHECK(input_tokens IS NULL OR input_tokens >= 0),
+    output_tokens INTEGER CHECK(output_tokens IS NULL OR output_tokens >= 0),
+    latency_ms INTEGER CHECK(latency_ms IS NULL OR latency_ms >= 0),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (bot_conversation_id) REFERENCES bot_conversations(bot_conversation_id) ON DELETE CASCADE,
+    UNIQUE(bot_conversation_id, sequence_no)
+);
+CREATE INDEX IF NOT EXISTS ix_bot_msg_conv ON bot_messages(bot_conversation_id, sequence_no);
+
+CREATE TABLE IF NOT EXISTS channel_connections (
+    channel_connection_id TEXT PRIMARY KEY,
+    channel TEXT NOT NULL CHECK(channel IN ('WHATSAPP','EMAIL')),
+    display_name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    account_identifier TEXT NOT NULL,
+    affiliate_id TEXT,
+    secret_name TEXT NOT NULL,
+    webhook_secret_name TEXT,
+    status TEXT NOT NULL CHECK(status IN ('DRAFT','CONNECTED','ERROR','DISABLED')),
+    last_polled_at TEXT,
+    last_error TEXT,
+    auto_create_case INTEGER NOT NULL DEFAULT 0 CHECK(auto_create_case IN (0,1)),
+    default_case_category_id TEXT,
+    created_by_user_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (affiliate_id) REFERENCES affiliates(affiliate_id) ON DELETE SET NULL,
+    FOREIGN KEY (default_case_category_id) REFERENCES case_categories(case_category_id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    UNIQUE(channel, account_identifier)
+);
+CREATE INDEX IF NOT EXISTS ix_channel_conn_status ON channel_connections(channel, status);
+
+CREATE TABLE IF NOT EXISTS channel_messages (
+    channel_message_id TEXT PRIMARY KEY,
+    channel_connection_id TEXT NOT NULL,
+    external_message_id TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK(direction IN ('INBOUND','OUTBOUND')),
+    from_address TEXT,
+    to_address TEXT,
+    subject TEXT,
+    body TEXT,
+    received_at TEXT NOT NULL,
+    account_id TEXT,
+    contact_id TEXT,
+    case_id TEXT,
+    status TEXT NOT NULL CHECK(status IN ('RECEIVED','CLASSIFIED','LINKED','IGNORED','FAILED')),
+    raw_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (channel_connection_id) REFERENCES channel_connections(channel_connection_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE SET NULL,
+    FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE SET NULL,
+    UNIQUE(channel_connection_id, external_message_id)
+);
+CREATE INDEX IF NOT EXISTS ix_channel_msg_queue ON channel_messages(channel_connection_id, status, received_at);
+CREATE INDEX IF NOT EXISTS ix_channel_msg_account ON channel_messages(account_id, received_at);
+CREATE INDEX IF NOT EXISTS ix_channel_msg_case ON channel_messages(case_id);
+
+CREATE TABLE IF NOT EXISTS message_classifications (
+    message_classification_id TEXT PRIMARY KEY,
+    channel_message_id TEXT NOT NULL,
+    ai_provider_id TEXT,
+    model TEXT,
+    suggested_case_type TEXT CHECK(suggested_case_type IS NULL OR suggested_case_type IN
+      ('ENQUIRY','COMPLAINT','REQUEST','INCIDENT','FEEDBACK','COMPLIMENT')),
+    suggested_case_category_id TEXT,
+    suggested_priority TEXT CHECK(suggested_priority IS NULL OR suggested_priority IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+    suggested_account_id TEXT,
+    confidence REAL CHECK(confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
+    rationale TEXT,
+    review_status TEXT NOT NULL DEFAULT 'PENDING'
+      CHECK(review_status IN ('PENDING','ACCEPTED','CORRECTED','REJECTED')),
+    reviewed_by_user_id TEXT,
+    reviewed_at TEXT,
+    final_case_type TEXT,
+    final_case_category_id TEXT,
+    final_priority TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (channel_message_id) REFERENCES channel_messages(channel_message_id) ON DELETE CASCADE,
+    FOREIGN KEY (ai_provider_id) REFERENCES ai_providers(ai_provider_id) ON DELETE SET NULL,
+    FOREIGN KEY (suggested_case_category_id) REFERENCES case_categories(case_category_id) ON DELETE SET NULL,
+    FOREIGN KEY (final_case_category_id) REFERENCES case_categories(case_category_id) ON DELETE SET NULL,
+    FOREIGN KEY (suggested_account_id) REFERENCES accounts(account_id) ON DELETE SET NULL,
+    FOREIGN KEY (reviewed_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    UNIQUE(channel_message_id)
+);
+CREATE INDEX IF NOT EXISTS ix_msg_class_review ON message_classifications(review_status, created_at);
+
 CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_update
 BEFORE UPDATE ON audit_events
 BEGIN

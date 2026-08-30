@@ -24,6 +24,7 @@
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsAssistant from '@/components/cms/CmsAssistant.astro';
 import CmsOverlayScript from '@/components/cms/CmsOverlayScript.astro';
 import CmsSearchScript from '@/components/cms/CmsSearchScript.astro';
 import CmsSidebar from '@/components/cms/CmsSidebar.astro';
@@ -91,6 +92,7 @@ const currentPath = Astro.locals.cmsPath ?? '/app';
 const principal = Astro.locals.cms;
 const permissions = principal?.user.permissions ?? [];
 const DRAWER_ID = 'cms-nav-drawer';
+const ASSISTANT_ID = 'cms-assistant';
 ---
 
 <!doctype html>
@@ -209,6 +211,20 @@ const DRAWER_ID = 'cms-nav-drawer';
     <CmsDrawer id={DRAWER_ID} title="Navigate">
       <CmsSidebar currentPath={currentPath} idPrefix="drawer" permissions={permissions} />
     </CmsDrawer>
+
+    {
+      /*
+        THE ASSISTANT IS IN THE SHELL AND COSTS THE SHELL NOTHING. It renders
+        empty markup and reads nothing: any query here would be added to every
+        page in the application, and Home is at thirteen of its fifteen. It
+        talks to /api/assistant only once somebody opens it.
+      */
+    }
+    {
+      principal !== undefined && principal.user.userType === 'INTERNAL' && (
+        <CmsAssistant id={ASSISTANT_ID} />
+      )
+    }
 
     <CmsOverlayScript />
     <CmsRailScript />
