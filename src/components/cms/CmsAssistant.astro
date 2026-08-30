@@ -4,10 +4,10 @@
  *
  * ZERO ROUND TRIPS AT RENDER TIME, AND THAT IS A HARD REQUIREMENT RATHER THAN
  * A PREFERENCE. This sits in the shell, so any query it made would be added to
- * EVERY page in the application, and Home is already at thirteen of its budget
- * of fifteen. So the markup is static: an empty transcript, a text box, and a
- * script that talks to `/api/assistant` when somebody actually opens it. A
- * person who never presses the button costs exactly what they did before.
+ * EVERY page in the application. So the markup is static: an empty transcript,
+ * a text box, and a script that talks to `/api/assistant` when somebody
+ * actually opens it. A person who never presses the button costs exactly what
+ * they did before.
  *
  * THE PANEL HOLDS NO ACCESS LOGIC, and could not usefully hold any. Every
  * answer is composed on the server from records already read through the
@@ -15,11 +15,49 @@
  * with `resolveEntityAccess`, the same function an activity uses. Nothing here
  * decides what may be seen; it renders what came back.
  *
- * A NATIVE <dialog>, so Escape closes it, focus is trapped by the platform,
- * and there is no focus management to get wrong.
+ * ---------------------------------------------------------------------------
+ * WHY IT LOOKS LIKE THIS
+ * ---------------------------------------------------------------------------
+ *
+ * It is the one surface somebody uses casually, so it has to feel calm, and the
+ * calm comes from the same principles as the rest of the sweep rather than from
+ * a second aesthetic.
+ *
+ * ONE COLUMN, 60 TO 75 CHARACTERS. `max-w-[68ch]` on the message body. A wide
+ * chat is hard to read because the eye loses the line return on the way back,
+ * and the panel is wide enough to tempt exactly that.
+ *
+ * THE TWO SPEAKERS DIFFER BY POSITION AND TONE, NOT BY TWO LOUD COLOURS. The
+ * person's message is aligned to the trailing edge on the royal tint; the
+ * assistant's is aligned to the leading edge on the canvas. No dark bubbles, no
+ * high-contrast alternation, no avatar on every message, no tail. Two loud
+ * colours alternating down a transcript is a barber's pole, and it makes the
+ * conversation harder to follow rather than easier.
+ *
+ * SPACE BETWEEN TURNS, LESS WITHIN ONE. 1.25rem between turns and 0.25rem
+ * between a speaker's label and their words. That is the grouping rule: a
+ * paragraph and its reply must not be equidistant, or the eye cannot tell which
+ * words belong together.
+ *
+ * THE COMPOSER IS THE ANCHOR. Fixed at the foot, 44px minimum, and it never
+ * moves as messages arrive — the transcript above it scrolls instead. Enter
+ * submits; Shift+Enter is a newline, because a multi-line question is ordinary
+ * and losing one to a stray Enter is not.
+ *
+ * WORKING, NOT THINKING. While the model is answering, a quiet line sits in the
+ * ASSISTANT'S OWN POSITION, so the reply appears exactly where the indicator
+ * was and nothing jumps. No spinner over the panel, no typing dots implying a
+ * person at a keyboard, and it does not animate under prefers-reduced-motion —
+ * global.css clamps every animation to 0.01ms, so the dot is simply still.
+ *
+ * LONG ANSWERS ARE SCANNABLE. The response is split on blank lines into
+ * paragraphs, and lines that begin with a bullet or a number become a real
+ * list. Deliberately not a Markdown renderer: that is a dependency this phase
+ * may not add, and rendering arbitrary Markdown from a model into innerHTML is
+ * the injection this application's CSP exists to prevent. Every node below is
+ * created with `textContent`.
  */
 import CmsDrawer from './CmsDrawer.astro';
-import CmsButton from './CmsButton.astro';
 
 interface Props {
   id: string;
@@ -28,31 +66,41 @@ const { id } = Astro.props;
 ---
 
 <CmsDrawer id={id} title="Assistant" tone="form" closeLabel="Close the assistant">
-  <div class="flex h-full flex-col gap-3 p-4">
+  <div class="flex h-full flex-col">
+    {/* THE TRANSCRIPT SCROLLS. The composer below it does not move. */}
     <ol
       id="cms-assistant-transcript"
-      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+      class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4"
       aria-live="polite"
       aria-label="Conversation"
     >
     </ol>
 
-    <p id="cms-assistant-note" class="text-cms-caption text-cms-muted"></p>
-
-    <form id="cms-assistant-form" class="flex flex-col gap-2">
-      <label class="text-cms-label font-medium text-cms-ink" for="cms-assistant-question">
-        Ask about your records
-      </label>
-      <textarea
-        id="cms-assistant-question"
-        name="question"
-        rows="3"
-        required
-        maxlength="2000"
-        class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      ></textarea>
-      <CmsButton type="submit" variant="primary" id="cms-assistant-send">Ask</CmsButton>
-    </form>
+    <div class="shrink-0 border-t border-cms-line px-4 py-3">
+      <form id="cms-assistant-form" class="flex flex-col gap-2">
+        <label class="text-cms-label font-medium text-cms-ink" for="cms-assistant-question">
+          Ask about your records
+        </label>
+        <div class="flex items-end gap-2">
+          <textarea
+            id="cms-assistant-question"
+            name="question"
+            rows="1"
+            required
+            maxlength="2000"
+            class="min-h-11 w-full resize-none rounded-cms border border-cms-border bg-cms-surface px-3 py-2.5 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          ></textarea>
+          <button
+            type="submit"
+            id="cms-assistant-send"
+            class="inline-flex h-11 shrink-0 items-center rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-55"
+          >
+            Ask
+          </button>
+        </div>
+        <p id="cms-assistant-note" class="min-h-4 text-cms-caption text-cms-muted"></p>
+      </form>
+    </div>
   </div>
 </CmsDrawer>
 
@@ -68,32 +116,113 @@ const { id } = Astro.props;
   // storage would be an id this person may no longer own.
   let conversationId = '';
 
-  const bubble = (who: string, text: string) => {
-    if (transcript === null) return;
+  /**
+   * A model's answer, made scannable without a Markdown renderer.
+   *
+   * Blank lines separate paragraphs; a run of lines starting with a bullet or a
+   * number becomes a real list; a short line ending in a colon becomes a
+   * heading. Every node is built with `textContent`, so nothing the model
+   * returns can become markup — which is the whole reason this is hand-rolled
+   * rather than a dependency.
+   */
+  const render = (target: HTMLElement, text: string) => {
+    for (const block of text.split(/\n\s*\n/)) {
+      const lines = block
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== '');
+      if (lines.length === 0) continue;
+
+      const bulleted = lines.every((line) => /^([-*•]|\d+[.)])\s+/.test(line));
+      if (bulleted) {
+        const list = document.createElement(/^\d/.test(lines[0]!) ? 'ol' : 'ul');
+        list.className = /^\d/.test(lines[0]!)
+          ? 'ms-4 flex list-decimal flex-col gap-1'
+          : 'ms-4 flex list-disc flex-col gap-1';
+        for (const line of lines) {
+          const item = document.createElement('li');
+          item.textContent = line.replace(/^([-*•]|\d+[.)])\s+/, '');
+          list.appendChild(item);
+        }
+        target.appendChild(list);
+        continue;
+      }
+
+      if (lines.length === 1 && lines[0]!.length < 60 && lines[0]!.endsWith(':')) {
+        const heading = document.createElement('p');
+        heading.className = 'font-semibold text-cms-ink';
+        heading.textContent = lines[0]!.slice(0, -1);
+        target.appendChild(heading);
+        continue;
+      }
+
+      const paragraph = document.createElement('p');
+      paragraph.textContent = lines.join(' ');
+      target.appendChild(paragraph);
+    }
+  };
+
+  /**
+   * One turn.
+   *
+   * Position and tone carry the speaker, and the label carries it for anybody
+   * who cannot see either. `gap-1` inside a turn against `gap-5` between them
+   * is the grouping rule made literal.
+   */
+  const turn = (who: 'You' | 'Assistant'): HTMLElement | null => {
+    if (transcript === null) return null;
     const item = document.createElement('li');
     item.className =
       who === 'You'
-        ? 'self-end rounded-cms bg-cms-royal-tint px-3 py-2 text-cms-body-sm text-cms-ink'
-        : 'rounded-cms bg-cms-sunken px-3 py-2 text-cms-body-sm text-cms-ink';
+        ? 'flex max-w-[68ch] flex-col gap-1 self-end rounded-cms bg-cms-royal-tint px-3 py-2 text-cms-body-sm text-cms-ink'
+        : 'flex max-w-[68ch] flex-col gap-1 self-start text-cms-body-sm text-cms-ink';
+
     const label = document.createElement('span');
-    label.className = 'block text-cms-caption text-cms-muted';
+    label.className = 'text-cms-caption text-cms-muted';
     label.textContent = who;
-    const body = document.createElement('span');
-    body.textContent = text;
     item.appendChild(label);
+
+    const body = document.createElement('div');
+    body.className = 'flex flex-col gap-2';
     item.appendChild(body);
+
     transcript.appendChild(item);
     transcript.scrollTop = transcript.scrollHeight;
+    return body;
   };
+
+  // ENTER SUBMITS, SHIFT+ENTER IS A NEWLINE. A multi-line question is ordinary,
+  // and losing one to a stray Enter is not something to shrug at.
+  question?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      form?.requestSubmit();
+    }
+  });
 
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const asked = (question?.value ?? '').trim();
     if (asked === '') return;
-    bubble('You', asked);
+
+    const mine = turn('You');
+    if (mine !== null) render(mine, asked);
     if (question !== null) question.value = '';
     if (send !== null) send.disabled = true;
-    if (note !== null) note.textContent = 'Thinking.';
+
+    // THE INDICATOR SITS WHERE THE REPLY WILL APPEAR, so the answer replaces it
+    // in place and nothing on the screen jumps. It is a word and a still dot,
+    // not a spinner over the panel and not typing dots implying a person.
+    const reply = turn('Assistant');
+    const working = document.createElement('p');
+    working.className = 'flex items-center gap-1.5 text-cms-muted';
+    working.textContent = 'Working';
+    const dot = document.createElement('span');
+    dot.className = 'cms-assistant-dot inline-block h-1.5 w-1.5 rounded-full bg-cms-muted';
+    dot.setAttribute('aria-hidden', 'true');
+    working.appendChild(dot);
+    reply?.appendChild(working);
+    if (note !== null) note.textContent = '';
 
     let body: Record<string, unknown> | null = null;
     try {
@@ -108,15 +237,22 @@ const { id } = Astro.props;
     }
 
     if (send !== null) send.disabled = false;
+    working.remove();
+
     if (body === null) {
-      if (note !== null) note.textContent = '';
-      bubble('Assistant', 'The assistant could not be reached. Nothing was changed.');
+      // SAID IN THE SAME QUIET TONE AS AN ANSWER, in the assistant's own
+      // position. A failure to reach the model is not an error the person made.
+      if (reply !== null) render(reply, 'I could not be reached. Nothing was changed.');
       return;
     }
 
     const returned = String(body.conversationId ?? '');
     if (returned !== '') conversationId = returned;
-    bubble('Assistant', String(body.answer ?? ''));
+    const answer = String(body.answer ?? '').trim();
+    if (reply !== null) {
+      render(reply, answer === '' ? 'I do not know the answer to that from your records.' : answer);
+    }
+    if (transcript !== null) transcript.scrollTop = transcript.scrollHeight;
 
     // WHAT IT COST, ON THE SCREEN. The token counts and the latency are
     // recorded on every message; showing them here means the person spending
@@ -124,10 +260,31 @@ const { id } = Astro.props;
     const usage = body.usage as Record<string, unknown> | null;
     if (note !== null) {
       note.textContent =
-        usage === null
+        usage === null || usage === undefined
           ? ''
           : `${String(usage.model)} · ${String(usage.inputTokens ?? '?')} in, ` +
             `${String(usage.outputTokens ?? '?')} out · ${String(usage.latencyMs ?? '?')}ms`;
     }
   });
 </script>
+
+<style>
+  /*
+    The one moving thing in the panel, and it is a pulse rather than a spin.
+    global.css clamps every animation to 0.01ms under prefers-reduced-motion, so
+    for anybody who asked for less movement the dot is simply still and the word
+    "Working" carries the whole message on its own.
+  */
+  .cms-assistant-dot {
+    animation: cms-assistant-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes cms-assistant-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+</style>

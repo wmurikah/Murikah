@@ -186,7 +186,24 @@ const ASSISTANT_ID = 'cms-assistant';
                 <span class="flex w-16 shrink-0 items-center justify-center">
                   <CmsIcon name="chevronRight" size={18} />
                 </span>
-                <span class="whitespace-nowrap" data-cms-rail-pin-label>Keep open</span>
+                {
+                  /*
+                  THE LABEL SAYS WHAT PRESSING IT WILL DO, and the line beneath
+                  says whether a choice is currently in force.
+
+                  The rail collapses by default and always has; a rail that will
+                  not collapse is one where somebody pressed "Keep open" — in
+                  this browser, possibly months ago, possibly on a build whose
+                  defaults have since changed. localStorage outranks a later
+                  change of default silently and for ever, and until now nothing
+                  on screen said a preference existed at all, so the only
+                  reading available was "the collapse is broken".
+                */
+                }
+                <span class="flex flex-col items-start leading-tight whitespace-nowrap">
+                  <span data-cms-rail-pin-label>Keep open</span>
+                  <span class="text-cms-caption text-cms-rail-muted" data-cms-rail-pin-note></span>
+                </span>
               </button>
             </div>
           </div>
