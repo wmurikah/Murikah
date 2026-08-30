@@ -53,7 +53,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const form = await request.formData();
   const roleCode = String(form.get('role_code') ?? '').trim();
-  if (!roleCode) return redirect('/settings/access-control?error=invalid');
+  if (!roleCode) return back('', 'error', 'No role was selected.');
   // SUPER_ADMIN always holds the full matrix and is never modified here.
   if (roleCode === 'SUPER_ADMIN') {
     return back(roleCode, 'error', 'SUPER_ADMIN always has full access and cannot be changed.');

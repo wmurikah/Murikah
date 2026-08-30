@@ -1936,6 +1936,68 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       await enterInstance();
     });
 
+    // An access change must reach a session that is already open, on its very
+    // next request (Build Prompt 40, finding AC-04). The matrix is cached, so
+    // this holds two signed-in actors at once: the auditor keeps their session
+    // while the administrator changes the matrix underneath it.
+    await t.test('a permission change reaches an open session immediately', async () => {
+      const adminJar = server.exportCookies();
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const auditorJar = server.exportCookies();
+      const before = await server.get('/work-papers');
+      assert.equal(before.status, 200, 'the auditor starts with the work-paper grant');
+      assert.ok(
+        !before.hops[before.hops.length - 1].startsWith('/login'),
+        'the auditor is signed in',
+      );
+
+      // The administrator takes WORK_PAPER away, without the auditor doing
+      // anything: no sign-out, no reload, no new session.
+      server.importCookies(adminJar);
+      const saved = await server.request('POST', '/api/access-control', {
+        role_code: 'AUDITOR',
+        grant_ACTION_PLAN_read: '1',
+      });
+      assert.ok(
+        !/[?&]error=/.test(String(saved.headers.location ?? '')),
+        `the save must succeed, got ${saved.headers.location}`,
+      );
+
+      // The auditor's very next request on the same session is refused: the
+      // central page map denies the section the matrix no longer unlocks.
+      server.importCookies(auditorJar);
+      const after = await server.get('/work-papers');
+      assert.equal(
+        after.hops[after.hops.length - 1],
+        '/',
+        `the revoked grant must apply at once, went ${after.hops.join(' -> ')}`,
+      );
+
+      // Put it back, so the steps after this see the seeded grants.
+      server.importCookies(adminJar);
+      const restored = await server.request('POST', '/api/access-control', {
+        role_code: 'AUDITOR',
+        grant_WORK_PAPER_read: '1',
+        grant_WORK_PAPER_create: '1',
+        grant_WORK_PAPER_update: '1',
+        grant_ACTION_PLAN_read: '1',
+        grant_ACTION_PLAN_create: '1',
+        grant_ACTION_PLAN_update: '1',
+        grant_AUDITEE_RESPONSE_read: '1',
+        grant_AUDIT_WORKBENCH_read: '1',
+        grant_REPORT_read: '1',
+      });
+      assert.ok(
+        !/[?&]error=/.test(String(restored.headers.location ?? '')),
+        'the restoring save must succeed',
+      );
+      server.importCookies(auditorJar);
+      const back = await server.get('/work-papers');
+      assert.equal(back.status, 200, 'the restored grant applies at once too');
+      server.importCookies(adminJar);
+    });
+
     await t.test('the instance admin is pinned to their organisation', async () => {
       await signInWithEmailCode(SMOKE.instanceAdminEmail, SMOKE.password, SMOKE.instanceAdminId);
       const home = await server.get('/');
