@@ -1,5 +1,5 @@
 /**
- * The leaderboard's eight columns, defined once for both tables.
+ * The leaderboard's four columns, defined once for both tables.
  *
  * BOTH LEADERBOARDS CARRY IDENTICAL COLUMNS IN IDENTICAL ORDER, and that is
  * what lets the eye move between them: a purchase order figure and a sales
@@ -28,6 +28,23 @@
  * Both extremes still have a home: the row detail, where nothing sorts and
  * nothing ranks.
  *
+ * NO FUNCTION COLUMN. It is a section heading above each block instead. Eight
+ * columns did not fit at a laptop width and both tables scrolled sideways, and
+ * a table you have to scroll to read is a table nobody reads. A heading is
+ * scanned once; a repeated cell is read on every row. A person acting in two
+ * functions still appears once under each, so the separation the whole design
+ * rests on is unchanged — it moved from a column to a heading.
+ *
+ * NO WITHIN SLA COLUMN. No SLA targets are configured for these functions, so
+ * it was empty on every row, and an empty column is worse than an absent one:
+ * it takes width and teaches the reader that the table has nothing to say. It
+ * comes back when targets exist.
+ *
+ * NO PENDING AND NO OLDEST PENDING. That information already sits directly
+ * above each table — "1 in approval", "3 awaiting finance approval" — and it
+ * belongs to the FUNCTION rather than to a person. Those lines stay, and are
+ * links. The table is about people.
+ *
  * ---------------------------------------------------------------------------
  * PLAIN WORDS IN THE HEADER, TECHNICAL NAMES IN THE DEFINITION
  * ---------------------------------------------------------------------------
@@ -41,16 +58,7 @@
 import type { CmsColumn } from '@/components/cms/CmsDataTable.astro';
 
 /** The plain-English headers, in the one order both tables use. */
-export const LEADERBOARD_HEADERS = [
-  'Person',
-  'Function',
-  'Volume',
-  'Typical',
-  'Slowest 10%',
-  'Within SLA',
-  'Pending',
-  'Oldest pending',
-] as const;
+export const LEADERBOARD_HEADERS = ['Person', 'Volume', 'Typical', 'Slowest 10%'] as const;
 
 /** What each column measures, with its technical name stated exactly. */
 export const LEADERBOARD_DEFINITIONS: Readonly<Record<string, string>> = {
@@ -58,9 +66,6 @@ export const LEADERBOARD_DEFINITIONS: Readonly<Record<string, string>> = {
     'Who performed the function. Invoicing and loading authority record no actor in the source ' +
     'extract, so those rows read "Not recorded" rather than attributing the work to whoever last ' +
     'touched the order.',
-  Function:
-    'Which step was performed. Purchase order functions are the configured approval levels; sales ' +
-    'order functions are finance approval, credit release, invoicing and loading authority.',
   Volume: 'How many of this function this person completed inside the period.',
   Typical:
     'The MEDIAN, also written P50. Half of this person’s completions of this function were faster ' +
@@ -69,34 +74,21 @@ export const LEADERBOARD_DEFINITIONS: Readonly<Record<string, string>> = {
   'Slowest 10%':
     'The 90th PERCENTILE, written P90. Nine of ten completions were faster than this figure and one ' +
     'in ten was slower. It is the cost of the tail rather than the cost of a normal approval.',
-  'Within SLA':
-    'The share of completions that met the configured SLA target, counted only over completions ' +
-    'where a target resolves. Targets are measured in business hours and these durations are ' +
-    'elapsed, so the two agree within a working day and diverge across a weekend. Clicking opens ' +
-    'the breaches, since those are the actionable half.',
-  Pending: 'How many of this function are still waiting on this person right now.',
-  'Oldest pending':
-    'When the longest-waiting item on this person for this function began waiting. It opens that ' +
-    'one record.',
 };
 
 /**
  * The columns as the table takes them.
  *
  * `numeric` right-aligns and gives tabular figures so digits line up down the
- * column; `secondary` hides a column of context below the small breakpoint
- * rather than letting eight columns squeeze a phone.
+ * column. Nothing is `secondary` any more: four columns fit at every width this
+ * application supports, so there is no longer anything to hide on a phone.
  */
 export function leaderboardColumns(denominator: string, dateBasis: string): CmsColumn[] {
   const base: { key: string; label: string; numeric?: boolean; secondary?: boolean }[] = [
     { key: 'person', label: 'Person' },
-    { key: 'function', label: 'Function' },
     { key: 'volume', label: 'Volume', numeric: true },
     { key: 'typical', label: 'Typical', numeric: true },
     { key: 'slowest10', label: 'Slowest 10%', numeric: true },
-    { key: 'within', label: 'Within SLA', numeric: true, secondary: true },
-    { key: 'pending', label: 'Pending', numeric: true },
-    { key: 'oldest', label: 'Oldest pending', secondary: true },
   ];
   return base.map((column) => ({
     ...column,
@@ -106,12 +98,9 @@ export function leaderboardColumns(denominator: string, dateBasis: string): CmsC
   }));
 }
 
-/** Which records a column's figure opens. Six columns, six destinations. */
+/** Which records a figure opens. Every remaining figure is clickable. */
 export const FIGURE_DESTINATIONS: Readonly<Record<string, string>> = {
   Volume: 'completed',
   Typical: 'typical',
   'Slowest 10%': 'tail',
-  'Within SLA': 'breaches',
-  Pending: 'pending',
-  'Oldest pending': 'record',
 };

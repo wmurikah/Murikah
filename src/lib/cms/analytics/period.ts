@@ -375,6 +375,27 @@ export interface CalendarSource {
   readonly column: string;
   /** An optional extra restriction, already safe: no caller input reaches it. */
   readonly where?: string;
+  /**
+   * WHICH PANEL THIS ACTIVITY BELONGS TO, AND WHY IT HAD TO EXIST.
+   *
+   * Home draws two boards from one period. The calendar behind the period
+   * control used to union every source into one population, so "does this
+   * period hold data" was answered for the PAGE. That is the wrong question,
+   * and it produced the exact failure this field fixes: on 30 August 2026 the
+   * calendar saw a lead and a sales order completed in August, answered "yes,
+   * August has data", and the fallback never fired — while the purchase order
+   * board, whose data ran 1 to 30 May, rendered an empty chart and an empty
+   * table in silence.
+   *
+   * A series labels each source so the same single statement answers the
+   * question per board as well as for the page. The period is still resolved
+   * ONCE, from the combined calendar; each panel then knows whether ITS own
+   * data is in that period, and says so when it is not.
+   *
+   * Omit it and the source counts only towards the combined total, which is
+   * what a single-board page wants.
+   */
+  readonly series?: string;
 }
 
 /** Which years, months and days hold activity, and the extremes. */
@@ -415,46 +436,100 @@ export function calendarSql(sources: readonly CalendarSource[]): string {
   const union = sources
     .map(
       (s) =>
-        `SELECT ${s.column} AS dt FROM ${s.table} WHERE ${s.column} IS NOT NULL` +
+        `SELECT ${s.column} AS dt, ${s.series === undefined ? "''" : `'${s.series}'`} AS series` +
+        ` FROM ${s.table} WHERE ${s.column} IS NOT NULL` +
         (s.where === undefined ? '' : ` AND ${s.where}`),
     )
     .join('\n      UNION ALL\n      ');
+  // STILL ONE STATEMENT. The series is another GROUP BY column, not another
+  // round trip: marking the empty periods is the most useful thing on the
+  // control and it must not cost a query per board. The `''` rows are the
+  // combined population the page's own period is resolved from, and they are
+  // produced by the same scan rather than by a second pass.
   return `
     WITH src AS (
       ${union}
-    )
-    SELECT 'Y' AS lvl, substr(dt, 1, 4) AS k, COUNT(*) AS n FROM src GROUP BY 2
+    ),
+    all_src AS (SELECT dt, '' AS series FROM src UNION ALL SELECT dt, series FROM src WHERE series <> '')
+    SELECT 'Y' AS lvl, substr(dt, 1, 4) AS k, series, COUNT(*) AS n FROM all_src GROUP BY 2, 3
     UNION ALL
-    SELECT 'M', substr(dt, 1, 7), COUNT(*) FROM src GROUP BY 2
+    SELECT 'M', substr(dt, 1, 7), series, COUNT(*) FROM all_src GROUP BY 2, 3
     UNION ALL
-    SELECT 'D', substr(dt, 1, 10), COUNT(*) FROM src WHERE substr(dt, 1, 7) = ? GROUP BY 2
+    SELECT 'D', substr(dt, 1, 10), series, COUNT(*) FROM all_src
+      WHERE substr(dt, 1, 7) = ? GROUP BY 2, 3
     UNION ALL
-    SELECT 'X', MIN(dt), COUNT(*) FROM src
+    SELECT 'X', MIN(dt), series, COUNT(*) FROM all_src GROUP BY 3
     UNION ALL
-    SELECT 'Z', MAX(dt), COUNT(*) FROM src`;
+    SELECT 'Z', MAX(dt), series, COUNT(*) FROM all_src GROUP BY 3`;
 }
 
 /** Read the one statement's rows into the calendar the control renders from. */
 export function readCalendar(rows: readonly Record<string, unknown>[]): DataCalendar {
-  const years = new Set<string>();
-  const months = new Set<string>();
-  const days = new Set<string>();
-  let earliest: string | null = null;
-  let latest: string | null = null;
-  let total = 0;
+  return readCalendars(rows).combined;
+}
+
+/**
+ * The combined calendar, and one per series.
+ *
+ * The page resolves its period from `combined`; each panel checks its own
+ * board against `series.get(name)`. Both come from the same statement's rows,
+ * so a panel can never be checking a different read from the one the period was
+ * chosen with.
+ */
+export interface CalendarSet {
+  readonly combined: DataCalendar;
+  readonly series: ReadonlyMap<string, DataCalendar>;
+}
+
+export function readCalendars(rows: readonly Record<string, unknown>[]): CalendarSet {
+  const building = new Map<
+    string,
+    {
+      years: Set<string>;
+      months: Set<string>;
+      days: Set<string>;
+      earliest: string | null;
+      latest: string | null;
+      total: number;
+    }
+  >();
+  const of = (name: string) => {
+    let found = building.get(name);
+    if (found === undefined) {
+      found = {
+        years: new Set(),
+        months: new Set(),
+        days: new Set(),
+        earliest: null,
+        latest: null,
+        total: 0,
+      };
+      building.set(name, found);
+    }
+    return found;
+  };
+
   for (const row of rows) {
     const lvl = String(row.lvl ?? '');
     const k = row.k === null || row.k === undefined ? null : String(row.k);
     if (k === null) continue;
-    if (lvl === 'Y') years.add(k);
-    else if (lvl === 'M') months.add(k);
-    else if (lvl === 'D') days.add(k);
+    const bucket = of(String(row.series ?? ''));
+    if (lvl === 'Y') bucket.years.add(k);
+    else if (lvl === 'M') bucket.months.add(k);
+    else if (lvl === 'D') bucket.days.add(k);
     else if (lvl === 'X') {
-      earliest = k.slice(0, 10);
-      total = Number(row.n ?? 0);
-    } else if (lvl === 'Z') latest = k.slice(0, 10);
+      bucket.earliest = k.slice(0, 10);
+      bucket.total = Number(row.n ?? 0);
+    } else if (lvl === 'Z') bucket.latest = k.slice(0, 10);
   }
-  return { years, months, days, earliest, latest, total };
+
+  const freeze = (name: string): DataCalendar => {
+    const b = building.get(name);
+    return b === undefined ? EMPTY_CALENDAR : { ...b };
+  };
+  const series = new Map<string, DataCalendar>();
+  for (const name of building.keys()) if (name !== '') series.set(name, freeze(name));
+  return { combined: freeze(''), series };
 }
 
 /** Whether a period holds anything, answered from the calendar alone. */
