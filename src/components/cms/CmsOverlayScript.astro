@@ -23,35 +23,92 @@
     const dialogOf = (el: Element | null): HTMLDialogElement | null =>
       el?.closest('dialog') instanceof HTMLDialogElement ? el.closest('dialog') : null;
 
+    const openedBy = new WeakMap<HTMLDialogElement, HTMLElement>();
+    const dirty = new WeakSet<HTMLDialogElement>();
+    const openDialogs = new Set<HTMLDialogElement>();
+
+    const lockPage = (dialog: HTMLDialogElement) => {
+      openDialogs.add(dialog);
+      document.body.style.overflow = 'hidden';
+    };
+    const releasePage = (dialog: HTMLDialogElement) => {
+      openDialogs.delete(dialog);
+      if (openDialogs.size === 0) document.body.style.removeProperty('overflow');
+    };
+    const open = (dialog: HTMLDialogElement, opener: HTMLElement) => {
+      openedBy.set(dialog, opener);
+      dialog.showModal();
+      lockPage(dialog);
+      dialog.querySelector<HTMLElement>('[autofocus], input, select, textarea, button')?.focus();
+    };
+    const close = (dialog: HTMLDialogElement, force = false) => {
+      if (!force && dirty.has(dialog) && !window.confirm('Discard the changes you have made?'))
+        return;
+      dialog.close();
+    };
+
     document.addEventListener('click', (event) => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
 
-      const opener = target.closest<HTMLElement>('[data-cms-modal-open]');
-      if (opener) {
-        const id = opener.getAttribute('data-cms-modal-open');
+      const trigger = target.closest<HTMLElement>('[data-cms-modal-open]');
+      if (trigger) {
+        const id = trigger.getAttribute('data-cms-modal-open');
         const dialog = id ? document.getElementById(id) : null;
-        if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+        if (dialog instanceof HTMLDialogElement && !dialog.open) {
+          open(dialog, trigger);
+        }
         return;
       }
 
       // The close control, and any element that asks to close its own dialog.
       if (target.closest('[data-testid$="-close"], [data-cms-modal-close]')) {
-        dialogOf(target)?.close();
+        const dialog = dialogOf(target);
+        if (dialog) close(dialog);
         return;
       }
 
       // A click on the backdrop lands on the dialog element itself, never on
       // its contents, so this closes only when the pointer was genuinely
       // outside.
-      if (target instanceof HTMLDialogElement && target.open) target.close();
+      if (target instanceof HTMLDialogElement && target.open) close(target);
     });
+
+    document.addEventListener('input', (event) => {
+      const dialog = dialogOf(event.target as HTMLElement | null);
+      if (dialog) dirty.add(dialog);
+    });
+
+    document.addEventListener(
+      'close',
+      (event) => {
+        if (!(event.target instanceof HTMLDialogElement)) return;
+        dirty.delete(event.target);
+        releasePage(event.target);
+        const opener = openedBy.get(event.target);
+        openedBy.delete(event.target);
+        if (opener?.isConnected) opener.focus();
+      },
+      true,
+    );
+
+    document.addEventListener(
+      'cancel',
+      (event) => {
+        if (!(event.target instanceof HTMLDialogElement)) return;
+        if (!event.target.hasAttribute('data-cms-confirm-dirty')) return;
+        event.preventDefault();
+        close(event.target);
+      },
+      true,
+    );
 
     // Following a link out of the drawer must not leave the dialog open behind
     // the new page in a browser that restores it from the back/forward cache.
     document.addEventListener('click', (event) => {
       const link = (event.target as HTMLElement | null)?.closest('a[href]');
-      if (link) dialogOf(link)?.close();
+      const dialog = dialogOf(link ?? null);
+      if (dialog) close(dialog, true);
     });
   }
 </script>
