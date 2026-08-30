@@ -620,7 +620,12 @@ test('every figure on Home carries a destination', () => {
       const at = match.index!;
       // A count inside the sentence that explains an empty period is prose,
       // not a figure: it has nothing to open because there is nothing there.
-      if (/lie outside this period/.test(source.slice(at, at + 160))) continue;
+      if (/outside this period/.test(source.slice(at, at + 200))) continue;
+      // The row detail's own figures are a distribution readout, not dashboard
+      // figures: fastest, slowest and count describe the rows already listed,
+      // and the slowest is the one of the three that opens anything.
+      const detailStart = source.lastIndexOf('<details class="cms-leader-detail"', at);
+      if (detailStart !== -1 && source.indexOf('</details>', detailStart) > at) continue;
       counted += 1;
       const before = source.slice(Math.max(0, at - 400), at);
       assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
@@ -631,7 +636,10 @@ test('every figure on Home carries a destination', () => {
   // The two duration columns are links too, and they are the ones this phase
   // added: Typical and Slowest 10% each open the records behind them.
   const board = templateOf('src/components/cms/CmsApprovalLeaderboard.astro');
-  for (const view of ['completed', 'typical', 'tail', 'breaches', 'pending']) {
+  // Three columns carry a figure, and each opens its own records. `breaches`
+  // and `pending` went with the columns that opened them; the record page still
+  // serves those views for anything else that wants them.
+  for (const view of ['completed', 'typical', 'tail']) {
     assert.ok(board.includes(`records(row, '${view}')`), `${view} has no destination`);
   }
 
@@ -709,19 +717,13 @@ test('the two leaderboards carry identical columns in identical order', () => {
     2,
     'both leaderboards come from the same component',
   );
-  assert.deepEqual(
-    [...LEADERBOARD_HEADERS],
-    [
-      'Person',
-      'Function',
-      'Volume',
-      'Typical',
-      'Slowest 10%',
-      'Within SLA',
-      'Pending',
-      'Oldest pending',
-    ],
-  );
+  // FOUR, NOT EIGHT. Eight did not fit at a laptop width and both tables
+  // scrolled sideways; a table you have to scroll to read is a table nobody
+  // reads. Function became a section heading, Within SLA went because no
+  // targets are configured so it was empty on every row, and Pending and
+  // Oldest pending went because that information sits above the table already
+  // and belongs to the function rather than to a person.
+  assert.deepEqual([...LEADERBOARD_HEADERS], ['Person', 'Volume', 'Typical', 'Slowest 10%']);
   const columns = leaderboardColumns('x', 'y');
   assert.deepEqual(
     columns.map((column) => column.label),
@@ -747,8 +749,8 @@ test('no average, fastest or slowest column appears in either table', () => {
   // which ranks nothing.
   for (const label of LEADERBOARD_HEADERS) {
     assert.ok(
-      !/^(Average|Mean|Fastest|Slowest)$/i.test(label),
-      `${label} is a column this phase removed`,
+      !/^(Average|Mean|Fastest|Slowest|Function|Within SLA|Pending|Oldest pending)$/i.test(label),
+      `${label} is a column that has been removed`,
     );
   }
   // The component defines no columns of its own, so there is nowhere for a
@@ -1198,4 +1200,57 @@ test('the empty periods are marked without relying on colour', () => {
   // Dimming alone is colour carrying meaning. The accessible name says it too.
   assert.match(control, /no data/, 'an empty period says so in its accessible name');
   assert.match(control, /aria-label=\{mark\(/, 'every drill cell carries the mark');
+});
+
+test('the leaderboard groups by function and carries only people', () => {
+  const board = readFileSync('src/components/cms/CmsApprovalLeaderboard.astro', 'utf8');
+
+  // FUNCTION IS A HEADING, NOT A COLUMN. A real row header with a colspan, so
+  // a screen reader announces the rows beneath it as belonging to it rather
+  // than meeting a styled cell.
+  assert.match(board, /scope="colgroup"/, 'the function heading is a real group header');
+  assert.match(board, /colspan=\{COLUMNS\.length\}/, 'it spans the table');
+  // Grouped, and a person acting in two functions appears once under each,
+  // because the grouping is by the row's own function rather than by person.
+  assert.match(board, /groups\.find\(\(group\) => group\.fn === row\.fn\)/);
+
+  // A LEADERBOARD IS PEOPLE. A function whose extract records no actor is
+  // excluded whole — dropping the null rows and keeping the function would
+  // leave an empty heading claiming somebody worked on it.
+  assert.match(board, /filter\(\(row\) => row\.userId !== null\)/);
+  // And it is named beneath, so the same fact is still on the page. Matched on
+  // whitespace-normalised source, because the formatter is free to rewrap a
+  // sentence and an assertion that breaks when it does is testing prettier.
+  const flat = board.replace(/\s+/g, ' ');
+  assert.match(flat, /in the chart above and not in this table/);
+
+  // The three removed columns leave no trace in the markup.
+  for (const gone of ['Within SLA', 'Oldest pending', 'oldestPendingAt', 'row.pending']) {
+    assert.ok(!board.includes(gone), `${gone} still appears in the leaderboard`);
+  }
+});
+
+test('a panel never renders empty in silence while its own data is elsewhere', () => {
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  // THE PAGE-LEVEL FALLBACK IS NOT ENOUGH, and that is the whole lesson: it
+  // moves the period when NOTHING on the page has data, which is false the
+  // moment one board has data and the other does not.
+  assert.match(home, /const elsewhere = /, 'each panel checks its own board');
+  assert.equal(
+    (home.match(/elsewhere\((purchase|sales)Calendar/g) ?? []).length >= 2,
+    true,
+    'both panels carry the check',
+  );
+  // The count under each table is that board's own, never the page's mixed
+  // total across every entity type.
+  assert.match(home, /totalOutside=\{outsideFor\(purchaseCalendar, purchases\)\}/);
+  assert.match(home, /totalOutside=\{outsideFor\(salesCalendar, sales\)\}/);
+  assert.ok(!/totalOutside=\{outside\}/.test(home), 'the mixed page total is gone');
+
+  // The period is still resolved ONCE for the page.
+  assert.equal(
+    (home.match(/choosePeriod\(/g) ?? []).length,
+    1,
+    'the period must be resolved once for the page',
+  );
 });
