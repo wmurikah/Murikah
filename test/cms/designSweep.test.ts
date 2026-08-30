@@ -646,6 +646,56 @@ test('the rail is collapsed by default and opens four ways', () => {
   assert.match(global, /transition-duration: 0\.01ms !important/);
 });
 
+test('the landing group has no heading and no disclosure', () => {
+  const sidebar = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
+  // WORK IS GONE. It sat above Home, Customers, CRM, Helpdesk and Orders,
+  // told nobody anything, and rendered like a heading while doing nothing
+  // when pressed.
+  assert.ok(!sidebar.includes("label: 'Work'"), 'the Work heading is deleted');
+  assert.match(sidebar, /\{ label: null, items: \['Home',/, 'the landing group has no label');
+  // And it is a plain list, not a disclosure: collapsing the thing you arrived
+  // at is a control nobody wants, and it would put a control in the tab order
+  // ahead of Home.
+  assert.match(
+    sidebar,
+    /if \(group\.label === null\) \{\s*return <div class="mb-3 last:mb-0">\{items\}<\/div>;/,
+    'a headingless group renders as a plain list',
+  );
+  // Exactly three headings remain, and no fourth was added.
+  const labels = [...sidebar.matchAll(/\{ label: '([^']+)', items:/g)].map((m) => m[1]!);
+  assert.deepEqual(labels, ['Insights', 'Operations', 'System']);
+});
+
+test('no label looks interactive without being a control', () => {
+  // THE RULE, AND THE ONE THAT WORK BROKE. A thing that renders like a control
+  // must be one. In the rail that means every remaining heading is a real
+  // <summary> carrying a chevron, and the one that was not has been deleted.
+  const sidebar = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
+  assert.equal(
+    (sidebar.match(/<summary/g) ?? []).length,
+    1,
+    'one summary, rendered for the three labelled groups and for nothing else',
+  );
+  assert.ok(
+    sidebar.indexOf('cursor-pointer') > sidebar.indexOf('<summary'),
+    'the pointer cursor belongs to the summary, not to a plain heading',
+  );
+
+  // ROYAL IS THE ACTION COLOUR AND NOTHING ELSE. Using it on something that
+  // cannot be pressed is the same false promise in a different place.
+  const kpi = readFileSync('src/components/cms/CmsKpiCard.astro', 'utf8');
+  const unlinked = kpi.slice(kpi.indexOf('    ) : ('));
+  assert.ok(
+    !unlinked.includes('text-cms-royal'),
+    'a KPI card with no destination uses no action colour',
+  );
+  const leaderboard = readFileSync('src/components/cms/CmsLeaderboardRow.astro', 'utf8');
+  assert.ok(
+    !/bg-cms-royal-tint text-cms-royal/.test(leaderboard),
+    'a rank is not a chip somebody can press',
+  );
+});
+
 test('the module groups collapse, persist, and open on the current page', () => {
   const sidebar = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
   // A native <details>, so the disclosure works with no JavaScript at all and
