@@ -115,7 +115,13 @@ const states = {
           {value}
         </span>
         {context && <span class="text-cms-caption text-cms-muted">{context}</span>}
-        {spark && <span class="mt-1 block text-cms-royal" set:html={spark.svg} />}
+        {/*
+          NOT THE ACTION COLOUR ON A CARD THAT IS NOT AN ACTION. Royal means
+          "this can be pressed", and a card with no destination cannot be. The
+          linked branch above keeps it; this one draws its trend in ink, so the
+          colour never promises something the card does not do.
+        */}
+        {spark && <span class="mt-1 block text-cms-ink-500" set:html={spark.svg} />}
       </div>
     )
   }
