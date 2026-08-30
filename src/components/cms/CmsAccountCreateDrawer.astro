@@ -232,7 +232,7 @@ const pick = (list: Option[], empty: string) => [
         item.className = 'rounded-cms border border-cms-line bg-cms-surface px-3 py-2';
 
         const link = document.createElement('a');
-        link.href = `/app/customers/${candidate.accountId}`;
+        link.href = `/app/operations/customers/${candidate.accountId}`;
         link.className =
           'font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus';
         link.textContent = candidate.accountName;
@@ -308,8 +308,8 @@ const pick = (list: Option[], empty: string) => [
         if (response.ok) {
           const created = (await response.json()) as { accountId?: string };
           window.location.href = created.accountId
-            ? `/app/customers/${created.accountId}`
-            : '/app/customers';
+            ? `/app/operations/customers/${created.accountId}`
+            : '/app/operations/customers';
           return;
         }
         const answer = (await response.json().catch(() => null)) as {
