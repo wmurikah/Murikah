@@ -1,0 +1,30 @@
+---
+/**
+ * A section's name. That is the whole component.
+ *
+ * IT TAKES NO DESCRIPTION, AND THAT IS THE POINT. Every section heading on the
+ * dashboard used to carry a sentence under it explaining what the section
+ * contained, and a reader who has just read "Needs attention" does not need to
+ * be told that it lists exceptions. There is deliberately no `description`
+ * prop, so the paragraph cannot come back one page at a time.
+ *
+ * Renders an h2, so the page keeps one h1 and nothing is skipped. The actions
+ * slot is for a control that belongs to the section itself, such as the SLA
+ * family switch, and it sits on the same line rather than above it.
+ */
+interface Props {
+  /** The section name, and the accessible name of the region around it. */
+  title: string;
+  /** Used as the heading's id so a <section> can point aria-labelledby at it. */
+  id: string;
+  class?: string;
+}
+const { title, id, class: className } = Astro.props;
+---
+
+<div class:list={['flex flex-wrap items-center justify-between gap-3', className]}>
+  <h2 id={id} class="text-cms-section font-semibold text-cms-ink">{title}</h2>
+  <div class="flex shrink-0 items-center gap-2">
+    <slot name="actions" />
+  </div>
+</div>

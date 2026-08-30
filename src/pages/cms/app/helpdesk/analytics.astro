@@ -1,0 +1,698 @@
+---
+/**
+ * Service → Analytics.
+ *
+ * Beyond counting complaints: what customers experienced, what recurs, where
+ * internal time accumulated, and whether promises were kept.
+ *
+ * RESOLUTION IS REPORTED TWICE AND LABELLED BOTH TIMES. A case that spent
+ * five hours waiting on the customer took five hours of that customer's day
+ * whatever the SLA says, and the organisation is held to a different figure.
+ * Both are true, both matter to different people, and neither is ever shown
+ * as the other.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsDefinition from '@/components/cms/CmsDefinition.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewCases } from '@/lib/cms/permissions';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import {
+  summary,
+  waitingBreakdown,
+  handoffs,
+  categoryMix,
+  repeatIssues,
+  slaPicture,
+  breachAttribution,
+  surveyScores,
+  feedbackCoverage,
+  customerView,
+  entityView,
+  teamView,
+  trend,
+  insights,
+  type ServiceSummary,
+  type WaitingBreakdown,
+  type HandoffRow,
+  type CategoryRow,
+  type RepeatRow,
+  type SlaPicture,
+  type SurveyScore,
+  type FeedbackCoverage,
+  type CustomerServiceRow,
+  type EntityRow,
+  type TeamServiceRow,
+  type ServiceTrendBucket,
+  type Insight,
+} from '@/lib/cms/repos/serviceAnalytics';
+import { lineChart, distributionChart, stackedBarChart } from '@/lib/cms/charts/svg';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewCases(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let signals: ServiceSummary | null = null;
+let breakdown: WaitingBreakdown | null = null;
+let chains: { rows: HandoffRow[]; threshold: number; wording: string } = {
+  rows: [],
+  threshold: 0,
+  wording: '',
+};
+let categories: CategoryRow[] = [];
+let repeats: { rows: RepeatRow[]; windowDays: number; wording: string } = {
+  rows: [],
+  windowDays: 0,
+  wording: '',
+};
+let sla: SlaPicture | null = null;
+let attribution: Awaited<ReturnType<typeof breachAttribution>> = [];
+let surveys: SurveyScore[] = [];
+let coverage: FeedbackCoverage | null = null;
+let customers: CustomerServiceRow[] = [];
+let entities: EntityRow[] = [];
+let teams: TeamServiceRow[] = [];
+let buckets: ServiceTrendBucket[] = [];
+let cards: Insight[] = [];
+let affiliates: { value: string; label: string }[] = [];
+let loadFailed = false;
+
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const [s, wb, ho, cat, rep, sl, att, sv, fc, cust, ent, tm, tr, ins, af] = await Promise.all([
+      summary(db, userId, filter),
+      waitingBreakdown(db, userId, filter),
+      handoffs(db, userId, filter),
+      categoryMix(db, userId, filter),
+      repeatIssues(db, userId, filter),
+      slaPicture(db, userId, filter, now),
+      breachAttribution(db, userId, filter),
+      surveyScores(db, userId, filter),
+      feedbackCoverage(db, userId, filter),
+      customerView(db, userId, filter),
+      entityView(db, userId, filter),
+      teamView(db, userId, filter),
+      trend(db, userId, filter),
+      insights(db, userId, filter),
+      db.execute(
+        `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
+      ),
+    ]);
+    signals = s;
+    breakdown = wb;
+    chains = ho;
+    categories = cat;
+    repeats = rep;
+    sla = sl;
+    attribution = att;
+    surveys = sv;
+    coverage = fc;
+    customers = cust;
+    entities = ent;
+    teams = tm;
+    buckets = tr;
+    cards = ins;
+    affiliates = af.rows.map((row) => ({
+      value: String(row.affiliate_id),
+      label: String(row.affiliate_name),
+    }));
+  } catch (error) {
+    console.error('[cms.service.analytics] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const timeChart =
+  breakdown === null
+    ? null
+    : stackedBarChart(
+        [
+          {
+            name: 'Active handling',
+            token: 'cms-series-1',
+            points: [{ label: 'Measured cases', value: breakdown.activeHandlingMinutes }],
+          },
+          {
+            name: 'Waiting on the customer',
+            token: 'cms-series-2',
+            points: [{ label: 'Measured cases', value: breakdown.waitingCustomerMinutes }],
+          },
+          {
+            name: 'Waiting internally',
+            token: 'cms-series-3',
+            points: [{ label: 'Measured cases', value: breakdown.waitingInternalMinutes }],
+          },
+        ],
+        { unit: 'minutes', format: formatDuration },
+      );
+
+const volumeTrend = lineChart(
+  [
+    {
+      name: 'Cases',
+      token: 'cms-series-1',
+      points: buckets.map((b) => ({ label: b.bucket, value: b.cases })),
+    },
+    {
+      name: 'Complaints',
+      token: 'cms-series-3',
+      points: buckets.map((b) => ({ label: b.bucket, value: b.complaints })),
+    },
+  ],
+  { unit: 'cases' },
+);
+
+const categoryChart = distributionChart(
+  {
+    name: 'Category',
+    token: 'cms-series-4',
+    points: categories.slice(0, 10).map((row) => ({
+      label: `${row.categoryName} / ${row.subcategoryName}`,
+      value: row.cases,
+      href: drillTo('/app/helpdesk', filter, { caseCategoryId: row.caseCategoryId }),
+    })),
+  },
+  { unit: 'cases' },
+);
+---
+
+<CmsLayout title="Helpdesk analytics">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to service analytics"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ||
+      signals === null ||
+      breakdown === null ||
+      sla === null ||
+      coverage === null ? (
+      <CmsErrorState
+        title="Helpdesk analytics could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Helpdesk analytics"
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Helpdesk', href: '/app/helpdesk' },
+            { label: 'Analytics' },
+          ]}
+        />
+
+        <CmsOrderFilters
+          filter={filter}
+          affiliates={affiliates}
+          statuses={[
+            'NEW',
+            'ASSIGNED',
+            'IN_PROGRESS',
+            'WAITING_CUSTOMER',
+            'WAITING_INTERNAL',
+            'RESOLVED',
+            'CLOSED',
+          ]}
+          action="/app/helpdesk/analytics"
+          showCredit={false}
+        />
+
+        <section aria-labelledby="signals" class="mb-6">
+          <h2 id="signals" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Signals
+          </h2>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Cases opened</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {signals.casesOpened}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Date basis: when the case was raised.
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Open backlog</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {signals.openBacklog}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">Not resolved, closed or cancelled.</p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">External SLA compliance</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatRate(signals.externalSlaCompliancePercent)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                What the customer was promised, over {signals.externalSlaMeasured} settled timers.
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Median resolution</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatDuration(signals.medianResolutionElapsedMinutes)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                Elapsed, which is what the customer experienced. Accountable, pause-adjusted:{' '}
+                {formatDuration(signals.medianResolutionAccountableMinutes)}. Over{' '}
+                {signals.resolutionMeasured} of {signals.resolutionTotal} cases that reached
+                resolution.
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">First response, median</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {formatDuration(signals.firstResponseMedianMinutes)}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                P90 {formatDuration(signals.firstResponseP90Minutes)}. Within SLA{' '}
+                {formatRate(signals.firstResponseWithinSlaPercent)}. {signals.awaitingFirstResponse}{' '}
+                cases still have no first response.
+              </p>
+            </div>
+            <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+              <p class="text-cms-body-sm text-cms-muted">Satisfaction (CSAT)</p>
+              <p class="text-cms-display font-semibold text-cms-ink tabular-nums">
+                {signals.csatScore === null ? 'Not available' : signals.csatScore}
+              </p>
+              <p class="mt-1 text-cms-body-sm text-cms-muted">
+                From {signals.csatResponses} response{signals.csatResponses === 1 ? '' : 's'}. A
+                small sample is a small sample, and the count is shown so it reads as one.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {cards.length > 0 && (
+          <section aria-labelledby="insights" class="mb-6">
+            <h2 id="insights" class="mb-3 text-cms-body font-semibold text-cms-ink">
+              What the numbers say
+            </h2>
+            <div class="grid gap-3 lg:grid-cols-3">
+              {cards.map((card) => (
+                <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+                  <p class="text-cms-body font-medium text-cms-ink">{card.headline}</p>
+                  <p class="mt-2 text-cms-body-sm text-cms-muted">{card.working}</p>
+                  <p class="mt-1 text-cms-body-sm text-cms-muted">
+                    Sample: {card.sampleSize}
+                    {card.comparisonPeriod && `. Compared against ${card.comparisonPeriod}`}
+                  </p>
+                  <a
+                    href={drillTo('/app/helpdesk', filter, card.drill)}
+                    class="mt-2 inline-block text-cms-body-sm font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    Open the records
+                  </a>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section aria-labelledby="time" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="time" class="sr-only">
+            Where the time went
+          </h2>
+          {timeChart && (
+            <CmsChart
+              title="Where the elapsed time went"
+              definition="Elapsed time decomposed from the case status history into active handling, waiting on the customer and waiting internally. The three bands are the decomposition, so they sum to the elapsed total."
+              chart={timeChart}
+              coverage={`${breakdown.casesMeasured} of ${breakdown.totalCases} cases had a complete enough status history. ${breakdown.casesExcluded} were excluded rather than estimated.`}
+            />
+          )}
+          {/*
+            It was titled "Reading this" and led with a paragraph explaining
+            the bands, which is an explanatory panel: the card is now named
+            after what it actually shows, and the explanation is on demand
+            beside the title, where a definition belongs.
+          */}
+          <CmsCard title="Where the time went">
+            <CmsDefinition
+              slot="actions"
+              label="Where the time went"
+              definition={breakdown.wording}
+            />
+            <dl class="text-cms-body-sm">
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Waiting on the customer</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {formatDuration(breakdown.waitingCustomerMinutes)}
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Waiting internally</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {formatDuration(breakdown.waitingInternalMinutes)}
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Active handling</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {formatDuration(breakdown.activeHandlingMinutes)}
+                </dd>
+              </div>
+              <div class="flex justify-between py-1.5">
+                <dt class="text-cms-muted">Elapsed total</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {formatDuration(breakdown.elapsedMinutes)}
+                </dd>
+              </div>
+            </dl>
+          </CmsCard>
+        </section>
+
+        <section aria-labelledby="mix" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="mix" class="sr-only">
+            Case mix and trend
+          </h2>
+          <CmsChart
+            title="Case mix by category"
+            definition="Counted on the structured category and subcategory. The free-text root cause is searchable on a case and is never counted as a dimension."
+            chart={categoryChart}
+          />
+          <CmsChart
+            title="Volume"
+            definition="Cases and complaints raised per period, on the raised date."
+            chart={volumeTrend}
+          />
+        </section>
+
+        <section aria-labelledby="sla" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="sla" class="sr-only">
+            SLA
+          </h2>
+          <CmsCard title="SLA">
+            <CmsDataTable
+              caption="SLA"
+              columns={[
+                { key: 'kind', label: '' },
+                { key: 'met', label: 'Met', numeric: true },
+                { key: 'breached', label: 'Breached', numeric: true },
+                { key: 'risk', label: 'At risk', numeric: true },
+                { key: 'compliance', label: 'Compliance', numeric: true },
+              ]}
+              empty={false}
+            >
+              {[
+                { kind: 'External (the customer promise)', data: sla.external },
+                { kind: 'Internal (who held it)', data: sla.internal },
+              ].map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.kind}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.data.met}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.data.breached}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.data.atRisk}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.data.compliancePercent)}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Median breach {formatDuration(sla.medianBreachMinutes)}. {sla.attributionNote}
+            </p>
+          </CmsCard>
+
+          <CmsCard title="Breach attribution" description="Who held it, beside who closed it.">
+            <CmsDataTable
+              caption="Breach attribution"
+              columns={[
+                { key: 'case', label: 'Case' },
+                { key: 'accountable', label: 'Accountable' },
+                { key: 'team', label: 'Team' },
+                { key: 'closed', label: 'Closed by' },
+                { key: 'minutes', label: 'Over target', numeric: true },
+              ]}
+              empty={attribution.length === 0}
+            >
+              {attribution.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.caseNumber}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.accountableUser ?? 'Not attributed'}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.accountableTeam ?? 'Not attributed'}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">{row.closedByUser ?? 'Not recorded'}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.breachMinutes)}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              The closing column is shown so the difference is visible: the person who closed a case
+              is very often the person who rescued it.
+            </p>
+          </CmsCard>
+        </section>
+
+        <section aria-labelledby="satisfaction" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="satisfaction" class="sr-only">
+            Satisfaction and handoffs
+          </h2>
+          <CmsCard title="Satisfaction">
+            <CmsDataTable
+              caption="Satisfaction"
+              columns={[
+                { key: 'type', label: 'Instrument' },
+                { key: 'score', label: 'Score', numeric: true },
+                { key: 'responses', label: 'Responses', numeric: true },
+                { key: 'scale', label: 'Scale' },
+              ]}
+              empty={surveys.length === 0}
+            >
+              {surveys.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.surveyType}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-ink tabular-nums">
+                    {row.score === null ? 'Not available' : row.score}
+                    {row.nps && (
+                      <span class="block text-cms-body-sm font-normal text-cms-muted">
+                        {row.nps.promoters} promoters, {row.nps.passives} passives,{' '}
+                        {row.nps.detractors} detractors
+                      </span>
+                    )}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.responses}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-body-sm text-cms-muted">{row.scale}</td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              {coverage.responses} responses from {coverage.closedCases} resolved or closed cases, a
+              response rate of {formatRate(coverage.responseRatePercent)}. {coverage.note}
+            </p>
+          </CmsCard>
+
+          <CmsCard title="Handoffs">
+            <CmsDataTable
+              caption="Handoffs"
+              columns={[
+                { key: 'case', label: 'Case' },
+                { key: 'count', label: 'Handoffs', numeric: true },
+                { key: 'chain', label: 'Chain' },
+                { key: 'flag', label: '' },
+              ]}
+              empty={chains.rows.length === 0}
+            >
+              {chains.rows.slice(0, 20).map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.caseNumber}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.handoffs}</td>
+                  <td class="px-4 py-2.5 text-cms-body-sm text-cms-muted">
+                    {row.chain
+                      .map((step) => step.toTeam ?? step.toUser ?? 'Unassigned')
+                      .join(' then ')}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    {row.highReassignment && <CmsBadge tone="warning" label="High reassignment" />}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">{chains.wording}</p>
+          </CmsCard>
+        </section>
+
+        <section aria-labelledby="who" class="mb-6 grid gap-4 xl:grid-cols-3">
+          <h2 id="who" class="sr-only">
+            Customers, entities and teams
+          </h2>
+          <CmsCard title="Customers">
+            <CmsDataTable
+              caption="Customers"
+              columns={[
+                { key: 'customer', label: 'Customer' },
+                { key: 'cases', label: 'Cases', numeric: true },
+                { key: 'complaints', label: 'Complaints', numeric: true },
+                { key: 'sla', label: 'External SLA', numeric: true },
+                { key: 'resolution', label: 'Median resolution', numeric: true },
+                { key: 'csat', label: 'CSAT', numeric: true },
+                { key: 'repeats', label: 'Repeat issues', numeric: true },
+              ]}
+              empty={customers.length === 0}
+            >
+              {customers.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.customerName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.cases}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.complaints}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.externalSlaPercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.medianResolutionElapsedMinutes)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.csatScore === null
+                      ? 'No responses'
+                      : `${row.csatScore} (${row.csatResponses})`}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.repeatIssues}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard title="Affiliates" description="A rate only where a denominator exists.">
+            <CmsDataTable
+              caption="Affiliates"
+              columns={[
+                { key: 'affiliate', label: 'Affiliate' },
+                { key: 'cases', label: 'Cases', numeric: true },
+                { key: 'complaints', label: 'Complaints', numeric: true },
+                { key: 'rate', label: 'Complaint rate' },
+              ]}
+              empty={entities.length === 0}
+            >
+              {entities.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.affiliateName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.cases}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.complaints}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.complaintRatePercent === null ? (
+                      <span class="text-cms-body-sm">No denominator, so no rate</span>
+                    ) : (
+                      <span class="tabular-nums">{formatRate(row.complaintRatePercent)}</span>
+                    )}
+                    <span class="block text-cms-body-sm text-cms-muted">{row.rateNote}</span>
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard title="Teams" description="Never ranked on speed alone.">
+            <CmsDataTable
+              caption="Teams"
+              columns={[
+                { key: 'team', label: 'Team' },
+                { key: 'cases', label: 'Cases', numeric: true },
+                { key: 'response', label: 'Median first response', numeric: true },
+                { key: 'resolution', label: 'Median resolution', numeric: true },
+                { key: 'external', label: 'External SLA', numeric: true },
+                { key: 'internal', label: 'Internal SLA', numeric: true },
+                { key: 'backlog', label: 'Backlog', numeric: true },
+                { key: 'oldest', label: 'Oldest open' },
+                { key: 'csat', label: 'CSAT' },
+              ]}
+              empty={teams.length === 0}
+            >
+              {teams.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">{row.teamName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.casesHandled}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.medianFirstResponseMinutes)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.medianResolutionElapsedMinutes)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.externalSlaPercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatRate(row.internalSlaPercent)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.backlog}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">{row.oldestOpenAt ?? 'None open'}</td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.csatScore === null
+                      ? 'No responses'
+                      : `${row.csatScore} (${row.csatResponses})`}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+        </section>
+
+        <section aria-labelledby="repeats" class="mb-6">
+          <h2 id="repeats" class="mb-1 text-cms-body font-semibold text-cms-ink">
+            Repeat issues
+          </h2>
+          <p class="mb-3 text-cms-body-sm text-cms-muted">
+            Same customer, same category, within {repeats.windowDays} days. {repeats.wording}
+          </p>
+          <CmsDataTable
+            caption="Repeat issues"
+            columns={[
+              { key: 'customer', label: 'Customer' },
+              { key: 'category', label: 'Category' },
+              { key: 'cases', label: 'Cases', numeric: true },
+              { key: 'first', label: 'First' },
+              { key: 'last', label: 'Most recent' },
+            ]}
+            empty={repeats.rows.length === 0}
+          >
+            {repeats.rows.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-ink">{row.customerName}</td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.categoryName} / {row.subcategoryName}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.cases}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.firstAt}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.lastAt}</td>
+              </tr>
+            ))}
+          </CmsDataTable>
+        </section>
+      </Fragment>
+    )
+  }
+</CmsLayout>

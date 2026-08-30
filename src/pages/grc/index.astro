@@ -11,6 +11,7 @@ export const prerender = false;
  * Gate: DASHBOARD.view.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
 import GrcBarChart from '@/components/grc/GrcBarChart.astro';
 import GrcGroupedBar from '@/components/grc/GrcGroupedBar.astro';
 import GrcDonut from '@/components/grc/GrcDonut.astro';
@@ -47,6 +48,7 @@ const scope: DashboardScope = {
   roleCode: grc.roleCode,
   isPlatformOwner: grc.isPlatformOwner,
   perms: grc.perms,
+  affiliateScope: grc.affiliateScope,
 };
 const canTeam = canSeeTeamPerformance(grc.roleCode);
 // The analytics charts are org-wide, so they show for roles with organisation
@@ -99,8 +101,10 @@ if (allowed) {
     }));
     chartsError = !(await guardPageLoad('dashboard.charts', async () => {
       const [teamR, chartsR] = await Promise.all([
-        canTeam ? getTeamPerformance(db, grc.organizationId) : Promise.resolve(null),
-        canCharts ? getDashboardCharts(db, grc.organizationId, chartYear) : Promise.resolve(null),
+        canTeam ? getTeamPerformance(db, grc.organizationId, scope) : Promise.resolve(null),
+        canCharts
+          ? getDashboardCharts(db, grc.organizationId, chartYear, scope)
+          : Promise.resolve(null),
       ]);
       team = teamR;
       charts = chartsR;
@@ -129,6 +133,8 @@ const riskClass = (r: string | null): string => {
       <p class="grc-lead">Your internal audit workspace for {grc.organizationName}.</p>
     </div>
   </div>
+
+  <GrcAffiliateNotice subject="figures" />
 
   {
     passwordChanged && (
@@ -270,7 +276,7 @@ const riskClass = (r: string | null): string => {
               <div class="grc-chartcard">
                 <GrcDonut
                   title="Not implemented, high risk"
-                  description={`Action plans not yet implemented on high and extreme risk findings, by area, for ${chartYear}.`}
+                  description={`Action plans not yet implemented on high and extreme risk observations, by area, for ${chartYear}.`}
                   data={charts.notImplementedHighRisk}
                   variant="pie"
                   valueHeading="Action plans"

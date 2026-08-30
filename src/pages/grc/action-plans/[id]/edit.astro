@@ -39,7 +39,7 @@ let loadError = false;
 if (allowed && id) {
   loadError = !(await guardPageLoad('action-plans.edit', async () => {
     const db = await getDb(getGrcEnv());
-    plan = await getActionPlan(db, grc.organizationId, id);
+    plan = await getActionPlan(db, grc.organizationId, id, grc.affiliateScope);
     if (plan) {
       [workPapers, users] = await Promise.all([
         listWorkPaperOptions(db, grc.organizationId),
@@ -87,9 +87,9 @@ const val = (key: string): string => {
         )}
         <form method="post" action={`/api/action-plans/${id}`} class="grc-form">
           <div class="grc-field">
-            <label for="work-paper">Work paper (finding)</label>
+            <label for="work-paper">Work paper (observation)</label>
             <select id="work-paper" name="work_paper_id" class="grc-select" required>
-              <option value="">Choose the parent finding</option>
+              <option value="">Choose the parent observation</option>
               {workPapers.map((w) => (
                 <option value={w.id} selected={val('work_paper_id') === w.id}>
                   {w.label}

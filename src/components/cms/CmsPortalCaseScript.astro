@@ -1,0 +1,108 @@
+---
+/**
+ * The two writes on a customer's request page: the reply and the survey.
+ *
+ * One script rather than two, because both post JSON to an endpoint that
+ * already knows the case, both show their failure in the same place, and
+ * both reload the page on success so what the customer then reads came from
+ * the database rather than from something the browser assembled.
+ *
+ * Nothing here decides whether the customer may write. The endpoints do
+ * that, against the membership, on every call. A hidden form is a courtesy;
+ * the guard is the control.
+ */
+interface Props {
+  caseId: string;
+}
+const { caseId } = Astro.props;
+---
+
+<script is:inline data-portal-case-id set:html={JSON.stringify(caseId)} type="application/json" />
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const idNode = document.querySelector('[data-portal-case-id]');
+  const caseId = idNode ? (JSON.parse(idNode.textContent ?? '""') as string) : '';
+
+  const post = async (
+    url: string,
+    payload: unknown,
+    box: HTMLElement,
+    button: HTMLButtonElement,
+  ): Promise<void> => {
+    box.hidden = true;
+    button.disabled = true;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        window.location.reload();
+        return;
+      }
+      if (response.status === 429) {
+        box.textContent = 'That is a lot at once. Please try again in a few minutes.';
+      } else {
+        const body = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        box.textContent =
+          body?.error?.fields?.[0]?.message ??
+          body?.error?.message ??
+          'We could not send that just now. Please try again.';
+      }
+      box.hidden = false;
+      button.disabled = false;
+    } catch {
+      box.textContent = 'We could not send that just now. Please try again.';
+      box.hidden = false;
+      button.disabled = false;
+    }
+  };
+
+  const replyForm = document.getElementById('portal-reply') as HTMLFormElement | null;
+  const replyError = document.getElementById('portal-reply-error');
+  const replySend = document.getElementById('portal-reply-send') as HTMLButtonElement | null;
+  if (replyForm && replyError && replySend && caseId !== '') {
+    replyForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const message = String(new FormData(replyForm).get('message') ?? '').trim();
+      if (message === '') {
+        replyError.textContent = 'Type a message first.';
+        replyError.hidden = false;
+        return;
+      }
+      void post(`/api/portal/helpdesk/${caseId}`, { message }, replyError, replySend);
+    });
+  }
+
+  const surveyForm = document.getElementById('portal-survey') as HTMLFormElement | null;
+  const surveyError = document.getElementById('portal-survey-error');
+  const surveySend = document.getElementById('portal-survey-send') as HTMLButtonElement | null;
+  if (surveyForm && surveyError && surveySend) {
+    surveyForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const data = new FormData(surveyForm);
+      const invitationId = String(data.get('invitationId') ?? '');
+      const raw = data.get('score');
+      if (raw === null || String(raw) === '') {
+        surveyError.textContent = 'Choose a score first.';
+        surveyError.hidden = false;
+        return;
+      }
+      const comments = String(data.get('comments') ?? '').trim();
+      void post(
+        `/api/portal/surveys/${invitationId}`,
+        { score: Number(raw), comments: comments === '' ? null : comments },
+        surveyError,
+        surveySend,
+      );
+    });
+  }
+</script>

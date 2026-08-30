@@ -9,6 +9,7 @@ export const prerender = false;
  * role. Scoped by organisation.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
 import GrcBarChart from '@/components/grc/GrcBarChart.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
@@ -44,6 +45,7 @@ if (allowed) {
       grc.organizationId,
       new Map([...wpLabels, ...apLabels]),
       new Date(),
+      grc.affiliateScope,
     );
   }));
 }
@@ -63,6 +65,8 @@ const rateTone =
       <p class="grc-lead">Portfolio analytics and AI insights for {grc.organizationName}.</p>
     </div>
   </div>
+
+  <GrcAffiliateNotice subject="figures" />
 
   {
     !hasAi ? (

@@ -1,0 +1,345 @@
+---
+/**
+ * Orders → Sales Orders → one order.
+ *
+ * The lifecycle in the order it happens, the stages that actually exist, the
+ * two durations kept apart, and the source history where the spreadsheet's
+ * own variance sits beside this application's arithmetic for diagnosis.
+ *
+ * WHERE CREDIT WAS NOT REQUIRED THIS SAYS "Not required".
+ * In the real extract 593 of 1,386 rows have every credit column blank,
+ * which means credit approval was never needed. Rendering that as "0 min"
+ * would say credit took no time, which is a different statement and a false
+ * one.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canSeeCreditInformation, canViewSalesOrders } from '@/lib/cms/permissions';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import { orderDetail, type OrderDetail } from '@/lib/cms/repos/soPerformance';
+import { measureInstance } from '@/lib/cms/sla/engine';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewSalesOrders(permissions);
+const maySeeCredit = canSeeCreditInformation(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const orderId = Astro.params.orderId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const nowDate = new Date();
+
+let detail: OrderDetail | null = null;
+let engineMeasures: Record<string, { elapsedMinutes: number; accountableMinutes: number } | null> =
+  {};
+let loadFailed = false;
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    detail = await orderDetail(db, userId, orderId);
+    if (detail !== null) {
+      // The engine's own figures, per stage: business-calendar adjusted and
+      // pause-adjusted. This is the SLA engine from Build Prompt 15, called
+      // rather than re-implemented.
+      for (const stage of detail.stages) {
+        if (stage.slaInstanceId === null) continue;
+        engineMeasures[stage.slaInstanceId] = await measureInstance(
+          db,
+          stage.slaInstanceId,
+          nowDate,
+        );
+      }
+    }
+  } catch (error) {
+    console.error('[cms.orders.sales.detail] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const NOT_AVAILABLE = 'Not available';
+---
+
+<CmsLayout title={detail === null ? 'Sales order' : detail.order.documentNumber}>
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to sales orders"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The order could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : detail === null ? (
+      <CmsErrorState
+        title="That order could not be found"
+        description="It may not exist, or it may be outside the organisation you can see."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          auditEntityType="SALES_ORDER"
+          auditEntityId={orderId}
+          title={detail.order.documentNumber}
+          description={`${detail.order.customerName}, ${detail.order.affiliateName}${detail.order.businessUnitName === null ? '' : `, ${detail.order.businessUnitName}`}. Created ${detail.order.orderCreatedAt}.`}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Orders', href: '/app/orders' },
+            { label: 'Sales orders', href: drillTo('/app/orders/sales', filter) },
+            { label: detail.order.documentNumber },
+          ]}
+        >
+          <Fragment slot="actions">
+            <CmsBadge tone="neutral" label={detail.order.status.replace('_', ' ').toLowerCase()} />
+            <CmsButton variant="ghost" href={drillTo('/app/orders/sales', filter)}>
+              Back to the queue
+            </CmsButton>
+          </Fragment>
+        </CmsPageHeader>
+
+        <div class="grid gap-4 xl:grid-cols-2">
+          <CmsCard title="Lifecycle" description="Each step, and what is actually known about it.">
+            <ol class="flex flex-col gap-3">
+              {detail.lifecycle.map((step) => (
+                <li class="flex items-start justify-between gap-4 border-b border-cms-line pb-3 last:border-0 last:pb-0">
+                  <div>
+                    <p class="text-cms-body-sm font-medium text-cms-ink">{step.step}</p>
+                    <p class="text-cms-body-sm text-cms-muted">{step.note}</p>
+                  </div>
+                  <p class="shrink-0 text-cms-body-sm text-cms-muted tabular-nums">
+                    {step.at ?? NOT_AVAILABLE}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </CmsCard>
+
+          <CmsCard title="Overview" description="What the source carries, and what it does not.">
+            <dl class="text-cms-body-sm">
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Currency</dt>
+                <dd class="text-cms-ink">{detail.order.currencyCode ?? NOT_AVAILABLE}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Order value</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {detail.order.orderValue === null
+                    ? NOT_AVAILABLE
+                    : `${detail.order.currencyCode ?? ''} ${detail.order.orderValue.toLocaleString('en-KE')}`.trim()}
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Finance turnaround (elapsed)</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {formatDuration(detail.order.financeMinutes)}
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Credit approval</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {!detail.order.creditRequired
+                    ? 'Not required'
+                    : formatDuration(detail.order.creditMinutes)}
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt class="text-cms-muted">Loaded</dt>
+                <dd class="text-cms-ink">{detail.order.loadedAt ?? NOT_AVAILABLE}</dd>
+              </div>
+              {/*
+                LOADING AUTHORITIES, WHEN THERE WAS MORE THAN ONE.
+                An order line can be loaded more than once, and sales_orders
+                holds a single loading_authority_at, so the column records a
+                choice: the EARLIEST, which is how long the customer waited
+                for their first truck. Saying only the chosen timestamp on an
+                order loaded seven times would be true and misleading, so the
+                count sits beside it and the whole list is below.
+                A single-authority order shows nothing extra: a row reading
+                "1 loading authority" on 589 of 662 orders is noise.
+              */}
+              {detail.loadingAuthorities.length > 1 && (
+                <div class="flex justify-between py-1.5">
+                  <dt class="text-cms-muted">Loading authorities</dt>
+                  <dd class="text-cms-ink tabular-nums">
+                    {detail.loadingAuthorities.length} — earliest shown above
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </CmsCard>
+
+          {detail.loadingAuthorities.length > 1 && (
+            <CmsCard title="Loading authorities">
+              <ol class="flex flex-col gap-2">
+                {detail.loadingAuthorities.map((at, index) => (
+                  <li class="flex items-baseline justify-between gap-4 border-b border-cms-line pb-2 last:border-0 last:pb-0">
+                    <span class="text-cms-body-sm text-cms-muted">
+                      {index === 0 ? 'Earliest, on the order' : `Later load ${index}`}
+                    </span>
+                    <span class="text-cms-body-sm text-cms-ink tabular-nums">{at}</span>
+                  </li>
+                ))}
+              </ol>
+              <p class="mt-3 text-cms-body-sm text-cms-muted">
+                The extract repeats an order line once per event, so a line loaded several times
+                appears several times. These are the distinct authorities, not the row count.
+              </p>
+            </CmsCard>
+          )}
+
+          <CmsCard title="Products">
+            <CmsDataTable
+              caption="Order lines"
+              columns={[
+                { key: 'line', label: 'Line', numeric: true },
+                { key: 'product', label: 'Product' },
+                { key: 'quantity', label: 'Quantity', numeric: true },
+                { key: 'price', label: 'Unit price', numeric: true },
+                { key: 'value', label: 'Line value', numeric: true },
+              ]}
+              empty={detail.lines.length === 0}
+            >
+              {detail.lines.map((line) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {line.lineNumber}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-ink">
+                    {line.productCode ?? NOT_AVAILABLE}
+                    {line.productName && (
+                      <span class="block text-cms-muted">{line.productName}</span>
+                    )}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {line.quantity === null
+                      ? NOT_AVAILABLE
+                      : `${line.quantity.toLocaleString('en-KE')} ${line.unitOfMeasure ?? ''}`.trim()}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {line.unitPrice === null
+                      ? NOT_AVAILABLE
+                      : line.unitPrice.toLocaleString('en-KE')}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {line.lineValue === null
+                      ? NOT_AVAILABLE
+                      : line.lineValue.toLocaleString('en-KE')}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+          </CmsCard>
+
+          <CmsCard title="Workflow and SLA">
+            <CmsDataTable
+              caption="Workflow stages"
+              columns={[
+                { key: 'stage', label: 'Stage' },
+                { key: 'assignee', label: 'Assignee' },
+                { key: 'status', label: 'Status' },
+                { key: 'elapsed', label: 'Elapsed', numeric: true },
+                { key: 'accountable', label: 'Accountable (SLA)', numeric: true },
+                { key: 'sla', label: 'SLA state' },
+              ]}
+              empty={detail.stages.length === 0}
+            >
+              {detail.stages.map((stage) => {
+                const measured =
+                  stage.slaInstanceId === null ? null : engineMeasures[stage.slaInstanceId];
+                return (
+                  <tr class="border-b border-cms-line last:border-0">
+                    <td class="px-4 py-2.5 text-cms-ink">{stage.stageName}</td>
+                    <td class="px-4 py-2.5 text-cms-muted">{stage.assignedUser ?? 'Unassigned'}</td>
+                    <td class="px-4 py-2.5 text-cms-muted">{stage.status.toLowerCase()}</td>
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {formatDuration(stage.elapsedMinutes)}
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                      {measured === null || measured === undefined
+                        ? NOT_AVAILABLE
+                        : formatDuration(measured.accountableMinutes)}
+                    </td>
+                    <td class="px-4 py-2.5">
+                      <CmsBadge
+                        tone={
+                          stage.slaStatus === 'BREACHED'
+                            ? 'danger'
+                            : stage.slaStatus === 'MET'
+                              ? 'success'
+                              : 'neutral'
+                        }
+                        label={(stage.slaStatus ?? NOT_AVAILABLE).toLowerCase()}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Elapsed is wall clock, which is what the customer waited. Accountable is the SLA
+              engine's own figure for the same stage: business-calendar adjusted where the rule
+              measures in business hours, and less any time the clock was paused. They are two
+              different durations and are never added together or swapped.
+            </p>
+          </CmsCard>
+
+          <CmsCard title="Source history">
+            {detail.snapshots.length === 0 ? (
+              <p class="text-cms-body-sm text-cms-muted">
+                This order was not created by an import, so it has no source snapshots.
+              </p>
+            ) : (
+              <ul class="flex flex-col gap-3">
+                {detail.snapshots.map((snapshot) => (
+                  <li class="border-b border-cms-line pb-3 last:border-0 last:pb-0">
+                    <p class="text-cms-body-sm font-medium text-cms-ink">
+                      Version {snapshot.versionNo}
+                      {snapshot.isCurrent && (
+                        <span class="ml-2 font-normal text-cms-muted">current</span>
+                      )}
+                      <span class="ml-2 font-normal text-cms-muted">{snapshot.capturedAt}</span>
+                    </p>
+                    <pre class="mt-1 overflow-x-auto rounded-cms bg-cms-canvas p-2 text-cms-body-sm text-cms-muted">
+                      {snapshot.snapshotJson}
+                    </pre>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              The source variance columns are kept here as reconciliation evidence. No figure on the
+              performance page is computed from them: every duration this application reports is
+              arithmetic on timestamps.
+            </p>
+          </CmsCard>
+
+          {!maySeeCredit ? null : (
+            <CmsCard title="Credit">
+              <dl class="text-cms-body-sm">
+                <div class="flex justify-between border-b border-cms-line py-1.5">
+                  <dt class="text-cms-muted">Credit approval required</dt>
+                  <dd class="text-cms-ink">{detail.order.creditRequired ? 'Yes' : 'No'}</dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                  <dt class="text-cms-muted">Exception reason</dt>
+                  <dd class="text-cms-ink">
+                    {detail.order.creditRequired ? 'Recorded on the order' : 'Not required'}
+                  </dd>
+                </div>
+              </dl>
+            </CmsCard>
+          )}
+        </div>
+      </Fragment>
+    )
+  }
+</CmsLayout>

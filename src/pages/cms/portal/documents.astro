@@ -1,0 +1,96 @@
+---
+/**
+ * The customer's documents.
+ *
+ * ONLY WHAT SOMEBODY DECIDED TO SHARE. `customer_visible` defaults to 0, so
+ * every attachment that existed before the portal is invisible here until an
+ * internal user marks it. That default is the right way round: a document
+ * becomes customer-facing by a decision, never by an oversight.
+ *
+ * The storage key is not in the shape this page renders. A download goes
+ * through an endpoint that re-checks the session, the membership, the
+ * account and the visibility flag before it streams a byte, so a link
+ * copied out of this page is worth nothing to anybody else.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import { portalDocuments, type PortalDocument } from '@/lib/cms/repos/portalData';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+import { portalDate, portalSize } from '@/lib/cms/portal/present';
+
+export const prerender = false;
+
+let scope: PortalScope | null = null;
+let documents: PortalDocument[] = [];
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+  if (scope) documents = await portalDocuments(db, scope);
+} catch (error) {
+  console.error('[cms.portal.documents] load failed', error);
+  loadFailed = true;
+}
+---
+
+<CmsPortalLayout title="Documents" scope={scope} current="/portal/documents">
+  <div class="flex flex-col gap-1.5">
+    <h1 class="text-cms-page font-semibold text-cms-navy">Documents</h1>
+    <p class="text-cms-body-sm text-cms-muted">
+      Paperwork we have shared with you. If something you expected is not here, raise a request
+      under Service.
+    </p>
+  </div>
+
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load your documents just now"
+        description="Please try again in a moment."
+      />
+    ) : scope === null ? (
+      <CmsEmptyState
+        icon="customers"
+        title="No account is linked to your sign-in yet"
+        description="Contact your Hass Petroleum representative to have your account linked."
+      />
+    ) : documents.length === 0 ? (
+      <CmsEmptyState
+        icon="data"
+        title="No documents have been shared with you yet"
+        description="Documents we share on your account will appear here."
+      />
+    ) : (
+      <CmsCard bodyClass="p-0">
+        <ul class="flex flex-col divide-y divide-cms-line">
+          {documents.map((document) => (
+            <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <span class="min-w-0">
+                <span class="block truncate text-cms-body-sm font-semibold text-cms-ink">
+                  {document.title}
+                </span>
+                <span class="block text-cms-caption text-cms-muted">
+                  {document.relatesTo} - shared {portalDate(document.attachedAt)} -{' '}
+                  {portalSize(document.sizeBytes)}
+                </span>
+              </span>
+              <a
+                href={`/api/portal/documents/${document.entityAttachmentId}`}
+                class="min-h-10 rounded-cms border border-cms-border px-3 py-2 text-cms-body-sm font-semibold text-cms-royal outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                Download
+                <span class="sr-only"> {document.title}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </CmsCard>
+    )
+  }
+</CmsPortalLayout>

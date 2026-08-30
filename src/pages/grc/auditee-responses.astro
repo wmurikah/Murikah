@@ -4,7 +4,7 @@ export const prerender = false;
 /**
  * Auditee responses: one route, two audiences, decided by permission.
  *
- * An auditee (UNIT_MANAGER, JUNIOR_STAFF and the like) sees only the findings
+ * An auditee (UNIT_MANAGER, JUNIOR_STAFF and the like) sees only the observations
  * shared with them, with the response deadline stated plainly and the round they
  * are on. The scoping is in the query, not the page, so the auditee's universe
  * is restricted at the source. A reviewer (AUDITOR and above) sees the queue of
@@ -14,6 +14,7 @@ export const prerender = false;
  * Gate: AUDITEE.respond for the auditee side, WORK_PAPERS.review for the queue.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -40,11 +41,11 @@ const canReview = grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review'
 const canRespond = grc.isPlatformOwner || grc.perms.includes('AUDITEE.respond');
 const allowed = canReview || canRespond;
 
-// The statuses a finding can be answered in: with the auditee now, or already
+// The statuses a observation can be answered in: with the auditee now, or already
 // answered this round and awaiting the reviewer.
 const AUDITEE_STATUSES = [WP_STATUS.SENT_TO_AUDITEE, WP_STATUS.RESPONSE_RECEIVED];
 
-let findings: AuditeeFinding[] = [];
+let observations: AuditeeFinding[] = [];
 let queue: ResponseRow[] = [];
 let deadlineDays = DEFAULT_RESPONSE_DEADLINE_DAYS;
 let loadError = false;
@@ -53,12 +54,20 @@ if (allowed) {
     const db = await getDb(getGrcEnv());
     const [mine, awaiting, config] = await Promise.all([
       canRespond
-        ? listAuditeeFindings(db, grc.organizationId, grc.userId, AUDITEE_STATUSES)
+        ? listAuditeeFindings(
+            db,
+            grc.organizationId,
+            grc.userId,
+            AUDITEE_STATUSES,
+            grc.affiliateScope,
+          )
         : Promise.resolve([]),
-      canReview ? listReviewQueue(db, grc.organizationId) : Promise.resolve([]),
+      canReview
+        ? listReviewQueue(db, grc.organizationId, 200, grc.affiliateScope)
+        : Promise.resolve([]),
       getConfigValues(db, grc.organizationId, ['RESPONSE_DEADLINE_DAYS']),
     ]);
-    findings = mine;
+    observations = mine;
     queue = awaiting;
     deadlineDays = configuredNumber(
       config.get('RESPONSE_DEADLINE_DAYS'),
@@ -76,7 +85,7 @@ const riskClass = (r: string | null): string => {
 };
 const fmtDate = (d: string | null): string => (d ? d.slice(0, 10) : '-');
 
-/** The deadline for a finding: the stored one when set, else derived from the sent date. */
+/** The deadline for a observation: the stored one when set, else derived from the sent date. */
 const deadlineFor = (f: AuditeeFinding): string | null =>
   f.storedDeadline ?? responseDeadline(f.sentDate, deadlineDays);
 
@@ -91,12 +100,14 @@ const failed = Astro.url.searchParams.get('error');
       <p class="grc-lead">
         {
           canRespond && !canReview
-            ? 'Findings shared with you, and your response to each.'
+            ? 'Observations shared with you, and your response to each.'
             : 'Management responses and the review queue.'
         }
       </p>
     </div>
   </div>
+
+  <GrcAffiliateNotice subject="observations" />
 
   {
     done && (
@@ -124,21 +135,21 @@ const failed = Astro.url.searchParams.get('error');
       <>
         {canRespond && (
           <section class="grc-section">
-            <h2>Findings shared with you</h2>
-            {findings.length === 0 ? (
+            <h2>Observations shared with you</h2>
+            {observations.length === 0 ? (
               <div class="grc-empty">
                 <p>
-                  <strong>Nothing awaits your response.</strong> Findings appear here once an
+                  <strong>Nothing awaits your response.</strong> Observations appear here once an
                   auditor shares them with you.
                 </p>
               </div>
             ) : (
               <div class="grc-tablewrap">
-                <table class="grc-table" aria-label="Findings shared with you">
+                <table class="grc-table" aria-label="Observations shared with you">
                   <thead>
                     <tr>
                       <th>Reference</th>
-                      <th>Finding</th>
+                      <th>Observation</th>
                       <th>Risk</th>
                       <th>Round</th>
                       <th>Respond by</th>
@@ -146,7 +157,7 @@ const failed = Astro.url.searchParams.get('error');
                     </tr>
                   </thead>
                   <tbody>
-                    {findings.map((f) => {
+                    {observations.map((f) => {
                       const deadline = deadlineFor(f);
                       const state = deadlineState(deadline);
                       return (
@@ -154,7 +165,7 @@ const failed = Astro.url.searchParams.get('error');
                           <td>
                             <a href={`/auditee-responses/${f.workPaperId}`}>{f.reference}</a>
                           </td>
-                          <td>{f.observationTitle || 'Untitled finding'}</td>
+                          <td>{f.observationTitle || 'Untitled observation'}</td>
                           <td>
                             {f.riskRating ? (
                               <span class={riskClass(f.riskRating)}>{f.riskRating}</span>
@@ -208,7 +219,7 @@ const failed = Astro.url.searchParams.get('error');
                   <thead>
                     <tr>
                       <th>Reference</th>
-                      <th>Finding</th>
+                      <th>Observation</th>
                       <th>Round</th>
                       <th>Submitted by</th>
                       <th>Submitted</th>
@@ -221,7 +232,7 @@ const failed = Astro.url.searchParams.get('error');
                         <td>
                           <a href={`/auditee-responses/${r.workPaperId}`}>{r.reference}</a>
                         </td>
-                        <td>{r.observationTitle || 'Untitled finding'}</td>
+                        <td>{r.observationTitle || 'Untitled observation'}</td>
                         <td class="grc-num">{r.round}</td>
                         <td>{r.submittedByName ?? '-'}</td>
                         <td class="grc-num">{fmtDate(r.submittedDate)}</td>

@@ -25,6 +25,7 @@ import {
 } from './transitions';
 import { ACTION_PLAN_ENUM_TYPE, actionForTransition } from './actionPlanActions';
 import { getActionPlan } from '@grc/repos/actionPlans';
+import { countAttachments } from '@grc/repos/evidence';
 import { isOwner, parseOwnerIds, setOwners, type OwnerRef } from '@grc/repos/actionPlanOwners';
 import { insertHistoryStatement } from '@grc/repos/actionPlanHistory';
 import { enqueueNotification } from '@grc/repos/notify';
@@ -45,18 +46,12 @@ export type Result =
 
 const EVIDENCE_OVERRIDE = 'ACTION_PLANS.evidence_override';
 
-// The organisation scope lives on files, not on the file_attachments link table
-// (which has no organization_id of its own), so the count joins through it.
+// Counted through the repository that writes and lists evidence, so the plan's
+// gate, its panel and the work paper's all agree about what "attached" means
+// (Build Prompt 65). A second copy of this join is a second definition of it,
+// and the last one to hold a copy counted evidence nobody could see.
 async function evidenceCount(db: Client, organizationId: string, id: string): Promise<number> {
-  const res = await db.execute({
-    sql: `SELECT COUNT(*) AS n
-            FROM file_attachments fa
-            JOIN files f ON f.file_id = fa.file_id
-           WHERE f.organization_id = ? AND f.deleted_at IS NULL
-             AND fa.entity_type = 'action_plan' AND fa.entity_id = ?`,
-    args: [organizationId, id],
-  });
-  return Number(res.rows[0]?.n ?? 0);
+  return countAttachments(db, organizationId, 'action_plan', id);
 }
 
 export interface TransitionExtras {

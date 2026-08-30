@@ -13,7 +13,6 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { can } from '@grc/auth/rbac';
 import { seal, open } from '@grc/auth/secretBox';
 import { exchangeAuthCode, fetchMailboxAddress } from '@grc/notify/graph';
 import { getGrcDeliveryEnv } from '@grc/notify/env';
@@ -31,8 +30,11 @@ const fail = (message: string): Response => back(`error=${encodeURIComponent(mes
 export const GET: APIRoute = async ({ url, locals }) => {
   const grc = locals.grc;
   if (!grc) return new Response(null, { status: 303, headers: { location: '/login' } });
-  if (!grc.isPlatformOwner && !can(locals, 'update', 'CONFIG')) {
-    return fail('Only an administrator can connect the mailbox.');
+  // Platform owner only (Build Prompt 44): this is the step that stores the
+  // shared mailbox record on the platform-wide GLOBAL sentinel, so it carries
+  // the same authority as the connect flow that started it (AC-02).
+  if (!grc.isPlatformOwner) {
+    return fail('The shared mailbox is connected by the platform owner.');
   }
   try {
     const refused = url.searchParams.get('error');

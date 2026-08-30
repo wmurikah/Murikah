@@ -30,7 +30,7 @@ import {
   type ControlDropdowns,
 } from '@grc/repos/dropdowns';
 import { isEditable } from '@grc/workflow/workPaperActions';
-import { storageConfigured } from '@grc/storage';
+import { storageConfiguredFor } from '@grc/storage';
 import { listAttachments, type Attachment } from '@grc/repos/evidence';
 
 const grc = Astro.locals.grc;
@@ -39,6 +39,7 @@ const hasAi = aiEnabled((f) => grc.hasFeature(f));
 const { id } = Astro.params;
 
 const allowed = can(Astro.locals, 'update', 'WORK_PAPER');
+const storageReady = await storageConfiguredFor(grc.organizationId);
 
 let wp = null as WorkPaperDetail | null;
 let areas: Option[] = [];
@@ -51,7 +52,7 @@ let loadError = false;
 if (allowed && id) {
   loadError = !(await guardPageLoad('work-papers.edit', async () => {
     const db = await getDb(getGrcEnv());
-    wp = await getWorkPaper(db, grc.organizationId, id);
+    wp = await getWorkPaper(db, grc.organizationId, id, grc.affiliateScope);
     // The lookups are only needed when the paper is editable; the redirect for
     // a locked state happens outside the boundary.
     if (wp && isEditable(wp.status)) {
@@ -75,7 +76,7 @@ if (allowed && !loadError && !wp) Astro.response.status = 404;
   <div class="grc-page-head">
     <div>
       <h1>{wp ? `Edit ${wp.reference}` : 'Edit work paper'}</h1>
-      <p class="grc-lead">Amend the finding while it is in draft or revision.</p>
+      <p class="grc-lead">Amend the observation while it is in draft or revision.</p>
     </div>
     {
       wp && (
@@ -99,6 +100,7 @@ if (allowed && !loadError && !wp) Astro.response.status = 404;
       <WorkPaperForm
         action={`/api/work-papers/${id}`}
         submitLabel="Save changes"
+        offerSubmit={true}
         areas={areas}
         affiliates={affiliates}
         auditors={auditors}
@@ -111,7 +113,7 @@ if (allowed && !loadError && !wp) Astro.response.status = 404;
           entityId: id ?? '',
           items: evidence,
           canDelete: true,
-          storageReady: storageConfigured(),
+          storageReady,
         }}
       />
     )

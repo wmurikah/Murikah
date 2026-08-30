@@ -390,23 +390,29 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.grc-signout {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--grc-s2);
-  border: 1px solid rgba(242, 244, 250, 0.22);
-  border-radius: var(--grc-radius-sm);
+/* The account actions read as the navigation they sit under (Build Prompt 60):
+   the same list, the same icon column, the same hover. `.grc-navlink` carries
+   the look; this only makes the <button> that has to stay a button behave like
+   the anchors beside it. */
+.grc-account__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+.grc-account__list form {
+  margin: 0;
+}
+.grc-navlink--action {
+  width: 100%;
+  border: 0;
   background: transparent;
-  color: var(--grc-on-navy);
-  padding: 0.4rem var(--grc-s3);
   font: inherit;
   font-size: var(--grc-fs-small);
-  font-weight: 600;
+  font-weight: 500;
+  text-align: left;
   cursor: pointer;
-  width: fit-content;
-}
-.grc-signout:hover {
-  background: rgba(242, 244, 250, 0.08);
 }
 
 /* ---- Auto-collapsing sidebar (Build Prompt 31) ----------------------------- */
@@ -454,9 +460,7 @@
 /* Icons must never shrink: on the folded rail the nowrap labels would
    otherwise squeeze them to zero width. */
 .grc-navgroup__summary > svg,
-.grc-bell__summary > svg,
 .grc-account__id > svg,
-.grc-signout > svg,
 .grc-brand > .grc-brand__badge {
   flex: 0 0 auto;
 }
@@ -495,25 +499,20 @@
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-brand > span:last-child,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__label,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navgroup__chevron,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink > span:not(.grc-navcount),
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary > span:not(.grc-navcount),
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-account__id > span,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-signout > span {
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink__label > span,
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-account__id > span {
     opacity: 0;
     transition: opacity 0.12s ease;
   }
   .grc-sidebar .grc-brand > span:last-child,
   .grc-sidebar .grc-navgroup__label,
   .grc-sidebar .grc-navgroup__chevron,
-  .grc-sidebar .grc-navlink > span:not(.grc-navcount),
-  .grc-sidebar .grc-bell__summary > span:not(.grc-navcount),
-  .grc-sidebar .grc-account__id > span,
-  .grc-sidebar .grc-signout > span {
+  .grc-sidebar .grc-navlink__label > span,
+  .grc-sidebar .grc-account__id > span {
     transition: opacity 0.12s ease 0.06s;
   }
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-orgline,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-switcher,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__panel,
   :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-pinbtn {
     display: none;
   }
@@ -525,17 +524,11 @@
     align-items: flex-start;
     gap: var(--grc-s2);
   }
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-signout {
-    border-color: transparent;
-  }
-
   /* Counts stay visible on the rail as small badges beside the icon. */
-  .grc-navlink,
-  .grc-bell__summary {
+  .grc-navlink {
     position: relative;
   }
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink .grc-navcount,
-  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-bell__summary .grc-navcount {
+  :root:not(.grc-pin) .grc-sidebar:not(.is-open) .grc-navlink .grc-navcount {
     position: absolute;
     left: 1.7rem;
     top: 0;
@@ -904,13 +897,28 @@
   border-collapse: collapse;
   font-size: var(--grc-fs-body);
 }
+/* Cells wrap by default (Build Prompt 70).
+   
+   They used to be `white-space: nowrap`, every one of them, which is right for
+   a date and wrong for prose: one long observation title made the table wider
+   than the screen, and the reader had to scroll sideways to reach the status
+   and the date. Nowrap is now asked for by the cells that want it rather than
+   imposed on the cells that cannot bear it. */
 .grc-table th,
 .grc-table td {
   text-align: left;
   padding: var(--grc-s2) var(--grc-s3);
   border-bottom: 1px solid var(--grc-line);
-  white-space: nowrap;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+/* Short values that read worse broken than wrapped: dates, references, counts. */
+.grc-table th.grc-nowrap,
+.grc-table td.grc-nowrap,
+.grc-table td.grc-num,
+.grc-table th.grc-num {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .grc-table th {
   font-size: var(--grc-fs-micro);
@@ -945,6 +953,51 @@
 .grc-table td.grc-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- Responsive lists (Build Prompt 70) ----------------------------------
+   A wide table fits the screen by dropping its least important columns, not by
+   putting a scrollbar under itself. What is dropped is not lost: it reappears
+   as a second line under the row's own title, so a tablet reader still learns
+   the affiliate and the audit area, they simply read them where there is room.
+
+   Column priority is declared in the markup (`grc-col--secondary`), so which
+   columns give way first is a decision made where the table is written rather
+   than guessed at here. */
+.grc-table .grc-cell__meta {
+  display: none;
+}
+@media (max-width: 68rem) {
+  .grc-table--responsive .grc-col--secondary {
+    display: none;
+  }
+  .grc-table--responsive .grc-cell__meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+  }
+}
+/* Narrower still: the title carries the row, and the remaining columns hold
+   their own because they are all short. */
+@media (max-width: 44rem) {
+  .grc-table--responsive .grc-col--tertiary {
+    display: none;
+  }
+  .grc-table--responsive th,
+  .grc-table--responsive td {
+    padding: var(--grc-s2);
+  }
+}
+/* The wrapper keeps its scroll as a last resort for a viewport narrower than
+   anything designed for, but the table is built not to need it. */
+.grc-tablewrap--fit {
+  overflow-x: clip;
+}
+@supports not (overflow: clip) {
+  .grc-tablewrap--fit {
+    overflow-x: auto;
+  }
 }
 
 /* Filter bar over a list. */
@@ -1063,8 +1116,16 @@
 .grc-actionbar:has(> .grc-field) {
   align-items: end;
 }
+/* A field reserves three rows so a form grid can line labels, controls and
+   helper text up across columns (see .grc-formgrid). In an add row there is no
+   helper text, but the empty third track still contributes its gap, which made
+   the field's box end one step below its control and put every Add button that
+   much lower than the input it submits. An add row ends at its control, so the
+   button lands on the control's line rather than under it. Helper text in an
+   add row belongs under the whole bar, not inside a field. */
 .grc-actionbar > .grc-field {
   margin-bottom: 0;
+  grid-template-rows: auto auto;
 }
 
 /* Detail description list. */
@@ -1215,21 +1276,53 @@
   color: var(--grc-ink);
   white-space: nowrap;
 }
+/* The risk palette, "Quiet paper" (Build Prompt 71). One set of values for the
+   whole product, so the pill on the observation preview and the pill in the
+   list two screens away are the same red. Every pair clears 4.5:1 against its
+   own background, which `grc/test/quietPaper.test.ts` computes rather than
+   takes on trust. */
 .grc-pill--risk-high,
 .grc-pill--risk-critical {
-  background: #fbe9e7;
-  border-color: #e0a9a0;
-  color: #7a271a;
+  background: #fbeae7;
+  border-color: #e7b3ab;
+  color: #a4271b;
 }
-.grc-pill--risk-medium {
-  background: #fdf3e2;
+/* Waiting on somebody: an outstanding requirement reads like a medium risk,
+   because that is what it is until the information arrives. */
+.grc-pill--risk-medium,
+.grc-pill--warn {
+  background: #fbefdd;
   border-color: #e6c893;
-  color: #7a4f16;
+  color: #9a5b12;
 }
-.grc-pill--risk-low {
-  background: #eaf3ec;
+/* Settled: received, complete, nothing owed. */
+.grc-pill--risk-low,
+.grc-pill--ok {
+  background: #e8f3ec;
   border-color: #a9ccb2;
-  color: #1e4d2b;
+  color: #1c6d47;
+}
+/* Extreme sits above high rather than beside it (Build Prompt 67): a pack that
+   draws the worst rating in the same red as the one below it has thrown away
+   the distinction the rating exists to make. */
+.grc-pill--risk-extreme {
+  background: #fbdcd8;
+  border-color: #b42318;
+  color: #7d1a11;
+}
+/* An unrecognised rating keeps its own words and takes the neutral base:
+   drawing it as low risk would be an invention. */
+.grc-pill--risk-unrated {
+  background: var(--grc-stone);
+  border-color: var(--grc-line);
+  color: var(--grc-ink);
+}
+/* The header strip's pill is the same pill, read at arm's length. */
+.grc-pill--lg {
+  padding: 0.3rem 0.9rem;
+  font-size: var(--grc-fs-small);
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .grc-tags {
@@ -1772,6 +1865,269 @@
   font-weight: 600;
 }
 
+/* --- The observation panel, "Snapshot-led" (Build Prompt 72) --------------
+   One styling system for the observation wherever it is drawn: its own screen,
+   the report preview, and the printed or PDF version of either. The class names
+   are the contract, which is why the print rules further down adjust these
+   rather than redrawing the layout: a board pack that does not match the screen
+   it was approved from is a second document nobody reconciled.
+
+   CLARITY, DEFERENCE, DEPTH. One panel, hairline rules between sections, and
+   nothing filled or dark. Whitespace and type carry the whole hierarchy, which
+   is what leaves the risk pill as the only colour on the page and therefore the
+   only thing that means anything by being coloured. Two text colours: ink for
+   what the reader came for, muted for what merely places it. The title takes
+   navy and the section labels gold, which are the two exceptions the design
+   names, and neither is used for running text.
+
+   Weights are 400, 500 and 600. No light weight appears: a 12px label at 300
+   is a label somebody has to lean in to read.
+
+   The spacing is a strict 8px rhythm, so the eye can predict where the next
+   thing starts. */
+.grc-snap {
+  --sn-page: #faf8f3;
+  --sn-panel: #ffffff;
+  --sn-divider: #f2eee4;
+  --sn-border: #ece7db;
+  --sn-navy: #1a2740;
+  --sn-ink: #1d2129;
+  --sn-muted: #71767f;
+  /* Darker than the #a9822b the design named. That value measures 3.55:1 on the
+     panel, and these labels are 11.5px uppercase, so they need 4.5:1. This is
+     the least darkening that clears it: the same gold, legible.
+     `snapshotPalette.test.ts` computes the ratio rather than trusting it. */
+  --sn-gold: #917025;
+
+  /* One typeface, the system stack, so the panel renders in the reader's own
+     interface font and costs no download. */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--sn-panel);
+  border: 1px solid var(--sn-border);
+  border-radius: 12px;
+  color: var(--sn-ink);
+  overflow: hidden;
+}
+
+/* The snapshot: read first, and built to be read first. */
+.grc-snap__head {
+  padding: 24px;
+  border-bottom: 1px solid var(--sn-divider);
+}
+.grc-snap__kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.grc-snap__ref {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--sn-muted);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+/* The risk is pushed to the far end, where the eye lands after the reference
+   and before the title. */
+.grc-snap__risk {
+  margin-left: auto;
+}
+/* The anchor: the largest thing on the page, and the first thing read. The year
+   and the rest of the administration sit below it, because they answer
+   questions the reader has not asked yet. */
+.grc-snap__title {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--sn-navy);
+  overflow-wrap: anywhere;
+}
+.grc-snap__context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+/* A chip: a fact about where the record sits, carrying no urgency of its own,
+   so it takes no colour. */
+.grc-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--sn-border, #ece7db);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sn-muted, #71767f);
+  white-space: nowrap;
+}
+.grc-chip--quiet {
+  border-color: var(--sn-divider);
+}
+
+/* A section: label, then content, ruled off from the next. */
+.grc-snap__section {
+  padding: 24px;
+  border-bottom: 1px solid var(--sn-divider);
+}
+.grc-snap__section:last-child {
+  border-bottom: none;
+}
+.grc-snap__label {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sn-gold);
+}
+.grc-snap__body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--sn-ink);
+}
+/* Risk is the explanation of the observation rather than the observation, so it
+   is set in the secondary colour: present, and plainly a note on what came
+   before it. */
+.grc-snap__section[data-card='risk'] .grc-snap__body,
+.grc-snap__section[data-card='trail'] .grc-snap__table td {
+  color: var(--sn-muted);
+}
+.grc-snap__body + .grc-snap__body,
+.grc-snap__facts + .grc-snap__body,
+.grc-snap__body + .grc-tablewrap,
+.grc-snap__facts + .grc-tablewrap {
+  margin-top: 16px;
+}
+.grc-snap__facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+}
+.grc-snap__facts dt {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sn-muted);
+}
+.grc-snap__facts dd {
+  margin: 4px 0 0;
+  color: var(--sn-ink);
+  overflow-wrap: anywhere;
+}
+/* The quiet empty state: a short note in the secondary colour, in the voice of
+   a fact rather than a warning, because nothing has gone wrong. */
+.grc-snap__empty {
+  margin: 0;
+  font-size: 15px;
+  font-style: italic;
+  color: var(--sn-muted);
+}
+.grc-snap__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.grc-snap__table th {
+  text-align: left;
+  padding: 0 16px 8px 0;
+  border-bottom: 1px solid var(--sn-divider);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sn-muted);
+  white-space: nowrap;
+}
+.grc-snap__table td {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--sn-divider);
+  vertical-align: top;
+  color: var(--sn-ink);
+  overflow-wrap: anywhere;
+}
+.grc-snap__table tr:last-child td {
+  border-bottom: none;
+}
+/* Evidence reads as a lightweight file list rather than a table in a card.
+   The document is the primary action; provenance stays close but deferential. */
+.grc-snap__evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.grc-snap__evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--sn-divider);
+}
+.grc-snap__evidence-item:first-child {
+  padding-top: 4px;
+}
+.grc-snap__evidence-item:last-child {
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+.grc-snap__evidence-icon {
+  display: grid;
+  flex: 0 0 2.5rem;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  background: var(--grc-stone, var(--sn-page));
+  color: var(--sn-navy);
+}
+.grc-snap__evidence-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+.grc-snap__evidence-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.grc-snap__evidence-name {
+  color: var(--sn-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.grc-snap__evidence-detail {
+  color: var(--sn-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+/* Inside the panel the narrative takes the panel's own colours and measure. */
+.grc-snap .grc-richbody h4,
+.grc-snap .grc-richbody h5 {
+  color: var(--sn-navy);
+}
+.grc-snap .grc-richbody li::marker {
+  color: var(--sn-muted);
+}
+
 /* Print: only the report, edge to edge, colours preserved. */
 @media print {
   .grc-sidebar,
@@ -1803,6 +2159,47 @@
   }
   body {
     background: #fff;
+  }
+
+  /* The observation prints as the same panel (Build Prompt 72). The layout is
+     not redrawn, only adjusted for paper: the risk pill and the gold labels
+     keep their colours because the rating is the fact a printed pack is read
+     for and the labels are what make the sections findable, and no section is
+     allowed to break across a page, because half a recommendation on the next
+     sheet is how a board pack gets misread. */
+  .grc-pill,
+  .grc-snap__label,
+  .grc-snap__table th,
+  .grc-report__table th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .grc-snap {
+    border-radius: 0;
+  }
+  .grc-snap__head,
+  .grc-snap__section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    padding: 16px;
+    box-shadow: none;
+  }
+  .grc-snap__title {
+    font-size: 20px;
+  }
+  .grc-snap__body,
+  .grc-snap__empty,
+  .grc-snap__facts {
+    font-size: 13px;
+  }
+  .grc-snap__table {
+    font-size: 12px;
+  }
+  /* An observation starts a fresh page in a pack of several, so the reader is
+     never handed a page holding the tail of one and the head of the next. */
+  .grc-report .grc-snap + .grc-snap {
+    break-before: page;
+    page-break-before: always;
   }
 }
 
@@ -2318,115 +2715,40 @@ a.grc-bars__group:hover .grc-bars__bar {
 .grc-navlink {
   position: relative;
 }
+/* The pending count: a small red bubble raised at the end of the label it
+   counts (Build Prompt 62). `sup` already lifts it, so the only work here is
+   making it a bubble and keeping it from stretching the line box. */
+.grc-navlink__label {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+}
 .grc-navcount {
-  margin-left: auto;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  padding: 0 0.3rem;
+  display: inline-block;
+  min-width: 1rem;
+  padding: 0 0.28rem;
   border-radius: 999px;
-  background: var(--grc-gold);
-  color: var(--grc-navy);
-  font-size: var(--grc-fs-micro);
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.62rem;
   font-weight: 700;
-  line-height: 1.15rem;
+  line-height: 1rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  vertical-align: super;
+  /* A superscript must not push the navigation rows apart. */
+  position: relative;
+  top: -0.15rem;
 }
 .grc-navcount[hidden] {
   display: none;
 }
-.grc-navcount--alert {
-  background: #c0392b;
-  color: #fff;
-}
+/* --- Notifications: the centre and the send queue ------------------------ */
 
-/* --- Notifications: bell, centre, send queue ---------------------------- */
-
-/* The sidebar bell dropdown (in the navy sidebar). */
-.grc-bell {
-  margin: var(--grc-s2) 0;
-}
-.grc-bell__summary {
-  display: flex;
-  align-items: center;
-  gap: var(--grc-s2);
-  padding: var(--grc-s2);
-  border-radius: var(--grc-radius-sm);
-  color: var(--grc-on-navy);
-  font-size: var(--grc-fs-small);
-  cursor: pointer;
-  list-style: none;
-}
-.grc-bell__summary::-webkit-details-marker {
-  display: none;
-}
-.grc-bell__summary:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-.grc-bell__summary .grc-navcount {
-  margin-left: auto;
-}
-.grc-bell__panel {
-  margin-top: var(--grc-s1);
-  background: var(--grc-surface);
-  border: 1px solid var(--grc-line);
-  border-radius: var(--grc-radius-sm);
-  padding: var(--grc-s2);
-  color: var(--grc-ink);
-}
-.grc-bell__empty {
-  margin: 0;
-  padding: var(--grc-s2);
-  font-size: var(--grc-fs-small);
-  color: var(--grc-muted);
-}
-.grc-bell__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 1px;
-}
-.grc-bell__item a {
-  display: block;
-  padding: var(--grc-s2);
-  font-size: var(--grc-fs-small);
-  color: var(--grc-ink);
-  text-decoration: none;
-  border-radius: var(--grc-radius-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.grc-bell__item a:hover {
-  background: var(--grc-paper);
-}
-.grc-bell__item.is-unread a {
-  font-weight: 600;
-}
-.grc-bell__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--grc-s2);
-  margin-top: var(--grc-s1);
-  padding-top: var(--grc-s2);
-  border-top: 1px solid var(--grc-line);
-  font-size: var(--grc-fs-caption);
-}
-.grc-bell__foot a {
-  color: var(--grc-navy-2);
-}
-.grc-bell__mark {
-  background: none;
-  border: none;
-  color: var(--grc-navy-2);
-  font-size: var(--grc-fs-caption);
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-}
-
+/* The sidebar's bell went with the Notifications entry it duplicated (Build
+   Prompt 67); what follows dresses the notification centre itself, which is
+   still reachable at /notifications and is still what the emails link to. */
 /* The notification centre list. */
 .grc-notiflist {
   list-style: none;
@@ -2719,28 +3041,85 @@ a.grc-notifrow__title:hover {
   background: var(--grc-paper, #faf7f0);
   min-height: 4rem;
 }
-.grc-richbody p {
-  margin: 0 0 0.5rem;
+/* A stored narrative, rendered (Build Prompt 67).
+   The markdown these fields have always accepted was parsed and marked up, but
+   dressed so tightly that a finding with headings and a numbered recommendation
+   read as one grey slab: the marks were there and the shape was not. What
+   follows is the shape. It is CSS on server-rendered HTML from the one parser
+   in richtext.ts, so it costs nothing at run time and there is no editor, no
+   framework and no client library involved.
+
+   The scale is deliberately short: body, a subheading and a sub-subheading, one
+   step apart, because a finding is a page and a half and a five-level scale on
+   a page and a half is noise. Vertical rhythm is one measure (0.6rem) with
+   headings taking a larger space above than below, so a heading belongs to what
+   follows it rather than floating between two blocks. */
+.grc-richbody {
+  line-height: 1.55;
 }
-.grc-richbody p:last-child {
+.grc-richbody > :first-child {
+  margin-top: 0;
+}
+.grc-richbody > :last-child {
   margin-bottom: 0;
+}
+.grc-richbody p {
+  margin: 0 0 0.6rem;
+  /* Long enough to read, short enough not to lose the line: the measure most
+     of these fields sit in is already narrow, so this only bites on wide
+     screens where a paragraph would otherwise run the full panel. */
+  max-width: 68ch;
 }
 .grc-richbody h4,
 .grc-richbody h5 {
-  margin: 0.75rem 0 0.25rem;
-  color: var(--grc-navy, #1a365d);
+  margin: 1.1rem 0 0.35rem;
+  color: var(--grc-navy);
+  line-height: 1.3;
+  font-weight: 700;
 }
-.grc-richbody h4:first-child,
-.grc-richbody h5:first-child {
-  margin-top: 0;
+.grc-richbody h4 {
+  font-size: 1.02em;
+  letter-spacing: 0.005em;
+}
+.grc-richbody h5 {
+  font-size: 0.95em;
+  color: var(--grc-navy-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .grc-richbody ul,
 .grc-richbody ol {
-  margin: 0 0 0.5rem;
-  padding-left: 1.4rem;
+  margin: 0 0 0.6rem;
+  padding-left: 1.35rem;
+  max-width: 68ch;
 }
 .grc-richbody li {
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.25rem;
+  padding-left: 0.15rem;
+}
+.grc-richbody li:last-child {
+  margin-bottom: 0;
+}
+.grc-richbody li::marker {
+  color: var(--grc-navy-2);
+}
+/* A list is a step in a procedure, so a nested one steps in rather than
+   restarting the rhythm. */
+.grc-richbody li > ul,
+.grc-richbody li > ol {
+  margin: 0.25rem 0 0;
+}
+.grc-richbody strong {
+  font-weight: 700;
+  color: var(--grc-ink);
+}
+.grc-richbody em {
+  font-style: italic;
+}
+/* Inside a definition list the body sits against its own label, so it carries
+   no leading space of its own. */
+dd.grc-richbody {
+  margin-left: 0;
 }
 
 /* The all-instances view: every instance on the platform, one enterable row
@@ -2918,6 +3297,146 @@ a.grc-notifrow__title:hover {
   font-size: var(--grc-fs-caption);
 }
 
+/* The uploading rows (Build Prompt 66). One per file being sent, each with the
+   name, the size and a bar driven by the bytes the browser has acknowledged, so
+   an upload that is slow looks different from one that has stopped. */
+.grc-upload-list {
+  list-style: none;
+  margin: var(--grc-s3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--grc-s2);
+}
+.grc-upload-list:empty {
+  display: none;
+}
+.grc-upload {
+  display: grid;
+  gap: var(--grc-s1);
+  padding: var(--grc-s2) var(--grc-s3);
+  border: 1px solid var(--grc-line);
+  border-left: 3px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-surface);
+}
+.grc-upload[data-state='active'] {
+  border-left-color: var(--grc-navy-2);
+}
+.grc-upload[data-state='done'] {
+  border-left-color: var(--grc-status-impl);
+}
+.grc-upload[data-state='failed'] {
+  border-left-color: var(--grc-risk-high);
+}
+.grc-upload__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--grc-s2);
+}
+.grc-upload__name {
+  font-weight: 600;
+  color: var(--grc-ink);
+  overflow-wrap: anywhere;
+}
+.grc-upload__size {
+  flex: none;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.grc-upload__bar {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--grc-navy) 10%, transparent);
+  overflow: hidden;
+}
+.grc-upload__fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--grc-navy-2);
+  transition: width 0.18s ease;
+}
+.grc-upload[data-state='done'] .grc-upload__fill {
+  background: var(--grc-status-impl);
+}
+.grc-upload[data-state='failed'] .grc-upload__bar {
+  display: none;
+}
+.grc-upload__note {
+  margin: 0;
+  font-size: var(--grc-fs-caption);
+  color: var(--grc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.grc-upload[data-state='failed'] .grc-upload__note {
+  color: var(--grc-risk-high);
+  font-variant-numeric: normal;
+}
+.grc-upload__retry {
+  justify-self: start;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-paper, #faf7f0);
+  color: var(--grc-navy);
+  font: inherit;
+  font-size: var(--grc-fs-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+.grc-upload__retry:hover {
+  border-color: var(--grc-gold-deep);
+}
+.grc-upload__retry[hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .grc-upload__fill {
+    transition: none;
+  }
+}
+
+/* The per-line upload control in the owner's requirements table (Build Prompt
+   69). One row, one thing asked for, one Browse and one button, so an owner
+   uploads against each line without leaving the list or picking which
+   requirement they meant. It wraps rather than squeezing: a file input is
+   already the widest control on the page and a table cell is the narrowest
+   place to put one. */
+.grc-rowupload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--grc-s2);
+  min-width: 14rem;
+}
+.grc-rowupload__note {
+  flex: 1 1 9rem;
+  min-width: 8rem;
+}
+.grc-rowupload__file {
+  flex: 1 1 11rem;
+  min-width: 0;
+  font-size: var(--grc-fs-caption);
+}
+.grc-rowupload__file::file-selector-button {
+  margin-right: var(--grc-s2);
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--grc-line);
+  border-radius: var(--grc-radius-sm);
+  background: var(--grc-paper);
+  color: var(--grc-navy);
+  font: inherit;
+  font-size: var(--grc-fs-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+.grc-rowupload__file:hover::file-selector-button {
+  border-color: var(--grc-gold-deep);
+}
+
 .grc-evidence__status:empty {
   display: none;
 }
@@ -3012,4 +3531,94 @@ a.grc-notifrow__title:hover {
 .grc-evidence-tile__del[disabled] {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Work papers are a reading surface, not a desktop-sized canvas. Keep every
+   child inside the available viewport and let prose wrap before it can force
+   the application shell wider. */
+.grc-shell,
+.grc-main,
+.grc-work-paper-page,
+.grc-work-paper-page > * {
+  min-width: 0;
+}
+.grc-work-paper-page {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+.grc-work-paper-page .grc-tablewrap {
+  max-width: 100%;
+  overflow-x: clip;
+}
+.grc-work-paper-page .grc-table {
+  table-layout: fixed;
+}
+.grc-work-paper-page .grc-input,
+.grc-work-paper-page .grc-select,
+.grc-work-paper-page .grc-textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+.grc-work-paper-page .grc-snap__table {
+  table-layout: fixed;
+}
+
+/* Evidence belongs to the page's content hierarchy. It is deliberately not an
+   outer card: the heading, generous drop target and attachments breathe in the
+   same horizontal measure as the surrounding work paper. */
+.grc-evidence-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: var(--grc-s3) 0 var(--grc-s5);
+}
+.grc-evidence-panel__head {
+  max-width: 68ch;
+  margin-bottom: var(--grc-s4);
+}
+.grc-evidence-panel__head h2 {
+  font-size: var(--grc-fs-h2);
+}
+.grc-dropzone {
+  padding: clamp(1.5rem, 5vw, 3rem) clamp(1rem, 4vw, 2rem);
+  border-radius: var(--grc-radius-sm);
+  background: color-mix(in srgb, var(--grc-surface) 55%, transparent);
+}
+
+@media (max-width: 44rem) {
+  .grc-main {
+    padding-inline: var(--grc-s3);
+  }
+  .grc-work-paper-page .grc-page-head,
+  .grc-work-paper-page .grc-actionbar {
+    align-items: stretch;
+  }
+  .grc-work-paper-page .grc-page-head > *,
+  .grc-work-paper-page .grc-actionbar > * {
+    min-width: 0;
+  }
+  .grc-work-paper-page .grc-btn {
+    white-space: normal;
+  }
+  .grc-work-paper-page .grc-table {
+    font-size: var(--grc-fs-small);
+  }
+  .grc-work-paper-page .grc-table th,
+  .grc-work-paper-page .grc-table td {
+    padding: var(--grc-s2) var(--grc-s1);
+  }
+  .grc-snap__head,
+  .grc-snap__section {
+    padding: var(--grc-s4);
+  }
+  .grc-snap__table th,
+  .grc-snap__table td {
+    padding-right: var(--grc-s2);
+    white-space: normal;
+  }
+  .grc-evidence-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(8.5rem, 100%), 1fr));
+  }
 }

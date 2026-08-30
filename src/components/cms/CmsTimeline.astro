@@ -1,0 +1,68 @@
+---
+/**
+ * A vertical activity trail shell.
+ *
+ * An ordered list, because the order is the meaning: this is a sequence of
+ * things that happened, and a screen reader should say so. The rail and the
+ * dots are drawn with borders on the list items rather than an absolutely
+ * positioned line, so nothing has to be measured and it cannot drift out of
+ * alignment when an entry wraps to two lines.
+ *
+ * Every entry carries its own time element, so a date is machine-readable as
+ * well as visible.
+ */
+export interface CmsTimelineEntry {
+  title: string;
+  detail?: string;
+  actor?: string;
+  /** ISO 8601, used for the datetime attribute. */
+  timestamp: string;
+  /** What a reader sees, for example "2 hours ago" or a formatted date. */
+  timeLabel: string;
+  tone?: 'default' | 'success' | 'warning' | 'danger';
+}
+
+interface Props {
+  entries: CmsTimelineEntry[];
+  label: string;
+  class?: string;
+}
+const { entries, label, class: className } = Astro.props;
+
+const dots = {
+  default: 'bg-cms-border',
+  success: 'bg-cms-positive',
+  warning: 'bg-cms-caution',
+  danger: 'bg-cms-negative',
+};
+---
+
+<ol aria-label={label} class:list={['flex flex-col', className]}>
+  {
+    entries.map((entry, index) => (
+      <li
+        class:list={[
+          'relative flex gap-3 border-l pb-5 pl-1 last:pb-0',
+          index < entries.length - 1 ? 'border-cms-line' : 'border-transparent',
+        ]}
+      >
+        <span
+          class:list={[
+            'absolute top-1.5 -left-[4.5px] h-2 w-2 shrink-0 rounded-full ring-2 ring-cms-surface',
+            dots[entry.tone ?? 'default'],
+          ]}
+          aria-hidden="true"
+        />
+        <div class="min-w-0 pl-4">
+          <p class="text-cms-body-sm font-medium text-cms-ink">{entry.title}</p>
+          {entry.detail && <p class="mt-0.5 text-cms-body-sm text-cms-muted">{entry.detail}</p>}
+          <p class="mt-1 flex flex-wrap items-center gap-x-2 text-cms-caption text-cms-muted">
+            {entry.actor && <span>{entry.actor}</span>}
+            {entry.actor && <span aria-hidden="true">&middot;</span>}
+            <time datetime={entry.timestamp}>{entry.timeLabel}</time>
+          </p>
+        </div>
+      </li>
+    ))
+  }
+</ol>

@@ -13,8 +13,15 @@
  *    the creator, the preparer and the assigned auditor. A platform owner sees
  *    everything.
  *
- * Import-free, so node strips types and unit-tests this directly.
+ * Affiliate confinement (Build Prompt 45) sits on top of all of this and never
+ * under it: it only ever removes rows the rules above would have shown, so a
+ * confined auditor still sees the whole organisation's findings minus those
+ * outside their affiliate, and a confined auditee still sees only their own.
+ *
+ * Import-free but for the scope type, so node strips types and unit-tests this
+ * directly.
  */
+import type { AffiliateScope } from '@grc/auth/affiliateScope';
 
 /** The viewer, as the middleware attaches it to locals.grc. */
 export interface WorkPaperViewer {
@@ -22,6 +29,8 @@ export interface WorkPaperViewer {
   roleCode: string;
   perms: string[];
   isPlatformOwner: boolean;
+  /** The affiliate confinement in force, from locals.grc.affiliateScope. */
+  affiliateScope: AffiliateScope;
 }
 
 /** The legacy codes that mark the auditor side of the house. */

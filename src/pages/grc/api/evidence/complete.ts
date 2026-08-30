@@ -1,15 +1,21 @@
 export const prerender = false;
 
 /**
- * Complete an evidence upload. The worker recomputes the tenant key from the
- * request (so the client cannot record an arbitrary key), verifies the object
- * exists in R2, computes and stores its sha256 content hash, and writes the
- * files and file_attachments rows. Gate: upload rights on the target entity.
+ * Complete a presigned evidence upload. The worker recomputes the tenant key
+ * from the request (so the client cannot record an arbitrary key), verifies the
+ * object exists in the organisation's own storage provider, computes and stores
+ * its sha256 content hash, and writes the files and file_attachments rows. Gate:
+ * upload rights on the target entity.
+ *
+ * Only the presigning providers reach here (Build Prompt 51); the ones whose
+ * bytes stream through the worker record their attachment in /api/evidence/put,
+ * because there the worker already holds the object and a second round trip
+ * would only invite a half-recorded upload.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { finaliseUpload } from '@grc/storage';
+import { finaliseUpload, orgProvider } from '@grc/storage';
 import { buildObjectKey, keyBelongsToOrg } from '@grc/storage/keys';
 import { canUploadEvidence, isDraftEntity, type EvidenceActor } from '@grc/storage/access';
 import { recordAttachment } from '@grc/repos/evidence';
@@ -47,6 +53,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = await getDb(getGrcEnv());
+  const provider = await orgProvider(db, grc.organizationId);
+  if (!provider) {
+    return json({ error: 'Evidence storage is not configured for your organisation.' }, 503);
+  }
+
   const actor: EvidenceActor = {
     userId: grc.userId,
     organizationId: grc.organizationId,
@@ -66,22 +77,32 @@ export const POST: APIRoute = async ({ request, locals }) => {
   });
   if (!keyBelongsToOrg(key, grc.organizationId)) return json({ error: 'forbidden' }, 403);
 
-  const ref = { backend: 'r2', key };
-  const finalised = await finaliseUpload(ref);
+  const ref = { backend: provider.provider, key };
+  const finalised = await finaliseUpload(provider, key);
   if (!finalised) return json({ error: 'The upload did not complete.' }, 409);
 
-  const attachmentId = await recordAttachment(db, grc.organizationId, {
-    fileId,
-    entityType,
-    entityId,
-    fileName,
-    contentType,
-    sizeBytes: finalised.size,
-    uploadedBy: grc.userId,
-    ref,
-    contentHash: finalised.hash,
-    contentHashAlgo: finalised.algo,
-  });
+  // The attach is the point of the upload: bytes in storage with no link row is
+  // evidence nobody can see, so a failure here is reported, never swallowed
+  // (Build Prompt 65). recordAttachment logs the driver's own reason under
+  // [grc.evidence.attach] before it throws.
+  let attachmentId: string;
+  try {
+    attachmentId = await recordAttachment(db, grc.organizationId, {
+      fileId,
+      entityType,
+      entityId,
+      fileName,
+      contentType,
+      sizeBytes: finalised.size,
+      uploadedBy: grc.userId,
+      ref,
+      contentHash: finalised.hash,
+      contentHashAlgo: finalised.algo,
+    });
+  } catch (err) {
+    console.error('[grc.evidence.attach] the attachment was not recorded', err);
+    return json({ error: 'The evidence was stored but could not be attached.' }, 502);
+  }
 
   try {
     await writeAuditLog(db, {

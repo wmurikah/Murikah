@@ -1,0 +1,216 @@
+---
+/**
+ * Administration → Roles & Permissions.
+ *
+ * A role list, and behind each one a permission matrix rendered entirely from
+ * the `permissions` table. No module, resource or action name is written into
+ * this file: inserting a row into that table makes it appear here with no code
+ * change, which is what makes the catalogue configuration rather than source.
+ *
+ * The two seeded system roles are marked. A change that removes privilege from
+ * one asks for confirmation, and the change that would leave nobody able to
+ * administer roles at all is refused by the endpoint, not by this screen.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsRoleScript from '@/components/cms/CmsRoleScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageRoles } from '@/lib/cms/permissions';
+import { countAdministrators, listRoles, type RoleRow } from '@/lib/cms/repos/rbacAdmin';
+
+export const prerender = false;
+
+const mayManage = canManageRoles(Astro.locals.cms?.user.permissions ?? []);
+let roles: RoleRow[] = [];
+let administrators = 0;
+let loadFailed = false;
+
+if (mayManage) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [roles, administrators] = await Promise.all([listRoles(db), countAdministrators(db)]);
+  } catch (error) {
+    console.error('[cms.roles] load failed', error);
+    loadFailed = true;
+  }
+}
+---
+
+<CmsLayout title="Roles and permissions">
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to role administration"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Roles could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Roles and permissions"
+          definition="An access role says what a person may do in the application. It is not their job title, which says where they sit, and not their workflow role, which says what they may approve."
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Roles and permissions' },
+          ]}
+        >
+          <CmsButton slot="actions" variant="primary" icon="plus" data-cms-role-create>
+            New role
+          </CmsButton>
+        </CmsPageHeader>
+
+        {/*
+          The count that makes the lockout guard concrete. One holder is not a
+          comfortable number, and saying so is more useful than waiting for
+          somebody to discover it by being locked out.
+        */}
+        <p
+          class:list={[
+            'flex items-start gap-2 rounded-cms border px-3 py-2 text-cms-body-sm',
+            administrators <= 1
+              ? 'border-cms-caution bg-cms-caution-tint text-cms-ink'
+              : 'border-cms-line bg-cms-canvas text-cms-muted',
+          ]}
+        >
+          <CmsIcon
+            name={administrators <= 1 ? 'statusWarn' : 'statusInfo'}
+            size={15}
+            class="mt-0.5 shrink-0"
+          />
+          <span>
+            {administrators} {administrators === 1 ? 'person can' : 'people can'} administer roles.
+            {administrators <= 1 ? ' Removing the last one is refused.' : ''}
+          </span>
+        </p>
+
+        <CmsDataTable
+          caption="Access roles"
+          columns={[
+            { key: 'role', label: 'Role' },
+            { key: 'description', label: 'Description', secondary: true },
+            { key: 'permissions', label: 'Permissions', numeric: true },
+            { key: 'holders', label: 'Held by', numeric: true },
+            { key: 'status', label: 'Status' },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          empty={roles.length === 0}
+        >
+          {roles.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={`/app/administration/roles/${row.roleId}`}
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.roleName}
+                </a>
+                {row.isSystemRole && <CmsBadge tone="warning" label="System role" class="ms-2" />}
+              </td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.description ?? '—'}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.grantedCount}</td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.holderCount}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.active ? 'success' : 'neutral'}
+                  label={row.active ? 'Active' : 'Inactive'}
+                />
+              </td>
+              <td class="px-4 py-2.5">
+                <button
+                  type="button"
+                  class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                  data-cms-role-edit={row.roleId}
+                  data-values={JSON.stringify({
+                    roleName: row.roleName,
+                    description: row.description ?? '',
+                    active: row.active,
+                  })}
+                  data-consequence={
+                    row.holderCount > 0
+                      ? `${row.holderCount} ${row.holderCount === 1 ? 'person holds' : 'people hold'} this role. Deactivating it takes their access away on their next request.`
+                      : ''
+                  }
+                  data-system={row.isSystemRole ? '1' : ''}
+                >
+                  Edit
+                </button>
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="administration"
+              title="No roles"
+              description="Create the first one."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        <CmsDrawer id="cms-role-drawer" tone="form" title="Role">
+          <form id="cms-role-form" novalidate class="flex flex-col gap-4">
+            <p
+              id="cms-role-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <p
+              id="cms-role-system"
+              hidden
+              class="rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink"
+            >
+              This is a system role. It exists because the platform depends on it, and changing it
+              affects everybody who holds it.
+            </p>
+            <CmsInput id="r-roleName" name="roleName" label="Role name" required />
+            <CmsInput
+              id="r-description"
+              name="description"
+              label="Description"
+              hint="What somebody holding this role is expected to do."
+            />
+            <CmsCheckbox
+              id="r-active"
+              name="active"
+              label="Active"
+              checked
+              hint="Deactivating a role takes its access away from everybody who holds it, on their next request."
+            />
+            <p id="cms-role-consequence" hidden class="text-cms-body-sm text-cms-caution" />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              id="cms-role-save"
+              form="cms-role-form"
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+        <CmsRoleScript />
+      </Fragment>
+    )
+  }
+</CmsLayout>

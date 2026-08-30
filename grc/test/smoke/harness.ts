@@ -14,13 +14,28 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { FakeTursoServer } from './fakeTurso.ts';
-import { seedDatabase } from './seed.ts';
+import { seedDatabase, SMOKE_SESSION_SECRET } from './seed.ts';
+import { FakeS3Server } from './fakeS3.ts';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 const WRANGLER_CONFIG = join(REPO_ROOT, 'dist', 'server', 'wrangler.json');
 const SCHEMA_MD = join(REPO_ROOT, 'grc', 'db', 'schema.md');
 const HOST = 'grc.localhost';
 const BOOT_TIMEOUT_MS = 120_000;
+
+/**
+ * A posted form. A plain object for the common case; URLSearchParams when a key
+ * repeats, as the batch release does with one work_paper_id per selected draft.
+ */
+export type SmokeForm = Record<string, string> | URLSearchParams;
+
+/** A file part of a multipart post: the bytes, and how they are announced. */
+export interface SmokeUpload {
+  field: string;
+  filename: string;
+  contentType: string;
+  content: string;
+}
 
 export interface SmokeResponse {
   status: number;
@@ -30,6 +45,9 @@ export interface SmokeResponse {
 
 export class SmokeServer {
   private turso: FakeTursoServer | null = null;
+  private s3: FakeS3Server | null = null;
+  /** The harness's S3 stand-in, so a test can restore a connection it broke. */
+  s3Origin = '';
   private wrangler: ChildProcess | null = null;
   private port = 0;
   private serverLog = '';
@@ -54,7 +72,11 @@ export class SmokeServer {
     }
 
     this.turso = new FakeTursoServer(SCHEMA_MD);
-    seedDatabase(this.turso.db);
+    // Somewhere the R2 connection test can actually succeed, so the smoke run
+    // can prove that a passing test activates a provider (Build Prompt 54).
+    this.s3 = new FakeS3Server();
+    this.s3Origin = await this.s3.listen();
+    await seedDatabase(this.turso.db, this.s3Origin);
     const dbUrl = await this.turso.listen();
 
     this.port = 20000 + Math.floor(Math.random() * 20000);
@@ -77,7 +99,8 @@ export class SmokeServer {
         'TURSO_GRC_AUTH_TOKEN:smoke-token',
         '--var',
         // The session signer base64-decodes the secret, so it must be base64.
-        `GRC_SESSION_SECRET:${Buffer.from('grc-smoke-harness-session-secret').toString('base64')}`,
+        // Shared with the seed, which seals the storage connection with it.
+        `GRC_SESSION_SECRET:${SMOKE_SESSION_SECRET}`,
       ],
       {
         cwd: REPO_ROOT,
@@ -118,6 +141,10 @@ export class SmokeServer {
       await this.turso.close();
       this.turso = null;
     }
+    if (this.s3) {
+      await this.s3.close();
+      this.s3 = null;
+    }
   }
 
   /** Forget the session, as a browser losing its cookies would. */
@@ -156,18 +183,58 @@ export class SmokeServer {
     return [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
   }
 
+  /**
+   * A multipart post, for the one thing a urlencoded body cannot carry: a file.
+   * An owner fulfilling a requirement uploads the document with the form
+   * (Build Prompt 58), and a smoke run that posted only the note would prove the
+   * half of that path which never touches the evidence store.
+   */
+  async postMultipart(
+    path: string,
+    fields: Record<string, string>,
+    upload?: SmokeUpload,
+  ): Promise<SmokeResponse> {
+    const boundary = `----murikahsmoke${'0'.repeat(8)}`;
+    const parts: string[] = [];
+    for (const [name, value] of Object.entries(fields)) {
+      parts.push(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      );
+    }
+    if (upload) {
+      parts.push(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${upload.field}"; ` +
+          `filename="${upload.filename}"\r\nContent-Type: ${upload.contentType}\r\n\r\n` +
+          `${upload.content}\r\n`,
+      );
+    }
+    parts.push(`--${boundary}--\r\n`);
+    return this.rawRequest('POST', path, undefined, true, {
+      body: parts.join(''),
+      contentType: `multipart/form-data; boundary=${boundary}`,
+    });
+  }
+
   private rawRequest(
     method: string,
     path: string,
-    form?: Record<string, string>,
+    form?: SmokeForm,
     useCookies = true,
+    raw?: { body: string; contentType: string },
   ): Promise<SmokeResponse> {
+    // URLSearchParams as well as a plain object, because a form can legitimately
+    // repeat a key: the batch release posts one work_paper_id per finding
+    // selected (Build Prompt 53), which an object cannot express.
     const body =
-      form === undefined
-        ? undefined
-        : Object.entries(form)
-            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-            .join('&');
+      raw !== undefined
+        ? raw.body
+        : form === undefined
+          ? undefined
+          : form instanceof URLSearchParams
+            ? form.toString()
+            : Object.entries(form)
+                .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+                .join('&');
     const headers: Record<string, string> = { host: HOST };
     if (useCookies && this.cookies.size > 0) headers.cookie = this.cookieHeader();
     if (method !== 'GET') {
@@ -175,7 +242,7 @@ export class SmokeServer {
       headers.origin = `http://${HOST}`;
     }
     if (body !== undefined) {
-      headers['content-type'] = 'application/x-www-form-urlencoded';
+      headers['content-type'] = raw?.contentType ?? 'application/x-www-form-urlencoded';
       headers['content-length'] = String(Buffer.byteLength(body));
     }
     return new Promise((resolve, reject) => {
@@ -207,11 +274,7 @@ export class SmokeServer {
    * a connection error or its "worker restarted mid-request" 503; those never
    * reached the app, so they are retried a couple of times before counting.
    */
-  async request(
-    method: 'GET' | 'POST',
-    path: string,
-    form?: Record<string, string>,
-  ): Promise<SmokeResponse> {
+  async request(method: 'GET' | 'POST', path: string, form?: SmokeForm): Promise<SmokeResponse> {
     for (let attempt = 0; ; attempt++) {
       try {
         const res = await this.rawRequest(method, path, form);

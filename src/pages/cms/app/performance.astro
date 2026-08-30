@@ -1,0 +1,330 @@
+---
+/**
+ * Performance → SLA Monitor.
+ *
+ * Rendering this page is an entry into the engine: the sweep runs first, so
+ * warnings and breaches that came due while nothing was running are settled
+ * before anything is read. The server stays the source of truth for every
+ * timestamp; nothing here counts down client-side.
+ *
+ * Colour never carries meaning alone: every state pairs its tone with the
+ * word and the timestamps.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewSlaDashboard, canManageSlaRules } from '@/lib/cms/permissions';
+import { listSlaInstances, type SlaMonitorRow } from '@/lib/cms/repos/slaAdmin';
+import { sweepDueSlas, verifySlaTables, fromDb } from '@/lib/cms/sla/engine';
+import { readMonitorQuery } from '@/lib/cms/admin/slaInput';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewSlaDashboard(permissions);
+const mayConfigure = canManageSlaRules(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+const params = Astro.url.searchParams;
+const query = readMonitorQuery(params);
+const now = new Date();
+
+let page: { items: SlaMonitorRow[]; total: number; page: number; pageSize: number } = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 25,
+};
+let tablesMissing: string[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const verified = await verifySlaTables(db);
+    if (!verified.ok) {
+      tablesMissing = verified.missing;
+    } else {
+      await sweepDueSlas(db, now);
+      page = await listSlaInstances(db, userId, query, now);
+    }
+  } catch (error) {
+    console.error('[cms.performance.sla] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const statusTone = (status: string) =>
+  status === 'BREACHED'
+    ? 'danger'
+    : status === 'MET'
+      ? 'success'
+      : status === 'PAUSED'
+        ? 'neutral'
+        : 'info';
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+/** Remaining or overrun, computed server-side from the authoritative stamps. */
+function variance(row: SlaMonitorRow): string {
+  const target = fromDb(row.targetAt);
+  if (row.status === 'MET') return 'Met';
+  if (row.status === 'CANCELLED') return 'Cancelled';
+  if (row.status === 'BREACHED') {
+    const end = row.stoppedAt === null ? now : fromDb(row.stoppedAt);
+    const minutes = Math.max(0, Math.round((end.getTime() - target.getTime()) / 60000));
+    return `Breached by ${minutes} min`;
+  }
+  const minutes = Math.round((target.getTime() - now.getTime()) / 60000);
+  return minutes >= 0 ? `${minutes} min remaining` : `${-minutes} min over`;
+}
+const atRisk = (row: SlaMonitorRow) =>
+  row.status === 'RUNNING' && row.warningAt !== null && fromDb(row.warningAt) <= now;
+
+const BUCKETS = [
+  { key: null, label: 'All' },
+  { key: 'at-risk', label: 'At risk' },
+  { key: 'breached', label: 'Breached' },
+  { key: 'active', label: 'Active' },
+  { key: 'completed', label: 'Completed' },
+];
+const performanceFilters = [
+  query.slaType && { key: 'slaType', label: titleCase(query.slaType) },
+  query.entityType && { key: 'entityType', label: titleCase(query.entityType) },
+  query.status && { key: 'status', label: titleCase(query.status) },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutPerformanceFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/performance?${next.toString()}`;
+};
+function bucketHref(key: string | null): string {
+  const next = new URLSearchParams(params);
+  if (key === null) next.delete('bucket');
+  else next.set('bucket', key);
+  next.delete('page');
+  return `/app/performance?${next.toString()}`;
+}
+---
+
+<CmsLayout title="SLA Monitor">
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to the SLA monitor"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The monitor could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : tablesMissing.length > 0 ? (
+      <CmsErrorState
+        title="SLA monitoring is not available"
+        description="The required service configuration is incomplete. Contact your system administrator."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="SLA Monitor"
+          definition="Breached at is the moment the promise broke, not the moment somebody noticed."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Performance' },
+            { label: 'SLA Monitor' },
+          ]}
+        >
+          <CmsButton slot="actions" variant="secondary" href="/app/performance/reports">
+            Reports
+          </CmsButton>
+          {mayConfigure && (
+            <CmsButton slot="actions" variant="secondary" href="/app/administration/sla">
+              Configuration
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <nav aria-label="Buckets" class="flex flex-wrap gap-2">
+          {BUCKETS.map((b) => (
+            <a
+              href={bucketHref(b.key)}
+              aria-current={query.bucket === b.key ? 'page' : undefined}
+              class:list={[
+                'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                query.bucket === b.key
+                  ? 'bg-cms-royal text-white'
+                  : 'text-cms-ink hover:bg-cms-canvas',
+              ]}
+            >
+              {b.label}
+            </a>
+          ))}
+        </nav>
+
+        <CmsFilterPanel action="/app/performance" activeCount={performanceFilters.length}>
+          <Fragment slot="primary">
+            {query.bucket !== null && <input type="hidden" name="bucket" value={query.bucket} />}
+            <CmsSelect
+              id="f-slaType"
+              name="slaType"
+              label="Family"
+              value={query.slaType ?? ''}
+              options={[
+                { value: '', label: 'Internal and external' },
+                { value: 'INTERNAL', label: 'Internal' },
+                { value: 'EXTERNAL', label: 'External' },
+              ]}
+            />
+          </Fragment>
+          <Fragment slot="advanced">
+            <CmsSelect
+              id="f-entityType"
+              name="entityType"
+              label="Entity"
+              value={query.entityType ?? ''}
+              options={[
+                { value: '', label: 'Everything' },
+                { value: 'CASE', label: 'Cases' },
+                { value: 'LEAD', label: 'Leads' },
+                { value: 'SALES_ORDER', label: 'Sales orders' },
+                { value: 'PURCHASE_ORDER', label: 'Purchase orders' },
+              ]}
+            />
+            <CmsSelect
+              id="f-status"
+              name="status"
+              label="Status"
+              value={query.status ?? ''}
+              options={[
+                { value: '', label: 'Every status' },
+                ...['RUNNING', 'PAUSED', 'MET', 'BREACHED', 'CANCELLED'].map((s) => ({
+                  value: s,
+                  label: titleCase(s),
+                })),
+              ]}
+            />
+          </Fragment>
+          <Fragment slot="chips">
+            {performanceFilters.map((chip) => (
+              <a
+                href={withoutPerformanceFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
+
+        <CmsDataTable
+          caption="SLA instances"
+          columns={[
+            { key: 'entity', label: 'Entity' },
+            { key: 'customer', label: 'Customer', secondary: true },
+            { key: 'rule', label: 'SLA' },
+            { key: 'family', label: 'Family' },
+            { key: 'accountable', label: 'Accountable', secondary: true },
+            { key: 'target', label: 'Target', secondary: true },
+            { key: 'variance', label: 'Remaining / over' },
+            { key: 'status', label: 'Status' },
+          ]}
+          empty={page.items.length === 0}
+        >
+          {page.items.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <span class="font-medium text-cms-ink">{row.entityLabel ?? row.entityId}</span>
+                <span class="ms-2 text-cms-caption text-cms-muted">
+                  {titleCase(row.entityType)}
+                </span>
+              </td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.customerName ?? 'Not available'}
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.ruleName}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.slaType === 'EXTERNAL' ? 'info' : 'neutral'}
+                  label={titleCase(row.slaType)}
+                />
+              </td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.accountableUserName ?? row.accountableTeamName ?? 'Not assigned'}
+              </td>
+              <td class="hidden px-4 py-2.5 text-cms-muted tabular-nums sm:table-cell">
+                {row.targetAt}
+              </td>
+              <td class="px-4 py-2.5 text-cms-body-sm tabular-nums">
+                {variance(row)}
+                {row.pausedMinutes > 0 && (
+                  <span class="ms-1 text-cms-caption text-cms-muted">
+                    ({row.pausedMinutes} min paused)
+                  </span>
+                )}
+              </td>
+              <td class="px-4 py-2.5">
+                {atRisk(row) ? (
+                  <CmsBadge tone="warning" icon="statusWarn" label="At risk" />
+                ) : (
+                  <CmsBadge
+                    tone={statusTone(row.status)}
+                    icon={
+                      row.status === 'BREACHED'
+                        ? 'statusBreach'
+                        : row.status === 'MET'
+                          ? 'statusOk'
+                          : 'statusInfo'
+                    }
+                    label={titleCase(row.status)}
+                  />
+                )}
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <div class="flex min-h-16 items-center gap-3 px-4 py-3">
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">
+                    {row.entityLabel ?? row.entityId}
+                  </span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {row.ruleName} · {variance(row)}
+                  </span>
+                </span>
+                {atRisk(row) ? (
+                  <CmsBadge tone="warning" icon="statusWarn" label="At risk" />
+                ) : (
+                  <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+                )}
+              </div>
+            ))}
+          </Fragment>
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="performance"
+              title="Nothing in this bucket"
+              description="Try another bucket or remove a filter."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        <p class="text-cms-body-sm text-cms-muted">
+          {page.total} SLA instance{page.total === 1 ? '' : 's'}
+        </p>
+      </Fragment>
+    )
+  }
+</CmsLayout>

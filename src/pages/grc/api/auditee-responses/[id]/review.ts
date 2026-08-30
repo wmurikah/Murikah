@@ -1,8 +1,16 @@
 export const prerender = false;
 
 /**
- * Review a submitted response: accept it, or request changes and reopen the
- * finding to the auditee on the next round. Gate: WORK_PAPERS.review.
+ * Review a released response: accept it, modify it, or send it back to the
+ * auditee for another round. Gate: WORK_PAPERS.review.
+ *
+ * Three decisions, not two (Build Prompt 68). "Modify" is audit editing the
+ * response and accepting the edited version, which happens constantly at a
+ * closing meeting: the wording is nearly right, audit fixes it, and forcing a
+ * whole extra round on the unit manager to correct a sentence is how a loop
+ * becomes a formality nobody reads. It closes the round like an acceptance and
+ * records what was changed, so the trail shows audit's hand rather than
+ * presenting audit's words as management's.
  *
  * The decision records the reviewer and their comments on the round being
  * judged, then moves the parent finding through the ordinary work-paper
@@ -21,7 +29,6 @@ import {
   stampWorkPaperReviewStatement,
 } from '@grc/repos/auditeeResponses';
 import {
-  parseDecision,
   statusForDecision,
   nextRound,
   roundsExhausted,
@@ -33,6 +40,30 @@ import { executeTransition } from '@grc/workflow/workPaperWorkflow';
 import { WP_STATUS } from '@grc/workflow/workPaperActions';
 import { getConfigValues } from '@grc/repos/orgConfig';
 import { buildAuditStatement } from '@grc/repos/audit';
+import {
+  AUDITEE_STAGE,
+  moveLabel,
+  nextStage,
+  parseAuditDecision,
+  stageOf,
+  type AuditDecision,
+} from '@grc/workflow/auditeeLoop';
+import { setStageStatement } from '@grc/repos/auditeeDelegations';
+import { enqueueNotification } from '@grc/repos/notify';
+
+/** What the trail, the email and the confirmation call each decision. */
+const DECISION_LABEL: Record<AuditDecision, string> = {
+  accept: moveLabel('accept'),
+  modify: moveLabel('modify'),
+  request_change: moveLabel('request_change'),
+};
+
+const DONE_MESSAGE: Record<AuditDecision, (round: number) => string> = {
+  accept: () => 'Response accepted and the observation marked reviewed.',
+  modify: () => 'Response modified and accepted. The change is recorded on the round.',
+  request_change: (round) =>
+    `Change requested. The observation is back with the auditee for round ${round}.`,
+};
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
   const grc = locals.grc;
@@ -53,14 +84,24 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   }
 
   const form = await request.formData();
-  const decision = parseDecision(
+  const decision = parseAuditDecision(
     form.get('decision') == null ? null : String(form.get('decision')).trim(),
   );
   const comments = String(form.get('review_comments') ?? '').trim() || null;
   if (!decision) {
     return back(
       '/auditee-responses',
-      `error=${encodeURIComponent('Choose accept or request changes.')}`,
+      `error=${encodeURIComponent('Choose accept, modify or request a change.')}`,
+    );
+  }
+  // A modification is audit rewriting management's answer, so it has to say what
+  // it changed it to. Recording "modified" with no words would leave a response
+  // altered by somebody the trail does not name and for a reason it does not
+  // give.
+  if (decision === 'modify' && !comments) {
+    return back(
+      '/auditee-responses',
+      `error=${encodeURIComponent('Say what you changed before recording a modification.')}`,
     );
   }
 
@@ -86,19 +127,30 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     config.get('MAX_RESPONSE_ROUNDS'),
     DEFAULT_MAX_RESPONSE_ROUNDS,
   );
-  const round = nextRound(response.round, decision);
-  if (decision === 'request_changes' && roundsExhausted(round, maxRounds)) {
+  // Accepting and modifying both close the round; only a request for change
+  // opens the next one.
+  const round = nextRound(
+    response.round,
+    decision === 'request_change' ? 'request_changes' : 'accept',
+  );
+  if (decision === 'request_change' && roundsExhausted(round, maxRounds)) {
     return back(
       thread,
       `error=${encodeURIComponent(
-        `This finding has used its ${maxRounds} response rounds. Resolve it directly rather than asking for another round.`,
+        `This observation has used its ${maxRounds} response rounds. Resolve it directly rather than asking for another round.`,
       )}`,
     );
   }
 
   const now = new Date().toISOString();
   const userName = grc.userName ?? grc.userEmail ?? grc.userId;
-  const status = statusForDecision(decision);
+  const status = statusForDecision(decision === 'request_change' ? 'request_changes' : 'accept');
+  // Where the auditee side stands afterwards: closed on an acceptance or a
+  // modification, back with the responsibles when audit wants another round.
+  const stage = stageOf(response.auditeeStage);
+  const toStage =
+    nextStage(stage, decision) ??
+    (decision === 'request_change' ? AUDITEE_STAGE.WITH_AUDITEE : AUDITEE_STAGE.CLOSED);
 
   await db.batch(
     [
@@ -111,6 +163,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         now,
       ),
       stampWorkPaperReviewStatement(grc.organizationId, response.workPaperId, status, round, now),
+      setStageStatement(grc.organizationId, response.workPaperId, toStage, now),
       buildAuditStatement({
         organizationId: grc.organizationId,
         userId: grc.userId,
@@ -130,7 +183,8 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   // clearing an older round while the finding is back with the auditee), there
   // is nothing to move: the round advanced, which is the substance, and asking
   // the engine for a status-to-itself move would only fail.
-  const target = decision === 'accept' ? WP_STATUS.RESPONSE_REVIEWED : WP_STATUS.SENT_TO_AUDITEE;
+  const target =
+    decision === 'request_change' ? WP_STATUS.SENT_TO_AUDITEE : WP_STATUS.RESPONSE_REVIEWED;
   const result =
     response.workPaperStatus === target
       ? ({ ok: true } as const)
@@ -144,6 +198,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
             userName,
             roleCode: grc.roleCode,
             isPlatformOwner: grc.isPlatformOwner,
+            matrix: grc.matrix,
             perms: grc.perms,
           },
           comments,
@@ -152,12 +207,26 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   if (!result.ok) {
     return back(
       thread,
-      `error=${encodeURIComponent(`The decision was recorded, but the finding could not move: ${result.message}`)}`,
+      `error=${encodeURIComponent(`The decision was recorded, but the observation could not move: ${result.message}`)}`,
     );
   }
-  const message =
-    decision === 'accept'
-      ? 'Response accepted and the finding marked reviewed.'
-      : `Changes requested. The finding is back with the auditee for round ${round}.`;
-  return back(thread, `done=${encodeURIComponent(message)}`);
+  // Everybody named on the auditee side is told what audit decided, whether or
+  // not it is their turn to act: the person who drafted it, the manager who
+  // released it and the people copied in all learn the outcome of the thing
+  // they worked on (Build Prompt 68).
+  await enqueueNotification(db, {
+    organizationId: grc.organizationId,
+    templateCode: 'auditee_decided',
+    entityType: 'work_paper',
+    entityId: response.workPaperId,
+    actorUserId: grc.userId,
+    comment: comments,
+    extra: {
+      decision: DECISION_LABEL[decision],
+      stage: toStage === AUDITEE_STAGE.CLOSED ? 'Closed by audit' : 'With the auditee',
+      round: String(round),
+    },
+  });
+
+  return back(thread, `done=${encodeURIComponent(DONE_MESSAGE[decision](round))}`);
 };

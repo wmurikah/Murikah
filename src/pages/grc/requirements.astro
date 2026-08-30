@@ -1,0 +1,311 @@
+---
+export const prerender = false;
+
+/**
+ * Requirements: the information audit has asked for, who owes it, and where
+ * each ask has got to (Build Prompt 58).
+ *
+ * ONE SCREEN, TWO READERSHIPS. An auditor holding REQUIREMENTS.manage sees every
+ * requirement in the organisation, filterable by observation, owner and status, and
+ * raises new ones. Everybody else sees the requirements naming them, which for
+ * an auditee owner is the whole of their audit system: what they have been asked
+ * for, when it is wanted, and whether audit has come back on it.
+ *
+ * The two are different queries rather than one query with a filter
+ * (repos/requirementsModule.ts), so an owner's list cannot be widened by a
+ * parameter. An auditor who also owns requirements sees the organisation's list
+ * with their own marked, rather than two lists of the same rows.
+ *
+ * Gate: none at the section door, on purpose. Owning a requirement is not a
+ * permission an administrator grants, it is a row naming you, so the screen
+ * gates on what it shows rather than on who may open it. An auditee with no
+ * grants at all reaches their own requirements and nothing else.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import {
+  listOrgRequirements,
+  listOwnedRequirements,
+  type RequirementRow,
+  type RequirementFilters,
+} from '@grc/repos/requirementsModule';
+import {
+  REQUIREMENT_STATUS,
+  REQUIREMENT_STATUS_FILTERS,
+  requirementStatusLabel,
+} from '@grc/workflow/requirementFlow';
+import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
+import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+// Managing requirements is the auditor's side: raising them, and deciding on
+// what comes back. Everyone else is here as an owner.
+const manages = grc.isPlatformOwner || grc.perms.includes('REQUIREMENTS.manage');
+const p = Astro.url.searchParams;
+const linkedParam = manages ? p.get('linked') : null;
+const filters: RequirementFilters = {
+  workPaperId: p.get('work_paper') || undefined,
+  ownerId: manages ? p.get('owner') || undefined : undefined,
+  status: p.get('status') || undefined,
+  linkedOnly: linkedParam === 'yes' ? true : linkedParam === 'no' ? false : undefined,
+};
+
+let rows: RequirementRow[] = [];
+let workPapers: WorkPaperOption[] = [];
+let users: Option[] = [];
+let loadError = false;
+loadError = !(await guardPageLoad('requirements.list', async () => {
+  const db = await getDb(getGrcEnv());
+  rows = manages
+    ? await listOrgRequirements(db, grc.organizationId, filters)
+    : await listOwnedRequirements(db, grc.organizationId, grc.userId, filters);
+  if (manages) {
+    [workPapers, users] = await Promise.all([
+      listWorkPaperOptions(db, grc.organizationId),
+      listAuditors(db, grc.organizationId),
+    ]);
+  }
+}));
+
+const statusClass = (status: string): string => {
+  if (status === REQUIREMENT_STATUS.CLOSED) return 'grc-badge grc-badge--done';
+  if (status === REQUIREMENT_STATUS.AWAITING_REVIEW) return 'grc-badge grc-badge--review';
+  if (status === REQUIREMENT_STATUS.MORE_INFO) return 'grc-badge grc-badge--overdue';
+  return 'grc-badge grc-badge--pending';
+};
+const dateLabel = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+const truncate = (v: string, n: number): string => (v.length > n ? `${v.slice(0, n - 1)}…` : v);
+const outstanding = rows.filter((r) => r.status !== REQUIREMENT_STATUS.CLOSED).length;
+const awaiting = rows.filter((r) => r.status === REQUIREMENT_STATUS.AWAITING_REVIEW).length;
+const done = p.get('done');
+const error = p.get('error');
+---
+
+<GrcLayout title="Requirements">
+  <div class="grc-page-head">
+    <div>
+      <h1>Requirements</h1>
+      <p class="grc-lead">
+        {
+          manages
+            ? `Information requested from the business for ${grc.organizationName}.`
+            : 'What Internal Audit has asked you for. Upload each item against its line.'
+        }
+      </p>
+    </div>
+    {
+      manages && (
+        <a href="/requirements/new" class="grc-btn grc-btn--primary">
+          New requirement
+        </a>
+      )
+    }
+  </div>
+
+  {
+    done && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        {decodeURIComponent(done)}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {decodeURIComponent(error)}
+      </p>
+    )
+  }
+
+  {
+    loadError ? (
+      <GrcErrorCard subject="The requirements list" />
+    ) : (
+      <>
+        <div class="grc-stats" role="group" aria-label="Requirement summary">
+          <div class="grc-stat">
+            <span class="grc-stat__n">{rows.length}</span>
+            <span class="grc-stat__l">Total</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{outstanding}</span>
+            <span class="grc-stat__l">Still open</span>
+          </div>
+          <div class="grc-stat">
+            <span class="grc-stat__n">{awaiting}</span>
+            <span class="grc-stat__l">Awaiting review</span>
+          </div>
+        </div>
+
+        <form method="get" class="grc-filters" role="search" aria-label="Filter requirements">
+          {manages && (
+            <div class="grc-field" style="min-width:16rem">
+              <label for="f-wp">Work paper</label>
+              <select id="f-wp" name="work_paper" class="grc-select">
+                <option value="">All observations</option>
+                {workPapers.map((w) => (
+                  <option value={w.id} selected={filters.workPaperId === w.id}>
+                    {w.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {manages && (
+            <div class="grc-field">
+              <label for="f-owner">Owner</label>
+              <select id="f-owner" name="owner" class="grc-select">
+                <option value="">Anyone</option>
+                {users.map((u) => (
+                  <option value={u.id} selected={filters.ownerId === u.id}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {manages && (
+            <div class="grc-field">
+              <label for="f-link">Linking</label>
+              <select id="f-link" name="linked" class="grc-select">
+                <option value="">Linked or not</option>
+                <option value="no" selected={p.get('linked') === 'no'}>
+                  Not linked yet
+                </option>
+                <option value="yes" selected={p.get('linked') === 'yes'}>
+                  Linked to a observation
+                </option>
+              </select>
+            </div>
+          )}
+          <div class="grc-field">
+            <label for="f-status">Status</label>
+            <select id="f-status" name="status" class="grc-select">
+              <option value="">All</option>
+              {REQUIREMENT_STATUS_FILTERS.map((st) => (
+                <option value={st} selected={filters.status === st}>
+                  {requirementStatusLabel(st)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="submit" class="grc-btn grc-btn--secondary">
+            Apply
+          </button>
+          <a href="/requirements" class="grc-btn grc-btn--secondary">
+            Clear
+          </a>
+        </form>
+
+        {rows.length === 0 ? (
+          <div class="grc-empty">
+            <p>
+              <strong>Nothing to show.</strong>{' '}
+              {manages
+                ? 'No requirement matches these filters. Raise one to ask the business for information; a observation can be linked to it later.'
+                : 'You have not been asked for any information.'}
+            </p>
+          </div>
+        ) : (
+          <div class="grc-tablewrap">
+            <table class="grc-table" aria-label="Requirements">
+              <thead>
+                <tr>
+                  <th scope="col">What is needed</th>
+                  {manages && <th scope="col">Owners</th>}
+                  <th scope="col">Requested</th>
+                  <th scope="col">Due</th>
+                  <th scope="col">Rounds</th>
+                  <th scope="col">Status</th>
+                  {/* Only audit sees the observation, and only audit can set it
+                      (Build Prompt 69). An owner's table has no column for it,
+                      because which work paper their document supports is not a
+                      question they can answer or should be shown. */}
+                  {manages && <th scope="col">Linked observation</th>}
+                  {/* The owner's own column: the thing they came here to do. */}
+                  {!manages && <th scope="col">Provide it</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr>
+                    <td>
+                      <a href={`/requirements/${r.id}`}>{truncate(r.description, 80)}</a>
+                    </td>
+                    {manages && <td>{r.ownerNames.join(', ') || 'Unassigned'}</td>}
+                    <td>{dateLabel(r.requestedDate)}</td>
+                    <td>{dateLabel(r.dueDate)}</td>
+                    <td>{r.rounds}</td>
+                    <td>
+                      <span class={statusClass(r.status)}>{requirementStatusLabel(r.status)}</span>
+                    </td>
+                    {manages && (
+                      <td>
+                        {r.workPaperId ? (
+                          <a href={`/work-papers/${r.workPaperId}`}>
+                            {r.workPaperRef || 'Observation'}
+                          </a>
+                        ) : (
+                          <a class="grc-tone--muted" href={`/requirements/${r.id}#link`}>
+                            Not linked yet
+                          </a>
+                        )}
+                      </td>
+                    )}
+                    {!manages && (
+                      <td>
+                        {!r.canProvide ? (
+                          /* Copied in: told, not asked (Build Prompt 69). */
+                          <span class="grc-tone--muted">Copied in</span>
+                        ) : r.closedAt ? (
+                          <span class="grc-tone--muted">Closed</span>
+                        ) : (
+                          <form
+                            method="post"
+                            action={`/api/requirements/${r.id}/submit`}
+                            enctype="multipart/form-data"
+                            class="grc-rowupload"
+                          >
+                            <label class="grc-vh" for={`note-${r.id}`}>
+                              What you are providing for: {truncate(r.description, 60)}
+                            </label>
+                            <input
+                              type="text"
+                              id={`note-${r.id}`}
+                              name="note"
+                              class="grc-input grc-rowupload__note"
+                              placeholder="What this is"
+                              maxlength="500"
+                              required
+                            />
+                            <label class="grc-vh" for={`file-${r.id}`}>
+                              The document for: {truncate(r.description, 60)}
+                            </label>
+                            <input
+                              type="file"
+                              id={`file-${r.id}`}
+                              name="file"
+                              class="grc-rowupload__file"
+                            />
+                            <button type="submit" class="grc-btn grc-btn--secondary">
+                              Upload
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</GrcLayout>

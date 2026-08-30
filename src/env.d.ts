@@ -63,13 +63,34 @@ declare namespace Cloudflare {
     TURSO_GRC_AUTH_TOKEN?: string;
     GRC_SESSION_SECRET?: string;
 
-    // Hass CMS product, its own Turso database and session secret, namespaced so
-    // they never clash with engr, grc or the marketing site. Optional here so the
-    // marketing preview typechecks without them; the cms env accessor throws at
-    // runtime when any is missing. Runtime secrets, never committed.
+    // CMS product, its own Turso database and session secret, namespaced so they
+    // never clash with engr, grc or the marketing site. Runtime secrets, never
+    // committed. No code reads them at present: the product was torn down to
+    // bare ground (Build Prompt 00) and these names are deliberately held in
+    // reserve, along with the worker secrets and the database behind them, so
+    // the redesign reconnects with the same names and the same values rather
+    // than inventing new ones. See docs/cms/CMS_V1_ARCHIVE_NOTES.md.
     TURSO_CMS_DATABASE_URL?: string;
     TURSO_CMS_AUTH_TOKEN?: string;
     CMS_SESSION_SECRET?: string;
+    CMS_AUTH_MAIL_ENDPOINT?: string;
+    CMS_AUTH_MAIL_SECRET?: string;
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
+    MICROSOFT_CLIENT_ID?: string;
+    MICROSOFT_CLIENT_SECRET?: string;
+    MICROSOFT_TENANT?: string;
+    APPLE_CLIENT_ID?: string;
+    APPLE_TEAM_ID?: string;
+    APPLE_KEY_ID?: string;
+    APPLE_PRIVATE_KEY?: string;
+    /**
+     * Set to the exact string 'development' to let the CMS show an invitation
+     * link to the administrator who created a user. Off everywhere else,
+     * including where it is unset. See invitationLinksVisible() in
+     * src/lib/cms/env.ts for why the comparison is exact rather than truthy.
+     */
+    CMS_INVITE_LINKS?: string;
 
     // GRC notification delivery via Microsoft Graph (Outlook), sent as the
     // delegated mailbox an admin connects once on Settings -> Email. All
@@ -105,6 +126,19 @@ declare namespace Cloudflare {
     R2_ACCESS_KEY_ID?: string;
     R2_SECRET_ACCESS_KEY?: string;
     R2_BUCKET?: string; // the bucket name used in the S3 presign path
+
+    // Per-organisation evidence storage connectors (Build Prompt 51). These are
+    // the platform's OAuth application registrations, identifying Murikah to each
+    // provider; they are the same for every customer, so they are Worker secrets.
+    // The per-organisation refresh token is sealed in storage_connections, never
+    // here. Absent credentials leave that provider unconnectable and the settings
+    // screen says so. The Microsoft app falls back to the Outlook GRAPH_* pair,
+    // since one Entra registration can carry both scope sets. See
+    // grc/docs/storage-setup.md.
+    SHAREPOINT_CLIENT_ID?: string;
+    SHAREPOINT_CLIENT_SECRET?: string;
+    DROPBOX_CLIENT_ID?: string;
+    DROPBOX_CLIENT_SECRET?: string;
 
     // Read-only Google Drive credential for reading and migrating existing
     // Drive-backed evidence (never writing). OAuth2 refresh-token flow from the
@@ -214,6 +248,26 @@ declare namespace App {
       matrix: Record<string, Record<string, boolean>>;
       /** Legacy permission codes derived from the matrix, e.g. WORK_PAPERS.view. */
       perms: string[];
+      /**
+       * The affiliate confinement in force for this viewer (Build Prompt 45).
+       * `confined` is the role's `scope_to_affiliate` flag; `affiliateCode` is
+       * the viewer's own `users.affiliate_code`. Together they bound which rows
+       * the viewer may see, on top of the matrix. A platform owner and a
+       * SUPER_ADMIN are never confined. A confined viewer with a null
+       * `affiliateCode` sees nothing until an affiliate is assigned, and the
+       * screens say so rather than showing an ordinary empty state.
+       */
+      affiliateScope: {
+        confined: boolean;
+        affiliateCode: string | null;
+        /**
+         * True when the role is confined but the viewer's affiliate is marked
+         * `affiliates.is_group`, so the confinement does not narrow them
+         * (Build Prompt 48). `confined` is already false in that case; this only
+         * lets the screens say why they see every affiliate.
+         */
+        groupExempt: boolean;
+      };
       /** Plan feature flags from the subscription's plan features_json. */
       features: Record<string, boolean>;
       /** True when the matrix grants the action on the module (aliases applied). */
@@ -226,44 +280,31 @@ declare namespace App {
     grcPath?: string;
 
     /**
-     * The signed-in Hass CMS user and their acting context, set by the middleware
-     * from the verified session. Present on authenticated cms routes only; every
-     * downstream read and write scopes by the acting tenant (and, for a customer,
-     * their own customer_id).
+     * The visitor-facing root-relative path on cms.murikah.com, before the /cms
+     * rewrite. Attached by the middleware host branch on every CMS request,
+     * signed in or not.
+     */
+    cmsPath?: string;
+    /**
+     * The request's CSP nonce, for the one inline script the rail needs.
+     * Set in the CMS branch of the middleware, read by CmsLayout.
+     */
+    cmsNonce?: string;
+
+    /**
+     * The signed-in CMS principal, attached by the middleware guard from a
+     * verified session. Absent on an anonymous request, which is every request
+     * to the sign-in page and the sign-in endpoint.
+     *
+     * `can` is a convenience over the resolved permission codes. It answers
+     * whether a permission was granted, not whether an action is allowed in
+     * context: fine-grained authorisation, including the data scopes on the
+     * roles, arrives in a later phase.
      */
     cms?: {
-      /** Which surface the user belongs to; the two never cross. */
-      userType: 'STAFF' | 'CUSTOMER';
-      /** users.user_id for staff, contacts.contact_id for a portal customer. */
-      userId: string;
-      /** The cached primary role code (staff role, or the contact's portal_role). */
-      role: string | null;
-      /** Staff home country (roles, branding and config scope by it); null for customers. */
-      countryCode: string | null;
-      /** The customer a portal user belongs to; null for staff. */
-      customerId: string | null;
-      userName?: string;
-      userEmail?: string;
-      /** The acting tenant. Hass is the first; every query scopes by this. */
-      tenantId: string;
-      tenantName: string;
-      /** True when the staff role may act across tenants. */
-      isPlatformOwner: boolean;
-      /** The resolved brand (tenant/country brand, or the Murikah default). */
-      branding: {
-        appName: string;
-        logoUrl: string | null;
-        primaryColor: string;
-        secondaryColor: string;
-        accentColor: string;
-      };
-      /** The permission codes the role holds, from the seeded matrix. */
-      perms: string[];
-      /** True when the role holds the permission code. */
-      can: (code: string) => boolean;
+      sessionId: string;
+      user: import('@/lib/cms/repos/identity').CmsIdentity;
+      can: (permissionCode: string) => boolean;
     };
-
-    /** The visitor-facing root-relative path on cms.murikah.com, before the /cms rewrite. */
-    cmsPath?: string;
   }
 }

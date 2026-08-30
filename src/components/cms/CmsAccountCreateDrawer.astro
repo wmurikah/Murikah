@@ -1,0 +1,345 @@
+---
+/**
+ * The new-account form, and the duplicate check that runs before it commits.
+ *
+ * THE DUPLICATE CHECK IS A STEP, NOT A GATE.
+ * On submit the form asks /api/customers/accounts/duplicate-check first. If
+ * anything looks similar it shows the candidates under "Possible existing
+ * customer found", with what matched each one named, and offers three routes:
+ * open the existing record, go back and edit, or continue anyway. Nothing is
+ * merged, and nothing is merged automatically ever: two similarly named
+ * companies in one country are ordinary, and merging two real customers
+ * destroys the history of both.
+ *
+ * The hard stop is the UNIQUE constraint on `account_code` and
+ * `oracle_customer_code`, which comes back from the create as a field message.
+ *
+ * A component, so Astro ships it only where it is rendered. A page-level
+ * `<script>` is hoisted whatever markup surrounds it, which would send the
+ * create behaviour to somebody who may only read.
+ */
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import { ACCOUNT_TYPES, ACCOUNT_STATUSES, CONTACT_CHANNELS } from '@/lib/cms/admin/accountInput';
+
+interface Option {
+  id: string;
+  label: string;
+  parentId?: string | null;
+}
+interface Props {
+  countries: Option[];
+  affiliates: Option[];
+  managers: Option[];
+  segments: string[];
+}
+const { countries, affiliates, managers, segments } = Astro.props;
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+---
+
+<form id="cms-account-form" novalidate class="flex flex-col gap-4">
+  <p
+    id="cms-account-form-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+  >
+  </p>
+
+  {/* The duplicate panel, populated by the script and empty until then. */}
+  <section
+    id="cms-account-duplicates"
+    hidden
+    class="rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-3 text-cms-body-sm text-cms-ink"
+  >
+    <h3 class="font-semibold">Possible existing customer found</h3>
+    <p class="mt-1 text-cms-muted">
+      Nothing has been created or merged. Open one to check, or continue if this really is a
+      different company.
+    </p>
+    <ul id="cms-account-duplicate-list" class="mt-2 flex flex-col gap-2"></ul>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button
+        type="button"
+        id="cms-account-continue"
+        class="inline-flex h-9 items-center rounded-cms bg-cms-royal px-3 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        Continue anyway
+      </button>
+      <button
+        type="button"
+        id="cms-account-back"
+        class="inline-flex h-9 items-center rounded-cms border border-cms-border px-3 text-cms-body-sm font-medium text-cms-ink outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        Go back and edit
+      </button>
+    </div>
+  </section>
+
+  <CmsInput id="a-accountName" name="accountName" label="Account name" required />
+  <CmsSelect
+    id="a-accountType"
+    name="accountType"
+    label="Type"
+    required
+    options={ACCOUNT_TYPES.map((t) => ({ value: t, label: titleCase(t) }))}
+    hint="A prospect has no Oracle master record yet, and does not need one here."
+  />
+  <CmsSelect
+    id="a-countryId"
+    name="countryId"
+    label="Country"
+    required
+    options={pick(countries, 'Choose a country')}
+  />
+  <CmsSelect
+    id="a-affiliateId"
+    name="affiliateId"
+    label="Affiliate"
+    options={pick(affiliates, 'None')}
+    hint="Must sit in the country chosen above."
+  />
+  <CmsSelect
+    id="a-accountManagerUserId"
+    name="accountManagerUserId"
+    label="Account manager"
+    options={pick(managers, 'Unassigned')}
+    hint="Only people you may assign are offered."
+  />
+
+  <CmsInput
+    id="a-oracleCustomerCode"
+    name="oracleCustomerCode"
+    label="Oracle customer code"
+    hint="Leave empty until the Oracle master record exists. Never invent one."
+  />
+  <CmsInput id="a-accountCode" name="accountCode" label="Account code" />
+  <CmsInput id="a-taxPin" name="taxPin" label="Tax PIN" />
+  {
+    segments.length > 0 ? (
+      <CmsSelect
+        id="a-segment"
+        name="segment"
+        label="Segment"
+        options={[{ value: '', label: 'None' }, ...segments.map((s) => ({ value: s, label: s }))]}
+      />
+    ) : (
+      <CmsInput id="a-segment" name="segment" label="Segment" />
+    )
+  }
+  <CmsInput id="a-industry" name="industry" label="Industry" />
+  <CmsInput id="a-email" name="email" label="Email" type="email" />
+  <CmsInput id="a-phone" name="phone" label="Phone" type="tel" />
+  <CmsInput id="a-address" name="address" label="Address" />
+  <CmsInput id="a-website" name="website" label="Website" type="url" />
+  <CmsInput
+    id="a-creditLimit"
+    name="creditLimit"
+    label="Credit limit"
+    type="number"
+    min="0"
+    hint="Leave empty when no limit has been agreed. Empty is not zero: zero would mean this customer may take no credit at all."
+  />
+  <CmsInput id="a-creditDays" name="creditDays" label="Credit days" type="number" min="0" />
+  <CmsInput id="a-customerSince" name="customerSince" label="Customer since" type="date" />
+  <CmsSelect
+    id="a-status"
+    name="status"
+    label="Status"
+    value="ACTIVE"
+    options={ACCOUNT_STATUSES.map((s) => ({ value: s, label: titleCase(s) }))}
+    hint="Blocked is an administrative account status, not a credit decision. Credit terms are the two fields above."
+  />
+
+  <input type="hidden" name="preferredChannelHint" value={CONTACT_CHANNELS[0]} disabled />
+</form>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+  interface Candidate {
+    accountId: string;
+    accountName: string;
+    accountCode: string | null;
+    oracleCustomerCode: string | null;
+    status: string;
+    matchedOn: string[];
+  }
+
+  const form = document.getElementById('cms-account-form') as HTMLFormElement | null;
+  const drawer = document.getElementById('cms-account-drawer') as HTMLDialogElement | null;
+  const save = document.querySelector<HTMLButtonElement>('[data-cms-account-save]');
+  const errorBox = document.getElementById('cms-account-form-error');
+  const panel = document.getElementById('cms-account-duplicates');
+  const list = document.getElementById('cms-account-duplicate-list');
+  const continueButton = document.getElementById('cms-account-continue');
+  const backButton = document.getElementById('cms-account-back');
+
+  if (form && drawer && save && panel && list) {
+    // Set once the person has seen the candidates and chosen to proceed, so the
+    // next submit skips the check rather than looping on the same warning.
+    let acknowledged = false;
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    const paint = (fields: FieldError[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        const element = field instanceof HTMLElement ? field : null;
+        if (!element || !element.id) continue;
+        element.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${element.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    const payload = (): Record<string, unknown> => {
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string') body[name] = value;
+      }
+      return body;
+    };
+
+    const showCandidates = (candidates: Candidate[]) => {
+      list.replaceChildren();
+      for (const candidate of candidates) {
+        const item = document.createElement('li');
+        item.className = 'rounded-cms border border-cms-line bg-cms-surface px-3 py-2';
+
+        const link = document.createElement('a');
+        link.href = `/app/customers/${candidate.accountId}`;
+        link.className =
+          'font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus';
+        link.textContent = candidate.accountName;
+        item.appendChild(link);
+
+        const codes = [candidate.accountCode, candidate.oracleCustomerCode]
+          .filter((code): code is string => code !== null)
+          .join(' · ');
+        if (codes !== '') {
+          const meta = document.createElement('span');
+          meta.className = 'ms-2 text-cms-caption text-cms-muted';
+          meta.textContent = codes;
+          item.appendChild(meta);
+        }
+
+        const why = document.createElement('p');
+        why.className = 'text-cms-body-sm text-cms-muted';
+        why.textContent = `Matched on ${candidate.matchedOn.join(' and ')}.`;
+        item.appendChild(why);
+
+        list.appendChild(item);
+      }
+      panel.hidden = false;
+      panel.scrollIntoView({ block: 'nearest' });
+    };
+
+    continueButton?.addEventListener('click', () => {
+      acknowledged = true;
+      panel.hidden = true;
+      form.requestSubmit();
+    });
+    backButton?.addEventListener('click', () => {
+      panel.hidden = true;
+      form.querySelector<HTMLElement>('input')?.focus();
+    });
+
+    const post = async (url: string, body: unknown) =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      save.disabled = true;
+      const body = payload();
+
+      try {
+        if (!acknowledged) {
+          const check = await post('/api/customers/accounts/duplicate-check', {
+            accountName: body.accountName,
+            oracleCustomerCode: body.oracleCustomerCode,
+            taxPin: body.taxPin,
+            email: body.email,
+            phone: body.phone,
+          });
+          if (check.ok) {
+            const answer = (await check.json()) as { candidates?: Candidate[] };
+            if (answer.candidates && answer.candidates.length > 0) {
+              showCandidates(answer.candidates);
+              return;
+            }
+          }
+          // A failed check never blocks the create. The UNIQUE constraints are
+          // the real guard, and refusing to create because a convenience lookup
+          // was unavailable would be the wrong failure.
+        }
+
+        const response = await post('/api/customers/accounts', body);
+        if (response.ok) {
+          const created = (await response.json()) as { accountId?: string };
+          window.location.href = created.accountId
+            ? `/app/customers/${created.accountId}`
+            : '/app/customers';
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (answer?.error?.fields?.length) paint(answer.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.message ?? 'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-cms-account-create]')) return;
+      acknowledged = false;
+      panel.hidden = true;
+      clear();
+      form.reset();
+      drawer.showModal();
+      form.querySelector<HTMLElement>('input')?.focus();
+    });
+  }
+</script>

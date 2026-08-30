@@ -9,6 +9,13 @@
  */
 import type { Cell, Kpi, ReportBlock, ReportDocument, Tone } from '../reportTypes';
 import { parseRichText, parseInlines, type RichBlock, type RichInline } from '../../richtext.ts';
+import {
+  cardIsEmpty,
+  contextChips,
+  findingHeader,
+  visibleCards,
+  type FindingSource,
+} from '../findingCards.ts';
 
 const NAVY = '1A365D';
 const GOLD = 'C9A83E';
@@ -166,6 +173,98 @@ function kpiTableXml(items: Kpi[]): string {
   return `<w:tbl>${tblPr}<w:tr>${cells}</w:tr></w:tbl>`;
 }
 
+/** The colour Word paints a risk rating, matched to the pill on the screen. */
+const RISK_COLOUR: Record<string, string> = {
+  extreme: '9C261A',
+  high: '9C261A',
+  medium: '8A5410',
+  low: '1A6A45',
+};
+
+/** The gold the section labels take, matched to `--sn-gold` on the screen. */
+const GOLD_LABEL = '917025';
+
+/**
+ * An observation, snapshot-led, rendered for Word (Build Prompt 72).
+ *
+ * The same order the screen reads in, because it is the same arrangement: the
+ * kicker, the title large, the context, then the sections under their gold
+ * labels. Word has no chip and no hairline, so a chip becomes a short run in
+ * the secondary colour and the rule becomes the space around a heading; the
+ * hierarchy survives because it was never carried by the boxes.
+ *
+ * A section with nothing in it prints its quiet line rather than a label over
+ * blank paper: a board reading a pack should be told the response is
+ * outstanding, not left to wonder whether it was omitted.
+ */
+function findingXml(source: FindingSource): string {
+  const header = findingHeader(source);
+  const parts: string[] = [];
+  parts.push(
+    para(
+      run(header.reference, { bold: true, size: 18, colour: TONE_COLOUR.muted }) +
+        run('    ', { size: 18 }) +
+        run(header.status, { size: 18, colour: TONE_COLOUR.muted }) +
+        run('    ', { size: 18 }) +
+        run(header.risk.srLabel, {
+          bold: true,
+          size: 18,
+          colour: RISK_COLOUR[header.risk.tone ?? ''] ?? TONE_COLOUR.muted,
+        }),
+      { after: 60 },
+    ),
+  );
+  // The anchor: the largest thing in the section, exactly as on screen.
+  parts.push(para(run(header.title, { bold: true, size: 34, colour: NAVY }), { after: 60 }));
+  const chips = contextChips(source);
+  if (chips.length > 0) {
+    parts.push(
+      para(run(chips.join('  ·  '), { size: 18, colour: TONE_COLOUR.muted }), { after: 160 }),
+    );
+  }
+  for (const card of visibleCards(source)) {
+    parts.push(
+      para(run(card.heading.toUpperCase(), { bold: true, size: 17, colour: GOLD_LABEL }), {
+        before: 120,
+        after: 60,
+      }),
+    );
+    if (cardIsEmpty(card)) {
+      parts.push(
+        para(run(card.emptyText ?? '', { italic: true, size: 20, colour: TONE_COLOUR.muted }), {
+          after: 120,
+        }),
+      );
+      continue;
+    }
+    for (const body of card.body) {
+      if (body.kind === 'rich') {
+        const rich = parseRichText(body.text);
+        parts.push(rich.length === 0 ? para('') : rich.map(richBlockXml).join(''));
+      } else if (body.kind === 'facts') {
+        for (const fact of body.facts.filter((f) => String(f.value ?? '').trim() !== '')) {
+          parts.push(
+            para(
+              run(`${fact.label}: `, { bold: true, size: 20, colour: TONE_COLOUR.muted }) +
+                run(fact.value, { size: 20 }),
+              { after: 40 },
+            ),
+          );
+        }
+      } else {
+        parts.push(
+          tableXml(
+            body.columns,
+            body.rows.map((row) => row.map((cell) => ({ text: cell }))),
+          ),
+          para(''),
+        );
+      }
+    }
+  }
+  return parts.join('');
+}
+
 function blockXml(block: ReportBlock): string {
   switch (block.kind) {
     case 'kpis':
@@ -197,6 +296,14 @@ function blockXml(block: ReportBlock): string {
         : '';
       return heading + subtitle + badges + tableXml(block.columns, block.rows) + para('');
     }
+    // One finding, as the same header strip and cards the screen draws
+    // (Build Prompt 67). Word has no card, so a card becomes what a card is on
+    // paper: a bold heading over its content, with the strip as a small facts
+    // table and the risk rating carrying the colour the pill carries. The
+    // arrangement comes from the shared model, so the order and the headings
+    // are the screen's, not a second opinion about them.
+    case 'finding':
+      return findingXml(block.source);
     case 'note':
       return para(run(block.text, { italic: true, size: 20, colour: TONE_COLOUR.muted }));
     case 'heading':

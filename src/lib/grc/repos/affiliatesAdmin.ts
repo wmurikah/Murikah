@@ -26,12 +26,18 @@ export interface Affiliate {
   country: string | null;
   region: string | null;
   isActive: boolean;
+  /**
+   * `affiliates.is_group`: this is the organisation's Group or HQ unit, and a
+   * user posted to it is exempt from affiliate confinement (Build Prompt 48).
+   */
+  isGroup: boolean;
 }
 
 export interface AffiliateInput {
   name: string;
   country: string | null;
   region: string | null;
+  isGroup: boolean;
 }
 
 const s = (v: unknown): string | null => (v == null ? null : String(v));
@@ -41,7 +47,8 @@ export async function listAffiliates(db: Client, organizationId: string): Promis
   return cached(db, cacheKeys.affiliates(organizationId), CACHE_TTL.reference, async () => {
     const res = await db.execute({
       sql: `SELECT ${AFF.affiliate_code} AS code, ${AFF.affiliate_name} AS name,
-                 ${AFF.country} AS country, ${AFF.region} AS region, ${AFF.is_active} AS is_active
+                 ${AFF.country} AS country, ${AFF.region} AS region, ${AFF.is_active} AS is_active,
+                 ${AFF.is_group} AS is_group
             FROM affiliates
            WHERE ${AFF.organization_id} = ? AND ${AFF.deleted_at} IS NULL
         ORDER BY ${AFF.is_active} DESC, ${AFF.affiliate_name}`,
@@ -53,6 +60,7 @@ export async function listAffiliates(db: Client, organizationId: string): Promis
       country: s(r.country),
       region: s(r.region),
       isActive: Number(r.is_active ?? 0) === 1,
+      isGroup: Number(r.is_group ?? 0) === 1,
     }));
   });
 }
@@ -82,9 +90,18 @@ export async function createAffiliate(
   await db.execute({
     sql: `INSERT INTO affiliates
             (${AFF.affiliate_code}, ${AFF.organization_id}, ${AFF.affiliate_name}, ${AFF.country},
-             ${AFF.region}, ${AFF.is_active}, ${AFF.created_at}, ${AFF.updated_at})
-          VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
-    args: [code, organizationId, input.name, input.country, input.region, now, now],
+             ${AFF.region}, ${AFF.is_active}, ${AFF.is_group}, ${AFF.created_at}, ${AFF.updated_at})
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    args: [
+      code,
+      organizationId,
+      input.name,
+      input.country,
+      input.region,
+      input.isGroup ? 1 : 0,
+      now,
+      now,
+    ],
   });
   await invalidateAffiliates(db, organizationId);
 }
@@ -98,9 +115,18 @@ export async function updateAffiliate(
 ): Promise<void> {
   await db.execute({
     sql: `UPDATE affiliates
-             SET ${AFF.affiliate_name} = ?, ${AFF.country} = ?, ${AFF.region} = ?, ${AFF.updated_at} = ?
+             SET ${AFF.affiliate_name} = ?, ${AFF.country} = ?, ${AFF.region} = ?,
+                 ${AFF.is_group} = ?, ${AFF.updated_at} = ?
            WHERE ${AFF.organization_id} = ? AND ${AFF.affiliate_code} = ?`,
-    args: [input.name, input.country, input.region, new Date().toISOString(), organizationId, code],
+    args: [
+      input.name,
+      input.country,
+      input.region,
+      input.isGroup ? 1 : 0,
+      new Date().toISOString(),
+      organizationId,
+      code,
+    ],
   });
   await invalidateAffiliates(db, organizationId);
 }
@@ -118,6 +144,44 @@ export async function setAffiliateActive(
     args: [active ? 1 : 0, new Date().toISOString(), organizationId, code],
   });
   await invalidateAffiliates(db, organizationId);
+}
+
+/**
+ * Whether the viewer's own affiliate is the organisation's Group unit, and so
+ * exempt from affiliate confinement (Build Prompt 48).
+ *
+ * Read fresh, never through the affiliates cache, and for the same reason the
+ * permission matrix is not cached (Build Prompt 43): this is an access decision.
+ * A cached answer would keep a user seeing every affiliate for the rest of the
+ * entry's lifetime after an administrator un-marked their unit, and "the access
+ * change applies on the very next request" is the guarantee the rest of this
+ * subsystem already makes. It is one indexed lookup on a small table, and the
+ * middleware only asks when the role is confined and the user has an affiliate,
+ * so an unconfined request pays nothing at all.
+ *
+ * A deleted or inactive affiliate does not confer the exemption: `deleted_at` is
+ * excluded so a removed unit stops widening access immediately. Any failure is
+ * treated as "not a group", so the confinement stands: the fail-closed direction.
+ */
+export async function isGroupAffiliate(
+  db: Client,
+  organizationId: string,
+  affiliateCode: string,
+): Promise<boolean> {
+  if (affiliateCode === '') return false;
+  try {
+    const res = await db.execute({
+      sql: `SELECT ${AFF.is_group} AS is_group FROM affiliates
+             WHERE ${AFF.organization_id} = ? AND ${AFF.affiliate_code} = ?
+               AND ${AFF.deleted_at} IS NULL
+             LIMIT 1`,
+      args: [organizationId, affiliateCode],
+    });
+    return Number(res.rows[0]?.is_group ?? 0) === 1;
+  } catch (err) {
+    console.error('[grc.affiliates] the group flag could not be read; confinement stands', err);
+    return false;
+  }
 }
 
 /** Whether any work paper or action plan in the organisation references the code. */

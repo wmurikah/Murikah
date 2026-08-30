@@ -58,13 +58,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // The parent must be a real finding in the acting organisation; a stray or
   // crafted id is refused with the same field error, not stored.
   const parent = input.workPaperId
-    ? await getWorkPaper(db, grc.organizationId, input.workPaperId)
+    ? await getWorkPaper(db, grc.organizationId, input.workPaperId, grc.affiliateScope)
     : null;
   if (!parent) {
     return new Response(null, {
       status: 303,
       headers: {
-        location: `/action-plans/new?error=${encodeURIComponent('Every action plan must be linked to a parent finding. Choose the work paper it remediates.')}`,
+        location: `/action-plans/new?error=${encodeURIComponent('Every action plan must be linked to a parent observation. Choose the work paper it remediates.')}`,
       },
     });
   }
@@ -77,7 +77,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     try {
       const config = await loadAiConfig(db);
       if (config.evaluationEnabled) {
-        const wp = await getWorkPaper(db, grc.organizationId, input.workPaperId);
+        const wp = await getWorkPaper(
+          db,
+          grc.organizationId,
+          input.workPaperId,
+          grc.affiliateScope,
+        );
         if (wp) {
           const verdict = await evaluateAuditeeResponse(
             db,

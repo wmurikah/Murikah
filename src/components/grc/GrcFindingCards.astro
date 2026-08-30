@@ -1,0 +1,86 @@
+---
+/**
+ * An observation, drawn snapshot-led (Build Prompt 72).
+ *
+ * HIGH TO LOW. The first thing read is what the observation is: its title,
+ * large, with the risk beside it. Everything else is detail that follows from
+ * that, top to bottom, and administrative metadata never precedes it. A reader
+ * opening this should know within a second what was found and how bad it is;
+ * the year it belongs to and the sub-area it sits in are answers to questions
+ * they have not asked yet.
+ *
+ * DEFERENCE. One panel, hairline rules between sections, no boxes inside boxes
+ * and nothing filled or dark. Whitespace and type carry the hierarchy, so the
+ * only colour on the page is the risk, which therefore means something.
+ *
+ * The arrangement is decided in `reports/findingCards.ts` and this component
+ * draws it, so this screen, the report preview and the printed pack show the
+ * same observation in the same order under the same labels, and the print rules
+ * apply to all of them because there is one set of class names.
+ *
+ * Server-rendered, with no client script of any kind.
+ */
+import GrcFindingCard from '@/components/grc/GrcFindingCard.astro';
+import {
+  contextChips,
+  findingHeader,
+  riskPillClass,
+  visibleCards,
+  type FindingSource,
+} from '@grc/reports/findingCards';
+
+interface Props {
+  finding: FindingSource;
+  /** Set on the print and board views, which want no interactive chrome. */
+  flat?: boolean;
+  /** Match the quiet, fieldset-led create/edit work-paper layout. */
+  formStyle?: boolean;
+}
+const { finding, flat = false, formStyle = false } = Astro.props;
+
+const header = findingHeader(finding);
+const chips = contextChips(finding);
+const cards = visibleCards(finding);
+---
+
+<article
+  class:list={['grc-snap', { 'grc-snap--flat': flat, 'grc-snap--form': formStyle }]}
+  data-finding-cards
+>
+  <header class="grc-snap__head">
+    {
+      /* The kicker: which record, where it stands, and how bad it is. Small and
+        quiet, because it is the caption to the title rather than the headline. */
+    }
+    <div class="grc-snap__kicker">
+      <span class="grc-snap__ref">{header.reference}</span>
+      <span class="grc-chip">{header.status}</span>
+      {
+        /* Colour is never the only signal: the pill carries its own word, and
+          the screen reader is told what the word means. */
+      }
+      <span
+        class:list={['grc-snap__risk', riskPillClass(header.risk.tone)]}
+        data-risk={header.risk.tone ?? 'unrated'}
+      >
+        <span class="grc-vh">{header.risk.srLabel}</span>
+        <span aria-hidden="true">{header.risk.label}</span>
+      </span>
+    </div>
+
+    {/* The anchor. Everything below is read in the light of this. */}
+    <h2 class="grc-snap__title">{header.title}</h2>
+
+    {
+      chips.length > 0 && (
+        <ul class="grc-snap__context">
+          {chips.map((chip) => (
+            <li class="grc-chip grc-chip--quiet">{chip}</li>
+          ))}
+        </ul>
+      )
+    }
+  </header>
+
+  {cards.map((card) => <GrcFindingCard card={card} />)}
+</article>

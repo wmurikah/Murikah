@@ -1,0 +1,48 @@
+-- Migration 002: confine a role to its user's affiliate (Build Prompt 45)
+--
+-- Adds scope_to_affiliate to role_permissions. When set for a role in an
+-- organisation, a user holding that role sees only records whose affiliate_code
+-- matches their own users.affiliate_code, on top of the module and action grants
+-- they already hold. When unset, behaviour is exactly as before: the whole
+-- organisation, within their grants.
+--
+-- WHY THE FLAG LIVES HERE, and not on `roles`. `roles` is a platform-wide table
+-- with no organization_id, so a flag on it would confine that role for every
+-- customer at once: the very cross-tenant defect migration 001 removed from the
+-- permission matrix (AC-01). `role_permissions` is tenant-scoped, so the flag
+-- inherits that scoping for free and one customer's decision stays theirs.
+--
+-- The flag is therefore stored once per grant row rather than once per role,
+-- which is denormalised. It is safe because the whole row set for a role is
+-- rewritten in a single atomic batch on every save
+-- (repos/permissionsAdmin.ts::saveRoleMatrix), so the rows cannot disagree. The
+-- read takes MAX(scope_to_affiliate) and treats any set row as confining, so
+-- even a hand-edited database fails closed rather than open.
+--
+-- This is a plain ADD COLUMN: no key changes, so no table rebuild is needed and
+-- no data moves. Existing rows default to 0, which is the current behaviour, so
+-- applying this changes nothing until an administrator ticks the box.
+--
+-- HOW TO RUN IT. See grc/docs/deploy.md, "Migration 002":
+--
+--   turso db shell hassaudit < grc/db/migrations/002-role-permissions-affiliate-scope.sql
+--
+-- Take a backup first (`turso db shell hassaudit .dump > backup.sql`). Run
+-- migration 001 before this one; this assumes the tenant-scoped table it
+-- created. Running it twice fails harmlessly with "duplicate column name".
+
+ALTER TABLE role_permissions
+  ADD COLUMN scope_to_affiliate INTEGER NOT NULL DEFAULT 0;
+
+-- Verification, to run afterwards.
+--
+--   -- The column is there, defaulted off, so nothing has changed yet.
+--   SELECT sql FROM sqlite_master WHERE name = 'role_permissions';
+--   SELECT scope_to_affiliate, COUNT(*) FROM role_permissions GROUP BY scope_to_affiliate;
+--
+--   -- Before confining a role, check its users actually carry an affiliate:
+--   -- one in a confined role with no affiliate_code sees nothing until an
+--   -- administrator assigns them one, which the screens say plainly.
+--   SELECT organization_id, role_code, affiliate_code, COUNT(*)
+--     FROM users WHERE deleted_at IS NULL
+--    GROUP BY organization_id, role_code, affiliate_code;

@@ -1,0 +1,61 @@
+---
+/**
+ * Tabs, as links.
+ *
+ * Each tab is an anchor to a real path rather than a JavaScript panel switch,
+ * so a tab can be bookmarked, opened in a new tab, and survives a reload. That
+ * is progressive disclosure without inventing client-side state, and it is the
+ * form these tabs will keep once the modules behind them exist.
+ *
+ * aria-current marks the active tab, which is the correct attribute for a set
+ * of links; role="tablist" is deliberately not used, because these are not
+ * ARIA tabs and claiming otherwise would promise keyboard behaviour that a link
+ * list does not have.
+ */
+export interface CmsTab {
+  label: string;
+  href: string;
+  count?: number;
+}
+
+interface Props {
+  tabs: CmsTab[];
+  current: string;
+  label: string;
+  class?: string;
+}
+const { tabs, current, label, class: className } = Astro.props;
+---
+
+<nav aria-label={label} class:list={['border-b border-cms-line', className]}>
+  <ul class="-mb-px flex gap-1 overflow-x-auto">
+    {
+      tabs.map((tab) => {
+        const active = tab.href === current;
+        return (
+          <li>
+            <a
+              href={tab.href}
+              aria-current={active ? 'page' : undefined}
+              class:list={[
+                'inline-flex h-11 items-center gap-2 border-b-2 px-3 text-cms-body-sm font-medium',
+                'whitespace-nowrap transition-colors duration-150 outline-none',
+                'focus-visible:ring-2 focus-visible:ring-focus',
+                active
+                  ? 'border-cms-royal text-cms-royal'
+                  : 'border-transparent text-cms-muted hover:border-cms-border hover:text-cms-ink',
+              ]}
+            >
+              {tab.label}
+              {typeof tab.count === 'number' && (
+                <span class="rounded-full bg-cms-canvas px-1.5 py-0.5 text-cms-caption font-semibold text-cms-muted">
+                  {tab.count}
+                </span>
+              )}
+            </a>
+          </li>
+        );
+      })
+    }
+  </ul>
+</nav>

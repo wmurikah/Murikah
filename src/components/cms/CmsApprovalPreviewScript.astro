@@ -1,0 +1,226 @@
+---
+/**
+ * The behaviour behind the approval preview.
+ *
+ * It posts the form to /api/admin/approval-preview and renders the stages the
+ * server answered with. It contains no resolution logic of its own, and it must
+ * not gain any: the whole value of this screen is that what it shows is what
+ * the live path will do, and a browser that worked any of it out for itself
+ * would be a second resolver disagreeing with the first.
+ *
+ * The plain-language reason is always shown. The full resolution trace is
+ * behind a disclosure, because a normal reading of this screen is "who approves
+ * this", and the configuration dump is what you open when the answer surprises
+ * you.
+ */
+---
+
+<script>
+  interface Approver {
+    userId: string;
+    displayName: string;
+    reason: string;
+    assignmentId: string;
+    authorityRuleId: string | null;
+    scopeType: string;
+    unrestricted: boolean;
+  }
+  interface TraceEntry {
+    displayName: string;
+    assignmentId: string;
+    scopeType: string;
+    scopeTargetId: string | null;
+    priority: number;
+    eligible: boolean;
+    rejection: string | null;
+    ruleNotes: string[];
+  }
+  interface StagePreview {
+    stageCode: string;
+    stageName: string;
+    sequenceNo: number;
+    approvalMode: string;
+    requiredApprovals: number;
+    threshold: number;
+    outcome: 'resolved' | 'exception' | 'not_applicable';
+    approvers: Approver[];
+    exception: { reason: string; message: string } | null;
+    trace: TraceEntry[] | null;
+  }
+
+  const form = document.getElementById('cms-preview-form') as HTMLFormElement | null;
+  const output = document.getElementById('cms-preview-output');
+  const errorBox = document.getElementById('cms-preview-error');
+  const run = document.getElementById('cms-preview-run') as HTMLButtonElement | null;
+
+  if (form && output && run) {
+    const el = (tag: string, className: string, textContent = ''): HTMLElement => {
+      const node = document.createElement(tag);
+      if (className !== '') node.className = className;
+      if (textContent !== '') node.textContent = textContent;
+      return node;
+    };
+
+    const showError = (message: string) => {
+      if (!errorBox) return;
+      errorBox.hidden = false;
+      errorBox.textContent = message;
+    };
+
+    const renderTrace = (entries: TraceEntry[]): HTMLElement => {
+      const details = el('details', 'mt-2 rounded-cms border border-cms-line bg-cms-canvas p-3');
+      const summary = el(
+        'summary',
+        'cursor-pointer text-cms-body-sm font-medium text-cms-royal',
+        `Why: every assignment considered (${entries.length})`,
+      );
+      details.appendChild(summary);
+      const list = el('ul', 'mt-2 flex flex-col gap-2');
+      for (const entry of entries) {
+        const item = el('li', 'text-cms-body-sm');
+        const target = entry.scopeTargetId === null ? '' : ` ${entry.scopeTargetId}`;
+        item.appendChild(
+          el(
+            'span',
+            entry.eligible ? 'font-medium text-cms-ink' : 'font-medium text-cms-muted',
+            `${entry.displayName} (${entry.scopeType.toLowerCase().replace(/_/g, ' ')}${target}, priority ${entry.priority}): ${entry.eligible ? 'eligible' : (entry.rejection ?? 'not eligible')}`,
+          ),
+        );
+        if (entry.ruleNotes.length > 0) {
+          const notes = el('ul', 'mt-1 ms-4 list-disc text-cms-muted');
+          for (const note of entry.ruleNotes) notes.appendChild(el('li', '', note));
+          item.appendChild(notes);
+        }
+        list.appendChild(item);
+      }
+      details.appendChild(list);
+      return details;
+    };
+
+    const renderStage = (stage: StagePreview): HTMLElement => {
+      const card = el('li', 'rounded-cms-lg border border-cms-line bg-cms-surface p-4');
+      const head = el('div', 'flex flex-wrap items-baseline justify-between gap-2');
+      head.appendChild(
+        el(
+          'h4',
+          'text-cms-card font-semibold text-cms-navy',
+          `${stage.sequenceNo}. ${stage.stageName}`,
+        ),
+      );
+      head.appendChild(el('span', 'text-cms-caption text-cms-muted', stage.stageCode));
+      card.appendChild(head);
+
+      if (stage.outcome === 'not_applicable') {
+        card.appendChild(
+          el(
+            'p',
+            'mt-2 text-cms-body-sm text-cms-muted',
+            'This stage goes to a named person, a team or the system, so no authority resolution applies.',
+          ),
+        );
+        return card;
+      }
+
+      if (stage.outcome === 'exception') {
+        const warn = el(
+          'p',
+          'mt-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink',
+          stage.exception?.message ?? 'No eligible approver.',
+        );
+        card.appendChild(warn);
+        card.appendChild(
+          el(
+            'p',
+            'mt-1 text-cms-body-sm text-cms-muted',
+            'A live stage in this state is a configuration exception: nobody is assigned, an APPROVAL_EXCEPTION is written, and it waits for an administrator.',
+          ),
+        );
+        if (stage.trace && stage.trace.length > 0) card.appendChild(renderTrace(stage.trace));
+        return card;
+      }
+
+      card.appendChild(
+        el(
+          'p',
+          'mt-1 text-cms-body-sm text-cms-muted',
+          `${stage.approvers.length === 1 ? '1 approver' : `${stage.approvers.length} approvers`}, ${stage.threshold === 1 ? '1 approval needed' : `${stage.threshold} approvals needed`}.`,
+        ),
+      );
+      const list = el('ul', 'mt-2 flex flex-col gap-2');
+      for (const approver of stage.approvers) {
+        const item = el('li', 'rounded-cms border border-cms-line px-3 py-2');
+        item.appendChild(el('p', 'font-medium text-cms-ink', approver.displayName));
+        item.appendChild(el('p', 'text-cms-body-sm text-cms-muted', approver.reason));
+        if (approver.unrestricted) {
+          item.appendChild(
+            el(
+              'p',
+              'mt-1 text-cms-body-sm text-cms-caution',
+              'This assignment carries no authority rule, so it is not limited by amount, currency or product.',
+            ),
+          );
+        }
+        list.appendChild(item);
+      }
+      card.appendChild(list);
+      if (stage.trace && stage.trace.length > 0) card.appendChild(renderTrace(stage.trace));
+      return card;
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (errorBox) errorBox.hidden = true;
+      run.disabled = true;
+      output.replaceChildren();
+
+      const data = new FormData(form);
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of data.entries()) {
+        if (typeof value === 'string' && value !== '') body[name] = value;
+      }
+
+      // The product dimension is a set of lines, because a rule that restricts
+      // by product is tested against every line and not against a header field.
+      const lines: { productCategoryId: string; productGroupId: string }[] = [];
+      form.querySelectorAll<HTMLInputElement>('input[name="line"]:checked').forEach((box) =>
+        lines.push({
+          productCategoryId: box.dataset.categoryId ?? '',
+          productGroupId: box.dataset.groupId ?? '',
+        }),
+      );
+      body.lines = lines;
+
+      try {
+        const response = await fetch('/api/admin/approval-preview', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        const answer = (await response.json().catch(() => null)) as {
+          definition?: { workflowName: string; versionNo: number };
+          stages?: StagePreview[];
+          error?: { message?: string };
+        } | null;
+
+        if (!response.ok) {
+          showError(answer?.error?.message ?? 'That preview could not be run.');
+          return;
+        }
+        const heading = el(
+          'p',
+          'text-cms-body-sm text-cms-muted',
+          `${answer?.definition?.workflowName ?? 'Workflow'}, version ${answer?.definition?.versionNo ?? 1}.`,
+        );
+        output.appendChild(heading);
+        const stages = el('ul', 'mt-3 flex flex-col gap-3');
+        for (const stage of answer?.stages ?? []) stages.appendChild(renderStage(stage));
+        output.appendChild(stages);
+      } catch {
+        showError('There was a problem reaching the server. Check your connection.');
+      } finally {
+        run.disabled = false;
+      }
+    });
+  }
+</script>

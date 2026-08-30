@@ -26,11 +26,18 @@ export type NotificationType =
   | 'STALE_REMINDER'
   | 'OVERDUE_REMINDER'
   | 'DUE_SOON_REMINDER'
+  | 'REQUIREMENT_ASSIGNED'
+  | 'REQUIREMENT_SUBMITTED'
+  | 'REQUIREMENT_MORE_INFO'
+  | 'AUDITEE_DELEGATED'
+  | 'AUDITEE_RETURNED'
+  | 'AUDITEE_RELEASED'
+  | 'AUDITEE_DECIDED'
   | 'PASSWORD_RESET';
 
 export type Priority = 'normal' | 'urgent';
 export type Severity = 'info' | 'warning' | 'urgent';
-export type EntityType = 'work_paper' | 'action_plan' | 'user';
+export type EntityType = 'work_paper' | 'action_plan' | 'requirement' | 'user';
 
 export interface TypeMeta {
   label: string;
@@ -78,7 +85,7 @@ export const TYPE_META: Record<NotificationType, TypeMeta> = {
     entity: 'work_paper',
   },
   WP_SENT_TO_AUDITEE: {
-    label: 'Finding sent to auditee',
+    label: 'Observation sent to auditee',
     priority: 'urgent',
     severity: 'urgent',
     ccHoa: true,
@@ -174,6 +181,68 @@ export const TYPE_META: Record<NotificationType, TypeMeta> = {
     severity: 'warning',
     ccHoa: false,
     entity: 'action_plan',
+  },
+  // The requirements loop (Build Prompt 58). An owner being asked for something,
+  // and being asked again, are the events they act on, so both copy the head of
+  // audit for nothing: they are between the auditor and the owner. A submission
+  // is the auditor's cue to review, and it is batched like every other normal
+  // item, so twelve owners answering on a Friday make one digest.
+  REQUIREMENT_ASSIGNED: {
+    label: 'Information requested',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'requirement',
+  },
+  REQUIREMENT_SUBMITTED: {
+    label: 'Information provided',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'requirement',
+  },
+  REQUIREMENT_MORE_INFO: {
+    label: 'Further information requested',
+    priority: 'normal',
+    severity: 'warning',
+    ccHoa: false,
+    entity: 'requirement',
+  },
+  // The auditee response loop (Build Prompt 68). Every one of these goes to
+  // every responsible and every CC on the finding, because the loop's whole
+  // failure mode is somebody assuming somebody else was told: a unit manager
+  // who does not know their supervisor handed the draft back, or a copy
+  // recipient who finds out at the closing meeting. None copies the head of
+  // audit through the ccHoa flag: audit is either the actor or already a named
+  // recipient of the release and the decision, and a second copy of a mail you
+  // sent yourself is noise.
+  AUDITEE_DELEGATED: {
+    label: 'Response delegated',
+    priority: 'urgent',
+    severity: 'urgent',
+    ccHoa: false,
+    entity: 'work_paper',
+  },
+  AUDITEE_RETURNED: {
+    label: 'Draft returned to the unit manager',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'work_paper',
+  },
+  AUDITEE_RELEASED: {
+    label: 'Response released to audit',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: true,
+    entity: 'work_paper',
+  },
+  AUDITEE_DECIDED: {
+    label: 'Audit decision on the response',
+    priority: 'normal',
+    severity: 'info',
+    ccHoa: false,
+    entity: 'work_paper',
   },
   PASSWORD_RESET: {
     label: 'Password reset link',

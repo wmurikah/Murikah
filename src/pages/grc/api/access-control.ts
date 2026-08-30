@@ -1,37 +1,47 @@
 export const prerender = false;
 
 /**
- * Save a role's permission matrix, gated on the matrix itself (CONFIG update),
- * platform owner always. Never touches SUPER_ADMIN, which always holds the full
- * matrix.
+ * Save a role's permission matrix for one organisation, gated on the matrix
+ * itself (CONFIG update), platform owner always. Reads every module and action
+ * grant off the submitted checkboxes and writes the role's whole matrix in one
+ * atomic batch, never touching SUPER_ADMIN (which always holds the full matrix),
+ * and records the change in audit_log.
  *
- * The whole submission goes down as one atomic batch (Build Prompt 43). It used
- * to be 54 sequential UPDATE-then-INSERT round trips with nothing around them,
- * which meant two things: a failure part way through left the role three
- * quarters changed while telling the administrator the save had failed, and the
- * throw escaped to the middleware's last-resort boundary, so all they ever saw
- * was `{"error":"internal_error"}`. Now it applies in full or not at all, and a
- * failure comes back to the screen as a message with the cause logged under
- * [grc.access-control], the way every other Setup endpoint behaves.
+ * The organisation written is the acting one, resolved server-side from the
+ * session in `src/middleware.ts` and never taken from the request (Build Prompt
+ * 44). An instance admin is pinned to their own organisation and cannot switch,
+ * so a save by one customer's administrator can only reach that customer's rows.
+ * A platform owner inside an instance edits that instance, exactly as its own
+ * administrator would; a platform owner inside no instance edits the platform
+ * defaults, which is the one path that writes the sentinel organisation and is
+ * why this endpoint is instance-free (`src/lib/grc/routing.ts`).
+ *
+ * The write is wrapped, and the wrapping is the point: an unhandled throw here
+ * used to escape into the middleware's last-resort boundary and reach the
+ * administrator as `{"error":"internal_error"}` with the real cause visible only
+ * in the Worker log (audit finding AC-03). A Setup mutation must never reach
+ * that boundary. The cause is logged under `[grc.access-control]` and the
+ * administrator is redirected back to the screen with something they can act on,
+ * exactly as the other Setup endpoints behave.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { MODULES, ACTIONS, can } from '@grc/auth/rbac';
-import { saveRoleMatrix, type Grant } from '@grc/repos/permissionsAdmin';
+import { MODULES, ACTIONS, can, PLATFORM_DEFAULT_ORG } from '@grc/auth/rbac';
+import { saveRoleMatrix, type RoleGrant } from '@grc/repos/permissionsAdmin';
 import { writeAuditLog } from '@grc/repos/audit';
 
 const TAG = '[grc.access-control]';
-const PAGE = '/settings/access-control';
 
 function redirect(location: string): Response {
   return new Response(null, { status: 303, headers: { location } });
 }
 
 /** Back to the screen with the role still selected, carrying a message. */
-function back(roleCode: string, kind: 'done' | 'error', message: string): Response {
-  const role = roleCode ? `role=${encodeURIComponent(roleCode)}&` : '';
-  return redirect(`${PAGE}?${role}${kind}=${encodeURIComponent(message)}`);
+function back(roleCode: string, param: 'done' | 'error', message: string): Response {
+  return redirect(
+    `/settings/access-control?role=${encodeURIComponent(roleCode)}&${param}=${encodeURIComponent(message)}`,
+  );
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -46,14 +56,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!roleCode) return back('', 'error', 'No role was selected.');
   // SUPER_ADMIN always holds the full matrix and is never modified here.
   if (roleCode === 'SUPER_ADMIN') {
-    return back(
-      'SUPER_ADMIN',
-      'error',
-      'SUPER_ADMIN always has full access and cannot be changed.',
-    );
+    return back(roleCode, 'error', 'SUPER_ADMIN always has full access and cannot be changed.');
   }
 
-  const grants: Grant[] = [];
+  // The submission is the complete matrix the administrator saw: an unticked box
+  // posts nothing, so every cell is read explicitly and stored either way.
+  const grants: RoleGrant[] = [];
   for (const moduleCode of MODULES) {
     for (const actionCode of ACTIONS) {
       grants.push({
@@ -64,29 +72,42 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
   }
 
+  // The one organisation this save may reach. An acting organisation is always
+  // present for anybody but a platform owner above the instances, and only that
+  // owner can therefore reach the platform defaults.
+  const targetOrg = grc.organizationId === '' ? PLATFORM_DEFAULT_ORG : grc.organizationId;
+  if (targetOrg === PLATFORM_DEFAULT_ORG && !grc.isPlatformOwner) {
+    return back(roleCode, 'error', 'Only the platform owner can change the platform defaults.');
+  }
+  const scopeName =
+    targetOrg === PLATFORM_DEFAULT_ORG ? 'the platform defaults' : grc.organizationName;
+
+  // Affiliate confinement (Build Prompt 45), the second dimension beside the
+  // grants: a role marked confined sees only its user's own affiliate.
+  const scopeToAffiliate = form.get('scope_to_affiliate') === '1';
+
+  const db = await getDb(getGrcEnv());
   try {
-    const db = await getDb(getGrcEnv());
-    // One atomic batch: the role's matrix is replaced in full, or not at all.
-    await saveRoleMatrix(db, roleCode, grants);
-    try {
-      await writeAuditLog(db, {
-        organizationId: grc.organizationId,
-        userId: grc.userId,
-        action: 'ACCESS_CONTROL.update',
-        details: roleCode,
-      });
-    } catch {
-      // best-effort audit
-    }
-    return back(roleCode, 'done', `Permissions saved for ${roleCode}.`);
+    await saveRoleMatrix(db, targetOrg, roleCode, grants, scopeToAffiliate);
   } catch (err) {
-    // Never a silent 500 from the boundary: the cause goes to the log and the
-    // administrator gets something they can act on.
-    console.error(`${TAG} saving the matrix for ${roleCode} failed`, err);
+    console.error(`${TAG} the permissions for ${roleCode} in ${targetOrg} could not be saved`, err);
     return back(
       roleCode,
       'error',
-      'The permissions could not be saved. Nothing was changed. Please try again, and contact support if it keeps happening.',
+      `The permissions for ${roleCode} could not be saved, so nothing was changed. Please try again.`,
     );
   }
+
+  try {
+    await writeAuditLog(db, {
+      organizationId: targetOrg,
+      userId: grc.userId,
+      action: 'ACCESS_CONTROL.update',
+      details: `${roleCode} in ${targetOrg}${scopeToAffiliate ? ' (confined to affiliate)' : ''}`,
+    });
+  } catch {
+    // best-effort audit
+  }
+
+  return back(roleCode, 'done', `Permissions for ${roleCode} saved for ${scopeName}.`);
 };

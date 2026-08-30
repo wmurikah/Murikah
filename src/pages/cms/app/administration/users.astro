@@ -1,0 +1,370 @@
+---
+/**
+ * Administration → Users: the directory.
+ *
+ * Filtered and paginated in the database. Loading fifteen users and filtering
+ * in the browser would work today and stop working at five hundred, and the
+ * shape of the query is the part that is painful to retrofit.
+ *
+ * EVERY JOIN OUT OF `users` IS A LEFT JOIN
+ * The five seeded EXTERNAL users hold no assignment row at all. An INNER JOIN
+ * would drop them and the directory would be quietly lying about who exists, so
+ * every assignment-derived column here tolerates null and says what it means:
+ * "No assignment" rather than an empty cell that reads as a rendering fault.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsUserCreateDrawer from '@/components/cms/CmsUserCreateDrawer.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers } from '@/lib/cms/permissions';
+import { USER_STATUSES, USER_TYPES } from '@/lib/cms/admin/userInput';
+import {
+  listUsers,
+  listJobTitles,
+  PAGE_SIZE,
+  type JobTitleRow,
+  type UserPage,
+} from '@/lib/cms/repos/userAdmin';
+import {
+  listAffiliates,
+  listBusinessUnits,
+  listCountries,
+  listDepartments,
+  listTeams,
+  type AffiliateRow,
+  type BusinessUnitRow,
+  type CountryRow,
+  type DepartmentRow,
+  type TeamRow,
+} from '@/lib/cms/repos/organisationAdmin';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageUsers(permissions);
+
+const q = Astro.url.searchParams;
+const filters = {
+  search: q.get('q') ?? '',
+  status: q.get('status') ?? '',
+  userType: q.get('userType') ?? '',
+  countryId: q.get('countryId') ?? '',
+  affiliateId: q.get('affiliateId') ?? '',
+  businessUnitId: q.get('businessUnitId') ?? '',
+  departmentId: q.get('departmentId') ?? '',
+  jobTitleId: q.get('jobTitleId') ?? '',
+  teamId: q.get('teamId') ?? '',
+  page: Number(q.get('page') ?? '1') || 1,
+};
+
+let page: UserPage = { items: [], total: 0, page: 1, pageSize: PAGE_SIZE, pageCount: 1 };
+let countries: CountryRow[] = [];
+let affiliates: AffiliateRow[] = [];
+let businessUnits: BusinessUnitRow[] = [];
+let departments: DepartmentRow[] = [];
+let titles: JobTitleRow[] = [];
+let teams: TeamRow[] = [];
+let loadFailed = false;
+
+if (mayManage) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [page, countries, affiliates, businessUnits, departments, titles, teams] = await Promise.all([
+      listUsers(db, filters),
+      listCountries(db),
+      listAffiliates(db),
+      listBusinessUnits(db),
+      listDepartments(db),
+      listJobTitles(db),
+      listTeams(db),
+    ]);
+  } catch (error) {
+    console.error('[cms.users] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const anyOption = (label: string) => ({ value: '', label });
+const statusOptions = [
+  anyOption('Any status'),
+  ...USER_STATUSES.map((s) => ({ value: s, label: title(s) })),
+];
+const typeOptions = [
+  anyOption('Any type'),
+  ...USER_TYPES.map((t) => ({ value: t, label: title(t) })),
+];
+const countryOptions = [
+  anyOption('Any country'),
+  ...countries.map((c) => ({ value: c.countryId, label: c.countryName })),
+];
+const affiliateOptions = [
+  anyOption('Any affiliate'),
+  // The code disambiguates: `affiliate_name` is not unique in this schema.
+  ...affiliates.map((a) => ({
+    value: a.affiliateId,
+    label: `${a.affiliateName} (${a.affiliateCode})`,
+  })),
+];
+const unitOptions = [
+  anyOption('Any business unit'),
+  ...businessUnits.map((b) => ({ value: b.businessUnitId, label: b.businessUnitName })),
+];
+const departmentOptions = [
+  anyOption('Any department'),
+  ...departments.map((d) => ({ value: d.departmentId, label: d.departmentName })),
+];
+const titleOptions = [
+  anyOption('Any job title'),
+  ...titles.map((t) => ({ value: t.jobTitleId, label: t.titleName })),
+];
+const teamOptions = [
+  anyOption('Any team'),
+  ...teams.map((t) => ({ value: t.teamId, label: t.teamName })),
+];
+
+/** `SUSPENDED` is a database value, not a word a person should have to read. */
+function title(value: string): string {
+  return value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+}
+
+const statusTone = (status: string) =>
+  status === 'ACTIVE'
+    ? 'success'
+    : status === 'SUSPENDED'
+      ? 'danger'
+      : status === 'INVITED'
+        ? 'info'
+        : 'neutral';
+
+const filtered = Object.entries(filters).some(([k, v]) => k !== 'page' && v !== '');
+const pageHref = (n: number) => {
+  const next = new URLSearchParams(q);
+  next.set('page', String(n));
+  return `/app/administration/users?${next.toString()}`;
+};
+---
+
+<CmsLayout title="Users">
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to user administration"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The user directory could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Users"
+          crumbs={[{ label: 'Administration', href: '/app/administration' }, { label: 'Users' }]}
+        >
+          <CmsButton slot="actions" variant="secondary" href="/app/administration/users/job-titles">
+            Job titles
+          </CmsButton>
+          <CmsButton slot="actions" variant="primary" icon="plus" id="cms-user-create">
+            New user
+          </CmsButton>
+        </CmsPageHeader>
+
+        {/*
+          A GET form, so a filtered view is a URL: it can be bookmarked, shared
+          and reached with the back button, and none of it needs JavaScript.
+        */}
+        <form
+          method="get"
+          action="/app/administration/users"
+          class="flex flex-wrap items-end gap-3"
+        >
+          <CmsInput
+            id="cms-user-search"
+            name="q"
+            label="Search"
+            type="search"
+            value={filters.search}
+            placeholder="Name, email or employee number"
+            class="min-w-56 flex-1"
+          />
+          <CmsSelect
+            id="f-status"
+            name="status"
+            label="Status"
+            options={statusOptions}
+            value={filters.status}
+            class="w-40"
+          />
+          <CmsSelect
+            id="f-userType"
+            name="userType"
+            label="Type"
+            options={typeOptions}
+            value={filters.userType}
+            class="w-36"
+          />
+          <CmsSelect
+            id="f-country"
+            name="countryId"
+            label="Country"
+            options={countryOptions}
+            value={filters.countryId}
+            class="w-44"
+          />
+          <CmsSelect
+            id="f-affiliate"
+            name="affiliateId"
+            label="Affiliate"
+            options={affiliateOptions}
+            value={filters.affiliateId}
+            class="w-52"
+          />
+          <CmsSelect
+            id="f-unit"
+            name="businessUnitId"
+            label="Business unit"
+            options={unitOptions}
+            value={filters.businessUnitId}
+            class="w-44"
+          />
+          <CmsSelect
+            id="f-department"
+            name="departmentId"
+            label="Department"
+            options={departmentOptions}
+            value={filters.departmentId}
+            class="w-48"
+          />
+          <CmsSelect
+            id="f-title"
+            name="jobTitleId"
+            label="Job title"
+            options={titleOptions}
+            value={filters.jobTitleId}
+            class="w-48"
+          />
+          <CmsSelect
+            id="f-team"
+            name="teamId"
+            label="Team"
+            options={teamOptions}
+            value={filters.teamId}
+            class="w-48"
+          />
+          <CmsButton type="submit" variant="secondary">
+            Apply
+          </CmsButton>
+          {filtered && (
+            <CmsButton variant="ghost" href="/app/administration/users">
+              Clear
+            </CmsButton>
+          )}
+        </form>
+
+        <p class="text-cms-body-sm text-cms-muted">
+          {page.total} {page.total === 1 ? 'person' : 'people'}
+          {filtered ? ' match these filters' : ' in the directory'}
+          {page.pageCount > 1 ? `, page ${page.page} of ${page.pageCount}` : ''}.
+        </p>
+
+        <CmsDataTable
+          caption="Users"
+          columns={[
+            { key: 'name', label: 'Name' },
+            { key: 'employee', label: 'Employee no.', secondary: true },
+            { key: 'title', label: 'Job title' },
+            { key: 'assignment', label: 'Assignment' },
+            { key: 'team', label: 'Team', secondary: true },
+            { key: 'status', label: 'Status' },
+            { key: 'lastLogin', label: 'Last login', secondary: true },
+          ]}
+          empty={page.items.length === 0}
+        >
+          {page.items.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={`/app/administration/users/${row.userId}`}
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.displayName}
+                </a>
+                <span class="block text-cms-caption text-cms-muted">{row.email}</span>
+              </td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.employeeNo ?? '—'}
+              </td>
+              {/*
+                An external user holds no assignment. "No assignment" rather
+                than a blank cell, so an empty column reads as a fact about the
+                person and not as a fault in the page.
+              */}
+              <td class="px-4 py-2.5 text-cms-muted">{row.jobTitle ?? 'No assignment'}</td>
+              <td class="px-4 py-2.5 text-cms-muted">
+                {row.assignmentLevel === 'GROUP'
+                  ? 'Hass Petroleum Group'
+                  : (row.businessUnitName ?? row.affiliateName ?? row.countryName ?? '—')}
+              </td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.teamNames ?? '—'}
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone={statusTone(row.status)} label={title(row.status)} />
+              </td>
+              <td class="hidden px-4 py-2.5 text-cms-muted tabular-nums sm:table-cell">
+                {row.lastLoginAt ?? 'Never'}
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="search"
+              title="Nobody matches"
+              description="Change the search or the filters, or add a user."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        {page.pageCount > 1 && (
+          <nav aria-label="Directory pages" class="flex items-center justify-between gap-3">
+            <CmsButton
+              variant="ghost"
+              href={pageHref(Math.max(1, page.page - 1))}
+              disabled={page.page === 1}
+            >
+              Previous
+            </CmsButton>
+            <span class="text-cms-body-sm text-cms-muted">
+              Page {page.page} of {page.pageCount}
+            </span>
+            <CmsButton
+              variant="ghost"
+              href={pageHref(Math.min(page.pageCount, page.page + 1))}
+              disabled={page.page === page.pageCount}
+            >
+              Next
+            </CmsButton>
+          </nav>
+        )}
+
+        <CmsUserCreateDrawer
+          countries={countries}
+          affiliates={affiliates}
+          businessUnits={businessUnits}
+          departments={departments}
+          titles={titles}
+        />
+      </Fragment>
+    )
+  }
+</CmsLayout>

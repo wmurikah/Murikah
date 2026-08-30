@@ -1,0 +1,41 @@
+---
+/**
+ * Initials in a circle. No image support yet, because there is no avatar in the
+ * data model to show and a broken <img> is worse than initials. The name is
+ * required and carries the accessible text, so the circle is never a
+ * meaningless decoration.
+ */
+interface Props {
+  name: string;
+  size?: 'sm' | 'md';
+  tone?: 'royal' | 'onNavy';
+  class?: string;
+}
+const { name, size = 'md', tone = 'royal', class: className } = Astro.props;
+
+const initials = name
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0]?.toUpperCase() ?? '')
+  .join('');
+
+const sizes = { sm: 'h-7 w-7 text-cms-caption', md: 'h-9 w-9 text-cms-body-sm' };
+const tones = {
+  royal: 'bg-cms-royal-tint text-cms-royal',
+  onNavy: 'bg-cms-navy-soft text-cms-rail-text',
+};
+---
+
+<span
+  class:list={[
+    'inline-flex shrink-0 items-center justify-center rounded-full font-semibold',
+    sizes[size],
+    tones[tone],
+    className,
+  ]}
+  title={name}
+>
+  <span aria-hidden="true">{initials}</span>
+  <span class="sr-only">{name}</span>
+</span>

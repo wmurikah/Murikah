@@ -14,6 +14,13 @@ import {
   fullMatrix,
   deriveLegacyPerms,
   PAGE_PERMISSION_MAP,
+  MODULES,
+  ACTIONS,
+  PERMISSION_MODULES,
+  PERMISSION_ACTIONS,
+  PLATFORM_DEFAULT_ORG,
+  selectScopedRows,
+  type ScopedMatrixRow,
 } from '../../src/lib/grc/auth/matrix.ts';
 
 const auditor = buildMatrix([
@@ -49,7 +56,160 @@ test('pageAccess resolves a page slug through the page map', () => {
   assert.equal(pageAccess(auditeeOnly, 'action-plans'), true);
   assert.equal(pageAccess(auditeeOnly, 'auditee-responses'), true);
   assert.equal(pageAccess(auditeeOnly, 'work-papers'), false);
-  assert.deepEqual(PAGE_PERMISSION_MAP['settings/general'], [{ module: 'CONFIG', action: 'read' }]);
+  assert.deepEqual(PAGE_PERMISSION_MAP['settings/general'], [
+    { module: 'CONFIG', action: 'read' },
+    { module: 'SETUP', action: 'read' },
+  ]);
+  // Build Prompt 43 wired the two modules the live permission_modules table held
+  // and nothing read. Each opens its section on its own, and the CONFIG grant
+  // that opened them before still does, so reconciling took no access away.
+  const setupOnly = buildMatrix([{ moduleCode: 'SETUP', actionCode: 'read', isAllowed: true }]);
+  assert.equal(pageAccess(setupOnly, 'settings/general'), true);
+  assert.equal(pageAccess(setupOnly, 'settings/dropdowns'), true);
+  assert.equal(
+    pageAccess(setupOnly, 'settings/access-control'),
+    false,
+    'CONFIG only, deliberately',
+  );
+  const notifyOnly = buildMatrix([
+    { moduleCode: 'NOTIFICATION', actionCode: 'read', isAllowed: true },
+  ]);
+  assert.equal(pageAccess(notifyOnly, 'send-queue'), true);
+  const configOnly = buildMatrix([{ moduleCode: 'CONFIG', actionCode: 'read', isAllowed: true }]);
+  for (const slug of [
+    'send-queue',
+    'settings',
+    'settings/general',
+    'settings/affiliates',
+    'settings/audit-universe',
+    'settings/dropdowns',
+  ]) {
+    assert.equal(pageAccess(configOnly, slug), true, `CONFIG.read must still open ${slug}`);
+  }
+  // settings/users is unchanged: it gates on USER.read, not on CONFIG.
+  assert.equal(pageAccess(configOnly, 'settings/users'), false);
+});
+
+test('the module and action lists come from the one catalogue', () => {
+  // The drift this guards against: the code enforcing a module the live
+  // permission_modules table does not hold makes every role save violate a
+  // foreign key (Build Prompt 43). One source, and the seed reads it too.
+  assert.deepEqual(
+    MODULES,
+    PERMISSION_MODULES.map((m) => m.code),
+  );
+  assert.deepEqual(
+    ACTIONS,
+    PERMISSION_ACTIONS.map((a) => a.code),
+  );
+  assert.equal(new Set(MODULES).size, MODULES.length, 'no duplicate module code');
+  assert.equal(new Set(ACTIONS).size, ACTIONS.length, 'no duplicate action code');
+  // Every row the save creates is complete, not a bare code.
+  for (const module of PERMISSION_MODULES) {
+    assert.ok(module.code && module.name && module.description, module.code);
+  }
+  for (const action of PERMISSION_ACTIONS) {
+    assert.ok(action.code && action.name, action.code);
+  }
+  // Every module the page map gates on must be one the matrix can actually
+  // grant, or a page would be locked behind a permission no screen can give.
+  for (const grants of Object.values(PAGE_PERMISSION_MAP)) {
+    for (const grant of grants) {
+      assert.ok(MODULES.includes(grant.module), `${grant.module} must be a real module`);
+      assert.ok(ACTIONS.includes(grant.action), `${grant.action} must be a real action`);
+    }
+  }
+});
+
+const row = (
+  organizationId: string,
+  actionCode: string,
+  isAllowed: boolean,
+  scopeToAffiliate = false,
+): ScopedMatrixRow => ({
+  organizationId,
+  moduleCode: 'WORK_PAPER',
+  actionCode,
+  isAllowed,
+  scopeToAffiliate,
+});
+
+test('selectScopedRows prefers the organisation own grants over the defaults', () => {
+  // Build Prompt 44, AC-01. The matrix is tenant data: an organisation resolves
+  // its own rows when it has any, and the platform defaults otherwise.
+  const rows = [
+    row('GLOBAL', 'read', true),
+    row('GLOBAL', 'delete', true),
+    row('ORG-HASS', 'read', true),
+    row('ORG-HASS', 'delete', false),
+  ];
+
+  const hass = selectScopedRows(rows, 'ORG-HASS', 'GLOBAL');
+  assert.equal(hass.inherited, false);
+  assert.equal(canMatrix(buildMatrix(hass.rows), 'delete', 'WORK_PAPER'), false);
+
+  // An organisation with no rows of its own falls back whole, and says so.
+  const coast = selectScopedRows(rows, 'ORG-COAST', 'GLOBAL');
+  assert.equal(coast.inherited, true);
+  assert.equal(canMatrix(buildMatrix(coast.rows), 'delete', 'WORK_PAPER'), true);
+
+  // The fallback is all-or-nothing per role, never a cell-by-cell merge: an
+  // administrator who unticks a cell must be able to trust that it is revoked,
+  // not quietly re-granted by a default underneath it.
+  const partial: ScopedMatrixRow[] = [
+    { ...row('GLOBAL', 'export', true), moduleCode: 'REPORT' },
+    row('ORG-HASS', 'read', true),
+  ];
+  const own = selectScopedRows(partial, 'ORG-HASS', 'GLOBAL');
+  assert.equal(own.rows.length, 1, 'the defaults must not be merged in');
+  assert.equal(canMatrix(buildMatrix(own.rows), 'export', 'REPORT'), false);
+
+  // No acting organisation (a platform owner above the instances) reads the
+  // defaults, which is exactly what they are there to edit.
+  const platform = selectScopedRows(rows, '', 'GLOBAL');
+  assert.equal(platform.inherited, true);
+  assert.equal(canMatrix(buildMatrix(platform.rows), 'delete', 'WORK_PAPER'), true);
+
+  // Nothing seeded at all is an empty matrix, not a crash and not a full grant.
+  const empty = selectScopedRows([], 'ORG-HASS', 'GLOBAL');
+  assert.deepEqual(empty.rows, []);
+  assert.equal(canMatrix(buildMatrix(empty.rows), 'read', 'WORK_PAPER'), false);
+});
+
+test('selectScopedRows carries the affiliate confinement with the grants', () => {
+  // Build Prompt 45. The flag is stored on every grant row for the role, so it
+  // is read as "any row set": the save writes the whole set atomically and
+  // cannot leave them disagreeing, and a hand-edited database fails closed.
+  const confined = selectScopedRows(
+    [row('ORG-HASS', 'read', true, true), row('ORG-HASS', 'delete', false, true)],
+    'ORG-HASS',
+    'GLOBAL',
+  );
+  assert.equal(confined.scopeToAffiliate, true);
+
+  const open = selectScopedRows([row('ORG-HASS', 'read', true)], 'ORG-HASS', 'GLOBAL');
+  assert.equal(open.scopeToAffiliate, false);
+
+  // Fail closed: a single set row confines the role.
+  const mixed = selectScopedRows(
+    [row('ORG-HASS', 'read', true), row('ORG-HASS', 'delete', false, true)],
+    'ORG-HASS',
+    'GLOBAL',
+  );
+  assert.equal(mixed.scopeToAffiliate, true);
+
+  // The confinement travels with the rows that were chosen, so an organisation
+  // inheriting the defaults inherits their confinement, and one with its own
+  // grants is never confined by a default it does not use.
+  const rows = [row('GLOBAL', 'read', true, true), row('ORG-HASS', 'read', true, false)];
+  assert.equal(selectScopedRows(rows, 'ORG-COAST', 'GLOBAL').scopeToAffiliate, true);
+  assert.equal(selectScopedRows(rows, 'ORG-HASS', 'GLOBAL').scopeToAffiliate, false);
+});
+
+test('the platform default sentinel is the shared GLOBAL organisation', () => {
+  // One sentinel row carries everything that belongs to the platform rather than
+  // to a customer: the config rows, and now the default grants.
+  assert.equal(PLATFORM_DEFAULT_ORG, 'GLOBAL');
 });
 
 test('pageSlugForPath maps app paths onto the section slugs', () => {
@@ -59,6 +219,13 @@ test('pageSlugForPath maps app paths onto the section slugs', () => {
   assert.equal(pageSlugForPath('/settings'), 'settings');
   assert.equal(pageSlugForPath('/settings/users'), 'settings/users');
   assert.equal(pageSlugForPath('/settings/access-control'), 'settings/access-control');
+  // One finding's thread is its own slug and is deliberately unmapped, so a
+  // delegate with no permissions at all can reach the finding they were named
+  // on; the page itself refuses anybody without standing (Build Prompt 68).
+  assert.equal(pageSlugForPath('/auditee-responses'), 'auditee-responses');
+  assert.equal(pageSlugForPath('/auditee-responses/WP-1'), 'auditee-responses/thread');
+  assert.equal(pageAccess({}, 'auditee-responses/thread'), true, 'the thread gates on the page');
+  assert.equal(pageAccess({}, 'auditee-responses'), false, 'the queue still needs a grant');
   // Every mapped slug must be reachable from a real path shape.
   for (const slug of Object.keys(PAGE_PERMISSION_MAP)) {
     assert.equal(pageSlugForPath(`/${slug}`), slug, slug);

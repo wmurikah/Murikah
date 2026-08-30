@@ -1,0 +1,161 @@
+---
+/**
+ * Administration: the landing page for the configuration sections.
+ *
+ * No longer the shared placeholder, because most of these sections are now
+ * real. The page says which is built and which is not, rather than presenting
+ * equal tiles and letting a person find out by clicking.
+ *
+ * Each card is shown only to somebody who could actually use it. That is
+ * presentation and not access control: the workspace behind Organisation checks
+ * the permission for itself, and every endpoint under it refuses a caller who
+ * lacks it whether or not this page ever rendered a link.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import {
+  canManageCatalogue,
+  canManageRoles,
+  canManageUsers,
+  canViewAudit,
+  canViewOrganisation,
+  canViewWorkflows,
+  canManageWorkflowRoles,
+} from '@/lib/cms/permissions';
+import { ORGANISATION_PATH } from '@/lib/cms/admin/workspace';
+import { WORKFLOW_PATH } from '@/lib/cms/admin/workflowWorkspace';
+
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time and the permission check below runs once during
+// the build rather than per request.
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+
+interface Section {
+  label: string;
+  href: string | null;
+  ready: boolean;
+  visible: boolean;
+}
+
+const sections: Section[] = [
+  {
+    label: 'AI',
+    href: '/app/administration/ai',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
+    label: 'Channels',
+    href: '/app/administration/channels',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
+    label: 'Organisation',
+    href: ORGANISATION_PATH,
+    ready: true,
+    visible: canViewOrganisation(permissions),
+  },
+  {
+    label: 'Users',
+    href: '/app/administration/users',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
+    label: 'Roles and permissions',
+    href: '/app/administration/roles',
+    ready: true,
+    visible: canManageRoles(permissions),
+  },
+  {
+    label: 'Workflows',
+    href: WORKFLOW_PATH,
+    ready: true,
+    visible: canViewWorkflows(permissions),
+  },
+  {
+    label: 'Product catalogue',
+    href: '/app/administration/catalogue',
+    ready: true,
+    visible: canManageCatalogue(permissions),
+  },
+  {
+    label: 'Audit trail',
+    href: '/app/administration/audit',
+    ready: true,
+    visible: canViewAudit(permissions),
+  },
+  {
+    label: 'System health',
+    href: '/app/administration/health',
+    ready: true,
+    visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
+  },
+  {
+    label: 'Access review',
+    href: '/app/administration/access-review',
+    ready: true,
+    visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
+  },
+  {
+    label: 'Design reference',
+    href: '/app/administration/components',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
+    label: 'Workflow authority review',
+    href: '/app/administration/authority',
+    ready: true,
+    visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
+  },
+];
+
+const visible = sections.filter((section) => section.visible);
+---
+
+<CmsLayout title="Administration">
+  <CmsPageHeader
+    title="Administration"
+    crumbs={[{ label: 'Home', href: '/app' }, { label: 'Administration' }]}
+  />
+
+  {
+    visible.length === 0 ? (
+      <CmsCard>
+        <p class="text-cms-body-sm text-cms-muted">
+          You do not hold any administration permission, so there is nothing here for you to
+          configure. Ask a system administrator if you believe that is wrong.
+        </p>
+      </CmsCard>
+    ) : (
+      <div class="overflow-hidden rounded-cms-lg border border-cms-line bg-cms-surface">
+        {visible.map((section) =>
+          section.ready && section.href ? (
+            <a
+              href={section.href}
+              class:list={[
+                'group flex items-center gap-4 border-b border-cms-line px-5 py-4 outline-none last:border-0 hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset',
+                section.label === 'Design reference' && 'bg-cms-canvas',
+              ]}
+            >
+              <span class="min-w-0 flex-1 text-cms-card font-semibold text-cms-navy">
+                {section.label}
+              </span>
+              <CmsIcon
+                name="chevronRight"
+                size={17}
+                class="shrink-0 text-cms-muted group-hover:text-cms-royal"
+              />
+            </a>
+          ) : null,
+        )}
+      </div>
+    )
+  }
+</CmsLayout>

@@ -1,0 +1,155 @@
+---
+/**
+ * Data → the Upload Centre landing.
+ *
+ * One place where extracts arrive, one history for every type, and a light
+ * quality panel: how many names, customers and products are waiting for a
+ * decision, and which imports finished partially. Counts and a short list,
+ * deliberately: this is not an analytics dashboard and does not try to be.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canUploadImports, canViewImports } from '@/lib/cms/permissions';
+import {
+  dataQuality,
+  listBatches,
+  type DataQuality,
+  type BatchSummaryRow,
+} from '@/lib/cms/import/uploadCentre';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewImports(permissions);
+const mayUpload = canUploadImports(permissions);
+
+let quality: DataQuality | null = null;
+let recent: BatchSummaryRow[] = [];
+let loadFailed = false;
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    quality = await dataQuality(db);
+    recent = (await listBatches(db, 5)).slice(0, 5);
+  } catch (error) {
+    console.error('[cms.data.home] load failed', error);
+    loadFailed = true;
+  }
+}
+---
+
+<CmsLayout title="Data">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to the Upload Centre"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed || quality === null ? (
+      <CmsErrorState
+        title="The Upload Centre could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Upload Centre"
+          definition="Uploading validates and reports. Nothing becomes an order until somebody commits it."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Data' }]}
+        >
+          {mayUpload && (
+            <CmsButton slot="actions" variant="primary" icon="plus" href="/app/data/upload">
+              Upload a file
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <CmsKpiCard label="Unresolved users" value={String(quality.unresolvedUsers)} />
+          <CmsKpiCard
+            label="Rows awaiting a customer"
+            value={String(quality.unresolvedCustomerRows)}
+          />
+          <CmsKpiCard
+            label="Rows awaiting a product"
+            value={String(quality.unresolvedProductRows)}
+          />
+          <CmsKpiCard label="Rejected rows" value={String(quality.rejectedRows)} />
+        </div>
+
+        <div class="mt-6 grid gap-4 lg:grid-cols-2">
+          <CmsCard title="Recent imports">
+            {recent.length === 0 ? (
+              <CmsEmptyState
+                icon="data"
+                title="Nothing imported yet"
+                description="An upload will appear here."
+              />
+            ) : (
+              <ul class="flex flex-col gap-3">
+                {recent.map((batch) => (
+                  <li class="flex items-center justify-between gap-3">
+                    <a
+                      href={`/app/data/history/${batch.batchId}`}
+                      class="text-cms-body-sm font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {batch.filename}
+                    </a>
+                    <span class="text-cms-body-sm text-cms-muted tabular-nums">
+                      {batch.rowsReceived} rows, {batch.uniqueDocuments} documents,{' '}
+                      {batch.status.toLowerCase()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div class="mt-4">
+              <CmsButton variant="ghost" href="/app/data/history">
+                All import history
+              </CmsButton>
+            </div>
+          </CmsCard>
+
+          <CmsCard title="Partial imports">
+            {quality.recentPartialImports.length === 0 ? (
+              <CmsEmptyState
+                icon="data"
+                title="No partial imports"
+                description="Every commit so far landed whole."
+              />
+            ) : (
+              <ul class="flex flex-col gap-3">
+                {quality.recentPartialImports.map((batch) => (
+                  <li>
+                    <a
+                      href={`/app/data/history/${batch.batchId}`}
+                      class="text-cms-body-sm font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {batch.filename}
+                    </a>
+                    <span class="ml-2 text-cms-body-sm text-cms-muted">{batch.uploadedAt}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div class="mt-4 flex flex-wrap gap-2">
+              <CmsButton variant="ghost" href="/app/data/exceptions">
+                Exceptions and unresolved users
+              </CmsButton>
+              <CmsButton variant="ghost" href="/app/data/review">
+                Created from import
+              </CmsButton>
+            </div>
+          </CmsCard>
+        </div>
+      </Fragment>
+    )
+  }
+</CmsLayout>

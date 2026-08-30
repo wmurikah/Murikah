@@ -62,7 +62,8 @@ export type CountKey =
   | 'myActionPlans'
   | 'myObservations'
   | 'responsesToReview'
-  | 'approvedQueue';
+  | 'approvedQueue'
+  | 'myRequirements';
 
 export interface NavItemDef {
   label: string;
@@ -70,7 +71,15 @@ export interface NavItemDef {
   icon: string;
   /** The badge count to show on this link, if any. */
   countKey?: CountKey;
-  /** Render the badge in the alert colour (e.g. overdue). */
+  /**
+   * Kept for callers that still read it; the badge no longer varies by it.
+   *
+   * Every pending badge is the same red bubble (Build Prompt 60 and 62): they
+   * replaced the Notifications entry, and their whole job is to say "something
+   * here is yours to do". A count that has to be interpreted before it is
+   * noticed is a count that gets skipped, so they read the same wherever they
+   * appear.
+   */
   alert?: boolean;
 }
 export interface NavGroupDef {
@@ -81,11 +90,17 @@ export interface NavGroupDef {
 
 /**
  * The navigation groups visible to the context, with empty groups dropped. The
- * dashboard and notifications are for everyone; the audit workbench follows the
+ * dashboard is for everyone; the audit workbench follows the
  * work-paper and action-plan permissions; the auditee section shows for the
  * auditee roles or anyone who responds or reviews; board reports follow the
  * reports permission or the board roles; analytics is AI-gated for auditor
- * roles; setup is admin only, with AI settings when the plan includes AI.
+ * roles; administration is admin only, with AI settings when the plan includes
+ * AI and the platform group for a platform owner.
+ *
+ * Administration is grouped rather than listed (Build Prompt 52): Organisation
+ * for who and what the audit covers, Configuration for how the application
+ * behaves, Platform for what belongs to Murikah Labs. Every screen appears once
+ * and only once, which is the whole of the change: nothing was dropped.
  *
  * A platform owner inside no instance sees none of that: every module needs an
  * acting organisation, so their navigation is the platform's own, the
@@ -124,6 +139,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
       href: '/work-papers',
       icon: 'workpapers',
       countKey: 'pendingReview',
+      alert: true,
     });
   if (show.actionPlans)
     audit.push({
@@ -139,34 +155,76 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
       href: '/auditee-responses',
       icon: 'responses',
       countKey: 'responsesToReview',
+      alert: true,
+    });
+  // Requirements is the one entry an auditee sees for a reason (Build Prompt
+  // 58): being asked for a document is not a permission an administrator grants,
+  // it is a row naming you, and the screen scopes itself to what the reader
+  // owns. So it is offered to the audit side and to the auditee side alike, and
+  // an owner who holds nothing else still has somewhere to provide it.
+  if (show.workPapers || show.auditee)
+    audit.push({
+      label: 'Requirements',
+      href: '/requirements',
+      icon: 'list',
+      countKey: 'myRequirements',
+      alert: true,
     });
   if (show.reports) audit.push({ label: 'Reports', href: '/reports', icon: 'reports' });
   if (show.analytics) audit.push({ label: 'Analytics', href: '/analytics', icon: 'analytics' });
 
-  const setup: NavItemDef[] = [];
+  // Administration is two different jobs, so it is two groups rather than one
+  // long list (Build Prompt 52). Organisation is who and what the audit covers;
+  // Configuration is how the application behaves. Every destination appears
+  // exactly once, and the settings hub is the last entry rather than a second
+  // route to the same screens.
+  const organisation: NavItemDef[] = [];
+  const configuration: NavItemDef[] = [];
+  const platform: NavItemDef[] = [];
   if (show.setup) {
-    setup.push(
+    organisation.push(
       { label: 'Affiliates', href: '/settings/affiliates', icon: 'affiliates' },
       { label: 'Audit universe', href: '/settings/audit-universe', icon: 'universe' },
       { label: 'Users', href: '/settings/users', icon: 'users' },
       { label: 'Roles', href: '/settings/access-control', icon: 'roles' },
-      { label: 'Send queue', href: '/send-queue', icon: 'bell' },
-      { label: 'Settings', href: '/settings', icon: 'settings' },
     );
-    if (ctx.hasAi) setup.push({ label: 'AI settings', href: '/settings/ai', icon: 'ai' });
+    configuration.push(
+      { label: 'General settings', href: '/settings/general', icon: 'settings' },
+      { label: 'Dropdowns', href: '/settings/dropdowns', icon: 'list' },
+      { label: 'Email', href: '/settings/email', icon: 'mail' },
+      { label: 'Evidence storage', href: '/settings/storage', icon: 'storage' },
+    );
+    if (ctx.hasAi) configuration.push({ label: 'AI settings', href: '/settings/ai', icon: 'ai' });
+    configuration.push({ label: 'All settings', href: '/settings', icon: 'setup' });
+  }
+  // Provisioning a customer organisation is the platform owner's, and it stayed
+  // reachable only from the settings grid. It has its own group here, so the two
+  // authorities read apart on the screen as well as in the gate.
+  if (ctx.isPlatformOwner) {
+    platform.push(
+      { label: 'All organisations', href: '/platform', icon: 'affiliates' },
+      { label: 'Provision organisation', href: '/settings/provision', icon: 'plus' },
+    );
   }
 
+  // Notifications is not a module and no longer pretends to be one (Build Prompt
+  // 60). It was a destination that listed what every other destination already
+  // knew, so a person checked two places for the same fact and the sidebar
+  // carried an entry that led away from the work. The bell in the sidebar head
+  // still opens the centre for anyone who wants the history; what is waiting
+  // now shows as a count on the module it is waiting in.
+  const overview: NavItemDef[] = [{ label: 'Dashboard', href: '/', icon: 'dashboard' }];
+  // What is coming in and what is going out belong together. The send queue used
+  // to sit in Setup under the same bell as Notifications, which read as the same
+  // destination twice; it is neither a setting nor an inbox, and now says so.
+  if (show.setup) overview.push({ label: 'Send queue', href: '/send-queue', icon: 'send' });
+
   const groups: NavGroupDef[] = [
-    {
-      label: 'Overview',
-      icon: 'overview',
-      items: [
-        { label: 'Dashboard', href: '/', icon: 'dashboard' },
-        { label: 'Notifications', href: '/notifications', icon: 'bell' },
-      ],
-    },
+    { label: 'Overview', icon: 'overview', items: overview },
     { label: 'Audit', icon: 'audit', items: audit },
-    { label: 'Setup', icon: 'setup', items: setup },
+    { label: 'Organisation', icon: 'affiliates', items: organisation },
+    { label: 'Configuration', icon: 'setup', items: configuration },
+    { label: 'Platform', icon: 'overview', items: platform },
   ];
   return groups.filter((g) => g.items.length > 0);
 }

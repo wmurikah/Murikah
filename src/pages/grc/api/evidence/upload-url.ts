@@ -1,12 +1,24 @@
 export const prerender = false;
 
 /**
- * Issue a presigned PUT URL for a new evidence object, scoped to the exact tenant
- * key, only after checking the user may upload to the target work paper or action
- * plan. The large bytes go straight from the client to R2; the worker records
- * nothing yet. The client keeps the returned file_id and calls /complete once the
- * PUT succeeds. Gate: upload rights on the target entity (auditor edit permission,
+ * Prepare an upload for a new evidence object, scoped to the exact tenant key,
+ * only after checking the user may upload to the target work paper or action
+ * plan. Gate: upload rights on the target entity (auditor edit permission,
  * platform owner, or an auditee on their own finding or plan).
+ *
+ * The answer depends on the organisation's own storage provider (Build Prompt
+ * 51), and there are two shapes because the providers genuinely differ:
+ *
+ * - `mode: 'presigned'` — the provider can sign a URL (R2), so the large bytes
+ *   go straight from the client to the bucket and the worker records nothing
+ *   yet. The client keeps the returned file_id and calls /complete once the PUT
+ *   succeeds.
+ * - `mode: 'direct'` — Drive, Graph and Dropbox authenticate with a bearer
+ *   token that must never reach a browser, so the client posts the bytes to
+ *   /api/evidence/put and the worker streams them on.
+ *
+ * The client is told which, and never which provider: the mode is the only
+ * thing about the choice that changes what a browser has to do.
  *
  * For an image the response also carries a second presigned URL for the preview
  * object: a copy reduced to one constant dimension (storage/keys.ts) that the
@@ -18,7 +30,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { storageConfigured, presignUpload } from '@grc/storage';
+import { orgProvider } from '@grc/storage';
 import {
   buildObjectKey,
   keyBelongsToOrg,
@@ -48,7 +60,6 @@ const json = (body: unknown, status: number): Response =>
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
   if (!grc) return json({ error: 'unauthorised' }, 401);
-  if (!storageConfigured()) return json({ error: 'Evidence storage is not configured.' }, 503);
 
   const form = await request.formData();
   const entityType = String(form.get('entity_type') ?? '').trim();
@@ -68,6 +79,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = await getDb(getGrcEnv());
+  const provider = await orgProvider(db, grc.organizationId);
+  if (!provider) {
+    return json({ error: 'Evidence storage is not configured for your organisation.' }, 503);
+  }
+
   const actor: EvidenceActor = {
     userId: grc.userId,
     organizationId: grc.organizationId,
@@ -90,22 +106,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!keyBelongsToOrg(key, grc.organizationId)) return json({ error: 'forbidden' }, 403);
 
   try {
-    const url = await presignUpload(key, UPLOAD_TTL_SECONDS);
-    // Only for an image, and only ever alongside the original: a preview URL is
-    // useless on its own, because /complete records the original's key.
-    const previewUrl = isPreviewableImage(contentType)
-      ? await presignUpload(previewKeyFor(key), UPLOAD_TTL_SECONDS)
-      : null;
+    const url = await provider.presignedUploadUrl(key, UPLOAD_TTL_SECONDS);
+    const previewable = isPreviewableImage(contentType);
+    const common = {
+      fileId,
+      backend: provider.provider,
+      contentType,
+      previewContentType: PREVIEW_CONTENT_TYPE,
+      previewMaxDimension: PREVIEW_MAX_DIMENSION,
+    };
+    if (url) {
+      // Only for an image, and only ever alongside the original: a preview URL
+      // is useless on its own, because /complete records the original's key.
+      const previewUrl = previewable
+        ? await provider.presignedUploadUrl(previewKeyFor(key), UPLOAD_TTL_SECONDS)
+        : null;
+      return json({ ...common, mode: 'presigned', method: 'PUT', url, previewUrl }, 200);
+    }
+    // The provider cannot sign a URL, so the bytes come to the worker instead.
+    // The key is still computed here and never sent: /put rebuilds it from the
+    // same inputs, so a client can no more choose a key on this path than on
+    // the other one.
     return json(
       {
-        fileId,
-        backend: 'r2',
-        method: 'PUT',
-        url,
-        contentType,
-        previewUrl,
-        previewContentType: PREVIEW_CONTENT_TYPE,
-        previewMaxDimension: PREVIEW_MAX_DIMENSION,
+        ...common,
+        mode: 'direct',
+        method: 'POST',
+        url: '/api/evidence/put',
+        previewUrl: previewable ? '/api/evidence/put' : null,
       },
       200,
     );

@@ -1,0 +1,318 @@
+---
+/**
+ * Who from this customer can sign in, and the four things an administrator
+ * does about it: invite, resend, suspend, revoke. Reinstating a suspended
+ * membership is the fifth, and it is the same button read the other way.
+ *
+ * THERE IS NO DELETE. Revoking sets a status; the user row and the audit
+ * trail stay. Somebody asking in a year why this person lost access needs
+ * the row to still be there to answer it.
+ *
+ * A contact who cannot be invited is listed with the reason rather than
+ * omitted, because an administrator hunting for a name that is not in a
+ * picker cannot tell a missing email from a bug.
+ */
+import CmsCard from './CmsCard.astro';
+import CmsBadge from './CmsBadge.astro';
+import CmsButton from './CmsButton.astro';
+import type { PortalMembershipRow, InvitableContact } from '@/lib/cms/repos/portalAdmin';
+
+interface Props {
+  accountId: string;
+  memberships: PortalMembershipRow[];
+  contacts: InvitableContact[];
+  roles: { roleId: string; roleName: string }[];
+  mayManage: boolean;
+}
+const { accountId, memberships, contacts, roles, mayManage } = Astro.props;
+
+const TONE: Readonly<Record<string, 'success' | 'info' | 'warning' | 'neutral'>> = {
+  ACTIVE: 'success',
+  INVITED: 'info',
+  SUSPENDED: 'warning',
+  REVOKED: 'neutral',
+};
+const LABEL: Readonly<Record<string, string>> = {
+  ACTIVE: 'Active',
+  INVITED: 'Invited',
+  SUSPENDED: 'Suspended',
+  REVOKED: 'Revoked',
+};
+
+const invitable = contacts.filter((contact) => contact.blockedReason === null);
+const blocked = contacts.filter((contact) => contact.blockedReason !== null);
+/** Absent means never, and never is not a date and not a zero. */
+const stamp = (value: string | null): string => value ?? 'Never';
+---
+
+<div class="flex flex-col gap-6" data-portal-access data-account-id={accountId}>
+  <p
+    id="portal-access-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+  >
+  </p>
+
+  <CmsCard title="Portal access" description="Everyone from this customer who can sign in.">
+    {
+      memberships.length === 0 ? (
+        <p class="text-cms-body-sm text-cms-muted">
+          Nobody from this customer has portal access yet.
+        </p>
+      ) : (
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-left">
+            <caption class="sr-only">Portal memberships on this account</caption>
+            <thead>
+              <tr class="border-b border-cms-line">
+                <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                  Person
+                </th>
+                <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                  State
+                </th>
+                <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                  Invited
+                </th>
+                <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                  Last signed in
+                </th>
+                {mayManage && (
+                  <th scope="col" class="py-2 text-cms-label font-semibold text-cms-muted">
+                    Actions
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {memberships.map((row) => (
+                <tr class="border-b border-cms-line align-top last:border-0">
+                  <td class="py-3 pr-3">
+                    <span class="block text-cms-body-sm font-semibold text-cms-ink">
+                      {row.contactName}
+                    </span>
+                    <span class="block text-cms-caption text-cms-muted">
+                      {row.email ?? 'No email recorded'}
+                    </span>
+                  </td>
+                  <td class="py-3 pr-3">
+                    <CmsBadge
+                      tone={TONE[row.status] ?? 'neutral'}
+                      label={LABEL[row.status] ?? row.status}
+                    />
+                  </td>
+                  <td class="py-3 pr-3 text-cms-body-sm text-cms-muted">{stamp(row.invitedAt)}</td>
+                  <td class="py-3 pr-3 text-cms-body-sm text-cms-muted">
+                    {stamp(row.lastAccessAt)}
+                  </td>
+                  {mayManage && (
+                    <td class="py-3">
+                      <div class="flex flex-wrap gap-2">
+                        {row.status === 'INVITED' && row.contactId !== null && (
+                          <button
+                            type="button"
+                            data-portal-action="resend"
+                            data-contact-id={row.contactId}
+                            data-role-id={roles[0]?.roleId ?? ''}
+                            class="min-h-9 rounded-cms border border-cms-border px-2.5 text-cms-body-sm text-cms-royal outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus"
+                          >
+                            Resend
+                          </button>
+                        )}
+                        {row.status === 'ACTIVE' && (
+                          <button
+                            type="button"
+                            data-portal-action="suspend"
+                            data-membership-id={row.membershipId}
+                            class="min-h-9 rounded-cms border border-cms-border px-2.5 text-cms-body-sm text-cms-ink outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                          >
+                            Suspend
+                          </button>
+                        )}
+                        {(row.status === 'SUSPENDED' || row.status === 'REVOKED') && (
+                          <button
+                            type="button"
+                            data-portal-action="reinstate"
+                            data-membership-id={row.membershipId}
+                            class="min-h-9 rounded-cms border border-cms-border px-2.5 text-cms-body-sm text-cms-royal outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus"
+                          >
+                            Reinstate
+                          </button>
+                        )}
+                        {row.status !== 'REVOKED' && (
+                          <button
+                            type="button"
+                            data-portal-action="revoke"
+                            data-membership-id={row.membershipId}
+                            data-confirm="Revoke this person's access? They keep their history and can be reinstated later."
+                            class="min-h-9 rounded-cms border border-cms-negative px-2.5 text-cms-body-sm text-cms-negative outline-none hover:bg-cms-negative-tint focus-visible:ring-2 focus-visible:ring-focus"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </CmsCard>
+
+  {
+    mayManage && (
+      <CmsCard title="Invite a contact">
+        {roles.length === 0 ? (
+          <p class="text-cms-body-sm text-cms-muted">
+            No portal role is configured, so there is nothing to invite anybody into. An
+            administrator sets one up under Roles.
+          </p>
+        ) : invitable.length === 0 ? (
+          <p class="text-cms-body-sm text-cms-muted">
+            Every active contact on this account either has access already or cannot be invited. The
+            reasons are listed below.
+          </p>
+        ) : (
+          <form id="portal-invite" novalidate class="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <label for="portal-invite-contact" class="text-cms-label font-medium text-cms-ink">
+                Contact
+              </label>
+              <select
+                id="portal-invite-contact"
+                name="contactId"
+                class="min-h-10 w-full rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {invitable.map((contact) => (
+                  <option value={contact.contactId}>
+                    {contact.fullName} ({contact.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="flex min-w-0 flex-col gap-1.5">
+              <label for="portal-invite-role" class="text-cms-label font-medium text-cms-ink">
+                Role
+              </label>
+              <select
+                id="portal-invite-role"
+                name="portalRoleId"
+                class="min-h-10 w-full rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {roles.map((role) => (
+                  <option value={role.roleId}>{role.roleName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <CmsButton type="submit" variant="primary" id="portal-invite-send">
+                Send invitation
+              </CmsButton>
+            </div>
+          </form>
+        )}
+
+        {blocked.length > 0 && (
+          <div class="mt-5 border-t border-cms-line pt-4">
+            <p class="text-cms-label font-semibold text-cms-muted">Cannot be invited</p>
+            <ul class="mt-2 flex flex-col gap-1">
+              {blocked.map((contact) => (
+                <li class="text-cms-body-sm text-cms-muted">
+                  {contact.fullName} - {contact.blockedReason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CmsCard>
+    )
+  }
+</div>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const root = document.querySelector('[data-portal-access]');
+  const errorBox = document.getElementById('portal-access-error');
+
+  if (root instanceof HTMLElement && errorBox) {
+    const accountId = root.dataset.accountId ?? '';
+    const url = `/api/customers/accounts/${accountId}/portal-access`;
+
+    const send = async (payload: Record<string, unknown>): Promise<void> => {
+      errorBox.hidden = true;
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const body = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        errorBox.textContent =
+          body?.error?.fields?.[0]?.message ??
+          body?.error?.message ??
+          'That could not be completed. Please try again.';
+        errorBox.hidden = false;
+        errorBox.scrollIntoView({ block: 'nearest' });
+      } catch {
+        errorBox.textContent = 'That could not be completed. Please try again.';
+        errorBox.hidden = false;
+      }
+    };
+
+    root.addEventListener('click', (event) => {
+      const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>(
+        '[data-portal-action]',
+      );
+      if (!button) return;
+      const action = button.dataset.portalAction ?? '';
+      const confirmation = button.dataset.confirm;
+      // Revoking is the one action worth a second look. Suspending is
+      // reversible in one click and asking about it would train people to
+      // click through the question that matters.
+      if (confirmation !== undefined && !window.confirm(confirmation)) return;
+      button.disabled = true;
+      const payload: Record<string, unknown> =
+        action === 'resend'
+          ? {
+              action,
+              contactId: button.dataset.contactId ?? '',
+              portalRoleId: button.dataset.roleId ?? '',
+            }
+          : { action, membershipId: button.dataset.membershipId ?? '' };
+      void send(payload).finally(() => {
+        button.disabled = false;
+      });
+    });
+
+    const invite = document.getElementById('portal-invite') as HTMLFormElement | null;
+    const inviteButton = document.getElementById('portal-invite-send') as HTMLButtonElement | null;
+    if (invite && inviteButton) {
+      invite.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const data = new FormData(invite);
+        inviteButton.disabled = true;
+        void send({
+          action: 'invite',
+          contactId: String(data.get('contactId') ?? ''),
+          portalRoleId: String(data.get('portalRoleId') ?? ''),
+        }).finally(() => {
+          inviteButton.disabled = false;
+        });
+      });
+    }
+  }
+</script>

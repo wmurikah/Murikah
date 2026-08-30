@@ -543,3 +543,245 @@ rewritten blind.
 Errors on the dashboard data load are wrapped and logged with the
 `[grc.dashboard]` tag, showing a notice rather than a blank 500; enum-label reads
 fail soft to the humanised value.
+
+## Permission modules reconciled to one source (Build Prompt 43)
+
+The access-control audit found the code's module list and the live
+`permission_modules` rows had drifted: the code enforced `CONFIG` and
+`AUDIT_LOG`, the recovered seed carried `NOTIFICATION` and `SETUP`, and both
+lists were nine long, which is what let the divergence go unnoticed. With
+`PRAGMA foreign_keys = ON` (`src/lib/grc/db.ts`), the first grant written for a
+module the lookup table did not hold violated the foreign key and killed the
+whole save (AC-05, `grc/docs/access-control-audit.md`).
+
+There is now exactly one list, `src/lib/grc/auth/permissionModules.ts`. The
+matrix screen renders it, `/api/access-control` writes it, `auth/matrix.ts`
+derives `MODULES` and `ACTIONS` from it, and `grc/test/smoke/seed.ts` seeds the
+smoke database from it. Adding a module means editing that file and nothing else.
+
+The list is the union of the two that had drifted, and each half was decided
+rather than merged blindly:
+
+- `CONFIG` and `AUDIT_LOG` stay, because the code enforces them: `CONFIG.read`
+  is the door to every settings screen and `CONFIG.update` gates the role save
+  itself. Dropping them would have taken access away from live roles.
+- `NOTIFICATION` and `SETUP` stay and are now wired, in `PAGE_PERMISSION_MAP`:
+  `NOTIFICATION.read` opens the send queue (which is the notification queue) and
+  `SETUP.read` opens the four organisation-level setup screens. Both are
+  additive alternatives beside the `CONFIG.read` that already opened those
+  sections, so the reconciliation takes no access away either. Deleting the rows
+  was not an option worth taking: a `permission_modules` row cannot be removed
+  while a `role_permissions` row still references it.
+
+**The rows the live database is missing are created by the save itself.** This
+build had no live database access, so it could not introspect
+`permission_modules` and could not apply a migration. Instead
+`repos/permissionsAdmin.ts::saveRoleMatrix` emits an idempotent insert per module
+and per action at the head of the same batch as the grants, guarded by
+`WHERE NOT EXISTS` rather than `INSERT OR IGNORE` (the two are equivalent only
+when the code column carries a unique index, and the dictionary records no
+constraints). A row that already exists is left exactly as the database has it,
+name and description included, so this only ever supplies what is missing and
+can never overwrite live reference data. It is the same self-healing shape as the
+`GLOBAL` config sentinel in `repos/orgConfig.ts`.
+
+To confirm the live state, or to apply the rows ahead of the first save:
+
+```sql
+SELECT sql FROM sqlite_master WHERE name = 'role_permissions';
+SELECT module_code FROM permission_modules ORDER BY module_code;
+SELECT action_code FROM permission_actions ORDER BY action_code;
+```
+
+The first save of any role reconciles the table by itself, so no manual step is
+required; the queries are worth running once to confirm the reference rows
+landed and that nothing else was disturbed.
+
+## The permission matrix is tenant data (Build Prompt 44)
+
+`role_permissions` carries `organization_id`, and the effective key is
+`(organization_id, role_code, module_code, action_code)`. Applied by
+`grc/db/migrations/001-role-permissions-tenant-scope.sql`; see
+`grc/docs/deploy.md`, "Migration 001", for how the operator runs it.
+
+Before this, the table was keyed by role, module and action alone and the
+comment at the head of `repos/permissionsAdmin.ts` called it shared reference
+data. That was defensible for a single-tenant deployment and wrong for a
+platform: any instance admin holding `CONFIG.update` rewrote every customer's
+roles with one save (AC-01, `grc/docs/access-control-audit.md`).
+
+How it resolves, in `auth/rbac.ts` and the pure `selectScopedRows` beside it:
+
+- One query returns the acting organisation's rows and the platform defaults
+  together, keyed `WHERE role_code = ? AND organization_id IN (?, ?)`.
+- If the organisation holds any row for that role, those rows are the answer.
+  Otherwise the platform defaults are.
+- The choice is all-or-nothing per role, never a cell-by-cell merge. An
+  administrator who unticks a cell has to be able to trust it is revoked rather
+  than quietly re-granted by a default underneath, and an access-control screen a
+  reviewer cannot read is worse than a coarse one. The screen says which of the
+  two it is showing.
+
+Where the defaults live: the `GLOBAL` sentinel organisation, the same inactive
+row the platform-wide config already hangs off
+(`repos/orgConfig.ts::GLOBAL_CONFIG_ORG`, and `PLATFORM_DEFAULT_ORG` in
+`auth/permissionModules.ts`). One sentinel for everything that belongs to the
+platform rather than to a customer. `repos/orgConfig.ts::globalSentinelStatement`
+is the single definition of that row, so whichever path creates it, it is
+identical.
+
+Who may write what:
+
+- An instance admin is pinned to their home organisation by the middleware and
+  cannot switch, so a save reaches their own rows and nothing else.
+- A platform owner inside an instance edits that instance's rows, exactly as its
+  own administrator would.
+- A platform owner inside no instance edits the platform defaults. That is why
+  `/settings/access-control` and `/api/access-control` are in
+  `INSTANCE_FREE_PATHS` (`src/lib/grc/routing.ts`); the gate they sit behind only
+  ever applies to a platform owner, so it widens nothing for anybody else.
+- New organisations are given their own copy of the defaults at provisioning
+  (`repos/provisioning.ts`, in the same batch as the organisation row), rather
+  than a live fallback, so the first administrator sees a real editable set and a
+  later change to the defaults cannot move an existing customer's access
+  underneath them.
+
+## Affiliate confinement (Build Prompt 45)
+
+`role_permissions` carries `scope_to_affiliate`. When set for a role in an
+organisation, a user holding that role sees only records whose `affiliate_code`
+matches their own `users.affiliate_code`, on top of the module and action grants
+they already hold. Applied by
+`grc/db/migrations/002-role-permissions-affiliate-scope.sql`.
+
+**Why the flag is on `role_permissions` and not on `roles`.** `roles` is a
+platform-wide table with no `organization_id`, so a flag there would confine that
+role for every customer at once: the cross-tenant defect migration 001 removed
+from the matrix (AC-01). `role_permissions` is tenant-scoped, so the flag
+inherits that scoping for free.
+
+The cost is that the flag is stored once per grant row rather than once per role.
+That is safe because `saveRoleMatrix` rewrites a role's whole row set in one
+atomic batch, so the rows cannot disagree, and the read takes "any row set" so a
+hand-edited database fails closed rather than open.
+
+**How it is enforced.** `auth/affiliateScope.ts` is the pure core: three states,
+and a predicate builder.
+
+| State                           | Predicate appended             |
+| ------------------------------- | ------------------------------ |
+| Not confined                    | nothing                        |
+| Confined, user has an affiliate | `AND <col>.affiliate_code = ?` |
+| Confined, user has none         | `AND 1 = 0`                    |
+
+The third row is the one that matters. A missing affiliate closes the door: an
+empty predicate there would show a user in a confined role the entire
+organisation, which is the exact failure the feature exists to prevent. The
+screens then say so (`components/grc/GrcAffiliateNotice.astro`), because a clean
+empty list would read as "your organisation has no findings" when the truth is
+"your account is not finished".
+
+It is a boundary, not the user-chosen affiliate filter that already existed on
+the list screens. Both may apply at once; a confined viewer who filters to
+another affiliate simply sees nothing.
+
+Where it is applied: `repos/workPapers.ts`, `actionPlans.ts`,
+`auditeeResponses.ts`, `dashboard.ts`, `analytics.ts` and `reportData.ts`. The
+detail reads (`getWorkPaper`, `getActionPlan`) take the scope too and return
+null outside it, because those routes take an id from the URL and a list
+predicate alone would leave a guessed link open. Outside the affiliate reads as
+"not found" rather than a distinguishable refusal, which would confirm the record
+exists.
+
+Two things it deliberately does not change:
+
+- A platform owner and a SUPER_ADMIN hold a synthesised matrix, so no role row
+  carries the flag for them and they are never confined.
+- The hard-coded UNIT_MANAGER affiliate scope in `reportData.ts` stays as a
+  floor beneath the flag rather than being replaced by it. It is role-based
+  defence in depth that predates the flag and holds whether or not an
+  administrator has ticked it; removing it would quietly widen a unit manager's
+  report the day this ships.
+
+The confinement is part of every dashboard and analytics cache key
+(`affiliateScopeKey`), so two viewers with different confinement never share an
+aggregation.
+
+## The Group affiliate (Build Prompt 48)
+
+`affiliates` carries `is_group`. A user whose own `users.affiliate_code` points
+at an affiliate with `is_group = 1` is exempt from affiliate confinement: a
+confined role does not narrow them, and they see every affiliate's records within
+the module, action and organisation grants they already hold. Applied by
+`grc/db/migrations/003-affiliate-is-group.sql`.
+
+**Why the flag is on `affiliates`.** The exemption is a property of the business
+unit, not of a role and not of a person: "the Group unit sees everything" stays
+true as people move in and out of it. On `roles` it would be a role property; on
+`users` it would have to be re-decided for every joiner, and two people on the
+same unit could disagree. `affiliates` is already organisation-scoped, so the
+flag is tenant data with no further work. It also keeps the exemption out of the
+permission model, so the access-control matrix stays a matrix.
+
+It replaces the obvious alternative of a hard-coded affiliate code in the
+application, which would be right for one customer, wrong for the next, and
+invisible to a reviewer either way.
+
+**How it resolves.** `resolveAffiliateScope` takes the flag as a fourth argument
+and, when it is set, returns a scope with `confined: false` and
+`groupExempt: true`. That is the whole mechanism: because the predicate builders
+read `confined` alone, none of the six repositories that honour confinement
+needed a line changed, and none of them can forget the exemption. `groupExempt`
+is carried only so the screens can say _why_ somebody under a confined role sees
+everything, which would otherwise read as a bug.
+
+The flag is read once per request, in `src/middleware.ts`, and only when a
+confinement would otherwise bite (`repos/affiliatesAdmin.ts::isGroupAffiliate`),
+so an unconfined request makes no extra query at all. It is read **fresh, never
+through the affiliates cache**, for the same reason the permission matrix is not
+cached (Build Prompt 43): it is an access decision, and a cached answer would
+keep a user seeing every affiliate after an administrator un-marked their unit.
+
+Three edges, all deliberate:
+
+- **A deleted affiliate confers nothing.** The lookup excludes `deleted_at`, so
+  a removed unit stops widening access immediately.
+- **A read failure means "not a group".** The confinement stands: fail closed.
+- **No affiliate is not exempt.** A confined user with no `affiliate_code` still
+  sees nothing until one is assigned; there is no unit that could have been
+  marked a group, and the screens name that state as before.
+
+A group-exempt viewer shares the unconfined cache key, because they see exactly
+the same rows and splitting them would only halve the hit rate.
+
+## Work-paper form fields are not always their column (Build Prompt 50)
+
+Three writable work-paper fields post under a name that is not the column they
+store in:
+
+| Form control       | `work_papers` column     |
+| ------------------ | ------------------------ |
+| `classification`   | `control_classification` |
+| `standards`        | `control_standards`      |
+| `assigned_auditor` | `assigned_auditor_id`    |
+
+Everything else matches one to one. The write always mapped them correctly; the
+two views did not, and read `row['classification']` and `row['standards']`
+straight off the detail row. The consequences were not equal:
+
+- On the **detail** it was a display bug: a dash over stored data.
+- On the **edit form** it was a data-loss bug. The control prefilled blank
+  because the lookup missed, and the next save wrote that blank back over the
+  stored value. Anybody who opened a finding to change its title silently
+  cleared its classification, its standards and its assigned auditor.
+
+`FIELDS` in `repos/workPapers.ts` now carries all three names for each field, and
+`columnForFormField()` derives the lookup from it. The edit form prefills through
+that function rather than guessing, so a third view cannot reintroduce this.
+
+Beside it, `getWorkPaper` aliases the joined auditor as
+`assigned_auditor_full_name` rather than over `wp.*`. The `work_papers` row
+carries its own denormalised `assigned_auditor_name`, and two output columns of
+the same name leave which one survives to the driver. The repository now prefers
+the live joined name and falls back to the stored copy, so "Unassigned" means
+`assigned_auditor_id` really is null.

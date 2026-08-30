@@ -30,6 +30,9 @@ import { insertRevisionStatement } from '@grc/repos/revisions';
 import { buildAuditStatement } from '@grc/repos/audit';
 import { enqueueNotification } from '@grc/repos/notify';
 import { RESPONSE_STATUS } from '@grc/workflow/responseRounds';
+import { AUDITEE_STAGE, mayMove, nextStage, stageOf } from '@grc/workflow/auditeeLoop';
+import { auditeeStanding } from '@grc/repos/auditeeStanding';
+import { closeDelegationsStatement, setStageStatement } from '@grc/repos/auditeeDelegations';
 
 const back = (id: string, query: string): Response =>
   new Response(null, {
@@ -59,7 +62,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     grc.perms.includes('AUDITEE.respond') ||
     grc.perms.includes('WORK_PAPERS.review');
   if (!mayRespond) {
-    return back(workPaperId, `error=${encodeURIComponent('You cannot respond to this finding.')}`);
+    return back(
+      workPaperId,
+      `error=${encodeURIComponent('You cannot respond to this observation.')}`,
+    );
   }
   if (!managementResponse) {
     return back(
@@ -69,16 +75,41 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = await getDb(getGrcEnv());
-  const wp = await getWorkPaper(db, grc.organizationId, workPaperId);
+  const wp = await getWorkPaper(db, grc.organizationId, workPaperId, grc.affiliateScope);
   if (!wp) {
-    return back(workPaperId, `error=${encodeURIComponent('That finding was not found.')}`);
+    return back(workPaperId, `error=${encodeURIComponent('That observation was not found.')}`);
   }
 
   // Assignment is the auditee's authority to answer; an auditor reviewing on
   // their behalf is covered by the review permission.
   const assigned = await isAssignedAuditee(db, grc.organizationId, workPaperId, grc.userId);
   if (!assigned && !grc.isPlatformOwner && !grc.perms.includes('WORK_PAPERS.review')) {
-    return back(workPaperId, `error=${encodeURIComponent('That finding is not assigned to you.')}`);
+    return back(
+      workPaperId,
+      `error=${encodeURIComponent('That observation is not assigned to you.')}`,
+    );
+  }
+
+  // Releasing is the unit manager's act, and not while a delegate is still
+  // drafting (Build Prompt 68). A delegate who has been asked to draft has not
+  // been asked to decide the response is finished: they return it, and the
+  // manager releases it. The stage machine is what says so.
+  const standing = await auditeeStanding(db, grc.organizationId, workPaperId, {
+    userId: grc.userId,
+    isPlatformOwner: grc.isPlatformOwner,
+    perms: grc.perms,
+  });
+  const stage = stageOf(wp.auditee_stage as string | null);
+  const releasing = { ...standing, isResponsible: standing.isResponsible || standing.isAudit };
+  if (!mayMove(releasing, stage, 'release_to_audit')) {
+    return back(
+      workPaperId,
+      `error=${encodeURIComponent(
+        stage === AUDITEE_STAGE.DELEGATED
+          ? 'The delegate must return this draft before it can be released to audit.'
+          : 'Only a responsible on this observation can release its response to audit.',
+      )}`,
+    );
   }
 
   const fromStatus = String(wp.status);
@@ -136,24 +167,35 @@ export const POST: APIRoute = async ({ request, locals }) => {
         entityId: workPaperId,
         details: `round ${round}`,
       }),
+      // The work has left the auditee side, so nobody on it is still holding a
+      // brief: a delegate must not keep write access to a response that is
+      // already with the reviewer.
+      setStageStatement(
+        grc.organizationId,
+        workPaperId,
+        nextStage(stage, 'release_to_audit') ?? AUDITEE_STAGE.WITH_AUDIT,
+        now,
+      ),
+      closeDelegationsStatement(grc.organizationId, workPaperId, now),
     ],
     'write',
   );
 
-  try {
-    await enqueueNotification(db, {
-      organizationId: grc.organizationId,
-      templateCode: 'response_received',
-      entityType: 'work_paper',
-      entityId: workPaperId,
-      actorUserId: grc.userId,
-    });
-  } catch {
-    // best-effort: the response is recorded either way.
-  }
+  // Everybody named on the auditee side hears that it went, and so does the
+  // auditor whose finding it is: a release is the one move in the loop that
+  // puts work back on the audit side (Build Prompt 68).
+  await enqueueNotification(db, {
+    organizationId: grc.organizationId,
+    templateCode: 'auditee_released',
+    entityType: 'work_paper',
+    entityId: workPaperId,
+    actorUserId: grc.userId,
+    comment: managementResponse,
+    extra: { stage: 'With internal audit', round: String(round) },
+  });
 
   return back(
     workPaperId,
-    `done=${encodeURIComponent(`Response submitted for round ${round}.`)}&status=${RESPONSE_STATUS.SUBMITTED}`,
+    `done=${encodeURIComponent(`Round ${round} released to internal audit.`)}&status=${RESPONSE_STATUS.SUBMITTED}`,
   );
 };

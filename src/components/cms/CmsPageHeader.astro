@@ -1,0 +1,85 @@
+---
+/**
+ * The page-title zone: breadcrumb, the single h1, a line of context, and the
+ * page's actions.
+ *
+ * Every page in the shell renders exactly one of these, which is how the
+ * "exactly one h1" rule is kept structurally rather than by discipline. The
+ * actions slot is where the page's dominant action goes, on the right, alone if
+ * possible, so there is one obvious thing to do.
+ */
+import CmsBreadcrumb, { type CmsCrumb } from './CmsBreadcrumb.astro';
+import CmsAuditHistoryLink from './CmsAuditHistoryLink.astro';
+import CmsDefinition from './CmsDefinition.astro';
+
+interface Props {
+  title: string;
+  /**
+   * Context about the RECORD this page is showing: a customer's type and
+   * country, an order's affiliate and value, a workflow's version.
+   *
+   * NOT A DESCRIPTION OF THE PAGE. A page titled Customers showing a table of
+   * customers does not need a sentence saying it lists customers, and every
+   * one of those has been deleted. What survives here is data. Where a page
+   * genuinely carries a rule a reader could not work out by looking, it goes
+   * in `definition` below and opens on demand.
+   */
+  description?: string;
+  /**
+   * A rule or definition that governs the whole page, available from a control
+   * beside the title rather than printed underneath it.
+   *
+   * This is where the deleted paragraphs went when they turned out to be
+   * saying something real: that a lead's account is optional here and required
+   * at conversion, that SLA precedence runs customer, segment, affiliate,
+   * default. Progressive disclosure, so the rule is one control away for the
+   * person who needs it and invisible to the ninety-nine who do not.
+   */
+  definition?: string;
+  crumbs?: CmsCrumb[];
+  /**
+   * A record's audit entity type and identifier. Where both are given, the
+   * header renders the View Audit History action beside the page's own
+   * actions.
+   *
+   * IT LIVES HERE RATHER THAN ON EACH PAGE so that eleven record types get
+   * the same action in the same place from one line each, and so that a
+   * twelfth cannot quietly ship without it. The component renders nothing for
+   * a principal without AUDIT.EVENTS.VIEW, and that is presentation only: the
+   * workspace checks the permission and applies the scope for itself.
+   */
+  auditEntityType?: string;
+  auditEntityId?: string;
+  class?: string;
+}
+const {
+  title,
+  description,
+  definition,
+  crumbs,
+  auditEntityType,
+  auditEntityId,
+  class: className,
+} = Astro.props;
+---
+
+<header class:list={['flex flex-col gap-4 pt-1', className]}>
+  {crumbs && crumbs.length > 0 && <CmsBreadcrumb items={crumbs} />}
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex min-w-0 flex-col gap-1">
+      <div class="flex items-start gap-1.5">
+        <h1 class="text-cms-page font-semibold tracking-tight text-cms-ink">{title}</h1>
+        {definition && <CmsDefinition label={title} definition={definition} class="mt-1" />}
+      </div>
+      {description && <p class="max-w-2xl text-cms-body-sm text-cms-muted">{description}</p>}
+    </div>
+    <div class="flex shrink-0 flex-wrap items-center gap-2">
+      <slot name="actions" />
+      {
+        auditEntityType !== undefined && auditEntityId !== undefined && auditEntityId !== '' && (
+          <CmsAuditHistoryLink entityType={auditEntityType} entityId={auditEntityId} />
+        )
+      }
+    </div>
+  </div>
+</header>

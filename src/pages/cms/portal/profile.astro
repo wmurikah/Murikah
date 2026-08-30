@@ -1,0 +1,128 @@
+---
+/**
+ * The customer's own details, and nothing they cannot see anyway.
+ *
+ * There is no edit form. A contact's name, email and telephone number are
+ * master data an account manager keeps, and letting a portal user rewrite
+ * the row that identifies them would quietly change who we think we are
+ * dealing with. So the page shows what we hold and says exactly how to have
+ * it corrected, which is honest about where the authority sits.
+ *
+ * NO PERMISSION CODES AND NO ROLE NAMES. An external user does hold portal
+ * permission codes, but they describe our system, they are not a fact about
+ * the customer, and listing them would invite questions we would rather
+ * answer with a sentence than with a table.
+ */
+import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+
+export const prerender = false;
+
+const user = Astro.locals.cms?.user;
+let scope: PortalScope | null = null;
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+} catch (error) {
+  console.error('[cms.portal.profile] load failed', error);
+  loadFailed = true;
+}
+
+const details =
+  user === undefined
+    ? []
+    : [
+        { label: 'Name', value: user.displayName },
+        { label: 'Email', value: user.email },
+      ];
+---
+
+<CmsPortalLayout title="Profile" scope={scope} current="/portal/profile">
+  <div class="flex flex-col gap-1.5">
+    <h1 class="text-cms-page font-semibold text-cms-navy">Profile</h1>
+    <p class="text-cms-body-sm text-cms-muted">
+      What we hold about you, and who to tell if it is wrong.
+    </p>
+  </div>
+
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load your profile just now"
+        description="Please try again in a moment."
+      />
+    ) : user === undefined ? (
+      <CmsEmptyState icon="customers" title="You are not signed in" />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <CmsCard title="Your details">
+          <dl class="grid gap-4 sm:grid-cols-2">
+            {details.map((detail) => (
+              <div class="flex flex-col gap-0.5">
+                <dt class="text-cms-label text-cms-muted">{detail.label}</dt>
+                <dd class="text-cms-body-sm font-semibold break-words text-cms-ink">
+                  {detail.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p class="mt-4 text-cms-caption text-cms-muted">
+            To have any of this corrected, raise a request under Service or speak to your Hass
+            Petroleum representative.
+          </p>
+        </CmsCard>
+
+        <CmsCard
+          title="Accounts you can see"
+          description={
+            scope !== null && scope.memberships.length > 1
+              ? 'Choose which one you are looking at from the bar at the top of the page.'
+              : undefined
+          }
+        >
+          {scope === null || scope.memberships.length === 0 ? (
+            <p class="text-cms-body-sm text-cms-muted">
+              No account is linked to your sign-in yet. Contact your Hass Petroleum representative
+              to have your account linked.
+            </p>
+          ) : (
+            <ul class="flex flex-col gap-3">
+              {scope.memberships.map((membership) => (
+                <li class="flex flex-wrap items-center justify-between gap-3">
+                  <span class="min-w-0 text-cms-body-sm font-semibold text-cms-ink">
+                    {membership.accountName ?? membership.accountId}
+                  </span>
+                  {membership.accountId === scope.activeAccountId && (
+                    <CmsBadge tone="info" label="Currently viewing" />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CmsCard>
+
+        <CmsCard title="Signing in">
+          <p class="text-cms-body-sm text-cms-muted">
+            Sign out on any shared computer. Your sign-in is personal to you and should not be
+            passed on to a colleague; ask us to invite them instead and they will get their own.
+          </p>
+          <form method="post" action="/api/auth/logout" class="mt-4">
+            <CmsButton type="submit" variant="secondary" icon="logout">
+              Sign out
+            </CmsButton>
+          </form>
+        </CmsCard>
+      </div>
+    )
+  }
+</CmsPortalLayout>

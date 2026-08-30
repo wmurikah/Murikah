@@ -1,0 +1,88 @@
+---
+/**
+ * One section of an observation: a small gold label, then the content
+ * (Build Prompt 72).
+ *
+ * A section, not a card. The panel is the card; these are the parts of it,
+ * separated by a hairline rule and by the space around them. Boxing each one
+ * would put a card inside a card and make the chrome louder than the argument.
+ *
+ * The label is small, uppercase and gold. It says which part of the argument
+ * this is and then gets out of the way: the content is what the reader is here
+ * for.
+ */
+import { renderRichHtml } from '@grc/richtext';
+import { cardIsEmpty, type FindingCard } from '@grc/reports/findingCards';
+
+interface Props {
+  card: FindingCard;
+}
+const { card } = Astro.props;
+const filled = (value: string | null | undefined): boolean => String(value ?? '').trim() !== '';
+const meaningful = (value: string | null | undefined): boolean =>
+  filled(value) && String(value).trim() !== '-';
+---
+
+<section class="grc-snap__section" data-card={card.key}>
+  <p class="grc-snap__label">{card.heading}</p>
+  {
+    cardIsEmpty(card) ? (
+      <p class="grc-snap__empty">{card.emptyText}</p>
+    ) : (
+      card.body.map((body) =>
+        body.kind === 'rich' ? (
+          <div class="grc-snap__body grc-richbody" set:html={renderRichHtml(body.text)} />
+        ) : body.kind === 'facts' ? (
+          <dl class="grc-snap__facts">
+            {body.facts
+              .filter((f) => filled(f.value))
+              .map((f) => (
+                <div>
+                  <dt>{f.label}</dt>
+                  <dd>{f.value}</dd>
+                </div>
+              ))}
+          </dl>
+        ) : card.key === 'evidence' ? (
+          <ul class="grc-snap__evidence" aria-label="Supporting documents">
+            {body.rows.map((row) => (
+              <li class="grc-snap__evidence-item">
+                <span class="grc-snap__evidence-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M7 3.75h6.6L18 8.15v12.1H7z" />
+                    <path d="M13.5 3.75v4.5H18M9.5 12h6M9.5 15h6" />
+                  </svg>
+                </span>
+                <span class="grc-snap__evidence-copy">
+                  <span class="grc-snap__evidence-name">{row[0]}</span>
+                  {filled(row[1]) && <span class="grc-snap__evidence-detail">{row[1]}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div class="grc-tablewrap grc-tablewrap--fit">
+            <table class="grc-snap__table">
+              <thead>
+                <tr>
+                  {body.columns.map((c) => (
+                    <th scope="col">{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {body.rows.map((row) => (
+                  <tr>
+                    {row.map((cell) => (
+                      <td>{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ),
+      )
+    )
+  }
+</section>

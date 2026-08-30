@@ -88,57 +88,131 @@ export function parseSchema(schemaMdPath: string): Map<string, string[]> {
 }
 
 /**
- * The key constraints the smoke database enforces.
+ * The constraints the generated smoke schema carries.
  *
- * The dictionary (grc/db/schema.md) records column names only, so a table built
- * from it alone accepts anything and no foreign-key, NOT NULL or CHECK violation
- * can be caught before deploy. That is exactly how a role save that failed on
- * every attempt in production passed the smoke test for weeks (Build Prompt 40,
- * finding AC-06). These are the constraints the live schema is believed to
- * enforce, declared so the smoke run exercises them.
+ * `grc/db/schema.md` is a column dictionary and records no keys, so every smoke
+ * table used to be created with bare untyped columns. That is why a foreign-key
+ * violation on the role save passed the smoke test and shipped (audit finding
+ * AC-06): a database that enforces nothing cannot refuse anything. These three
+ * tables declare what the live schema is known to enforce, so the same write the
+ * live database refuses is refused here too.
  *
- * Add an entry when a table's integrity matters to a test. Keep it to keys:
- * this is a net for the mistakes the typed column layer cannot catch, not a
- * second copy of the schema. A referenced parent column must be declared unique
- * or a primary key, or SQLite cannot resolve the reference.
+ * The set is deliberately narrow rather than a guess at the whole live schema:
+ * an invented constraint would fail the smoke test on a write the live database
+ * accepts, which is a worse failure than the one being fixed. Add to it only
+ * where the live schema is known, not where it is assumed.
+ *
+ * `node:sqlite` enforces foreign keys by default, and the worker's connection
+ * runs `PRAGMA foreign_keys = ON` besides (`src/lib/grc/db.ts`), so a declared
+ * reference bites in both directions: from the seed and from the worker.
  */
-const COLUMN_CONSTRAINTS: Record<string, Record<string, string>> = {
-  // The platform-wide GLOBAL config sentinel is refused by this reference,
-  // which is what the self-healing config write path exists for.
-  organizations: { organization_id: 'PRIMARY KEY' },
-  config: { organization_id: 'REFERENCES organizations(organization_id)' },
-  // The permission model. role_permissions references both lookup tables, which
-  // is the constraint the drifted module list violated on every role save.
-  roles: { role_code: 'PRIMARY KEY' },
-  permission_modules: { module_code: 'PRIMARY KEY' },
-  permission_actions: { action_code: 'PRIMARY KEY' },
-  role_permissions: {
-    role_code: 'NOT NULL REFERENCES roles(role_code)',
-    module_code: 'NOT NULL REFERENCES permission_modules(module_code)',
-    action_code: 'NOT NULL REFERENCES permission_actions(action_code)',
-  },
-  // The tables the smoke run writes through the app, keyed so a duplicate or a
-  // missing parent fails the test rather than the user's screen.
-  users: {
-    user_id: 'PRIMARY KEY',
-    organization_id: 'NOT NULL REFERENCES organizations(organization_id)',
-  },
-  work_papers: { work_paper_id: 'PRIMARY KEY' },
-  action_plans: { action_plan_id: 'PRIMARY KEY' },
-  affiliates: { affiliate_code: 'PRIMARY KEY' },
-  audit_areas: { audit_area_id: 'PRIMARY KEY' },
-  files: { file_id: 'PRIMARY KEY' },
-  file_attachments: { attachment_id: 'PRIMARY KEY' },
-  sessions: { session_id: 'PRIMARY KEY' },
+
+/** Parent columns a reference resolves against. SQLite needs them unique. */
+const PRIMARY_KEYS: Record<string, string> = {
+  organizations: 'organization_id',
+  roles: 'role_code',
+  permission_modules: 'module_code',
+  permission_actions: 'action_code',
+  storage_connections: 'connection_id',
+  // Migration 006: a requirement's rounds are keyed by their own id, and the
+  // trail is only ever read for one requirement at a time.
+  requirement_submissions: 'submission_id',
+  work_paper_requirements: 'requirement_id',
 };
 
-/** Creates every dictionary table (columns from the dictionary, keys from above). */
+/** `table.column` to the `parent(column)` it references. */
+const FOREIGN_KEYS: Record<string, Record<string, string>> = {
+  config: { organization_id: 'organizations(organization_id)' },
+  // The permission model's references: three to its own reference tables (the
+  // constraint the role save violated for every role, every time), and the
+  // organisation the grants belong to since the matrix became tenant data.
+  role_permissions: {
+    organization_id: 'organizations(organization_id)',
+    role_code: 'roles(role_code)',
+    module_code: 'permission_modules(module_code)',
+    action_code: 'permission_actions(action_code)',
+  },
+  // Build Prompt 51: a storage connection belongs to exactly one organisation,
+  // and the reference is what makes a row for a non-existent tenant impossible.
+  storage_connections: { organization_id: 'organizations(organization_id)' },
+  // Migration 006: an owner row and a round both belong to a requirement that
+  // exists. An orphan round is a trail that reads as somebody else's, which is
+  // exactly the write the live schema refuses and this must refuse too.
+  requirement_owners: {
+    requirement_id: 'work_paper_requirements(requirement_id)',
+  },
+  requirement_submissions: {
+    requirement_id: 'work_paper_requirements(requirement_id)',
+    organization_id: 'organizations(organization_id)',
+  },
+};
+
+/**
+ * Column defaults, where the live schema declares one. A NOT NULL column with a
+ * default must carry it here too, or the smoke database is stricter than the
+ * live one and refuses an insert the live database accepts: a false failure is
+ * worse than the one the constraints were added to catch.
+ */
+const DEFAULTS: Record<string, Record<string, string>> = {
+  // Migration 002: added with a default, so existing rows and any insert that
+  // omits it mean "not confined".
+  role_permissions: { scope_to_affiliate: '0' },
+  // Migration 006: the first answer to a requirement is round one.
+  requirement_submissions: { round_number: '1' },
+  // Migration 003: likewise, an affiliate is not the Group unless said to be.
+  affiliates: { is_group: '0' },
+  // Migration 004: a new connection is inactive and untested until an
+  // administrator tests it and chooses it.
+  storage_connections: { is_active: '0', status: "'pending'" },
+};
+
+/** Columns a row cannot be written without. */
+const NOT_NULL: Record<string, string[]> = {
+  role_permissions: [
+    'organization_id',
+    'role_code',
+    'module_code',
+    'action_code',
+    'is_allowed',
+    'scope_to_affiliate',
+  ],
+  permission_modules: ['module_code'],
+  permission_actions: ['action_code'],
+  affiliates: ['is_group'],
+  storage_connections: ['organization_id', 'provider', 'status', 'is_active'],
+  // Migration 006: a round with no requirement, no organisation or no number is
+  // not a round of anything.
+  requirement_owners: ['requirement_id', 'user_id'],
+  requirement_submissions: ['requirement_id', 'organization_id', 'round_number'],
+};
+
+/** Creates every dictionary table (untyped columns; SQLite is typeless) plus the FTS index. */
 export function createTables(db: DatabaseSync, tables: Map<string, string[]>): void {
   for (const [name, columns] of tables) {
-    const constraints = COLUMN_CONSTRAINTS[name] ?? {};
-    const defs = columns.map((c) => (constraints[c] ? `${c} ${constraints[c]}` : c));
+    const defs = columns.map((c) => {
+      let def = c;
+      if (PRIMARY_KEYS[name] === c) def += ' PRIMARY KEY';
+      else if (NOT_NULL[name]?.includes(c)) def += ' NOT NULL';
+      const fallback = DEFAULTS[name]?.[c];
+      if (fallback !== undefined) def += ` DEFAULT ${fallback}`;
+      const reference = FOREIGN_KEYS[name]?.[c];
+      if (reference) def += ` REFERENCES ${reference}`;
+      return def;
+    });
     db.exec(`CREATE TABLE ${name} (${defs.join(', ')})`);
   }
+  // Migration 004's two indexes. The partial one is a real constraint, not a
+  // performance hint: it is what makes "the organisation's active storage
+  // provider" a single answer, so the smoke database must carry it or a bug
+  // that leaves two active rows would pass here and fail in production.
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_storage_connections_org_provider
+       ON storage_connections (organization_id, provider)`,
+  );
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_storage_connections_one_active
+       ON storage_connections (organization_id) WHERE is_active = 1`,
+  );
   // The external-content full-text index over work papers, maintained by the
   // work-papers repository on create, edit and delete.
   db.exec(

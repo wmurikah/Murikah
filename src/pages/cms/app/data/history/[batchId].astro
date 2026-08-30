@@ -1,0 +1,675 @@
+---
+/**
+ * Data → Import History → one batch.
+ *
+ * Overview, exception queues, rows, and a row inspector. What the inspector
+ * shows depends on what the reader may see: the Upload Centre permission
+ * says a row exists and what happened to it, and the source values inside
+ * need the data type's own module access.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canUploadImportType, canViewImports } from '@/lib/cms/permissions';
+import {
+  exceptionQueues,
+  REPROCESSABLE,
+  FILE_STORAGE_CONNECTED,
+  NO_FILE_STORAGE_MESSAGE,
+  listBatches,
+  escapeForDisplay,
+  IMPORT_TYPE_LABELS,
+  type BatchSummaryRow,
+  type ExceptionQueue,
+  type ImportType,
+} from '@/lib/cms/import/uploadCentre';
+import { importProgress, dominantAction, type ImportProgress } from '@/lib/cms/import/progress';
+import { planBatchDeletion, type BatchDeletePlan } from '@/lib/cms/import/batchAdmin';
+
+export const prerender = false;
+
+const batchId = Astro.params.batchId ?? '';
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewImports(permissions);
+
+interface RowLine {
+  importRowId: string;
+  sourceRowNumber: number;
+  sourceRecordKey: string | null;
+  rowStatus: string;
+  errorMessage: string | null;
+  entityId: string | null;
+}
+
+let batch: BatchSummaryRow | undefined;
+let queues: ExceptionQueue[] = [];
+let rows: RowLine[] = [];
+let audits: { eventType: string; action: string; at: string; after: string | null }[] = [];
+// RENDERED ON THE SERVER, EVERY LOAD. The island polls the same query, so a
+// refresh mid-run shows the same phase and the same counts, and the page is
+// complete with no JavaScript at all.
+let progress: ImportProgress | null = null;
+let deletion: BatchDeletePlan | null = null;
+let loadFailed = false;
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    batch = (await listBatches(db, 200)).find((candidate) => candidate.batchId === batchId);
+    if (batch !== undefined) {
+      progress = await importProgress(db, batchId);
+      deletion = await planBatchDeletion(db, batchId);
+      queues = await exceptionQueues(db, batchId);
+      const rowResult = await db.execute({
+        sql: `SELECT import_row_id, source_row_number, source_record_key, row_status,
+                error_message, entity_id
+              FROM import_rows WHERE import_batch_id = ?
+              ORDER BY CASE row_status WHEN 'REJECTED' THEN 0 WHEN 'UNRESOLVED' THEN 1 ELSE 2 END,
+                       source_row_number
+              LIMIT 200`,
+        args: [batchId],
+      });
+      rows = rowResult.rows.map((raw) => ({
+        importRowId: String(raw.import_row_id),
+        sourceRowNumber: Number(raw.source_row_number),
+        sourceRecordKey: raw.source_record_key === null ? null : String(raw.source_record_key),
+        rowStatus: String(raw.row_status),
+        errorMessage:
+          raw.error_message === null ? null : escapeForDisplay(String(raw.error_message)),
+        entityId: raw.entity_id === null ? null : String(raw.entity_id),
+      }));
+      const auditResult = await db.execute({
+        sql: `SELECT event_type, action, event_at, after_json FROM audit_events
+              WHERE entity_type = 'IMPORT_BATCH' AND entity_id = ? ORDER BY event_at`,
+        args: [batchId],
+      });
+      audits = auditResult.rows.map((raw) => ({
+        eventType: String(raw.event_type),
+        action: String(raw.action),
+        at: String(raw.event_at),
+        after: raw.after_json === null ? null : String(raw.after_json),
+      }));
+    }
+  } catch (error) {
+    console.error('[cms.data.batch] load failed', error);
+    loadFailed = true;
+  }
+}
+/**
+ * Whether validation actually classified anything.
+ *
+ * A batch at VALIDATING has not finished; a REJECTED batch with no rows never
+ * got as far as classifying one. Either way the exception panel must say so
+ * rather than report a clean run. Read from the rows themselves, so it stays
+ * true whatever wrote the batch.
+ */
+const validationRan =
+  rows.length > 0 ||
+  batch?.status === 'READY' ||
+  batch?.status === 'IMPORTED' ||
+  batch?.status === 'PARTIAL';
+
+const mayCommit =
+  batch !== undefined && canUploadImportType(permissions, batch.importType as ImportType);
+const statusTone = (status: string) =>
+  status === 'IMPORTED'
+    ? 'success'
+    : status === 'PARTIAL'
+      ? 'warning'
+      : status === 'REJECTED'
+        ? 'danger'
+        : 'neutral';
+const rowTone = (status: string) =>
+  status === 'REJECTED'
+    ? 'danger'
+    : status === 'UNRESOLVED'
+      ? 'warning'
+      : status === 'CHANGED'
+        ? 'info'
+        : 'neutral';
+const action = dominantAction(batch?.status ?? '', batchId);
+---
+
+<CmsLayout title="Import batch">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to import history"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The batch could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : batch === undefined ? (
+      <CmsErrorState
+        title="That batch could not be found"
+        description="It may have been removed from view."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title={batch.filename}
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Data', href: '/app/data' },
+            { label: 'History', href: '/app/data/history' },
+            { label: 'Batch' },
+          ]}
+        >
+          {mayCommit && (
+            <Fragment slot="actions">
+              {/*
+                THREE DIFFERENT THINGS, LABELLED AS THREE DIFFERENT THINGS.
+                Revalidate re-checks rows against master data and writes no
+                record. Retry the import writes the records that are missing.
+                Delete removes the batch. They were one ghost button and a
+                commit button, which is how an operator presses the wrong one.
+                The destructive one is last, apart, and carries its own
+                confirmation.
+              */}
+              <CmsButton id="cms-batch-revalidate" variant="ghost">
+                Revalidate
+              </CmsButton>
+              {action.action === 'retry' && (
+                <CmsButton id="cms-batch-retry" variant="primary" icon="data">
+                  Retry the import
+                </CmsButton>
+              )}
+              {action.action === 'commit' && (
+                <CmsButton id="cms-batch-commit" variant="primary" icon="check">
+                  {action.label}
+                </CmsButton>
+              )}
+              {action.href !== null && action.label !== null && (
+                <CmsButton variant="primary" href={action.href} icon="check">
+                  {action.label}
+                </CmsButton>
+              )}
+              {deletion?.permitted === true && (
+                <CmsButton
+                  id="cms-batch-delete"
+                  variant="danger"
+                  data-cms-modal-open="cms-batch-delete-confirm"
+                >
+                  Delete this batch
+                </CmsButton>
+              )}
+            </Fragment>
+          )}
+        </CmsPageHeader>
+
+        {/*
+          WHAT TO DO NEXT, BEFORE THE TABLE. The overview used to lead, which
+          told an operator arriving at a failed batch nothing they could act
+          on. One sentence for the state, the count beside it, and the phase
+          rendered from the server so a reload and the poll cannot disagree.
+        */}
+        <CmsCard title={progress?.label ?? batch.status} class="mb-4">
+          <p class="text-cms-body text-cms-ink">{action.sentence}</p>
+          {progress !== null && progress.done !== null && progress.total !== null && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted tabular-nums" data-cms-progress-count>
+              {progress.done} of {progress.total} {progress.unit}
+              {progress.percent === null ? '' : ` — ${progress.percent}%`}
+            </p>
+          )}
+          {progress !== null && progress.percent === null && progress.running && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted" data-cms-progress-note>
+              {progress.sentence}
+            </p>
+          )}
+          {action.retryUnavailable !== null && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted">{action.retryUnavailable}</p>
+          )}
+          {deletion?.permitted === false && deletion.refusal !== null && (
+            <p class="mt-2 text-cms-body-sm text-cms-muted">{deletion.refusal}</p>
+          )}
+          <p
+            id="cms-batch-retry-figures"
+            role="status"
+            aria-live="polite"
+            class="mt-2 text-cms-body-sm text-cms-muted"
+          />
+          {/*
+            THE SAME FIGURES WITHOUT JAVASCRIPT. The numbers above came from
+            the server on this load, so they are already correct for a reader
+            with no scripting. What such a reader loses is the poll, so they
+            are given the one control that replaces it: a plain link back to
+            this page. It is not a fallback message, it is the mechanism.
+          */}
+          {progress?.running === true && (
+            <noscript>
+              <p class="mt-2 text-cms-body-sm text-cms-muted">
+                These figures were read when the page loaded.{' '}
+                <a class="underline" href={`/app/data/history/${encodeURIComponent(batchId)}`}>
+                  Reload for the current position
+                </a>
+                .
+              </p>
+            </noscript>
+          )}
+        </CmsCard>
+
+        {/*
+         * A batch that cannot be recovered says so, here, without anybody
+         * having to press a button to find out. The action is absent rather
+         * than disabled-and-silent, and the sentence names what is missing.
+         */}
+        {REPROCESSABLE.has(batch.status) && !FILE_STORAGE_CONNECTED && (
+          <CmsErrorState
+            class="mb-4"
+            title="This batch cannot be reprocessed"
+            description={NO_FILE_STORAGE_MESSAGE}
+          />
+        )}
+
+        <p
+          id="cms-batch-message"
+          role="status"
+          aria-live="polite"
+          class="mb-4 text-cms-body-sm text-cms-muted"
+        />
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <CmsCard title="Overview">
+            <dl class="text-cms-body-sm text-cms-muted">
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Status</dt>
+                <dd>
+                  <CmsBadge tone={statusTone(batch.status)} label={batch.status.toLowerCase()} />
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Data type</dt>
+                <dd class="text-cms-ink">
+                  {IMPORT_TYPE_LABELS[batch.importType as ImportType] ?? batch.importType}
+                </dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Source system</dt>
+                <dd class="text-cms-ink">{batch.sourceSystem}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Uploaded by</dt>
+                <dd class="text-cms-ink">{batch.uploadedBy}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Uploaded at</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.uploadedAt}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Rows received</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.rowsReceived}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Documents</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.uniqueDocuments}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>New rows</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.rowsNew}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Changed rows</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.rowsChanged}</dd>
+              </div>
+              <div class="flex justify-between border-b border-cms-line py-1.5">
+                <dt>Exact duplicate rows</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.rowsDuplicate}</dd>
+              </div>
+              <div class="flex justify-between py-1.5">
+                <dt>Rejected rows</dt>
+                <dd class="text-cms-ink tabular-nums">{batch.rowsRejected}</dd>
+              </div>
+            </dl>
+          </CmsCard>
+
+          <CmsCard title="Exception queues">
+            {/*
+             * THREE STATES, BECAUSE TWO OF THEM ARE NOT THE SAME THING.
+             * A batch still validating, or one that was rejected before it
+             * classified a row, has no exceptions in the sense that nothing
+             * has been examined. Rendering that as "No exceptions. Every row
+             * resolved." tells the operator the run succeeded, on a batch
+             * where nothing ran, which is how the stuck validation looked
+             * like a clean one.
+             */}
+            {validationRan === false ? (
+              <CmsEmptyState
+                icon="data"
+                title="Not validated"
+                description={
+                  batch.status === 'VALIDATING'
+                    ? 'This batch is still validating. No row has been classified yet.'
+                    : 'This batch was rejected before any row was classified.'
+                }
+              />
+            ) : queues.length === 0 ? (
+              <CmsEmptyState
+                icon="check"
+                title="No exceptions"
+                description={`Validated. All ${batch.rowsReceived} rows resolved.`}
+              />
+            ) : (
+              <ul class="flex flex-col gap-2 text-cms-body-sm">
+                {queues.map((queue) => (
+                  <li class="flex items-start justify-between gap-3 border-b border-cms-line pb-2 last:border-0">
+                    <span class="text-cms-ink">
+                      {queue.queue}
+                      {queue.example && <span class="block text-cms-muted">{queue.example}</span>}
+                    </span>
+                    <span class="text-cms-muted tabular-nums">{queue.rows}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CmsCard>
+        </div>
+
+        <div class="mt-6">
+          <CmsDataTable
+            caption="Rows"
+            columns={[
+              { key: 'row', label: 'Row', numeric: true },
+              { key: 'key', label: 'Source key' },
+              { key: 'status', label: 'Status' },
+              { key: 'error', label: 'Message' },
+              { key: 'entity', label: 'Record' },
+              { key: 'actions', label: 'Actions' },
+            ]}
+            empty={rows.length === 0}
+          >
+            {rows.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.sourceRowNumber}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.sourceRecordKey ?? 'Not available'}</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge tone={rowTone(row.rowStatus)} label={row.rowStatus.toLowerCase()} />
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.errorMessage ?? ''}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.entityId ?? 'Not imported'}</td>
+                <td class="px-4 py-2.5">
+                  <button
+                    type="button"
+                    data-cms-row-inspect={row.importRowId}
+                    class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    Inspect
+                  </button>
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState icon="data" title="No rows" description="This batch holds no rows." />
+            </Fragment>
+          </CmsDataTable>
+        </div>
+
+        <div class="mt-6">
+          <CmsCard title="Audit">
+            {audits.length === 0 ? (
+              <CmsEmptyState
+                icon="data"
+                title="No audit entries"
+                description="Nothing recorded yet."
+              />
+            ) : (
+              <ul class="flex flex-col gap-2 text-cms-body-sm text-cms-muted">
+                {audits.map((entry) => (
+                  <li class="border-b border-cms-line pb-2 last:border-0">
+                    <span class="font-medium text-cms-ink">{entry.eventType}</span>
+                    <span class="ml-2">{entry.at}</span>
+                    {entry.after && <span class="block break-words">{entry.after}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CmsCard>
+        </div>
+
+        {/*
+          THE CONFIRMATION STATES WHAT GOES AND WHAT STAYS. A destructive
+          dialog that only asks "are you sure?" is asking somebody to confirm
+          something they have not been told.
+        */}
+        {deletion?.permitted === true && (
+          <CmsModal
+            id="cms-batch-delete-confirm"
+            title="Delete this batch?"
+            description="This cannot be undone."
+          >
+            <div class="px-5 py-4 text-cms-body-sm">
+              <p class="font-semibold text-cms-ink">What goes</p>
+              <ul class="mt-1 mb-3 list-disc pl-5 text-cms-muted">
+                <li>This batch and its record in the history</li>
+                <li>{deletion.contents.rows} import rows</li>
+                <li>{deletion.contents.landedRows} landed extract rows</li>
+                <li>{deletion.contents.unresolvedActors} unresolved people</li>
+              </ul>
+              <p class="font-semibold text-cms-ink">What stays</p>
+              <ul class="mt-1 list-disc pl-5 text-cms-muted">
+                <li>Every sales order and purchase order already written</li>
+                <li>
+                  {deletion.footprint.accountsCreated} customers and{' '}
+                  {deletion.footprint.productsCreated} products created from this batch
+                </li>
+                <li>The audit trail, which is append-only and is never deleted</li>
+              </ul>
+            </div>
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <CmsButton id="cms-batch-delete-confirmed" variant="danger">
+                Delete the batch
+              </CmsButton>
+            </Fragment>
+          </CmsModal>
+        )}
+
+        <CmsDrawer id="cms-row-drawer" tone="form" title="Import row">
+          <div id="cms-row-body" class="text-cms-body-sm text-cms-muted">
+            Loading.
+          </div>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Close
+            </CmsButton>
+          </Fragment>
+        </CmsDrawer>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  const drawer = document.getElementById('cms-row-drawer') as HTMLDialogElement | null;
+  const body = document.getElementById('cms-row-body');
+  const message = document.getElementById('cms-batch-message');
+  const batchId = window.location.pathname.split('/').pop() ?? '';
+
+  document.addEventListener('click', async (event) => {
+    const target = (event.target as HTMLElement | null)?.closest('[data-cms-row-inspect]');
+    if (!target || !drawer || !body) return;
+    const rowId = target.getAttribute('data-cms-row-inspect') ?? '';
+    body.textContent = 'Loading.';
+    drawer.showModal();
+    const response = await fetch(`/api/data/rows/${rowId}`);
+    if (!response.ok) {
+      body.textContent = 'That row could not be read.';
+      return;
+    }
+    const payload = (await response.json()) as { row?: Record<string, unknown> };
+    const row = payload.row ?? {};
+    const raw = row.rawSource as Record<string, string> | null;
+    const pair = (label: string, value: string) =>
+      `<div class="flex justify-between gap-3 border-b border-cms-line py-1.5 last:border-0"><span>${label}</span><span class="font-medium text-cms-ink break-all">${value}</span></div>`;
+    body.innerHTML =
+      pair('Source row', String(row.sourceRowNumber ?? '')) +
+      pair('Source key', String(row.sourceRecordKey ?? 'Not available')) +
+      pair('Status', String(row.rowStatus ?? '')) +
+      pair('Message', String(row.errorMessage ?? '')) +
+      pair('Row hash', String(row.rowHash ?? '')) +
+      pair('Record', String(row.entityId ?? 'Not imported')) +
+      pair(
+        'Snapshot version',
+        row.snapshotVersion === null ? 'Not available' : String(row.snapshotVersion),
+      ) +
+      (raw === null
+        ? `<p class="mt-3 rounded-cms border border-cms-line bg-cms-canvas px-3 py-2">${String(row.withheld ?? '')}</p>`
+        : `<p class="mt-3 font-medium text-cms-ink">Raw source</p>` +
+          Object.entries(raw)
+            .map(([key, value]) => pair(key, value))
+            .join(''));
+  });
+
+  /**
+   * THE THREE FIGURES, FETCHED BEFORE THE RETRY RUNS.
+   *
+   * The operator decides with them in front of them. Asked on load rather than
+   * on press, so the number is on screen before a finger is near the button.
+   */
+  const retryButton = document.getElementById('cms-batch-retry');
+  const figures = document.getElementById('cms-batch-retry-figures');
+  if (retryButton && figures) {
+    void (async () => {
+      const response = await fetch(`/api/data/imports/${batchId}/retry`);
+      if (!response.ok) return;
+      const preview = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (preview === null) return;
+      const blocked = Number(preview.blocked ?? 0);
+      figures.textContent =
+        `${Number(preview.alreadyImported ?? 0)} already imported and will be skipped. ` +
+        `${Number(preview.willImport ?? 0)} will be imported. ` +
+        `${blocked} blocked.` +
+        (blocked === 0
+          ? ''
+          : ` ${((preview.blockedReasons as { reason?: string }[] | undefined) ?? [])
+              .map((entry) => entry.reason ?? '')
+              .join(' ')}`);
+    })();
+
+    retryButton.addEventListener('click', async () => {
+      const note = document.getElementById('cms-batch-message');
+      if (note) note.textContent = 'Retrying the import';
+      const response = await fetch(`/api/data/imports/${batchId}/retry`, { method: 'POST' });
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      const outcome = (payload ?? {}) as Record<string, unknown>;
+      if (note) {
+        note.textContent = response.ok
+          ? String(outcome.message ?? 'The retry finished.')
+          : 'The retry could not be run.';
+      }
+      if (response.ok && outcome.nothingChanged !== true) window.location.reload();
+    });
+  }
+
+  // The delete, behind its own confirmation. The button is only rendered when
+  // the server has already said the batch may be deleted, and the endpoint
+  // asks the same question again before it acts.
+  document.getElementById('cms-batch-delete-confirmed')?.addEventListener('click', async () => {
+    const note = document.getElementById('cms-batch-message');
+    const response = await fetch(`/api/data/imports/${batchId}/delete`, { method: 'POST' });
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const outcome = (payload ?? {}) as Record<string, unknown>;
+    if (response.ok && outcome.ok === true) {
+      window.location.assign('/app/data/history');
+      return;
+    }
+    (document.getElementById('cms-batch-delete-confirm') as HTMLDialogElement | null)?.close();
+    if (note) note.textContent = String(outcome.refusal ?? 'The batch could not be deleted.');
+  });
+
+  /**
+   * THE PROGRESS ISLAND, AND IT ONLY EXISTS WHILE SOMETHING IS RUNNING.
+   *
+   * The page already rendered the phase and the counts from the server, so
+   * this changes nothing about what a reader sees on load or after a refresh;
+   * it only keeps them current. It polls the one query the server rendered
+   * from, so the two cannot disagree, and it stops the moment the run does.
+   */
+  const progressCount = document.querySelector('[data-cms-progress-count]');
+  const progressNote = document.querySelector('[data-cms-progress-note]');
+  if (progressCount || progressNote) {
+    const poll = async () => {
+      const response = await fetch(`/api/data/imports/${batchId}/progress`);
+      if (!response.ok) return false;
+      const state = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (state === null) return false;
+      const done = state.done as number | null;
+      const total = state.total as number | null;
+      const percent = state.percent as number | null;
+      if (progressCount && done !== null && total !== null) {
+        progressCount.textContent =
+          `${done} of ${total} ${String(state.unit ?? '')}` +
+          (percent === null ? '' : ` \u2014 ${percent}%`);
+      }
+      if (progressNote) progressNote.textContent = String(state.sentence ?? '');
+      return state.running === true;
+    };
+    const tick = async () => {
+      if (await poll()) window.setTimeout(() => void tick(), 2000);
+      else window.location.reload();
+    };
+    window.setTimeout(() => void tick(), 2000);
+  }
+
+  // Run the whole batch again from the stored file. Not offered on an
+  // IMPORTED batch, and the server refuses it there too.
+  document.getElementById('cms-batch-reprocess')?.addEventListener('click', async () => {
+    const message = document.getElementById('cms-batch-message');
+    if (message) message.textContent = 'Reprocessing';
+    const response = await fetch(`/api/data/imports/${batchId}/reprocess`, { method: 'POST' });
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const result = (body ?? {}) as Record<string, unknown>;
+    if (message) {
+      message.textContent = response.ok
+        ? `Reprocessed: ${String(result.previousStatus)} to ${String(result.newStatus)}.`
+        : String(result.reason ?? 'The batch could not be reprocessed.');
+    }
+    if (response.ok) window.location.reload();
+  });
+
+  document.getElementById('cms-batch-commit')?.addEventListener('click', async () => {
+    if (message) message.textContent = 'Importing.';
+    const response = await fetch(`/api/data/imports/${batchId}/commit`, { method: 'POST' });
+    const result = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok || result === null) {
+      if (message) message.textContent = 'The import could not be completed.';
+      return;
+    }
+    const skipped = (result.skippedReasons ?? []) as { reason: string; rows: number }[];
+    if (message) {
+      message.textContent =
+        String(result.status) === 'PARTIAL'
+          ? `Partial: ${String(result.documentsCreated)} created, ${String(result.documentsUpdated)} updated, ${String(result.documentsSkipped)} not imported. ${skipped.map((entry) => `${entry.rows} rows: ${entry.reason}`).join('; ')}`
+          : `Imported: ${String(result.documentsCreated)} created, ${String(result.documentsUpdated)} updated, ${String(result.documentsUnchanged)} unchanged.`;
+    }
+    window.setTimeout(() => window.location.reload(), 1200);
+  });
+
+  document.getElementById('cms-batch-revalidate')?.addEventListener('click', async () => {
+    if (message) message.textContent = 'Revalidating.';
+    const response = await fetch(`/api/data/imports/${batchId}/revalidate`, { method: 'POST' });
+    const result = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok || result === null) {
+      if (message) message.textContent = 'The rows could not be revalidated.';
+      return;
+    }
+    if (message) {
+      message.textContent = `Examined ${String(result.rowsExamined)} rows: ${String(result.rowsResolved)} resolved, ${String(result.rowsStillUnresolved)} still waiting, ${String(result.actorsResolved)} names mapped.`;
+    }
+    window.setTimeout(() => window.location.reload(), 1500);
+  });
+</script>

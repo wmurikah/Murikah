@@ -2,11 +2,16 @@
 export const prerender = false;
 
 /**
- * Work paper detail (Workpaperview). Shows the full finding, its requirements,
+ * Work paper detail (Workpaperview). Shows the full observation, its requirements,
  * responsibles and CC, the revision history (audit trail), any evidence, the
  * management response, and, prominently, only the workflow actions valid for the
  * current status and the signed-in role (resolved through the engine). Gate:
  * WORK_PAPERS.view.
+ *
+ * An action this person may not perform is absent, not explained (Build Prompt
+ * 63): the panel shows what they can do, and shows nothing when that is nothing.
+ * The reasons a move is withheld are diagnostic, and diagnostics belong in the
+ * log rather than in front of an auditor who cannot act on them.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import { renderRichHtml } from '@grc/richtext';
@@ -16,7 +21,12 @@ import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
 import { guardPageLoad } from '@grc/pageGuard';
 import { getWorkPaper, type WorkPaperDetail } from '@grc/repos/workPapers';
-import { listRequirements, type Requirement } from '@grc/repos/requirements';
+import {
+  listRequirements,
+  isReceived,
+  receiptLabel,
+  type Requirement,
+} from '@grc/repos/requirements';
 import {
   listResponsibles,
   listCcRecipients,
@@ -25,14 +35,17 @@ import {
 } from '@grc/repos/responsibles';
 import { listRevisions, type Revision } from '@grc/repos/revisions';
 import { listAttachments, type Attachment } from '@grc/repos/evidence';
+import GrcFindingCards from '@/components/grc/GrcFindingCards.astro';
+import { listActionPlans, type ActionPlanListRow } from '@grc/repos/actionPlans';
+import type { FindingSource } from '@grc/reports/findingCards';
 import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
-import { WORK_PAPER_ENUM_TYPE, isEditable } from '@grc/workflow/workPaperActions';
+import { WORK_PAPER_ENUM_TYPE, WP_STATUS, isEditable } from '@grc/workflow/workPaperActions';
 import { offeredActions, type OfferedAction } from '@grc/workflow/workPaperWorkflow';
 import { aiEnabled } from '@grc/ai/gate';
 import { AI_DISCLAIMER } from '@grc/ai/validation';
-import { storageConfigured } from '@grc/storage';
+import { storageConfiguredFor } from '@grc/storage';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
@@ -42,7 +55,16 @@ const allowed = can(Astro.locals, 'read', 'WORK_PAPER');
 const canEdit = can(Astro.locals, 'update', 'WORK_PAPER');
 const canManageReq = can(Astro.locals, 'update', 'WORK_PAPER');
 const hasAi = aiEnabled((f) => grc.hasFeature(f));
-const canUpload = canEdit && storageConfigured();
+const storageReady = await storageConfiguredFor(grc.organizationId);
+const canUpload = canEdit && storageReady;
+// Whether this reviewer may consciously send a observation out with nothing
+// attached (Build Prompt 62). Holding the grant only puts the tick box on the
+// screen; the gate still stands unless they tick it.
+const canOverrideEvidence =
+  grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.evidence_override');
+// A new requirement defaults to "asked for today", which is what is happening
+// when somebody types one in.
+const today = new Date().toISOString().slice(0, 10);
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 
@@ -52,6 +74,7 @@ let responsibles: Responsible[] = [];
 let cc: CcRecipient[] = [];
 let revisions: Revision[] = [];
 let evidence: Attachment[] = [];
+let plans: ActionPlanListRow[] = [];
 let auditors: Option[] = [];
 let labels = new Map<string, string>();
 let actions: OfferedAction[] = [];
@@ -62,22 +85,51 @@ if (allowed && id) {
   // card, never a blank 500 or a misleading "not found".
   loadError = !(await guardPageLoad('work-papers.detail', async () => {
     const db = await getDb(getGrcEnv());
-    wp = await getWorkPaper(db, grc.organizationId, id);
+    wp = await getWorkPaper(db, grc.organizationId, id, grc.affiliateScope);
     if (wp) {
-      [requirements, responsibles, cc, revisions, evidence, auditors, labels] = await Promise.all([
-        listRequirements(db, grc.organizationId, id),
-        listResponsibles(db, grc.organizationId, id),
-        listCcRecipients(db, grc.organizationId, id),
-        listRevisions(db, grc.organizationId, id),
-        listAttachments(db, grc.organizationId, 'work_paper', id),
-        listAuditors(db, grc.organizationId),
-        loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
-      ]);
-      actions = await offeredActions(db, wp.status, {
+      [requirements, responsibles, cc, revisions, evidence, auditors, labels, plans] =
+        await Promise.all([
+          listRequirements(db, grc.organizationId, id),
+          listResponsibles(db, grc.organizationId, id),
+          listCcRecipients(db, grc.organizationId, id),
+          listRevisions(db, grc.organizationId, id),
+          listAttachments(db, grc.organizationId, 'work_paper', id),
+          listAuditors(db, grc.organizationId),
+          loadEnumLabels(db, WORK_PAPER_ENUM_TYPE),
+          // The actions agreed against this observation, for the management
+          // response card: a response promising remediation and the remediation
+          // it promises are one answer, read together (Build Prompt 67).
+          listActionPlans(
+            db,
+            grc.organizationId,
+            {
+              userId: grc.userId,
+              roleCode: grc.roleCode,
+              perms: grc.perms,
+              isPlatformOwner: grc.isPlatformOwner,
+              affiliateScope: grc.affiliateScope,
+            },
+            {},
+          ).then((all) => all.filter((p) => p.workPaperId === id)),
+        ]);
+      // The subject, not just the status: submitting is the observation's own
+      // auditor's move, so the offer needs to know whose observation it is.
+      const subject = {
+        status: wp.status,
+        assignedAuditorId: wp.assignedAuditorId as string | null,
+      };
+      // Only what this person may actually do (Build Prompt 63). A move they
+      // may not make is not shown at all: an auditor is not told that Start
+      // review exists and that their role lacks WORK_PAPER.approve, because
+      // that is a permission code in front of somebody who cannot act on it,
+      // about an action that was never theirs. The reason still exists for
+      // diagnosis, and the refusal log names it if anybody ever posts the move.
+      actions = await offeredActions(db, subject, {
         userId: grc.userId,
         userName: grc.userName ?? grc.userEmail ?? grc.userId,
         roleCode: grc.roleCode,
         isPlatformOwner: grc.isPlatformOwner,
+        matrix: grc.matrix,
         perms: grc.perms,
       });
     }
@@ -95,408 +147,631 @@ const rich = (key: string): string => {
   const raw = wp?.[key];
   return raw == null || String(raw) === '' ? '<p>-</p>' : renderRichHtml(String(raw));
 };
+
+/**
+ * The dated attribution the workflow stamps on each move (workPaperActions.ts),
+ * read back. Every one of these is stored on a real transition and none of them
+ * was rendered anywhere, so the review a observation has actually been through was
+ * invisible on its own page (Build Prompt 50).
+ *
+ * Only the steps that have happened are listed: a Draft observation shows the one
+ * line it has earned rather than a column of dashes claiming it was reviewed.
+ */
+interface TrailStep {
+  label: string;
+  who: string | null;
+  when: string | null;
+  comment: string | null;
+}
+const text = (key: string | undefined): string | null => {
+  const raw = key ? wp?.[key] : null;
+  return raw == null || String(raw) === '' ? null : String(raw);
+};
+const step = (
+  label: string,
+  whoKey: string | undefined,
+  whenKey: string,
+  commentKey?: string,
+): TrailStep => ({
+  label,
+  who: text(whoKey),
+  when: text(whenKey),
+  comment: text(commentKey),
+});
+const trail: TrailStep[] = wp
+  ? [
+      step('Prepared', 'prepared_by_name', 'prepared_date'),
+      step('Submitted', undefined, 'submitted_date'),
+      step('Reviewed', 'reviewed_by_name', 'review_date', 'review_comments'),
+      step('Approved', 'approved_by_name', 'approved_date'),
+      step('Sent to auditee', undefined, 'sent_to_auditee_date'),
+      step('Response submitted', undefined, 'response_submitted_date'),
+      step('Response reviewed', undefined, 'response_review_date', 'response_review_comments'),
+    ].filter((t) => t.who !== null || t.when !== null || t.comment !== null)
+  : [];
+// The response cycle's own state, stored and likewise never shown.
+const responseFacts: { label: string; value: string }[] = wp
+  ? (
+      [
+        { label: 'Response status', value: val('response_status') },
+        { label: 'Response round', value: val('response_round') },
+        { label: 'Response deadline', value: val('response_deadline') },
+        { label: 'Final status', value: val('final_status') },
+      ] as { label: string; value: string }[]
+    ).filter((f) => f.value !== '-')
+  : [];
+
+/**
+ * The observation as the shared card arrangement sees it (Build Prompt 67).
+ *
+ * The arrangement itself lives in `reports/findingCards.ts` and is drawn by
+ * `GrcFindingCards.astro`, so this screen, the report preview and the printed
+ * pack show the same observation in the same order with the same headings. What
+ * this does is translate the stored row into that shape, once.
+ */
+const findingSource: FindingSource | null = wp
+  ? {
+      reference: String(wp.reference ?? ''),
+      observationTitle: text('observation_title') ?? '',
+      observationDescription: text('observation_description') ?? '',
+      affiliate: String(wp.affiliate_name ?? wp.affiliate_code ?? ''),
+      auditArea: String(wp.audit_area_name ?? ''),
+      subArea: String(wp.sub_area_name ?? ''),
+      // The period as one chip rather than two dates: the reader wants to know
+      // what span was looked at, not to assemble it from a pair of fields.
+      period: [text('audit_period_from'), text('audit_period_to')].filter(Boolean).join(' to '),
+      status: statusLabel(labels, String(wp.status ?? '')),
+      riskRating: text('risk_rating'),
+      riskSummary: text('risk_summary') ?? '',
+      recommendation: text('recommendation') ?? '',
+      managementResponse: text('management_response') ?? '',
+      responsibility: responsibles.map((r) => r.name ?? r.userId).join(', '),
+      actionPlans: plans.map((p) => ({
+        description: p.description,
+        owner: p.ownerNames ?? 'Unassigned',
+        due: p.dueDate ?? '-',
+        status: p.status,
+      })),
+      evidence: evidence.map((e) => ({
+        name: e.fileName,
+        detail: [e.uploadedBy, e.createdAt ? e.createdAt.slice(0, 10) : '']
+          .filter(Boolean)
+          .join(', '),
+      })),
+      trail: trail.map((t) => ({
+        label: t.label,
+        who: t.who ?? '-',
+        when: t.when ? t.when.slice(0, 10) : '-',
+        comment: t.comment ?? '',
+      })),
+      trailFacts: responseFacts,
+    }
+  : null;
 ---
 
 <GrcLayout title={wp ? String(wp.reference) : 'Work paper'}>
-  <div class="grc-page-head">
-    <div>
-      <h1>{wp ? wp.reference : 'Work paper'}</h1>
-      <p class="grc-lead">{wp ? String(wp.observation_title ?? 'Untitled finding') : ''}</p>
+  <div class="grc-work-paper-page">
+    <div class="grc-page-head">
+      <div>
+        <h1>{wp ? wp.reference : 'Work paper'}</h1>
+        <p class="grc-lead">{wp ? String(wp.observation_title ?? 'Untitled observation') : ''}</p>
+      </div>
+      <div class="grc-actionbar" style="margin:0">
+        {
+          wp && editable && canEdit && (
+            <a href={`/work-papers/${id}/edit`} class="grc-btn grc-btn--secondary">
+              Edit
+            </a>
+          )
+        }
+        {
+          wp && editable && canEdit && (
+            <form method="post" action={`/api/work-papers/${id}/delete`} style="display:inline">
+              <button type="submit" class="grc-btn grc-btn--secondary">
+                Delete
+              </button>
+            </form>
+          )
+        }
+        <a href="/work-papers" class="grc-btn grc-btn--secondary">Back to list</a>
+      </div>
     </div>
-    <div class="grc-actionbar" style="margin:0">
-      {
-        wp && editable && canEdit && (
-          <a href={`/work-papers/${id}/edit`} class="grc-btn grc-btn--secondary">
-            Edit
-          </a>
-        )
-      }
-      {
-        wp && editable && canEdit && (
-          <form method="post" action={`/api/work-papers/${id}/delete`} style="display:inline">
-            <button type="submit" class="grc-btn grc-btn--secondary">
-              Delete
-            </button>
-          </form>
-        )
-      }
-      <a href="/work-papers" class="grc-btn grc-btn--secondary">Back to list</a>
-    </div>
-  </div>
 
-  {
-    errorCode && (
-      <p class="grc-error" role="alert">
-        {decodeURIComponent(errorCode)}
-      </p>
-    )
-  }
-  {
-    done && (
-      <p class="grc-notice" role="status">
-        {decodeURIComponent(done)}
-      </p>
-    )
-  }
-
-  {
-    !allowed ? (
-      <p class="grc-error" role="alert">
-        You do not have access to work papers.
-      </p>
-    ) : loadError ? (
-      <GrcErrorCard subject="This work paper" />
-    ) : !wp ? (
-      <p class="grc-empty">That work paper was not found in your organisation.</p>
-    ) : (
-      <>
-        <p style="margin:0 0 1rem">
-          <span class="grc-pill">{statusLabel(labels, wp.status)}</span>
+    {
+      errorCode && (
+        <p class="grc-error" role="alert">
+          {decodeURIComponent(errorCode)}
         </p>
+      )
+    }
+    {
+      done && (
+        <p class="grc-notice" role="status">
+          {decodeURIComponent(done)}
+        </p>
+      )
+    }
 
-        {actions.length > 0 && (
-          <div class="grc-panel">
-            <h2>Actions</h2>
-            <div style="display:grid;gap:0.75rem">
-              {actions.map((a) => (
-                <form
-                  method="post"
-                  action={`/api/work-papers/${id}/transition`}
-                  class="grc-actionbar"
-                  style="margin:0;align-items:end"
+    {
+      !allowed ? (
+        <p class="grc-error" role="alert">
+          You do not have access to work papers.
+        </p>
+      ) : loadError ? (
+        <GrcErrorCard subject="This work paper" />
+      ) : !wp ? (
+        <p class="grc-empty">That work paper was not found in your organisation.</p>
+      ) : (
+        <>
+          <p style="margin:0 0 1rem">
+            <span class="grc-pill">{statusLabel(labels, wp.status)}</span>
+          </p>
+
+          {actions.length > 0 && (
+            <div class="grc-panel">
+              <h2>Actions</h2>
+              <div style="display:grid;gap:0.75rem">
+                {actions.map((a) => (
+                  <form
+                    method="post"
+                    action={`/api/work-papers/${id}/transition`}
+                    class="grc-actionbar"
+                    style="margin:0;align-items:end"
+                  >
+                    <input type="hidden" name="to_status" value={a.toStatus} />
+                    {a.toStatus === WP_STATUS.SENT_TO_AUDITEE && canOverrideEvidence && (
+                      /* Sending with nothing attached is a decision, not a
+                       loophole (Build Prompt 62): the reviewer ticks it
+                       deliberately, and the audit trail records that they did.
+                       Without the tick the evidence gate stands. */
+                      <div class="grc-field" style="margin:0;flex:1 1 18rem">
+                        <label class="grc-checkline" for="evidence-override">
+                          <input
+                            type="checkbox"
+                            id="evidence-override"
+                            name="evidence_override"
+                            value="1"
+                          />
+                          <span>Send without evidence (recorded as an override)</span>
+                        </label>
+                      </div>
+                    )}
+                    {a.requiresComment && (
+                      <div class="grc-field" style="margin:0;flex:1 1 20rem">
+                        <label for={`c-${a.toStatus}`}>Comment (required)</label>
+                        <textarea
+                          id={`c-${a.toStatus}`}
+                          name="comment"
+                          class="grc-textarea"
+                          required
+                        />
+                      </div>
+                    )}
+                    <button type="submit" class="grc-btn grc-btn--primary">
+                      {a.label}
+                    </button>
+                  </form>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* The audit context: the control that was tested and how. It stays a
+            plain list on purpose, because it is reference material an auditor
+            scans rather than the argument a reader follows, and the cards
+            below are that argument (Build Prompt 67). */}
+          <fieldset class="grc-fieldset grc-preview-section">
+            <legend>Audit context</legend>
+            <dl class="grc-detail">
+              <>
+                <dt>Year</dt>
+                <dd>{val('year')}</dd>
+              </>
+              <>
+                <dt>Affiliate</dt>
+                <dd>{String(wp.affiliate_name ?? wp.affiliate_code ?? '-')}</dd>
+              </>
+              <>
+                <dt>Audit area</dt>
+                <dd>{String(wp.audit_area_name ?? '-')}</dd>
+              </>
+              <>
+                <dt>Sub-area</dt>
+                <dd>{String(wp.sub_area_name ?? '-')}</dd>
+              </>
+              <>
+                <dt>Work paper date</dt>
+                <dd>{val('work_paper_date')}</dd>
+              </>
+              <>
+                <dt>Audit period</dt>
+                <dd>
+                  {val('audit_period_from')} to {val('audit_period_to')}
+                </dd>
+              </>
+              <>
+                <dt>Assigned auditor</dt>
+                {/* Resolved from assigned_auditor_id by the repository, falling back
+                  to the denormalised name. "Unassigned" only when genuinely so. */}
+                <dd>{String(wp.assigned_auditor_name ?? 'Unassigned')}</dd>
+              </>
+              <>
+                <dt>Classification</dt>
+                <dd>{val('control_classification')}</dd>
+              </>
+              <>
+                <dt>Control type</dt>
+                <dd>{val('control_type')}</dd>
+              </>
+              <>
+                <dt>Frequency</dt>
+                <dd>{val('control_frequency')}</dd>
+              </>
+              <>
+                <dt>Standards</dt>
+                <dd>{val('control_standards')}</dd>
+              </>
+              <>
+                <dt>Control objectives</dt>
+                <dd class="grc-richbody" set:html={rich('control_objectives')} />
+              </>
+              <>
+                <dt>Risk description</dt>
+                <dd class="grc-richbody" set:html={rich('risk_description')} />
+              </>
+              <>
+                <dt>Test objective</dt>
+                <dd class="grc-richbody" set:html={rich('test_objective')} />
+              </>
+              <>
+                <dt>Testing steps</dt>
+                <dd class="grc-richbody" set:html={rich('testing_steps')} />
+              </>
+            </dl>
+          </fieldset>
+
+          {/* The observation itself, from the shared arrangement: the header strip
+            with its risk pill, then audit's assessment as one group (Observation,
+            Risk, Recommendation), then management's answer, the evidence and
+            the trail. The same component draws it in the board pack, so the
+            two cannot drift apart. */}
+          {findingSource && <GrcFindingCards finding={findingSource} formStyle />}
+
+          {hasAi && (
+            <div class="grc-panel">
+              <div class="grc-actionbar" style="margin:0 0 0.5rem;justify-content:space-between">
+                <h2 style="margin:0">AI insights</h2>
+                <button
+                  type="button"
+                  id="wp-insight-btn"
+                  class="grc-btn grc-btn--secondary"
+                  data-wp-id={id}
                 >
-                  <input type="hidden" name="to_status" value={a.toStatus} />
-                  {a.requiresComment && (
-                    <div class="grc-field" style="margin:0;flex:1 1 20rem">
-                      <label for={`c-${a.toStatus}`}>Comment (required)</label>
-                      <textarea
-                        id={`c-${a.toStatus}`}
-                        name="comment"
-                        class="grc-textarea"
-                        required
-                      />
-                    </div>
-                  )}
-                  <button type="submit" class="grc-btn grc-btn--primary">
-                    {a.label}
-                  </button>
-                </form>
-              ))}
+                  Generate insights
+                </button>
+              </div>
+              <p class="grc-field__hint">{AI_DISCLAIMER}</p>
+              <div id="wp-insight-status" class="grc-lead" role="status" aria-live="polite" />
+              <div id="wp-insight-out" class="grc-ai-out" hidden />
             </div>
-          </div>
-        )}
+          )}
 
-        <div class="grc-panel">
-          <h2>Finding</h2>
-          <dl class="grc-detail">
-            <>
-              <dt>Year</dt>
-              <dd>{val('year')}</dd>
-            </>
-            <>
-              <dt>Affiliate</dt>
-              <dd>{String(wp.affiliate_name ?? wp.affiliate_code ?? '-')}</dd>
-            </>
-            <>
-              <dt>Audit area</dt>
-              <dd>{String(wp.audit_area_name ?? '-')}</dd>
-            </>
-            <>
-              <dt>Sub-area</dt>
-              <dd>{String(wp.sub_area_name ?? '-')}</dd>
-            </>
-            <>
-              <dt>Audit period</dt>
-              <dd>
-                {val('audit_period_from')} to {val('audit_period_to')}
-              </dd>
-            </>
-            <>
-              <dt>Assigned auditor</dt>
-              <dd>{String(wp.assigned_auditor_name ?? '-')}</dd>
-            </>
-            <>
-              <dt>Classification</dt>
-              <dd>{val('classification')}</dd>
-            </>
-            <>
-              <dt>Control type</dt>
-              <dd>{val('control_type')}</dd>
-            </>
-            <>
-              <dt>Frequency</dt>
-              <dd>{val('control_frequency')}</dd>
-            </>
-            <>
-              <dt>Standards</dt>
-              <dd>{val('standards')}</dd>
-            </>
-            <>
-              <dt>Control objectives</dt>
-              <dd class="grc-richbody" set:html={rich('control_objectives')} />
-            </>
-            <>
-              <dt>Risk description</dt>
-              <dd class="grc-richbody" set:html={rich('risk_description')} />
-            </>
-            <>
-              <dt>Test objective</dt>
-              <dd class="grc-richbody" set:html={rich('test_objective')} />
-            </>
-            <>
-              <dt>Testing steps</dt>
-              <dd class="grc-richbody" set:html={rich('testing_steps')} />
-            </>
-            <>
-              <dt>Observation</dt>
-              <dd class="grc-richbody" set:html={rich('observation_description')} />
-            </>
-            <>
-              <dt>Risk rating</dt>
-              <dd>{val('risk_rating')}</dd>
-            </>
-            <>
-              <dt>Risk summary</dt>
-              <dd class="grc-richbody" set:html={rich('risk_summary')} />
-            </>
-            <>
-              <dt>Recommendation</dt>
-              <dd class="grc-richbody" set:html={rich('recommendation')} />
-            </>
-            <>
-              <dt>Management response</dt>
-              <dd class="grc-richbody" set:html={rich('management_response')} />
-            </>
-          </dl>
-        </div>
-
-        {hasAi && (
           <div class="grc-panel">
-            <div class="grc-actionbar" style="margin:0 0 0.5rem;justify-content:space-between">
-              <h2 style="margin:0">AI insights</h2>
-              <button
-                type="button"
-                id="wp-insight-btn"
-                class="grc-btn grc-btn--secondary"
-                data-wp-id={id}
+            <h2>Requirements</h2>
+            <p class="grc-lead" style="margin:0 0 0.5rem">
+              The information asked for on this observation, when it was asked for, and when it
+              arrived. To ask an owner for something and run the review rounds on it, use{' '}
+              <a href={`/requirements?work_paper=${id}`}>Requirements</a>.
+            </p>
+            {requirements.length === 0 ? (
+              <p class="grc-lead" style="margin:0">
+                No requirements recorded.
+              </p>
+            ) : (
+              <div class="grc-tablewrap">
+                <table class="grc-table">
+                  <thead>
+                    <tr>
+                      <th>Information requested</th>
+                      <th>Date requested</th>
+                      <th>Date received</th>
+                      <th>Status</th>
+                      {canManageReq && <th>Update</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {requirements.map((r) =>
+                      canManageReq ? (
+                        /* Editable in place: the two dates are the point of the row,
+                         and a separate edit screen for one date and a sentence
+                         would be a worse trade than a row that saves itself. */
+                        <tr>
+                          <td>
+                            <label class="grc-vh" for={`req-desc-${r.id}`}>
+                              Information requested
+                            </label>
+                            <input
+                              form={`req-save-${r.id}`}
+                              type="text"
+                              id={`req-desc-${r.id}`}
+                              name="description"
+                              class="grc-input"
+                              value={r.description}
+                              required
+                              maxlength="300"
+                            />
+                          </td>
+                          <td>
+                            <label class="grc-vh" for={`req-req-${r.id}`}>
+                              Date requested
+                            </label>
+                            <input
+                              form={`req-save-${r.id}`}
+                              type="date"
+                              id={`req-req-${r.id}`}
+                              name="requested_date"
+                              class="grc-input"
+                              value={r.requestedDate ?? ''}
+                            />
+                          </td>
+                          <td>
+                            <label class="grc-vh" for={`req-rec-${r.id}`}>
+                              Date received
+                            </label>
+                            <input
+                              form={`req-save-${r.id}`}
+                              type="date"
+                              id={`req-rec-${r.id}`}
+                              name="received_date"
+                              class="grc-input"
+                              value={r.receivedDate ?? ''}
+                            />
+                          </td>
+                          <td>
+                            <span
+                              class={`grc-pill ${isReceived(r) ? 'grc-pill--ok' : 'grc-pill--warn'}`}
+                            >
+                              {receiptLabel(r)}
+                            </span>
+                          </td>
+                          <td>
+                            <div class="grc-actions">
+                              <form
+                                method="post"
+                                id={`req-save-${r.id}`}
+                                action={`/api/work-papers/${id}/requirements`}
+                              >
+                                <input type="hidden" name="op" value="update" />
+                                <input type="hidden" name="requirement_id" value={r.id} />
+                                <button type="submit" class="grc-btn grc-btn--secondary">
+                                  Save
+                                </button>
+                              </form>
+                              <form method="post" action={`/api/work-papers/${id}/requirements`}>
+                                <input type="hidden" name="op" value="remove" />
+                                <input type="hidden" name="requirement_id" value={r.id} />
+                                <button
+                                  type="submit"
+                                  class="grc-btn grc-btn--secondary"
+                                  aria-label={`Remove: ${r.description}`}
+                                >
+                                  Remove
+                                </button>
+                              </form>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <td>{r.description}</td>
+                          <td>{r.requestedDate ?? 'Not recorded'}</td>
+                          <td>{r.receivedDate ?? 'Not yet'}</td>
+                          <td>
+                            <span
+                              class={`grc-pill ${isReceived(r) ? 'grc-pill--ok' : 'grc-pill--warn'}`}
+                            >
+                              {receiptLabel(r)}
+                            </span>
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {canManageReq && (
+              <form
+                method="post"
+                action={`/api/work-papers/${id}/requirements`}
+                class="grc-actionbar"
               >
-                Generate insights
-              </button>
-            </div>
-            <p class="grc-field__hint">{AI_DISCLAIMER}</p>
-            <div id="wp-insight-status" class="grc-lead" role="status" aria-live="polite" />
-            <div id="wp-insight-out" class="grc-ai-out" hidden />
+                <input type="hidden" name="op" value="add" />
+                <div class="grc-field" style="margin:0;flex:1 1 20rem">
+                  <label for="req-desc">Add a requirement</label>
+                  <input
+                    type="text"
+                    id="req-desc"
+                    name="description"
+                    class="grc-input"
+                    placeholder="The information requested"
+                    required
+                    maxlength="300"
+                  />
+                </div>
+                <div class="grc-field" style="margin:0">
+                  <label for="req-requested">Date requested</label>
+                  <input
+                    type="date"
+                    id="req-requested"
+                    name="requested_date"
+                    class="grc-input"
+                    value={today}
+                  />
+                </div>
+                <div class="grc-field" style="margin:0">
+                  <label for="req-received">Date received</label>
+                  <input type="date" id="req-received" name="received_date" class="grc-input" />
+                </div>
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Add
+                </button>
+              </form>
+            )}
           </div>
-        )}
 
-        <div class="grc-panel">
-          <h2>Requirements</h2>
-          {requirements.length === 0 ? (
-            <p class="grc-lead" style="margin:0">
-              No requirements recorded.
+          <div class="grc-panel">
+            <h2>Responsibles and CC</h2>
+            <p class="grc-lead" style="margin:0 0 0.5rem">
+              Responsibles
             </p>
-          ) : (
-            <ul class="grc-tags" style="flex-direction:column;align-items:stretch">
-              {requirements.map((r) => (
-                <li class="grc-tag" style="justify-content:space-between">
-                  <span>{r.description}</span>
-                  <span class="grc-pill">{r.status || 'Open'}</span>
-                  {canManageReq && (
-                    <form
-                      method="post"
-                      action={`/api/work-papers/${id}/requirements`}
-                      style="display:inline"
-                    >
-                      <input type="hidden" name="op" value="remove" />
-                      <input type="hidden" name="requirement_id" value={r.id} />
-                      <button
-                        type="submit"
-                        class="grc-btn grc-btn--secondary"
-                        style="min-height:1.9rem;padding:0 0.6rem"
+            <ul class="grc-tags">
+              {responsibles.length === 0 ? (
+                <li class="grc-lead">None</li>
+              ) : (
+                responsibles.map((r) => (
+                  <li class="grc-tag">
+                    <span>{r.name ?? r.userId}</span>
+                    <span class="grc-pill">{r.roleInFinding || 'PRIMARY'}</span>
+                    {canEdit && (
+                      <form
+                        method="post"
+                        action={`/api/work-papers/${id}/responsibles`}
+                        style="display:inline"
                       >
-                        Remove
-                      </button>
-                    </form>
-                  )}
-                </li>
-              ))}
+                        <input type="hidden" name="op" value="remove_responsible" />
+                        <input type="hidden" name="responsible_id" value={r.id} />
+                        <button
+                          type="submit"
+                          class="grc-btn grc-btn--secondary"
+                          style="min-height:1.7rem;padding:0 0.5rem"
+                        >
+                          x
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))
+              )}
             </ul>
-          )}
-          {canManageReq && (
-            <form
-              method="post"
-              action={`/api/work-papers/${id}/requirements`}
-              class="grc-actionbar"
-            >
-              <input type="hidden" name="op" value="add" />
-              <div class="grc-field" style="margin:0;flex:1 1 20rem">
-                <label for="req-desc">Add a requirement</label>
-                <input
-                  type="text"
-                  id="req-desc"
-                  name="description"
-                  class="grc-input"
-                  required
-                  maxlength="300"
-                />
-              </div>
-              <button type="submit" class="grc-btn grc-btn--secondary">
-                Add
-              </button>
-            </form>
-          )}
-        </div>
-
-        <div class="grc-panel">
-          <h2>Responsibles and CC</h2>
-          <p class="grc-lead" style="margin:0 0 0.5rem">
-            Responsibles
-          </p>
-          <ul class="grc-tags">
-            {responsibles.length === 0 ? (
-              <li class="grc-lead">None</li>
-            ) : (
-              responsibles.map((r) => (
-                <li class="grc-tag">
-                  <span>{r.name ?? r.userId}</span>
-                  <span class="grc-pill">{r.roleInFinding || 'PRIMARY'}</span>
-                  {canEdit && (
-                    <form
-                      method="post"
-                      action={`/api/work-papers/${id}/responsibles`}
-                      style="display:inline"
-                    >
-                      <input type="hidden" name="op" value="remove_responsible" />
-                      <input type="hidden" name="responsible_id" value={r.id} />
-                      <button
-                        type="submit"
-                        class="grc-btn grc-btn--secondary"
-                        style="min-height:1.7rem;padding:0 0.5rem"
-                      >
-                        x
-                      </button>
-                    </form>
-                  )}
-                </li>
-              ))
+            {canEdit && (
+              <form
+                method="post"
+                action={`/api/work-papers/${id}/responsibles`}
+                class="grc-actionbar"
+              >
+                <input type="hidden" name="op" value="add_responsible" />
+                <div class="grc-field" style="margin:0">
+                  <label for="resp-user">Add responsible</label>
+                  <select id="resp-user" name="user_id" class="grc-select" required>
+                    {auditors.map((a) => (
+                      <option value={a.id}>{a.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div class="grc-field" style="margin:0;max-width:10rem">
+                  <label for="resp-role">Role</label>
+                  <input
+                    type="text"
+                    id="resp-role"
+                    name="role_in_finding"
+                    class="grc-input"
+                    value="PRIMARY"
+                  />
+                </div>
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Add
+                </button>
+              </form>
             )}
-          </ul>
-          {canEdit && (
-            <form
-              method="post"
-              action={`/api/work-papers/${id}/responsibles`}
-              class="grc-actionbar"
-            >
-              <input type="hidden" name="op" value="add_responsible" />
-              <div class="grc-field" style="margin:0">
-                <label for="resp-user">Add responsible</label>
-                <select id="resp-user" name="user_id" class="grc-select" required>
-                  {auditors.map((a) => (
-                    <option value={a.id}>{a.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div class="grc-field" style="margin:0;max-width:10rem">
-                <label for="resp-role">Role</label>
-                <input
-                  type="text"
-                  id="resp-role"
-                  name="role_in_finding"
-                  class="grc-input"
-                  value="PRIMARY"
-                />
-              </div>
-              <button type="submit" class="grc-btn grc-btn--secondary">
-                Add
-              </button>
-            </form>
-          )}
-          <p class="grc-lead" style="margin:1rem 0 0.5rem">
-            CC recipients
-          </p>
-          <ul class="grc-tags">
-            {cc.length === 0 ? (
-              <li class="grc-lead">None</li>
-            ) : (
-              cc.map((c) => (
-                <li class="grc-tag">
-                  <span>{c.name ?? c.userId}</span>
-                  {canEdit && (
-                    <form
-                      method="post"
-                      action={`/api/work-papers/${id}/responsibles`}
-                      style="display:inline"
-                    >
-                      <input type="hidden" name="op" value="remove_cc" />
-                      <input type="hidden" name="cc_id" value={c.id} />
-                      <button
-                        type="submit"
-                        class="grc-btn grc-btn--secondary"
-                        style="min-height:1.7rem;padding:0 0.5rem"
-                      >
-                        x
-                      </button>
-                    </form>
-                  )}
-                </li>
-              ))
-            )}
-          </ul>
-          {canEdit && (
-            <form
-              method="post"
-              action={`/api/work-papers/${id}/responsibles`}
-              class="grc-actionbar"
-            >
-              <input type="hidden" name="op" value="add_cc" />
-              <div class="grc-field" style="margin:0">
-                <label for="cc-user">Add CC recipient</label>
-                <select id="cc-user" name="user_id" class="grc-select" required>
-                  {auditors.map((a) => (
-                    <option value={a.id}>{a.label}</option>
-                  ))}
-                </select>
-              </div>
-              <button type="submit" class="grc-btn grc-btn--secondary">
-                Add
-              </button>
-            </form>
-          )}
-        </div>
-
-        <GrcEvidence
-          entityType="work_paper"
-          entityId={id!}
-          items={evidence}
-          canUpload={canUpload}
-          canDelete={canEdit}
-          storageReady={storageConfigured()}
-        />
-
-        <div class="grc-panel">
-          <h2>Revision history</h2>
-          {revisions.length === 0 ? (
-            <p class="grc-lead" style="margin:0">
-              No transitions yet.
+            <p class="grc-lead" style="margin:1rem 0 0.5rem">
+              CC recipients
             </p>
-          ) : (
-            <ol class="grc-revisions">
-              {revisions.map((r) => (
-                <li>
-                  <strong>#{r.revisionNumber}</strong> {statusLabel(labels, r.fromStatus ?? '')} to{' '}
-                  {statusLabel(labels, r.toStatus ?? '')} by {r.userName ?? r.userId ?? 'system'}
-                  {r.comments && <div>{r.comments}</div>}
-                  <div>
-                    <time>{r.createdAt ?? ''}</time>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      </>
-    )
-  }
+            <ul class="grc-tags">
+              {cc.length === 0 ? (
+                <li class="grc-lead">None</li>
+              ) : (
+                cc.map((c) => (
+                  <li class="grc-tag">
+                    <span>{c.name ?? c.userId}</span>
+                    {canEdit && (
+                      <form
+                        method="post"
+                        action={`/api/work-papers/${id}/responsibles`}
+                        style="display:inline"
+                      >
+                        <input type="hidden" name="op" value="remove_cc" />
+                        <input type="hidden" name="cc_id" value={c.id} />
+                        <button
+                          type="submit"
+                          class="grc-btn grc-btn--secondary"
+                          style="min-height:1.7rem;padding:0 0.5rem"
+                        >
+                          x
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))
+              )}
+            </ul>
+            {canEdit && (
+              <form
+                method="post"
+                action={`/api/work-papers/${id}/responsibles`}
+                class="grc-actionbar"
+              >
+                <input type="hidden" name="op" value="add_cc" />
+                <div class="grc-field" style="margin:0">
+                  <label for="cc-user">Add CC recipient</label>
+                  <select id="cc-user" name="user_id" class="grc-select" required>
+                    {auditors.map((a) => (
+                      <option value={a.id}>{a.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Add
+                </button>
+              </form>
+            )}
+          </div>
+
+          <GrcEvidence
+            entityType="work_paper"
+            entityId={id!}
+            items={evidence}
+            canUpload={canUpload}
+            canDelete={canEdit}
+            storageReady={storageReady}
+          />
+
+          <div class="grc-panel">
+            <h2>Revision history</h2>
+            {revisions.length === 0 ? (
+              <p class="grc-lead" style="margin:0">
+                No transitions yet.
+              </p>
+            ) : (
+              <ol class="grc-revisions">
+                {revisions.map((r) => (
+                  <li>
+                    <strong>#{r.revisionNumber}</strong> {statusLabel(labels, r.fromStatus ?? '')}{' '}
+                    to {statusLabel(labels, r.toStatus ?? '')} by{' '}
+                    {r.userName ?? r.userId ?? 'system'}
+                    {r.comments && <div>{r.comments}</div>}
+                    <div>
+                      <time>{r.createdAt ?? ''}</time>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </>
+      )
+    }
+  </div>
 </GrcLayout>
 
 <script>
