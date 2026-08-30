@@ -49,6 +49,8 @@ import {
   SO_LANDING_TABLE,
 } from './landing.ts';
 import { verifyColumns } from './completeness.ts';
+import { decideDuplicate } from './contentHash.ts';
+import { alreadyCanonical } from './retry.ts';
 import { newTraceId } from '../errors.ts';
 import { logWriteFailure } from './writeFailure.ts';
 import {
@@ -257,6 +259,14 @@ export interface SoValidation {
   batchId: string | null;
   fileSha256: string;
   duplicateOfBatchId: string | null;
+  /** The workbook's data fingerprint, independent of how the file was saved. */
+  contentSha256: string | null;
+  /** Set where the bytes differ but every cell is the same as an earlier batch. */
+  resavedOfBatchId: string | null;
+  resavedFilename: string | null;
+  resavedUploadedAt: string | null;
+  /** Documents in this file that already exist in the canonical tables. */
+  documentsAlreadyImported: number;
   /**
    * Set when the run could not finish. The batch is REJECTED by then, never
    * left at VALIDATING, and this is what the operator is told.
@@ -396,20 +406,28 @@ export async function validateSoWorkbook(
   // to it. An upload asks "have these bytes been seen before"; a reprocess has
   // already said which batch it is and is running that batch again.
   const reprocessOf = input.reprocessBatchId ?? null;
-  const existing: { rows: Record<string, unknown>[] } =
-    reprocessOf !== null
-      ? { rows: [] }
-      : await db.execute({
-          sql: `SELECT import_batch_id FROM import_batches WHERE file_sha256 = ? LIMIT 1`,
-          args: [fileSha256],
-        });
-  if (existing.rows[0] !== undefined) {
-    // The exact file was uploaded before. The hash, not the filename, is the
-    // rule; nothing is re-imported and the previous batch is named.
+  // TWO QUESTIONS, ASKED IN ORDER. The bytes first, because a file uploaded
+  // unchanged should be told exactly that; then the data, which is what
+  // catches a workbook Excel has re-saved.
+  const seen = await decideDuplicate(db, buffer, {
+    importType: 'SALES_ORDER',
+    reprocessBatchId: reprocessOf,
+    fileSha256,
+  });
+  const contentSha256 = seen.contentSha256;
+  if (seen.kind !== 'new') {
+    // The same file, or the same data saved again. Nothing is re-imported and
+    // the earlier batch is named either way; which of the two it was decides
+    // the sentence the operator reads.
     return {
       batchId: null,
       fileSha256,
-      duplicateOfBatchId: text(existing.rows[0].import_batch_id),
+      contentSha256,
+      duplicateOfBatchId: seen.kind === 'bytes' ? (seen.match?.batchId ?? null) : null,
+      resavedOfBatchId: seen.kind === 'content' ? (seen.match?.batchId ?? null) : null,
+      resavedFilename: seen.kind === 'content' ? (seen.match?.filename ?? null) : null,
+      resavedUploadedAt: seen.kind === 'content' ? (seen.match?.uploadedAt ?? null) : null,
+      documentsAlreadyImported: 0,
       rejectedReason: null,
       rowsReceived: 0,
       uniqueDocuments: 0,
@@ -773,10 +791,30 @@ export async function validateSoWorkbook(
       await db.batch(statements.slice(start, start + 200), 'write');
     }
 
+    // HOW MUCH OF THIS FILE IS ALREADY IN THE SYSTEM. A genuinely different
+    // workbook still overlaps an earlier one: an extract re-run a week later
+    // repeats every order that has not closed. Saying so before the import
+    // runs is the difference between a considered decision and a surprise.
+    const documentsAlreadyImported = (
+      await alreadyCanonical(
+        db,
+        'SALES_ORDER',
+        [...documents].map((key) => {
+          const parts = key.split('|');
+          return { affiliateId: parts[0] ?? '', documentNumber: parts[1] ?? '' };
+        }),
+      )
+    ).size;
+
     return {
       batchId,
       fileSha256,
+      contentSha256,
       duplicateOfBatchId: null,
+      resavedOfBatchId: null,
+      resavedFilename: null,
+      resavedUploadedAt: null,
+      documentsAlreadyImported,
       rejectedReason: null,
       rowsReceived: sheet.rows.length,
       uniqueDocuments: documents.size,
@@ -823,7 +861,12 @@ export async function validateSoWorkbook(
     return {
       batchId,
       fileSha256,
+      contentSha256,
       duplicateOfBatchId: null,
+      resavedOfBatchId: null,
+      resavedFilename: null,
+      resavedUploadedAt: null,
+      documentsAlreadyImported: 0,
       rejectedReason:
         'Validation could not be completed, so nothing was imported. ' + describeFailure(error),
       rowsReceived: sheet.rows.length,

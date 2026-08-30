@@ -178,10 +178,7 @@ const NOT_AVAILABLE = 'Not available';
           </CmsCard>
 
           {detail.loadingAuthorities.length > 1 && (
-            <CmsCard
-              title="Loading authorities"
-              description="This order was loaded more than once. The earliest is the one the order carries; every one the extract recorded is here."
-            >
+            <CmsCard title="Loading authorities">
               <ol class="flex flex-col gap-2">
                 {detail.loadingAuthorities.map((at, index) => (
                   <li class="flex items-baseline justify-between gap-4 border-b border-cms-line pb-2 last:border-0 last:pb-0">
@@ -242,10 +239,7 @@ const NOT_AVAILABLE = 'Not available';
             </CmsDataTable>
           </CmsCard>
 
-          <CmsCard
-            title="Workflow and SLA"
-            description="The stages this order actually has, with elapsed and accountable kept apart."
-          >
+          <CmsCard title="Workflow and SLA">
             <CmsDataTable
               caption="Workflow stages"
               columns={[
@@ -298,10 +292,7 @@ const NOT_AVAILABLE = 'Not available';
             </p>
           </CmsCard>
 
-          <CmsCard
-            title="Source history"
-            description="What each upload said about this order, and the spreadsheet's own variance beside this application's arithmetic."
-          >
+          <CmsCard title="Source history">
             {detail.snapshots.length === 0 ? (
               <p class="text-cms-body-sm text-cms-muted">
                 This order was not created by an import, so it has no source snapshots.
@@ -332,10 +323,7 @@ const NOT_AVAILABLE = 'Not available';
           </CmsCard>
 
           {!maySeeCredit ? null : (
-            <CmsCard
-              title="Credit"
-              description="Commercially sensitive, and shown only with the credit permission."
-            >
+            <CmsCard title="Credit">
               <dl class="text-cms-body-sm">
                 <div class="flex justify-between border-b border-cms-line py-1.5">
                   <dt class="text-cms-muted">Credit approval required</dt>

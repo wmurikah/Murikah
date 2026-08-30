@@ -36,10 +36,7 @@ const maySeePurchases = canViewPurchaseOrders(permissions);
         />
         <div class="grid gap-4 lg:grid-cols-2">
           {maySeeSales && (
-            <CmsCard
-              title="Sales orders"
-              description="Finance approval, credit approval where required, invoicing and loading."
-            >
+            <CmsCard title="Sales orders">
               <div class="flex flex-wrap gap-2">
                 <CmsButton variant="primary" href="/app/orders/sales">
                   Operations
@@ -51,10 +48,7 @@ const maySeePurchases = canViewPurchaseOrders(permissions);
             </CmsCard>
           )}
           {maySeePurchases && (
-            <CmsCard
-              title="Purchase orders"
-              description="Approval stages, physical receipt and Oracle stock posting."
-            >
+            <CmsCard title="Purchase orders">
               <div class="flex flex-wrap gap-2">
                 <CmsButton variant="primary" href="/app/orders/purchases">
                   Operations

@@ -89,7 +89,7 @@ const diff = diffPayloads(
       <CmsEmptyState
         icon="administration"
         title="You do not have permission to see the design reference"
-        description="ADMIN.USERS.MANAGE is needed."
+        description="Ask an administrator for access."
       />
     ) : (
       <div class="flex flex-col gap-6">
@@ -126,10 +126,7 @@ const diff = diffPayloads(
           </div>
         </CmsCard>
 
-        <CmsCard
-          title="Badges"
-          description="A tone is never the only signal: every badge has a label."
-        >
+        <CmsCard title="Badges">
           <div class="flex flex-wrap items-center gap-2">
             {TONES.map((tone) => (
               <CmsBadge tone={tone} label={tone} />
@@ -304,10 +301,7 @@ const diff = diffPayloads(
           />
         </CmsCard>
 
-        <CmsCard
-          title="Chart"
-          description="Server-rendered SVG, tokens only, with its text alternative and its table."
-        >
+        <CmsCard title="Chart">
           <CmsChart
             title="Orders by affiliate"
             definition="Sales orders created in the period, counted per affiliate. Not a rate. Date basis: sales_orders.order_created_at."

@@ -37,7 +37,6 @@ const permissions = Astro.locals.cms?.user.permissions ?? [];
 interface Section {
   label: string;
   href: string | null;
-  description: string;
   ready: boolean;
   visible: boolean;
 }
@@ -46,70 +45,60 @@ const sections: Section[] = [
   {
     label: 'Organisation',
     href: ORGANISATION_PATH,
-    description: 'Countries, affiliates, business units, departments and teams.',
     ready: true,
     visible: canViewOrganisation(permissions),
   },
   {
     label: 'Users',
     href: '/app/administration/users',
-    description: 'Accounts, assignments, job titles and team membership.',
     ready: true,
     visible: canManageUsers(permissions),
   },
   {
     label: 'Roles and permissions',
     href: '/app/administration/roles',
-    description: 'Roles, permissions, data scopes and assignments.',
     ready: true,
     visible: canManageRoles(permissions),
   },
   {
     label: 'Workflows',
     href: WORKFLOW_PATH,
-    description: 'Approval roles, authority and versioned approval chains.',
     ready: true,
     visible: canViewWorkflows(permissions),
   },
   {
     label: 'Product catalogue',
     href: '/app/administration/catalogue',
-    description: 'Product groups, categories, products and units of measure.',
     ready: true,
     visible: canManageCatalogue(permissions),
   },
   {
     label: 'Audit trail',
     href: '/app/administration/audit',
-    description: 'Review who changed what and when.',
     ready: true,
     visible: canViewAudit(permissions),
   },
   {
     label: 'System health',
     href: '/app/administration/health',
-    description: 'Review configuration health and unassigned workflow roles.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
   {
     label: 'Access review',
     href: '/app/administration/access-review',
-    description: 'Review application access and approval authority.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
   {
     label: 'Design reference',
     href: '/app/administration/components',
-    description: 'Internal reference for interface components and states.',
     ready: true,
     visible: canManageUsers(permissions),
   },
   {
     label: 'Workflow authority review',
     href: '/app/administration/authority',
-    description: 'Review who currently holds approval authority.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
@@ -143,11 +132,8 @@ const visible = sections.filter((section) => section.visible);
                 section.label === 'Design reference' && 'bg-cms-canvas',
               ]}
             >
-              <span class="min-w-0 flex-1">
-                <span class="text-cms-card font-semibold text-cms-navy">{section.label}</span>
-                <span class="mt-0.5 block max-w-3xl text-cms-body-sm text-cms-muted">
-                  {section.description}
-                </span>
+              <span class="min-w-0 flex-1 text-cms-card font-semibold text-cms-navy">
+                {section.label}
               </span>
               <CmsIcon
                 name="chevronRight"

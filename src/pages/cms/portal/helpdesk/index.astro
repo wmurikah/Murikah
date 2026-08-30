@@ -56,9 +56,9 @@ const open = cases.filter((row) => row.status !== 'Resolved' && row.status !== '
 const closed = cases.filter((row) => row.status === 'Resolved' || row.status === 'Closed');
 ---
 
-<CmsPortalLayout title="Service" scope={scope} current="/portal/service">
+<CmsPortalLayout title="Helpdesk" scope={scope} current="/portal/helpdesk">
   <div class="flex flex-col gap-1.5">
-    <h1 class="text-cms-page font-semibold text-cms-navy">Service</h1>
+    <h1 class="text-cms-page font-semibold text-cms-navy">Helpdesk</h1>
     <p class="text-cms-body-sm text-cms-muted">
       Ask us something, tell us when something has gone wrong, and follow what we are doing about
       it.
@@ -92,7 +92,7 @@ const closed = cases.filter((row) => row.status === 'Resolved' || row.status ===
                 <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <span class="min-w-0">
                     <a
-                      href={`/portal/service/${row.caseId}`}
+                      href={`/portal/helpdesk/${row.caseId}`}
                       class="block truncate text-cms-body-sm font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
                     >
                       {row.subject}
@@ -118,7 +118,7 @@ const closed = cases.filter((row) => row.status === 'Resolved' || row.status ===
                 <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <span class="min-w-0">
                     <a
-                      href={`/portal/service/${row.caseId}`}
+                      href={`/portal/helpdesk/${row.caseId}`}
                       class="block truncate text-cms-body-sm text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
                     >
                       {row.subject}
