@@ -53,13 +53,23 @@ const isActive = (href: string) =>
   href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(href + '/');
 
 /**
- * Administration is configuration, not work, and a change there reaches
- * everybody. Separating it is the reference deck's own arrangement and it is
- * also the safer one: the group a person uses fifty times a day should not sit
- * flush against the group that reshapes what everybody else can see.
+ * THE FIRST GROUP HAS NO HEADING, AND THAT IS THE POINT.
+ *
+ * It used to say WORK above Home, Customers, CRM, Helpdesk and Orders. Those
+ * five are the default view of the application; a label saying they are work
+ * told nobody anything, and it was worse than useless because it rendered like
+ * a heading and did nothing when pressed. A false affordance.
+ *
+ * It is also not collapsible, deliberately. Collapsing the thing you arrived
+ * at is a control nobody wants, and the group a person uses fifty times a day
+ * should not be one accidental click from empty.
+ *
+ * The three below keep their headings and each is a real disclosure. That
+ * separation is the whole rule: a label either does something when pressed or
+ * does not look as though it might.
  */
 const groups = [
-  { label: 'Work', items: ['Home', 'Customers', 'CRM', 'Helpdesk', 'Orders'] },
+  { label: null, items: ['Home', 'Customers', 'CRM', 'Helpdesk', 'Orders'] },
   { label: 'Insights', items: ['Performance'] },
   { label: 'Operations', items: ['Data'] },
   { label: 'System', items: ['Administration'] },
@@ -79,6 +89,55 @@ const rendered = groups
     rendered.map((group) => {
       // OPEN BECAUSE THE READER IS IN IT, decided here rather than in a script.
       const holdsCurrent = group.entries.some((item) => isActive(item.href));
+      const items = (
+        <ul class="flex flex-col gap-0.5">
+          {group.entries.map((item) => {
+            const active = isActive(item.href);
+            return (
+              <li>
+                <a
+                  href={item.href}
+                  aria-current={active ? 'page' : undefined}
+                  class:list={[
+                    'relative flex h-10 items-center rounded-cms pr-3 text-cms-body-sm',
+                    'transition-colors duration-150 outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy',
+                    active
+                      ? 'bg-cms-navy-deep font-semibold text-white'
+                      : 'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white',
+                  ]}
+                >
+                  {/*
+                    The active marker is absolute at the leading edge so it is
+                    visible whether the rail is 64px or 256px, and the icon box
+                    is exactly the collapsed width so the label starts at the
+                    clip.
+                  */}
+                  <span
+                    class:list={[
+                      'absolute inset-y-2 start-1 w-0.5 rounded-full',
+                      active ? 'bg-cms-gold' : 'bg-transparent',
+                    ]}
+                    aria-hidden="true"
+                  />
+                  <span class="flex w-16 shrink-0 items-center justify-center">
+                    <CmsIcon name={item.icon} size={18} />
+                  </span>
+                  <span class="whitespace-nowrap">{item.label}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      );
+
+      // NO HEADING, NO DISCLOSURE, NOTHING IN THE TAB ORDER BEFORE HOME. The
+      // landing group is a plain list, so the first Tab from the rail's start
+      // lands on Home rather than on a control nobody asked for.
+      if (group.label === null) {
+        return <div class="mb-3 last:mb-0">{items}</div>;
+      }
+
       return (
         <details
           class="cms-nav-group mb-3 last:mb-0"
@@ -92,7 +151,9 @@ const rendered = groups
             {/*
               The chevron sits in the same 64px icon column every row uses, so
               the heading text begins exactly at the clip and the control is
-              never half-visible.
+              never half-visible. It is also what tells a reader this label
+              does something: the three headings that remain are all real
+              disclosures, and the one that was not has been deleted.
             */}
             <span class="flex w-16 shrink-0 items-center justify-center">
               <span class="cms-nav-chevron inline-flex" aria-hidden="true">
@@ -101,44 +162,7 @@ const rendered = groups
             </span>
             <span class="whitespace-nowrap">{group.label}</span>
           </summary>
-          <ul class="flex flex-col gap-0.5">
-            {group.entries.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <li>
-                  <a
-                    href={item.href}
-                    aria-current={active ? 'page' : undefined}
-                    class:list={[
-                      'relative flex h-10 items-center rounded-cms pr-3 text-cms-body-sm',
-                      'transition-colors duration-150 outline-none',
-                      'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy',
-                      active
-                        ? 'bg-cms-navy-deep font-semibold text-white'
-                        : 'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white',
-                    ]}
-                  >
-                    {/*
-                The active marker is absolute at the leading edge so it is
-                visible whether the rail is 64px or 256px, and the icon box is
-                exactly the collapsed width so the label starts at the clip.
-              */}
-                    <span
-                      class:list={[
-                        'absolute inset-y-2 start-1 w-0.5 rounded-full',
-                        active ? 'bg-cms-gold' : 'bg-transparent',
-                      ]}
-                      aria-hidden="true"
-                    />
-                    <span class="flex w-16 shrink-0 items-center justify-center">
-                      <CmsIcon name={item.icon} size={18} />
-                    </span>
-                    <span class="whitespace-nowrap">{item.label}</span>
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
+          {items}
         </details>
       );
     })
