@@ -37,10 +37,29 @@ export const LOGIN_PATH = '/login';
  * with three states and nothing else, so an unauthenticated caller learns
  * that the application is running and no more.
  */
-const PUBLIC_PATHS: ReadonlySet<string> = new Set([LOGIN_PATH, '/api/auth/login', '/api/health']);
+const AUTH_ENTRY_PATHS: ReadonlySet<string> = new Set([
+  LOGIN_PATH,
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+]);
+const PUBLIC_PATHS: ReadonlySet<string> = new Set([
+  ...AUTH_ENTRY_PATHS,
+  '/api/auth/login',
+  '/api/health',
+]);
 
 export function isPublicPath(appPath: string): boolean {
   return PUBLIC_PATHS.has(appPath);
+}
+
+export function isCmsAuthEntryPage(appPath: string): boolean {
+  return AUTH_ENTRY_PATHS.has(appPath);
+}
+
+/** OIDC callbacks authenticate their cross-site POST with state, nonce and PKCE. */
+export function isOidcCallbackPath(appPath: string): boolean {
+  return /^\/api\/auth\/oidc\/(google|microsoft|apple)\/callback$/.test(appPath);
 }
 
 /** An API path answers 401 rather than redirecting to a sign-in page. */
