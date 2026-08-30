@@ -35,15 +35,26 @@ import CmsDropdown from '@/components/cms/CmsDropdown.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { canManageAccounts, canSeePortalAccess, canViewAccounts } from '@/lib/cms/permissions';
+import {
+  canManageAccounts,
+  canSeePortalAccess,
+  canViewAccounts,
+  canViewCreditTerms,
+} from '@/lib/cms/permissions';
 import {
   accountCounts,
+  accountOptions,
   getAccount,
   listContacts,
+  oracleCodeUsage,
   type AccountCounts,
+  type AccountOptions,
   type AccountRow,
   type ContactRow,
+  type OracleCodeUsage,
 } from '@/lib/cms/repos/accountAdmin';
+import CmsAccountEditForm from '@/components/cms/CmsAccountEditForm.astro';
+import CmsAccountCodesForm from '@/components/cms/CmsAccountCodesForm.astro';
 import { STATUS_MEANING } from '@/lib/cms/admin/accountInput';
 import { listAccountActivities, type ActivityPage } from '@/lib/cms/repos/activityAdmin';
 import {
@@ -61,11 +72,16 @@ const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayRead = canViewAccounts(permissions);
 const mayManage = canManageAccounts(permissions);
 const maySeePortal = canSeePortalAccess(permissions);
+// THE CREDIT FIELDS ARE THEIR OWN PERMISSION. A credit limit says what the
+// business will carry for this customer, and a service agent reading a case
+// does not need to know it.
+const maySeeCreditTerms = canViewCreditTerms(permissions);
 const userId = Astro.locals.cms?.user.userId ?? '';
 const accountId = Astro.params.accountId ?? '';
 
 const TABS = [
   'overview',
+  'edit',
   'timeline',
   'contacts',
   'portal',
@@ -86,6 +102,8 @@ let memberships: PortalMembershipRow[] = [];
 let invitable: InvitableContact[] = [];
 let roles: { roleId: string; roleName: string }[] = [];
 let timelineOptions: Awaited<ReturnType<typeof leadOptions>> | null = null;
+let options: AccountOptions | null = null;
+let usage: OracleCodeUsage | null = null;
 let loadFailed = false;
 
 if (mayRead) {
@@ -112,6 +130,14 @@ if (mayRead) {
       }
       if (tab === 'contacts') {
         contacts = (await listContacts(db, userId, accountId, maySeePortal)) ?? [];
+      }
+      // The edit tab's own reads, and only when it is open and the caller may
+      // actually write. A reader who cannot manage costs nothing extra.
+      if (tab === 'edit' && mayManage) {
+        [options, usage] = await Promise.all([
+          accountOptions(db, userId),
+          oracleCodeUsage(db, accountId, account.oracleCustomerCode),
+        ]);
       }
       // Same rule as the other tabs: fetched when it is open and not before.
       // The permission is checked here as well as in the endpoints, so a
@@ -235,6 +261,9 @@ const COMING: Readonly<Record<string, string>> = {
             )}
             tabs={[
               { label: 'Overview', href: href('overview') },
+              // ONLY WHERE THE CALLER MAY ACTUALLY WRITE. A tab that opens a
+              // form nobody can submit is a false affordance.
+              ...(mayManage ? [{ label: 'Edit', href: href('edit') }] : []),
               { label: 'Activity', href: href('timeline') },
               { label: 'Commercial', href: href('opportunities') },
               { label: 'Helpdesk', href: href('service') },
@@ -273,6 +302,44 @@ const COMING: Readonly<Record<string, string>> = {
             )}
           </CmsDropdown>
         </div>
+
+        {tab === 'edit' && mayManage && account !== null && (
+          <Fragment>
+            {/*
+              NO PAGE DESCRIPTION. The heading names the screen and the fields
+              name themselves; a paragraph under the heading explaining that
+              this is where a customer is edited tells nobody anything they did
+              not already know from clicking Edit.
+            */}
+            <section aria-labelledby="edit-customer" class="flex flex-col gap-3">
+              <h2 id="edit-customer" class="text-cms-section font-semibold text-cms-ink">
+                Customer details
+              </h2>
+              <CmsCard>
+                <CmsAccountEditForm
+                  account={account}
+                  countries={options?.countries ?? []}
+                  affiliates={options?.affiliates ?? []}
+                  managers={options?.managers ?? []}
+                  segments={options?.segments ?? []}
+                  maySeeCreditTerms={maySeeCreditTerms}
+                />
+              </CmsCard>
+            </section>
+
+            <section aria-labelledby="edit-codes" class="flex flex-col gap-3">
+              <h2 id="edit-codes" class="text-cms-section font-semibold text-cms-ink">
+                Matching codes
+              </h2>
+              <CmsCard>
+                <CmsAccountCodesForm
+                  account={account}
+                  usage={usage ?? { orders: 0, extractRows: 0 }}
+                />
+              </CmsCard>
+            </section>
+          </Fragment>
+        )}
 
         {tab === 'overview' && (
           <Fragment>
