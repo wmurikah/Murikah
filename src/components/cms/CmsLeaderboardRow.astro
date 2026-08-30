@@ -81,7 +81,11 @@ const state =
   <span
     class:list={[
       'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-cms-caption font-semibold tabular-nums',
-      rank === null ? 'bg-cms-neutral-tint text-cms-muted' : 'bg-cms-royal-tint text-cms-royal',
+      // A RANK IS NOT AN ACTION AND NOT A STATUS. It used to be a royal-tinted
+      // pill, which reads as a chip somebody can press and borrows the one
+      // colour that means "this is the action". Both states are ink now, and
+      // they differ by weight of tone rather than by hue.
+      rank === null ? 'bg-cms-ink-100 text-cms-muted' : 'bg-cms-ink-200 text-cms-ink',
     ]}
     aria-hidden={rank === null ? 'true' : undefined}
   >
