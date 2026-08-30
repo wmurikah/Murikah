@@ -40,13 +40,13 @@ import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
-import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import { formatDuration } from '@/lib/cms/analytics/stats';
 import { attentionCustomers, type AttentionCustomer } from '@/lib/cms/repos/executive';
 import { countSalesOrders } from '@/lib/cms/repos/soPerformance';
 import { countPurchaseOrders } from '@/lib/cms/repos/poPerformance';
 import {
   approvalBoard,
-  windowStart,
+  resolveApprovalPeriod,
   MINIMUM_RANKED_VOLUME,
   WINDOW_DAYS,
   type ApprovalBoard,
@@ -62,7 +62,7 @@ const user = principal?.user;
 const userId = user?.userId ?? '';
 const filter = parseFilter(Astro.url.searchParams);
 const now = toDbTimestamp(new Date());
-const since = windowStart(new Date());
+let period = { from: '', before: '', label: '', fallback: false };
 
 /**
  * WHERE EACH FUNCTION'S QUEUE LIVES, AS A STATUS.
@@ -94,6 +94,10 @@ let connectionFailed = false;
 if (user) {
   try {
     const db = await getDb(getCmsEnv());
+    // ONE PERIOD FOR THE PAGE. Both panels receive these exact bounds; if the
+    // requested month has no data, the resolver selects the latest month that
+    // both processes share instead of letting either panel fail silently.
+    period = await resolveApprovalPeriod(db, filter.from);
     // ONE QUEUE FOR THE WHOLE PAGE. Every read issued in the same microtask
     // leaves as a single batch, which is how a dashboard of this size costs a
     // handful of round trips rather than one per figure.
@@ -105,9 +109,11 @@ if (user) {
     // targets for their rows; a link costs nothing.
     const [po, so, attention, poCount, soCount] = await Promise.all([
       runSection(batcher, 'home.purchases', (client) =>
-        approvalBoard(client, 'PURCHASE_ORDER', since),
+        approvalBoard(client, 'PURCHASE_ORDER', period.from, period.before),
       ),
-      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', since)),
+      runSection(batcher, 'home.sales', (client) =>
+        approvalBoard(client, 'SALES_ORDER', period.from, period.before),
+      ),
       runSection(batcher, 'home.attention', (client) =>
         attentionCustomers(client, userId, filter, now),
       ),
@@ -160,15 +166,20 @@ const salesChart = chartOf(sales, (fn) => toSales({ status: SO_WAITING[fn] ?? nu
 
 const COLUMNS = [
   { key: 'person', label: 'Person' },
-  { key: 'function', label: 'Function' },
   { key: 'volume', label: 'Volume', numeric: true },
-  { key: 'average', label: 'Average', numeric: true, secondary: true },
-  { key: 'median', label: 'Median', numeric: true },
-  { key: 'p90', label: 'P90', numeric: true },
-  { key: 'within', label: 'Within SLA', numeric: true, secondary: true },
-  { key: 'pending', label: 'Pending', numeric: true },
-  { key: 'oldest', label: 'Oldest pending', secondary: true },
+  { key: 'typical', label: 'Typical', numeric: true },
+  { key: 'slowest', label: 'Slowest 10%', numeric: true },
 ];
+
+const peopleByFunction = (board: ApprovalBoard | null) =>
+  (board?.functions ?? []).map((fn) => ({
+    fn,
+    people: (board?.leaders ?? []).filter((row) => row.fn === fn.fn && row.userId !== null),
+  }));
+const omittedFunctions = (board: ApprovalBoard | null) =>
+  (board?.functions ?? [])
+    .filter((fn) => !(board?.leaders ?? []).some((row) => row.fn === fn.fn && row.userId !== null))
+    .map((fn) => fn.fn);
 
 /**
  * The definition every figure on this page shares, one control away.
@@ -190,6 +201,15 @@ const DEFINITION =
 
 <CmsLayout title="Home" width="data">
   <CmsPageHeader title="Home" definition={DEFINITION} />
+
+  {
+    period.label && (
+      <p class="text-cms-body-sm text-cms-muted">
+        Showing {period.label}
+        {period.fallback ? ' — the most recent period with data for both processes.' : '.'}
+      </p>
+    )
+  }
 
   {connectionFailed && <CmsErrorState title="The dashboard could not be loaded" />}
   {
@@ -216,7 +236,7 @@ const DEFINITION =
         definition={DEFINITION}
         chart={purchaseChart}
         unit="minutes"
-        coverage={`${count(purchases?.functions.reduce((n, f) => n + f.volume, 0) ?? 0)} approvals`}
+        coverage={`${period.label}: ${(purchases?.functions.reduce((n, f) => n + f.volume, 0) ?? 0).toLocaleString('en-KE')} approvals`}
       />
       <p class="text-cms-body-sm text-cms-muted">
         <a
@@ -227,49 +247,58 @@ const DEFINITION =
         </a>{' '}
         in approval
       </p>
-      <CmsDataTable
-        caption="Purchase order approvers"
-        columns={COLUMNS}
-        empty={(purchases?.leaders.length ?? 0) === 0}
-        rowCount={purchases?.leaders.length ?? 0}
-        emptyMessage="No approvals completed in this window."
-      >
-        {
-          (purchases?.leaders ?? []).map((row: LeaderRow) => (
-            <tr class="border-b border-cms-line last:border-0">
-              <td class="px-3 py-2">{row.person ?? 'Not recorded'}</td>
-              <td class="px-3 py-2">{row.fn}</td>
-              <td class="px-3 py-2 text-right tabular-nums">
-                <a
-                  class="text-cms-royal hover:underline"
-                  href={toPurchases({ status: PO_WAITING_STATUS })}
+      {
+        peopleByFunction(purchases).map(
+          ({ fn, people }) =>
+            people.length > 0 && (
+              <section class="flex flex-col gap-2" aria-labelledby={`po-${fn.order}`}>
+                <h3 id={`po-${fn.order}`} class="text-cms-label font-semibold text-cms-muted">
+                  {fn.fn}
+                </h3>
+                <CmsDataTable
+                  caption={`${fn.fn} approvers`}
+                  columns={COLUMNS}
+                  rowCount={people.length}
                 >
-                  {count(row.volume)}
-                </a>
-              </td>
-              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
-                {formatDuration(row.meanMinutes)}
-              </td>
-              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.medianMinutes)}</td>
-              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.p90Minutes)}</td>
-              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
-                {row.targetMinutes === null ? 'No target' : formatRate(row.withinTarget)}
-              </td>
-              <td class="px-3 py-2 text-right tabular-nums">
-                <a
-                  class="text-cms-royal hover:underline"
-                  href={toPurchases({ status: PO_WAITING_STATUS, ownerId: row.userId })}
-                >
-                  {count(row.pending)}
-                </a>
-              </td>
-              <td class="hidden px-3 py-2 sm:table-cell">
-                {row.oldestPendingAt ?? 'Nothing waiting'}
-              </td>
-            </tr>
-          ))
-        }
-      </CmsDataTable>
+                  {people.map((row: LeaderRow) => (
+                    <tr class="border-b border-cms-line last:border-0">
+                      <td class="px-3 py-2">{row.person}</td>
+                      {[
+                        count(row.volume),
+                        formatDuration(row.medianMinutes),
+                        formatDuration(row.p90Minutes),
+                      ].map((value) => (
+                        <td class="px-3 py-2 text-right tabular-nums">
+                          <a
+                            class="text-cms-royal hover:underline"
+                            href={toPurchases({ status: PO_WAITING_STATUS, ownerId: row.userId })}
+                          >
+                            {value}
+                          </a>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </CmsDataTable>
+              </section>
+            ),
+        )
+      }
+      {
+        (purchases?.leaders.filter((row) => row.userId !== null).length ?? 0) === 0 && (
+          <p class="text-cms-body-sm text-cms-muted">
+            No recorded approvers completed work in this period.
+          </p>
+        )
+      }
+      {
+        omittedFunctions(purchases).length > 0 && (
+          <p class="text-cms-caption text-cms-muted">
+            Not included in the people leaderboard because no actor was recorded:{' '}
+            {omittedFunctions(purchases).join(', ')}.
+          </p>
+        )
+      }
       <p class="text-cms-caption text-cms-muted">
         Ranked from {MINIMUM_RANKED_VOLUME} completed approvals.
       </p>
@@ -281,7 +310,7 @@ const DEFINITION =
         definition={DEFINITION}
         chart={salesChart}
         unit="minutes"
-        coverage={`${count(sales?.functions.reduce((n, f) => n + f.volume, 0) ?? 0)} completions`}
+        coverage={`${period.label}: ${(sales?.functions.reduce((n, f) => n + f.volume, 0) ?? 0).toLocaleString('en-KE')} completions`}
       />
       <p class="text-cms-body-sm text-cms-muted">
         <a
@@ -292,49 +321,61 @@ const DEFINITION =
         </a>{' '}
         awaiting finance approval
       </p>
-      <CmsDataTable
-        caption="Sales order approvers"
-        columns={COLUMNS}
-        empty={(sales?.leaders.length ?? 0) === 0}
-        rowCount={sales?.leaders.length ?? 0}
-        emptyMessage="No completions in this window."
-      >
-        {
-          (sales?.leaders ?? []).map((row: LeaderRow) => (
-            <tr class="border-b border-cms-line last:border-0">
-              <td class="px-3 py-2">{row.person ?? 'Not recorded'}</td>
-              <td class="px-3 py-2">{row.fn}</td>
-              <td class="px-3 py-2 text-right tabular-nums">
-                <a
-                  class="text-cms-royal hover:underline"
-                  href={toSales({ status: SO_WAITING[row.fn] ?? null })}
+      {
+        peopleByFunction(sales).map(
+          ({ fn, people }) =>
+            people.length > 0 && (
+              <section class="flex flex-col gap-2" aria-labelledby={`so-${fn.order}`}>
+                <h3 id={`so-${fn.order}`} class="text-cms-label font-semibold text-cms-muted">
+                  {fn.fn}
+                </h3>
+                <CmsDataTable
+                  caption={`${fn.fn} approvers`}
+                  columns={COLUMNS}
+                  rowCount={people.length}
                 >
-                  {count(row.volume)}
-                </a>
-              </td>
-              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
-                {formatDuration(row.meanMinutes)}
-              </td>
-              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.medianMinutes)}</td>
-              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.p90Minutes)}</td>
-              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
-                {row.targetMinutes === null ? 'No target' : formatRate(row.withinTarget)}
-              </td>
-              <td class="px-3 py-2 text-right tabular-nums">
-                <a
-                  class="text-cms-royal hover:underline"
-                  href={toSales({ status: SO_WAITING[row.fn] ?? null, ownerId: row.userId })}
-                >
-                  {count(row.pending)}
-                </a>
-              </td>
-              <td class="hidden px-3 py-2 sm:table-cell">
-                {row.oldestPendingAt ?? 'Nothing waiting'}
-              </td>
-            </tr>
-          ))
-        }
-      </CmsDataTable>
+                  {people.map((row: LeaderRow) => (
+                    <tr class="border-b border-cms-line last:border-0">
+                      <td class="px-3 py-2">{row.person}</td>
+                      {[
+                        count(row.volume),
+                        formatDuration(row.medianMinutes),
+                        formatDuration(row.p90Minutes),
+                      ].map((value) => (
+                        <td class="px-3 py-2 text-right tabular-nums">
+                          <a
+                            class="text-cms-royal hover:underline"
+                            href={toSales({
+                              status: SO_WAITING[row.fn] ?? null,
+                              ownerId: row.userId,
+                            })}
+                          >
+                            {value}
+                          </a>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </CmsDataTable>
+              </section>
+            ),
+        )
+      }
+      {
+        (sales?.leaders.filter((row) => row.userId !== null).length ?? 0) === 0 && (
+          <p class="text-cms-body-sm text-cms-muted">
+            No recorded approvers completed work in this period.
+          </p>
+        )
+      }
+      {
+        omittedFunctions(sales).length > 0 && (
+          <p class="text-cms-caption text-cms-muted">
+            Not included in the people leaderboard because no actor was recorded:{' '}
+            {omittedFunctions(sales).join(', ')}.
+          </p>
+        )
+      }
       <p class="text-cms-caption text-cms-muted">
         Ranked from {MINIMUM_RANKED_VOLUME} completed functions.
       </p>
@@ -370,7 +411,7 @@ const DEFINITION =
                 <td class="px-3 py-2">
                   <a
                     class="font-medium text-cms-royal hover:underline"
-                    href={`/app/customers/${row.accountId}`}
+                    href={`/app/operations/customers/${row.accountId}`}
                   >
                     {row.customerName}
                   </a>

@@ -479,7 +479,7 @@ test('every figure on Home carries a destination', () => {
   // Every numeric cell renders {count(...)} or a duration. The countable ones
   // must sit inside an anchor.
   const counted = [...source.matchAll(/\{count\(([^)]*)\)\}/g)].map((m) => m[1]!);
-  assert.ok(counted.length >= 8, `expected Home's counts, found ${counted.length}`);
+  assert.ok(counted.length >= 5, `expected Home's counts, found ${counted.length}`);
   for (const figure of counted) {
     const at = source.indexOf(`{count(${figure})}`);
     const before = source.slice(Math.max(0, at - 400), at);
@@ -511,24 +511,17 @@ test('every Home destination carries the filter and the scope', () => {
   assert.match(source, /drillTo\('\/app\/orders\/sales', filter/);
 });
 
-test('Home leads with the two charts, then the two leaderboards', () => {
+test('each Home chart is followed by its grouped people leaderboard', () => {
   const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
 
   // The charts come first, purchase orders then sales orders, and each
   // leaderboard follows its own chart inside the same column. Reading the
   // order out of the file is what proves the column reads downward: a grid
   // that placed them side by side would interleave these four markers.
-  const marks = [
-    ...source.matchAll(
-      /title="(Purchase order approval|Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
-    ),
-  ].map((m) => m[1] ?? m[2]!);
-  assert.deepEqual(marks, [
-    'Purchase order approval',
-    'Purchase order approvers',
-    'Sales order approval',
-    'Sales order approvers',
-  ]);
+  assert.ok(
+    source.indexOf('Purchase order approval') < source.indexOf('peopleByFunction(purchases)'),
+  );
+  assert.ok(source.indexOf('Sales order approval') < source.indexOf('peopleByFunction(sales)'));
 
   // Everything that used to sit between them is gone; the one section left is
   // the exception list, and it is below all four.
@@ -537,7 +530,7 @@ test('Home leads with the two charts, then the two leaderboards', () => {
   );
   assert.deepEqual(order, ['Needs attention']);
   assert.ok(
-    source.indexOf('Needs attention') > source.indexOf('Sales order approvers'),
+    source.indexOf('Needs attention') > source.indexOf('peopleByFunction(sales)'),
     'the exceptions sit below the leaderboards',
   );
 
@@ -553,17 +546,9 @@ test('the two leaderboards carry identical columns in identical order', () => {
   assert.equal((source.match(/columns=\{COLUMNS\}/g) ?? []).length, 2);
   const columns = /const COLUMNS = \[([\s\S]*?)\];/.exec(source)?.[1] ?? '';
   const labels = [...columns.matchAll(/label: '([^']+)'/g)].map((m) => m[1]!);
-  assert.deepEqual(labels, [
-    'Person',
-    'Function',
-    'Volume',
-    'Average',
-    'Median',
-    'P90',
-    'Within SLA',
-    'Pending',
-    'Oldest pending',
-  ]);
+  assert.deepEqual(labels, ['Person', 'Volume', 'Typical', 'Slowest 10%']);
+  assert.doesNotMatch(columns, /Within SLA|Pending|Oldest pending/);
+  assert.match(source, /row\.userId !== null/, 'only recorded people reach the leaderboard');
 });
 
 test('a minimum volume before a rank is stated on the screen', () => {
@@ -841,7 +826,7 @@ test('an empty table does not claim that nothing exists', () => {
   const fallback = /emptyMessage = '([^']+)'/.exec(table);
   assert.ok(fallback, 'the table declares a default empty message');
   assert.notEqual(fallback![1], 'Nothing to show yet.', 'the old message is gone');
-  assert.match(fallback![1]!, /An empty result is not a claim that nothing exists/);
+  assert.equal(fallback![1]!, 'No results match the current view.');
 });
 
 test('numbers are tabular and right aligned in every table', () => {
