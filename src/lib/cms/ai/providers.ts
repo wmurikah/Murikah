@@ -19,18 +19,10 @@ import type { WriteContext } from '../admin/guard.ts';
 import type { VerifyStatus } from './model.ts';
 
 const text = (v: unknown): string => String(v ?? '');
-const maybeText = (v: unknown): string | null =>
-  v === null || v === undefined ? null : String(v);
-const maybeNum = (v: unknown): number | null =>
-  v === null || v === undefined ? null : Number(v);
+const maybeText = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+const maybeNum = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 
-export const PROVIDER_TYPES = [
-  'ANTHROPIC',
-  'OPENAI',
-  'AZURE_OPENAI',
-  'GOOGLE',
-  'OTHER',
-] as const;
+export const PROVIDER_TYPES = ['ANTHROPIC', 'OPENAI', 'AZURE_OPENAI', 'GOOGLE', 'OTHER'] as const;
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 
 export const PURPOSES = ['ASSISTANT', 'CLASSIFICATION', 'BOTH'] as const;
@@ -137,8 +129,7 @@ export function validateProvider(input: ProviderInput): FieldError[] {
     errors.push({ field: 'providerName', message: 'Give the provider a name.' });
   if (!(PROVIDER_TYPES as readonly string[]).includes(input.providerType))
     errors.push({ field: 'providerType', message: 'Choose a provider type.' });
-  if (input.model.trim() === '')
-    errors.push({ field: 'model', message: 'Name the model.' });
+  if (input.model.trim() === '') errors.push({ field: 'model', message: 'Name the model.' });
   if (!(PURPOSES as readonly string[]).includes(input.purpose))
     errors.push({ field: 'purpose', message: 'Choose what this provider is for.' });
   if (!/^[A-Z][A-Z0-9_]{2,63}$/.test(input.secretName)) {

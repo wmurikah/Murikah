@@ -46,8 +46,7 @@ const CONTEXT_ROWS = 10;
 export const NO_PROVIDER =
   'No assistant is configured. An administrator can set one up under Administration.';
 
-export const OUT_OF_SCOPE =
-  'That record is not one you can open, so I cannot discuss it.';
+export const OUT_OF_SCOPE = 'That record is not one you can open, so I cannot discuss it.';
 
 /**
  * The standing instruction.
