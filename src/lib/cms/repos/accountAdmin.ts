@@ -38,6 +38,19 @@ import { ACCOUNTS_VIEW } from '../permissions.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 
+/**
+ * A field message that also names the record already holding a unique value.
+ *
+ * The extra fields are optional and carried on the shared `FieldError`
+ * structurally rather than by widening it: a collision is the only place in the
+ * product where the useful next action is "open the other record", and the
+ * contact form on the marketing site has no business growing two fields for it.
+ */
+export interface ConflictFieldError extends FieldError {
+  readonly holderAccountId?: string;
+  readonly holderAccountName?: string;
+}
+
 export type WriteResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly kind: 'conflict'; readonly fields: FieldError[] }
@@ -84,6 +97,18 @@ export const ACCOUNT_AUDIT = {
   typeChanged: 'ACCOUNT_TYPE_CHANGED',
   statusChanged: 'ACCOUNT_STATUS_CHANGED',
   managerChanged: 'ACCOUNT_MANAGER_CHANGED',
+  /**
+   * THE ORACLE CODE GETS ITS OWN EVENT, AND SO DOES THE ACCOUNT CODE.
+   *
+   * The Oracle customer code is the key the importer matches an extract row on.
+   * Changing it silently re-points every future import at a different account,
+   * and the effect does not show up until the next extract lands. Finding out
+   * when that happened must not mean diffing two JSON blobs inside an
+   * ACCOUNT_UPDATED event among fifteen other fields, so it is its own row with
+   * its own type, and the audit search finds it by name.
+   */
+  oracleCodeChanged: 'ACCOUNT_ORACLE_CODE_CHANGED',
+  accountCodeChanged: 'ACCOUNT_CODE_CHANGED',
   contactCreated: 'CONTACT_CREATED',
   contactUpdated: 'CONTACT_UPDATED',
   contactDeactivated: 'CONTACT_DEACTIVATED',
@@ -521,14 +546,86 @@ export async function findDuplicates(
   });
 }
 
-function accountConflict(error: unknown): FieldError {
+/**
+ * A collision names the account already holding the value.
+ *
+ * "Another account already holds that code" tells somebody they cannot proceed
+ * and nothing about what to do next. Nine times in ten the holder is the record
+ * they actually meant to edit, or a duplicate somebody created last year, and
+ * either way the next action is to open it. So the message names it and the
+ * screen links to it.
+ *
+ * The lookup is deliberately UNSCOPED, and the consequence is stated rather
+ * than hidden: a caller may be told the name of an account in a country they
+ * cannot otherwise see. The alternative is refusing the write while claiming
+ * nothing holds the code, which is a lie the person cannot act on and which
+ * sends them to an administrator to find out what the database already told
+ * the database. A unique key is a global fact about the system; concealing who
+ * holds it does not conceal that somebody does.
+ */
+async function accountConflict(
+  db: Client,
+  input: AccountInput,
+  error: unknown,
+): Promise<ConflictFieldError> {
   const message = error instanceof Error ? error.message : '';
-  return /oracle_customer_code/i.test(message)
-    ? {
-        field: 'oracleCustomerCode',
-        message: 'Another account already holds that Oracle customer code.',
-      }
-    : { field: 'accountCode', message: 'Another account already holds that account code.' };
+  const onOracle = /oracle_customer_code/i.test(message);
+  const field = onOracle ? 'oracleCustomerCode' : 'accountCode';
+  const column = onOracle ? 'oracle_customer_code' : 'account_code';
+  const value = onOracle ? input.oracleCustomerCode : input.accountCode;
+  const label = onOracle ? 'Oracle customer code' : 'account code';
+  if (value === null) return { field, message: `Another account already holds that ${label}.` };
+  const found = await db.execute({
+    sql: `SELECT account_id, account_name FROM accounts WHERE ${column} = ? LIMIT 1`,
+    args: [value],
+  });
+  const row = found.rows[0];
+  if (row === undefined) return { field, message: `Another account already holds that ${label}.` };
+  return {
+    field,
+    message: `${text(row.account_name)} already holds the ${label} ${value}.`,
+    holderAccountId: text(row.account_id),
+    holderAccountName: text(row.account_name),
+  };
+}
+
+/**
+ * How many orders currently match an Oracle customer code.
+ *
+ * TWO COUNTS, BECAUSE THEY ANSWER TWO DIFFERENT QUESTIONS. `orders` is how many
+ * sales orders belong to the account today, which is what stops pointing at
+ * this customer if the code moves. `extractRows` is how many rows of imported
+ * extract carry the code literally, which is what the importer matches on and
+ * therefore what will be re-pointed by the NEXT import. A code with no orders
+ * and four hundred extract rows is still a consequential change, and a
+ * confirmation that showed only the first number would say it was safe.
+ */
+export interface OracleCodeUsage {
+  readonly orders: number;
+  readonly extractRows: number;
+}
+
+export async function oracleCodeUsage(
+  db: Client,
+  accountId: string,
+  code: string | null,
+): Promise<OracleCodeUsage> {
+  const [orders, rows] = await Promise.all([
+    db.execute({
+      sql: `SELECT COUNT(*) AS n FROM sales_orders WHERE account_id = ?`,
+      args: [accountId],
+    }),
+    code === null
+      ? Promise.resolve({ rows: [{ n: 0 }] })
+      : db.execute({
+          sql: `SELECT COUNT(*) AS n FROM so_extract_rows WHERE customer_code = ?`,
+          args: [code],
+        }),
+  ]);
+  return {
+    orders: Number((orders.rows[0] as Record<string, unknown>)?.n ?? 0),
+    extractRows: Number((rows.rows[0] as Record<string, unknown>)?.n ?? 0),
+  };
 }
 
 export async function createAccount(
@@ -581,7 +678,7 @@ export async function createAccount(
     );
   } catch (error) {
     if (isUnique(error)) {
-      return { ok: false, kind: 'conflict', fields: [accountConflict(error)] };
+      return { ok: false, kind: 'conflict', fields: [await accountConflict(db, input, error)] };
     }
     if (isForeignKey(error)) {
       return {
@@ -705,6 +802,32 @@ export async function updateAccount(
       ),
     );
   }
+  if (before.oracleCustomerCode !== input.oracleCustomerCode) {
+    statements.push(
+      audit(
+        ctx,
+        ACCOUNT_AUDIT.oracleCodeChanged,
+        'ACCOUNT',
+        accountId,
+        'ORACLE_CODE_CHANGE',
+        { oracleCustomerCode: before.oracleCustomerCode },
+        { oracleCustomerCode: input.oracleCustomerCode },
+      ),
+    );
+  }
+  if (before.accountCode !== input.accountCode) {
+    statements.push(
+      audit(
+        ctx,
+        ACCOUNT_AUDIT.accountCodeChanged,
+        'ACCOUNT',
+        accountId,
+        'ACCOUNT_CODE_CHANGE',
+        { accountCode: before.accountCode },
+        { accountCode: input.accountCode },
+      ),
+    );
+  }
   if (before.accountManagerUserId !== input.accountManagerUserId) {
     statements.push(
       audit(
@@ -725,7 +848,7 @@ export async function updateAccount(
     await db.batch(statements, 'write');
   } catch (error) {
     if (isUnique(error)) {
-      return { ok: false, kind: 'conflict', fields: [accountConflict(error)] };
+      return { ok: false, kind: 'conflict', fields: [await accountConflict(db, input, error)] };
     }
     if (isForeignKey(error)) {
       return {
