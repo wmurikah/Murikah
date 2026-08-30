@@ -123,10 +123,17 @@ test(
   },
 );
 
-test('the sign-in page itself is reachable without a session', { skip: skip() }, async () => {
-  const response = await worker.call('GET', '/login', { cookie: null });
-  assert.equal(response.status, 200);
-  assert.match(response.body, /Sign in/);
+test('every auth entry page is reachable without a session', { skip: skip() }, async () => {
+  for (const [path, text] of [
+    ['/login', 'Welcome back'],
+    ['/register', 'Join your company workspace'],
+    ['/forgot-password', 'Reset your password'],
+    ['/reset-password', 'Choose a new password'],
+  ] as const) {
+    const response = await worker.call('GET', path, { cookie: null });
+    assert.equal(response.status, 200, path);
+    assert.match(response.body, new RegExp(text), path);
+  }
 });
 
 test('a valid internal sign-in sets the session cookie', { skip: skip() }, async () => {
@@ -185,7 +192,7 @@ test(
   'an authenticated internal user is redirected away from /login and /',
   { skip: skip() },
   async () => {
-    for (const path of ['/login', '/']) {
+    for (const path of ['/login', '/register', '/forgot-password', '/reset-password', '/']) {
       const response = await worker.call('GET', path);
       assert.equal(response.status, 302, `${path} status`);
       assert.equal(response.location, '/app', `${path} location`);

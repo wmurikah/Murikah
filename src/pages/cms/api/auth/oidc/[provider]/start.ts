@@ -55,6 +55,10 @@ export const GET: APIRoute = async ({ params, request, url }) => {
     return Response.redirect(target, 302);
   } catch (error) {
     console.error('[cms.oidc.start]', error);
-    return Response.redirect(new URL(`/login?provider_error=${provider.toLowerCase()}`, url), 303);
+    const entry = purpose === 'REGISTER' ? '/register' : '/login';
+    return Response.redirect(
+      new URL(`${entry}?provider_error=${provider.toLowerCase()}`, url),
+      303,
+    );
   }
 };
