@@ -50,6 +50,12 @@ export const CMS_ICONS = {
   eye: '<path d="M2 12s3.8-6.5 10-6.5S22 12 22 12s-3.8 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/>',
   eyeOff:
     '<path d="M9.6 5.7A9.9 9.9 0 0 1 12 5.5c6.2 0 10 6.5 10 6.5a17.6 17.6 0 0 1-3.4 4.1M6.2 7.9A17.4 17.4 0 0 0 2 12s3.8 6.5 10 6.5a9.8 9.8 0 0 0 3.3-.55M10 10.1a2.8 2.8 0 0 0 3.9 3.9M3.5 3.5l17 17"/>',
+  /**
+   * The assistant. A speech bubble rather than a star or a spark: this is a
+   * conversation with a system that reads records, and the glyphs that mean
+   * "magic" promise something the assistant deliberately does not do.
+   */
+  chat: '<path d="M20.5 12.2a7.7 7.7 0 0 1-8.3 7.7 8.6 8.6 0 0 1-2.6-.5L4.5 21l1.4-4.2a7.6 7.6 0 0 1-1.4-4.6 7.7 7.7 0 0 1 8-7.7 7.7 7.7 0 0 1 8 7.7Z"/>',
 } as const;
 
 export type CmsIconName = keyof typeof CMS_ICONS;

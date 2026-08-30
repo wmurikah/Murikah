@@ -189,6 +189,9 @@ const withoutServiceFilter = (key: string) => {
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'Helpdesk' }]}
         >
           <Fragment slot="actions">
+            <CmsButton variant="ghost" href="/app/helpdesk/review">
+              Review
+            </CmsButton>
             {mayCreate && (
               <CmsButton variant="primary" icon="plus" data-cms-case-create>
                 New case

@@ -1,0 +1,257 @@
+---
+/**
+ * Administration → Channels.
+ *
+ * The same shape as the AI screen and for the same reason: what an
+ * administrator types is the NAME of a Worker secret, never a token. A
+ * WhatsApp or mailbox credential in a row is readable by anyone with the Turso
+ * token and cannot be rotated without an UPDATE against production.
+ *
+ * AUTO-CREATE IS OFF UNTIL SOMEBODY TURNS IT ON, at three layers that agree:
+ * the column defaults to 0, the route reads an absent field as false, and this
+ * form ships the box unchecked. A new connection therefore reads into the
+ * review queue and creates nothing, which means a mis-configured connection's
+ * first act is to fill a list rather than to open two hundred cases.
+ */
+import { env } from 'cloudflare:workers';
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers } from '@/lib/cms/permissions';
+import {
+  listConnections,
+  CHANNELS,
+  CONNECTION_STATUSES,
+  type ChannelConnection,
+} from '@/lib/cms/ai/channels';
+import { secretPresent } from '@/lib/cms/ai/model';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageUsers(permissions);
+
+let connections: ChannelConnection[] = [];
+let categories: { value: string; label: string }[] = [];
+let loadFailed = false;
+if (mayManage) {
+  try {
+    // TWO ROUND TRIPS, in one batch: the connections and the categories a
+    // connection that opens cases has to choose from.
+    const db = await getDb(getCmsEnv());
+    const [rows, categoryRows] = await Promise.all([
+      listConnections(db),
+      db.execute(
+        `SELECT case_category_id, category_name, subcategory_name FROM case_categories
+          WHERE active = 1 ORDER BY category_name, subcategory_name`,
+      ),
+    ]);
+    connections = rows;
+    categories = categoryRows.rows.map((row) => {
+      const r = row as Record<string, unknown>;
+      return {
+        value: String(r.case_category_id),
+        label: `${String(r.category_name)} · ${String(r.subcategory_name)}`,
+      };
+    });
+  } catch (error) {
+    console.error('[cms.admin.channels] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const environment = env as unknown as Record<string, unknown>;
+const present = new Map(
+  connections.map((c) => [c.channelConnectionId, secretPresent(environment, c.secretName)]),
+);
+
+const STATUS_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'neutral'>> = {
+  CONNECTED: 'success',
+  ERROR: 'danger',
+  DRAFT: 'warning',
+  DISABLED: 'neutral',
+};
+---
+
+<CmsLayout title="Channels">
+  <CmsPageHeader
+    title="Channels"
+    crumbs={[
+      { label: 'Home', href: '/app' },
+      { label: 'Administration', href: '/app/administration' },
+      { label: 'Channels' },
+    ]}
+    definition={'A connection reads a WhatsApp number or a mailbox. Its credential is held as a Worker secret and this screen stores only the name. Creating cases without a person reviewing the suggestion is off until it is switched on here.'}
+  >
+    {
+      mayManage && (
+        <CmsButton slot="actions" variant="primary" data-cms-modal-open="cms-channel-new">
+          Add a connection
+        </CmsButton>
+      )
+    }
+  </CmsPageHeader>
+
+  {
+    !mayManage && (
+      <CmsEmptyState
+        title="You do not have permission to configure channels"
+        description="Ask an administrator for access."
+      />
+    )
+  }
+  {
+    loadFailed && (
+      <CmsErrorState
+        title="The connections could not be loaded"
+        description="Please try again in a moment."
+      />
+    )
+  }
+  {
+    mayManage && !loadFailed && connections.length === 0 && (
+      <CmsEmptyState
+        title="No connection is configured"
+        description="Add one to start reading messages into the review queue."
+      />
+    )
+  }
+
+  {
+    mayManage && connections.length > 0 && (
+      <CmsCard title="Connections">
+        <ul class="flex flex-col gap-2">
+          {connections.map((c) => (
+            <li class="rounded-cms border border-cms-line px-3 py-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-cms-body-sm font-semibold text-cms-ink">{c.displayName}</span>
+                <span class="flex items-center gap-2">
+                  <CmsBadge tone="neutral" label={c.channel} />
+                  <CmsBadge tone={STATUS_TONE[c.status] ?? 'neutral'} label={c.status} />
+                  <CmsBadge
+                    tone={present.get(c.channelConnectionId) === true ? 'success' : 'danger'}
+                    label={
+                      present.get(c.channelConnectionId) === true
+                        ? 'Secret present'
+                        : 'Secret missing'
+                    }
+                  />
+                  <CmsBadge
+                    tone={c.autoCreateCase ? 'warning' : 'neutral'}
+                    label={c.autoCreateCase ? 'Creates cases' : 'Queues only'}
+                  />
+                </span>
+              </div>
+              <dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-cms-caption text-cms-muted sm:grid-cols-3">
+                <div>
+                  <dt class="inline">Reads</dt>{' '}
+                  <dd class="inline text-cms-ink">{c.accountIdentifier}</dd>
+                </div>
+                <div>
+                  <dt class="inline">Provider</dt> <dd class="inline text-cms-ink">{c.provider}</dd>
+                </div>
+                <div>
+                  <dt class="inline">Secret</dt>{' '}
+                  <dd class="inline font-mono text-cms-ink">{c.secretName}</dd>
+                </div>
+                {c.lastPolledAt !== null && (
+                  <div>
+                    <dt class="inline">Last read</dt>{' '}
+                    <dd class="inline text-cms-ink">{c.lastPolledAt}</dd>
+                  </div>
+                )}
+              </dl>
+            </li>
+          ))}
+        </ul>
+      </CmsCard>
+    )
+  }
+
+  <p
+    id="cms-channel-message"
+    role="status"
+    aria-live="polite"
+    class="mt-4 text-cms-body-sm text-cms-muted"
+  >
+  </p>
+
+  {
+    mayManage && (
+      <CmsDrawer id="cms-channel-new" title="Add a connection">
+        <form id="cms-channel-form" class="flex flex-col gap-4">
+          <CmsSelect
+            id="ch-channel"
+            name="channel"
+            label="Channel"
+            required
+            options={CHANNELS.map((c) => ({ value: c, label: c }))}
+          />
+          <CmsInput id="ch-name" name="displayName" label="Name" required />
+          <CmsInput id="ch-provider" name="provider" label="Provider" required />
+          <CmsInput id="ch-account" name="accountIdentifier" label="Number or mailbox" required />
+          <CmsInput id="ch-secret" name="secretName" label="Worker secret name" required />
+          <CmsInput id="ch-webhook" name="webhookSecretName" label="Webhook secret name" />
+          <CmsSelect
+            id="ch-status"
+            name="status"
+            label="Status"
+            required
+            options={CONNECTION_STATUSES.map((s) => ({ value: s, label: s }))}
+          />
+          <CmsSelect
+            id="ch-category"
+            name="defaultCaseCategoryId"
+            label="Category for created cases"
+            options={[{ value: '', label: 'None' }, ...categories]}
+          />
+          <CmsCheckbox
+            id="ch-auto"
+            name="autoCreateCase"
+            label="Create cases without review, above the confidence threshold"
+          />
+          <CmsButton type="submit" variant="primary">
+            Save
+          </CmsButton>
+        </form>
+      </CmsDrawer>
+    )
+  }
+</CmsLayout>
+
+<script>
+  const message = document.querySelector<HTMLElement>('#cms-channel-message');
+  document
+    .querySelector<HTMLFormElement>('#cms-channel-form')
+    ?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = new FormData(event.target as HTMLFormElement);
+      const payload: Record<string, unknown> = {};
+      for (const [key, value] of data.entries()) payload[key] = value;
+      payload.autoCreateCase = data.get('autoCreateCase') !== null;
+      const response = await fetch('/api/admin/channels', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok) {
+        const errors = (body?.errors ?? []) as { message: string }[];
+        if (message)
+          message.textContent =
+            errors.map((e) => e.message).join(' ') || 'The connection could not be saved.';
+        return;
+      }
+      location.reload();
+    });
+</script>
