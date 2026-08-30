@@ -1,0 +1,33 @@
+---
+/** Identity-provider entry points shared by sign-in and customer registration. */
+interface Props {
+  purpose: 'SIGN_IN' | 'REGISTER';
+  apple?: boolean;
+}
+
+const { purpose, apple = false } = Astro.props;
+const providers = [
+  { key: 'microsoft', label: 'Microsoft', mark: 'M' },
+  { key: 'google', label: 'Google', mark: 'G' },
+  ...(apple ? [{ key: 'apple', label: 'Apple', mark: 'A' }] : []),
+];
+---
+
+<div class="grid gap-2.5" aria-label="Single sign-on options">
+  {
+    providers.map((provider) => (
+      <a
+        href={`/api/auth/oidc/${provider.key}/start?purpose=${purpose}`}
+        class="group flex min-h-11 w-full items-center justify-center gap-3 rounded-cms border border-cms-border bg-cms-surface px-4 text-cms-body-sm font-semibold text-cms-ink transition-[border-color,background-color,transform] duration-150 outline-none hover:border-cms-royal hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-canvas active:translate-y-px"
+      >
+        <span
+          class="inline-flex h-6 w-6 items-center justify-center rounded-cms bg-cms-auth-mark text-cms-caption font-bold text-white transition-colors group-hover:bg-cms-royal"
+          aria-hidden="true"
+        >
+          {provider.mark}
+        </span>
+        Continue with {provider.label}
+      </a>
+    ))
+  }
+</div>

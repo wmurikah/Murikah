@@ -84,6 +84,12 @@
   .cms-login-character[data-state='success'] {
     transform: translateY(-4px) scale(1.02);
   }
+  .cms-login-character[data-state='loading'] .eyes {
+    transform: scaleY(0.45);
+  }
+  .cms-login-character[data-state='loading'] {
+    transform: translateY(-2px);
+  }
   @media (prefers-reduced-motion: reduce) {
     .cms-login-character,
     .cms-login-character * {
