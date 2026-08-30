@@ -44,7 +44,7 @@ const titleCase = (value: string) =>
 function parentHref(a: ActivityRow): string | null {
   switch (a.entityType) {
     case 'ACCOUNT':
-      return `/app/customers/${a.entityId}`;
+      return `/app/operations/customers/${a.entityId}`;
     case 'LEAD':
       return `/app/crm/${a.entityId}`;
     case 'OPPORTUNITY':
