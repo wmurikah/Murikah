@@ -109,7 +109,7 @@ async function workflowRolesWithoutApprover(db: Client, today: string): Promise<
     severity: 'BLOCKING',
     count: rows.length,
     examples: rows,
-    href: '/app/administration/workflow-roles',
+    href: '/app/administration/workflows',
   };
 }
 
@@ -286,7 +286,7 @@ async function suspendedPortalMemberships(db: Client): Promise<HealthCheck> {
     severity: 'INFORMATION',
     count: rows.length,
     examples: rows,
-    href: '/app/customers',
+    href: '/app/operations/customers',
   };
 }
 
@@ -312,7 +312,7 @@ async function teamsWithoutManager(db: Client): Promise<HealthCheck> {
     severity: 'ATTENTION',
     count: rows.length,
     examples: rows,
-    href: '/app/administration/organisation/teams',
+    href: '/app/administration/organisation',
   };
 }
 

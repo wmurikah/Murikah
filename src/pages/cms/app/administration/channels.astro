@@ -22,7 +22,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
-import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import { getCmsEnv } from '@/lib/cms/env';
@@ -188,24 +188,39 @@ const STATUS_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'n
 
   {
     mayManage && (
-      <CmsDrawer id="cms-channel-new" title="Add a connection">
+      <CmsModal id="cms-channel-new" title="Add a connection">
         <form id="cms-channel-form" class="flex flex-col gap-4">
           <CmsSelect
             id="ch-channel"
             name="channel"
-            label="Channel"
+            label="Channel type"
             required
             options={CHANNELS.map((c) => ({ value: c, label: c }))}
           />
-          <CmsInput id="ch-name" name="displayName" label="Name" required />
-          <CmsInput id="ch-provider" name="provider" label="Provider" required />
-          <CmsInput id="ch-account" name="accountIdentifier" label="Number or mailbox" required />
-          <CmsInput id="ch-secret" name="secretName" label="Worker secret name" required />
-          <CmsInput id="ch-webhook" name="webhookSecretName" label="Webhook secret name" />
+          <CmsInput id="ch-name" name="displayName" label="Connection name" required autofocus />
+          <CmsInput id="ch-provider" name="provider" label="Service provider" required />
+          <CmsInput
+            id="ch-account"
+            name="accountIdentifier"
+            label="WhatsApp number or mailbox"
+            required
+          />
+          <CmsInput
+            id="ch-secret"
+            name="secretName"
+            label="Stored secret name"
+            required
+            hint="Enter the name of the Cloudflare secret, not its key; for example, WHATSAPP_ACCESS_TOKEN."
+          />
+          <CmsInput
+            id="ch-webhook"
+            name="webhookSecretName"
+            label="Webhook verification secret name"
+          />
           <CmsSelect
             id="ch-status"
             name="status"
-            label="Status"
+            label="Connection status"
             required
             options={CONNECTION_STATUSES.map((s) => ({ value: s, label: s }))}
           />
@@ -220,11 +235,14 @@ const STATUS_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'n
             name="autoCreateCase"
             label="Create cases without review, above the confidence threshold"
           />
-          <CmsButton type="submit" variant="primary">
-            Save
-          </CmsButton>
         </form>
-      </CmsDrawer>
+        <CmsButton slot="actions" type="button" variant="ghost" data-cms-modal-close>
+          Cancel
+        </CmsButton>
+        <CmsButton slot="actions" type="submit" form="cms-channel-form" variant="primary">
+          Add connection
+        </CmsButton>
+      </CmsModal>
     )
   }
 </CmsLayout>
