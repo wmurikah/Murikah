@@ -1,0 +1,222 @@
+---
+/**
+ * Administration → Access Review.
+ *
+ * THIS SCREEN EXISTS TO MAKE ONE DISTINCTION VISIBLE, and it is the
+ * distinction the whole security model rests on: application access is not
+ * approval authority.
+ *
+ * A person may read every sales order in Kenya and approve none of them.
+ * Another may approve a hundred million shillings of purchase orders and hold
+ * a single access role. Conflating the two is how somebody ends up with
+ * authority nobody meant to give, because the grant looked like an ordinary
+ * permission on an ordinary screen.
+ *
+ * So the two are rendered as two blocks with those two headings, side by
+ * side, and there is no merged "what this person can do" list anywhere on the
+ * page or in the shape behind it. The merge is the error.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
+import { accessReview, type AccessReviewRow } from '@/lib/cms/repos/controlCentre';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canManageUsers(permissions) || canManageWorkflowRoles(permissions);
+const search = (Astro.url.searchParams.get('q') ?? '').trim();
+const today = toDbTimestamp(new Date()).slice(0, 10);
+
+let rows: AccessReviewRow[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    rows = await accessReview(db, today, { search });
+  } catch (error) {
+    console.error('[cms.control.accessReview] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const money = (value: number | null): string =>
+  value === null ? 'no limit' : value.toLocaleString('en-KE');
+---
+
+<CmsLayout title="Access review">
+  <CmsPageHeader
+    title="Access review"
+    definition="Application access and approval authority are separate mechanisms. A role says what a person may do; approval authority says what they may approve. Neither implies the other, which is why they are never merged into one list."
+    crumbs={[{ label: 'Administration', href: '/app/administration' }, { label: 'Access review' }]}
+  />
+
+  {
+    !mayRead ? (
+      <CmsEmptyState
+        icon="administration"
+        title="You do not have permission to run an access review"
+        description="Ask an administrator for access."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The access review could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <p class="max-w-prose rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+          <span class="font-semibold text-cms-ink">
+            Application access is not approval authority.
+          </span>{' '}
+          An access role decides which screens and records a person can open. Approval authority
+          decides what they can approve, for which process, in which entity, up to what value. A
+          person can have a great deal of one and none of the other, and reading them as one list is
+          how authority gets granted by accident.
+        </p>
+
+        <CmsCard title="Find a person">
+          <form method="get" class="flex flex-wrap items-end gap-3">
+            <CmsInput
+              id="q"
+              name="q"
+              label="Name or email"
+              type="search"
+              value={search}
+              class="min-w-64"
+            />
+            <CmsButton type="submit" variant="primary" icon="search">
+              Search
+            </CmsButton>
+            <CmsButton href="/app/administration/access-review" variant="secondary">
+              Show everyone
+            </CmsButton>
+          </form>
+        </CmsCard>
+
+        <p class="text-cms-body-sm text-cms-muted">
+          {rows.length} internal {rows.length === 1 ? 'user' : 'users'}, as at {today}.
+        </p>
+
+        {rows.length === 0 ? (
+          <CmsEmptyState
+            icon="customers"
+            title="No internal users matched"
+            description="Clear the search to see everybody."
+          />
+        ) : (
+          rows.map((person) => (
+            <CmsCard title={person.displayName}>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-cms-body-sm break-all text-cms-muted">{person.email}</span>
+                <CmsBadge
+                  tone={person.status === 'ACTIVE' ? 'success' : 'warning'}
+                  label={person.status}
+                />
+                {person.jobTitle !== null && (
+                  <span class="text-cms-caption text-cms-muted">{person.jobTitle}</span>
+                )}
+                {person.organisation !== null && (
+                  <span class="text-cms-caption text-cms-muted">{person.organisation}</span>
+                )}
+              </div>
+
+              <div class="mt-4 grid gap-6 lg:grid-cols-2">
+                {/* Block one. */}
+                <section>
+                  <h3 class="text-cms-card font-semibold text-cms-navy">Application access</h3>
+                  <p class="text-cms-caption text-cms-muted">What this person can open and read.</p>
+                  {person.accessRoles.length === 0 ? (
+                    <p class="mt-2 text-cms-body-sm text-cms-muted">No access role.</p>
+                  ) : (
+                    <ul class="mt-2 flex flex-col gap-3">
+                      {person.accessRoles.map((role) => (
+                        <li class="rounded-cms border border-cms-line px-3 py-2">
+                          <p class="text-cms-body-sm font-medium text-cms-ink">{role.roleName}</p>
+                          <p class="text-cms-caption text-cms-muted">
+                            From {role.effectiveFrom}
+                            {role.effectiveTo === null
+                              ? ', no end date'
+                              : ` to ${role.effectiveTo}`}
+                          </p>
+                          {role.scopes.length === 0 ? (
+                            <p class="text-cms-caption text-cms-muted">No data scope recorded.</p>
+                          ) : (
+                            <ul class="mt-1 flex flex-wrap gap-1.5">
+                              {role.scopes.map((scope) => (
+                                <li>
+                                  <CmsBadge
+                                    tone={scope.scopeType === 'GROUP' ? 'warning' : 'neutral'}
+                                    label={scope.label}
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                {/* Block two. Never merged with block one. */}
+                <section>
+                  <h3 class="text-cms-card font-semibold text-cms-navy">Approval authority</h3>
+                  <p class="text-cms-caption text-cms-muted">
+                    What this person can approve, and to what value.
+                  </p>
+                  {person.approvalAuthority.length === 0 ? (
+                    <p class="mt-2 text-cms-body-sm text-cms-muted">
+                      No approval authority. This person approves nothing.
+                    </p>
+                  ) : (
+                    <ul class="mt-2 flex flex-col gap-3">
+                      {person.approvalAuthority.map((authority) => (
+                        <li class="rounded-cms border border-cms-line px-3 py-2">
+                          <p class="text-cms-body-sm font-medium text-cms-ink">
+                            {authority.workflowRoleName}
+                          </p>
+                          <p class="text-cms-caption text-cms-muted">
+                            {authority.scopeLabel}. From {authority.effectiveFrom}
+                            {authority.effectiveTo === null
+                              ? ', no end date'
+                              : ` to ${authority.effectiveTo}`}
+                          </p>
+                          {authority.rules.length === 0 ? (
+                            <p class="text-cms-caption text-cms-muted">
+                              No value rule: this role approves without an amount band.
+                            </p>
+                          ) : (
+                            <ul class="mt-1 flex flex-col gap-0.5">
+                              {authority.rules.map((rule) => (
+                                <li class="text-cms-caption text-cms-muted">
+                                  {rule.processType}
+                                  {rule.currency === null ? '' : ` in ${rule.currency}`}: from{' '}
+                                  {money(rule.minAmount)} to {money(rule.maxAmount)}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </div>
+            </CmsCard>
+          ))
+        )}
+      </div>
+    )
+  }
+</CmsLayout>

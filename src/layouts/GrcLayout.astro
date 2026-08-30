@@ -21,7 +21,6 @@ import GrcIcon from '@/components/grc/GrcIcon.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { getSidebarCounts, type SidebarCounts } from '@grc/repos/dashboard';
-import { unreadCount, listInApp, type InAppItem } from '@grc/repos/inApp';
 import { buildNav, type CountKey, type NavGroupDef, type NavItemDef } from '@grc/dashboard/roleNav';
 import { aiEnabled } from '@grc/ai/gate';
 
@@ -52,16 +51,16 @@ const groups = buildNav({
 // They count an organisation's queues, so with no instance selected there is
 // nothing to count and no query is made.
 let counts: SidebarCounts | null = null;
-let unread = 0;
-let bellItems: InAppItem[] = [];
 if (grc && inInstance) {
   try {
     const db = await getDb(getGrcEnv());
-    [counts, unread, bellItems] = await Promise.all([
-      getSidebarCounts(db, grc.organizationId, grc.userId),
-      unreadCount(db, grc.userId),
-      listInApp(db, grc.userId, 6),
-    ]);
+    counts = await getSidebarCounts(
+      db,
+      grc.organizationId,
+      grc.userId,
+      grc.affiliateScope,
+      grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review'),
+    );
   } catch (err) {
     console.error('[grc.layout] sidebar counts failed', err);
     counts = null;
@@ -80,7 +79,12 @@ const isActive = (href: string): boolean =>
 const groupActive = (g: NavGroupDef): boolean => g.items.some((i: NavItemDef) => isActive(i.href));
 
 const orgName = grc?.organizationName ?? 'Organisation';
-const orgLabel = inInstance ? 'Organisation' : 'Platform';
+// The super-label distinguishes "you are above the customers" from "you are
+// inside one", which is real information for a platform owner and none at all
+// for anybody else: an instance admin belongs to exactly one organisation,
+// cannot switch, and has no second context to tell it apart from. So they see
+// the name alone, and the line costs them nothing (audit observation AC-08).
+const orgLabel = grc?.isPlatformOwner === true ? (inInstance ? 'Organisation' : 'Platform') : null;
 const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
 // The switcher belongs to the platform owner alone, and stays available inside
 // an instance so they can move straight to another one. An instance admin never
@@ -161,44 +165,18 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
         </div>
 
         <div class="grc-orgline">
-          <p class="grc-orgline__label">{orgLabel}</p>
+          {orgLabel && <p class="grc-orgline__label">{orgLabel}</p>}
           <p class="grc-orgline__name">{orgName}</p>
         </div>
 
         {
-          grc && inInstance && (
-            <details class="grc-bell">
-              <summary class="grc-bell__summary" data-tip="Notifications">
-                <GrcIcon name="bell" size={16} />
-                <span>Notifications</span>
-                {unread > 0 && <span class="grc-navcount grc-navcount--alert">{unread}</span>}
-              </summary>
-              <div class="grc-bell__panel">
-                {bellItems.length === 0 ? (
-                  <p class="grc-bell__empty">No notifications.</p>
-                ) : (
-                  <ul class="grc-bell__list">
-                    {bellItems.map((it) => (
-                      <li class:list={['grc-bell__item', { 'is-unread': !it.read }]}>
-                        <a href={it.link ?? '/notifications'}>{it.title}</a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div class="grc-bell__foot">
-                  {unread > 0 && (
-                    <form method="post" action="/api/notifications" style="margin:0">
-                      <input type="hidden" name="all" value="1" />
-                      <button type="submit" class="grc-bell__mark">
-                        Mark all read
-                      </button>
-                    </form>
-                  )}
-                  <a href="/notifications">See all</a>
-                </div>
-              </div>
-            </details>
-          )
+          /* There is no Notifications item in the sidebar (Build Prompt 67).
+            Build Prompt 60 took away the destination and left the bell; the
+            bell was the same thing wearing a different shape, a second place
+            to look that repeated what the modules were already saying. What is
+            waiting for somebody is counted on the module it is waiting in, in
+            red, next to the label they would click anyway. Two of the three
+            queries this shell used to make on every navigation went with it. */
         }
 
         {
@@ -260,17 +238,30 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
                         aria-current={isActive(item.href) ? 'page' : undefined}
                       >
                         <GrcIcon name={item.icon} size={16} class="grc-navlink__icon" />
-                        <span>{item.label}</span>
-                        {item.countKey && (
-                          <span
-                            class:list={['grc-navcount', { 'grc-navcount--alert': item.alert }]}
-                            data-count-key={item.countKey}
-                            aria-label={`${item.label} count`}
-                            hidden={countFor(item.countKey) === 0}
-                          >
-                            {countFor(item.countKey)}
-                          </span>
-                        )}
+                        {/*
+                          The count rides the label as a superscript bubble
+                          rather than sitting off at the far edge of the rail
+                          (Build Prompt 62): it belongs to the word it counts,
+                          the way a footnote marker does, and at the edge it read
+                          as a column of unrelated numbers. `sup` is the element
+                          that means this, so a screen reader and a stylesheet
+                          agree about what it is; the label beside it says what
+                          the number counts, since a bare digit announces nothing.
+                        */}
+                        <span class="grc-navlink__label">
+                          <span>{item.label}</span>
+                          {item.countKey && (
+                            <sup
+                              class="grc-navcount"
+                              data-count-key={item.countKey}
+                              hidden={countFor(item.countKey) === 0}
+                            >
+                              <span class="grc-vh">, </span>
+                              {countFor(item.countKey)}
+                              <span class="grc-vh"> pending</span>
+                            </sup>
+                          )}
+                        </span>
                       </a>
                     </li>
                   ))}
@@ -291,20 +282,39 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
               </span>
             </span>
           </div>
-          <a href="/mfa/setup" class="grc-signout" data-tip="Account security">
-            <GrcIcon name="roles" size={16} />
-            <span>Account security</span>
-          </a>
-          <a href="/change-password" class="grc-signout" data-tip="Change password">
-            <GrcIcon name="key" size={16} />
-            <span>Change password</span>
-          </a>
-          <form method="post" action="/api/auth/logout">
-            <button type="submit" class="grc-signout" data-tip="Sign out">
-              <GrcIcon name="signout" size={16} />
-              <span>Sign out</span>
-            </button>
-          </form>
+          {
+            /*
+            The account actions are options, not buttons (Build Prompt 60). They
+            were bordered pills of their own width, so the footer sat out of line
+            with the icon column above it and read as three controls bolted on
+            rather than the end of the same list. They are now the same list, the
+            same icon column and the same hover as the navigation; sign out stays
+            a real button inside its form, because it posts, and only looks like
+            its neighbours.
+          */
+          }
+          <ul class="grc-account__list">
+            <li>
+              <a href="/mfa/setup" class="grc-navlink" data-tip="Account security">
+                <GrcIcon name="roles" size={16} class="grc-navlink__icon" />
+                <span>Account security</span>
+              </a>
+            </li>
+            <li>
+              <a href="/change-password" class="grc-navlink" data-tip="Change password">
+                <GrcIcon name="key" size={16} class="grc-navlink__icon" />
+                <span>Change password</span>
+              </a>
+            </li>
+            <li>
+              <form method="post" action="/api/auth/logout">
+                <button type="submit" class="grc-navlink grc-navlink--action" data-tip="Sign out">
+                  <GrcIcon name="signout" size={16} class="grc-navlink__icon" />
+                  <span>Sign out</span>
+                </button>
+              </form>
+            </li>
+          </ul>
         </div>
       </nav>
 

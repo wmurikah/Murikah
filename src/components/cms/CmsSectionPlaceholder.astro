@@ -1,0 +1,35 @@
+---
+/**
+ * The one placeholder page, rendered for every module destination.
+ *
+ * Seven near-identical page files would drift apart within a week, so there is
+ * one component and the pages pass it their href. The label comes from
+ * CMS_NAV, so it cannot disagree with the rail.
+ *
+ * WHAT THIS PAGE USED TO SAY, AND WHY IT NO LONGER DOES. It printed the
+ * permission code the section will require and a paragraph explaining that the
+ * module arrives in a later phase. Neither is something a reader can act on,
+ * and one of them names an internal code on a screen. The state says it is
+ * unavailable; that is the whole message.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import { CMS_NAV } from '@/lib/cms/nav';
+
+interface Props {
+  href: string;
+}
+const { href } = Astro.props;
+const item = CMS_NAV.find((entry) => entry.href === href);
+if (!item) throw new Error(`No navigation entry for ${href}`);
+---
+
+<CmsLayout title={item.label}>
+  <CmsPageHeader title={item.label} crumbs={[{ label: 'Home', href: '/' }, { label: item.label }]}>
+    <CmsBadge slot="actions" tone="neutral" label="Unavailable" />
+  </CmsPageHeader>
+
+  <CmsEmptyState icon={item.icon} title={`${item.label} is not available`} />
+</CmsLayout>

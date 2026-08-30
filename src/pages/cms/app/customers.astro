@@ -1,0 +1,384 @@
+---
+/**
+ * Customers → Accounts.
+ *
+ * The customer list. Every filter, the search, the sort and the paging happen
+ * in the database, and the scope predicate is the first clause of the WHERE, so
+ * the total beside the list counts exactly what the list can show.
+ *
+ * The counts along the top are the same query as the list with a different
+ * filter, not a separate aggregate. That is section 0d's rule about a count
+ * revealing a record the caller cannot open: if the card and the list used
+ * different predicates, the card would advertise a customer that returns 404.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
+import CmsUnavailable from '@/components/cms/CmsUnavailable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsAccountCreateDrawer from '@/components/cms/CmsAccountCreateDrawer.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageAccounts, canViewAccounts } from '@/lib/cms/permissions';
+import {
+  accountOptions,
+  listAccounts,
+  type AccountOptions,
+  type AccountPage,
+} from '@/lib/cms/repos/accountAdmin';
+import { readAccountQuery, ACCOUNT_TYPES, ACCOUNT_STATUSES } from '@/lib/cms/admin/accountInput';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewAccounts(permissions);
+const mayManage = canManageAccounts(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+const params = Astro.url.searchParams;
+const query = readAccountQuery(params);
+
+let page: AccountPage = { items: [], total: 0, page: 1, pageSize: 25 };
+let options: AccountOptions = { countries: [], affiliates: [], managers: [], segments: [] };
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [page, options] = await Promise.all([
+      listAccounts(db, userId, query),
+      accountOptions(db, userId),
+    ]);
+  } catch (error) {
+    console.error('[cms.customers] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const blank = (label: string) => ({ value: '', label });
+const asOptions = (list: { id: string; label: string }[], empty: string) => [
+  blank(empty),
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+const from = (query.page - 1) * page.pageSize + 1;
+const to = Math.min(query.page * page.pageSize, page.total);
+const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
+
+/** Keep every filter when moving between pages. */
+function pageHref(target: number): string {
+  const next = new URLSearchParams(params);
+  next.set('page', String(target));
+  return `/app/customers?${next.toString()}`;
+}
+const activeFilters = [
+  query.accountType,
+  query.status,
+  query.countryId,
+  query.affiliateId,
+  query.accountManagerUserId,
+  query.segment,
+].filter(Boolean).length;
+const customerFilterChips = [
+  query.accountType && { key: 'type', label: titleCase(query.accountType) },
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.countryId && {
+    key: 'country',
+    label: options.countries.find((o) => o.id === query.countryId)?.label ?? 'Country',
+  },
+  query.affiliateId && {
+    key: 'affiliate',
+    label: options.affiliates.find((o) => o.id === query.affiliateId)?.label ?? 'Affiliate',
+  },
+  query.accountManagerUserId && {
+    key: 'manager',
+    label:
+      options.managers.find((o) => o.id === query.accountManagerUserId)?.label ?? 'Account manager',
+  },
+  query.segment && { key: 'segment', label: query.segment },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutCustomerFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/customers?${next.toString()}`;
+};
+---
+
+<CmsLayout title="Customers">
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to customers"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Customers could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Customers"
+          definition="A company is created once, here, and every lead, case, opportunity and order references the same record."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Customers' }]}
+        >
+          {mayManage && (
+            <CmsButton slot="actions" variant="primary" icon="plus" data-cms-account-create>
+              New account
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <CmsFilterPanel action="/app/customers" activeCount={activeFilters}>
+          <div slot="primary">
+            <CmsInput
+              id="f-q"
+              name="q"
+              label="Search"
+              type="search"
+              value={query.search}
+              hint="Account name, account code, Oracle code, tax PIN, email or phone. Case does not matter."
+            />
+          </div>
+          <Fragment slot="advanced">
+            <CmsSelect
+              id="f-type"
+              name="type"
+              label="Type"
+              value={query.accountType ?? ''}
+              options={[
+                blank('Every type'),
+                ...ACCOUNT_TYPES.map((t) => ({ value: t, label: titleCase(t) })),
+              ]}
+            />
+            <CmsSelect
+              id="f-status"
+              name="status"
+              label="Status"
+              value={query.status ?? ''}
+              options={[
+                blank('Every status'),
+                ...ACCOUNT_STATUSES.map((s) => ({ value: s, label: titleCase(s) })),
+              ]}
+            />
+            <CmsSelect
+              id="f-country"
+              name="country"
+              label="Country"
+              value={query.countryId ?? ''}
+              options={asOptions(options.countries, 'Every country')}
+            />
+            <CmsSelect
+              id="f-affiliate"
+              name="affiliate"
+              label="Affiliate"
+              value={query.affiliateId ?? ''}
+              options={asOptions(options.affiliates, 'Every affiliate')}
+            />
+            <CmsSelect
+              id="f-manager"
+              name="manager"
+              label="Account manager"
+              value={query.accountManagerUserId ?? ''}
+              options={asOptions(options.managers, 'Anyone')}
+            />
+            {options.segments.length > 0 && (
+              <CmsSelect
+                id="f-segment"
+                name="segment"
+                label="Segment"
+                value={query.segment ?? ''}
+                options={[
+                  blank('Every segment'),
+                  ...options.segments.map((s) => ({ value: s, label: s })),
+                ]}
+              />
+            )}
+          </Fragment>
+          <Fragment slot="chips">
+            {customerFilterChips.map((chip) => (
+              <a
+                href={withoutCustomerFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
+
+        <CmsDataTable
+          caption="Customer accounts"
+          columns={[
+            { key: 'account', label: 'Account' },
+            { key: 'type', label: 'Relationship' },
+            { key: 'terms', label: 'Credit terms', numeric: true },
+            { key: 'status', label: 'Status' },
+          ]}
+          empty={page.items.length === 0}
+        >
+          {page.items.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-3">
+                <a
+                  href={`/app/customers/${row.accountId}`}
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.accountName}
+                </a>
+                {row.segment !== null && (
+                  <span class="ms-2 text-cms-caption text-cms-muted">{row.segment}</span>
+                )}
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[row.countryName, row.affiliateName, row.accountManagerName]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.accountType === 'CUSTOMER' ? 'success' : 'neutral'}
+                  label={titleCase(row.accountType)}
+                />
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {/*
+                  Not available, never 0. A zero credit-days would say this
+                  customer trades strictly cash, which is a commercial fact
+                  nobody has recorded.
+                */}
+                {row.creditDays === null ? <CmsUnavailable compact /> : `${row.creditDays} days`}
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={
+                    row.status === 'ACTIVE'
+                      ? 'success'
+                      : row.status === 'BLOCKED'
+                        ? 'danger'
+                        : 'neutral'
+                  }
+                  label={titleCase(row.status)}
+                />
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <a
+                href={`/app/customers/${row.accountId}`}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">{row.accountName}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {[row.countryName, row.segment, row.accountManagerName]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                <CmsBadge
+                  tone={
+                    row.status === 'ACTIVE'
+                      ? 'success'
+                      : row.status === 'BLOCKED'
+                        ? 'danger'
+                        : 'neutral'
+                  }
+                  label={titleCase(row.status)}
+                />
+              </a>
+            ))}
+          </Fragment>
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="customers"
+              title="No accounts match"
+              description="Try a different search or remove a filter."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        {page.total > 0 && (
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-cms-body-sm text-cms-muted">
+              {from}–{to} of {page.total} customers
+            </p>
+            {lastPage > 1 && (
+              <nav aria-label="Pages" class="flex items-center gap-2">
+                <a
+                  href={pageHref(Math.max(1, query.page - 1))}
+                  aria-disabled={query.page === 1 ? 'true' : undefined}
+                  class:list={[
+                    'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-focus',
+                    query.page === 1
+                      ? 'pointer-events-none text-cms-muted opacity-50'
+                      : 'text-cms-royal hover:bg-cms-canvas',
+                  ]}
+                >
+                  Previous
+                </a>
+                <span class="text-cms-body-sm text-cms-muted">
+                  Page {query.page} of {lastPage}
+                </span>
+                <a
+                  href={pageHref(Math.min(lastPage, query.page + 1))}
+                  aria-disabled={query.page === lastPage ? 'true' : undefined}
+                  class:list={[
+                    'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-focus',
+                    query.page === lastPage
+                      ? 'pointer-events-none text-cms-muted opacity-50'
+                      : 'text-cms-royal hover:bg-cms-canvas',
+                  ]}
+                >
+                  Next
+                </a>
+              </nav>
+            )}
+          </div>
+        )}
+
+        {mayManage && (
+          <Fragment>
+            <CmsDrawer id="cms-account-drawer" tone="form" title="New account">
+              <CmsAccountCreateDrawer
+                countries={options.countries}
+                affiliates={options.affiliates}
+                managers={options.managers}
+                segments={options.segments}
+              />
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                <button
+                  type="submit"
+                  form="cms-account-form"
+                  data-cms-account-save
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Create account
+                </button>
+              </Fragment>
+            </CmsDrawer>
+          </Fragment>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

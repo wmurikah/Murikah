@@ -65,7 +65,12 @@ async function signingKey(secretAccessKey: string, dateStamp: string): Promise<A
 }
 
 export interface R2PresignParams {
-  method: 'GET' | 'PUT';
+  /**
+   * The HTTP method the URL is signed for. SigV4 signs the method, so a URL
+   * signed for PUT cannot be used to DELETE: each verb needs its own signature.
+   * HEAD and DELETE are here for the server-side probe and the governed removal.
+   */
+  method: 'GET' | 'PUT' | 'HEAD' | 'DELETE';
   accountId: string;
   bucket: string;
   /** The object key, already tenant-scoped by the caller. */
@@ -75,6 +80,38 @@ export interface R2PresignParams {
   expiresInSeconds: number;
   /** The signing instant; passed in so the result is deterministic and testable. */
   now: Date;
+  /**
+   * The S3 origin to sign against, when the customer's account is not reached
+   * at the default `<account>.r2.cloudflarestorage.com`. This is the Endpoint
+   * field the settings screen has always offered and, until now, never used:
+   * an S3-compatible endpoint is exactly what makes an R2 connection testable
+   * against something other than Cloudflare (Build Prompt 54).
+   *
+   * SigV4 signs the host header, so the override has to reach the signature
+   * rather than being swapped into the URL afterwards; a URL signed for one
+   * host and sent to another is refused.
+   */
+  endpoint?: string;
+}
+
+/**
+ * The origin and host to sign for: the configured endpoint when there is one,
+ * else the account's own R2 origin. A malformed endpoint falls back rather than
+ * throwing, so a typo in a settings field degrades to the default instead of
+ * breaking every upload.
+ */
+function originFor(p: R2PresignParams): { origin: string; host: string } {
+  const raw = (p.endpoint ?? '').trim();
+  if (raw !== '') {
+    try {
+      const url = new URL(raw.includes('://') ? raw : `https://${raw}`);
+      return { origin: `${url.protocol}//${url.host}`, host: url.host };
+    } catch {
+      // fall through to the default
+    }
+  }
+  const host = `${p.accountId}.r2.cloudflarestorage.com`;
+  return { origin: `https://${host}`, host };
 }
 
 /**
@@ -83,7 +120,7 @@ export interface R2PresignParams {
  * already confirmed the key belongs to the acting tenant.
  */
 export async function presignR2Url(p: R2PresignParams): Promise<string> {
-  const host = `${p.accountId}.r2.cloudflarestorage.com`;
+  const { origin, host } = originFor(p);
   const canonicalUri = `/${awsUriEncode(p.bucket, false)}/${awsUriEncode(p.key, false)}`;
 
   const amzDate = p.now.toISOString().replace(/[:-]|\.\d{3}/g, '');
@@ -121,5 +158,5 @@ export async function presignR2Url(p: R2PresignParams): Promise<string> {
   const key = await signingKey(p.secretAccessKey, dateStamp);
   const signature = toHex(await hmac(key, stringToSign));
 
-  return `https://${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+  return `${origin}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }

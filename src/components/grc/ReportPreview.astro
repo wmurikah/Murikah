@@ -7,6 +7,7 @@
  */
 import type { ReportDocument, Tone, Cell } from '@grc/reports/reportTypes';
 import { renderRichHtml, renderInlinesHtml, parseInlines } from '@grc/richtext';
+import GrcFindingCards from '@/components/grc/GrcFindingCards.astro';
 
 interface Props {
   doc: ReportDocument;
@@ -52,6 +53,11 @@ const cellClass = (c: Cell): string =>
         ) : (
           <h3 class="grc-report__subsection">{block.text}</h3>
         );
+      }
+      // One observation, drawn by the very component the work paper's own screen
+      // uses (Build Prompt 67), so the pack matches the screen it came from.
+      if (block.kind === 'finding') {
+        return <GrcFindingCards finding={block.source} flat />;
       }
       if (block.kind === 'narrative') {
         return (

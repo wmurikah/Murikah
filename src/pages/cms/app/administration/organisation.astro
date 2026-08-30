@@ -1,0 +1,796 @@
+---
+/**
+ * Administration → Organisation: one workspace over five master-data tables.
+ *
+ * One page with tabs rather than five pages, because countries, affiliates,
+ * business units, departments and teams are one subject that an administrator
+ * moves between while doing a single job. Five destinations in the rail would
+ * have made the rail longer and the job slower.
+ *
+ * The tabs are links carrying `?tab=`, so a tab is bookmarkable, opens in a new
+ * browser tab, and survives a reload. There is no React island here and no
+ * client router: the tab state is the URL, the rows are rendered on the server,
+ * and the only JavaScript is the drawer form, which is a fetch and a reload.
+ *
+ * Authorisation is checked here as well as on every endpoint. Not because the
+ * page check protects anything, it does not: the endpoints are what a caller
+ * reaches with curl and they refuse for themselves. It is here so a person
+ * without the permission is told so, rather than being shown an empty workspace
+ * that looks broken.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsOrganisationFormScript from '@/components/cms/CmsOrganisationFormScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageOrganisation, canViewOrganisation } from '@/lib/cms/permissions';
+import { TEAM_TYPES } from '@/lib/cms/admin/organisationInput';
+import {
+  ORGANISATION_PATH,
+  ORGANISATION_TABS,
+  matchesSearch,
+  matchesStatus,
+  resolveStatus,
+  resolveTab,
+  tabHref,
+} from '@/lib/cms/admin/workspace';
+import {
+  listAffiliates,
+  listBusinessUnits,
+  listCountries,
+  listDepartments,
+  listSelectableUsers,
+  listTeams,
+  type AffiliateRow,
+  type BusinessUnitRow,
+  type CountryRow,
+  type DepartmentRow,
+  type SelectableUser,
+  type TeamRow,
+} from '@/lib/cms/repos/organisationAdmin';
+
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time, the guard runs once during the build instead of
+// per request, and the rows a visitor sees are whoever's the build happened to
+// read.
+export const prerender = false;
+
+const principal = Astro.locals.cms;
+const permissions = principal?.user.permissions ?? [];
+const mayView = canViewOrganisation(permissions);
+const mayManage = canManageOrganisation(permissions);
+
+const tab = resolveTab(Astro.url.searchParams.get('tab'));
+const search = Astro.url.searchParams.get('q') ?? '';
+const status = resolveStatus(Astro.url.searchParams.get('status'));
+
+let countries: CountryRow[] = [];
+let affiliates: AffiliateRow[] = [];
+let businessUnits: BusinessUnitRow[] = [];
+let departments: DepartmentRow[] = [];
+let teams: TeamRow[] = [];
+let users: SelectableUser[] = [];
+let loadFailed = false;
+
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    // The affiliate and country lists are loaded whatever the tab is, because
+    // the team and affiliate drawers need them as options. Five small reads of
+    // master data, not a page of transactions.
+    [countries, affiliates, businessUnits, departments, teams, users] = await Promise.all([
+      listCountries(db),
+      listAffiliates(db),
+      listBusinessUnits(db),
+      listDepartments(db),
+      listTeams(db),
+      listSelectableUsers(db),
+    ]);
+  } catch (error) {
+    console.error('[cms.organisation] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const visibleCountries = countries.filter(
+  (row) =>
+    matchesStatus(row.active, status) &&
+    matchesSearch(search, row.countryName, row.iso2, row.currencyCode, row.timezone),
+);
+const visibleAffiliates = affiliates.filter(
+  (row) =>
+    matchesStatus(row.active, status) &&
+    matchesSearch(search, row.affiliateName, row.affiliateCode, row.countryName),
+);
+const visibleBusinessUnits = businessUnits.filter(
+  (row) =>
+    matchesStatus(row.active, status) &&
+    matchesSearch(search, row.businessUnitName, row.businessUnitCode, row.description),
+);
+const visibleDepartments = departments.filter(
+  (row) =>
+    matchesStatus(row.active, status) && matchesSearch(search, row.departmentName, row.description),
+);
+const visibleTeams = teams.filter(
+  (row) =>
+    matchesStatus(row.active, status) &&
+    matchesSearch(search, row.teamName, row.teamType, row.affiliateName, row.businessUnitName),
+);
+
+const counts: Record<string, number> = {
+  countries: countries.length,
+  affiliates: affiliates.length,
+  'business-units': businessUnits.length,
+  departments: departments.length,
+  teams: teams.length,
+};
+
+const tabs = ORGANISATION_TABS.map((entry) => ({
+  label: entry.label,
+  href: tabHref(entry.key),
+  count: counts[entry.key],
+}));
+
+/** Options for a select, with the empty choice a nullable column needs. */
+const activeCountryOptions = [
+  ...countries
+    .filter((row) => row.active)
+    .map((row) => ({ value: row.countryId, label: `${row.countryName} (${row.iso2})` })),
+];
+const affiliateOptions = [
+  { value: '', label: 'Group-wide, no affiliate' },
+  ...affiliates
+    .filter((row) => row.active)
+    .map((row) => ({
+      value: row.affiliateId,
+      // The code disambiguates: affiliate_name is not unique in this schema.
+      label: `${row.affiliateName} (${row.affiliateCode})`,
+    })),
+];
+const businessUnitOptions = [
+  { value: '', label: 'No business unit' },
+  ...businessUnits
+    .filter((row) => row.active)
+    .map((row) => ({ value: row.businessUnitId, label: row.businessUnitName })),
+];
+const managerOptions = [
+  { value: '', label: 'No manager' },
+  ...users.map((row) => ({ value: row.userId, label: row.displayName })),
+];
+const teamTypeOptions = TEAM_TYPES.map((value) => ({
+  value,
+  // CUSTOMER_SERVICE is a database value, not a label a person should read.
+  label: value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' '),
+}));
+
+const statusOptions = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'active', label: 'Active only' },
+  { value: 'inactive', label: 'Inactive only' },
+];
+
+/** The reference counts a deactivation confirmation quotes. */
+function references(pairs: [number, string][]): string {
+  const parts = pairs
+    .filter(([count]) => count > 0)
+    .map(([count, noun]) => `${count} ${noun}${count === 1 ? '' : 's'}`);
+  return parts.join(' and ');
+}
+---
+
+<CmsLayout title="Organisation">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to the organisation settings"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The organisation data could not be loaded"
+        description="Please try again. Contact your administrator if the problem continues."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Organisation"
+          definition="These structures drive data visibility, assignments, approvals and reporting. A change here reaches every one of those at once."
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Organisation' },
+          ]}
+        >
+          {mayManage && (
+            <CmsButton
+              slot="actions"
+              variant="primary"
+              icon="plus"
+              id="cms-org-create"
+              data-cms-create={tab.key}
+            >
+              New {tab.singular}
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <CmsTabs tabs={tabs} current={tabHref(tab.key)} label="Organisation sections" />
+
+        {/*
+          Search and the status filter are a GET form, so a filtered view is a
+          URL. No JavaScript, and the back button does what it should.
+        */}
+        <form method="get" action={ORGANISATION_PATH} class="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="tab" value={tab.key} />
+          <CmsInput
+            id="cms-org-search"
+            name="q"
+            label={`Search ${tab.label.toLowerCase()}`}
+            type="search"
+            value={search}
+            placeholder="Name, code or country"
+            class="min-w-56 flex-1"
+          />
+          <CmsSelect
+            id="cms-org-status"
+            name="status"
+            label="Status"
+            options={statusOptions}
+            value={status}
+            class="w-44"
+          />
+          <CmsButton type="submit" variant="secondary">
+            Apply
+          </CmsButton>
+          {(search !== '' || status !== 'all') && (
+            <CmsButton variant="ghost" href={tabHref(tab.key)}>
+              Clear
+            </CmsButton>
+          )}
+        </form>
+
+        {tab.key === 'countries' && (
+          <CmsDataTable
+            caption="Countries"
+            columns={[
+              { key: 'country', label: 'Country' },
+              { key: 'iso2', label: 'Code' },
+              { key: 'timezone', label: 'Time zone', secondary: true },
+              { key: 'currency', label: 'Currency', secondary: true },
+              { key: 'affiliates', label: 'Affiliates', numeric: true },
+              { key: 'status', label: 'Status' },
+              { key: 'actions', label: 'Actions' },
+            ]}
+            empty={visibleCountries.length === 0}
+          >
+            {visibleCountries.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.countryName}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.iso2}</td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{row.timezone}</td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{row.currencyCode}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.affiliateCount}
+                </td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.active ? 'success' : 'neutral'}
+                    label={row.active ? 'Active' : 'Inactive'}
+                  />
+                </td>
+                <td class="px-4 py-2.5">
+                  {mayManage ? (
+                    <button
+                      type="button"
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                      data-cms-edit="countries"
+                      data-id={row.countryId}
+                      data-values={JSON.stringify({
+                        iso2: row.iso2,
+                        countryName: row.countryName,
+                        timezone: row.timezone,
+                        currencyCode: row.currencyCode,
+                        active: row.active,
+                      })}
+                      data-consequence={
+                        row.affiliateCount > 0
+                          ? `${references([[row.affiliateCount, 'affiliate']])} reference this country.`
+                          : ''
+                      }
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <span class="text-cms-caption text-cms-muted">View only</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="search"
+                title="No countries match"
+                description="Change the search or the status filter, or add a country."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab.key === 'affiliates' && (
+          <CmsDataTable
+            caption="Affiliates"
+            columns={[
+              { key: 'code', label: 'Code' },
+              { key: 'name', label: 'Affiliate' },
+              { key: 'country', label: 'Country' },
+              { key: 'teams', label: 'Teams', numeric: true },
+              { key: 'status', label: 'Status' },
+              { key: 'actions', label: 'Actions' },
+            ]}
+            empty={visibleAffiliates.length === 0}
+          >
+            {visibleAffiliates.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.affiliateCode}</td>
+                <td class="px-4 py-2.5 text-cms-ink">{row.affiliateName}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.countryName}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.teamCount}</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.active ? 'success' : 'neutral'}
+                    label={row.active ? 'Active' : 'Inactive'}
+                  />
+                </td>
+                <td class="px-4 py-2.5">
+                  {mayManage ? (
+                    <button
+                      type="button"
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                      data-cms-edit="affiliates"
+                      data-id={row.affiliateId}
+                      data-values={JSON.stringify({
+                        affiliateCode: row.affiliateCode,
+                        affiliateName: row.affiliateName,
+                        countryId: row.countryId,
+                        active: row.active,
+                      })}
+                      data-consequence={
+                        row.teamCount + row.assignmentCount > 0
+                          ? `${references([
+                              [row.teamCount, 'team'],
+                              [row.assignmentCount, 'user assignment'],
+                            ])} reference this affiliate.`
+                          : ''
+                      }
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <span class="text-cms-caption text-cms-muted">View only</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="search"
+                title="No affiliates match"
+                description="Change the search or the status filter, or add an affiliate."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab.key === 'business-units' && (
+          <CmsDataTable
+            caption="Business units"
+            columns={[
+              { key: 'code', label: 'Code' },
+              { key: 'name', label: 'Business unit' },
+              { key: 'description', label: 'Description', secondary: true },
+              { key: 'teams', label: 'Teams', numeric: true },
+              { key: 'status', label: 'Status' },
+              { key: 'actions', label: 'Actions' },
+            ]}
+            empty={visibleBusinessUnits.length === 0}
+          >
+            {visibleBusinessUnits.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.businessUnitCode}</td>
+                <td class="px-4 py-2.5 text-cms-ink">{row.businessUnitName}</td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                  {row.description ?? '—'}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.teamCount}</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.active ? 'success' : 'neutral'}
+                    label={row.active ? 'Active' : 'Inactive'}
+                  />
+                </td>
+                <td class="px-4 py-2.5">
+                  {mayManage ? (
+                    <button
+                      type="button"
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                      data-cms-edit="business-units"
+                      data-id={row.businessUnitId}
+                      data-values={JSON.stringify({
+                        businessUnitCode: row.businessUnitCode,
+                        businessUnitName: row.businessUnitName,
+                        description: row.description ?? '',
+                        active: row.active,
+                      })}
+                      data-consequence={
+                        row.teamCount + row.assignmentCount > 0
+                          ? `${references([
+                              [row.teamCount, 'team'],
+                              [row.assignmentCount, 'user assignment'],
+                            ])} reference this business unit.`
+                          : ''
+                      }
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <span class="text-cms-caption text-cms-muted">View only</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="search"
+                title="No business units match"
+                description="Business units are Group-level definitions, shared across every affiliate."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab.key === 'departments' && (
+          <CmsDataTable
+            caption="Departments"
+            columns={[
+              { key: 'name', label: 'Department' },
+              { key: 'description', label: 'Description', secondary: true },
+              { key: 'jobTitles', label: 'Job titles', numeric: true },
+              { key: 'status', label: 'Status' },
+              { key: 'actions', label: 'Actions' },
+            ]}
+            empty={visibleDepartments.length === 0}
+          >
+            {visibleDepartments.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.departmentName}</td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                  {row.description ?? '—'}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.jobTitleCount}
+                </td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.active ? 'success' : 'neutral'}
+                    label={row.active ? 'Active' : 'Inactive'}
+                  />
+                </td>
+                <td class="px-4 py-2.5">
+                  {mayManage ? (
+                    <button
+                      type="button"
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                      data-cms-edit="departments"
+                      data-id={row.departmentId}
+                      data-values={JSON.stringify({
+                        departmentName: row.departmentName,
+                        description: row.description ?? '',
+                        active: row.active,
+                      })}
+                      data-consequence={
+                        row.jobTitleCount + row.assignmentCount > 0
+                          ? `${references([
+                              [row.jobTitleCount, 'job title'],
+                              [row.assignmentCount, 'user assignment'],
+                            ])} reference this department.`
+                          : ''
+                      }
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <span class="text-cms-caption text-cms-muted">View only</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="search"
+                title="No departments match"
+                description="Departments are Group-level definitions, shared across every affiliate."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {tab.key === 'teams' && (
+          <CmsDataTable
+            caption="Teams"
+            columns={[
+              { key: 'name', label: 'Team' },
+              { key: 'type', label: 'Type' },
+              { key: 'affiliate', label: 'Affiliate' },
+              { key: 'unit', label: 'Business unit', secondary: true },
+              { key: 'manager', label: 'Manager', secondary: true },
+              { key: 'members', label: 'Members', numeric: true },
+              { key: 'status', label: 'Status' },
+              { key: 'actions', label: 'Actions' },
+            ]}
+            empty={visibleTeams.length === 0}
+          >
+            {visibleTeams.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">
+                  <a
+                    href={`${ORGANISATION_PATH}/teams/${row.teamId}`}
+                    class="rounded-cms text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {row.teamName}
+                  </a>
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.teamType.charAt(0) + row.teamType.slice(1).toLowerCase().replace(/_/g, ' ')}
+                </td>
+                {/*
+                  "Group-wide" rather than a dash. A team with no affiliate is a
+                  Group team, not a team missing its affiliate, and the words
+                  should say which.
+                */}
+                <td class="px-4 py-2.5 text-cms-muted">{row.affiliateName ?? 'Group-wide'}</td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                  {row.businessUnitName ?? 'Not specific'}
+                </td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                  {row.managerName ?? 'Unassigned'}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.currentMemberCount}
+                </td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge
+                    tone={row.active ? 'success' : 'neutral'}
+                    label={row.active ? 'Active' : 'Inactive'}
+                  />
+                </td>
+                <td class="px-4 py-2.5">
+                  {mayManage ? (
+                    <button
+                      type="button"
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                      data-cms-edit="teams"
+                      data-id={row.teamId}
+                      data-values={JSON.stringify({
+                        teamName: row.teamName,
+                        teamType: row.teamType,
+                        affiliateId: row.affiliateId ?? '',
+                        businessUnitId: row.businessUnitId ?? '',
+                        managerUserId: row.managerUserId ?? '',
+                        active: row.active,
+                      })}
+                      data-consequence={
+                        row.currentMemberCount > 0
+                          ? `${references([[row.currentMemberCount, 'current member']])} belong to this team.`
+                          : ''
+                      }
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <a
+                      href={`${ORGANISATION_PATH}/teams/${row.teamId}`}
+                      class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      View
+                    </a>
+                  )}
+                </td>
+              </tr>
+            ))}
+            <Fragment slot="empty">
+              <CmsEmptyState
+                icon="search"
+                title="No teams match"
+                description="A team may be Group-wide, affiliate-specific or business-unit-specific."
+              />
+            </Fragment>
+          </CmsDataTable>
+        )}
+
+        {mayManage && (
+          <Fragment>
+            <CmsDrawer id="cms-org-drawer" tone="form" title="Organisation record">
+              <form id="cms-org-form" novalidate class="flex flex-col gap-4">
+                <p
+                  id="cms-org-error"
+                  role="alert"
+                  hidden
+                  class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+                />
+
+                <div data-fields="countries" hidden class="flex flex-col gap-4">
+                  <CmsInput
+                    id="f-iso2"
+                    name="iso2"
+                    label="Country code"
+                    hint="Two letters, for example KE."
+                    required
+                  />
+                  <CmsInput id="f-countryName" name="countryName" label="Country name" required />
+                  <CmsInput
+                    id="f-timezone"
+                    name="timezone"
+                    label="Time zone"
+                    hint="An IANA zone, for example Africa/Nairobi."
+                    required
+                  />
+                  <CmsInput
+                    id="f-currencyCode"
+                    name="currencyCode"
+                    label="Currency code"
+                    hint="Three letters, for example KES."
+                    required
+                  />
+                </div>
+
+                <div data-fields="affiliates" hidden class="flex flex-col gap-4">
+                  <CmsInput
+                    id="f-affiliateCode"
+                    name="affiliateCode"
+                    label="Affiliate code"
+                    hint="Unique across the group, for example HKE."
+                    required
+                  />
+                  <CmsInput
+                    id="f-affiliateName"
+                    name="affiliateName"
+                    label="Affiliate name"
+                    hint="Two affiliates may share a name; the code is what must be unique."
+                    required
+                  />
+                  <CmsSelect
+                    id="f-countryId"
+                    name="countryId"
+                    label="Country"
+                    options={activeCountryOptions}
+                    hint="Only active countries can be chosen."
+                    required
+                  />
+                </div>
+
+                <div data-fields="business-units" hidden class="flex flex-col gap-4">
+                  <CmsInput
+                    id="f-businessUnitCode"
+                    name="businessUnitCode"
+                    label="Business unit code"
+                    required
+                  />
+                  <CmsInput
+                    id="f-businessUnitName"
+                    name="businessUnitName"
+                    label="Business unit name"
+                    required
+                  />
+                  <CmsInput
+                    id="f-buDescription"
+                    name="description"
+                    label="Description"
+                    hint="Optional."
+                  />
+                </div>
+
+                <div data-fields="departments" hidden class="flex flex-col gap-4">
+                  <CmsInput
+                    id="f-departmentName"
+                    name="departmentName"
+                    label="Department name"
+                    required
+                  />
+                  <CmsInput
+                    id="f-depDescription"
+                    name="description"
+                    label="Description"
+                    hint="Optional."
+                  />
+                </div>
+
+                <div data-fields="teams" hidden class="flex flex-col gap-4">
+                  <CmsInput id="f-teamName" name="teamName" label="Team name" required />
+                  <CmsSelect
+                    id="f-teamType"
+                    name="teamType"
+                    label="Team type"
+                    options={teamTypeOptions}
+                    required
+                  />
+                  <CmsSelect
+                    id="f-affiliateId"
+                    name="affiliateId"
+                    label="Affiliate"
+                    options={affiliateOptions}
+                    hint="Leave as Group-wide for a team that spans the group."
+                  />
+                  <CmsSelect
+                    id="f-businessUnitId"
+                    name="businessUnitId"
+                    label="Business unit"
+                    options={businessUnitOptions}
+                    hint="Optional. A team need not sit in one."
+                  />
+                  <CmsSelect
+                    id="f-managerUserId"
+                    name="managerUserId"
+                    label="Manager"
+                    options={managerOptions}
+                    hint="Optional. A team with no manager is valid."
+                  />
+                </div>
+
+                <CmsCheckbox
+                  id="f-active"
+                  name="active"
+                  label="Active"
+                  checked
+                  hint="Deactivating prevents this record from being chosen for new records. Existing records are unchanged."
+                />
+                <p id="cms-org-consequence" hidden class="text-cms-body-sm text-cms-caution" />
+              </form>
+
+              <Fragment slot="actions">
+                <CmsButton variant="ghost" data-cms-modal-close>
+                  Cancel
+                </CmsButton>
+                {/*
+                A plain button rather than CmsButton, because it needs the
+                `form` attribute. The drawer's actions slot renders outside the
+                <form>, and `form="cms-org-form"` is what associates a submit
+                control with a form it is not nested in. CmsButton does not take
+                that attribute, and widening a shared primitive for one caller
+                is how a primitive stops being one.
+              */}
+                <button
+                  type="submit"
+                  id="cms-org-save"
+                  form="cms-org-form"
+                  class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </Fragment>
+            </CmsDrawer>
+            <CmsOrganisationFormScript />
+          </Fragment>
+        )}
+
+        <p class="flex items-start gap-2 text-cms-caption text-cms-muted">
+          <CmsIcon name="statusInfo" size={15} class="mt-0.5 shrink-0" />
+          <span>
+            Nothing here is ever deleted. Deactivating a record keeps it and every historical
+            reference to it, and only stops it being chosen for new records.
+          </span>
+        </p>
+      </Fragment>
+    )
+  }
+</CmsLayout>

@@ -1,0 +1,62 @@
+-- Migration 003: the Group affiliate sees every affiliate (Build Prompt 48)
+--
+-- Adds is_group to affiliates. An affiliate marked as a group is the
+-- organisation's Group or HQ unit: a user whose own users.affiliate_code points
+-- at it is exempt from affiliate confinement (Build Prompt 45) and sees every
+-- affiliate's records, within the module, action and organisation grants they
+-- already hold.
+--
+-- WHY THE FLAG IS ON `affiliates`, and nowhere else. The exemption is a property
+-- of the business unit, not of a role and not of a user: "the Group unit sees
+-- everything" is true of whoever is posted to it, and stays true as people move
+-- in and out of it. Putting it on `roles` would confine it to a role rather than
+-- a unit; putting it on `users` would mean re-deciding it for every new joiner
+-- and letting two people on the same unit disagree. It also keeps the flag out
+-- of the permission model entirely, so the access-control matrix stays a matrix.
+--
+-- The alternative it replaces is a hard-coded affiliate code in the application.
+-- That would work for one customer and break for the next, and it would not be
+-- visible to a reviewer reading the screens. This is a row an administrator can
+-- see and change.
+--
+-- `affiliates` is already organisation-scoped, so the flag is tenant data with no
+-- further work: one customer marking their Group unit says nothing about
+-- another's.
+--
+-- This is a plain ADD COLUMN: no key change, so no table rebuild and no data
+-- moves. Existing rows default to 0, which is the current behaviour, so applying
+-- it changes nothing until an administrator ticks the box on
+-- /settings/affiliates.
+--
+-- HOW TO RUN IT. See grc/docs/deploy.md, "Migration 003":
+--
+--   turso db shell hassaudit < grc/db/migrations/003-affiliate-is-group.sql
+--
+-- Take a backup first (`turso db shell hassaudit .dump > backup.sql`). This is
+-- the migration the operator's own `grc-group-affiliate.sql` performed; if that
+-- has already been applied to the live database, this run fails harmlessly with
+-- "duplicate column name" and nothing is changed. Committing it here is what
+-- makes the column reproducible in a fresh database rather than a change only
+-- one database happens to carry.
+
+ALTER TABLE affiliates
+  ADD COLUMN is_group INTEGER NOT NULL DEFAULT 0;
+
+-- Verification, to run afterwards.
+--
+--   -- The column is there, defaulted off, so nothing has changed yet.
+--   SELECT sql FROM sqlite_master WHERE name = 'affiliates';
+--
+--   -- Which affiliates confer all-affiliate access, per organisation. Expect at
+--   -- most one per organisation; more than one is legal but is worth a look,
+--   -- since each one is a unit whose users see every other unit's records.
+--   SELECT organization_id, affiliate_code, affiliate_name, is_group
+--     FROM affiliates WHERE deleted_at IS NULL AND is_group = 1
+--    ORDER BY organization_id;
+--
+--   -- Who the exemption actually reaches: the users posted to a group unit.
+--   SELECT u.organization_id, u.email, u.role_code, u.affiliate_code
+--     FROM users u
+--     JOIN affiliates a ON a.affiliate_code = u.affiliate_code
+--                      AND a.organization_id = u.organization_id
+--    WHERE u.deleted_at IS NULL AND a.is_group = 1;

@@ -1,0 +1,210 @@
+---
+/**
+ * The global search behaviour: the shortcut, the debounce, the keyboard
+ * navigation and the rendering of the server's answer.
+ *
+ * IT HOLDS NO DATA OF ITS OWN. Every render comes from the endpoint's most
+ * recent reply and nothing is kept between queries. A cache here would
+ * outlive the scope change or membership revocation that should have emptied
+ * it, and a stale hit is a record somebody is no longer allowed to see.
+ *
+ * IT ALSO MAKES NO CLAIM THE SERVER DID NOT. "No results" is rendered for an
+ * empty answer whether the reason was that nothing matched or that everything
+ * matching was outside the caller's scope, because the endpoint deliberately
+ * cannot tell the two apart and neither should this.
+ *
+ * Rendering is done with `textContent` and `createElement` throughout, never
+ * `innerHTML` with interpolated values: a customer name is user-entered text
+ * and a search result is the last place it should become markup.
+ */
+---
+
+<script>
+  interface Hit {
+    group: string;
+    id: string;
+    title: string;
+    context: string;
+    href: string;
+  }
+  interface Group {
+    group: string;
+    label: string;
+    hits: Hit[];
+    more: boolean;
+  }
+  interface SearchResponse {
+    query: string;
+    groups: Group[];
+    total: number;
+    notPermitted: string[];
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-cms-search]');
+  const input = document.getElementById('cms-search') as HTMLInputElement | null;
+  const panel = document.getElementById('cms-search-results');
+  const status = document.querySelector<HTMLElement>('[data-cms-search-status]');
+
+  if (root && input && panel && status) {
+    const MIN_LENGTH = 2;
+    const DEBOUNCE_MS = 200;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let sequence = 0;
+    let options: HTMLAnchorElement[] = [];
+    let active = -1;
+
+    const close = (): void => {
+      panel.hidden = true;
+      input.setAttribute('aria-expanded', 'false');
+      options = [];
+      active = -1;
+    };
+
+    const setActive = (next: number): void => {
+      options.forEach((option) => option.classList.remove('bg-cms-royal-tint'));
+      if (next < 0 || next >= options.length) {
+        active = -1;
+        input.removeAttribute('aria-activedescendant');
+        return;
+      }
+      active = next;
+      const option = options[active] as HTMLAnchorElement;
+      option.classList.add('bg-cms-royal-tint');
+      input.setAttribute('aria-activedescendant', option.id);
+      option.scrollIntoView({ block: 'nearest' });
+    };
+
+    const render = (data: SearchResponse): void => {
+      panel.textContent = '';
+      options = [];
+      active = -1;
+
+      if (data.total === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'px-4 py-3 text-cms-body-sm text-cms-muted';
+        empty.textContent = `Nothing found for "${data.query}".`;
+        panel.appendChild(empty);
+        if (data.notPermitted.length > 0) {
+          const note = document.createElement('p');
+          note.className = 'border-t border-cms-line px-4 py-2 text-cms-caption text-cms-muted';
+          note.textContent = 'Some record types were not searched.';
+          panel.appendChild(note);
+        }
+        status.textContent = `No results for ${data.query}.`;
+        panel.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        return;
+      }
+
+      let index = 0;
+      for (const group of data.groups) {
+        const heading = document.createElement('p');
+        heading.className =
+          'sticky top-0 bg-cms-canvas px-4 py-1.5 text-cms-caption font-semibold tracking-wide text-cms-muted uppercase';
+        heading.textContent = group.label;
+        panel.appendChild(heading);
+
+        for (const hit of group.hits) {
+          const link = document.createElement('a');
+          link.id = `cms-search-option-${index}`;
+          link.setAttribute('role', 'option');
+          link.href = hit.href;
+          link.className =
+            'block px-4 py-2.5 outline-none hover:bg-cms-royal-tint focus-visible:bg-cms-royal-tint';
+
+          const title = document.createElement('span');
+          title.className = 'block truncate text-cms-body-sm font-medium text-cms-ink';
+          title.textContent = hit.title;
+
+          const context = document.createElement('span');
+          context.className = 'block truncate text-cms-caption text-cms-muted';
+          context.textContent = hit.context;
+
+          link.appendChild(title);
+          link.appendChild(context);
+          panel.appendChild(link);
+          options.push(link);
+          index += 1;
+        }
+
+        if (group.more) {
+          const more = document.createElement('p');
+          more.className = 'px-4 pb-2 text-cms-caption text-cms-muted';
+          more.textContent = 'More matches exist. Narrow the search to see them.';
+          panel.appendChild(more);
+        }
+      }
+
+      status.textContent = `${data.total} results for ${data.query}.`;
+      panel.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    };
+
+    const run = (query: string): void => {
+      const mine = ++sequence;
+      void fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+        headers: { accept: 'application/json' },
+      })
+        .then(async (response) => {
+          // A reply that arrived after a newer one was sent is discarded, so
+          // a slow query for "AB" cannot overwrite the results for "ABC".
+          if (mine !== sequence) return;
+          if (!response.ok) {
+            close();
+            return;
+          }
+          render((await response.json()) as SearchResponse);
+        })
+        .catch(() => {
+          if (mine === sequence) close();
+        });
+    };
+
+    input.addEventListener('input', () => {
+      const query = input.value.trim();
+      if (timer !== undefined) clearTimeout(timer);
+      if (query.length < MIN_LENGTH) {
+        sequence += 1;
+        close();
+        return;
+      }
+      timer = setTimeout(() => run(query), DEBOUNCE_MS);
+    });
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        close();
+        input.blur();
+        return;
+      }
+      if (panel.hidden || options.length === 0) return;
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActive(active + 1 >= options.length ? 0 : active + 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActive(active - 1 < 0 ? options.length - 1 : active - 1);
+      } else if (event.key === 'Enter' && active >= 0) {
+        event.preventDefault();
+        (options[active] as HTMLAnchorElement).click();
+      }
+    });
+
+    // The shortcut. `/` is the convention and needs no modifier, but it must
+    // never steal a keystroke from somebody typing into a field.
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName ?? '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (target?.isContentEditable === true) return;
+      event.preventDefault();
+      input.focus();
+      input.select();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!root.contains(event.target as Node)) close();
+    });
+  }
+</script>

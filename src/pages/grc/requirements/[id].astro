@@ -1,0 +1,433 @@
+---
+export const prerender = false;
+
+/**
+ * One requirement: what was asked for, who owes it, every round it has been
+ * through, and whichever of the two forms belongs to the reader (Build Prompt
+ * 58).
+ *
+ * THE TRAIL IS THE POINT. Each round is shown as a pair, oldest first: what the
+ * owner provided (note, file, when, by whom) beside what audit said to it
+ * (decision, comment, any further request, reviewer, when). Read top to bottom
+ * it is the conversation that actually happened, which is what an audit file is
+ * for; read at the bottom it is the current state, which is what somebody
+ * opening the screen today wants.
+ *
+ * WHO SEES WHAT. An owner sees the submit form while it is their move. An
+ * auditor holding REQUIREMENTS.manage sees the review form while a round is
+ * waiting on a decision. A requirement belonging to neither is not shown at all:
+ * an auditee opening somebody else's requirement id is told it was not found,
+ * because for them it was not.
+ */
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { guardPageLoad } from '@grc/pageGuard';
+import {
+  getRequirement,
+  isRequirementOwner,
+  listRounds,
+  type RequirementRow,
+  type RequirementRound,
+} from '@grc/repos/requirementsModule';
+import {
+  REQUIREMENT_STATUS,
+  REVIEW_STATUS,
+  awaitsAudit,
+  awaitsOwner,
+  openInfoRequest,
+  requirementStatusLabel,
+} from '@grc/workflow/requirementFlow';
+import {
+  isRequirementRecipient,
+  listRecipients,
+  RECIPIENT_ROLE,
+  type Recipient,
+} from '@grc/repos/requirementRecipients';
+import { listWorkPaperOptions, type WorkPaperOption } from '@grc/repos/actionPlans';
+import { storageConfiguredFor } from '@grc/storage';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+
+const id = Astro.params.id ?? '';
+const manages = grc.isPlatformOwner || grc.perms.includes('REQUIREMENTS.manage');
+
+let requirement: RequirementRow | null = null;
+let rounds: RequirementRound[] = [];
+let workPapers: WorkPaperOption[] = [];
+let isOwner = false;
+// Copied in: they read the request and are told about it, and upload nothing
+// (Build Prompt 69).
+let isCopied = false;
+let recipients: Recipient[] = [];
+let loadError = false;
+loadError = !(await guardPageLoad('requirements.detail', async () => {
+  const db = await getDb(getGrcEnv());
+  requirement = await getRequirement(db, grc.organizationId, id);
+  if (requirement) {
+    [rounds, isOwner, isCopied, recipients] = await Promise.all([
+      listRounds(db, grc.organizationId, id),
+      isRequirementOwner(db, id, grc.userId),
+      isRequirementRecipient(db, id, grc.userId),
+      listRecipients(db, grc.organizationId, id),
+    ]);
+    // Only audit is offered the link, so only audit loads the observations.
+    if (manages) workPapers = await listWorkPaperOptions(db, grc.organizationId);
+  }
+}));
+
+// Everything below reads the loaded row through a narrowed local: Astro's
+// checker cannot see that the assignment inside the loader ran.
+const req = requirement as RequirementRow | null;
+const visible = req !== null && (manages || isOwner || isCopied);
+if (!loadError && !visible) Astro.response.status = 404;
+
+const latest = rounds.length > 0 ? rounds[rounds.length - 1] : null;
+const openQuestion = openInfoRequest(
+  latest
+    ? { reviewStatus: latest.reviewStatus, additionalInfoRequest: latest.additionalInfoRequest }
+    : null,
+);
+const status = req?.status ?? REQUIREMENT_STATUS.OUTSTANDING;
+const ownerMayProvide = isOwner && req !== null && !req.closedAt && awaitsOwner(status);
+const auditMayReview = manages && awaitsAudit(status) && latest !== null;
+const storageReady = visible ? await storageConfiguredFor(grc.organizationId) : false;
+
+const statusClass = (s: string): string => {
+  if (s === REQUIREMENT_STATUS.CLOSED) return 'grc-badge grc-badge--done';
+  if (s === REQUIREMENT_STATUS.AWAITING_REVIEW) return 'grc-badge grc-badge--review';
+  if (s === REQUIREMENT_STATUS.MORE_INFO) return 'grc-badge grc-badge--overdue';
+  return 'grc-badge grc-badge--pending';
+};
+const dateLabel = (d: string | null): string => (d ? d.slice(0, 16).replace('T', ' ') : '-');
+const dayLabel = (d: string | null): string => (d ? d.slice(0, 10) : '-');
+const decisionLabel = (review: string | null): string => {
+  if (review === REVIEW_STATUS.ACCEPTED) return 'Accepted';
+  if (review === REVIEW_STATUS.MORE_INFO) return 'More information requested';
+  return 'Awaiting review';
+};
+const p = Astro.url.searchParams;
+const done = p.get('done');
+const error = p.get('error');
+---
+
+<GrcLayout title="Requirement">
+  <div class="grc-page-head">
+    <div>
+      <h1>Requirement</h1>
+      <p class="grc-lead">
+        {
+          req && visible
+            ? req.description.slice(0, 120)
+            : 'Information requested by Internal Audit.'
+        }
+      </p>
+    </div>
+    <a href="/requirements" class="grc-btn grc-btn--secondary">All requirements</a>
+  </div>
+
+  {
+    done && (
+      <p class="grc-notice" role="status" style="margin-bottom:1rem">
+        {decodeURIComponent(done)}
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+        {decodeURIComponent(error)}
+      </p>
+    )
+  }
+
+  {
+    loadError ? (
+      <GrcErrorCard subject="This requirement" />
+    ) : !visible || !req ? (
+      <p class="grc-empty">That requirement was not found in your organisation.</p>
+    ) : (
+      <>
+        <div class="grc-panel">
+          <p style="margin:0 0 1rem">
+            <span class={statusClass(req.status)}>{requirementStatusLabel(req.status)}</span>
+          </p>
+          <dl class="grc-detail">
+            <>
+              <dt>What is required</dt>
+              <dd>{req.description}</dd>
+            </>
+            {/* Only audit is shown the observation, and only when there is one
+                (Build Prompt 69). An owner is never told which work paper their
+                document supports: it is internal audit structure, it is not a
+                question they can answer, and showing it turns a request for a
+                document into a question about the audit file. */}
+            {manages && (
+              <>
+                <dt>Linked observation</dt>
+                <dd>
+                  {req.workPaperId ? (
+                    <a href={`/work-papers/${req.workPaperId}`}>
+                      {req.workPaperRef || req.workPaperId}
+                    </a>
+                  ) : (
+                    <span class="grc-tone--muted">
+                      Not linked yet. Link it once it is clear what this supports.
+                    </span>
+                  )}
+                </dd>
+              </>
+            )}
+            <>
+              <dt>Owners</dt>
+              <dd>{req.ownerNames.join(', ') || 'Unassigned'}</dd>
+            </>
+            {manages && recipients.some((r) => r.role === RECIPIENT_ROLE.CC) && (
+              <>
+                <dt>Copied</dt>
+                <dd>
+                  {recipients
+                    .filter((r) => r.role === RECIPIENT_ROLE.CC)
+                    .map((r) => r.name)
+                    .join(', ')}
+                </dd>
+              </>
+            )}
+            <>
+              <dt>Requested</dt>
+              <dd>{dayLabel(req.requestedDate)}</dd>
+            </>
+            <>
+              <dt>Due</dt>
+              <dd>{dayLabel(req.dueDate)}</dd>
+            </>
+            <>
+              <dt>Last reviewed</dt>
+              <dd>{dayLabel(req.lastReviewedDate)}</dd>
+            </>
+            {req.closedAt && (
+              <>
+                <dt>Closed</dt>
+                <dd>{dateLabel(req.closedAt)}</dd>
+              </>
+            )}
+          </dl>
+        </div>
+
+        <div class="grc-panel">
+          <h2>Rounds</h2>
+          {rounds.length === 0 ? (
+            <p class="grc-empty">
+              Nothing has been provided yet. The trail of what is sent and what audit says to it
+              appears here, round by round.
+            </p>
+          ) : (
+            <ol class="grc-plainlist" style="display:grid;gap:1rem;margin:0">
+              {rounds.map((r) => (
+                <li class="grc-panel" style="margin:0">
+                  <h3 style="margin:0 0 0.5rem">
+                    Round {r.roundNumber}
+                    <span class="grc-tone--muted"> {decisionLabel(r.reviewStatus)}</span>
+                  </h3>
+                  <dl class="grc-detail">
+                    <>
+                      <dt>Provided by</dt>
+                      <dd>
+                        {r.submittedByName || 'An owner'} on {dateLabel(r.submittedAt)}
+                      </dd>
+                    </>
+                    <>
+                      <dt>Note</dt>
+                      <dd>{r.note || '-'}</dd>
+                    </>
+                    <>
+                      <dt>Document</dt>
+                      <dd>
+                        {r.attachmentId ? (
+                          <a href={`/api/evidence/${r.attachmentId}/download`}>
+                            {r.fileName ?? 'Download'}
+                          </a>
+                        ) : (
+                          'No file on this round'
+                        )}
+                      </dd>
+                    </>
+                    {r.reviewStatus && r.reviewStatus !== REVIEW_STATUS.PENDING && (
+                      <>
+                        <dt>Audit decision</dt>
+                        <dd>
+                          {decisionLabel(r.reviewStatus)} by {r.reviewedByName ?? 'audit'} on{' '}
+                          {dateLabel(r.reviewedAt)}
+                        </dd>
+                      </>
+                    )}
+                    {r.reviewComment && (
+                      <>
+                        <dt>Review comment</dt>
+                        <dd>{r.reviewComment}</dd>
+                      </>
+                    )}
+                    {r.additionalInfoRequest && (
+                      <>
+                        <dt>Further information asked for</dt>
+                        <dd>{r.additionalInfoRequest}</dd>
+                      </>
+                    )}
+                  </dl>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+
+        {ownerMayProvide && (
+          <div class="grc-panel">
+            <h2>Provide what was asked for</h2>
+            {openQuestion && (
+              <p class="grc-notice" role="status">
+                Audit has asked for more: {openQuestion}
+              </p>
+            )}
+            {!storageReady && (
+              <p class="grc-error" role="alert">
+                Evidence storage is not configured for your organisation, so a file cannot be
+                attached. You can still record a note.
+              </p>
+            )}
+            <form
+              method="post"
+              action={`/api/requirements/${req.id}/submit`}
+              enctype="multipart/form-data"
+            >
+              <div class="grc-field">
+                <label for="note">What you are providing (required)</label>
+                <textarea
+                  id="note"
+                  name="note"
+                  class="grc-textarea"
+                  rows="4"
+                  maxlength="2000"
+                  required
+                  placeholder="The signed March reconciliation, with the review sheet attached."
+                />
+              </div>
+              <div class="grc-field">
+                <label for="file">Document</label>
+                <input
+                  type="file"
+                  id="file"
+                  name="file"
+                  class="grc-input"
+                  disabled={!storageReady}
+                />
+                <p class="grc-field__hint">
+                  Stored in your organisation's own evidence store, and readable afterwards by you
+                  and the audit team.
+                </p>
+              </div>
+              <div class="grc-actionbar">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Send to audit
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {auditMayReview && (
+          <div class="grc-panel">
+            <h2>Review round {latest?.roundNumber}</h2>
+            <form method="post" action={`/api/requirements/${req.id}/review`}>
+              <div class="grc-field">
+                <label for="review-comment">Review comment</label>
+                <textarea
+                  id="review-comment"
+                  name="review_comment"
+                  class="grc-textarea"
+                  rows="3"
+                  maxlength="2000"
+                  placeholder="Why this satisfies the request, or why it does not."
+                />
+              </div>
+              <div class="grc-field">
+                <label for="additional">Further information required</label>
+                <textarea
+                  id="additional"
+                  name="additional_info_request"
+                  class="grc-textarea"
+                  rows="3"
+                  maxlength="2000"
+                  placeholder="The reviewer's signature is missing; please send the signed copy."
+                />
+                <p class="grc-field__hint">
+                  Required when asking for more. This is the question the owners answer next round.
+                </p>
+              </div>
+              <div class="grc-actionbar">
+                <button
+                  type="submit"
+                  name="decision"
+                  value="accept"
+                  class="grc-btn grc-btn--primary"
+                >
+                  Accept and close
+                </button>
+                <button
+                  type="submit"
+                  name="decision"
+                  value="more_info"
+                  class="grc-btn grc-btn--secondary"
+                >
+                  Request more information
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Linking, which is a different decision from completeness and is
+            deliberately its own panel (Build Prompt 69). Information can be
+            everything that was asked for and still belong to no observation, and it
+            can be linked while audit is still waiting for more of it, so the
+            two are never one control. */}
+        {manages && (
+          <div class="grc-panel" id="link">
+            <h2>Link to a observation</h2>
+            <p class="grc-lead">
+              {req.workPaperId
+                ? 'Change which observation this information supports, or clear it to leave it unlinked.'
+                : 'Once it is clear what this information supports, link it. Leaving it unlinked is a legitimate resting state, not an omission.'}
+            </p>
+            <form method="post" action={`/api/requirements/${req.id}/link`}>
+              <div class="grc-field" style="max-width:32rem">
+                <label for="link-wp">Observation</label>
+                <select id="link-wp" name="work_paper_id" class="grc-select">
+                  <option value="">Not linked</option>
+                  {workPapers.map((w) => (
+                    <option value={w.id} selected={req.workPaperId === w.id}>
+                      {w.label}
+                    </option>
+                  ))}
+                </select>
+                <p class="grc-field__hint">
+                  The owner is not told and does not see this. Which work paper their document
+                  supports is audit's structure, not theirs.
+                </p>
+              </div>
+              <div class="grc-actionbar">
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Save the link
+                </button>
+              </div>
+            </form>
+            {req.linkedAt && req.workPaperId && (
+              <p class="grc-field__hint">Linked on {dayLabel(req.linkedAt)}.</p>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
+</GrcLayout>

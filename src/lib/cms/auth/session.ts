@@ -1,132 +1,98 @@
 /**
- * Hass CMS session cookie.
+ * Session tokens for the CMS.
  *
- * Like GRC, the CMS keeps sessions in the database (the `sessions` table), so a
- * session can be revoked server-side. The cookie carries only an opaque session
- * id, HMAC-signed with CMS_SESSION_SECRET so a forged or guessed id is rejected
- * before any database lookup. The cookie is HttpOnly, host-only (no Domain) and
- * Path=/ on cms.murikah.com, named `cms_session` separately from engr's and grc's
- * cookies, so the three products never share a session. Secure is gated on the
- * caller (off only for http development on cms.localhost).
+ * The raw token goes to the browser in an HttpOnly cookie and nowhere else. The
+ * database stores only HMAC-SHA-256(raw token, CMS_SESSION_SECRET) in
+ * `auth_sessions.refresh_token_hash`.
  *
- * A CMS session may be half-authorised: after the password step, when the role
- * requires MFA, the cookie is set with `mfa=pending` until the TOTP step
- * promotes it. The middleware treats a pending cookie as unauthenticated for
- * every route but the MFA step.
+ * The HMAC rather than a plain digest is the point. A plain SHA-256 of a
+ * 256-bit random token is not realistically reversible either, but the HMAC
+ * moves the security from "the token had enough entropy" to "the attacker also
+ * needs a secret the database does not contain". Someone holding a stolen
+ * database dump can therefore neither read live session tokens nor confirm a
+ * guess offline, because every check needs the key that lives only in the
+ * worker's environment.
+ *
+ * `crypto.subtle` and `crypto.getRandomValues` are native in both the Workers
+ * runtime and Node 22, so this module works unchanged in the API and in tests.
  */
 
-export const CMS_SESSION_COOKIE = 'cms_session';
-export const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60; // 12 hours
+/** 32 bytes = 256 bits of entropy from the platform CSPRNG. */
+const TOKEN_BYTES = 32;
 
-// The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
-function keyBytes(secret: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(secret);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function base64url(bytes: Uint8Array): string {
+/**
+ * URL-safe base64 without padding. The token travels in a cookie value, so it
+ * must avoid `=`, `+` and `/`, which are either separators or need escaping.
+ */
+function toBase64Url(bytes: Uint8Array): string {
   let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
+  for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function hmac(message: string, secret: string): Promise<string> {
+/** A fresh session token. Never logged, never stored, never returned in a body. */
+export function newSessionToken(): string {
+  return toBase64Url(crypto.getRandomValues(new Uint8Array(TOKEN_BYTES)));
+}
+
+/**
+ * The value stored in `auth_sessions.refresh_token_hash`.
+ *
+ * Deterministic, so a lookup is a single indexed equality match on the UNIQUE
+ * column rather than a scan: compute the HMAC of the presented cookie and look
+ * for that one row.
+ */
+export async function hashSessionToken(rawToken: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
-    keyBytes(secret),
+    new TextEncoder().encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],
   );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
-  return base64url(new Uint8Array(sig));
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawToken));
+  return toBase64Url(new Uint8Array(signature));
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
+/**
+ * Session lifetime. Eight hours matches an operational shift: long enough that
+ * a dispatcher is not signed out mid-task, short enough that an unattended
+ * terminal does not stay usable overnight.
+ */
+export const SESSION_TTL_SECONDS = 8 * 60 * 60;
+
+/**
+ * Timestamps in the format this schema uses throughout: TEXT, UTC, second
+ * precision, `YYYY-MM-DD HH:MM:SS`, matching SQLite's own `datetime('now')` so
+ * a value written by the application sorts and compares against a value written
+ * by a default or by seed data.
+ */
+export function toDbTimestamp(date: Date): string {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
-/** A fresh opaque session id (128 bits of randomness, hex). */
-export function newSessionId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+export interface SessionWindow {
+  issuedAt: string;
+  expiresAt: string;
+  /** Seconds, for the cookie's Max-Age, kept in step with expires_at. */
+  maxAge: number;
 }
 
-/** The sha256 hex of a session token, stored in sessions.token_hash. */
-export async function hashToken(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+/**
+ * The issue and expiry pair for a new session. Computed together from one
+ * instant so `expires_at >= issued_at` cannot be violated by clock movement
+ * between two separate reads, which the schema's CHECK constraint would reject.
+ */
+export function sessionWindow(now: Date, ttlSeconds: number = SESSION_TTL_SECONDS): SessionWindow {
+  const expires = new Date(now.getTime() + ttlSeconds * 1000);
+  return {
+    issuedAt: toDbTimestamp(now),
+    expiresAt: toDbTimestamp(expires),
+    maxAge: ttlSeconds,
+  };
 }
 
-/** Whether the session has cleared MFA, or is still pending the TOTP step. */
-export type MfaState = 'ok' | 'pending';
-
-function cookie(value: string, maxAge: number, secure: boolean): string {
-  const secureAttr = secure ? '; Secure' : '';
-  return `${CMS_SESSION_COOKIE}=${value}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
-}
-
-function readRawCookie(request: Request): string | null {
-  const header = request.headers.get('cookie');
-  if (!header) return null;
-  for (const part of header.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === CMS_SESSION_COOKIE) return part.slice(eq + 1).trim();
-  }
-  return null;
-}
-
-export interface CmsCookie {
-  sessionId: string;
-  mfa: MfaState;
-}
-
-// The signed payload is `${sessionId}.${mfa}`, so the MFA state cannot be tampered
-// with client-side; the signature covers both.
-function payload(sessionId: string, mfa: MfaState): string {
-  return `${sessionId}.${mfa}`;
-}
-
-/** The Set-Cookie value carrying a signed session id and its MFA state. */
-export async function createSessionCookie(
-  sessionId: string,
-  mfa: MfaState,
-  secret: string,
-  secure: boolean,
-): Promise<string> {
-  const body = payload(sessionId, mfa);
-  const sig = await hmac(body, secret);
-  return cookie(`${body}.${sig}`, SESSION_MAX_AGE_SECONDS, secure);
-}
-
-/** Read the cookie and return the session id and MFA state, only when the signature verifies. */
-export async function readSessionCookie(
-  request: Request,
-  secret: string,
-): Promise<CmsCookie | null> {
-  const raw = readRawCookie(request);
-  if (!raw) return null;
-  const lastDot = raw.lastIndexOf('.');
-  if (lastDot <= 0) return null;
-  const body = raw.slice(0, lastDot);
-  const sig = raw.slice(lastDot + 1);
-  const expected = await hmac(body, secret);
-  if (!timingSafeEqual(sig, expected)) return null;
-  const sep = body.indexOf('.');
-  if (sep <= 0) return null;
-  const sessionId = body.slice(0, sep);
-  const mfa = body.slice(sep + 1);
-  if (mfa !== 'ok' && mfa !== 'pending') return null;
-  return { sessionId, mfa };
-}
-
-/** The Set-Cookie value that clears the session; attributes match the set cookie. */
-export function clearSession(secure: boolean): string {
-  return cookie('', 0, secure);
+/** Whether a stored `expires_at` is in the past relative to `now`. */
+export function isExpired(expiresAt: string, now: Date): boolean {
+  return expiresAt < toDbTimestamp(now);
 }

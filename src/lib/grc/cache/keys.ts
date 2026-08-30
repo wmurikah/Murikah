@@ -18,10 +18,15 @@
  * the empty key, which cache/core.ts treats as "not cacheable" and passes
  * straight through to the database. No instance means no cached entry.
  *
- * Platform reference data that genuinely belongs to no tenant (the role
- * permission matrix, the enum labels) sits under the reserved GLOBAL namespace,
- * matching the `GLOBAL` sentinel the config table already uses. Nothing tenant
- * derived is ever placed there.
+ * Platform reference data that genuinely belongs to no tenant (the enum labels)
+ * sits under the reserved GLOBAL namespace, matching the `GLOBAL` sentinel the
+ * config table already uses. Nothing tenant derived is ever placed there.
+ *
+ * The role permission matrix is deliberately absent, and there is no key for it
+ * to be reached by. An authorisation decision is read fresh from the database on
+ * every request (`src/lib/grc/auth/rbac.ts`), so an access change applies on the
+ * very next request everywhere rather than once an invalidation has propagated
+ * (Build Prompt 43).
  *
  * No imports, so node strips the types and the unit tests run this directly.
  */
@@ -40,16 +45,12 @@ export const PLATFORM_NAMESPACE = 'GLOBAL';
  * `reference` covers the slowly changing, explicitly invalidated entries: the
  * audit universe, affiliates, the dropdown vocabularies, the general settings
  * and the subscription. `dashboard` is the short window the expensive
- * aggregations may lag by. `roleMatrix` is capped hard: a Cloudflare KV delete
- * is not instantaneous at every edge, so the TTL is the backstop that keeps an
- * access change inside a handful of seconds everywhere even if the explicit
- * invalidation has not yet propagated. Explicit invalidation still runs first
- * and is what normally makes the change take effect on the very next request.
+ * aggregations may lag by. There is no authorisation lifetime here on purpose:
+ * nothing the access decision rests on is cached at all.
  */
 export const CACHE_TTL = {
   reference: 300,
   dashboard: 60,
-  roleMatrix: 5,
 } as const;
 
 function segment(raw: string): string {
@@ -130,8 +131,5 @@ export const cacheKeys = {
 
   /** Display labels for an enum type. Platform reference data, no tenant content. */
   enumLabels: (enumType: string): string => key(PLATFORM_NAMESPACE, 'enum-labels', enumType),
-
-  /** One role's permission matrix. Platform reference data, keyed by role only. */
-  roleMatrix: (roleCode: string): string => key(PLATFORM_NAMESPACE, 'role-matrix', roleCode),
-  roleMatrixPrefix: (): string => prefix(PLATFORM_NAMESPACE, 'role-matrix'),
+  enumLabelsPrefix: (): string => prefix(PLATFORM_NAMESPACE, 'enum-labels'),
 } as const;

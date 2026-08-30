@@ -1,0 +1,268 @@
+---
+/**
+ * The case actions: change status, assign, record a communication.
+ *
+ * The status modal offers only the moves the transition table allows from
+ * the current status, and asks for exactly what the destination needs: a
+ * resolution summary for RESOLVED, a reason for a reopen. The server checks
+ * it all again; this form is convenience, not control.
+ */
+import CmsModal from './CmsModal.astro';
+import CmsButton from './CmsButton.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import { COMMUNICATION_CHANNELS } from '@/lib/cms/repos/serviceAdmin';
+
+interface Option {
+  id: string;
+  label: string;
+}
+interface Props {
+  caseId: string;
+  allowedMoves: string[];
+  teams: Option[];
+  users: Option[];
+  contacts: Option[];
+}
+const { caseId, allowedMoves, teams, users, contacts } = Astro.props;
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const pick = (list: Option[], empty: string) => [
+  { value: '', label: empty },
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+---
+
+<div data-cms-case-id={caseId}>
+  <CmsModal id="cms-case-status-modal" title="Change status">
+    <form id="cms-case-status-form" novalidate class="flex flex-col gap-4">
+      <p
+        id="cms-case-status-error"
+        role="alert"
+        hidden
+        class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+      >
+      </p>
+      <CmsSelect
+        id="cs-toStatus"
+        name="toStatus"
+        label="Move to"
+        required
+        options={[
+          { value: '', label: 'Choose a status' },
+          ...allowedMoves.map((s) => ({ value: s, label: titleCase(s) })),
+        ]}
+        hint="Only the moves the status machine allows from here are offered. Closed never returns to new; a reopen goes to In progress with a reason."
+      />
+      <div data-cs-field="resolution" hidden class="flex flex-col gap-4">
+        <div class="flex flex-col gap-1.5">
+          <label for="cs-resolutionSummary" class="text-cms-body-sm font-medium text-cms-ink">
+            Resolution summary <span class="text-cms-negative">*</span>
+          </label>
+          <textarea
+            id="cs-resolutionSummary"
+            name="resolutionSummary"
+            rows="3"
+            class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          ></textarea>
+        </div>
+        <CmsInput
+          id="cs-rootCause"
+          name="rootCause"
+          label="Root cause"
+          hint="Where known. Optional."
+        />
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <label for="cs-reason" class="text-cms-body-sm font-medium text-cms-ink">Reason</label>
+        <textarea
+          id="cs-reason"
+          name="reason"
+          rows="2"
+          class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        ></textarea>
+        <p class="text-cms-caption text-cms-muted">
+          Kept in the status history. Required when reopening.
+        </p>
+      </div>
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-case-status-save>Change</CmsButton>
+    </Fragment>
+  </CmsModal>
+
+  <CmsModal id="cms-case-assign-modal" title="Assign">
+    <form id="cms-case-assign-form" novalidate class="flex flex-col gap-4">
+      <p
+        id="cms-case-assign-error"
+        role="alert"
+        hidden
+        class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+      >
+      </p>
+      <CmsSelect id="ca-teamId" name="teamId" label="Team" options={pick(teams, 'No team')} />
+      <CmsSelect id="ca-userId" name="userId" label="Person" options={pick(users, 'No person')} />
+      <CmsInput
+        id="ca-reason"
+        name="reason"
+        label="Reason"
+        hint="Kept in the assignment history."
+      />
+      <p class="text-cms-caption text-cms-muted">
+        Assignment puts the case on somebody's queue. It does not widen their access: a person
+        outside the case's scope still cannot open it, and the fix for that is their scope, not this
+        form.
+      </p>
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-case-assign-save>Assign</CmsButton>
+    </Fragment>
+  </CmsModal>
+
+  <CmsModal id="cms-case-comm-modal" title="Record communication">
+    <form id="cms-case-comm-form" novalidate class="flex flex-col gap-4">
+      <p
+        id="cms-case-comm-error"
+        role="alert"
+        hidden
+        class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+      >
+      </p>
+      <CmsSelect
+        id="cc-direction"
+        name="direction"
+        label="Direction"
+        required
+        options={[
+          { value: 'OUTBOUND', label: 'Outbound, to the customer' },
+          { value: 'INBOUND', label: 'Inbound, from the customer' },
+          { value: 'INTERNAL', label: 'Internal note, never shown to the customer' },
+        ]}
+        hint="The first outbound on a customer-facing channel becomes the recorded first response."
+      />
+      <CmsSelect
+        id="cc-channel"
+        name="channel"
+        label="Channel"
+        required
+        options={COMMUNICATION_CHANNELS.map((ch) => ({ value: ch, label: titleCase(ch) }))}
+      />
+      <CmsSelect
+        id="cc-contactId"
+        name="contactId"
+        label="Contact"
+        options={pick(contacts, 'None')}
+      />
+      <CmsInput id="cc-subject" name="subject" label="Subject" />
+      <div class="flex flex-col gap-1.5">
+        <label for="cc-messageSummary" class="text-cms-body-sm font-medium text-cms-ink">
+          Summary <span class="text-cms-negative">*</span>
+        </label>
+        <textarea
+          id="cc-messageSummary"
+          name="messageSummary"
+          rows="3"
+          required
+          class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        ></textarea>
+      </div>
+      <CmsInput
+        id="cc-communicatedAt"
+        name="communicatedAt"
+        label="When"
+        type="datetime-local"
+        hint="Defaults to now. This records that it happened; nothing is sent from here."
+      />
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <CmsButton variant="primary" data-cms-case-comm-save>Record</CmsButton>
+    </Fragment>
+  </CmsModal>
+</div>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-cms-case-id]');
+  const caseId = root?.dataset.cmsCaseId ?? '';
+
+  if (caseId !== '') {
+    const open = (id: string) =>
+      (document.getElementById(id) as HTMLDialogElement | null)?.showModal();
+    const statusField = document.getElementById('cs-toStatus') as HTMLSelectElement | null;
+    statusField?.addEventListener('change', () => {
+      document
+        .querySelector<HTMLElement>('[data-cs-field="resolution"]')
+        ?.toggleAttribute('hidden', statusField.value !== 'RESOLVED');
+    });
+
+    const submit = async (formId: string, url: string, errorId: string) => {
+      const form = document.getElementById(formId) as HTMLFormElement | null;
+      const errorBox = document.getElementById(errorId);
+      if (!form) return;
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string' && value !== '') body[name] = value;
+      }
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.fields?.map((f) => f.message).join(' ') ??
+            answer?.error?.message ??
+            'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      }
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-cms-case-status]')) open('cms-case-status-modal');
+      else if (target?.closest('[data-cms-case-assign]')) open('cms-case-assign-modal');
+      else if (target?.closest('[data-cms-case-communicate]')) open('cms-case-comm-modal');
+      else if (target?.closest('[data-cms-case-status-save]'))
+        void submit(
+          'cms-case-status-form',
+          `/api/service/cases/${encodeURIComponent(caseId)}/status`,
+          'cms-case-status-error',
+        );
+      else if (target?.closest('[data-cms-case-assign-save]'))
+        void submit(
+          'cms-case-assign-form',
+          `/api/service/cases/${encodeURIComponent(caseId)}/assignment`,
+          'cms-case-assign-error',
+        );
+      else if (target?.closest('[data-cms-case-comm-save]'))
+        void submit(
+          'cms-case-comm-form',
+          `/api/service/cases/${encodeURIComponent(caseId)}/communications`,
+          'cms-case-comm-error',
+        );
+    });
+  }
+</script>

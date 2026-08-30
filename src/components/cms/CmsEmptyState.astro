@@ -1,0 +1,34 @@
+---
+/**
+ * An empty state that says what is missing and offers the one thing to do about
+ * it. Empty is a normal outcome, not a failure, so it is quiet: no red, no
+ * warning icon, and never a bare "No data".
+ */
+import CmsIcon from './CmsIcon.astro';
+import type { CmsIconName } from './icons';
+
+interface Props {
+  icon?: CmsIconName;
+  title: string;
+  description?: string;
+  class?: string;
+}
+const { icon = 'search', title, description, class: className } = Astro.props;
+---
+
+<div
+  class:list={[
+    'flex flex-col items-center gap-3 rounded-cms-lg border border-dashed border-cms-line',
+    'bg-cms-surface px-6 py-12 text-center',
+    className,
+  ]}
+>
+  <span
+    class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-cms-canvas text-cms-muted"
+  >
+    <CmsIcon name={icon} size={20} />
+  </span>
+  <p class="text-cms-card font-semibold text-cms-ink">{title}</p>
+  {description && <p class="max-w-sm text-cms-body-sm text-cms-muted">{description}</p>}
+  <slot />
+</div>

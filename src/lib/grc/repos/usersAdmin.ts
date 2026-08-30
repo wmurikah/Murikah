@@ -118,6 +118,11 @@ export async function getManagedUser(
  * organisations holding the same address would make one of those accounts
  * unreachable. The account being edited is excluded, so saving a user without
  * changing their address is never mistaken for a duplicate.
+ *
+ * Because the check spans organisations, the refusal an administrator sees must
+ * not: a message naming the address would confirm to one customer that it exists
+ * at another (audit finding AC-09). The caller says only that the address cannot
+ * be used. See `EMAIL_UNAVAILABLE` in `src/pages/grc/api/setup/users.ts`.
  */
 export async function emailInUse(
   db: Client,

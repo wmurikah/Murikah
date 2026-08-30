@@ -35,6 +35,18 @@ test('presignR2Url builds a well-formed, path-style SigV4 URL', async () => {
   assert.match(url, /X-Amz-Signature=[0-9a-f]{64}/);
 });
 
+test('only the host is signed, so the browser may set its own content type', async () => {
+  // The upload is a browser PUT that carries the file's content type. Because
+  // the signature covers the host and nothing else, that header cannot
+  // invalidate the URL. It does make the request non-simple, so the browser
+  // sends a preflight first, which is why the bucket needs a CORS rule allowing
+  // PUT and the content-type header (grc/docs/storage-setup.md). That is
+  // configuration, not signing, and this asserts the signing half of it.
+  const url = await presignR2Url({ method: 'PUT', ...base });
+  assert.match(url, /X-Amz-SignedHeaders=host(&|$)/, 'host, and only host');
+  assert.ok(!/content-type/i.test(url), 'no content type is signed into the URL');
+});
+
 test('presignR2Url is deterministic for the same inputs', async () => {
   const a = await presignR2Url({ method: 'GET', ...base });
   const b = await presignR2Url({ method: 'GET', ...base });

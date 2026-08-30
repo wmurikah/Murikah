@@ -17,6 +17,7 @@ import {
   resolveActiveRecipients,
   actionPlanOwnerIds,
   workPaperPartyIds,
+  workPaperAuditeeIds,
 } from '@grc/notify/recipients';
 import { entityLink } from '@grc/notify/links';
 
@@ -28,10 +29,90 @@ export interface NotifyInput {
   entityId: string;
   /** The user who triggered it. */
   actorUserId: string;
+  /**
+   * The comment the transition carried, when it carried one: the reviewer's
+   * reason for sending a finding back, which the email must repeat rather than
+   * merely announce (Build Prompt 62).
+   */
+  comment?: string | null;
+  /**
+   * Facts about the move that only the caller knows, merged into the payload so
+   * the email says what happened rather than that something did (Build Prompt
+   * 68): the stage the finding is now in, who it was delegated to, the decision
+   * audit reached.
+   */
+  extra?: Record<string, string | null | undefined>;
+}
+
+/**
+ * The auditee loop's own events, which go to everybody named on the auditee
+ * side rather than to whoever acts next (Build Prompt 68).
+ */
+const AUDITEE_LOOP_TYPES = new Set<NotificationType>([
+  'WP_SENT_TO_AUDITEE',
+  'AUDITEE_DELEGATED',
+  'AUDITEE_RETURNED',
+  'AUDITEE_RELEASED',
+  'AUDITEE_DECIDED',
+  'RESPONSE_SUBMITTED',
+  'RESPONSE_REVIEWED',
+]);
+
+/**
+ * Who a work-paper event is for: the party who must act next, not everybody
+ * attached to the finding (Build Prompt 62).
+ *
+ * A return for revision is the auditor's to answer, and telling the responsibles
+ * instead is how a loop stalls with everyone assuming somebody else was told. A
+ * share with the auditee is the responsibles' and the CC list's. Everything else
+ * keeps the party set it always had: the assigned auditor and the responsibles.
+ */
+async function workPaperRecipientIds(
+  db: Client,
+  organizationId: string,
+  workPaperId: string,
+  type: NotificationType,
+): Promise<string[]> {
+  if (type === 'WP_REVISION_REQUIRED' || type === 'WP_APPROVED') {
+    const auditor = await assignedAuditorId(db, organizationId, workPaperId);
+    return auditor ? [auditor] : [];
+  }
+  // The auditee loop tells everybody named on the auditee side, every time
+  // (Build Prompt 68). A release also tells the auditor whose finding it is,
+  // because it is the one move in the loop that puts work on the audit side.
+  if (AUDITEE_LOOP_TYPES.has(type)) {
+    const named = await workPaperAuditeeIds(db, organizationId, workPaperId);
+    if (type === 'AUDITEE_RELEASED' || type === 'RESPONSE_SUBMITTED') {
+      const auditor = await assignedAuditorId(db, organizationId, workPaperId);
+      if (auditor) named.push(auditor);
+    }
+    return named;
+  }
+  return workPaperPartyIds(db, organizationId, workPaperId);
+}
+
+/** The auditor answerable for a finding, or null when it has none. */
+async function assignedAuditorId(
+  db: Client,
+  organizationId: string,
+  workPaperId: string,
+): Promise<string | null> {
+  const res = await db.execute({
+    sql: `SELECT assigned_auditor_id AS auditor FROM work_papers
+           WHERE work_paper_id = ? AND organization_id = ? LIMIT 1`,
+    args: [workPaperId, organizationId],
+  });
+  const auditor = res.rows[0]?.auditor;
+  return auditor == null || String(auditor).trim() === '' ? null : String(auditor).trim();
 }
 
 // The module template codes map to the source NOTIFICATION_TYPES.
 const TEMPLATE_TO_TYPE: Record<string, NotificationType> = {
+  // Every round of the review loop tells the person who now has to act
+  // (Build Prompt 62). Returning a finding used to tell nobody: the reviewer
+  // wrote what was wrong with it and the auditor found out by opening the list.
+  finding_revision_required: 'WP_REVISION_REQUIRED',
+  finding_approved: 'WP_APPROVED',
   action_assigned: 'AP_ASSIGNED',
   action_delegated: 'AP_DELEGATED',
   action_implemented: 'AP_IMPLEMENTED',
@@ -42,6 +123,11 @@ const TEMPLATE_TO_TYPE: Record<string, NotificationType> = {
   finding_shared: 'WP_SENT_TO_AUDITEE',
   finding_submitted: 'WP_SUBMITTED',
   response_received: 'RESPONSE_SUBMITTED',
+  // The auditee loop (Build Prompt 68).
+  auditee_delegated: 'AUDITEE_DELEGATED',
+  auditee_returned: 'AUDITEE_RETURNED',
+  auditee_released: 'AUDITEE_RELEASED',
+  auditee_decided: 'AUDITEE_DECIDED',
 };
 
 async function loadEntityPayload(
@@ -67,9 +153,16 @@ async function loadEntityPayload(
         if (r.owner_names != null) base.ownerNames = String(r.owner_names);
       }
     } else {
+      // The audit area comes along for the digest's detail column (Build Prompt
+      // 53): "Treasury, High" tells a reviewer what they are being asked to
+      // look at; a reference alone does not. Left-joined, so a finding with no
+      // area still notifies.
       const res = await db.execute({
-        sql: `SELECT work_paper_ref AS reference, observation_title, status, risk_rating
-                FROM work_papers WHERE work_paper_id = ? AND organization_id = ? LIMIT 1`,
+        sql: `SELECT wp.work_paper_ref AS reference, wp.observation_title, wp.status,
+                     wp.risk_rating, aa.area_name AS audit_area
+                FROM work_papers wp
+                LEFT JOIN audit_areas aa ON aa.audit_area_id = wp.audit_area_id
+               WHERE wp.work_paper_id = ? AND wp.organization_id = ? LIMIT 1`,
         args: [entityId, organizationId],
       });
       const r = res.rows[0];
@@ -78,6 +171,7 @@ async function loadEntityPayload(
         base.title = String(r.observation_title ?? '');
         base.status = String(r.status ?? '');
         if (r.risk_rating != null) base.riskRating = String(r.risk_rating);
+        if (r.audit_area != null) base.auditArea = String(r.audit_area);
       }
     }
   } catch {
@@ -98,13 +192,20 @@ export async function enqueueNotification(db: Client, input: NotifyInput): Promi
     const userIds =
       entity === 'action_plan'
         ? await actionPlanOwnerIds(db, input.organizationId, input.entityId)
-        : await workPaperPartyIds(db, input.organizationId, input.entityId);
+        : await workPaperRecipientIds(db, input.organizationId, input.entityId, type);
     const recipients = (await resolveActiveRecipients(db, input.organizationId, userIds)).filter(
       (r) => r.userId !== input.actorUserId,
     );
 
     const data = await loadEntityPayload(db, input.organizationId, entity, input.entityId);
     if (input.actorUserId) data.actorName = data.actorName ?? '';
+    // The reviewer's words travel with the decision. A return that says only
+    // "revision required" sends the auditor back to the screen to find out what
+    // for, which is the email failing at the one thing it is for.
+    if (input.comment) data.comment = input.comment;
+    for (const [key, value] of Object.entries(input.extra ?? {})) {
+      if (value != null && String(value).trim() !== '') data[key] = String(value);
+    }
 
     for (const recipient of recipients) {
       await queueNotification(db, input.organizationId, {

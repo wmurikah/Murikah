@@ -23,14 +23,40 @@ import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
 // The same RFC 6238 implementation the worker verifies against, so the round
 // trip computes real codes for the enrolled secret.
-import { totpAt } from '../../src/lib/cms/auth/totp.ts';
+import { totpAt } from '../../src/lib/shared/totp.ts';
 // The same challenge shape the worker stores, so the email-code round trip
 // plants known challenges (the smoke run has no Graph mailer to deliver one).
 import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';
 import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
-// The single source for what the matrix can express (Build Prompt 43), so this
-// test cannot drift from the endpoint the way the seed once did.
-import { MODULES as MODULE_CODES, ACTIONS as ACTION_CODES } from '../../src/lib/grc/auth/matrix.ts';
+// The one catalogue the matrix, the save and the seed all read, so the role-save
+// step asserts against the real module list rather than a copy of it.
+import {
+  PERMISSION_ACTIONS,
+  PERMISSION_MODULES,
+  PLATFORM_DEFAULT_ORG,
+} from '../../src/lib/grc/auth/permissionModules.ts';
+// The same planner the cron drain uses, so the "one digest, never one email per
+// finding" assertion runs the real grouping rather than a copy of it.
+import { planNormalDigests } from '../../src/lib/grc/notify/render.ts';
+import { digestLinks } from '../../src/lib/grc/notify/links.ts';
+
+const DIGEST_LINKS = digestLinks();
+
+/** The cells the role-save step ticks, and therefore expects stored as allowed. */
+const GRANTED_IN_SAVE: [string, string][] = [
+  ['WORK_PAPER', 'read'],
+  ['WORK_PAPER', 'create'],
+  // An auditor who may write findings but not edit them is not a role anybody
+  // would configure, and leaving it out of the fixture hid the very gap Build
+  // Prompt 55 fixes: submitting follows this grant.
+  ['WORK_PAPER', 'update'],
+  ['ACTION_PLAN', 'read'],
+  ['REPORT', 'read'],
+  ['NOTIFICATION', 'read'],
+  ['SETUP', 'read'],
+  ['CONFIG', 'read'],
+  ['AUDIT_LOG', 'read'],
+];
 
 const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
 
@@ -59,6 +85,7 @@ const PAGE_PARAMS: Record<string, string> = {
   '/action-plans/[id]': SMOKE.actionPlanId,
   '/action-plans/[id]/edit': SMOKE.actionPlanId,
   '/auditee-responses/[id]': SMOKE.sentWorkPaperId,
+  '/requirements/[id]': SMOKE.requirementId,
 };
 
 /** The seeded database handle, for the state round-trip assertions. */
@@ -131,14 +158,16 @@ const MUTATION_STEPS: MutationStep[] = [
     expect: 'success',
     verify: (db) => {
       const r = db
-        .prepare(`SELECT status FROM work_papers WHERE observation_title = 'Smoke-created finding'`)
+        .prepare(
+          `SELECT status FROM work_papers WHERE observation_title = 'Smoke-created observation'`,
+        )
         .get() as { status?: string } | undefined;
       assert.equal(String(r?.status), 'Draft', 'the created work paper must exist as a draft');
     },
     method: 'POST',
     path: () => '/api/work-papers',
     form: () => ({
-      observation_title: 'Smoke-created finding',
+      observation_title: 'Smoke-created observation',
       observation_description: 'Created by the smoke test.',
       year: '2026',
       affiliate_code: SMOKE.affiliateCode,
@@ -147,6 +176,10 @@ const MUTATION_STEPS: MutationStep[] = [
       risk_rating: 'High',
       recommendation: 'Do the thing.',
       assigned_auditor: SMOKE.auditorId,
+      // Complete, because the crawl submits it a few steps later and a
+      // submission needs a whole finding (Build Prompt 59).
+      audit_period_from: '2026-01-01',
+      audit_period_to: '2026-03-31',
     }),
     capture: { key: 'wpId', from: /\/work-papers\/([^/?]+)/ },
   },
@@ -158,30 +191,221 @@ const MUTATION_STEPS: MutationStep[] = [
       const r = db
         .prepare(`SELECT observation_title AS t FROM work_papers WHERE work_paper_id = ?`)
         .get(String(c.get('wpId'))) as { t?: string };
-      assert.equal(String(r.t), 'Smoke-created finding (edited)', 'the edit must persist');
+      assert.equal(String(r.t), 'Smoke-created observation (edited)', 'the edit must persist');
     },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}`,
+    // The form posts every field, so the fixture does too: a partial post is a
+    // partial finding, and the crawl submits this one two steps later
+    // (Build Prompt 59).
     form: () => ({
-      observation_title: 'Smoke-created finding (edited)',
+      observation_title: 'Smoke-created observation (edited)',
+      observation_description: 'Created by the smoke test.',
       year: '2026',
       affiliate_code: SMOKE.affiliateCode,
       audit_area_id: SMOKE.auditAreaId,
+      sub_area_id: SMOKE.subAreaId,
+      risk_rating: 'High',
+      recommendation: 'Do the thing.',
+      assigned_auditor: SMOKE.auditorId,
+      audit_period_from: '2026-01-01',
+      audit_period_to: '2026-03-31',
     }),
   },
   {
     endpoint: 'work-papers/[id]/requirements.ts',
-    title: 'add a requirement',
+    title: 'add a requirement, with the date it was asked for',
     expect: 'success',
     verify: (db, c) => {
       const r = db
-        .prepare(`SELECT COUNT(*) AS n FROM work_paper_requirements WHERE work_paper_id = ?`)
-        .get(String(c.get('wpId'))) as { n: number | bigint };
-      assert.ok(Number(r.n) >= 1, 'the requirement row must exist');
+        .prepare(
+          `SELECT requested_date, received_date, status FROM work_paper_requirements
+            WHERE work_paper_id = ? AND description = 'Provide the smoke evidence.'`,
+        )
+        .get(String(c.get('wpId'))) as {
+        requested_date?: string;
+        received_date?: string | null;
+        status?: string;
+      };
+      assert.ok(r, 'the requirement row must exist');
+      assert.equal(String(r.requested_date), '2026-02-02', 'the date requested is stored');
+      assert.ok(r.received_date == null, 'nothing has been received yet');
+      // The status is derived from the date, never submitted, so the two cannot
+      // disagree (Build Prompt 52).
+      assert.equal(String(r.status), 'OUTSTANDING', 'an unreceived requirement is outstanding');
     },
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/requirements`,
-    form: () => ({ op: 'add', description: 'Provide the smoke evidence.', status: 'OPEN' }),
+    form: () => ({
+      op: 'add',
+      description: 'Provide the smoke evidence.',
+      requested_date: '2026-02-02',
+    }),
+  },
+  {
+    // Clearing the date of receipt reopens the requirement. This is the half of
+    // the derivation a "mark received" flag would never have to answer, and the
+    // half a stored status typed in beside the date gets wrong.
+    endpoint: 'work-papers/[id]/requirements.ts',
+    title: 'clearing the date received puts a requirement back outstanding',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT received_date, status FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(SMOKE.receivedRequirementId) as { received_date?: string | null; status?: string };
+      assert.ok(r.received_date == null, 'the date of receipt is gone');
+      assert.equal(String(r.status), 'OUTSTANDING', 'so the status says outstanding');
+    },
+    method: 'POST',
+    path: () => `/api/work-papers/${SMOKE.sentWorkPaperId}/requirements`,
+    form: () => ({
+      op: 'update',
+      requirement_id: SMOKE.receivedRequirementId,
+      description: 'Provide the approved bank mandate.',
+      requested_date: '2026-01-05',
+      received_date: '',
+    }),
+  },
+  {
+    // And dating it again marks it received, with the status following the date
+    // rather than the form: nothing here submits a status at all.
+    endpoint: 'work-papers/[id]/requirements.ts',
+    title: 'dating a requirement received marks it received',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT received_date, status FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(SMOKE.receivedRequirementId) as { received_date?: string; status?: string };
+      assert.equal(String(r.received_date), '2026-02-09', 'the date received is stored');
+      assert.equal(String(r.status), 'RECEIVED', 'the status follows the date, not the form');
+      // The other seeded requirement was never received and must be untouched,
+      // so the detail page still has one of each state to show.
+      const other = db
+        .prepare(`SELECT received_date FROM work_paper_requirements WHERE requirement_id = ?`)
+        .get(SMOKE.requirementId) as { received_date?: string | null };
+      assert.ok(other.received_date == null, 'the outstanding requirement stays outstanding');
+    },
+    method: 'POST',
+    path: () => `/api/work-papers/${SMOKE.sentWorkPaperId}/requirements`,
+    form: () => ({
+      op: 'update',
+      requirement_id: SMOKE.receivedRequirementId,
+      description: 'Provide the approved bank mandate.',
+      requested_date: '2026-01-05',
+      received_date: '2026-02-09',
+    }),
+  },
+  {
+    // The requirements module (Build Prompt 58). These three steps prove the
+    // endpoints answer and record; the two-round loop, the owner scoping and the
+    // upload are driven end to end in their own case further down.
+    endpoint: 'requirements/index.ts',
+    title: 'raise a requirement against a finding, with an owner',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT requirement_id AS id, status, due_date FROM work_paper_requirements
+            WHERE work_paper_id = ? AND description = 'Provide the smoke module evidence.'`,
+        )
+        .get(String(c.get('wpId'))) as { id?: string; status?: string; due_date?: string };
+      assert.ok(r?.id, 'the requirement must be linked to the finding it was raised against');
+      assert.equal(String(r.status), 'OUTSTANDING', 'a fresh ask is outstanding');
+      assert.equal(String(r.due_date), '2026-03-31', 'the date it is wanted by is stored');
+      const owners = db
+        .prepare(`SELECT COUNT(*) AS n FROM requirement_owners WHERE requirement_id = ?`)
+        .get(String(r.id)) as { n: number | bigint };
+      assert.ok(Number(owners.n) >= 1, 'and it names somebody to provide it');
+    },
+    method: 'POST',
+    path: () => '/api/requirements',
+    form: (c) => ({
+      work_paper_id: String(c.get('wpId')),
+      description: 'Provide the smoke module evidence.',
+      requested_date: '2026-03-01',
+      due_date: '2026-03-31',
+      // The acting session owns it, so the next two steps can act on it as the
+      // owner and as audit without a second sign-in inside the crawl.
+      owner_ids: SMOKE.userId,
+    }),
+    capture: { key: 'reqId', from: /\/requirements\/([^/?]+)/ },
+  },
+  {
+    endpoint: 'requirements/[id]/submit.ts',
+    title: 'an owner provides what was asked for',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT round_number, review_status, submission_note FROM requirement_submissions
+            WHERE requirement_id = ?`,
+        )
+        .get(String(c.get('reqId'))) as {
+        round_number?: number | bigint;
+        review_status?: string;
+        submission_note?: string;
+      };
+      assert.equal(Number(r?.round_number), 1, 'the first answer is round one');
+      assert.equal(String(r.review_status), 'PENDING', 'and it is waiting on audit');
+      const req = db
+        .prepare(`SELECT status FROM work_paper_requirements WHERE requirement_id = ?`)
+        .get(String(c.get('reqId'))) as { status?: string };
+      assert.equal(String(req.status), 'AWAITING_REVIEW', 'the requirement follows the round');
+    },
+    method: 'POST',
+    path: (c) => `/api/requirements/${c.get('reqId')}/submit`,
+    form: () => ({ note: 'The reconciliation, as asked.' }),
+  },
+  {
+    endpoint: 'requirements/[id]/review.ts',
+    title: 'audit accepts it and the requirement closes',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT status, closed_at, closed_by, last_reviewed_date
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(String(c.get('reqId'))) as {
+        status?: string;
+        closed_at?: string;
+        closed_by?: string;
+        last_reviewed_date?: string;
+      };
+      assert.equal(String(r.status), 'CLOSED', 'accepting ends the ask');
+      assert.ok(r.closed_at, 'and stamps when');
+      assert.equal(String(r.closed_by), SMOKE.userId, 'and who');
+      assert.ok(r.last_reviewed_date, 'a reviewed requirement records when it was last read');
+    },
+    method: 'POST',
+    path: (c) => `/api/requirements/${c.get('reqId')}/review`,
+    form: () => ({ decision: 'accept', review_comment: 'Complete, thank you.' }),
+  },
+  {
+    // Linking is audit's own act and is separate from the completeness decision
+    // above (Build Prompt 69): this requirement is already closed, and it is
+    // linked afterwards, which is exactly the order the module now allows.
+    endpoint: 'requirements/[id]/link.ts',
+    title: 'audit links a requirement to a finding, after the fact',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(
+          `SELECT linked_work_paper_id AS wp, linked_at, linked_by
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(String(c.get('reqId'))) as { wp?: string; linked_at?: string; linked_by?: string };
+      assert.equal(String(r?.wp), String(c.get('wpId')), 'the link names the finding');
+      assert.ok(r.linked_at, 'and stamps when it was made');
+      assert.equal(String(r.linked_by), SMOKE.userId, 'and who made it');
+    },
+    method: 'POST',
+    path: (c) => `/api/requirements/${c.get('reqId')}/link`,
+    form: (c) => ({ work_paper_id: String(c.get('wpId')) }),
   },
   {
     endpoint: 'work-papers/[id]/responsibles.ts',
@@ -200,6 +424,16 @@ const MUTATION_STEPS: MutationStep[] = [
     form: () => ({ op: 'add_responsible', user_id: SMOKE.auditeeId, role_in_finding: 'PRIMARY' }),
   },
   {
+    // Build Prompt 53. An empty selection is refused in the same shape as any
+    // other bad request, rather than redirecting as though something happened.
+    endpoint: 'work-papers/submit-batch.ts',
+    title: 'a batch release with nothing selected refuses and says so',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/work-papers/submit-batch',
+    form: () => ({}),
+  },
+  {
     endpoint: 'work-papers/[id]/transition.ts',
     title: 'submit the created work paper',
     expect: 'success',
@@ -212,6 +446,83 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
     form: () => ({ to_status: 'Submitted', comment: 'Smoke transition' }),
+  },
+  {
+    // Build Prompt 50, the review chain. Draft to Submitted has just run; these
+    // carry it on to Under Review and Approved, the path the seeded
+    // status_transitions define. Nothing here names a transition the engine does
+    // not already hold: a hard-coded step would pass even if the table were
+    // empty, which is the opposite of what this proves.
+    endpoint: 'work-papers/[id]/transition.ts',
+    title: 'start the review on the submitted work paper',
+    expect: 'success',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { status?: string };
+      assert.equal(String(r.status), 'Under Review', 'Submitted moves to Under Review');
+    },
+    method: 'POST',
+    path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
+    form: () => ({ to_status: 'Under Review' }),
+  },
+  {
+    endpoint: 'work-papers/[id]/transition.ts',
+    title: 'a return for revision without the required comment is refused',
+    // The seeded rule sets requires_comment on Under Review to Revision
+    // Required. Omitting it must refuse, or the rule is decorative.
+    expect: 'refusal',
+    verify: (db, c) => {
+      const r = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(String(c.get('wpId'))) as { status?: string };
+      assert.equal(String(r.status), 'Under Review', 'a refused move changes nothing');
+    },
+    method: 'POST',
+    path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
+    form: () => ({ to_status: 'Revision Required' }),
+  },
+  {
+    endpoint: 'work-papers/[id]/transition.ts',
+    title: 'approve the reviewed work paper, and the revisions record the whole chain',
+    expect: 'success',
+    verify: (db, c) => {
+      const id = String(c.get('wpId'));
+      const r = db
+        .prepare(
+          `SELECT status, approved_by_name AS approver, approved_date AS approved
+             FROM work_papers WHERE work_paper_id = ?`,
+        )
+        .get(id) as { status?: string; approver?: string; approved?: string };
+      assert.equal(String(r.status), 'Approved');
+      // The dated attribution the detail's review trail reads back. Before this
+      // build it was stamped and shown nowhere.
+      assert.ok(r.approver, 'the approver is stamped');
+      assert.ok(r.approved, 'and the date with them');
+
+      // One work_paper_revisions row per move, in order, with the actor and the
+      // comment: the iterations a reviewer needs to see.
+      const rows = db
+        .prepare(
+          `SELECT from_status AS f, to_status AS t, user_name AS who, comments AS c
+             FROM work_paper_revisions WHERE work_paper_id = ?
+            ORDER BY revision_number ASC`,
+        )
+        .all(id) as { f: string; t: string; who: string | null; c: string | null }[];
+      assert.deepEqual(
+        rows.map((x) => `${x.f} -> ${x.t}`),
+        ['Draft -> Submitted', 'Submitted -> Under Review', 'Under Review -> Approved'],
+        'every move is recorded, and the refused one is not',
+      );
+      assert.ok(
+        rows.every((x) => x.who),
+        'each revision names who made the move',
+      );
+      assert.equal(rows[0].c, 'Smoke transition', 'the comment is kept with its move');
+    },
+    method: 'POST',
+    path: (c) => `/api/work-papers/${c.get('wpId')}/transition`,
+    form: () => ({ to_status: 'Approved' }),
   },
   {
     endpoint: 'work-papers/[id]/delete.ts',
@@ -375,7 +686,7 @@ const MUTATION_STEPS: MutationStep[] = [
       const r = db
         .prepare(
           `SELECT COUNT(*) AS n FROM auditee_responses
-            WHERE work_paper_id = ? AND management_response LIKE '%accepts the finding%'`,
+            WHERE work_paper_id = ? AND management_response LIKE '%accepts the observation%'`,
         )
         .get(SMOKE.sentWorkPaperId) as { n: number | bigint };
       assert.ok(Number(r.n) >= 1, 'the response row must exist with its text');
@@ -384,7 +695,7 @@ const MUTATION_STEPS: MutationStep[] = [
     path: () => '/api/auditee-responses/submit',
     form: () => ({
       work_paper_id: SMOKE.sentWorkPaperId,
-      management_response: 'Management accepts the finding and will remediate.',
+      management_response: 'Management accepts the observation and will remediate.',
       action_plan_ids: SMOKE.actionPlanId,
     }),
   },
@@ -410,6 +721,38 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: () => `/api/auditee-responses/${SMOKE.responseId}/review`,
     form: () => ({ decision: 'accept' }),
+  },
+  // The auditee loop's two new endpoints, exercised here as the head of audit,
+  // who is neither a responsible on this finding nor holding a delegation on it
+  // (Build Prompt 68). Both refusals are the substance rather than a formality:
+  // audit does not delegate on a unit's behalf, and audit does not hand back a
+  // draft it was never given. The loop working end to end is a case of its own
+  // further down, signed in as the people it actually belongs to.
+  {
+    endpoint: 'auditee-responses/delegate.ts',
+    title: 'audit cannot delegate a unit is response for it',
+    expect: 'refusal',
+    verify: (db) => {
+      const r = db
+        .prepare(`SELECT COUNT(*) AS n FROM auditee_delegations WHERE work_paper_id = ?`)
+        .get(SMOKE.sentWorkPaperId) as { n: number | bigint };
+      assert.equal(Number(r.n), 0, 'and no delegation row is written by the refusal');
+    },
+    method: 'POST',
+    path: () => '/api/auditee-responses/delegate',
+    form: () => ({
+      work_paper_id: SMOKE.sentWorkPaperId,
+      delegated_to: SMOKE.staffId,
+      instructions: 'Audit should not be able to do this.',
+    }),
+  },
+  {
+    endpoint: 'auditee-responses/return.ts',
+    title: 'nobody can return a delegation they were never given',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/auditee-responses/return',
+    form: () => ({ work_paper_id: SMOKE.sentWorkPaperId, return_note: 'Not mine to return.' }),
   },
   {
     endpoint: 'setup/affiliates.ts',
@@ -719,52 +1062,129 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    // Build Prompt 43. The save is atomic and covers the whole matrix, so this
+    // step proves all three halves of that: every cell landed (not the three
+    // quarters the old sequential loop managed before a foreign key stopped it),
+    // the ticked cells are allowed, and a cell the seed granted but this
+    // submission left unticked is now refused. Ticking CONFIG and AUDIT_LOG is
+    // deliberate: those are the two modules whose missing `permission_modules`
+    // rows broke every save, and the smoke schema now enforces that reference.
     endpoint: 'access-control.ts',
-    title: 'save the auditor permission matrix, in full and atomically',
+    title: 'save the auditor permission matrix, in full, for this organisation alone',
     expect: 'success',
     verify: (db) => {
-      // The save replaces the role's whole matrix in one batch, so every cell
-      // the screen can express must be present afterwards and must match what
-      // was submitted. The old sequential loop half-applied and this step, which
-      // checked a single granted cell, could not see it (Build Prompt 40, AC-03).
-      const rows = db
-        .prepare(
-          `SELECT module_code AS m, action_code AS a, is_allowed AS v
-             FROM role_permissions WHERE role_code = 'AUDITOR'`,
-        )
-        .all() as { m: string; a: string; v: number | bigint }[];
-      const cells = new Map(rows.map((r) => [`${r.m}.${r.a}`, Number(r.v)]));
+      const cells = PERMISSION_MODULES.length * PERMISSION_ACTIONS.length;
+      const countFor = (org: string): number => {
+        const r = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM role_permissions
+              WHERE role_code = 'AUDITOR' AND organization_id = ?`,
+          )
+          .get(org) as { n: number | bigint };
+        return Number(r.n);
+      };
       assert.equal(
-        cells.size,
-        MODULE_CODES.length * ACTION_CODES.length,
-        'every module and action pair must be stored',
+        countFor(SMOKE.orgId),
+        cells,
+        'the whole matrix must be stored for the acting organisation',
       );
-      const ticked = new Set([
-        'WORK_PAPER.read',
-        'WORK_PAPER.create',
-        'ACTION_PLAN.read',
-        'REPORT.read',
-      ]);
-      for (const module of MODULE_CODES) {
-        for (const action of ACTION_CODES) {
-          const key = `${module}.${action}`;
-          assert.equal(
-            cells.get(key),
-            ticked.has(key) ? 1 : 0,
-            `${key} must match the submitted matrix`,
-          );
-        }
+      const allowed = (org: string, module: string, action: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = ? AND action_code = ?`,
+          )
+          .get(org, module, action) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      for (const [module, action] of GRANTED_IN_SAVE) {
+        assert.equal(
+          allowed(SMOKE.orgId, module, action),
+          1,
+          `${module}.${action} must be stored as allowed`,
+        );
       }
+      // Inherited as allowed from the platform defaults, left unticked here: the
+      // un-tick has to apply too, or a half-applied save would pass this step.
+      // (WORK_PAPER.update is ticked in this fixture, because an auditor who
+      // cannot edit a finding is not a role anybody configures; ACTION_PLAN
+      // update carries the same proof and is genuinely left off.)
+      assert.equal(
+        allowed(SMOKE.orgId, 'ACTION_PLAN', 'update'),
+        0,
+        'an unticked cell must be stored as refused, not left as it was',
+      );
+      // Every module in the catalogue is represented, including the ones the
+      // live permission_modules table was missing.
+      for (const module of PERMISSION_MODULES) {
+        assert.notEqual(
+          allowed(SMOKE.orgId, module.code, 'read'),
+          -1,
+          `${module.code} must have a stored grant, so the module row exists`,
+        );
+      }
+
+      // AC-01, the whole point of Build Prompt 44: the save reached this
+      // organisation and nobody else. Before it, this same submission rewrote
+      // the AUDITOR role for every customer on the platform at once.
+      assert.equal(
+        countFor(SMOKE.otherOrgId),
+        cells,
+        "the other organisation's own grants must still be there",
+      );
+      for (const [module, action] of GRANTED_IN_SAVE) {
+        assert.equal(
+          allowed(SMOKE.otherOrgId, module, action),
+          action === 'read' ? 1 : 0,
+          `${module}.${action} must be untouched in the other organisation`,
+        );
+      }
+      // The platform defaults are not this organisation's to change either.
+      assert.equal(
+        allowed(PLATFORM_DEFAULT_ORG, 'WORK_PAPER', 'update'),
+        1,
+        'the platform defaults must survive an organisation saving its own set',
+      );
     },
     method: 'POST',
     path: () => '/api/access-control',
     form: () => ({
       role_code: 'AUDITOR',
-      grant_WORK_PAPER_read: '1',
-      grant_WORK_PAPER_create: '1',
-      grant_ACTION_PLAN_read: '1',
-      grant_REPORT_read: '1',
+      ...Object.fromEntries(GRANTED_IN_SAVE.map(([m, a]) => [`grant_${m}_${a}`, '1'])),
     }),
+  },
+  {
+    // The other half of AC-03: a save the database refuses must refuse visibly
+    // and change nothing. A role that does not exist violates the
+    // role_permissions foreign key on the first insert, which is the shape of
+    // the failure that used to escape as {"error":"internal_error"} with three
+    // quarters of the matrix already committed. It must now come back as a
+    // handled error redirect, with the batch rolled back whole.
+    endpoint: 'access-control.ts',
+    title: 'a refused permission save changes nothing and says so',
+    expect: 'refusal',
+    verify: (db) => {
+      const ghost = db
+        .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE role_code = 'GHOST_ROLE'`)
+        .get() as { n: number | bigint };
+      assert.equal(Number(ghost.n), 0, 'a rolled-back save must leave no row behind');
+      // The role saved by the previous step is untouched by the failed one.
+      const auditor = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM role_permissions
+            WHERE role_code = 'AUDITOR' AND organization_id = ?`,
+        )
+        .get(SMOKE.orgId) as { n: number | bigint };
+      assert.equal(
+        Number(auditor.n),
+        PERMISSION_MODULES.length * PERMISSION_ACTIONS.length,
+        'a failed save must not disturb another role',
+      );
+    },
+    method: 'POST',
+    path: () => '/api/access-control',
+    form: () => ({ role_code: 'GHOST_ROLE', grant_WORK_PAPER_read: '1' }),
   },
   {
     // Build Prompt 42: the platform owner's cache recovery lever. Flushing an
@@ -862,7 +1282,7 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'evidence/upload-url.ts',
-    title: 'evidence upload refuses cleanly when storage is unconfigured',
+    title: 'evidence upload refuses an entity type it does not recognise',
     expect: 'refusal',
     method: 'POST',
     path: () => '/api/evidence/upload-url',
@@ -876,7 +1296,7 @@ const MUTATION_STEPS: MutationStep[] = [
   },
   {
     endpoint: 'evidence/complete.ts',
-    title: 'evidence completion refuses cleanly when storage is unconfigured',
+    title: 'evidence completion refuses an upload that never landed',
     expect: 'refusal',
     method: 'POST',
     path: () => '/api/evidence/complete',
@@ -885,6 +1305,24 @@ const MUTATION_STEPS: MutationStep[] = [
       entity_id: SMOKE.sentWorkPaperId,
       file_id: 'FILE-MISSING',
       file_name: 'smoke.pdf',
+      content_type: 'application/pdf',
+    }),
+  },
+  {
+    // The path the providers that cannot sign a URL take (Build Prompt 51).
+    // The harness posts urlencoded forms, so this is the no-file case: it must
+    // refuse in the same JSON contract as every other evidence endpoint rather
+    // than throwing on a body that is not multipart.
+    endpoint: 'evidence/put.ts',
+    title: 'a direct evidence write refuses a request carrying no file',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/evidence/put',
+    form: () => ({
+      entity_type: 'work_paper',
+      entity_id: SMOKE.sentWorkPaperId,
+      file_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff1111',
+      file_name: 'smoke-direct.pdf',
       content_type: 'application/pdf',
     }),
   },
@@ -938,6 +1376,73 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: () => `/api/evidence/${SMOKE.attachmentId}/delete`,
     form: () => ({ reason: 'smoke' }),
+  },
+  {
+    // Build Prompt 51. The folder is the one part of a connection that can be
+    // changed without disturbing which provider is active, so it is the step
+    // that proves the endpoint writes rather than only answering.
+    endpoint: 'admin/storage/save.ts',
+    title: 'choosing a storage folder is stored against the organisation',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT folder_id, is_active FROM storage_connections
+            WHERE organization_id = ? AND provider = 'r2'`,
+        )
+        .get(SMOKE.orgId) as { folder_id?: string; is_active?: number | bigint };
+      assert.equal(String(r.folder_id), 'smoke-evidence', 'the chosen folder must persist');
+      assert.equal(Number(r.is_active), 1, 'choosing a folder must not deactivate the provider');
+    },
+    method: 'POST',
+    path: () => '/api/admin/storage/save',
+    form: () => ({
+      action: 'folder',
+      provider: 'r2',
+      folder_id: 'smoke-evidence',
+      folder_name: 'smoke-evidence',
+    }),
+  },
+  {
+    endpoint: 'admin/storage/save.ts',
+    title: 'an OAuth provider refuses to be configured by typed-in fields',
+    expect: 'refusal',
+    method: 'POST',
+    path: () => '/api/admin/storage/save',
+    form: () => ({ action: 'save', provider: 'dropbox', bucket: 'nope' }),
+  },
+  {
+    // Activation is refused for a provider that has never passed a test, so
+    // evidence never starts depending on a connection nobody has proved.
+    endpoint: 'admin/storage/save.ts',
+    title: 'an unconfigured provider cannot be made the active one',
+    expect: 'refusal',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT provider FROM storage_connections
+            WHERE organization_id = ? AND is_active = 1`,
+        )
+        .get(SMOKE.orgId) as { provider?: string };
+      assert.equal(String(r.provider), 'r2', 'the tested provider stays the active one');
+    },
+    method: 'POST',
+    path: () => '/api/admin/storage/save',
+    form: () => ({ action: 'activate', provider: 'sharepoint' }),
+  },
+  {
+    endpoint: 'admin/storage/[provider]/connect.ts',
+    title: 'connecting a provider this deployment has not registered says so',
+    expect: 'refusal',
+    method: 'GET',
+    path: () => '/api/admin/storage/google_drive/connect',
+  },
+  {
+    endpoint: 'admin/storage/[provider]/callback.ts',
+    title: 'a storage callback with no code and no state is refused, not a 500',
+    expect: 'refusal',
+    method: 'GET',
+    path: () => '/api/admin/storage/dropbox/callback',
   },
   {
     endpoint: 'reports/export.ts',
@@ -1216,42 +1721,78 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
   // sends visibly fail (which itself proves the send path is wired) and known
   // challenges are planted through the database handle before verifying.
   const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
-  const readMfa = (db: SmokeDb, userId: string): MfaRecord => {
+  // The MFA record is stored under the user's own organisation, so every helper
+  // here takes one: a user outside Hass has their challenge written against
+  // their own instance, and a hard-coded Hass would find nothing to plant.
+  const readMfa = (
+    db: SmokeDb,
+    userId: string,
+    organizationId: string = SMOKE.orgId,
+  ): MfaRecord => {
     const row = db
       .prepare(
         `SELECT config_value AS v FROM config
           WHERE organization_id = ? AND config_key = ?`,
       )
-      .get(SMOKE.orgId, `MFA_TOTP::${userId}`) as { v?: string } | undefined;
+      .get(organizationId, `MFA_TOTP::${userId}`) as { v?: string } | undefined;
     assert.ok(row?.v, `an MFA record must exist for ${userId}`);
     return JSON.parse(String(row.v)) as MfaRecord;
   };
-  const writeMfa = (db: SmokeDb, userId: string, record: MfaRecord): void => {
+  const writeMfa = (
+    db: SmokeDb,
+    userId: string,
+    record: MfaRecord,
+    organizationId: string = SMOKE.orgId,
+  ): void => {
     db.prepare(
       `UPDATE config SET config_value = ?
         WHERE organization_id = ? AND config_key = ?`,
-    ).run(JSON.stringify(record), SMOKE.orgId, `MFA_TOTP::${userId}`);
+    ).run(JSON.stringify(record), organizationId, `MFA_TOTP::${userId}`);
   };
-  const plantOtp = (userId: string, code: string): void => {
+  const plantOtp = (userId: string, code: string, organizationId: string = SMOKE.orgId): void => {
     const db = server.database;
     assert.ok(db, 'the fake database is reachable to plant a code');
-    writeMfa(db, userId, {
-      ...readMfa(db, userId),
-      challenge: newChallenge(sha256(code), Date.now() - 90_000),
-    });
+    writeMfa(
+      db,
+      userId,
+      {
+        ...readMfa(db, userId, organizationId),
+        challenge: newChallenge(sha256(code), Date.now() - 90_000),
+      },
+      organizationId,
+    );
   };
+  /**
+   * The worker's log line matching a needle, waited for rather than read once:
+   * wrangler streams the worker's output, so a line written during a request can
+   * arrive after the response the test is already asserting on.
+   */
+  const waitForLogLine = async (needle: string, timeoutMs = 10_000): Promise<string | null> => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const line = server.log
+        .split('\n')
+        .reverse()
+        .find((l) => l.includes(needle));
+      if (line) return line;
+      if (Date.now() > deadline) return null;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  };
+
   /** The full universal sign-in: the password step, then the planted emailed code. */
   const signInWithEmailCode = async (
     email: string,
     password: string,
     userId: string,
+    organizationId: string = SMOKE.orgId,
   ): Promise<void> => {
     server.clearCookies();
     const login = await server.request('POST', '/api/auth/login', { email, password });
     assert.equal(login.status, 303, `login answered ${login.status}: ${login.body.slice(0, 300)}`);
     const location = String(login.headers.location ?? '');
     assert.ok(location.startsWith('/mfa'), `every sign-in must land on the step, got ${location}`);
-    plantOtp(userId, '424242');
+    plantOtp(userId, '424242', organizationId);
     const verified = await server.request('POST', '/api/auth/mfa/verify', { code: '424242' });
     const landed = String(verified.headers.location ?? '');
     assert.ok(!landed.includes('error'), `verification failed, redirected to ${landed}`);
@@ -1262,7 +1803,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
    * organisation, so after signing in they must select one before any module
    * page is reachable; every crawl and mutation below runs inside Hass.
    */
-  const enterInstance = async (organizationId = SMOKE.orgId): Promise<void> => {
+  const enterInstance = async (organizationId: string = SMOKE.orgId): Promise<void> => {
     const res = await server.request('POST', '/api/org/switch', {
       organization_id: organizationId,
     });
@@ -1483,6 +2024,243 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         stillHome.body.includes(SMOKE.orgName) && !stillHome.body.includes(SMOKE.otherOrgName),
         'a refused switch leaves them in their own organisation',
       );
+
+      // AC-08: the super-label above the organisation name is the platform
+      // owner's, and says nothing to somebody who belongs to one organisation.
+      assert.ok(
+        !stillHome.body.includes('grc-orgline__label'),
+        'a pinned admin sees the organisation name alone, with no super-label',
+      );
+
+      // AC-02: the platform-wide config is not theirs to write. Both of these
+      // sit on the shared GLOBAL sentinel, so a save here would change the model
+      // every tenant's AI runs on, or the mailbox every tenant sends from.
+      const aiSave = await server.request('POST', '/api/ai/config', {
+        active_provider: 'anthropic',
+        model: 'nothing-they-should-be-able-to-set',
+      });
+      assert.equal(aiSave.status, 403, 'an instance admin cannot change the platform AI config');
+      // The exact refusal matters here, not merely that an error came back: the
+      // smoke environment has no Graph credentials, so these endpoints error for
+      // a second reason too, and only the owner-gate message proves the gate.
+      const refusal = (res: { headers: Record<string, string | string[] | undefined> }): string =>
+        decodeURIComponent(String(res.headers.location ?? ''));
+      const mailConnect = await server.request('GET', '/api/admin/outlook/connect');
+      assert.match(
+        refusal(mailConnect),
+        /connected by the platform owner/,
+        'an instance admin cannot start the shared mailbox connect flow',
+      );
+      const mailTest = await server.request('POST', '/api/admin/outlook/test', {});
+      assert.match(
+        refusal(mailTest),
+        /tested by the platform owner/,
+        'an instance admin cannot send through the shared mailbox',
+      );
+      // The screens they can still read must not offer the controls either.
+      const emailScreen = await server.get('/settings/email');
+      assert.ok(
+        emailScreen.body.includes('connected and tested by Murikah Labs'),
+        'the email screen tells a pinned admin the mailbox is not theirs to manage',
+      );
+      assert.ok(
+        !emailScreen.body.includes('/api/admin/outlook/test'),
+        'the email screen offers a pinned admin no test action',
+      );
+
+      // AC-01: they may edit their own organisation's roles, and only those.
+      const saved = await server.request('POST', '/api/access-control', {
+        role_code: 'AUDITOR',
+        grant_WORK_PAPER_read: '1',
+      });
+      assert.ok(
+        !String(saved.headers.location ?? '').includes('error='),
+        'an instance admin may edit their own roles',
+      );
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const allowedIn = (org: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = 'WORK_PAPER' AND action_code = 'read'`,
+          )
+          .get(org) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      assert.equal(allowedIn(SMOKE.orgId), 1, 'their own organisation took the change');
+      assert.equal(
+        allowedIn(SMOKE.otherOrgId),
+        1,
+        "the other organisation's own grant is as it was seeded",
+      );
+      assert.equal(
+        allowedIn(PLATFORM_DEFAULT_ORG),
+        1,
+        'the platform defaults are not an instance admin to change',
+      );
+      // The revocations they just made reached nobody else: WORK_PAPER.create was
+      // left unticked, so it is refused for them and untouched everywhere else.
+      const createIn = (org: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = 'WORK_PAPER' AND action_code = 'create'`,
+          )
+          .get(org) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      assert.equal(createIn(SMOKE.orgId), 0, 'their own unticked cell is revoked');
+      assert.equal(createIn(PLATFORM_DEFAULT_ORG), 1, 'the platform default keeps it');
+      assert.equal(createIn(SMOKE.otherOrgId), 0, 'the other organisation keeps its own answer');
+
+      // Back to the owner inside Hass, the state the rest of the run assumes.
+      await signInAsOwnerInsideHass();
+    });
+
+    await t.test('the work paper detail shows the fields that are stored', async () => {
+      // Build Prompt 50. The seed stores an assigned_auditor_id with no
+      // denormalised name, a control_classification and control_standards, and
+      // the detail rendered a dash over all three: it was reading form-field
+      // names rather than column names, and the auditor alias was shadowed by
+      // wp.*. These assert the stored values reach the page.
+      const detail = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(detail.status, 200);
+      // Asserted as the label-and-value pair, not a bare substring: the words
+      // appear elsewhere on the page (the auditor dropdown, the filters), and a
+      // loose match would pass while the field itself still read a dash.
+      const field = (label: string): string | null => {
+        const m = new RegExp(`<dt>${label}</dt>\\s*<dd[^>]*>([^<]*)</dd>`).exec(detail.body);
+        return m ? m[1].trim() : null;
+      };
+      assert.equal(
+        field('Assigned auditor'),
+        'Amina Auditor',
+        'the assigned auditor resolves from assigned_auditor_id, not a dash',
+      );
+      assert.equal(field('Classification'), 'KEY', 'the stored classification is shown');
+      assert.equal(
+        field('Standards'),
+        'ISO 27001, IIA Standards',
+        'the stored standards are shown',
+      );
+
+      // The edit form prefills from the same values. Before this build it read
+      // the same wrong keys, so it opened blank and saved the blank back over
+      // real data: a display bug on the detail, a data-loss bug here.
+      const edit = await server.get(`/work-papers/${SMOKE.draftWorkPaperId}/edit`);
+      assert.equal(edit.status, 200);
+      assert.ok(
+        edit.body.includes('ISO 27001'),
+        'the edit form prefills the stored standards rather than blanking them',
+      );
+      assert.ok(
+        /<option[^>]*value="KEY"[^>]*selected/.test(edit.body),
+        'and keeps the stored classification selected',
+      );
+      assert.ok(
+        new RegExp(`<option[^>]*value="${SMOKE.auditorId}"[^>]*selected`).test(edit.body),
+        'and the stored assigned auditor selected',
+      );
+    });
+
+    await t.test('a role confined to its affiliate sees only its affiliate', async () => {
+      // Build Prompt 45. The seed puts every other record in HKL and exactly one
+      // finding and one action plan in HPL, and gives AFFILIATE_LEAD auditor-side
+      // grants, so the row-level rules would show this viewer the whole
+      // organisation. The confinement is the only thing narrowing them, which is
+      // what makes these assertions mean something.
+      await signInWithEmailCode(SMOKE.confinedUserEmail, SMOKE.password, SMOKE.confinedUserId);
+
+      const list = await server.get('/work-papers');
+      assert.equal(list.status, 200, 'a confined viewer still reaches their list');
+      assert.ok(list.body.includes('WP/2026/002'), 'their own affiliate is listed');
+      assert.ok(
+        !list.body.includes('WP/2026/HPL'),
+        'a finding in another affiliate must not be listed',
+      );
+      assert.ok(
+        list.body.includes(`confined to the ${SMOKE.affiliateCode} affiliate`),
+        'the screen says why the list is narrowed',
+      );
+
+      // The boundary holds on the detail route too, which takes its id from the
+      // URL: a list predicate alone would leave this open to a guessed link.
+      const foreign = await server.get(`/work-papers/${SMOKE.otherAffiliateWorkPaperId}`);
+      assert.ok(
+        foreign.status === 404 || !foreign.body.includes('Pipeline stock counts'),
+        `a finding outside the affiliate must not open, got ${foreign.status}`,
+      );
+      const own = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(own.status, 200, 'their own affiliate still opens');
+
+      // And on the mutation endpoint behind it.
+      const edited = await server.request(
+        'POST',
+        `/api/work-papers/${SMOKE.otherAffiliateWorkPaperId}`,
+        { observation_title: 'Edited across the affiliate boundary', year: '2026' },
+      );
+      assert.ok(edited.status < 500, 'a refused edit is still a handled response');
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+      const title = db
+        .prepare(`SELECT observation_title AS t FROM work_papers WHERE work_paper_id = ?`)
+        .get(SMOKE.otherAffiliateWorkPaperId) as { t?: string };
+      assert.ok(
+        !String(title.t).includes('across the affiliate boundary'),
+        'an edit outside the affiliate must not persist',
+      );
+
+      // The aggregations narrow too, or the totals would leak what the lists hide.
+      const plans = await server.get('/action-plans');
+      assert.ok(!plans.body.includes('AP/2026/HPL'), 'plans outside the affiliate are excluded');
+    });
+
+    await t.test('a user on a Group affiliate is exempt from confinement', async () => {
+      // Build Prompt 48. Same role, same grants, same confinement as the viewer
+      // above: the only difference is that their affiliate carries is_group, so
+      // any change in what they see is attributable to that flag and nothing
+      // else. They must see both affiliates, exactly as an unconfined user does.
+      await signInWithEmailCode(SMOKE.groupUserEmail, SMOKE.password, SMOKE.groupUserId);
+
+      const list = await server.get('/work-papers');
+      assert.equal(list.status, 200, 'a group viewer reaches their list');
+      assert.ok(list.body.includes('WP/2026/002'), 'the HKL affiliate is listed');
+      assert.ok(
+        list.body.includes('WP/2026/HPL'),
+        'and so is the HPL affiliate: the Group sees every affiliate',
+      );
+      assert.ok(
+        list.body.includes('Group affiliate'),
+        'the screen says why a confined role is not narrowing them',
+      );
+
+      // The detail route opens across the boundary too, which is the half a
+      // list-only exemption would have missed.
+      const foreign = await server.get(`/work-papers/${SMOKE.otherAffiliateWorkPaperId}`);
+      assert.equal(foreign.status, 200, 'a finding in another affiliate opens');
+      assert.ok(foreign.body.includes('Pipeline stock counts'), 'and renders its content');
+
+      // The aggregations widen with it, or the totals would contradict the lists.
+      const plans = await server.get('/action-plans');
+      assert.ok(plans.body.includes('AP/2026/HPL'), 'plans in every affiliate are counted');
+    });
+
+    await t.test('a confined user with no affiliate is told, not shown an empty list', async () => {
+      // The state that is easy to get wrong: an ordinary empty state here would
+      // read as "your organisation has no findings" when the truth is "your
+      // account is not finished".
+      await signInWithEmailCode(SMOKE.unassignedUserEmail, SMOKE.password, SMOKE.unassignedUserId);
+      const list = await server.get('/work-papers');
+      assert.equal(list.status, 200, 'the page still renders rather than erroring');
+      assert.ok(
+        list.body.includes('Your account has no affiliate'),
+        'the screen names the configuration problem',
+      );
+      assert.ok(!list.body.includes('WP/2026/002'), 'no findings are shown at all');
+      assert.ok(!list.body.includes('WP/2026/HPL'), 'including the other affiliate');
 
       // Back to the owner inside Hass, the state the rest of the run assumes.
       await signInAsOwnerInsideHass();
@@ -1748,12 +2526,12 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const page = await server.get('/action-plans');
       assert.equal(page.status, 200);
       assert.ok(
-        page.body.includes('Plans without a parent finding'),
+        page.body.includes('Plans without a parent observation'),
         'the orphan panel must show while a stray exists',
       );
       const relink = await server.request('POST', `/api/action-plans/${SMOKE.orphanPlanId}`, {
         work_paper_id: SMOKE.sentWorkPaperId,
-        action_description: 'Legacy stray plan with no parent finding.',
+        action_description: 'Legacy stray plan with no parent observation.',
         target_date: today,
         due_date: today,
         priority: 'Low',
@@ -1770,7 +2548,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.equal(String(row.work_paper_id), SMOKE.sentWorkPaperId, 'the stray must be linked');
       const after = await server.get('/action-plans');
       assert.ok(
-        !after.body.includes('Plans without a parent finding'),
+        !after.body.includes('Plans without a parent observation'),
         'the orphan panel clears once every plan is linked',
       );
     });
@@ -1835,6 +2613,2569 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       assert.ok(res.status < 500 || res.status === 503, `preview answered ${res.status}`);
     });
 
+    // Evidence storage is per organisation (Build Prompt 51). Hass has a tested,
+    // active R2 connection in the seed and Coast deliberately has none, so this
+    // proves both halves of the contract at once: the provider is resolved for
+    // the acting organisation, and an organisation without one is told so
+    // plainly rather than failing at the moment somebody tries to upload.
+    await t.test('the active storage provider is resolved per organisation', async () => {
+      const screen = await server.get('/settings/storage');
+      assert.equal(screen.status, 200, `evidence storage answered ${screen.status}`);
+      assert.ok(
+        screen.body.includes('New evidence is stored in Cloudflare R2'),
+        'Hass must see its own active provider named',
+      );
+      assert.ok(
+        !screen.body.includes('smoke-secret-key'),
+        'no stored credential may ever reach the screen',
+      );
+      assert.ok(
+        screen.body.includes('••••'),
+        'a stored credential is shown masked, so an administrator can tell one is set',
+      );
+
+      const prepared = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'smoke-evidence.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(
+        prepared.status,
+        200,
+        `preparing an upload in Hass answered ${prepared.status}: ${prepared.body.slice(0, 300)}`,
+      );
+      const plan = JSON.parse(prepared.body) as { backend?: string; mode?: string; url?: string };
+      assert.equal(plan.backend, 'r2', "the upload must be prepared against Hass's own provider");
+      assert.equal(plan.mode, 'presigned', 'R2 signs a URL, so the bytes never touch the worker');
+      assert.ok(
+        String(plan.url).includes(SMOKE.storageBucket),
+        "the signed URL must address Hass's own bucket",
+      );
+
+      // The same session, a different organisation, and nothing carries over.
+      await enterInstance(SMOKE.otherOrgId);
+      const coast = await server.get('/settings/storage');
+      assert.equal(coast.status, 200, `Coast's evidence storage answered ${coast.status}`);
+      assert.ok(
+        coast.body.includes('No provider is active yet'),
+        'an organisation with no connection must be told so, never shown a stranger provider',
+      );
+      assert.ok(
+        !coast.body.includes(SMOKE.storageBucket),
+        "Coast must never see Hass's storage settings",
+      );
+      const refused = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'smoke-evidence.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(
+        refused.status,
+        503,
+        `an unconfigured organisation must refuse the upload, got ${refused.status}`,
+      );
+      assert.ok(
+        refused.body.includes('not configured for your organisation'),
+        `the refusal must say why, got ${refused.body.slice(0, 200)}`,
+      );
+
+      await enterInstance();
+    });
+
+    // Requirements are a request for information with two dates on it (Build
+    // Prompt 52): what was asked for, when it was asked for, and when it
+    // arrived. The seeded pair is deliberately one of each state, so a page
+    // that rendered only one label would fail here.
+    await t.test('requirements show both dates, and what is still outstanding', async () => {
+      const res = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(res.status, 200, `the detail answered ${res.status}`);
+      for (const heading of ['Information requested', 'Date requested', 'Date received']) {
+        assert.ok(res.body.includes(heading), `the requirements table must show ${heading}`);
+      }
+      assert.ok(res.body.includes('>Outstanding<'), 'a requirement not yet received reads so');
+      assert.ok(res.body.includes('>Received<'), 'one that has arrived reads so');
+      // The dates themselves are on the page, not only the labels.
+      assert.ok(res.body.includes('2026-01-05'), 'the date requested is shown');
+      assert.ok(res.body.includes('2026-02-09'), 'the date received is shown');
+      // The status is never a form field: it is derived from the date, so there
+      // is nothing on the screen for it to be typed into out of step.
+      assert.ok(
+        !/name="status"/.test(res.body),
+        'a status a person can type beside the date is the bug this replaced',
+      );
+    });
+
+    // Batch release and the head-of-audit digest (Build Prompt 53). An auditor
+    // drafting a week of fieldwork releases it in one action, and the reviewer
+    // gets one email listing everything, never one per finding.
+    await t.test('several drafts release together and become one digest', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // Three real drafts, created through the API so they carry everything a
+      // finding carries: a reference, an area, a risk rating.
+      const created: string[] = [];
+      for (const [i, title] of [
+        'Bank reconciliations not performed',
+        'Supplier master file uncontrolled',
+        'Access reviews overdue',
+      ].entries()) {
+        const res = await server.request('POST', '/api/work-papers', {
+          observation_title: title,
+          observation_description: `Batch release smoke observation ${i + 1}.`,
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          risk_rating: 'High',
+          recommendation: 'Fix it.',
+          assigned_auditor: SMOKE.auditorId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
+        assert.ok(m, `create ${i + 1} redirected to ${res.headers.location}`);
+        created.push(m[1]);
+      }
+
+      // The list offers the batch control for drafts the actor may release.
+      const list = await server.get('/work-papers?status=Draft');
+      assert.equal(list.status, 200, `the list answered ${list.status}`);
+      assert.ok(
+        list.body.includes('Submit selected for review'),
+        'the list must offer the batch release',
+      );
+      assert.ok(list.body.includes('name="work_paper_id"'), 'and a checkbox per draft to release');
+
+      const before = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM notification_queue WHERE batch_type = 'WP_SUBMITTED'`,
+            )
+            .get() as { n: number | bigint }
+        ).n,
+      );
+
+      // One action, three findings.
+      const body = new URLSearchParams();
+      for (const id of created) body.append('work_paper_id', id);
+      const released = await server.request('POST', '/api/work-papers/submit-batch', body);
+      assert.ok(released.status < 400, `the batch answered ${released.status}`);
+      const location = String(released.headers.location ?? '');
+      assert.ok(!/[?&]error=/.test(location), `the batch bounced with an error: ${location}`);
+      assert.ok(
+        decodeURIComponent(location).includes('3 findings submitted for review'),
+        `the batch must report what it did, got: ${location}`,
+      );
+
+      // Each one moved through the transition engine, with its own revision row:
+      // a batch is many submissions, not a bulk update that skips the trail.
+      for (const id of created) {
+        const row = db
+          .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+          .get(id) as { status?: string };
+        assert.equal(String(row.status), 'Submitted', `${id} must be submitted`);
+        const revisions = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM work_paper_revisions
+              WHERE work_paper_id = ? AND to_status = 'Submitted'`,
+          )
+          .get(id) as { n: number | bigint };
+        assert.ok(Number(revisions.n) >= 1, `${id} must have its own revision row`);
+      }
+
+      // Every submission queued its own notification...
+      const queued = db
+        .prepare(
+          `SELECT notification_id AS id, batch_type, recipient_email, rendered_subject, payload,
+                  priority, status
+             FROM notification_queue
+            WHERE batch_type = 'WP_SUBMITTED' AND status = 'PENDING'`,
+        )
+        .all() as {
+        id: string;
+        batch_type: string;
+        recipient_email: string;
+        rendered_subject: string;
+        payload: string;
+        priority: string;
+      }[];
+      assert.ok(
+        queued.length >= before + 3,
+        `three submissions must queue three notifications, got ${queued.length - before}`,
+      );
+
+      // ...and the drain turns them into exactly one email per reviewer, with
+      // every finding in one table. This is the real planner the cron uses.
+      const plans = planNormalDigests(
+        queued.map((r) => ({
+          id: r.id,
+          batchType: r.batch_type,
+          recipientEmail: r.recipient_email,
+          subject: r.rendered_subject,
+          payload: r.payload,
+        })),
+        DIGEST_LINKS,
+      );
+      const recipients = new Set(queued.map((r) => r.recipient_email));
+      assert.ok(recipients.size >= 1, 'the head of audit must be among the recipients');
+      assert.equal(plans.length, recipients.size, 'one email per reviewer, never one per finding');
+      for (const plan of plans) {
+        const mine = queued.filter((r) => r.recipient_email === plan.email);
+        assert.equal(plan.rowIds.length, mine.length, 'the one email settles all their rows');
+        if (mine.length > 1) {
+          assert.match(
+            plan.subject,
+            /work papers submitted for review$/,
+            `a batch digest names the count, got ${plan.subject}`,
+          );
+        }
+        // The table carries every finding that reviewer was told about.
+        for (const row of mine) {
+          const reference = String(
+            (JSON.parse(row.payload) as { reference?: string }).reference ?? '',
+          );
+          assert.ok(reference, 'the payload carries the reference');
+          assert.ok(
+            plan.body.includes(reference),
+            `${reference} must appear in the digest for ${plan.email}`,
+          );
+        }
+        assert.ok(plan.body.includes('Review the queue'), 'with one button to the review queue');
+        assert.ok(
+          plan.body.includes('/work-papers?status=Submitted'),
+          'pointing at the findings waiting on them',
+        );
+      }
+    });
+
+    // Activation on a successful test (Build Prompt 54). A connection could be
+    // written, tested and marked connected while is_active stayed 0, so a
+    // working provider read as "not configured" and evidence could not be
+    // attached without somebody flipping a column by hand. This walks that
+    // exact state and proves the screen alone gets out of it.
+    await t.test('a successful test activates the provider and opens the gate', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      const activeRow = (): {
+        provider?: string;
+        status?: string;
+        is_active?: number | bigint;
+        connected_at?: string | null;
+      } =>
+        db
+          .prepare(
+            `SELECT provider, status, is_active, connected_at FROM storage_connections
+              WHERE organization_id = ? AND provider = 'r2'`,
+          )
+          .get(SMOKE.orgId) as {
+          provider?: string;
+          status?: string;
+          is_active?: number | bigint;
+          connected_at?: string | null;
+        };
+
+      // Put the organisation into the reported state: tested and connected, but
+      // never activated.
+      db.prepare(
+        `UPDATE storage_connections SET is_active = 0 WHERE organization_id = ? AND provider = 'r2'`,
+      ).run(SMOKE.orgId);
+      assert.equal(Number(activeRow().is_active), 0, 'the connection starts inactive');
+
+      // The gate is shut, exactly as an unconfigured organisation's would be.
+      const shut = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'before.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(shut.status, 503, 'a connected-but-inactive provider stores nothing');
+      const screenBefore = await server.get('/settings/storage');
+      assert.ok(
+        screenBefore.body.includes('No provider is active yet'),
+        'and the screen says so rather than showing a green tick',
+      );
+
+      // One press of Test connection.
+      const tested = await server.request('POST', '/api/admin/storage/save', {
+        action: 'test',
+        provider: 'r2',
+      });
+      const location = String(tested.headers.location ?? '');
+      assert.ok(
+        !/[?&]error=/.test(location),
+        `the test must pass against the harness S3, got ${decodeURIComponent(location)}`,
+      );
+
+      // It is now active and connected, with the attribution stamped.
+      const after = activeRow();
+      assert.equal(Number(after.is_active), 1, 'a passing test activates the provider');
+      assert.equal(String(after.status), 'connected', 'and records that it was proved');
+      assert.ok(after.connected_at, 'and when');
+
+      // Exactly one provider is active for the organisation.
+      const actives = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM storage_connections
+            WHERE organization_id = ? AND is_active = 1`,
+        )
+        .get(SMOKE.orgId) as { n: number | bigint };
+      assert.equal(Number(actives.n), 1, 'never two providers claiming the evidence');
+
+      // And the gate is open, with no manual database flip anywhere.
+      const open = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'after.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(open.status, 200, `the gate must open, got ${open.body.slice(0, 200)}`);
+      const screenAfter = await server.get('/settings/storage');
+      assert.ok(
+        screenAfter.body.includes('New evidence is stored in Cloudflare R2'),
+        'and the screen names the active provider',
+      );
+    });
+
+    await t.test('a failed test leaves the provider inactive and says why', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // Point the connection at somewhere that will not answer, and save it.
+      // Saving tests immediately, so this is the "saved but not active" path.
+      const saved = await server.request('POST', '/api/admin/storage/save', {
+        action: 'save',
+        provider: 'r2',
+        account_id: 'smoke-account',
+        bucket: SMOKE.storageBucket,
+        endpoint: 'http://127.0.0.1:1',
+      });
+      const location = decodeURIComponent(String(saved.headers.location ?? ''));
+      assert.match(location, /error=/, 'a save that cannot be proved must not read as success');
+      assert.match(location, /not active/, `it must say it is not active, got ${location}`);
+
+      const row = db
+        .prepare(
+          `SELECT status, is_active FROM storage_connections
+            WHERE organization_id = ? AND provider = 'r2'`,
+        )
+        .get(SMOKE.orgId) as { status?: string; is_active?: number | bigint };
+      assert.equal(Number(row.is_active), 0, 'an unproved connection is never active');
+      assert.equal(String(row.status), 'error', 'and the failure is recorded on the row');
+
+      // The gate is shut again, which is the honest answer while nothing works.
+      const shut = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper',
+        entity_id: SMOKE.sentWorkPaperId,
+        file_name: 'nope.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '1024',
+      });
+      assert.equal(shut.status, 503, 'nothing is stored through a provider that failed its test');
+
+      // Putting the endpoint back proves the recovery is the same one press:
+      // save, which tests, which activates. No column is touched by hand.
+      const fixed = await server.request('POST', '/api/admin/storage/save', {
+        action: 'save',
+        provider: 'r2',
+        account_id: 'smoke-account',
+        bucket: SMOKE.storageBucket,
+        endpoint: server.s3Origin,
+      });
+      assert.ok(
+        !/[?&]error=/.test(String(fixed.headers.location ?? '')),
+        `correcting the endpoint must re-activate it, got ${decodeURIComponent(
+          String(fixed.headers.location ?? ''),
+        )}`,
+      );
+      const restored = db
+        .prepare(
+          `SELECT status, is_active FROM storage_connections
+            WHERE organization_id = ? AND provider = 'r2'`,
+        )
+        .get(SMOKE.orgId) as { status?: string; is_active?: number | bigint };
+      assert.equal(Number(restored.is_active), 1, 'the working provider is active again');
+      assert.equal(String(restored.status), 'connected', 'and proved');
+    });
+
+    // The auditor's own submit (Build Prompt 55). The action is offered from the
+    // transition table and gated on the matrix grant an administrator can see
+    // ticked, so an auditor holding WORK_PAPER.update releases their own draft
+    // without anyone touching a permission list by hand.
+    // What the finding's page shows, and what it must never say (Build Prompt 63).
+    await t.test('the overview names the finding, and never explains a permission', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // A finding of the auditor's own, submitted, so a reviewer action exists
+      // for somebody and it is not this person.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const title = 'Tank dip readings not signed off';
+      const created = await server.request('POST', '/api/work-papers', {
+        intent: 'submit',
+        observation_title: title,
+        observation_description: 'The daily dips were recorded but never signed.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        sub_area_id: SMOKE.subAreaId,
+        audit_period_from: '2026-01-01',
+        audit_period_to: '2026-03-31',
+        risk_rating: 'Medium',
+        recommendation: 'Sign each dip sheet daily.',
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const m = /\/work-papers\/([^/?]+)/.exec(
+        decodeURIComponent(String(created.headers.location ?? '')),
+      );
+      assert.ok(m, `the auditor must be able to submit, got ${created.headers.location}`);
+      const id = m[1];
+      assert.equal(
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        ),
+        'Submitted',
+        'it is with the reviewer, so Start review exists for somebody',
+      );
+
+      const page = await server.get(`/work-papers/${id}`);
+      assert.equal(page.status, 200, `the finding answered ${page.status}`);
+
+      // The finding is drawn as the shared card arrangement (Build Prompt 67):
+      // a header strip with its risk pill, then audit's three cards as one
+      // group, then what management said. The stored title is the field
+      // labelled "Observation" inside the Finding card, which is what Build
+      // Prompt 63 put on this page and 67 moved into its proper place.
+      assert.ok(page.body.includes('data-finding-cards'), 'the observation is drawn as a panel');
+      // Snapshot-led (Build Prompt 72): the title is the anchor at the top of
+      // the panel, and the sections beneath it carry small gold labels.
+      assert.ok(
+        new RegExp(`<h2 class="grc-snap__title">${title}</h2>`).test(page.body),
+        'the stored title is the snapshot anchor',
+      );
+      assert.ok(
+        /<p class="grc-snap__label">Description<\/p>/.test(page.body),
+        'and the first section carries its gold label',
+      );
+      // High to low: nothing administrative precedes the title.
+      const titleAt = page.body.indexOf('grc-snap__title');
+      assert.ok(
+        page.body.indexOf('grc-snap__context') > titleAt,
+        'the context chips sit below the title, not above it',
+      );
+      assert.ok(
+        page.body.indexOf('data-card="description"') > titleAt,
+        'and every section follows it',
+      );
+      assert.ok(
+        !page.body.includes('Observation title'),
+        'and the old label is gone from the screen',
+      );
+      // The header strip rates the finding in words as well as colour.
+      assert.ok(page.body.includes('grc-pill--risk-'), 'the risk is a colour-coded pill');
+      assert.ok(page.body.includes('Risk rating:'), 'spelled out for a screen reader');
+      // The cards run in the order the argument runs, after the context that
+      // led to them.
+      const at = (needle: string): number => {
+        const i = page.body.indexOf(needle);
+        assert.ok(i > 0, `the page must carry ${needle}`);
+        return i;
+      };
+      assert.ok(
+        at('<dt>Testing steps</dt>') < at('data-card="description"'),
+        'the finding follows the testing that found it',
+      );
+      for (const [before, after] of [
+        ['data-card="description"', 'data-card="risk"'],
+        ['data-card="risk"', 'data-card="recommendation"'],
+        ['data-card="recommendation"', 'data-card="response"'],
+      ] as const) {
+        assert.ok(at(before) < at(after), `${before} must come before ${after}`);
+      }
+
+      // Nothing on the screen explains a permission, or names one.
+      for (const leak of [
+        'does not hold',
+        'WORK_PAPER.approve',
+        'WORK_PAPER.update',
+        'reserves it for the',
+        'No action is available to you',
+      ]) {
+        assert.ok(!page.body.includes(leak), `the screen must never say "${leak}"`);
+      }
+      // And the reviewer's actions are simply absent, not explained.
+      for (const reviewerAction of ['Start review', 'Approve', 'Send to auditee']) {
+        assert.ok(
+          !page.body.includes(reviewerAction),
+          `an auditor must not be offered ${reviewerAction}`,
+        );
+      }
+
+      // The head of audit, on the same finding, is offered the action that is
+      // theirs: the actions are hidden by permission, not removed from the app.
+      await signInAsOwnerInsideHass();
+      const reviewerView = await server.get(`/work-papers/${id}`);
+      assert.equal(reviewerView.status, 200, `the reviewer's view answered ${reviewerView.status}`);
+      assert.ok(reviewerView.body.includes('Start review'), 'the reviewer still has their action');
+      assert.ok(
+        !reviewerView.body.includes('does not hold'),
+        'and is told no permission reasons either',
+      );
+      assert.ok(reviewerView.body.includes('grc-snap__title'), 'and sees the observation named');
+      assert.ok(reviewerView.body.includes('data-finding-cards'), 'in the same card arrangement');
+      // A card with nothing in it is a quiet line, not a headed empty box: this
+      // finding has never been answered, and the reader is told so rather than
+      // left to wonder whether the response was omitted.
+      assert.ok(
+        /data-card="response"[\s\S]{0,400}Awaiting response/.test(reviewerView.body),
+        'an unanswered finding says so in its response card',
+      );
+      // And a card with nothing to say about its own absence is dropped.
+      assert.ok(
+        !reviewerView.body.includes('data-card="trail"') ||
+          reviewerView.body.includes('grc-snap__table'),
+        'a trail card only exists when there is a trail to show',
+      );
+
+      // The board pack draws the same cards from the same arrangement, so a
+      // pack and the screen it was approved from cannot disagree.
+      const pack = await server.get('/reports?type=observations');
+      assert.equal(pack.status, 200, `the observations report answered ${pack.status}`);
+      assert.ok(pack.body.includes('data-finding-cards'), 'the pack is drawn as the same cards');
+      assert.ok(pack.body.includes('grc-pill--risk-'), 'with the same risk pill');
+      for (const card of ['description', 'risk', 'recommendation']) {
+        assert.ok(
+          pack.body.includes(`data-card="${card}"`),
+          `the pack must carry the ${card} card`,
+        );
+      }
+    });
+
+    // The badge counts what is this person's to act on, per module (Build Prompt
+    // 62). It was the organisation's submitted count, which badged an auditor
+    // with a number that was nobody's work but the head of audit's.
+    await t.test('the pending badge counts the reader’s own work, per module', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      const countFrom = (body: string, key: string): number => {
+        const m = new RegExp(`data-count-key="${key}"[^>]*>([\\s\\S]*?)</sup>`).exec(body);
+        if (!m) return -1;
+        const digits = m[1].replace(/<[^>]*>/g, '').match(/\d+/);
+        return digits ? Number(digits[0]) : 0;
+      };
+      const hidden = (body: string, key: string): boolean =>
+        new RegExp(`data-count-key="${key}"[^>]*hidden`).test(body) ||
+        new RegExp(`hidden[^>]*data-count-key="${key}"`).test(body);
+
+      // The auditor: their own drafts and anything sent back to them.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const mine = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM work_papers
+                WHERE organization_id = ? AND assigned_auditor_id = ?
+                  AND status IN ('Draft', 'Revision Required')`,
+            )
+            .get(SMOKE.orgId, SMOKE.auditorId) as { n: number | bigint }
+        ).n,
+      );
+      const auditorPage = await server.get('/work-papers');
+      assert.equal(
+        countFrom(auditorPage.body, 'pendingReview'),
+        mine,
+        'an auditor is badged with their own work, not the organisation’s',
+      );
+
+      // The same badge for the head of audit counts what is waiting on them.
+      await signInAsOwnerInsideHass();
+      const waiting = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM work_papers
+                WHERE organization_id = ? AND status IN ('Submitted', 'Under Review')`,
+            )
+            .get(SMOKE.orgId) as { n: number | bigint }
+        ).n,
+      );
+      const reviewerPage = await server.get('/work-papers');
+      const reviewerCount = countFrom(reviewerPage.body, 'pendingReview');
+      assert.ok(
+        reviewerCount >= waiting,
+        `a reviewer is badged with the queue waiting on them, got ${reviewerCount} for ${waiting} waiting`,
+      );
+
+      // And the endpoint the live refresh polls answers the same shape.
+      const json = await server.request('GET', '/api/sidebar-counts');
+      assert.equal(json.status, 200, `the counts endpoint answered ${json.status}`);
+      const counts = JSON.parse(json.body) as Record<string, number>;
+      assert.equal(typeof counts.pendingReview, 'number', 'the badge count is served');
+      assert.equal(typeof counts.myRequirements, 'number', 'and the requirements one beside it');
+
+      // A module with nothing pending shows no bubble at all: the auditee owns
+      // no requirements awaiting them here.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const auditeePage = await server.get('/requirements');
+      assert.equal(auditeePage.status, 200, `the requirements page answered ${auditeePage.status}`);
+      const owned = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM work_paper_requirements r
+                WHERE r.organization_id = ? AND r.closed_at IS NULL AND r.deleted_at IS NULL
+                  AND EXISTS (SELECT 1 FROM requirement_owners o
+                               WHERE o.requirement_id = r.requirement_id AND o.user_id = ?)`,
+            )
+            .get(SMOKE.orgId, SMOKE.auditeeId) as { n: number | bigint }
+        ).n,
+      );
+      if (owned === 0) {
+        assert.ok(
+          hidden(auditeePage.body, 'myRequirements'),
+          'nothing pending means no bubble, not a zero',
+        );
+      } else {
+        assert.ok(
+          !hidden(auditeePage.body, 'myRequirements'),
+          'something pending means the bubble shows',
+        );
+      }
+
+      await signInAsOwnerInsideHass();
+    });
+
+    // The three defects of Build Prompt 62, driven end to end: the evidence gate
+    // that refused with evidence attached, the review rounds that told nobody,
+    // and the badge that counted somebody else's work.
+    await t.test(
+      'the review loop notifies each round, and sends with evidence attached',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          intent: 'submit',
+          observation_title: 'Bulk meter readings unreconciled',
+          observation_description: 'The depot readings were not reconciled to the dispatch notes.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+          risk_rating: 'High',
+          recommendation: 'Reconcile daily.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(
+          decodeURIComponent(String(created.headers.location ?? '')),
+        );
+        assert.ok(m, `the auditor must be able to submit, got ${created.headers.location}`);
+        const id = m[1];
+
+        const statusOf = (): string =>
+          String(
+            (
+              db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+                status?: string;
+              }
+            ).status,
+          );
+        // Who a round is addressed to, which is not everybody it reaches: the
+        // head of audit is copied on the key events and those rows carry is_cc,
+        // so they are counted apart from the person who must act next.
+        const queuedFor = (type: string): { user: string; body: string }[] =>
+          (
+            db
+              .prepare(
+                `SELECT recipient_user_id AS user, rendered_body AS body FROM notification_queue
+                  WHERE batch_type = ? AND related_entity_id = ? AND COALESCE(is_cc, 0) = 0`,
+              )
+              .all(type, id) as { user: string | null; body: string | null }[]
+          ).map((r) => ({ user: String(r.user ?? ''), body: String(r.body ?? '') }));
+
+        assert.equal(statusOf(), 'Submitted', 'it is with the reviewer');
+
+        // The reviewer opens it and sends it back. Every round must reach the
+        // auditor, with the reason it was sent back.
+        await signInAsOwnerInsideHass();
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Under Review',
+        });
+        const returned = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Revision Required',
+          comment: 'The dispatch notes for March are not attached.',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(returned.headers.location ?? ''))),
+          'the reviewer must be able to return it',
+        );
+        assert.equal(statusOf(), 'Revision Required', 'it is back with its auditor');
+
+        const firstReturn = queuedFor('WP_REVISION_REQUIRED');
+        assert.equal(firstReturn.length, 1, 'a return for revision emails exactly one person');
+        assert.equal(firstReturn[0].user, SMOKE.auditorId, 'and that person is its auditor');
+        assert.ok(
+          firstReturn[0].body.includes('The dispatch notes for March are not attached.'),
+          'the reviewer’s reason travels with it, or the email says nothing useful',
+        );
+
+        // Round two: the same loop again. The second return must email too, which
+        // is the half a "notify once" implementation gets wrong.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Submitted',
+        });
+        await signInAsOwnerInsideHass();
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Under Review',
+        });
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Revision Required',
+          comment: 'Still missing the 14 March note.',
+        });
+        assert.equal(
+          queuedFor('WP_REVISION_REQUIRED').length,
+          2,
+          'every round emails the auditor, not just the first',
+        );
+
+        // Round three, through to approval: the approval tells the auditor their
+        // finding passed.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Submitted',
+        });
+        await signInAsOwnerInsideHass();
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Under Review',
+        });
+        await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Approved',
+        });
+        assert.equal(statusOf(), 'Approved', 'it is approved');
+        const approved = queuedFor('WP_APPROVED');
+        assert.equal(
+          approved.length,
+          1,
+          `the approval is addressed to one person, got ${JSON.stringify(
+            db
+              .prepare(
+                `SELECT recipient_user_id AS u, is_cc AS cc FROM notification_queue
+                WHERE batch_type = 'WP_APPROVED' AND related_entity_id = ?`,
+              )
+              .all(id),
+          )}`,
+        );
+        assert.equal(approved[0].user, SMOKE.auditorId, 'the auditor whose finding it is');
+
+        // The evidence gate. With nothing attached it refuses, and says so in the
+        // log with the count it saw.
+        const refused = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Sent to Auditee',
+        });
+        const refusedAt = decodeURIComponent(String(refused.headers.location ?? ''));
+        assert.ok(
+          refusedAt.includes('Attach evidence before sending to the auditee'),
+          `an evidence-free send must refuse, got ${refusedAt}`,
+        );
+        const line = await waitForLogLine(
+          `[grc.workpaper.auditee] refused {"work_paper_id":"${id}"`,
+        );
+        assert.ok(line, 'and the refusal must say what it counted');
+        assert.ok(line.includes('"evidence_count":0'), `naming the count, got ${line}`);
+
+        // Attach evidence exactly as the Evidence panel does, and the same send
+        // now passes: the gate counts what the auditor can see.
+        const upload = await server.postMultipart(
+          '/api/evidence/put',
+          {
+            entity_type: 'work_paper',
+            entity_id: id,
+            file_id: crypto.randomUUID(),
+            file_name: 'dispatch-notes-march.txt',
+            content_type: 'text/plain',
+          },
+          {
+            field: 'file',
+            filename: 'dispatch-notes-march.txt',
+            contentType: 'text/plain',
+            content: 'March dispatch notes.',
+          },
+        );
+        assert.equal(upload.status, 200, `the upload answered ${upload.status}: ${upload.body}`);
+        // Both halves of the upload, asserted separately (Build Prompt 65). The
+        // file row on its own was what the live system had: bytes stored,
+        // metadata recorded, and no link row anywhere, so the evidence belonged
+        // to nothing and the panel and the gate both saw an empty finding.
+        const fileRow = db
+          .prepare(`SELECT COUNT(*) AS n FROM files WHERE file_name = ? AND organization_id = ?`)
+          .get('dispatch-notes-march.txt', SMOKE.orgId) as { n: number | bigint };
+        assert.equal(Number(fileRow.n), 1, 'the file row is written');
+        const attached = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM file_attachments fa
+               JOIN files f ON f.file_id = fa.file_id
+              WHERE TRIM(UPPER(fa.entity_type)) = 'WORK_PAPER' AND fa.entity_id = ?
+                AND f.file_name = ?`,
+          )
+          .get(id, 'dispatch-notes-march.txt') as { n: number | bigint };
+        assert.equal(Number(attached.n), 1, 'and the link row that ties it to the work paper');
+
+        const sent = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Sent to Auditee',
+        });
+        const sentAt = decodeURIComponent(String(sent.headers.location ?? ''));
+        assert.ok(
+          !/[?&]error=/.test(sentAt),
+          `evidence is attached, so it must send, got ${sentAt}`,
+        );
+        assert.equal(statusOf(), 'Sent to Auditee', 'and the finding goes to the auditee');
+      },
+    );
+
+    await t.test('the reviewer override sends a finding with no evidence on it', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // A finding approved with nothing attached: the state the override is for.
+      const approvedId = 'WP-NOEVIDENCE-1';
+      db.prepare(
+        `INSERT INTO work_papers (work_paper_id, organization_id, work_paper_ref, created_by,
+             year, affiliate_code, audit_area_id, sub_area_id, audit_period_from, audit_period_to,
+             observation_title, observation_description, risk_rating, recommendation,
+             status, revision_count, assigned_auditor_id, created_at, updated_at)
+           VALUES (?, ?, 'WP/2026/NOEV', ?, 2026, ?, ?, ?, '2026-01-01', '2026-03-31',
+                   'An observation with no attachment', 'Nothing to attach.', 'Low',
+                   'Note it in the file.', 'Approved', 0, ?, ?, ?)`,
+      ).run(
+        approvedId,
+        SMOKE.orgId,
+        SMOKE.auditorId,
+        SMOKE.affiliateCode,
+        SMOKE.auditAreaId,
+        SMOKE.subAreaId,
+        SMOKE.auditorId,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+
+      // The auditor holds update, not approve, so they hold no override either:
+      // the refusal is the same one anybody without the grant gets.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const asAuditor = await server.request('POST', `/api/work-papers/${approvedId}/transition`, {
+        to_status: 'Sent to Auditee',
+      });
+      assert.ok(
+        decodeURIComponent(String(asAuditor.headers.location ?? '')).includes('permission'),
+        'an auditor cannot send at all, override or not',
+      );
+
+      // The head of audit holds the override, but holding it is not using it: an
+      // unticked send is refused exactly as anybody else's is.
+      await signInAsOwnerInsideHass();
+      const unticked = await server.request('POST', `/api/work-papers/${approvedId}/transition`, {
+        to_status: 'Sent to Auditee',
+      });
+      assert.ok(
+        decodeURIComponent(String(unticked.headers.location ?? '')).includes('Attach evidence'),
+        'the gate stands until the override is deliberately used',
+      );
+
+      // Ticked, it sends, and the trail records who decided it.
+      const sent = await server.request('POST', `/api/work-papers/${approvedId}/transition`, {
+        to_status: 'Sent to Auditee',
+        evidence_override: '1',
+      });
+      const at = decodeURIComponent(String(sent.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(at), `the override must let the reviewer send, got ${at}`);
+      const overrideLogged = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_log
+            WHERE action = 'WORK_PAPER.evidence_override' AND entity_id = ?`,
+        )
+        .get(approvedId) as { n: number | bigint };
+      assert.ok(Number(overrideLogged.n) >= 1, 'a finding sent bare says who decided that');
+
+      // And the screen offers the tick only to somebody who holds the grant.
+      const detail = await server.get(`/work-papers/${SMOKE.sentWorkPaperId}`);
+      assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+      const row = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(approvedId) as { status?: string };
+      assert.equal(String(row.status), 'Sent to Auditee', 'and the finding goes');
+    });
+
+    // The workflow a move is looked up in (Build Prompt 61). `status_transitions`
+    // holds every workflow in one table, and two of them define a
+    // `Draft -> Submitted`: the work paper's, and an auditee response's. The
+    // live table spells the work-paper workflow in lower case, which a
+    // case-sensitive lookup matched none of, so the engine loaded an empty rule
+    // set and refused every move a finding could make.
+    await t.test('a work paper moves under its own workflow, not a same-named one', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // The premise: the decoy exists, under its own enum, and the work paper's
+      // own rows are spelled as the live database spells them.
+      const decoy = db
+        .prepare(
+          `SELECT enum_type AS e, required_role AS role FROM status_transitions
+            WHERE from_status = 'Draft' AND to_status = 'Submitted'
+         ORDER BY enum_type`,
+        )
+        .all() as { e: string; role: string | null }[];
+      assert.equal(decoy.length, 2, 'two workflows define this move, as the live table does');
+      assert.deepEqual(
+        decoy.map((d) => d.e),
+        ['response_status', 'work_paper_status'],
+        'one of them is not the work paper’s',
+      );
+      assert.equal(
+        decoy.find((d) => d.e === 'response_status')?.role,
+        'NOBODY',
+        'and the wrong one would refuse loudly if it were ever matched',
+      );
+
+      // The auditor submits a complete draft: it resolves its own workflow.
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const raise = async (title: string): Promise<string> => {
+        const res = await server.request('POST', '/api/work-papers', {
+          observation_title: title,
+          observation_description: 'Raised to prove the workflow lookup is scoped.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+          risk_rating: 'Medium',
+          recommendation: 'Fix it.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
+        assert.ok(m, `the auditor must be able to raise "${title}"`);
+        return m[1];
+      };
+      const single = await raise('Meter calibration records not held');
+      const batched = await raise('Depot gate log not maintained');
+
+      const statusOf = (id: string): string =>
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        );
+
+      // Single.
+      const submitted = await server.request('POST', `/api/work-papers/${single}/transition`, {
+        to_status: 'Submitted',
+      });
+      const at = decodeURIComponent(String(submitted.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(at), `the single submit must succeed, got ${at}`);
+      assert.equal(statusOf(single), 'Submitted', 'the finding moves');
+      const revision = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM work_paper_revisions
+            WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+        )
+        .get(single) as { n: number | bigint };
+      assert.equal(Number(revision.n), 1, 'and writes its revision');
+      const notified = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE batch_type = 'WP_SUBMITTED' AND related_entity_id = ?`,
+        )
+        .get(single) as { n: number | bigint };
+      assert.ok(Number(notified.n) >= 1, 'and the reviewer is told');
+
+      // Batch, through the list's own route, which returns to the list.
+      const body = new URLSearchParams();
+      body.append('work_paper_id', batched);
+      const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+      const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
+      assert.ok(batchAt.startsWith('/work-papers?'), 'and returns to the list');
+      assert.equal(statusOf(batched), 'Submitted', 'the batched finding moves too');
+
+      // The comment the decoy would have demanded was never asked for, which is
+      // the proof the other workflow's rules did not decide this move.
+      assert.ok(
+        !batchAt.includes('requires a comment'),
+        'the response workflow’s comment rule must never reach a work paper',
+      );
+
+      // And the same workflow answers as one workflow even where a row is
+      // spelled differently: the resubmit after a review is seeded under
+      // `Work_Paper_Status`, as a hand-edited reference row may well be.
+      await signInAsOwnerInsideHass();
+      for (const [to, comment] of [
+        ['Under Review', ''],
+        ['Revision Required', 'Add the sample selection.'],
+      ] as const) {
+        const moved = await server.request('POST', `/api/work-papers/${single}/transition`, {
+          to_status: to,
+          comment,
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(moved.headers.location ?? ''))),
+          `the reviewer must be able to move it to ${to}`,
+        );
+      }
+      assert.equal(statusOf(single), 'Revision Required', 'it is back with its auditor');
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const resubmitted = await server.request('POST', `/api/work-papers/${single}/transition`, {
+        to_status: 'Submitted',
+      });
+      const resubmittedAt = decodeURIComponent(String(resubmitted.headers.location ?? ''));
+      assert.ok(
+        !/[?&]error=/.test(resubmittedAt),
+        `a row spelled differently is still this workflow, got ${resubmittedAt}`,
+      );
+      assert.equal(statusOf(single), 'Submitted', 'and the resubmission moves it');
+
+      await signInAsOwnerInsideHass();
+    });
+
+    // The auditee response loop, end to end, signed in as the people it
+    // belongs to (Build Prompt 68). This is the case that proves staff act by
+    // delegation rather than by permission: Stella holds the JUNIOR_STAFF role,
+    // which is seeded with no role_permissions rows at all, so every door she
+    // walks through is opened by the delegation row and nothing else.
+    await t.test('a delegated response goes out, comes back and is released', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // A finding of its own, so the loop is not read through the state the
+      // other cases have already left the shared one in.
+      const id = 'WP-LOOP-1';
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO work_papers (work_paper_id, organization_id, work_paper_ref, created_by,
+             year, affiliate_code, audit_area_id, sub_area_id, audit_period_from, audit_period_to,
+             observation_title, observation_description, risk_rating, recommendation,
+             status, response_round, revision_count, assigned_auditor_id,
+             sent_to_auditee_date, auditee_stage, created_at, updated_at)
+           VALUES (?, ?, 'WP/2026/LOOP', ?, 2026, ?, ?, ?, '2026-01-01', '2026-03-31',
+                   'Fuel reconciliations are not reviewed', 'Nobody signs them off.', 'High',
+                   'Introduce a monthly review.', 'Sent to Auditee', 1, 1, ?, ?, 'WITH_AUDITEE', ?, ?)`,
+      ).run(
+        id,
+        SMOKE.orgId,
+        SMOKE.userId,
+        SMOKE.affiliateCode,
+        SMOKE.auditAreaId,
+        SMOKE.subAreaId,
+        SMOKE.auditorId,
+        now,
+        now,
+        now,
+      );
+      // The unit manager is responsible, the auditor is copied. Both must hear
+      // about every step of what follows.
+      db.prepare(
+        `INSERT INTO work_paper_responsibles (work_paper_id, user_id, role_in_finding, added_at, added_by)
+           VALUES (?, ?, 'RESPONSIBLE', ?, ?)`,
+      ).run(id, SMOKE.auditeeId, now, SMOKE.userId);
+      db.prepare(
+        `INSERT INTO work_paper_cc_recipients (work_paper_id, email, user_id, added_at)
+           VALUES (?, 'cc@hasspetroleum.com', ?, ?)`,
+      ).run(id, SMOKE.auditorId, now);
+
+      const stageOf = (): string => {
+        const r = db
+          .prepare(`SELECT auditee_stage AS stage FROM work_papers WHERE work_paper_id = ?`)
+          .get(id) as { stage?: string };
+        return String(r?.stage ?? '');
+      };
+      const queuedFor = (): Set<string> => {
+        const rows = db
+          .prepare(
+            `SELECT DISTINCT recipient_user_id AS uid FROM notification_queue
+              WHERE related_entity_id = ? AND recipient_user_id IS NOT NULL`,
+          )
+          .all(id) as { uid?: string }[];
+        return new Set(rows.map((r) => String(r.uid)));
+      };
+
+      // 1. The unit manager delegates the drafting to their staff.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const thread = await server.get(`/auditee-responses/${id}`);
+      assert.equal(thread.status, 200, `the manager's thread answered ${thread.status}`);
+      assert.ok(
+        thread.body.includes('Delegate the response'),
+        'the manager is offered the handover',
+      );
+      assert.ok(thread.body.includes('Release to audit'), 'and can release it themselves');
+
+      const delegated = await server.request('POST', '/api/auditee-responses/delegate', {
+        work_paper_id: id,
+        delegated_to: SMOKE.staffId,
+        instructions: 'Pull the March reconciliations and draft what we will do.',
+      });
+      const delegatedAt = decodeURIComponent(String(delegated.headers.location ?? ''));
+      assert.ok(
+        !/[?&]error=/.test(delegatedAt),
+        `the delegation must be accepted, got ${delegatedAt}`,
+      );
+      assert.equal(stageOf(), 'DELEGATED', 'and the finding says who is holding it');
+      const row = db
+        .prepare(
+          `SELECT delegated_to AS toId, status, instructions FROM auditee_delegations
+            WHERE work_paper_id = ?`,
+        )
+        .get(id) as { toId?: string; status?: string; instructions?: string };
+      assert.equal(String(row?.toId), SMOKE.staffId, 'the delegation names the delegate');
+      assert.equal(String(row?.status), 'ISSUED', 'and is live');
+      assert.match(
+        String(row?.instructions),
+        /March reconciliations/,
+        'with the brief they were given',
+      );
+
+      // The manager cannot release while somebody else is drafting: deciding
+      // the response is finished is not the delegate's call, and it is not the
+      // manager's either until they have it back.
+      const early = await server.request('POST', '/api/auditee-responses/submit', {
+        work_paper_id: id,
+        management_response: 'Releasing over the delegate is head.',
+      });
+      const earlyAt = decodeURIComponent(String(early.headers.location ?? ''));
+      assert.ok(
+        /must return this draft/.test(earlyAt),
+        `releasing past a live delegation must refuse, got ${earlyAt}`,
+      );
+
+      // 2. The delegate, who holds no permissions at all, drafts and returns it.
+      await signInWithEmailCode(SMOKE.staffEmail, SMOKE.password, SMOKE.staffId);
+      const staffView = await server.get(`/auditee-responses/${id}`);
+      assert.equal(staffView.status, 200, `the delegate's thread answered ${staffView.status}`);
+      assert.ok(
+        staffView.body.includes('Return the draft to the unit manager'),
+        'the delegate is offered the one move their delegation entitles them to',
+      );
+      assert.ok(
+        !staffView.body.includes('Release to audit'),
+        'and not the release, which is the manager is',
+      );
+      assert.ok(
+        !staffView.body.includes('Delegate the response'),
+        'nor the power to delegate it onwards',
+      );
+      // A delegate can attach what supports the draft: it is most of what they
+      // were asked to do, and their standing for it is the delegation row.
+      const upload = await server.postMultipart(
+        '/api/evidence/put',
+        {
+          entity_type: 'work_paper',
+          entity_id: id,
+          file_id: crypto.randomUUID(),
+          file_name: 'march-reconciliations.txt',
+          content_type: 'text/plain',
+        },
+        {
+          field: 'file',
+          filename: 'march-reconciliations.txt',
+          contentType: 'text/plain',
+          content: 'March reconciliations, signed.',
+        },
+      );
+      assert.equal(upload.status, 200, `the delegate's upload answered ${upload.status}`);
+
+      const returned = await server.request('POST', '/api/auditee-responses/return', {
+        work_paper_id: id,
+        return_note: 'Drafted and attached the March reconciliations.',
+      });
+      const returnedAt = decodeURIComponent(String(returned.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(returnedAt), `the return must be accepted, got ${returnedAt}`);
+      assert.equal(stageOf(), 'WITH_UNIT_MANAGER', 'and it goes back to the manager');
+
+      // Handed back, the delegate is finished: history is not access.
+      const afterReturn = await server.request('POST', '/api/auditee-responses/return', {
+        work_paper_id: id,
+        return_note: 'Trying again.',
+      });
+      assert.ok(
+        /[?&]error=/.test(decodeURIComponent(String(afterReturn.headers.location ?? ''))),
+        'a returned delegation confers nothing further',
+      );
+
+      // 3. The manager reviews what came back and releases it to audit.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const back = await server.get(`/auditee-responses/${id}`);
+      assert.ok(
+        back.body.includes('Drafted and attached the March reconciliations'),
+        'the manager sees what the delegate said when handing it back',
+      );
+      const released = await server.request('POST', '/api/auditee-responses/submit', {
+        work_paper_id: id,
+        management_response: 'We accept the finding. Monthly review starts in April.',
+      });
+      const releasedAt = decodeURIComponent(String(released.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(releasedAt), `the release must be accepted, got ${releasedAt}`);
+      assert.equal(stageOf(), 'WITH_AUDIT', 'and the finding is with audit');
+      const closed = db
+        .prepare(`SELECT status FROM auditee_delegations WHERE work_paper_id = ?`)
+        .get(id) as { status?: string };
+      assert.equal(
+        String(closed?.status),
+        'CLOSED',
+        'the delegation closes with the release, so no delegate keeps write access',
+      );
+
+      // 4. Audit modifies the wording and accepts, rather than spending a whole
+      // round on a sentence.
+      await signInAsOwnerInsideHass();
+      const auditView = await server.get(`/auditee-responses/${id}`);
+      assert.ok(
+        auditView.body.includes('Modify and accept'),
+        'audit is offered the third decision',
+      );
+      const responseRow = db
+        .prepare(
+          `SELECT response_id AS rid FROM auditee_responses
+            WHERE work_paper_id = ? ORDER BY submitted_date DESC LIMIT 1`,
+        )
+        .get(id) as { rid?: string };
+      assert.ok(responseRow?.rid, 'the released round exists to be decided');
+      const decided = await server.request(
+        'POST',
+        `/api/auditee-responses/${String(responseRow.rid)}/review`,
+        { decision: 'modify', review_comments: 'Reworded the deadline to 30 April.' },
+      );
+      const decidedAt = decodeURIComponent(String(decided.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(decidedAt), `the decision must be accepted, got ${decidedAt}`);
+      assert.equal(stageOf(), 'CLOSED', 'and the loop is finished');
+
+      // 5. Everybody named heard about it, every time. This is the loop's whole
+      // failure mode: the manager not knowing their supervisor handed it back,
+      // or the copy recipient finding out at the closing meeting.
+      const told = queuedFor();
+      for (const [who, uid] of [
+        ['the responsible unit manager', SMOKE.auditeeId],
+        ['the copied auditor', SMOKE.auditorId],
+        ['the delegate who drafted it', SMOKE.staffId],
+      ] as const) {
+        assert.ok(told.has(uid), `${who} must have been notified about this finding`);
+      }
+      // And the fan-out is per move, not one mail for the whole loop.
+      const moves = db
+        .prepare(
+          `SELECT DISTINCT batch_type AS t FROM notification_queue WHERE related_entity_id = ?`,
+        )
+        .all(id) as { t?: string }[];
+      const types = new Set(moves.map((m) => String(m.t)));
+      for (const type of [
+        'AUDITEE_DELEGATED',
+        'AUDITEE_RETURNED',
+        'AUDITEE_RELEASED',
+        'AUDITEE_DECIDED',
+      ]) {
+        assert.ok(types.has(type), `${type} must have been queued, got ${[...types].join(', ')}`);
+      }
+
+      // The trail reads as one story to whoever opens it.
+      const story = await server.get(`/auditee-responses/${id}`);
+      for (const step of [
+        'Delegated to Stella Staff',
+        'Returned to the unit manager',
+        'Round 1 released to audit',
+      ]) {
+        assert.ok(story.body.includes(step), `the trail must show "${step}"`);
+      }
+    });
+
+    // Being copied is not being asked (Build Prompt 68). The auditor is a CC on
+    // the finding above, so they see everything and can act on none of it.
+    await t.test('a copy recipient sees the loop and is offered nothing', async () => {
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+      const page = await server.get('/auditee-responses/WP-LOOP-1');
+      assert.equal(page.status, 200, `the CC's thread answered ${page.status}`);
+      assert.ok(
+        page.body.includes('Fuel reconciliations are not reviewed'),
+        'they see the finding',
+      );
+      assert.ok(page.body.includes('Delegated to Stella Staff'), 'and the whole trail');
+      for (const control of [
+        'Delegate the response',
+        'Return the draft to the unit manager',
+        'Release to audit',
+      ]) {
+        assert.ok(!page.body.includes(control), `a CC must not be offered "${control}"`);
+      }
+    });
+
+    // The word the product does not use any more (Build Prompt 70). Audit calls
+    // these observations, so every screen calls them observations: a page that
+    // says "finding" is a second vocabulary the reader has to reconcile with
+    // the one their charter uses. This crawls the pages a signed-in auditor
+    // sees and asserts the word is absent from the rendered HTML, which is the
+    // only place it matters. Code identifiers keep their own names, and the
+    // class and component names below are deliberately not searched for.
+    await t.test('no screen says "finding" where it means an observation', async () => {
+      await signInAsOwnerInsideHass();
+      const offenders: string[] = [];
+      for (const path of [
+        '/',
+        '/work-papers',
+        `/work-papers/${SMOKE.sentWorkPaperId}`,
+        '/work-papers/new',
+        '/action-plans',
+        '/action-plans/new',
+        '/auditee-responses',
+        `/auditee-responses/${SMOKE.sentWorkPaperId}`,
+        '/requirements',
+        '/requirements/new',
+        '/reports',
+      ]) {
+        const page = await server.get(path);
+        assert.equal(page.status, 200, `${path} answered ${page.status}`);
+        // Strip the markup first: `grc-finding`, `GrcFindingCards` and
+        // `data-card="finding"` are code, and code is not what a reader reads.
+        const text = page.body
+          .replace(/<script[\s\S]*?<\/script>/g, ' ')
+          .replace(/<style[\s\S]*?<\/style>/g, ' ')
+          .replace(/<[^>]+>/g, ' ');
+        const hit = /\b[Ff]indings?\b/.exec(text);
+        if (hit)
+          offenders.push(
+            `${path}: "${text.slice(Math.max(0, hit.index - 40), hit.index + 40).trim()}"`,
+          );
+      }
+      assert.deepEqual(offenders, [], `these screens still say finding:\n${offenders.join('\n')}`);
+    });
+
+    // The sidebar chrome (Build Prompt 60): no standalone Notifications
+    // destination, pending counts on the modules they belong to, and account
+    // actions that are options rather than bordered pills out of line with the
+    // icons above them.
+    await t.test('the sidebar badges the modules and lists the account actions', async () => {
+      const page = await server.get('/work-papers');
+      assert.equal(page.status, 200, `the page answered ${page.status}`);
+
+      // Nothing in the sidebar is called Notifications any more (Build Prompt
+      // 67). Build Prompt 60 took the destination and left the bell, which was
+      // the same thing in another shape; both are gone, and what is waiting is
+      // counted on the module it is waiting in.
+      assert.ok(
+        !page.body.includes('class="grc-navlink" href="/notifications"'),
+        'the standalone Notifications entry is gone from the navigation',
+      );
+      assert.ok(!page.body.includes('grc-bell'), 'and the bell that duplicated it is gone too');
+      assert.ok(
+        !page.body.includes('>Notifications<'),
+        'nothing in the shell is labelled Notifications',
+      );
+
+      // The modules carry their own pending counts, ready for the live refresh,
+      // as a superscript bubble on the label rather than a pill at the far edge
+      // (Build Prompt 62).
+      for (const key of ['pendingReview', 'myRequirements']) {
+        assert.ok(
+          page.body.includes(`data-count-key="${key}"`),
+          `${key} must badge its own module`,
+        );
+      }
+      assert.ok(
+        /<sup[^>]*class="grc-navcount"/.test(page.body),
+        'the count is a superscript on the label it counts',
+      );
+      assert.ok(page.body.includes('grc-navlink__label'), 'and rides the label, not the row');
+      assert.ok(
+        page.body.includes('pending</span>'),
+        'a bare digit announces nothing, so the label says what it counts',
+      );
+      // A badge with nothing pending is hidden rather than showing a zero.
+      assert.ok(
+        /data-count-key="myRequirements"[^>]*hidden/.test(page.body) ||
+          /hidden[^>]*data-count-key="myRequirements"/.test(page.body),
+        'a module with nothing waiting shows no badge at all',
+      );
+
+      // The account actions are the same list, the same alignment, as the nav.
+      assert.ok(page.body.includes('grc-account__list'), 'the account actions are a list');
+      assert.ok(
+        !page.body.includes('grc-signout'),
+        'and none of them is styled as a button any more',
+      );
+      for (const label of ['Account security', 'Change password', 'Sign out']) {
+        assert.ok(page.body.includes(label), `${label} is still offered`);
+      }
+      // Sign out still posts, so it stays a real button inside its form.
+      assert.ok(
+        page.body.includes('action="/api/auth/logout"'),
+        'signing out is still a form post, not a link',
+      );
+    });
+
+    // Who an organisation's mail reaches (Build Prompt 60). The platform owner's
+    // account carries SUPER_ADMIN and lives inside Hass, so the head-of-audit
+    // lookup resolved them and posted them every copy and reminder the instance
+    // generated. The head of audit for an instance is its own SUPER_ADMIN, and
+    // this is the very resolver the reminders copy through.
+    await t.test(
+      'the head-of-audit copy reaches the instance admin, never the platform owner',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        // The premise: both accounts are SUPER_ADMIN inside Hass, and only one of
+        // them runs the platform.
+        const admins = db
+          .prepare(
+            `SELECT user_id AS id, is_platform_owner AS owner FROM users
+            WHERE organization_id = ? AND role_code = 'SUPER_ADMIN' ORDER BY user_id`,
+          )
+          .all(SMOKE.orgId) as { id: string; owner: number | bigint }[];
+        assert.ok(
+          admins.some((a) => a.id === SMOKE.userId && Number(a.owner) === 1),
+          'the platform owner is a SUPER_ADMIN in this organisation',
+        );
+        assert.ok(
+          admins.some((a) => a.id === SMOKE.instanceAdminId && Number(a.owner) === 0),
+          'and so is the instance head of audit',
+        );
+
+        // A real event that copies the head of audit: the auditor submits their
+        // own finding.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          intent: 'submit',
+          observation_title: 'Tank calibration certificates missing',
+          observation_description: 'The calibration certificates were not produced.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+          risk_rating: 'High',
+          recommendation: 'Obtain and file the certificates.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const at = decodeURIComponent(String(created.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(at), `the submission must succeed, got ${at}`);
+        const m = /\/work-papers\/([^/?]+)/.exec(at);
+        assert.ok(m, `the submission must land on the finding, got ${at}`);
+
+        const copies = db
+          .prepare(
+            `SELECT recipient_user_id AS user_id, recipient_email AS email FROM notification_queue
+            WHERE related_entity_id = ? AND is_cc = 1`,
+          )
+          .all(m[1]) as { user_id: string | null; email: string }[];
+        assert.ok(copies.length >= 1, 'the head of audit is copied on a submission');
+        const ids = copies.map((c) => String(c.user_id ?? ''));
+        assert.ok(
+          !ids.includes(SMOKE.userId) && !copies.some((c) => c.email === SMOKE.email),
+          `the platform owner must never be copied, got ${ids.join(', ')}`,
+        );
+        assert.ok(
+          ids.includes(SMOKE.instanceAdminId),
+          `the instance head of audit must be, got ${ids.join(', ')}`,
+        );
+
+        await signInAsOwnerInsideHass();
+      },
+    );
+
+    await t.test('the assigned auditor can submit their own draft for review', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+
+      // Their own finding, created by them and assigned to them.
+      const created = await server.request('POST', '/api/work-papers', {
+        observation_title: 'Petty cash counts not evidenced',
+        observation_description: 'Raised by the auditor for their own submission.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        sub_area_id: SMOKE.subAreaId,
+        risk_rating: 'Medium',
+        recommendation: 'Evidence every count.',
+        assigned_auditor: SMOKE.auditorId,
+        audit_period_from: '2026-01-01',
+        audit_period_to: '2026-03-31',
+      });
+      const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+      assert.ok(m, `the auditor must be able to raise a finding, got ${created.headers.location}`);
+      const id = m[1];
+
+      const before = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(id) as { status?: string };
+      assert.equal(String(before.status), 'Draft', 'it starts as a draft');
+
+      // The action is offered, with its label and its form.
+      const detail = await server.get(`/work-papers/${id}`);
+      assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+      assert.ok(
+        detail.body.includes('Submit for review'),
+        'the assigned auditor must see Submit for review on their own draft',
+      );
+      assert.ok(
+        detail.body.includes('name="to_status" value="Submitted"'),
+        'and the form that performs it',
+      );
+      assert.ok(
+        !detail.body.includes('No action is available to you'),
+        'so the panel must not claim there is nothing they can do',
+      );
+
+      const queuedBefore = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM notification_queue WHERE batch_type = 'WP_SUBMITTED'`,
+            )
+            .get() as { n: number | bigint }
+        ).n,
+      );
+
+      // Using it moves the finding and writes a revision, through the engine.
+      const submitted = await server.request('POST', `/api/work-papers/${id}/transition`, {
+        to_status: 'Submitted',
+      });
+      const location = decodeURIComponent(String(submitted.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(location), `the submit must succeed, got ${location}`);
+
+      const after = db
+        .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+        .get(id) as { status?: string };
+      assert.equal(String(after.status), 'Submitted', 'the finding moves to Submitted');
+      const revision = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM work_paper_revisions
+            WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+        )
+        .get(id) as { n: number | bigint };
+      assert.ok(Number(revision.n) >= 1, 'and the move is recorded as a revision');
+
+      // The head of audit is told, rather than being asked to submit it.
+      const notified = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE batch_type = 'WP_SUBMITTED' AND related_entity_id = ?`,
+        )
+        .get(id) as { n: number | bigint };
+      assert.ok(Number(notified.n) >= 1, 'a submission notifies the reviewer');
+      const queuedAfter = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM notification_queue WHERE batch_type = 'WP_SUBMITTED'`,
+            )
+            .get() as { n: number | bigint }
+        ).n,
+      );
+      assert.ok(queuedAfter > queuedBefore, 'the notification is queued by this submission');
+
+      // And the reviewer, opening the same finding, is not invited to submit
+      // somebody else's work: submitting is the auditor's action.
+      await signInAsOwnerInsideHass();
+      const asReviewer = await server.get(`/work-papers/${id}`);
+      assert.equal(asReviewer.status, 200, `the reviewer's view answered ${asReviewer.status}`);
+      assert.ok(
+        !asReviewer.body.includes('name="to_status" value="Submitted"'),
+        "the head of audit is not offered Submit on an auditor's finding",
+      );
+    });
+
+    // Build Prompt 56. The grant follows the move rather than one blanket
+    // permission, and both paths ask the same mapping, so an auditor holding
+    // WORK_PAPER.update and no approve releases their drafts one at a time and
+    // together, and is still refused every reviewer move.
+    await t.test(
+      'an auditor with update but not approve submits, singly and in batch',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        // The premise, read from the stored matrix rather than assumed.
+        const granted = (module: string, action: string): number => {
+          const row = db
+            .prepare(
+              `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = ? AND action_code = ?`,
+            )
+            .get(SMOKE.orgId, module, action) as { a?: number | bigint } | undefined;
+          return Number(row?.a ?? -1);
+        };
+        assert.equal(granted('WORK_PAPER', 'update'), 1, 'the auditor may work on a finding');
+        assert.equal(granted('WORK_PAPER', 'approve'), 0, 'and may not approve one');
+
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+
+        const raise = async (title: string): Promise<string> => {
+          const res = await server.request('POST', '/api/work-papers', {
+            observation_title: title,
+            observation_description: 'Raised by the auditor, to be released by the auditor.',
+            year: '2026',
+            affiliate_code: SMOKE.affiliateCode,
+            audit_area_id: SMOKE.auditAreaId,
+            sub_area_id: SMOKE.subAreaId,
+            risk_rating: 'Medium',
+            recommendation: 'Fix it.',
+            assigned_auditor: SMOKE.auditorId,
+            audit_period_from: '2026-01-01',
+            audit_period_to: '2026-03-31',
+          });
+          const m = /\/work-papers\/([^/?]+)/.exec(String(res.headers.location ?? ''));
+          assert.ok(m, `the auditor must be able to raise "${title}", got ${res.headers.location}`);
+          return m[1];
+        };
+        const alone = await raise('Fuel stock counts unsupported');
+        const together = [
+          await raise('Depot keys not logged'),
+          await raise('Fuel card issue register incomplete'),
+        ];
+
+        const statusOf = (id: string): string =>
+          String(
+            (
+              db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+                status?: string;
+              }
+            ).status,
+          );
+        const revisions = (id: string): number =>
+          Number(
+            (
+              db
+                .prepare(
+                  `SELECT COUNT(*) AS n FROM work_paper_revisions
+                  WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+                )
+                .get(id) as { n: number | bigint }
+            ).n,
+          );
+
+        // One at a time, from the detail.
+        const single = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+          to_status: 'Submitted',
+        });
+        const singleAt = decodeURIComponent(String(single.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(singleAt), `the single submit must succeed, got ${singleAt}`);
+        assert.equal(statusOf(alone), 'Submitted', 'the finding moves to Submitted');
+        assert.equal(revisions(alone), 1, 'and the move is recorded as a revision');
+
+        // And together, from the list, which offers the tick boxes because the
+        // same guard says the release would be allowed.
+        const list = await server.get('/work-papers?status=Draft');
+        assert.equal(list.status, 200, `the auditor's list answered ${list.status}`);
+        assert.ok(
+          list.body.includes('Submit selected for review'),
+          'the auditor must be offered the batch release',
+        );
+        for (const id of together) {
+          assert.ok(
+            list.body.includes(`name="work_paper_id" value="${id}"`),
+            `and a tick box for their own draft ${id}`,
+          );
+        }
+        const body = new URLSearchParams();
+        for (const id of together) body.append('work_paper_id', id);
+        const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+        const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
+        assert.ok(
+          batchAt.includes('2 findings submitted for review'),
+          `the batch must report what it did, got ${batchAt}`,
+        );
+        for (const id of together) {
+          assert.equal(statusOf(id), 'Submitted', `${id} must be submitted`);
+          assert.equal(revisions(id), 1, `${id} must carry its own revision row`);
+        }
+
+        // The reviewer moves are untouched: the head of audit opens the review,
+        // and the auditor cannot then approve their own finding.
+        await signInAsOwnerInsideHass();
+        const opened = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+          to_status: 'Under Review',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(opened.headers.location ?? ''))),
+          'the head of audit still starts the review',
+        );
+        assert.equal(statusOf(alone), 'Under Review', 'the finding is under review');
+
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const approved = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+          to_status: 'Approved',
+        });
+        const approvedAt = decodeURIComponent(String(approved.headers.location ?? ''));
+        assert.ok(
+          approvedAt.includes('You do not have permission for that action.'),
+          `the auditor must be refused the approve, got ${approvedAt}`,
+        );
+        assert.equal(statusOf(alone), 'Under Review', 'and the finding does not move');
+
+        // The screen simply does not offer it, and explains nothing: naming the
+        // grant put a permission code in front of somebody who cannot act on it
+        // (Build Prompt 63 revises Build Prompt 55 here).
+        const detail = await server.get(`/work-papers/${alone}`);
+        assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+        assert.ok(
+          !detail.body.includes('name="to_status" value="Approved"'),
+          'the auditor is not offered a reviewer action',
+        );
+        assert.ok(
+          !detail.body.includes('WORK_PAPER.approve') && !detail.body.includes('does not hold'),
+          'and is told nothing about the permission they lack',
+        );
+
+        await signInAsOwnerInsideHass();
+      },
+    );
+
+    // Build Prompt 57. The organisation that has never saved its access control
+    // holds no grants of its own and inherits the platform defaults, which is
+    // where a guard that reads only the acting organisation's rows resolves
+    // every permission as absent. Its auditor must submit exactly as one in an
+    // organisation with its own rows does.
+    await t.test('an inheriting organisation submits on the platform-default grant', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      // The premise: no rows of its own, and the default it inherits.
+      const own = Number(
+        (
+          db
+            .prepare(`SELECT COUNT(*) AS n FROM role_permissions WHERE organization_id = ?`)
+            .get(SMOKE.inheritOrgId) as { n: number | bigint }
+        ).n,
+      );
+      assert.equal(own, 0, 'the organisation must hold no grants of its own');
+      const globalGrant = (module: string, action: string): number => {
+        const row = db
+          .prepare(
+            `SELECT is_allowed AS a FROM role_permissions
+              WHERE organization_id = ? AND role_code = 'AUDITOR'
+                AND module_code = ? AND action_code = ?`,
+          )
+          .get(PLATFORM_DEFAULT_ORG, module, action) as { a?: number | bigint } | undefined;
+        return Number(row?.a ?? -1);
+      };
+      assert.equal(globalGrant('WORK_PAPER', 'update'), 1, 'the default grants the auditor update');
+      assert.equal(globalGrant('WORK_PAPER', 'approve'), 0, 'and withholds approve');
+
+      await signInWithEmailCode(
+        SMOKE.inheritAuditorEmail,
+        SMOKE.password,
+        SMOKE.inheritAuditorId,
+        SMOKE.inheritOrgId,
+      );
+
+      const statusOf = (id: string): string =>
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        );
+      const submittedRevisions = (id: string): number =>
+        Number(
+          (
+            db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM work_paper_revisions
+                  WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+              )
+              .get(id) as { n: number | bigint }
+          ).n,
+        );
+
+      const [alone, ...together] = SMOKE.inheritDraftIds;
+      for (const id of SMOKE.inheritDraftIds) {
+        assert.equal(statusOf(id), 'Draft', `${id} starts as a draft`);
+      }
+
+      // Single, from the detail, which must offer the action in the first place.
+      const detail = await server.get(`/work-papers/${alone}`);
+      assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+      assert.ok(
+        detail.body.includes('name="to_status" value="Submitted"'),
+        'an inheriting auditor must be offered Submit on their own draft',
+      );
+      const single = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+        to_status: 'Submitted',
+      });
+      const singleAt = decodeURIComponent(String(single.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(singleAt), `the single submit must succeed, got ${singleAt}`);
+      assert.equal(statusOf(alone), 'Submitted', 'the inherited grant carries the move');
+      assert.equal(submittedRevisions(alone), 1, 'and the move is recorded as a revision');
+
+      // And in batch, through the endpoint that refused before.
+      const list = await server.get('/work-papers?status=Draft');
+      assert.equal(list.status, 200, `the list answered ${list.status}`);
+      assert.ok(
+        list.body.includes('Submit selected for review'),
+        'the batch release is offered on the inherited grant too',
+      );
+      const body = new URLSearchParams();
+      for (const id of together) body.append('work_paper_id', id);
+      const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+      const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
+      assert.ok(
+        batchAt.includes('2 findings submitted for review'),
+        `the batch must report what it did, got ${batchAt}`,
+      );
+      for (const id of together) {
+        assert.equal(statusOf(id), 'Submitted', `${id} must be submitted`);
+        assert.equal(submittedRevisions(id), 1, `${id} must carry its own revision row`);
+      }
+
+      // Inheriting the defaults grants update, not approve: the reviewer move is
+      // still refused, and the refusal says why.
+      const review = await server.request('POST', `/api/work-papers/${alone}/transition`, {
+        to_status: 'Under Review',
+      });
+      const reviewAt = decodeURIComponent(String(review.headers.location ?? ''));
+      assert.ok(
+        reviewAt.includes('You do not have permission for that action.'),
+        `the auditor must still be refused a reviewer move, got ${reviewAt}`,
+      );
+      assert.equal(statusOf(alone), 'Submitted', 'and the finding does not move');
+
+      // The refusal explains itself in the log, naming every input a person
+      // would otherwise have to guess at (Build Prompt 57).
+      const line = await waitForLogLine(
+        `[grc.workpaper.submit] refused {"work_paper_id":"${alone}"`,
+      );
+      assert.ok(
+        line,
+        `a refused transition must log its reason, log tail: ${server.log.slice(-600)}`,
+      );
+      for (const named of [
+        `"work_paper_id":"${alone}"`,
+        '"from_status":"Submitted"',
+        '"to_status":"Under Review"',
+        '"permission":"WORK_PAPER.approve"',
+        `"organization_id":"${SMOKE.inheritOrgId}"`,
+        '"role_code":"AUDITOR"',
+        '"grants_from":"GLOBAL"',
+      ]) {
+        assert.ok(line.includes(named), `the refusal line must name ${named}, got ${line}`);
+      }
+
+      await signInAsOwnerInsideHass();
+    });
+
+    // Build Prompt 57. `status_transitions` is operator-managed reference data,
+    // and the engine compared its rows as raw strings: a trailing space or a
+    // different case in a row nobody can see a fault in refused the move with
+    // "not permitted", which reads as a broken workflow rather than a typo.
+    await t.test('a hand-edited transition row still carries the submit', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      const rewrite = (from: string, to: string): void => {
+        db.prepare(
+          `UPDATE status_transitions SET from_status = ?, to_status = ?
+            WHERE enum_type = 'WORK_PAPER_STATUS' AND TRIM(LOWER(from_status)) = 'draft'
+              AND TRIM(LOWER(to_status)) = 'submitted'`,
+        ).run(from, to);
+      };
+
+      // The row as somebody typed it: a trailing space, and a lower-case target.
+      rewrite(' Draft ', 'submitted ');
+      try {
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          observation_title: 'Raised against a hand-edited workflow row',
+          observation_description: 'The transition row carries stray whitespace.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          sub_area_id: SMOKE.subAreaId,
+          risk_rating: 'Low',
+          recommendation: 'Fix the row, but do not refuse the auditor meanwhile.',
+          assigned_auditor: SMOKE.auditorId,
+          audit_period_from: '2026-01-01',
+          audit_period_to: '2026-03-31',
+        });
+        const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+        assert.ok(m, `create redirected to ${created.headers.location}`);
+        const id = m[1];
+
+        const detail = await server.get(`/work-papers/${id}`);
+        assert.ok(
+          detail.body.includes('name="to_status" value="Submitted"'),
+          'the button must carry the status the save will store, not the row spelling',
+        );
+
+        const submitted = await server.request('POST', `/api/work-papers/${id}/transition`, {
+          to_status: 'Submitted',
+        });
+        const at = decodeURIComponent(String(submitted.headers.location ?? ''));
+        assert.ok(
+          !/[?&]error=/.test(at),
+          `a hand-edited row must not refuse the submit, got ${at}`,
+        );
+
+        // Tolerated on the way in, canonical on the way out: the stored status is
+        // the one every filter, label and count already matches.
+        const row = db
+          .prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`)
+          .get(id) as { status?: string };
+        assert.equal(String(row.status), 'Submitted', 'the stored status keeps its own spelling');
+        const revision = db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM work_paper_revisions
+              WHERE work_paper_id = ? AND to_status = 'Submitted'`,
+          )
+          .get(id) as { n: number | bigint };
+        assert.equal(Number(revision.n), 1, 'and the revision row records the same spelling');
+      } finally {
+        rewrite('Draft', 'Submitted');
+        await signInAsOwnerInsideHass();
+      }
+    });
+
+    // Requirements come first and the finding comes later (Build Prompt 69):
+    // raised with no work paper at all, sent to an owner and a copy recipient,
+    // uploaded against from the owner's own table, reviewed for completeness,
+    // and only then linked to a finding. The auditee never sees a work paper at
+    // any point, which is the usability claim the rework is for.
+    await t.test('a requirement is raised unlinked, uploaded, reviewed, then linked', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      await signInAsOwnerInsideHass();
+      const raised = await server.request('POST', '/api/requirements', {
+        description: 'The March fuel reconciliations, signed by preparer and reviewer.',
+        requested_date: '2026-03-01',
+        due_date: '2026-03-31',
+        owner_ids: SMOKE.auditeeId,
+        cc_ids: SMOKE.staffId,
+        // No work_paper_id at all: the auditor does not know yet, and that is
+        // the ordinary case rather than an omission.
+      });
+      const raisedAt = decodeURIComponent(String(raised.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(raisedAt), `raising unlinked must be accepted, got ${raisedAt}`);
+      const m = /\/requirements\/([^/?]+)/.exec(raisedAt);
+      assert.ok(m, `raising must land on the requirement, got ${raisedAt}`);
+      const reqId = m[1];
+
+      const row = db
+        .prepare(
+          `SELECT linked_work_paper_id AS linked, work_paper_id AS legacy, status, due_date
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(reqId) as {
+        linked?: string | null;
+        legacy?: string | null;
+        status?: string;
+        due_date?: string;
+      };
+      assert.equal(row?.linked ?? null, null, 'it is raised linked to nothing');
+      assert.equal(row?.legacy ?? null, null, 'and the old column agrees, rather than disagreeing');
+      assert.equal(String(row?.status), 'OUTSTANDING', 'and it is outstanding');
+      assert.equal(String(row?.due_date), '2026-03-31', 'with the date it is wanted by');
+
+      // Owner and copy are both recorded, in their own capacities.
+      const named = db
+        .prepare(
+          `SELECT user_id AS uid, recipient_role AS role FROM requirement_recipients
+            WHERE requirement_id = ? ORDER BY recipient_role`,
+        )
+        .all(reqId) as { uid?: string; role?: string }[];
+      assert.deepEqual(
+        named.map((r) => `${String(r.role)}:${String(r.uid)}`).sort(),
+        [`CC:${SMOKE.staffId}`, `OWNER:${SMOKE.auditeeId}`],
+        'the owner owes it and the copy recipient is told about it',
+      );
+      // Only the owner may provide it: being copied is being told, not asked.
+      const owners = db
+        .prepare(`SELECT user_id AS uid FROM requirement_owners WHERE requirement_id = ?`)
+        .all(reqId) as { uid?: string }[];
+      assert.deepEqual(
+        owners.map((o) => String(o.uid)),
+        [SMOKE.auditeeId],
+        'the copy recipient owns nothing',
+      );
+
+      // Both were written to, with the same message.
+      const told = db
+        .prepare(
+          `SELECT DISTINCT recipient_user_id AS uid, batch_type AS t FROM notification_queue
+            WHERE related_entity_id = ?`,
+        )
+        .all(reqId) as { uid?: string; t?: string }[];
+      const toldIds = new Set(told.map((t) => String(t.uid)));
+      assert.ok(toldIds.has(SMOKE.auditeeId), 'the owner is asked');
+      assert.ok(toldIds.has(SMOKE.staffId), 'and the copy recipient is told');
+      assert.ok(
+        told.some((t) => String(t.t) === 'REQUIREMENT_ASSIGNED'),
+        'as an information request',
+      );
+      // The mail an auditee reads carries no work paper anywhere in it.
+      const mail = db
+        .prepare(
+          `SELECT rendered_subject AS subject, rendered_body AS body FROM notification_queue
+            WHERE related_entity_id = ? AND recipient_user_id = ? LIMIT 1`,
+        )
+        .get(reqId, SMOKE.auditeeId) as { subject?: string; body?: string };
+      assert.match(
+        String(mail?.subject),
+        /Internal Audit needs/,
+        'the subject names what is wanted',
+      );
+      assert.match(String(mail?.body), /Log in and upload/, 'and the button says what to do');
+      for (const leak of ['Work paper', 'work_paper', 'WP/2026']) {
+        assert.ok(
+          !String(mail?.body).includes(leak),
+          `an owner's email must never mention "${leak}"`,
+        );
+      }
+
+      // The owner's own table: a line per thing asked for, with its own upload
+      // control, and nothing about audit's structure.
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const ownerList = await server.get('/requirements');
+      assert.equal(ownerList.status, 200, `the owner's list answered ${ownerList.status}`);
+      assert.ok(
+        ownerList.body.includes('The March fuel reconciliations'),
+        'their requirement is listed',
+      );
+      assert.ok(
+        ownerList.body.includes(`/api/requirements/${reqId}/submit`),
+        'with its own upload form on the row',
+      );
+      assert.ok(
+        !ownerList.body.includes('Linked observation'),
+        'and no column for audit structure they cannot see',
+      );
+
+      // Upload against that line, through the organisation's evidence store.
+      const provided = await server.postMultipart(
+        `/api/requirements/${reqId}/submit`,
+        { note: 'March reconciliations, both signatures.' },
+        {
+          field: 'file',
+          filename: 'march-fuel-recs.txt',
+          contentType: 'text/plain',
+          content: 'Signed by preparer and reviewer.',
+        },
+      );
+      const providedAt = decodeURIComponent(String(provided.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(providedAt), `the upload must be accepted, got ${providedAt}`);
+      const round = db
+        .prepare(
+          `SELECT round_number AS n, file_id AS fid, review_status AS rs
+             FROM requirement_submissions WHERE requirement_id = ?`,
+        )
+        .get(reqId) as { n?: number | bigint; fid?: string; rs?: string };
+      assert.equal(Number(round?.n), 1, 'the first answer is round one');
+      assert.ok(round?.fid, 'the document is recorded on it');
+      assert.equal(String(round?.rs), 'PENDING', 'and waits on audit');
+      // Recorded like any other evidence, through the link table.
+      const attached = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM file_attachments fa JOIN files f ON f.file_id = fa.file_id
+            WHERE TRIM(UPPER(fa.entity_type)) = 'REQUIREMENT' AND fa.entity_id = ?`,
+        )
+        .get(reqId) as { n: number | bigint };
+      assert.equal(Number(attached.n), 1, 'stored and linked like any evidence');
+
+      // The copy recipient sees the same line and is offered no control.
+      await signInWithEmailCode(SMOKE.staffEmail, SMOKE.password, SMOKE.staffId);
+      const ccList = await server.get('/requirements');
+      assert.equal(ccList.status, 200, `the copy recipient's list answered ${ccList.status}`);
+      assert.ok(ccList.body.includes('The March fuel reconciliations'), 'they see the request');
+      assert.ok(ccList.body.includes('Copied in'), 'marked as theirs to know, not to answer');
+      assert.ok(
+        !ccList.body.includes(`/api/requirements/${reqId}/submit`),
+        'and are given no way to answer it',
+      );
+
+      // Audit decides completeness, which is one decision.
+      await signInAsOwnerInsideHass();
+      const accepted = await server.request('POST', `/api/requirements/${reqId}/review`, {
+        decision: 'accept',
+        review_comment: 'Complete, both signatures present.',
+      });
+      assert.ok(
+        !/[?&]error=/.test(decodeURIComponent(String(accepted.headers.location ?? ''))),
+        'audit accepts what arrived',
+      );
+      const closed = db
+        .prepare(
+          `SELECT status, linked_work_paper_id AS linked FROM work_paper_requirements
+            WHERE requirement_id = ?`,
+        )
+        .get(reqId) as { status?: string; linked?: string | null };
+      assert.equal(String(closed?.status), 'CLOSED', 'and the ask is closed');
+      assert.equal(
+        closed?.linked ?? null,
+        null,
+        'closed and still unlinked: completeness and linking are different decisions',
+      );
+
+      // And the link, afterwards, which is the other decision.
+      const linked = await server.request('POST', `/api/requirements/${reqId}/link`, {
+        work_paper_id: SMOKE.sentWorkPaperId,
+      });
+      assert.ok(
+        !/[?&]error=/.test(decodeURIComponent(String(linked.headers.location ?? ''))),
+        'audit links it once it is clear what it supports',
+      );
+      const after = db
+        .prepare(
+          `SELECT linked_work_paper_id AS linked, work_paper_id AS legacy, linked_by AS by
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+        )
+        .get(reqId) as { linked?: string; legacy?: string; by?: string };
+      assert.equal(String(after?.linked), SMOKE.sentWorkPaperId, 'the link names the finding');
+      assert.equal(String(after?.legacy), SMOKE.sentWorkPaperId, 'and the old column keeps step');
+      assert.equal(String(after?.by), SMOKE.userId, 'and records who decided it');
+
+      // The owner is not told, and still sees no work paper: linking is audit's
+      // structure, not theirs.
+      const afterMail = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE related_entity_id = ? AND recipient_user_id = ?`,
+        )
+        .get(reqId, SMOKE.auditeeId) as { n: number | bigint };
+      await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+      const ownerAfter = await server.get(`/requirements/${reqId}`);
+      assert.equal(ownerAfter.status, 200, `the owner's requirement answered ${ownerAfter.status}`);
+      assert.ok(
+        !ownerAfter.body.includes('Linked observation'),
+        'the owner is never shown which finding their document supports',
+      );
+      assert.ok(
+        !ownerAfter.body.includes('WP/2026/002'),
+        'nor the reference of the finding it was linked to',
+      );
+      const nowMail = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM notification_queue
+            WHERE related_entity_id = ? AND recipient_user_id = ?`,
+        )
+        .get(reqId, SMOKE.auditeeId) as { n: number | bigint };
+      assert.equal(
+        Number(nowMail.n),
+        Number(afterMail.n),
+        'and linking sends them nothing: it is not their decision to hear about',
+      );
+
+      // Audit, on the other hand, sees the link on their own screen.
+      await signInAsOwnerInsideHass();
+      const auditAfter = await server.get(`/requirements/${reqId}`);
+      assert.ok(auditAfter.body.includes('Linked observation'), 'audit sees the link');
+      assert.ok(auditAfter.body.includes('WP/2026/002'), 'and which finding it points at');
+    });
+
+    // The requirements module, end to end (Build Prompt 58): an auditor asks, an
+    // owner provides with a document, audit asks for more, the owner answers
+    // again, audit accepts, and the whole exchange is on the record. The two
+    // sides are two real sessions, because the scoping is the point: an owner
+    // here is an auditee who holds no audit permission at all.
+    await t.test(
+      'a requirement goes two rounds and closes, and owners see only theirs',
+      async () => {
+        const db = server.database;
+        assert.ok(db, 'the fake database is reachable for verification');
+
+        // The auditor raises a finding of their own, then asks for information on
+        // it. They are its assigned auditor, so they are who the submission tells.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const created = await server.request('POST', '/api/work-papers', {
+          observation_title: 'Depot fuel reconciliations unsupported',
+          observation_description: 'The supporting schedules were not provided.',
+          year: '2026',
+          affiliate_code: SMOKE.affiliateCode,
+          audit_area_id: SMOKE.auditAreaId,
+          risk_rating: 'High',
+          recommendation: 'Reconcile monthly.',
+          assigned_auditor: SMOKE.auditorId,
+        });
+        const wp = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+        assert.ok(
+          wp,
+          `the auditor must be able to raise a finding, got ${created.headers.location}`,
+        );
+
+        const raised = await server.request('POST', '/api/requirements', {
+          work_paper_id: wp[1],
+          description: 'The March depot reconciliation, signed by preparer and reviewer.',
+          requested_date: '2026-03-02',
+          due_date: '2026-03-16',
+          owner_ids: SMOKE.auditeeId,
+        });
+        const raisedAt = decodeURIComponent(String(raised.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(raisedAt), `raising must succeed, got ${raisedAt}`);
+        const m = /\/requirements\/([^/?]+)/.exec(raisedAt);
+        assert.ok(m, `raising must land on the requirement, got ${raisedAt}`);
+        const reqId = m[1];
+
+        const statusOf = (id: string): string =>
+          String(
+            (
+              db
+                .prepare(`SELECT status FROM work_paper_requirements WHERE requirement_id = ?`)
+                .get(id) as { status?: string }
+            ).status,
+          );
+        const queued = (type: string): number =>
+          Number(
+            (
+              db
+                .prepare(
+                  `SELECT COUNT(*) AS n FROM notification_queue
+                  WHERE batch_type = ? AND related_entity_id = ?`,
+                )
+                .get(type, reqId) as { n: number | bigint }
+            ).n,
+          );
+        assert.equal(statusOf(reqId), 'OUTSTANDING', 'a fresh ask is outstanding');
+        assert.ok(queued('REQUIREMENT_ASSIGNED') >= 1, 'the owner is told they have been asked');
+
+        // The owner: an auditee, with no audit permission of any kind.
+        await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+        const portal = await server.get('/requirements');
+        assert.equal(portal.status, 200, `the owner portal answered ${portal.status}`);
+        assert.ok(
+          portal.body.includes('The March depot reconciliation'),
+          'an owner must see what they have been asked for',
+        );
+        assert.ok(
+          !portal.body.includes('Provide the December reconciliation file.'),
+          'and must not see a requirement they do not own',
+        );
+        assert.ok(
+          !portal.body.includes('New requirement'),
+          'an owner is not offered the auditor’s raise action',
+        );
+        const notMine = await server.get(`/requirements/${SMOKE.requirementId}`);
+        assert.equal(notMine.status, 404, 'somebody else’s requirement is not found, for them');
+
+        // Round one, with the document, through the organisation's evidence store.
+        const first = await server.postMultipart(
+          `/api/requirements/${reqId}/submit`,
+          { note: 'March reconciliation attached, prepared by the depot accountant.' },
+          {
+            field: 'file',
+            filename: 'march-reconciliation.txt',
+            contentType: 'text/plain',
+            content: 'Depot reconciliation, March 2026.',
+          },
+        );
+        const firstAt = decodeURIComponent(String(first.headers.location ?? ''));
+        assert.ok(!/[?&]error=/.test(firstAt), `the first round must be accepted, got ${firstAt}`);
+        assert.equal(statusOf(reqId), 'AWAITING_REVIEW', 'and it now waits on audit');
+        const round1 = db
+          .prepare(
+            `SELECT file_id, review_status FROM requirement_submissions
+            WHERE requirement_id = ? AND round_number = 1`,
+          )
+          .get(reqId) as { file_id?: string; review_status?: string };
+        assert.ok(round1.file_id, 'the document is recorded on the round');
+        assert.equal(String(round1.review_status), 'PENDING', 'unreviewed until audit reads it');
+        const stored = db
+          .prepare(
+            `SELECT f.file_name AS name, fa.attachment_id AS attachment_id
+             FROM files f JOIN file_attachments fa ON fa.file_id = f.file_id
+            WHERE f.file_id = ? AND TRIM(UPPER(fa.entity_type)) = 'REQUIREMENT'
+              AND fa.entity_id = ?`,
+          )
+          .get(String(round1.file_id), reqId) as { name?: string; attachment_id?: string };
+        assert.equal(
+          String(stored?.name),
+          'march-reconciliation.txt',
+          'the bytes went to the evidence store and were recorded like any other evidence',
+        );
+        // And the owner can read back what they provided: the row naming them is
+        // the whole of their access to it.
+        const download = await server.request(
+          'GET',
+          `/api/evidence/${String(stored.attachment_id)}/download`,
+        );
+        assert.ok(
+          download.status < 400,
+          `an owner must be able to download their own document, got ${download.status}`,
+        );
+        assert.ok(
+          queued('REQUIREMENT_SUBMITTED') >= 1,
+          'the auditor is told there is something to read',
+        );
+
+        // Audit reads it and asks for more, naming what is missing.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const refusedBlank = await server.request('POST', `/api/requirements/${reqId}/review`, {
+          decision: 'more_info',
+          review_comment: 'Not complete.',
+        });
+        assert.ok(
+          decodeURIComponent(String(refusedBlank.headers.location ?? '')).includes(
+            'Say what further information is needed.',
+          ),
+          'asking for more without saying what is not a request, it is a dead end',
+        );
+        const more = await server.request('POST', `/api/requirements/${reqId}/review`, {
+          decision: 'more_info',
+          review_comment: 'The reviewer signature is missing.',
+          additional_info_request: 'Send the copy signed by the reviewer.',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(more.headers.location ?? ''))),
+          'audit must be able to ask for more',
+        );
+        assert.equal(statusOf(reqId), 'MORE_INFO', 'and it is the owner’s move again');
+        assert.ok(queued('REQUIREMENT_MORE_INFO') >= 1, 'the owner is told what else is wanted');
+
+        // Round two answers the question that was asked.
+        await signInWithEmailCode('owner@hasspetroleum.com', SMOKE.password, SMOKE.auditeeId);
+        const asked = await server.get(`/requirements/${reqId}`);
+        assert.equal(asked.status, 200, `the owner’s detail answered ${asked.status}`);
+        assert.ok(
+          asked.body.includes('Send the copy signed by the reviewer.'),
+          'the outstanding question is on the screen the owner answers it from',
+        );
+        const second = await server.postMultipart(
+          `/api/requirements/${reqId}/submit`,
+          { note: 'Signed copy attached.' },
+          {
+            field: 'file',
+            filename: 'march-reconciliation-signed.txt',
+            contentType: 'text/plain',
+            content: 'Depot reconciliation, March 2026. Signed.',
+          },
+        );
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(second.headers.location ?? ''))),
+          'the second round must be accepted',
+        );
+        assert.equal(statusOf(reqId), 'AWAITING_REVIEW', 'waiting on audit once more');
+
+        // Audit accepts, which ends the ask.
+        await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+        const accepted = await server.request('POST', `/api/requirements/${reqId}/review`, {
+          decision: 'accept',
+          review_comment: 'Signed copy received, thank you.',
+        });
+        assert.ok(
+          !/[?&]error=/.test(decodeURIComponent(String(accepted.headers.location ?? ''))),
+          'audit must be able to accept',
+        );
+        const closed = db
+          .prepare(
+            `SELECT status, closed_at, closed_by, last_reviewed_date
+             FROM work_paper_requirements WHERE requirement_id = ?`,
+          )
+          .get(reqId) as {
+          status?: string;
+          closed_at?: string;
+          closed_by?: string;
+          last_reviewed_date?: string;
+        };
+        assert.equal(String(closed.status), 'CLOSED', 'accepting closes the requirement');
+        assert.ok(closed.closed_at, 'with the moment it was closed');
+        assert.equal(String(closed.closed_by), SMOKE.auditorId, 'and who closed it');
+        assert.ok(closed.last_reviewed_date, 'and when audit last read it');
+
+        // The trail: two rounds, in order, each paired with what audit said to it.
+        const trail = db
+          .prepare(
+            `SELECT round_number, submitted_by, review_status, additional_info_request, reviewed_by
+             FROM requirement_submissions WHERE requirement_id = ? ORDER BY round_number`,
+          )
+          .all(reqId) as {
+          round_number: number | bigint;
+          submitted_by?: string;
+          review_status?: string;
+          additional_info_request?: string | null;
+          reviewed_by?: string;
+        }[];
+        assert.equal(
+          trail.length,
+          2,
+          'both rounds are kept; the second does not overwrite the first',
+        );
+        assert.equal(Number(trail[0].round_number), 1);
+        assert.equal(String(trail[0].review_status), 'MORE_INFO', 'round one was sent back');
+        assert.equal(
+          String(trail[0].additional_info_request),
+          'Send the copy signed by the reviewer.',
+          'and the question it was sent back with is still there',
+        );
+        assert.equal(Number(trail[1].round_number), 2);
+        assert.equal(String(trail[1].review_status), 'ACCEPTED', 'round two was accepted');
+        assert.equal(String(trail[1].submitted_by), SMOKE.auditeeId, 'both rounds are the owner’s');
+        assert.equal(
+          String(trail[1].reviewed_by),
+          SMOKE.auditorId,
+          'and both decisions are audit’s',
+        );
+
+        // And the screen shows it as the exchange it was, newest last.
+        const detail = await server.get(`/requirements/${reqId}`);
+        assert.equal(detail.status, 200, `the detail answered ${detail.status}`);
+        assert.ok(detail.body.includes('Round 1'), 'the first round is still on the record');
+        assert.ok(detail.body.includes('Round 2'), 'beside the second');
+        assert.ok(
+          detail.body.indexOf('Round 1') < detail.body.indexOf('Round 2'),
+          'oldest first, so the back-and-forth reads in the order it happened',
+        );
+        assert.ok(detail.body.includes('Closed'), 'and the current state reads at a glance');
+
+        await signInAsOwnerInsideHass();
+      },
+    );
+
+    // Save as draft and Submit for review, from one screen (Build Prompt 59).
+    // The draft saves with holes in it; the submission is refused until they are
+    // filled, and the refusal names every one of them.
+    await t.test('an incomplete finding saves as a draft and is refused submission', async () => {
+      const db = server.database;
+      assert.ok(db, 'the fake database is reachable for verification');
+
+      await signInWithEmailCode('auditor@hasspetroleum.com', SMOKE.password, SMOKE.auditorId);
+
+      // Half a finding: the observation is written, the rest is not. This is the
+      // state an auditor is in halfway through a depot visit, and it must save.
+      const created = await server.request('POST', '/api/work-papers', {
+        intent: 'draft',
+        observation_title: 'Fuel losses at the Nakuru depot',
+        observation_description: 'Losses exceed the tolerance, cause not yet established.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const at = decodeURIComponent(String(created.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(at), `an incomplete draft must save, got ${at}`);
+      const m = /\/work-papers\/([^/?]+)/.exec(at);
+      assert.ok(m, `saving must land on the finding, got ${at}`);
+      const id = m[1];
+      const statusOf = (): string =>
+        String(
+          (
+            db.prepare(`SELECT status FROM work_papers WHERE work_paper_id = ?`).get(id) as {
+              status?: string;
+            }
+          ).status,
+        );
+      assert.equal(statusOf(), 'Draft', 'and it saves as a draft');
+
+      // The form offers both actions, and says what the second one needs.
+      const form = await server.get(`/work-papers/${id}/edit`);
+      assert.equal(form.status, 200, `the edit form answered ${form.status}`);
+      assert.ok(form.body.includes('name="intent" value="draft"'), 'the save action is offered');
+      assert.ok(
+        form.body.includes('name="intent" value="submit"'),
+        'and Submit for review beside it',
+      );
+
+      // Submitting it now is refused, and the refusal names everything missing
+      // rather than the first thing: one attempt, the whole answer.
+      const refused = await server.request('POST', `/api/work-papers/${id}`, {
+        intent: 'submit',
+        observation_title: 'Fuel losses at the Nakuru depot',
+        observation_description: 'Losses exceed the tolerance, cause not yet established.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const refusedAt = decodeURIComponent(String(refused.headers.location ?? ''));
+      assert.ok(refusedAt.includes('/edit?'), 'the refusal lands where the gaps are filled');
+      for (const named of ['sub-area', 'audit period', 'risk rating', 'recommendation']) {
+        assert.ok(refusedAt.includes(named), `the refusal must name ${named}, got ${refusedAt}`);
+      }
+      assert.ok(
+        refusedAt.includes('Saved as a draft.'),
+        'and must say the work is safe, which is what the auditor fears',
+      );
+      assert.equal(statusOf(), 'Draft', 'the finding does not move');
+
+      // The same finding, ticked in the list, is refused by the batch too, and
+      // for the same stated reason rather than opaquely.
+      const body = new URLSearchParams();
+      body.append('work_paper_id', id);
+      const batch = await server.request('POST', '/api/work-papers/submit-batch', body);
+      const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
+      assert.ok(
+        batchAt.includes('Nothing was submitted') && batchAt.includes('sub-area'),
+        `the batch must refuse it and say why, got ${batchAt}`,
+      );
+      assert.equal(statusOf(), 'Draft', 'and it still does not move');
+
+      // Completing it and submitting from the same screen works.
+      const completed = await server.request('POST', `/api/work-papers/${id}`, {
+        intent: 'submit',
+        observation_title: 'Fuel losses at the Nakuru depot',
+        observation_description: 'Losses exceed the tolerance, traced to meter drift.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        sub_area_id: SMOKE.subAreaId,
+        audit_period_from: '2026-01-01',
+        audit_period_to: '2026-03-31',
+        risk_rating: 'High',
+        recommendation: 'Calibrate the meters monthly and reconcile the losses.',
+        assigned_auditor: SMOKE.auditorId,
+      });
+      const doneAt = decodeURIComponent(String(completed.headers.location ?? ''));
+      assert.ok(!/[?&]error=/.test(doneAt), `a complete finding must submit, got ${doneAt}`);
+      assert.equal(statusOf(), 'Submitted', 'and it moves once it is complete');
+      const revision = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM work_paper_revisions
+            WHERE work_paper_id = ? AND from_status = 'Draft' AND to_status = 'Submitted'`,
+        )
+        .get(id) as { n: number | bigint };
+      assert.equal(Number(revision.n), 1, 'through the same transition as every other submit');
+
+      await signInAsOwnerInsideHass();
+    });
+
+    await t.test('a draft with no auditor yet can still be submitted by its author', async () => {
+      // Between creating a finding and assigning it, somebody still has to be
+      // able to move it on; an unassigned draft is not a locked one.
+      const created = await server.request('POST', '/api/work-papers', {
+        observation_title: 'Unassigned draft finding',
+        observation_description: 'No auditor is on it yet.',
+        year: '2026',
+        affiliate_code: SMOKE.affiliateCode,
+        audit_area_id: SMOKE.auditAreaId,
+        risk_rating: 'Low',
+        recommendation: 'Assign it.',
+      });
+      const m = /\/work-papers\/([^/?]+)/.exec(String(created.headers.location ?? ''));
+      assert.ok(m, `create redirected to ${created.headers.location}`);
+      const detail = await server.get(`/work-papers/${m[1]}`);
+      assert.ok(
+        detail.body.includes('name="to_status" value="Submitted"'),
+        'an unassigned draft still offers Submit to whoever may edit it',
+      );
+    });
+
     // Rich text and staged evidence (Build Prompt 28), on the admin session.
     await t.test('narrative Markdown renders as marks, never raw or unescaped', async () => {
       const res = await server.request('POST', '/api/work-papers', {
@@ -1893,22 +5234,51 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
           `SELECT entity_type, entity_id FROM file_attachments WHERE attachment_id = 'ATT-STAGED'`,
         )
         .get() as { entity_type?: string; entity_id?: string };
-      assert.equal(String(bound.entity_type), 'work_paper', 'the staged attachment rebinds');
+      // The staged row is planted in the old lower-case spelling on purpose: the
+      // bind has to find evidence uploaded before the convention was settled,
+      // and it rewrites it to the spelling the table carries (Build Prompt 65).
+      assert.equal(String(bound.entity_type), 'WORK_PAPER', 'the staged attachment rebinds');
       assert.equal(String(bound.entity_id), m[1], 'the staged attachment binds to the new id');
       const page = await server.get(`/work-papers/${m[1]}`);
       assert.ok(page.body.includes('staged.pdf'), 'the bound evidence shows on the detail');
     });
 
-    await t.test('a draft upload refuses cleanly while storage is unconfigured', async () => {
+    // Staging against a draft token is prepared exactly as a saved finding is,
+    // through the organisation's own provider (Build Prompt 51). The key is
+    // still built by the worker, so a client cannot smuggle a path of its own
+    // in through the token.
+    await t.test('a draft upload is prepared under the tenant prefix', async () => {
+      const token = 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000';
       const res = await server.request('POST', '/api/evidence/upload-url', {
         entity_type: 'work_paper_draft',
-        entity_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000',
+        entity_id: token,
         file_name: 'x.pdf',
         content_type: 'application/pdf',
         size_bytes: '10',
       });
-      assert.equal(res.status, 503, `draft upload-url answered ${res.status}`);
-      assert.ok(res.body.trimStart().startsWith('{'), 'the refusal is the JSON contract');
+      assert.equal(res.status, 200, `draft upload-url answered ${res.status}`);
+      assert.ok(res.body.trimStart().startsWith('{'), 'the answer is the JSON contract');
+      const plan = JSON.parse(res.body) as { url?: string; mode?: string; method?: string };
+      assert.ok(
+        String(plan.url).includes(`org/${SMOKE.orgId}/work_paper_draft/${token}/`),
+        `a staged key must sit under the tenant prefix, got ${String(plan.url).slice(0, 200)}`,
+      );
+      // The browser is told the verb it must use, and the URL is signed for
+      // that verb: SigV4 signs the method, so a URL signed for one cannot be
+      // used with another (Build Prompt 66).
+      assert.equal(plan.mode, 'presigned', 'a signing provider sends the bytes straight to it');
+      assert.equal(plan.method, 'PUT', 'and the browser is told to PUT them');
+    });
+
+    await t.test('a draft upload refuses a token that is not a token', async () => {
+      const res = await server.request('POST', '/api/evidence/upload-url', {
+        entity_type: 'work_paper_draft',
+        entity_id: '../../other-tenant',
+        file_name: 'x.pdf',
+        content_type: 'application/pdf',
+        size_bytes: '10',
+      });
+      assert.equal(res.status, 400, `a path-like draft token answered ${res.status}`);
     });
 
     // Row scope and matrix gating, seen from the auditee side (Build Prompt

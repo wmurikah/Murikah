@@ -1,32 +1,167 @@
 ---
-export const prerender = false;
-
 /**
- * The customer portal home. The foundation lands a portal customer here after
- * sign-in, in the tenant brand, scoped to their own account; orders, invoices,
- * payments and tickets arrive one per prompt. Self-contained, so it never 500s.
+ * The customer's home, served at /portal on cms.murikah.com.
+ *
+ * Four questions, in the order a customer actually asks them: what needs me,
+ * where are my orders, what is happening with my requests, and what changed
+ * recently. Nothing else.
+ *
+ * NO INTERNAL PERFORMANCE INFORMATION APPEARS HERE OR ANYWHERE ELSE IN THIS
+ * SURFACE. No compliance percentage, no turnaround figure, no team, no
+ * comparison with another customer. The repository enforces that by not
+ * selecting it; this page could not render it if it wanted to.
+ *
+ * Where a membership has not been arranged yet the page says so plainly and
+ * asks the person to speak to their representative, rather than rendering an
+ * empty shell that looks broken.
  */
 import CmsPortalLayout from '@/layouts/CmsPortalLayout.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { portalPageScope } from '@/lib/cms/portal/guard';
+import { portalHome, type PortalHome } from '@/lib/cms/repos/portalData';
+import type { PortalScope } from '@/lib/cms/portal/tenant';
+import { portalDate, portalDateTime, orderTone, caseTone } from '@/lib/cms/portal/present';
 
-const cms = Astro.locals.cms;
-if (!cms) return Astro.redirect('/portal/login');
+export const prerender = false;
+
+const user = Astro.locals.cms?.user;
+let scope: PortalScope | null = null;
+let home: PortalHome = {
+  currentOrders: [],
+  openRequests: [],
+  actionRequired: [],
+  recentUpdates: [],
+};
+let loadFailed = false;
+
+try {
+  const db = await getDb(getCmsEnv());
+  scope = await portalPageScope(Astro.locals, Astro.url, db);
+  if (scope) home = await portalHome(db, scope);
+} catch (error) {
+  console.error('[cms.portal.home] load failed', error);
+  loadFailed = true;
+}
 ---
 
-<CmsPortalLayout title="Your portal">
-  <div class="cms-page-head">
-    <div>
-      <h1>Welcome{cms.userName ? `, ${cms.userName}` : ''}</h1>
-      <p class="cms-lead">Your {cms.tenantName} customer portal.</p>
-    </div>
+<CmsPortalLayout title="Your account" scope={scope} current="/portal">
+  <div class="flex flex-col gap-1.5">
+    <h1 class="text-cms-page font-semibold text-cms-navy">
+      Welcome back{user ? `, ${user.firstName}` : ''}
+    </h1>
+    <p class="text-cms-body-sm text-cms-muted">
+      Your orders, your requests and your documents, in one place.
+    </p>
   </div>
 
-  <div class="cms-cards">
-    <section class="cms-card">
-      <h2>Your account</h2>
-      <p class="cms-lead">
-        Signed in as {cms.userEmail ?? 'a customer'}. Your orders, invoices and support tickets will
-        appear here.
-      </p>
-    </section>
-  </div>
+  {
+    loadFailed ? (
+      <CmsErrorState
+        title="We could not load your account just now"
+        description="Please try again in a moment."
+      />
+    ) : scope === null ? (
+      <CmsEmptyState
+        icon="customers"
+        title="No account is linked to your sign-in yet"
+        description="Contact your Hass Petroleum representative to have your account linked."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        {home.actionRequired.length > 0 && (
+          <CmsCard title="Needs you">
+            <ul class="flex flex-col gap-2">
+              {home.actionRequired.map((item) => (
+                <li>
+                  <a
+                    href={item.href}
+                    class="text-cms-body-sm font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+
+        <CmsCard title="Orders in progress">
+          {home.currentOrders.length === 0 ? (
+            <p class="text-cms-body-sm text-cms-muted">
+              You have no orders in progress. Completed orders are under Orders.
+            </p>
+          ) : (
+            <ul class="flex flex-col divide-y divide-cms-line">
+              {home.currentOrders.map((order) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <span class="min-w-0">
+                    <a
+                      href={`/portal/orders/${order.salesOrderId}`}
+                      class="block truncate text-cms-body-sm font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {order.documentNumber}
+                    </a>
+                    <span class="block text-cms-caption text-cms-muted">
+                      Placed {portalDate(order.orderCreatedAt)}
+                    </span>
+                  </span>
+                  <CmsBadge tone={orderTone(order.status)} label={order.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </CmsCard>
+
+        <CmsCard title="Open requests">
+          {home.openRequests.length === 0 ? (
+            <p class="text-cms-body-sm text-cms-muted">
+              You have no open requests. You can raise one under Service.
+            </p>
+          ) : (
+            <ul class="flex flex-col divide-y divide-cms-line">
+              {home.openRequests.map((row) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <span class="min-w-0">
+                    <a
+                      href={`/portal/helpdesk/${row.caseId}`}
+                      class="block truncate text-cms-body-sm font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {row.subject}
+                    </a>
+                    <span class="block text-cms-caption text-cms-muted">
+                      {row.caseNumber} - raised {portalDate(row.raisedAt)}
+                    </span>
+                  </span>
+                  <CmsBadge tone={caseTone(row.status)} label={row.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </CmsCard>
+
+        {home.recentUpdates.length > 0 && (
+          <CmsCard title="Recently">
+            <ul class="flex flex-col gap-2">
+              {home.recentUpdates.map((update) => (
+                <li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <a
+                    href={update.href}
+                    class="text-cms-body-sm text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {update.summary}
+                  </a>
+                  <span class="text-cms-caption text-cms-muted">{portalDateTime(update.at)}</span>
+                </li>
+              ))}
+            </ul>
+          </CmsCard>
+        )}
+      </div>
+    )
+  }
 </CmsPortalLayout>

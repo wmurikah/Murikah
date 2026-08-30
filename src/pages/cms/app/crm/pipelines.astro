@@ -1,0 +1,389 @@
+---
+/**
+ * CRM → Pipeline settings.
+ *
+ * THE WARNING IS THE FEATURE.
+ * Pipelines are not versioned in this schema. Once a stage is used by an
+ * opportunity, renaming it rewrites what history reads as, reordering
+ * rewrites what progression meant, and deleting is simply not offered. The
+ * screen says this where the buttons are, per the phase instruction: in the
+ * admin screen, not only in the code.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManagePipelines } from '@/lib/cms/permissions';
+import { listPipelines, type PipelineRow } from '@/lib/cms/repos/opportunityAdmin';
+import { fractionToPercentLabel } from '@/lib/cms/crm/probability';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManagePipelines(permissions);
+
+let pipelines: PipelineRow[] = [];
+let loadFailed = false;
+if (mayManage) {
+  try {
+    pipelines = await listPipelines(await getDb(getCmsEnv()));
+  } catch (error) {
+    console.error('[cms.crm.pipelines] load failed', error);
+    loadFailed = true;
+  }
+}
+---
+
+<CmsLayout title="Pipelines">
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to pipeline configuration"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Pipelines could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Pipelines"
+          definition="Pipelines are not versioned. A stage in use is part of every deal history, so deactivate rather than remove, and open a new pipeline for a materially different process rather than reshaping this one."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'Pipelines' },
+          ]}
+        >
+          <CmsButton slot="actions" variant="primary" icon="plus" data-cms-pipeline-new>
+            New pipeline
+          </CmsButton>
+        </CmsPageHeader>
+
+        {pipelines.map((pipeline) => (
+          <CmsCard title={pipeline.pipelineName}>
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <CmsBadge
+                tone={pipeline.active ? 'success' : 'neutral'}
+                label={pipeline.active ? 'Active' : 'Inactive'}
+              />
+              <span class="text-cms-caption text-cms-muted">
+                {pipeline.opportunityCount} opportunit
+                {pipeline.opportunityCount === 1 ? 'y' : 'ies'}
+              </span>
+              {!pipeline.hasActiveStage && (
+                <CmsBadge tone="warning" label="No active stage: cannot receive opportunities" />
+              )}
+              {pipeline.hasActiveStage && !pipeline.hasWonStage && (
+                <CmsBadge tone="warning" label="No won stage" />
+              )}
+              {pipeline.hasActiveStage && !pipeline.hasLostStage && (
+                <CmsBadge tone="warning" label="No lost stage" />
+              )}
+            </div>
+            {pipeline.stages.length === 0 ? (
+              <p class="text-cms-body-sm text-cms-muted">No stages yet. Add the first one.</p>
+            ) : (
+              <ol class="flex flex-col gap-1">
+                {pipeline.stages.map((stage) => (
+                  <li class="flex flex-wrap items-center justify-between gap-2 rounded-cms border border-cms-line px-3 py-2">
+                    <div class="flex items-center gap-3">
+                      <span class="w-6 text-cms-caption text-cms-muted tabular-nums">
+                        {stage.sequenceNo}
+                      </span>
+                      <span class="text-cms-body-sm font-medium text-cms-ink">
+                        {stage.stageName}
+                      </span>
+                      {stage.isWonStage && <CmsBadge tone="success" label="Won" />}
+                      {stage.isLostStage && <CmsBadge tone="danger" label="Lost" />}
+                      {!stage.active && <CmsBadge tone="neutral" label="Inactive" />}
+                    </div>
+                    <div class="flex items-center gap-3 text-cms-caption text-cms-muted">
+                      <span class="tabular-nums">
+                        {fractionToPercentLabel(stage.defaultProbability)} default
+                      </span>
+                      <span class="tabular-nums">
+                        {stage.targetDays === null ? 'no target' : `${stage.targetDays}d target`}
+                      </span>
+                      <span class="tabular-nums">{stage.usageCount} uses</span>
+                      <button
+                        type="button"
+                        data-cms-stage-edit={stage.pipelineStageId}
+                        data-stage-name={stage.stageName}
+                        data-stage-prob={String(Math.round(stage.defaultProbability * 100))}
+                        data-stage-target={
+                          stage.targetDays === null ? '' : String(stage.targetDays)
+                        }
+                        data-stage-won={stage.isWonStage ? '1' : '0'}
+                        data-stage-lost={stage.isLostStage ? '1' : '0'}
+                        data-stage-active={stage.active ? '1' : '0'}
+                        class="rounded-cms px-2 py-1 font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <div class="mt-3 flex flex-wrap gap-2">
+              <CmsButton variant="secondary" data-cms-stage-add={pipeline.pipelineId}>
+                Add stage
+              </CmsButton>
+              {pipeline.stages.length > 1 && (
+                <CmsButton variant="ghost" data-cms-stage-reorder={pipeline.pipelineId}>
+                  Reorder
+                </CmsButton>
+              )}
+            </div>
+            {pipeline.opportunityCount > 0 && (
+              <p class="mt-2 text-cms-caption text-cms-muted">
+                This pipeline is in use. Reordering rewrites what its history means; the safer act
+                for a materially different process is a new pipeline.
+              </p>
+            )}
+          </CmsCard>
+        ))}
+
+        <CmsDrawer id="cms-pipeline-drawer" tone="form" title="Pipeline">
+          <form id="cms-pipeline-form" novalidate class="flex flex-col gap-4">
+            <p
+              id="cms-pipeline-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <CmsInput id="p-pipelineName" name="pipelineName" label="Pipeline name" required />
+            <CmsCheckbox id="p-active" name="active" label="Active" checked />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              form="cms-pipeline-form"
+              data-cms-pipeline-save
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+
+        <CmsDrawer id="cms-stage-drawer" tone="form" title="Stage">
+          <form id="cms-stage-form" novalidate class="flex flex-col gap-4">
+            <p
+              id="cms-stage-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <CmsInput id="s-stageName" name="stageName" label="Stage name" required />
+            <CmsInput
+              id="s-defaultProbabilityPercent"
+              name="defaultProbabilityPercent"
+              label="Default probability %"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              required
+              hint="Whole percent. Applied when a deal moves here without an explicit override. Used when a deal moves here without an override."
+            />
+            <CmsInput
+              id="s-targetDays"
+              name="targetDays"
+              label="Target days"
+              type="number"
+              min="0"
+              step="1"
+              hint="Leave empty for no target. Empty is not zero: zero would mean same-day."
+            />
+            <CmsCheckbox id="s-isWonStage" name="isWonStage" label="Won stage" />
+            <CmsCheckbox
+              id="s-isLostStage"
+              name="isLostStage"
+              label="Lost stage"
+              hint="A stage may be won, or lost, or neither. A stage cannot be both won and lost."
+            />
+            <CmsCheckbox id="s-active" name="active" label="Active" checked />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              form="cms-stage-form"
+              data-cms-stage-save
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const pipelineForm = document.getElementById('cms-pipeline-form') as HTMLFormElement | null;
+  const pipelineDrawer = document.getElementById('cms-pipeline-drawer') as HTMLDialogElement | null;
+  const pipelineError = document.getElementById('cms-pipeline-error');
+  const stageForm = document.getElementById('cms-stage-form') as HTMLFormElement | null;
+  const stageDrawer = document.getElementById('cms-stage-drawer') as HTMLDialogElement | null;
+  const stageError = document.getElementById('cms-stage-error');
+
+  if (pipelineForm && pipelineDrawer && stageForm && stageDrawer) {
+    // What the stage drawer is doing: adding to a pipeline, or editing a stage.
+    let stageTarget:
+      | { mode: 'add'; pipelineId: string }
+      | { mode: 'edit'; stageId: string }
+      | null = null;
+
+    const post = async (url: string, method: string, body: unknown) =>
+      fetch(url, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+
+    const showError = (box: HTMLElement | null, answer: unknown) => {
+      const parsed = answer as { error?: { message?: string; fields?: FieldError[] } } | null;
+      if (box) {
+        box.hidden = false;
+        box.textContent =
+          parsed?.error?.fields?.map((f) => f.message).join(' ') ??
+          parsed?.error?.message ??
+          'That could not be saved. Please try again.';
+      }
+    };
+
+    const payload = (form: HTMLFormElement) => {
+      const body: Record<string, unknown> = {};
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string') body[name] = value;
+      }
+      // Unchecked boxes are absent from FormData; the server reads absence as
+      // false, which is right, but an explicit false survives review better.
+      for (const box of form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+        body[box.name] = box.checked;
+      }
+      return body;
+    };
+
+    document.addEventListener('click', async (event) => {
+      const target = event.target as HTMLElement | null;
+
+      if (target?.closest('[data-cms-pipeline-new]')) {
+        pipelineForm.reset();
+        if (pipelineError) pipelineError.hidden = true;
+        pipelineDrawer.showModal();
+        return;
+      }
+
+      const add = target?.closest<HTMLElement>('[data-cms-stage-add]');
+      if (add) {
+        stageTarget = { mode: 'add', pipelineId: add.dataset.cmsStageAdd ?? '' };
+        stageForm.reset();
+        if (stageError) stageError.hidden = true;
+        stageDrawer.showModal();
+        return;
+      }
+
+      const edit = target?.closest<HTMLElement>('[data-cms-stage-edit]');
+      if (edit) {
+        stageTarget = { mode: 'edit', stageId: edit.dataset.cmsStageEdit ?? '' };
+        (document.getElementById('s-stageName') as HTMLInputElement).value =
+          edit.dataset.stageName ?? '';
+        (document.getElementById('s-defaultProbabilityPercent') as HTMLInputElement).value =
+          edit.dataset.stageProb ?? '';
+        (document.getElementById('s-targetDays') as HTMLInputElement).value =
+          edit.dataset.stageTarget ?? '';
+        (document.getElementById('s-isWonStage') as HTMLInputElement).checked =
+          edit.dataset.stageWon === '1';
+        (document.getElementById('s-isLostStage') as HTMLInputElement).checked =
+          edit.dataset.stageLost === '1';
+        (document.getElementById('s-active') as HTMLInputElement).checked =
+          edit.dataset.stageActive === '1';
+        if (stageError) stageError.hidden = true;
+        stageDrawer.showModal();
+        return;
+      }
+
+      const reorder = target?.closest<HTMLElement>('[data-cms-stage-reorder]');
+      if (reorder) {
+        // Reordering is deliberate and rare, so a prompt beats drag-and-drop
+        // machinery this page would otherwise have to ship: type the stage
+        // names in the order wanted, comma separated, exactly as shown.
+        const pipelineId = reorder.dataset.cmsStageReorder ?? '';
+        const card = reorder.closest('section, div, article')?.parentElement;
+        const names = [...(card?.querySelectorAll<HTMLElement>('[data-cms-stage-edit]') ?? [])].map(
+          (b) => b.dataset.stageName ?? '',
+        );
+        const answer = window.prompt(
+          `Type the stage names in the new order, comma separated. Reordering a used pipeline rewrites what its history means.\nCurrent: ${names.join(', ')}`,
+          names.join(', '),
+        );
+        if (answer === null) return;
+        const wanted = answer.split(',').map((s) => s.trim());
+        const byName = new Map(
+          [...(card?.querySelectorAll<HTMLElement>('[data-cms-stage-edit]') ?? [])].map((b) => [
+            b.dataset.stageName ?? '',
+            b.dataset.cmsStageEdit ?? '',
+          ]),
+        );
+        const orderedStageIds = wanted.map((name) => byName.get(name) ?? '');
+        const response = await post(
+          `/api/crm/pipelines/${encodeURIComponent(pipelineId)}/stage-order`,
+          'POST',
+          { orderedStageIds },
+        );
+        if (response.ok) window.location.reload();
+        else window.alert('The order was not accepted. Every stage must appear exactly once.');
+        return;
+      }
+    });
+
+    pipelineForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const response = await post('/api/crm/pipelines', 'POST', payload(pipelineForm));
+      if (response.ok) window.location.reload();
+      else showError(pipelineError, await response.json().catch(() => null));
+    });
+
+    stageForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (stageTarget === null) return;
+      const url =
+        stageTarget.mode === 'add'
+          ? `/api/crm/pipelines/${encodeURIComponent(stageTarget.pipelineId)}/stages`
+          : `/api/crm/pipeline-stages/${encodeURIComponent(stageTarget.stageId)}`;
+      const response = await post(
+        url,
+        stageTarget.mode === 'add' ? 'POST' : 'PATCH',
+        payload(stageForm),
+      );
+      if (response.ok) window.location.reload();
+      else showError(stageError, await response.json().catch(() => null));
+    });
+  }
+</script>

@@ -1,17 +1,21 @@
 export const prerender = false;
 
 /**
- * Start the one-time Outlook connect flow: redirect the admin to the Microsoft
+ * Start the one-time Outlook connect flow: redirect the owner to the Microsoft
  * authorize endpoint for personal accounts, asking consent for Mail.Send and
- * offline_access so the callback can store a refresh token. Admin only, gated
- * on the matrix (CONFIG update; a platform owner always passes). The state
- * parameter is a sealed box carrying the acting user and a timestamp, which
- * the callback verifies, so a forged or replayed callback is refused. Tagged
- * [grc.mail]; never a blank 500.
+ * offline_access so the callback can store a refresh token. The state parameter
+ * is a sealed box carrying the acting user and a timestamp, which the callback
+ * verifies, so a forged or replayed callback is refused. Tagged [grc.mail];
+ * never a blank 500.
+ *
+ * Platform owner only (Build Prompt 44). The connection is a single record on
+ * the platform-wide `GLOBAL` sentinel and it is the mailbox every customer's
+ * notifications send from, so an instance admin holding `CONFIG.update` could
+ * replace or disconnect the mailbox for every tenant at once (audit finding
+ * AC-02). One shared mailbox means one authority over it.
  */
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
-import { can } from '@grc/auth/rbac';
 import { seal } from '@grc/auth/secretBox';
 import { authorizeUrl } from '@grc/notify/graph';
 import { getGrcDeliveryEnv } from '@grc/notify/env';
@@ -24,8 +28,10 @@ const back = (q: string): Response =>
 export const GET: APIRoute = async ({ locals }) => {
   const grc = locals.grc;
   if (!grc) return new Response(null, { status: 303, headers: { location: '/login' } });
-  if (!grc.isPlatformOwner && !can(locals, 'update', 'CONFIG')) {
-    return back(`error=${encodeURIComponent('Only an administrator can connect the mailbox.')}`);
+  if (!grc.isPlatformOwner) {
+    return back(
+      `error=${encodeURIComponent('The shared mailbox is connected by the platform owner. Please contact Murikah Labs.')}`,
+    );
   }
   try {
     const delivery = getGrcDeliveryEnv();

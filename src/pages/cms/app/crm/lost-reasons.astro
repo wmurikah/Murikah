@@ -1,0 +1,235 @@
+---
+/**
+ * CRM → Lost reasons.
+ *
+ * The configured vocabulary behind every lost deal. Free text on a loss would
+ * make the lost analysis a word cloud; this list is what makes it a count.
+ * Reasons deactivate and never delete, because past losses point at them.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageLostReasons } from '@/lib/cms/permissions';
+import { listLostReasons, type LostReasonRow } from '@/lib/cms/repos/opportunityAdmin';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageLostReasons(permissions);
+
+let reasons: LostReasonRow[] = [];
+let loadFailed = false;
+if (mayManage) {
+  try {
+    reasons = await listLostReasons(await getDb(getCmsEnv()));
+  } catch (error) {
+    console.error('[cms.crm.lostReasons] load failed', error);
+    loadFailed = true;
+  }
+}
+---
+
+<CmsLayout title="Lost reasons">
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to lost reasons"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Lost reasons could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Lost reasons"
+          definition="Every lost deal names one of these, so losses can be counted rather than read. Deactivate rather than delete: history points here."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'CRM', href: '/app/crm' },
+            { label: 'Lost reasons' },
+          ]}
+        >
+          <CmsButton slot="actions" variant="primary" icon="plus" data-cms-reason-new>
+            New reason
+          </CmsButton>
+        </CmsPageHeader>
+
+        <CmsDataTable
+          caption="Lost reasons"
+          columns={[
+            { key: 'reason', label: 'Reason' },
+            { key: 'category', label: 'Category' },
+            { key: 'description', label: 'Description', secondary: true },
+            { key: 'losses', label: 'Losses', numeric: true },
+            { key: 'state', label: 'State' },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          empty={reasons.length === 0}
+        >
+          {reasons.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">{row.reasonName}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{row.category}</td>
+              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                {row.description ?? 'Not available'}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.usageCount}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.active ? 'success' : 'neutral'}
+                  label={row.active ? 'Active' : 'Inactive'}
+                />
+              </td>
+              <td class="px-4 py-2.5">
+                <button
+                  type="button"
+                  data-cms-reason-edit={row.lostReasonId}
+                  data-reason-name={row.reasonName}
+                  data-reason-category={row.category}
+                  data-reason-description={row.description ?? ''}
+                  data-reason-active={row.active ? '1' : '0'}
+                  class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  Edit
+                </button>
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="crm"
+              title="No lost reasons yet"
+              description="Add the first one. A deal cannot be marked lost without a configured reason."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        <CmsDrawer id="cms-reason-drawer" tone="form" title="Lost reason">
+          <form id="cms-reason-form" novalidate class="flex flex-col gap-4">
+            <p
+              id="cms-reason-error"
+              role="alert"
+              hidden
+              class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+            />
+            <CmsInput id="r-reasonName" name="reasonName" label="Reason" required />
+            <CmsInput
+              id="r-category"
+              name="category"
+              label="Category"
+              required
+              hint="For example Commercial, Competition, Customer or Operational."
+            />
+            <CmsInput id="r-description" name="description" label="Description" />
+            <CmsCheckbox id="r-active" name="active" label="Active" checked />
+          </form>
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+            <button
+              type="submit"
+              form="cms-reason-form"
+              data-cms-reason-save
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </Fragment>
+        </CmsDrawer>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+  }
+
+  const form = document.getElementById('cms-reason-form') as HTMLFormElement | null;
+  const drawer = document.getElementById('cms-reason-drawer') as HTMLDialogElement | null;
+  const errorBox = document.getElementById('cms-reason-error');
+
+  if (form && drawer) {
+    let editing = '';
+    const field = (id: string) => document.getElementById(id) as HTMLInputElement;
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-cms-reason-new]')) {
+        editing = '';
+        form.reset();
+        if (errorBox) errorBox.hidden = true;
+        drawer.showModal();
+        return;
+      }
+      const edit = target?.closest<HTMLElement>('[data-cms-reason-edit]');
+      if (edit) {
+        editing = edit.dataset.cmsReasonEdit ?? '';
+        field('r-reasonName').value = edit.dataset.reasonName ?? '';
+        field('r-category').value = edit.dataset.reasonCategory ?? '';
+        field('r-description').value = edit.dataset.reasonDescription ?? '';
+        field('r-active').checked = edit.dataset.reasonActive === '1';
+        if (errorBox) errorBox.hidden = true;
+        drawer.showModal();
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const body = {
+        reasonName: field('r-reasonName').value,
+        category: field('r-category').value,
+        description: field('r-description').value,
+        active: field('r-active').checked,
+      };
+      try {
+        const response = await fetch(
+          editing === ''
+            ? '/api/crm/lost-reasons'
+            : `/api/crm/lost-reasons/${encodeURIComponent(editing)}`,
+          {
+            method: editing === '' ? 'POST' : 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(body),
+          },
+        );
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const answer = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: FieldError[] };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            answer?.error?.fields?.map((f) => f.message).join(' ') ??
+            answer?.error?.message ??
+            'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      }
+    });
+  }
+</script>

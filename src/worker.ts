@@ -35,12 +35,7 @@ import {
   isGrcPassthroughAsset,
   grcMarketingRedirect,
 } from './lib/grc/routing';
-import {
-  isCmsHost,
-  toCmsPath,
-  isCmsPassthroughAsset,
-  cmsMarketingRedirect,
-} from './lib/cms/routing';
+import { isCmsHost, toCmsPath, isCmsPassthroughAsset, cmsMarketingRedirect } from './lib/hosts/cms';
 import { getEngrEnv } from './lib/engr/env';
 import { getDeliveryEnv } from './lib/engr/notify/env';
 import { getDb } from './lib/engr/db';
@@ -122,16 +117,15 @@ async function grcNotFound(response: Response, host: string): Promise<Response> 
 }
 
 // The cms equivalent: a neutral not-found for the cms host, so no corporate
-// content renders there. The app's own not-found screens use the cms layout
-// (body class "cms"); keep those so their specific message survives.
+// content renders there. The CMS product was torn down to bare ground (Build
+// Prompt 00) and the host now serves one holding page at `/`, so every other
+// path lands here. There is no app to link back into, so unlike the engr and
+// grc versions this page offers no sign-in link and there is no app-rendered
+// not-found screen left to preserve.
 const CMS_NOT_FOUND_HTML = `<!doctype html>
-<html lang="en-KE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Page not found, Hass CMS</title><style>body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f6f4ee;color:#1b1b1b;display:grid;min-height:100vh;place-items:center;padding:1.5rem}main{max-width:32rem;text-align:center}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0 0 1.25rem;color:#565656}a{display:inline-block;min-height:2.75rem;line-height:2.75rem;padding:0 1.1rem;border-radius:.5rem;background:#12233b;color:#f6f4ee;text-decoration:none;font-weight:600}</style></head><body><main><h1>Page not found</h1><p>That page does not exist on Hass CMS. Check the address, or return to the sign-in page.</p><a href="/login">Go to sign in</a></main></body></html>`;
+<html lang="en-KE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Page not found</title><style>body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f6f4ee;color:#1b1b1b;display:grid;min-height:100vh;place-items:center;padding:1.5rem}main{max-width:32rem;text-align:center}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0;color:#565656}</style></head><body><main><h1>Page not found</h1><p>That page does not exist. This platform is being rebuilt.</p></main></body></html>`;
 
-async function cmsNotFound(response: Response, host: string): Promise<Response> {
-  const body = await response.text();
-  if (body.includes('class="cms"')) {
-    return stamp(new Response(body, response), host, 'cms-app');
-  }
+function cmsNotFound(host: string): Response {
   return stamp(
     new Response(CMS_NOT_FOUND_HTML, {
       status: 404,
@@ -174,10 +168,12 @@ export default {
       return stamp(response, host, 'grc-app');
     }
 
-    // The Hass CMS platform host: serve the cms app, rewriting to the internal
-    // /cms route unless the path is already there or is a static asset. The
-    // browser URL is unchanged. The session guard then runs in src/middleware.ts
-    // against that /cms route.
+    // The CMS platform host: rewrite to the internal /cms route unless the path
+    // is already there or is a static asset. The browser URL is unchanged. The
+    // branch is deliberately unchanged by the Build Prompt 00 teardown, so
+    // cms.murikah.com keeps resolving and the Cloudflare custom domain never has
+    // to be re-pointed; what it serves is now a single holding page at `/`, and
+    // every other path falls through to the neutral not-found above.
     if (isCmsHost(host)) {
       const cmsPath = isCmsPassthroughAsset(url.pathname) ? url.pathname : toCmsPath(url.pathname);
       let response: Response;
@@ -188,7 +184,7 @@ export default {
         rewritten.pathname = cmsPath;
         response = await astro.fetch(new Request(rewritten, request), env, ctx);
       }
-      if (response.status === 404) return cmsNotFound(response, host);
+      if (response.status === 404) return cmsNotFound(host);
       return stamp(response, host, 'cms-app');
     }
 
@@ -247,12 +243,22 @@ export default {
   ): Promise<void> {
     ctx.waitUntil(
       (async () => {
-        const db = await getDb(getEngrEnv());
-        const delivery = getDeliveryEnv();
-        if (controller.cron === DAILY_PM_CRON) {
-          await runPmScan(db, delivery, systemClock, { orgLimit: 50, scheduleLimit: 200 });
+        // Engineering Rhythm's half of the cron, in its own boundary (Build
+        // Prompt 60). It used to run unguarded ahead of the GRC half, so an
+        // unconfigured engr binding did not merely skip its own work: it
+        // rejected before the GRC maintenance below was reached, and the
+        // reminders nobody received had no error to point at. The two products
+        // share a schedule, not a fate.
+        try {
+          const db = await getDb(getEngrEnv());
+          const delivery = getDeliveryEnv();
+          if (controller.cron === DAILY_PM_CRON) {
+            await runPmScan(db, delivery, systemClock, { orgLimit: 50, scheduleLimit: 200 });
+          }
+          await runDispatch(db, delivery, systemClock, { limit: 200 });
+        } catch (err) {
+          console.error('[engr.cron] scheduled run failed', err);
         }
-        await runDispatch(db, delivery, systemClock, { limit: 200 });
 
         // GRC maintenance and notification delivery. Wrapped so a missing GRC
         // binding or a schema difference never fails the engr crons. The queue is

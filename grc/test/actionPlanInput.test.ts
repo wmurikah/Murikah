@@ -55,18 +55,18 @@ test('blank fields become null rather than empty strings', () => {
   assert.equal(input.dueDate, null);
 });
 
-test('the parent finding is required: no description, no parent, no plan', () => {
+test('the parent observation is required: no description, no parent, no plan', () => {
   const linked = parseActionPlanInput(
     form({ action_description: 'Reconcile monthly.', work_paper_id: 'WP-1' }),
   );
   assert.equal(checkActionPlanInput(linked), null);
   const noParent = parseActionPlanInput(form({ action_description: 'Reconcile monthly.' }));
-  assert.match(String(checkActionPlanInput(noParent)), /parent finding/);
+  assert.match(String(checkActionPlanInput(noParent)), /parent observation/);
   // A blank selection is the same as none.
   const blankParent = parseActionPlanInput(
     form({ action_description: 'Reconcile monthly.', work_paper_id: '   ' }),
   );
-  assert.match(String(checkActionPlanInput(blankParent)), /parent finding/);
+  assert.match(String(checkActionPlanInput(blankParent)), /parent observation/);
   const noDescription = parseActionPlanInput(form({ work_paper_id: 'WP-1' }));
   assert.match(String(checkActionPlanInput(noDescription)), /description/);
 });

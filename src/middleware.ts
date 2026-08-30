@@ -30,12 +30,15 @@ import {
   resolveActingContext as resolveGrcActingContext,
   type SwitchOrg as GrcSwitchOrg,
 } from '@grc/repos/orgContext';
-import { getPermissionMatrix, deriveLegacyPerms, canMatrix, fullMatrix } from '@grc/auth/rbac';
+import { resolveRoleAccess, deriveLegacyPerms, canMatrix } from '@grc/auth/rbac';
+import { resolveAffiliateScope } from '@grc/auth/affiliateScope';
+import { isGroupAffiliate } from '@grc/repos/affiliatesAdmin';
 import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
 import { loadSubscription } from '@grc/repos/features';
 import {
   toGrcAppPath,
   isGrcPublicPath,
+  safeNextPath,
   isGrcApiPath,
   isGrcChangePasswordExempt,
   isGrcMfaPendingAllowed,
@@ -46,18 +49,31 @@ import {
 } from '@grc/routing';
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { scheduleCacheStatsRollUp } from '@grc/cache';
-import { getCmsEnv } from '@cms/env';
-import { getDb as getCmsDb } from '@cms/db';
-import { readSessionCookie } from '@cms/auth/session';
+import { toCmsAppPath } from '@/lib/hosts/cms';
 import {
-  resolveSession as resolveCmsSession,
-  touchSession,
-  getDisplayIdentity,
-} from '@cms/repos/session';
-import { loadRolePermissions, can as cmsCan } from '@cms/auth/rbac';
-import { loadBranding } from '@cms/repos/branding';
-import { resolveTenant } from '@cms/tenancy';
-import { toCmsAppPath, isCmsPublicPath, isCmsApiPath, isCmsPortalPath } from '@cms/routing';
+  applySecurityHeaders,
+  writableResponse,
+  isSameOrigin,
+  crossOriginRefusal,
+  newCspNonce,
+} from '@/lib/cms/security/headers';
+import { getCmsEnv } from '@/lib/cms/env';
+import { renamedPath } from '@/lib/cms/routes';
+import { getDb as getCmsDb } from '@/lib/cms/db';
+import { readSessionCookie as readCmsSessionCookie } from '@/lib/cms/auth/cookie';
+import { resolveSession as resolveCmsSession } from '@/lib/cms/auth/loginFlow';
+import { clearSessionCookie as clearCmsCookie, isSecureRequest } from '@/lib/cms/auth/cookie';
+import {
+  isPublicPath as isCmsPublicPath,
+  isApiPath as isCmsApiPath,
+  isAppPath,
+  isPortalPath,
+  homeFor,
+  APP_ROOT,
+  PORTAL_ROOT,
+  LOGIN_PATH,
+  EXPIRED_FLAG,
+} from '@/lib/cms/routes';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -93,9 +109,18 @@ export const onRequest = defineMiddleware(async (context, next) => {
           : new Response('The GRC platform is not configured.', { status: 503 });
       }
 
+      // Where they were going, carried through sign-in (Build Prompt 53). A
+      // digest email links a reviewer straight at the review queue, and losing
+      // that destination at the guard is what makes an emailed link feel
+      // broken. safeNextPath refuses anything that is not a path inside this
+      // app, so this can never become an open redirect.
+      const intended = safeNextPath(appPath + (context.url.search ?? ''));
+      const toLogin = (): Response =>
+        context.redirect(intended ? `/login?next=${encodeURIComponent(intended)}` : '/login');
+
       const sessionCookie = await readGrcSessionCookie(context.request, env.sessionSecret);
       if (!sessionCookie) {
-        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : toLogin();
       }
       const sessionId = sessionCookie.sessionId;
 
@@ -115,7 +140,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       const db = await getGrcDb(env);
       const identity = await resolveSession(db, sessionId);
       if (!identity) {
-        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
+        return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : toLogin();
       }
 
       // An instance admin, and every other ordinary role, is pinned to their home
@@ -148,13 +173,40 @@ export const onRequest = defineMiddleware(async (context, next) => {
       }
 
       // The permission matrix from role_permissions drives every gate. A SUPER_ADMIN
-      // and a platform owner hold the full matrix; every other role holds its grants.
+      // and a platform owner hold the full matrix; every other role holds its grants,
+      // resolved inside the acting organisation (its own rows if it has any, else the
+      // platform defaults), so one customer's grants never answer for another's.
       // The legacy perms list is derived from the matrix, so existing code keeps
       // working, matrix-driven.
-      const matrix =
-        identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN'
-          ? fullMatrix()
-          : await getPermissionMatrix(db, identity.roleCode);
+      // The second dimension of access beside the grants (Build Prompt 45): a
+      // role can be confined to its user's affiliate. Both come from the one
+      // query, so the grants and the scope can never disagree. A SUPER_ADMIN and
+      // a platform owner hold a synthesised matrix and are never confined.
+      // Resolved through the shared accessor (Build Prompt 57), which every
+      // other gate in the product also asks, so the session and a save behind it
+      // can never resolve the same role differently.
+      const access = await resolveRoleAccess(
+        db,
+        identity.roleCode,
+        organizationId,
+        identity.isPlatformOwner,
+      );
+      const matrix = access.matrix;
+      // The Group exemption (Build Prompt 48): a user posted to an affiliate
+      // marked `affiliates.is_group` sees every affiliate even under a confined
+      // role. Resolved once here, from the user's own affiliate, never per row,
+      // and only asked for when a confinement would otherwise bite: an
+      // unconfined request makes no extra query at all.
+      const onGroupAffiliate =
+        access.scopeToAffiliate && identity.affiliateCode
+          ? await isGroupAffiliate(db, organizationId, identity.affiliateCode)
+          : false;
+      const affiliateScope = resolveAffiliateScope(
+        access.scopeToAffiliate,
+        identity.affiliateCode,
+        identity.isPlatformOwner,
+        onGroupAffiliate,
+      );
       const perms = deriveLegacyPerms(matrix);
       // With no instance selected there is no subscription to read: the plan
       // belongs to the instance, not to the platform owner browsing above it.
@@ -173,6 +225,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         userEmail: identity.userEmail,
         isPlatformOwner: identity.isPlatformOwner,
         mustChangePassword: identity.mustChangePassword,
+        affiliateScope,
         switchable,
         matrix,
         perms,
@@ -235,76 +288,137 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // ---- Hass CMS guard (/cms routes) ----------------------------------------
+  // ---- CMS host branch (/cms routes) ---------------------------------------
+  // The branch itself is unchanged from Build Prompt 00, so cms.murikah.com
+  // keeps resolving and the Cloudflare custom domain never has to be
+  // re-pointed. Inside it, this is the whole of the CMS's route protection.
+  //
+  // Server-side, by redirect. There are no client-side guards anywhere in this
+  // product, and no client-side authentication store: the principal is resolved
+  // here, once per request, and read from locals by whatever renders. That is
+  // why a refresh keeps the user signed in with no code, why there is no
+  // loading state to design, and why protected markup can never flash on an
+  // unauthorised screen: it is never sent.
+  //
+  // The public list is default-deny (see @/lib/cms/routes): a page added later
+  // is protected because nobody had to remember to protect it.
   if (pathname === '/cms' || pathname.startsWith('/cms/')) {
     const appPath = toCmsAppPath(pathname);
     context.locals.cmsPath = appPath;
 
-    if (isCmsPublicPath(appPath)) return next();
+    // Service became Helpdesk. Before anything else, because an old link
+    // should land on the new page whether or not the visitor is signed in,
+    // and one prefix rule covers every sub-path including the dynamic ones.
+    const renamed = renamedPath(appPath);
+    if (renamed !== null) {
+      return writableResponse(context.redirect(renamed + (context.url.search ?? ''), 301));
+    }
+    // One nonce per response, minted before anything renders, so the layout
+    // can stamp it on the rail's inline script and the header can name the
+    // same value. A hash would go stale the next time that script is edited.
+    const nonce = newCspNonce();
+    context.locals.cmsNonce = nonce;
+
     const isApi = isCmsApiPath(appPath);
-    const loginPath = isCmsPortalPath(appPath) ? '/portal/login' : '/login';
+    let anonymousReason: string = 'no_cookie';
 
-    let env: ReturnType<typeof getCmsEnv>;
     try {
-      env = getCmsEnv();
+      const env = getCmsEnv();
+      const db = await getCmsDb(env);
+      const resolution = await resolveCmsSession(
+        db,
+        env.sessionSecret,
+        readCmsSessionCookie(context.request),
+        new Date(),
+      );
+      if (resolution.kind === 'authenticated') {
+        context.locals.cms = {
+          sessionId: resolution.sessionId,
+          user: resolution.identity,
+          can: (code: string) => resolution.identity.permissions.includes(code),
+        };
+      } else {
+        anonymousReason = resolution.reason;
+      }
     } catch {
-      return isApi
-        ? jsonResponse({ error: 'unavailable' }, 503)
-        : new Response('Hass CMS is not configured.', { status: 503 });
+      // Anonymous. An unconfigured TURSO_CMS_* or an unreachable database must
+      // not take the host down: the sign-in page and the static assets have no
+      // business depending on the database being up.
     }
 
-    const cookie = await readSessionCookie(context.request, env.sessionSecret);
-    if (!cookie) {
-      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect(loginPath);
-    }
+    const principal = context.locals.cms;
 
-    const db = await getCmsDb(env);
-    const identity = await resolveCmsSession(db, cookie.sessionId);
-    if (!identity) {
-      return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect(loginPath);
-    }
+    // A page response for a signed-in user must never be cached. Without this,
+    // the Back button can redisplay the shell from the browser's cache after
+    // sign-out, which looks exactly like still being signed in.
+    const guarded = async (): Promise<Response> => {
+      if (principal) {
+        // Signed in. Send each user type to its own surface, and keep them
+        // there. The sign-in page is not somewhere a signed-in user belongs.
+        const home = homeFor(principal.user.userType, principal.user.permissions);
+        if (appPath === LOGIN_PATH) return context.redirect(home, 302);
+        if (appPath === '/') return context.redirect(home, 302);
+        if (principal.user.userType === 'EXTERNAL' && isAppPath(appPath)) {
+          // Never rendered, not merely hidden.
+          return context.redirect(PORTAL_ROOT, 302);
+        }
+        if (principal.user.userType === 'INTERNAL' && isPortalPath(appPath)) {
+          // The decision: staff are sent to /app rather than shown the portal.
+          // The portal is the customer's surface and a staff user has no
+          // customer_portal_memberships row, so it would render an empty shell
+          // and invite confusion about which surface they are on. One home per
+          // user type is easier to reason about than a read-only visit.
+          return context.redirect(APP_ROOT, 302);
+        }
+        return next();
+      }
 
-    // A half-authorised (MFA pending) session may only reach the TOTP step.
-    if (cookie.mfa === 'pending') {
-      if (appPath === '/mfa') return next();
-      return isApi ? jsonResponse({ error: 'mfa_required' }, 401) : context.redirect('/mfa');
-    }
+      // Not signed in.
+      if (isCmsPublicPath(appPath)) return next();
 
-    // The two user types never cross: a customer is confined to the portal, a
-    // staff user is kept out of it. Sign-out and the MFA step are shared.
-    const onPortal = isCmsPortalPath(appPath);
-    if (identity.userType === 'CUSTOMER' && !onPortal && appPath !== '/mfa') {
-      return isApi ? jsonResponse({ error: 'forbidden' }, 403) : context.redirect('/portal');
-    }
-    if (identity.userType === 'STAFF' && onPortal) {
-      return isApi ? jsonResponse({ error: 'forbidden' }, 403) : context.redirect('/');
-    }
+      // An API answers for itself: a JSON client wants 401, not the HTML of a
+      // sign-in page delivered under a 302 it did not ask to follow.
+      if (isApi) return next();
 
-    const [perms, display] = await Promise.all([
-      identity.role ? loadRolePermissions(db, identity.role) : Promise.resolve(new Set<string>()),
-      getDisplayIdentity(db, identity.userType, identity.userId),
-    ]);
-    const tenant = resolveTenant(identity.role);
-    const branding = await loadBranding(db, identity.countryCode);
-    await touchSession(db, cookie.sessionId);
-
-    context.locals.cms = {
-      userType: identity.userType,
-      userId: identity.userId,
-      role: identity.role,
-      countryCode: identity.countryCode,
-      customerId: display?.customerId ?? null,
-      userName: display?.name,
-      userEmail: display?.email,
-      tenantId: tenant.tenantId,
-      tenantName: tenant.tenantName,
-      isPlatformOwner: tenant.isPlatformOwner,
-      branding,
-      perms: [...perms],
-      can: (code: string) => cmsCan(perms, code),
+      // A session that ran out gets told so; one that never existed does not.
+      const expired = anonymousReason === 'expired' || anonymousReason === 'revoked';
+      const destination = expired ? `${LOGIN_PATH}?${EXPIRED_FLAG}=1` : LOGIN_PATH;
+      const response = context.redirect(destination, 302);
+      // Clear the dead cookie on the way past, so the browser stops sending a
+      // credential that will never work again.
+      if (anonymousReason !== 'no_cookie') {
+        response.headers.append(
+          'set-cookie',
+          clearCmsCookie({ secure: isSecureRequest(context.request) }),
+        );
+      }
+      return response;
     };
 
-    return next();
+    // CSRF, before anything mutates. Section 0a puts this here rather than in
+    // the worker because the worker serves four products and this policy is
+    // the CMS's alone. SameSite=Lax already stops a cross-site POST carrying
+    // the cookie; this is the second line, because SameSite is one setting
+    // enforced by the client and a security control should not have exactly
+    // one of those.
+    if (!isSameOrigin(context.request, context.url)) {
+      const refused = crossOriginRefusal();
+      applySecurityHeaders(refused, { secure: isSecureRequest(context.request), nonce });
+      return refused;
+    }
+
+    // WRITABLE FIRST. A route may return `Response.redirect()`, whose headers
+    // are immutable; setting one throws and Astro turns the throw into an
+    // empty 500. See writableResponse: this is why every provider sign-in
+    // button returned 500, and it would have caught the successful sign-in
+    // callback too.
+    const response = writableResponse(await guarded());
+    if (principal) response.headers.set('cache-control', 'no-store');
+    // On every CMS response, signed in or not, including the sign-in page and
+    // every redirect. A policy that applied only to authenticated pages would
+    // leave the one page an unauthenticated attacker can reach unprotected.
+    applySecurityHeaders(response, { secure: isSecureRequest(context.request), nonce });
+    return response;
   }
 
   // ---- Engineering Rhythm guard (/engr routes) -----------------------------

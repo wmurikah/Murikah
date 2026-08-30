@@ -2,7 +2,7 @@
 export const prerender = false;
 
 /**
- * Action plans list (Actionplanslist): remediation and follow-up of findings,
+ * Action plans list (Actionplanslist): remediation and follow-up of observations,
  * scoped to the acting organisation and to the source's role-based visibility.
  * Two views of the same data, toggled by ?view: a dense table and a Kanban
  * board grouped by status. Filterable by status, affiliate, audit area, owner,
@@ -19,6 +19,7 @@ export const prerender = false;
  * comment the board cannot collect, so they stay on the detail.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcAffiliateNotice from '@/components/grc/GrcAffiliateNotice.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
@@ -75,6 +76,7 @@ const viewer: Viewer = {
   roleCode: grc.roleCode,
   perms: grc.perms,
   isPlatformOwner: grc.isPlatformOwner,
+  affiliateScope: grc.affiliateScope,
 };
 
 let rows: ActionPlanListRow[] = [];
@@ -107,7 +109,8 @@ if (allowed) {
     stats = computeStats(rows);
     // Strays from before the parent rule, shown to auditors so each gets
     // linked through its edit screen rather than stranded.
-    if (canRelink) orphans = await listOrphanActionPlans(db, grc.organizationId);
+    if (canRelink)
+      orphans = await listOrphanActionPlans(db, grc.organizationId, grc.affiliateScope);
   }));
 }
 
@@ -195,6 +198,8 @@ const done = p.get('done');
     }
   </div>
 
+  <GrcAffiliateNotice subject="action plans" />
+
   {
     done && (
       <p class="grc-notice" role="status" style="margin-bottom:1rem">
@@ -214,10 +219,10 @@ const done = p.get('done');
       <>
         {orphans.length > 0 && (
           <div class="grc-panel" style="margin-bottom:1rem">
-            <h2>Plans without a parent finding</h2>
+            <h2>Plans without a parent observation</h2>
             <p>
-              Every action plan must be linked to the finding it remediates. These plans predate
-              that rule and are invisible to the finding drill-downs and reports until they are
+              Every action plan must be linked to the observation it remediates. These plans predate
+              that rule and are invisible to the observation drill-downs and reports until they are
               linked. Open each one and choose its work paper.
             </p>
             <ul>

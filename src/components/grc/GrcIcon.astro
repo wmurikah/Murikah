@@ -56,6 +56,13 @@ const ICONS: Record<string, string> = {
   pin: '<path d="M9 4h6l-1 6 3 3v2H7v-2l3-3zM12 15v6"/>',
   // Evidence (Build Prompt 41)
   upload: '<path d="M12 16V4M8 8l4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+  // Settings navigation (Build Prompt 52). The send queue used to share the
+  // bell with Notifications, which read as the same destination listed twice.
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
+  storage:
+    '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
 };
 
 const inner = ICONS[name] ?? '<circle cx="12" cy="12" r="3"/>';

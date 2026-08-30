@@ -1,0 +1,139 @@
+---
+/**
+ * The audit list, used by the workspace, the security view and every entity
+ * history panel.
+ *
+ * THERE IS NO EDIT, DELETE OR CORRECT CONTROL IN THIS FILE, and there is
+ * none anywhere near an audit row in the application. The database refuses
+ * both operations outright; an interface offering them would be offering
+ * something that cannot happen. A correction to business data creates a new
+ * business change and a new audit event, and the original row stands.
+ *
+ * A HIGH-IMPACT EVENT CARRIES AN ICON, A LABEL AND A SENTENCE. Never a colour
+ * alone: somebody reading this in greyscale, or not distinguishing red from
+ * green, must get the same information as everybody else.
+ *
+ * The timestamp is absolute and in UTC, never "2 hours ago". This is legal
+ * evidence and a relative time is not evidence of anything.
+ */
+import CmsBadge from './CmsBadge.astro';
+import CmsIcon from './CmsIcon.astro';
+import CmsEmptyState from './CmsEmptyState.astro';
+import type { AuditRow } from '@/lib/cms/repos/auditTrail';
+
+interface Props {
+  rows: AuditRow[];
+  /** Where a row links. Omitted on a panel that has nowhere to go. */
+  detailBase?: string | null;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  /** Hides the entity column on a panel that is already about one entity. */
+  showEntity?: boolean;
+}
+const {
+  rows,
+  detailBase = '/app/administration/audit',
+  emptyTitle = 'No audit events in this window',
+  emptyDescription = 'Widen the date range, or clear a filter. An empty result is not a claim that nothing happened.',
+  showEntity = true,
+} = Astro.props;
+
+const CLASS_TONE = {
+  SECURITY: 'warning',
+  CONFIGURATION: 'info',
+  BUSINESS: 'neutral',
+} as const;
+---
+
+{
+  rows.length === 0 ? (
+    <CmsEmptyState icon="search" title={emptyTitle} description={emptyDescription} />
+  ) : (
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[52rem] border-collapse text-left">
+        <caption class="sr-only">Audit events, most recent first</caption>
+        <thead>
+          <tr class="border-b border-cms-line">
+            <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+              When (UTC)
+            </th>
+            <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+              Who
+            </th>
+            <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+              Event
+            </th>
+            {showEntity && (
+              <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+                Record
+              </th>
+            )}
+            <th scope="col" class="py-2 pr-3 text-cms-label font-semibold text-cms-muted">
+              Action
+            </th>
+            <th scope="col" class="py-2 text-cms-label font-semibold text-cms-muted">
+              What changed
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr class="border-b border-cms-line align-top last:border-0">
+              <td class="py-3 pr-3 text-cms-body-sm whitespace-nowrap text-cms-ink tabular-nums">
+                {row.eventAt}
+              </td>
+              <td class="py-3 pr-3">
+                <span class="block text-cms-body-sm text-cms-ink">{row.actorName}</span>
+                {row.actorEmail !== null && (
+                  <span class="block text-cms-caption break-all text-cms-muted">
+                    {row.actorEmail}
+                  </span>
+                )}
+              </td>
+              <td class="py-3 pr-3">
+                <span class="flex flex-wrap items-center gap-1.5">
+                  {row.highRisk && (
+                    <>
+                      {/* Icon, then label, then the sentence below. */}
+                      <CmsIcon name="statusWarn" size={16} title="High impact" />
+                      <span class="sr-only">High impact.</span>
+                    </>
+                  )}
+                  {detailBase === null ? (
+                    <span class="text-cms-body-sm font-medium text-cms-ink">{row.eventLabel}</span>
+                  ) : (
+                    <a
+                      href={`${detailBase}/${row.auditEventId}`}
+                      class="text-cms-body-sm font-medium text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      {row.eventLabel}
+                    </a>
+                  )}
+                  <CmsBadge tone={CLASS_TONE[row.classification]} label={row.classification} />
+                  {row.highRisk && <CmsBadge tone="warning" label="High impact" />}
+                </span>
+                {row.highRiskReason !== null && (
+                  <span class="mt-0.5 block max-w-prose text-cms-caption text-cms-muted">
+                    {row.highRiskReason}
+                  </span>
+                )}
+              </td>
+              {showEntity && (
+                <td class="py-3 pr-3">
+                  <span class="block text-cms-body-sm text-cms-ink">
+                    {row.entityLabel ?? row.entityId}
+                  </span>
+                  <span class="block text-cms-caption text-cms-muted">{row.entityType}</span>
+                </td>
+              )}
+              <td class="py-3 pr-3 text-cms-body-sm text-cms-muted">{row.action}</td>
+              <td class="max-w-xs py-3 text-cms-body-sm break-words text-cms-muted">
+                {row.changeSummary}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

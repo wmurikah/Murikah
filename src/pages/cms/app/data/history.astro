@@ -1,0 +1,280 @@
+---
+/**
+ * Data → Import History.
+ *
+ * Every batch of every type in one list, because there is one ingestion
+ * path. Rows and documents are separate columns and never combined into a
+ * percentage: 1,386 rows describing 662 orders is two facts, and averaging
+ * them would produce a third that is true of nothing.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canUploadImports, canViewImports } from '@/lib/cms/permissions';
+import {
+  listBatches,
+  IMPORT_TYPE_LABELS,
+  type BatchSummaryRow,
+  type ImportType,
+  isNonTerminal,
+} from '@/lib/cms/import/uploadCentre';
+import { dominantAction } from '@/lib/cms/import/progress';
+import { CLEAR_EVERYTHING_CONFIRMATION } from '@/lib/cms/import/batchAdmin';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewImports(permissions);
+const mayClear = canUploadImports(permissions);
+
+let batches: BatchSummaryRow[] = [];
+let loadFailed = false;
+if (mayView) {
+  try {
+    batches = await listBatches(await getDb(getCmsEnv()));
+  } catch (error) {
+    console.error('[cms.data.history] load failed', error);
+    loadFailed = true;
+  }
+}
+const statusTone = (status: string) =>
+  status === 'IMPORTED'
+    ? 'success'
+    : status === 'PARTIAL'
+      ? 'warning'
+      : status === 'REJECTED'
+        ? 'danger'
+        : 'neutral';
+const typeLabel = (type: string) =>
+  IMPORT_TYPE_LABELS[type as ImportType] ?? type.replace('_', ' ').toLowerCase();
+---
+
+<CmsLayout title="Import history">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to import history"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Import history could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Import history"
+          definition="Nothing here is ever deleted. The file, its hash and its lineage are kept."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Data', href: '/app/data' },
+            { label: 'History' },
+          ]}
+        >
+          {mayClear && (
+            <Fragment slot="actions">
+              <CmsButton variant="danger" data-cms-modal-open="cms-clear-history">
+                Clear history
+              </CmsButton>
+            </Fragment>
+          )}
+        </CmsPageHeader>
+
+        {mayClear && (
+          <CmsModal
+            id="cms-clear-history"
+            title="Clear import history"
+            description="A batch that wrote records is skipped, never deleted."
+          >
+            <div class="flex flex-col gap-4 px-5 py-4">
+              {/*
+                A SCOPE, NOT A BUTTON. "Delete everything" is rarely what
+                somebody means, and a control offering only that gets used for
+                the thing it is not meant for.
+              */}
+              <CmsSelect
+                id="cms-clear-scope"
+                name="scope"
+                label="What to clear"
+                options={[
+                  { value: 'failed', label: 'Everything that failed (rejected and stuck)' },
+                  { value: 'before', label: 'Everything before a date' },
+                  { value: 'no-records', label: 'Everything that never wrote a record' },
+                  { value: 'everything', label: 'Everything' },
+                ]}
+              />
+              <CmsInput id="cms-clear-before" name="before" label="Before" type="date" />
+              <CmsInput
+                id="cms-clear-confirmation"
+                name="confirmation"
+                label={`Type ${CLEAR_EVERYTHING_CONFIRMATION} to clear everything`}
+                hint="Only needed for the Everything scope."
+              />
+              <p
+                id="cms-clear-preview"
+                role="status"
+                aria-live="polite"
+                class="text-cms-body-sm text-cms-muted"
+              />
+            </div>
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <CmsButton id="cms-clear-check" variant="secondary">
+                Show what will go
+              </CmsButton>
+              <CmsButton id="cms-clear-run" variant="danger">
+                Clear
+              </CmsButton>
+            </Fragment>
+          </CmsModal>
+        )}
+        <CmsDataTable
+          caption="Import batches"
+          columns={[
+            { key: 'file', label: 'File' },
+            { key: 'type', label: 'Type' },
+            { key: 'source', label: 'Source' },
+            { key: 'by', label: 'Uploaded by' },
+            { key: 'at', label: 'Uploaded' },
+            { key: 'rows', label: 'Rows', numeric: true },
+            { key: 'documents', label: 'Documents', numeric: true },
+            { key: 'new', label: 'New', numeric: true },
+            { key: 'changed', label: 'Changed', numeric: true },
+            { key: 'duplicate', label: 'Duplicates', numeric: true },
+            { key: 'rejected', label: 'Rejected', numeric: true },
+            { key: 'status', label: 'Status' },
+            { key: 'action', label: 'Needs' },
+          ]}
+          empty={batches.length === 0}
+        >
+          {batches.map((batch) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={`/app/data/history/${batch.batchId}`}
+                  class="font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {batch.filename}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{typeLabel(batch.importType)}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{batch.sourceSystem}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{batch.uploadedBy}</td>
+              <td class="px-4 py-2.5 text-cms-muted">{batch.uploadedAt}</td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsReceived}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.uniqueDocuments}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{batch.rowsNew}</td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsChanged}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsDuplicate}
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {batch.rowsRejected}
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone={statusTone(batch.status)} label={batch.status.toLowerCase()} />
+                {/*
+                 * A batch that never reached a terminal state is not a
+                 * status anybody should have to open the detail page to
+                 * discover. It says so here, where the operator is already
+                 * looking, with the action that clears it beside it.
+                 */}
+                {isNonTerminal(batch.status) && (
+                  <a
+                    class="mt-1 block text-cms-body-sm text-cms-royal hover:underline"
+                    href={`/app/data/history/${batch.batchId}`}
+                  >
+                    Never finished, reprocess
+                  </a>
+                )}
+              </td>
+              {/*
+                THE ONE ACTION THAT BATCH NEEDS, WITHOUT OPENING IT. A history
+                that shows only a status word makes an operator open every
+                stuck batch to find out what to do with it.
+              */}
+              <td class="px-4 py-2.5 text-cms-muted">
+                {dominantAction(batch.status, batch.batchId).label ?? 'Nothing'}
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="data"
+              title="No imports yet"
+              description="Uploaded files appear here."
+            />
+          </Fragment>
+        </CmsDataTable>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  const scope = document.getElementById('cms-clear-scope') as HTMLSelectElement | null;
+  const before = document.getElementById('cms-clear-before') as HTMLInputElement | null;
+  const confirmation = document.getElementById('cms-clear-confirmation') as HTMLInputElement | null;
+  const note = document.getElementById('cms-clear-preview');
+
+  const selection = () => ({
+    scope: scope?.value ?? 'failed',
+    before: before?.value ?? '',
+  });
+
+  /** WHAT WILL GO, BEFORE IT GOES. Nothing is written by this. */
+  const check = async () => {
+    const query = new URLSearchParams(selection());
+    const response = await fetch(`/api/data/imports/clear?${query.toString()}`);
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok || body === null) {
+      if (note) note.textContent = 'That selection could not be read.';
+      return;
+    }
+    const skipped = Number(body.skipped ?? 0);
+    if (note) {
+      note.textContent =
+        `${Number(body.batches ?? 0)} batches, ${Number(body.rows ?? 0)} rows and ` +
+        `${Number(body.landedRows ?? 0)} landed rows will be deleted.` +
+        (skipped === 0 ? '' : ` ${String(body.skippedReason ?? '')}`);
+    }
+  };
+
+  document.getElementById('cms-clear-check')?.addEventListener('click', () => void check());
+  scope?.addEventListener('change', () => void check());
+
+  document.getElementById('cms-clear-run')?.addEventListener('click', async () => {
+    const response = await fetch('/api/data/imports/clear', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...selection(), confirmation: confirmation?.value ?? '' }),
+    });
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const result = (body ?? {}) as Record<string, unknown>;
+    if (response.ok && result.refusal === null) {
+      window.location.reload();
+      return;
+    }
+    if (note) {
+      note.textContent = String(result.refusal ?? 'The history could not be cleared.');
+    }
+  });
+</script>

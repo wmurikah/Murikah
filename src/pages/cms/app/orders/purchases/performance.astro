@@ -1,0 +1,496 @@
+---
+/**
+ * Orders → Purchase Orders → Performance.
+ *
+ * COVERAGE COMES FIRST ON THIS PAGE, ABOVE THE DURATIONS.
+ * In an early implementation the stock timestamps are largely absent, and a
+ * median receipt-to-posting time computed over two of forty-five orders is
+ * not wrong arithmetic, it is a wrong impression. The only defence is to put
+ * the denominator in front of the reader before the figure, so that is the
+ * order the page is in.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewPurchaseOrders } from '@/lib/cms/permissions';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import {
+  formatDuration,
+  formatRate,
+  coverageSentence,
+  MEDIAN_DEFINITION,
+  P90_DEFINITION,
+} from '@/lib/cms/analytics/stats';
+import {
+  coverage,
+  durations,
+  backlog,
+  stagePerformance,
+  bottleneck,
+  approverPerformance,
+  procurementMix,
+  trend,
+  stockConstraint,
+  type CoverageRow,
+  type PoDurationSet,
+  type PoBacklogSignal,
+  type StageRow,
+  type BottleneckRow,
+  type PoApproverRow,
+  type ProcurementRow,
+  type PoTrendBucket,
+  type StockConstraintRow,
+} from '@/lib/cms/repos/poPerformance';
+import { lineChart, distributionChart } from '@/lib/cms/charts/svg';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewPurchaseOrders(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+
+let coverageRows: CoverageRow[] = [];
+let durationSet: PoDurationSet | null = null;
+let backlogRows: PoBacklogSignal[] = [];
+let stages: StageRow[] = [];
+let shares: { rows: BottleneckRow[]; method: string } = { rows: [], method: '' };
+let approvers: { rows: PoApproverRow[]; minimumVolume: number } = { rows: [], minimumVolume: 0 };
+let mix: ProcurementRow[] = [];
+let buckets: PoTrendBucket[] = [];
+let stock: { rows: StockConstraintRow[]; wording: string } = { rows: [], wording: '' };
+let affiliates: { value: string; label: string }[] = [];
+let loadFailed = false;
+
+if (mayView) {
+  try {
+    const db = await getDb(getCmsEnv());
+    const [c, d, b, s, sh, a, m, t, st, af] = await Promise.all([
+      coverage(db, userId, filter, now),
+      durations(db, userId, filter, now),
+      backlog(db, userId, filter, now),
+      stagePerformance(db, userId, filter, now),
+      bottleneck(db, userId, filter, now),
+      approverPerformance(db, userId, filter, now),
+      procurementMix(db, userId, filter, now),
+      trend(db, userId, filter, now),
+      stockConstraint(db, userId, filter, now),
+      db.execute(
+        `SELECT affiliate_id, affiliate_name FROM affiliates WHERE active = 1 ORDER BY affiliate_name`,
+      ),
+    ]);
+    coverageRows = c;
+    durationSet = d;
+    backlogRows = b;
+    stages = s;
+    shares = sh;
+    approvers = a;
+    mix = m;
+    buckets = t;
+    stock = st;
+    affiliates = af.rows.map((row) => ({
+      value: String(row.affiliate_id),
+      label: String(row.affiliate_name),
+    }));
+  } catch (error) {
+    console.error('[cms.orders.purchases.performance] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const cycleTrend = lineChart(
+  [
+    {
+      name: 'Approval cycle median',
+      token: 'cms-series-1',
+      points: buckets.map((b) => ({ label: b.bucket, value: b.approvalCycleMedianMinutes })),
+    },
+    {
+      name: 'Receipt to Oracle posting median',
+      token: 'cms-series-2',
+      points: buckets.map((b) => ({ label: b.bucket, value: b.receiptToPostingMedianMinutes })),
+    },
+  ],
+  { unit: 'minutes', format: formatDuration },
+);
+
+const bottleneckChart = distributionChart(
+  {
+    name: 'Stage',
+    token: 'cms-series-4',
+    points: shares.rows.map((row) => ({
+      label: `${row.sequenceNo}. ${row.stageName}`,
+      value: row.sharePercent,
+    })),
+  },
+  { unit: 'per cent', format: (v) => (v === null ? 'Not available' : `${v}%`) },
+);
+---
+
+<CmsLayout title="Purchase order performance">
+  {
+    !mayView ? (
+      <CmsErrorState
+        title="You do not have access to purchase order performance"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed || durationSet === null ? (
+      <CmsErrorState
+        title="Performance could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Purchase order performance"
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Orders', href: '/app/orders' },
+            { label: 'Purchase orders', href: drillTo('/app/orders/purchases', filter) },
+            { label: 'Performance' },
+          ]}
+        >
+          <CmsButton slot="actions" variant="ghost" href={drillTo('/app/orders/purchases', filter)}>
+            Operations
+          </CmsButton>
+        </CmsPageHeader>
+
+        <CmsOrderFilters
+          filter={filter}
+          affiliates={affiliates}
+          statuses={['CREATED', 'IN_APPROVAL', 'APPROVED', 'RECEIVED', 'POSTED', 'CANCELLED']}
+          action="/app/orders/purchases/performance"
+          showCredit={false}
+        />
+
+        <section aria-labelledby="coverage" class="mb-6">
+          <h2 id="coverage" class="mb-1 text-cms-body font-semibold text-cms-ink">
+            Data coverage, read this first
+          </h2>
+          <p class="mb-3 text-cms-body-sm text-cms-muted">
+            How many of these orders carry each timestamp. Every duration below is computed only
+            over the orders that have what it needs, and an order without the timestamp is not
+            available rather than zero.
+          </p>
+          <CmsDataTable
+            caption="Data coverage"
+            columns={[
+              { key: 'field', label: 'Timestamp' },
+              { key: 'present', label: 'Present', numeric: true },
+              { key: 'total', label: 'Orders', numeric: true },
+              { key: 'percent', label: 'Coverage', numeric: true },
+              { key: 'note', label: 'What it means' },
+            ]}
+            empty={coverageRows.length === 0}
+          >
+            {coverageRows.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-ink">{row.label}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.present}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.total}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatRate(row.percent)}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.note}</td>
+              </tr>
+            ))}
+          </CmsDataTable>
+        </section>
+
+        <section aria-labelledby="durations" class="mb-6">
+          <h2 id="durations" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Durations
+          </h2>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[
+              {
+                label: 'Creation to submission',
+                stats: durationSet.creationToSubmission,
+                note: 'The requester’s own time, reported separately and never folded into the first approval stage.',
+              },
+              {
+                label: 'Approval cycle (completed orders)',
+                stats: durationSet.approvalCycle,
+                note: 'Submission to the final recorded approval, for orders whose stages have all finished. A pending order ages in the backlog instead.',
+              },
+              {
+                label: 'Approval to physical receipt',
+                stats: durationSet.approvalToPhysicalReceipt,
+                note: 'From the final approval to the goods arriving.',
+              },
+              {
+                label: 'Creation to physical receipt',
+                stats: durationSet.creationToPhysicalReceipt,
+                note: 'The whole procurement lead time.',
+              },
+              {
+                label: 'Physical receipt to Oracle posting',
+                stats: durationSet.physicalReceiptToOraclePosting,
+                note: 'How long the system takes to know about stock that is already in the yard. This is why the business tracks purchase orders.',
+              },
+              {
+                label: 'Creation to Oracle posting',
+                stats: durationSet.creationToOraclePosting,
+                note: 'Raised to sellable in the system.',
+              },
+            ].map((metric) => (
+              <div class="rounded-cms border border-cms-line bg-cms-surface p-4">
+                <p class="text-cms-body-sm text-cms-muted">{metric.label}</p>
+                <p class="text-cms-section font-semibold text-cms-ink tabular-nums">
+                  {formatDuration(metric.stats.medianMinutes)}
+                </p>
+                <p class="mt-1 text-cms-body-sm text-cms-muted">
+                  Median. Average {formatDuration(metric.stats.averageMinutes)}, P90{' '}
+                  {formatDuration(metric.stats.p90Minutes)}.
+                </p>
+                <p class="mt-1 text-cms-body-sm text-cms-muted">
+                  {coverageSentence(metric.stats, 'orders')}
+                </p>
+                <p class="mt-1 text-cms-body-sm text-cms-muted">{metric.note}</p>
+              </div>
+            ))}
+          </div>
+          <p class="mt-2 text-cms-body-sm text-cms-muted">
+            {MEDIAN_DEFINITION} {P90_DEFINITION}
+          </p>
+        </section>
+
+        <section aria-labelledby="backlog" class="mb-6">
+          <h2 id="backlog" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Backlog
+          </h2>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {backlogRows.map((signal) => (
+              <a
+                href={drillTo('/app/orders/purchases', filter, signal.drill)}
+                class="rounded-cms border border-cms-line bg-cms-surface p-4 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                <p class="text-cms-body-sm text-cms-muted">{signal.label}</p>
+                <p class="text-cms-section font-semibold text-cms-ink tabular-nums">
+                  {signal.orders}
+                </p>
+                <p class="mt-1 text-cms-body-sm text-cms-royal">Open the list</p>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="stages" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="stages" class="sr-only">
+            Stages
+          </h2>
+          <CmsCard title="Stage turnaround">
+            <CmsDataTable
+              caption="Stage turnaround"
+              columns={[
+                { key: 'seq', label: '#', numeric: true },
+                { key: 'stage', label: 'Stage' },
+                { key: 'recorded', label: 'Recorded', numeric: true },
+                { key: 'completed', label: 'Completed', numeric: true },
+                { key: 'pending', label: 'Pending', numeric: true },
+                { key: 'median', label: 'Median', numeric: true },
+                { key: 'p90', label: 'P90', numeric: true },
+                { key: 'oldest', label: 'Oldest pending' },
+              ]}
+              empty={stages.length === 0}
+            >
+              {stages.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.sequenceNo}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-ink">{row.stageName}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.recorded}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {row.completed}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.pending}</td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.medianMinutes)}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                    {formatDuration(row.p90Minutes)}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.oldestPendingAt ?? 'None pending'}
+                  </td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Stage one is measured from the submission timestamp, not from creation. The time
+              before submission belongs to the requester and is reported on its own above.
+            </p>
+          </CmsCard>
+
+          <CmsChart
+            title="Where the approval cycle goes"
+            definition={shares.method}
+            chart={bottleneckChart}
+            unit="per cent"
+          />
+        </section>
+
+        <section aria-labelledby="approvers" class="mb-6">
+          <h2 id="approvers" class="mb-1 text-cms-body font-semibold text-cms-ink">
+            Approver performance
+          </h2>
+          <p class="mb-3 text-cms-body-sm text-cms-muted">
+            One row per person per stage. A person who approves at two levels holds two rows, never
+            one blended purchase order figure. The authority context is derived from the affiliates
+            their transactions actually span, so a Group approver is not reported as one country's
+            performance. A comparative rank appears only above{' '}
+            {approvers.minimumVolume.toLocaleString('en-KE')} transactions.
+          </p>
+          <CmsDataTable
+            caption="Approver performance"
+            columns={[
+              { key: 'approver', label: 'Approver' },
+              { key: 'context', label: 'Authority context' },
+              { key: 'stage', label: 'Stage' },
+              { key: 'volume', label: 'Volume', numeric: true },
+              { key: 'median', label: 'Median', numeric: true },
+              { key: 'average', label: 'Average', numeric: true },
+              { key: 'p90', label: 'P90', numeric: true },
+              { key: 'sla', label: 'Within SLA', numeric: true },
+              { key: 'pending', label: 'Pending', numeric: true },
+              { key: 'oldest', label: 'Oldest pending' },
+              { key: 'rank', label: 'Rank' },
+            ]}
+            empty={approvers.rows.length === 0}
+          >
+            {approvers.rows.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.approver}</td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.authorityContext === 'GROUP'
+                    ? `Group, across ${row.affiliatesCovered} affiliates`
+                    : (row.affiliateName ?? 'Not available')}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.sequenceNo}. {row.stageName}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.transactions}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatDuration(row.medianMinutes)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatDuration(row.averageMinutes)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatDuration(row.p90Minutes)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {formatRate(row.withinSlaPercent)}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.pending}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.oldestPendingAt ?? 'None pending'}</td>
+                <td class="px-4 py-2.5">
+                  {row.rank === null ? (
+                    <span class="text-cms-body-sm text-cms-muted">Below the minimum volume</span>
+                  ) : (
+                    <CmsBadge tone="neutral" label={`#${row.rank}`} />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </CmsDataTable>
+        </section>
+
+        <section aria-labelledby="mix" class="mb-6 grid gap-4 xl:grid-cols-2">
+          <h2 id="mix" class="sr-only">
+            What was bought
+          </h2>
+          <CmsCard title="What these orders were for">
+            <CmsDataTable
+              caption="Procurement mix"
+              columns={[
+                { key: 'classification', label: 'Classification' },
+                { key: 'basis', label: 'Basis' },
+                { key: 'orders', label: 'Orders', numeric: true },
+              ]}
+              empty={mix.length === 0}
+            >
+              {mix.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 text-cms-ink">
+                    {row.classification}
+                    <span class="block text-cms-body-sm text-cms-muted">{row.note}</span>
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge
+                      tone={row.basis === 'CATALOGUE' ? 'success' : 'neutral'}
+                      label={row.basis.toLowerCase()}
+                    />
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">{row.orders}</td>
+                </tr>
+              ))}
+            </CmsDataTable>
+            <p class="mt-2 text-cms-body-sm text-cms-muted">
+              Not every purchase order is fuel. The extract's own NATURE column mixes fuel shipments
+              with general procurement, including shop stock, so it is reported as the source's
+              classification and is never mapped into the petroleum catalogue.
+            </p>
+          </CmsCard>
+
+          <CmsChart
+            title="Approval cycle and stock posting"
+            definition="Median durations per period. A period with no measurable posting shows a gap rather than a zero."
+            chart={cycleTrend}
+          />
+        </section>
+
+        <section aria-labelledby="stock" class="mb-6">
+          <h2 id="stock" class="mb-1 text-cms-body font-semibold text-cms-ink">
+            Potentially stock-constrained orders
+          </h2>
+          <p class="mb-3 text-cms-body-sm text-cms-muted">{stock.wording}</p>
+          <CmsDataTable
+            caption="Potentially stock-constrained orders"
+            columns={[
+              { key: 'product', label: 'Product' },
+              { key: 'affiliate', label: 'Affiliate' },
+              { key: 'demand', label: 'Open sales orders', numeric: true },
+              { key: 'unposted', label: 'Purchase orders awaiting posting', numeric: true },
+              { key: 'oldestSales', label: 'Oldest open sales order' },
+              { key: 'oldestPurchase', label: 'Oldest unposted purchase order' },
+            ]}
+            empty={stock.rows.length === 0}
+          >
+            {stock.rows.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-ink">{row.productCode}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.affiliateName}</td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.openSalesOrders}
+                </td>
+                <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                  {row.purchaseOrdersAwaitingPosting}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.oldestOpenSalesOrderAt ?? 'Not available'}
+                </td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.oldestUnpostedPurchaseOrderAt ?? 'Not available'}
+                </td>
+              </tr>
+            ))}
+          </CmsDataTable>
+        </section>
+      </Fragment>
+    )
+  }
+</CmsLayout>

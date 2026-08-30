@@ -1,0 +1,220 @@
+---
+/**
+ * A text input with a persistent label.
+ *
+ * The label is always visible, never a placeholder standing in for one, because
+ * a placeholder disappears the moment someone starts typing and takes the
+ * field's meaning with it. Recognition over recall, and it survives an
+ * interruption: come back to a half-filled form and every field still says what
+ * it is.
+ *
+ * Error prevention first, error messages second: the field carries its own
+ * `type`, `inputmode` and `autocomplete` so the browser and the password
+ * manager can do the work before validation has to. When an error does appear
+ * it is wired with aria-describedby and aria-invalid, so it is announced rather
+ * than merely coloured, and the hint stays described alongside it.
+ *
+ * `revealable` adds a show and hide control for a password. It is a real button
+ * inside the field, 40px square, and it flips `type` and its own aria-pressed.
+ * No island: this is four lines of script, and a React component here would
+ * cost more bytes than the whole page.
+ */
+import CmsIcon from './CmsIcon.astro';
+
+interface Props {
+  id: string;
+  name: string;
+  label: string;
+  /**
+   * `date` and `number` were added by Build Prompt 08. Effective dates and
+   * amount bands are the substance of an authority rule, and rendering either
+   * as free text puts the burden of getting a format right on the operator and
+   * then rejects them when they do not. Additive: every existing caller passes
+   * one of the original six and renders byte-identically.
+   */
+  type?:
+    | 'text'
+    | 'email'
+    | 'password'
+    | 'search'
+    | 'tel'
+    | 'url'
+    | 'date'
+    | 'datetime-local'
+    | 'number';
+  value?: string;
+  placeholder?: string;
+  hint?: string;
+  error?: string;
+  required?: boolean;
+  disabled?: boolean;
+  /**
+   * `sm` is the compact filter-bar control: 36px rather than 44px.
+   *
+   * ONE IMPLEMENTATION, TWO SIZES. A second small-input component would be a
+   * second set of label, hint and error behaviour to keep in step, and the
+   * first thing to drift would be the part nobody looks at, which is the error
+   * association. A filter control is never a page's primary action, so it is
+   * not held to the 44px figure; it is still far above the 24px floor.
+   */
+  size?: 'sm' | 'md';
+  readonly?: boolean;
+  autocomplete?: string;
+  inputmode?: 'text' | 'email' | 'numeric' | 'tel' | 'search' | 'url' | 'decimal';
+  /** `min`, `max` and `step` on a numeric input. Ignored on every other type. */
+  min?: string;
+  max?: string;
+  step?: string;
+  revealable?: boolean;
+  autofocus?: boolean;
+  class?: string;
+}
+const {
+  id,
+  name,
+  label,
+  type = 'text',
+  value,
+  placeholder,
+  hint,
+  error,
+  required = false,
+  disabled = false,
+  size = 'md',
+  readonly = false,
+  autocomplete,
+  inputmode,
+  min,
+  max,
+  step,
+  revealable = false,
+  autofocus = false,
+  class: className,
+} = Astro.props;
+
+const hintId = hint ? `${id}-hint` : undefined;
+const errorId = `${id}-error`;
+// The error is always described, so a client-side message injected later is
+// announced without the markup having to change.
+const describedBy = [hintId, errorId].filter(Boolean).join(' ');
+---
+
+<div class={['flex flex-col gap-1.5', className].filter(Boolean).join(' ')}>
+  <label for={id} class="text-cms-label font-semibold text-cms-ink">
+    {label}
+    {
+      required && (
+        <span class="text-cms-negative" aria-hidden="true">
+          *
+        </span>
+      )
+    }
+    {required && <span class="sr-only">(required)</span>}
+  </label>
+
+  <div class="relative">
+    <input
+      id={id}
+      name={name}
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      required={required}
+      disabled={disabled}
+      readonly={readonly}
+      autocomplete={autocomplete}
+      inputmode={inputmode}
+      min={type === 'number' ? min : undefined}
+      max={type === 'number' ? max : undefined}
+      step={type === 'number' ? step : undefined}
+      autofocus={autofocus}
+      data-revealable={revealable ? 'true' : undefined}
+      aria-describedby={describedBy || undefined}
+      aria-invalid={error ? 'true' : 'false'}
+      class:list={[
+        size === 'sm'
+          ? 'h-9 w-full rounded-cms border bg-cms-surface px-2.5 text-cms-body-sm'
+          : 'h-11 w-full rounded-cms border bg-cms-surface px-3 text-cms-body',
+        'text-cms-ink',
+        'transition-colors duration-150 placeholder:text-cms-muted/70',
+        'outline-none focus-visible:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
+        'disabled:cursor-not-allowed disabled:bg-cms-canvas disabled:text-cms-muted',
+        revealable ? 'pr-12' : '',
+        error ? 'border-cms-negative' : 'border-cms-border',
+      ]}
+    />
+
+    {
+      revealable && (
+        <button
+          type="button"
+          data-reveal-for={id}
+          aria-pressed="false"
+          aria-label={`Show ${label.toLowerCase()}`}
+          class="absolute top-0.5 right-0.5 inline-flex h-10 w-10 items-center justify-center rounded-cms text-cms-muted outline-none hover:bg-cms-canvas hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <CmsIcon name="eye" size={18} class="reveal-show" />
+          <CmsIcon name="eyeOff" size={18} class="reveal-hide hidden" />
+        </button>
+      )
+    }
+  </div>
+
+  {
+    hint && (
+      <p id={hintId} class="text-cms-caption text-cms-muted">
+        {hint}
+      </p>
+    )
+  }
+
+  {/* Always present so a message added on the client is announced. */}
+  <p
+    id={errorId}
+    role="alert"
+    data-field-error
+    class:list={[
+      'flex items-start gap-1.5 text-cms-caption font-medium text-cms-negative',
+      error ? '' : 'hidden',
+    ]}
+  >
+    {
+      error && (
+        <>
+          <CmsIcon name="statusBreach" size={14} class="mt-px shrink-0" />
+          <span>{error}</span>
+        </>
+      )
+    }
+  </p>
+</div>
+
+<script>
+  // Show and hide password. Flips the input type, the pressed state and the
+  // accessible label, and swaps which glyph is visible. Delegated from the
+  // document so it costs one listener however many fields are on the page.
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    const toggle = target?.closest<HTMLButtonElement>('[data-reveal-for]');
+    if (!toggle) return;
+
+    const fieldId = toggle.getAttribute('data-reveal-for');
+    const field = fieldId ? document.getElementById(fieldId) : null;
+    if (!(field instanceof HTMLInputElement)) return;
+
+    const nowVisible = field.type === 'password';
+    field.type = nowVisible ? 'text' : 'password';
+    toggle.setAttribute('aria-pressed', String(nowVisible));
+
+    const fieldLabel = document.querySelector(`label[for="${fieldId}"]`)?.textContent ?? '';
+    const noun = fieldLabel
+      .replace(/\*/g, '')
+      .replace(/\(required\)/g, '')
+      .trim()
+      .toLowerCase();
+    toggle.setAttribute('aria-label', `${nowVisible ? 'Hide' : 'Show'} ${noun}`);
+
+    toggle.querySelector('.reveal-show')?.classList.toggle('hidden', nowVisible);
+    toggle.querySelector('.reveal-hide')?.classList.toggle('hidden', !nowVisible);
+  });
+</script>

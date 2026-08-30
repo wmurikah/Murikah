@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   }
 
   const db = await getDb(getGrcEnv());
-  const plan = await getActionPlan(db, grc.organizationId, id);
+  const plan = await getActionPlan(db, grc.organizationId, id, grc.affiliateScope);
   if (!plan) return new Response(null, { status: 303, headers: { location: '/action-plans' } });
   if (!isEditableByAuditor(plan.status)) {
     return new Response(null, {
@@ -56,13 +56,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   // The parent must be a real finding in the acting organisation; an edit can
   // relink a stray plan but never unlink one.
   const parent = input.workPaperId
-    ? await getWorkPaper(db, grc.organizationId, input.workPaperId)
+    ? await getWorkPaper(db, grc.organizationId, input.workPaperId, grc.affiliateScope)
     : null;
   if (!parent) {
     return new Response(null, {
       status: 303,
       headers: {
-        location: `/action-plans/${id}/edit?error=${encodeURIComponent('Every action plan must be linked to a parent finding. Choose the work paper it remediates.')}`,
+        location: `/action-plans/${id}/edit?error=${encodeURIComponent('Every action plan must be linked to a parent observation. Choose the work paper it remediates.')}`,
       },
     });
   }

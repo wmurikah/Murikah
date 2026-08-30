@@ -22,6 +22,16 @@ import {
   type WorkPaperViewer,
 } from './workPaperVisibility';
 import { WP_STATUS } from '../workflow/workPaperActions';
+import type { CompletenessSubject } from '../workflow/workPaperCompleteness';
+import {
+  affiliatePredicate,
+  affiliateVisible,
+  UNCONFINED,
+  type AffiliateScope,
+} from '@grc/auth/affiliateScope';
+import { C, cols } from '@grc/schema/columns';
+
+const WPC = cols(C.work_papers);
 
 export interface WorkPaperListRow {
   id: string;
@@ -77,32 +87,62 @@ export interface WorkPaperInput {
   assignedAuditorId: string | null;
 }
 
-// The column list for the writable fields, paired with an input key, so create
-// and update share one source of truth.
-const FIELDS: { col: string; key: keyof WorkPaperInput }[] = [
-  { col: 'year', key: 'year' },
-  { col: 'affiliate_code', key: 'affiliateCode' },
-  { col: 'audit_area_id', key: 'auditAreaId' },
-  { col: 'sub_area_id', key: 'subAreaId' },
-  { col: 'work_paper_date', key: 'workPaperDate' },
-  { col: 'audit_period_from', key: 'auditPeriodFrom' },
-  { col: 'audit_period_to', key: 'auditPeriodTo' },
-  { col: 'control_objectives', key: 'controlObjectives' },
-  { col: 'control_classification', key: 'classification' },
-  { col: 'control_type', key: 'controlType' },
-  { col: 'control_frequency', key: 'controlFrequency' },
-  { col: 'control_standards', key: 'standards' },
-  { col: 'risk_description', key: 'riskDescription' },
-  { col: 'test_objective', key: 'testObjective' },
-  { col: 'testing_steps', key: 'testingSteps' },
-  { col: 'observation_title', key: 'observationTitle' },
-  { col: 'observation_description', key: 'observationDescription' },
-  { col: 'risk_rating', key: 'riskRating' },
-  { col: 'risk_summary', key: 'riskSummary' },
-  { col: 'recommendation', key: 'recommendation' },
-  { col: 'management_response', key: 'managementResponse' },
-  { col: 'assigned_auditor_id', key: 'assignedAuditorId' },
+/**
+ * The writable fields, in one table: the database column, the parsed input key,
+ * and the name the form control posts under. Create, update, the edit form's
+ * prefill and the detail's read all resolve through this, so the three names for
+ * one field can never drift apart.
+ *
+ * They are not all the same name, and that is where this went wrong (Build
+ * Prompt 50). Three fields post under a name that is not their column:
+ * `classification` stores `control_classification`, `standards` stores
+ * `control_standards`, and `assigned_auditor` stores `assigned_auditor_id`. The
+ * write mapped them correctly; the two views did not, so the detail rendered a
+ * dash over stored data and, worse, the edit form prefilled blank and saved that
+ * blank back over the value. Deriving the lookup from this table rather than
+ * repeating it is what stops a third view reintroducing it.
+ */
+const FIELDS: { col: string; key: keyof WorkPaperInput; field: string }[] = [
+  { col: 'year', key: 'year', field: 'year' },
+  { col: 'affiliate_code', key: 'affiliateCode', field: 'affiliate_code' },
+  { col: 'audit_area_id', key: 'auditAreaId', field: 'audit_area_id' },
+  { col: 'sub_area_id', key: 'subAreaId', field: 'sub_area_id' },
+  { col: 'work_paper_date', key: 'workPaperDate', field: 'work_paper_date' },
+  { col: 'audit_period_from', key: 'auditPeriodFrom', field: 'audit_period_from' },
+  { col: 'audit_period_to', key: 'auditPeriodTo', field: 'audit_period_to' },
+  { col: 'control_objectives', key: 'controlObjectives', field: 'control_objectives' },
+  { col: 'control_classification', key: 'classification', field: 'classification' },
+  { col: 'control_type', key: 'controlType', field: 'control_type' },
+  { col: 'control_frequency', key: 'controlFrequency', field: 'control_frequency' },
+  { col: 'control_standards', key: 'standards', field: 'standards' },
+  { col: 'risk_description', key: 'riskDescription', field: 'risk_description' },
+  { col: 'test_objective', key: 'testObjective', field: 'test_objective' },
+  { col: 'testing_steps', key: 'testingSteps', field: 'testing_steps' },
+  { col: 'observation_title', key: 'observationTitle', field: 'observation_title' },
+  {
+    col: 'observation_description',
+    key: 'observationDescription',
+    field: 'observation_description',
+  },
+  { col: 'risk_rating', key: 'riskRating', field: 'risk_rating' },
+  { col: 'risk_summary', key: 'riskSummary', field: 'risk_summary' },
+  { col: 'recommendation', key: 'recommendation', field: 'recommendation' },
+  { col: 'management_response', key: 'managementResponse', field: 'management_response' },
+  { col: 'assigned_auditor_id', key: 'assignedAuditorId', field: 'assigned_auditor' },
 ];
+
+const COLUMN_FOR_FIELD: Record<string, string> = Object.fromEntries(
+  FIELDS.map((f) => [f.field, f.col]),
+);
+
+/**
+ * The `work_papers` column a form control posts into. The edit form prefills
+ * through this, so a control whose name differs from its column still shows the
+ * stored value rather than blanking it on the next save.
+ */
+export function columnForFormField(field: string): string {
+  return COLUMN_FOR_FIELD[field] ?? field;
+}
 
 const s = (v: unknown): string | null => (v == null ? null : String(v));
 const n = (v: unknown): number | null => (v == null ? null : Number(v));
@@ -204,6 +244,13 @@ export async function listWorkPapers(
     args.push(filters.riskRating);
   }
 
+  // Affiliate confinement (Build Prompt 45). This is a boundary, not the
+  // user-chosen affiliate filter above it: both may apply at once, and a
+  // confined viewer who filters to another affiliate simply sees nothing.
+  const confine = affiliatePredicate(viewer.affiliateScope, `wp.${WPC.affiliate_code}`);
+  where += confine.clause;
+  args.push(...confine.args);
+
   const res = await db.execute({
     sql: `SELECT wp.work_paper_id AS id, wp.work_paper_ref AS reference,
                  wp.observation_title AS observation_title, wp.affiliate_code AS affiliate_code,
@@ -239,6 +286,29 @@ export async function listWorkPapers(
   }));
 }
 
+/**
+ * The completeness view of a stored finding (Build Prompt 59): the same fields
+ * the form posts, read off the row.
+ *
+ * The gate on submission is one rule, and it is checked against what is actually
+ * stored rather than against what a form happened to post, so the answer cannot
+ * differ between the create screen, the edit screen, the detail's Submit and the
+ * batch release.
+ */
+export function completenessOf(row: Record<string, unknown>): CompletenessSubject {
+  return {
+    auditAreaId: s(row.audit_area_id),
+    subAreaId: s(row.sub_area_id),
+    observationTitle: s(row.observation_title),
+    observationDescription: s(row.observation_description),
+    riskRating: s(row.risk_rating),
+    recommendation: s(row.recommendation),
+    assignedAuditorId: s(row.assigned_auditor_id),
+    auditPeriodFrom: s(row.audit_period_from),
+    auditPeriodTo: s(row.audit_period_to),
+  };
+}
+
 export type WorkPaperDetail = Record<string, unknown> & {
   id: string;
   reference: string;
@@ -246,15 +316,30 @@ export type WorkPaperDetail = Record<string, unknown> & {
   revisionCount: number;
 };
 
-/** The full work paper, scoped to the organisation, or null when not found. */
+/**
+ * The full work paper, scoped to the organisation, or null when not found.
+ *
+ * `scope` confines it to the viewer's affiliate when their role is confined
+ * (Build Prompt 45). A list predicate alone would not be a boundary: the detail
+ * route takes an id from the URL, so without this a confined viewer could open
+ * any finding in the organisation by guessing or being sent a link. Absent
+ * scope means unconfined, which is what every internal caller that has no viewer
+ * (the workflow engine, the notification builders) legitimately needs.
+ */
 export async function getWorkPaper(
   db: Client,
   organizationId: string,
   id: string,
+  scope: AffiliateScope = UNCONFINED,
 ): Promise<WorkPaperDetail | null> {
   const res = await db.execute({
+    // The joined auditor is aliased apart from wp.* rather than over it: the
+    // work_papers row carries its own denormalised assigned_auditor_name, and two
+    // output columns of the same name leave which one survives up to the driver.
+    // Aliasing makes the resolved live name available and lets the caller decide,
+    // which is why the detail showed a dash while assigned_auditor_id was set.
     sql: `SELECT wp.*, aff.affiliate_name AS affiliate_name, aa.area_name AS audit_area_name,
-                 sa.sub_area_name AS sub_area_name, u.full_name AS assigned_auditor_name
+                 sa.sub_area_name AS sub_area_name, u.full_name AS assigned_auditor_full_name
             FROM work_papers wp
             LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                  AND aff.organization_id = wp.organization_id
@@ -267,11 +352,20 @@ export async function getWorkPaper(
   });
   const row = res.rows[0];
   if (!row) return null;
+  // Outside the viewer's affiliate reads as "not found", never as "forbidden":
+  // a distinguishable refusal would confirm the finding exists.
+  if (!affiliateVisible(scope, row.affiliate_code == null ? null : String(row.affiliate_code))) {
+    return null;
+  }
   const detail = { ...row } as Record<string, unknown>;
   detail.id = String(row.work_paper_id);
   detail.reference = String(row.work_paper_ref ?? row.work_paper_id);
   detail.status = String(row.status);
   detail.revisionCount = Number(row.revision_count ?? 0);
+  // The live user's name wins over the denormalised copy, which can be stale or
+  // was never written; the copy is the fallback, and only a genuinely
+  // unassigned finding leaves this null.
+  detail.assigned_auditor_name = s(row.assigned_auditor_full_name) ?? s(row.assigned_auditor_name);
   return detail as WorkPaperDetail;
 }
 

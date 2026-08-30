@@ -1,0 +1,256 @@
+---
+/**
+ * Administration → Audit Trail.
+ *
+ * AN INVESTIGATION INTERFACE, NOT AN OPERATIONAL ONE. Somebody arrives here
+ * with a question: who changed this, when did that happen, what did this
+ * person do last Tuesday. So the filters are the ones an investigation uses,
+ * and the default is a bounded window rather than everything.
+ *
+ * THE TABLE IS NEVER LOADED INTO THE BROWSER. `audit_events` becomes the
+ * largest table in the database, so the query is paginated on the server, the
+ * date range is a clause, and the page renders fifty rows at a time. There is
+ * no client-side filtering anywhere on this page.
+ *
+ * IMMUTABILITY IS STATED, because a reviewer needs to know that the evidence
+ * cannot be edited by the people it describes, and because it is now a fact
+ * about the database rather than a promise this interface makes.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsAuditTable from '@/components/cms/CmsAuditTable.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewAudit, canExportAudit } from '@/lib/cms/permissions';
+import {
+  listAuditEvents,
+  parseAuditFilter,
+  auditFilterOptions,
+  auditFilterToQuery,
+  maySeeSecurityEvents,
+  DEFAULT_WINDOW_DAYS,
+  PAGE_SIZE,
+  type AuditPage,
+} from '@/lib/cms/repos/auditTrail';
+import { AUDIT_CATALOGUE } from '@/lib/cms/audit/catalogue';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewAudit(permissions);
+const mayExport = canExportAudit(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+const now = new Date();
+const filter = parseAuditFilter(Astro.url.searchParams, now);
+
+let page: AuditPage = {
+  items: [],
+  total: 0,
+  page: filter.page,
+  pageSize: PAGE_SIZE,
+  window: { from: filter.from, to: filter.to },
+  securityIncluded: false,
+};
+let options: Awaited<ReturnType<typeof auditFilterOptions>> = {
+  actors: [],
+  entityTypes: [],
+  actions: [],
+};
+let securityAllowed = false;
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await getDb(getCmsEnv());
+    [page, options, securityAllowed] = await Promise.all([
+      listAuditEvents(db, userId, filter),
+      auditFilterOptions(db, userId),
+      maySeeSecurityEvents(db, userId),
+    ]);
+  } catch (error) {
+    console.error('[cms.audit.trail] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const totalPages = Math.max(1, Math.ceil(page.total / page.pageSize));
+const pageHref = (target: number) =>
+  `/app/administration/audit?${auditFilterToQuery({ ...filter, page: target })}`;
+const exportHref = `/api/audit/export?${auditFilterToQuery({ ...filter, page: 1 })}`;
+
+const eventOptions = [
+  { value: '', label: 'Any event' },
+  ...Object.entries(AUDIT_CATALOGUE)
+    .map(([code, meta]) => ({ value: code, label: meta.label }))
+    .sort((a, b) => a.label.localeCompare(b.label)),
+];
+---
+
+<CmsLayout title="Audit trail">
+  <CmsPageHeader
+    title="Audit trail"
+    definition="Every row is evidence. The database refuses any update or delete against this table, so nothing here can be altered from the application, from a console, or from anywhere else."
+    crumbs={[{ label: 'Administration', href: '/app/administration' }, { label: 'Audit trail' }]}
+  />
+
+  {
+    !mayRead ? (
+      <CmsEmptyState
+        icon="administration"
+        title="You do not have permission to read the audit trail"
+        description="Ask an administrator for access."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="The audit trail could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        {/*
+          Stated on the page, not buried in a help article. A reviewer looking
+          at this evidence needs to know it cannot be edited by the people it
+          describes, and after the operator's script that is a property of the
+          database rather than a claim by this screen.
+        */}
+        <p class="rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+          <span class="font-semibold text-cms-ink">This record cannot be altered.</span> Two
+          database triggers refuse any update or deletion of an audit row, so nobody can change this
+          evidence, including the people it describes and including a system administrator. A
+          correction to business data creates a new change and a new audit event; the original row
+          stands.
+        </p>
+
+        <CmsCard title="Filters">
+          <form method="get" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <CmsInput id="from" name="from" label="From" type="date" value={filter.from} />
+            <CmsInput id="to" name="to" label="To" type="date" value={filter.to} />
+            <CmsInput
+              id="q"
+              name="q"
+              label="Search"
+              type="search"
+              value={filter.search}
+              hint="User name, email, or an exact record identifier."
+            />
+            <CmsSelect
+              id="actorUserId"
+              name="actorUserId"
+              label="User"
+              value={filter.actorUserId ?? ''}
+              options={[
+                { value: '', label: 'Anyone' },
+                ...options.actors.map((actor) => ({ value: actor.userId, label: actor.label })),
+              ]}
+            />
+            <CmsSelect
+              id="entityType"
+              name="entityType"
+              label="Record type"
+              value={filter.entityType ?? ''}
+              options={[
+                { value: '', label: 'Any record type' },
+                ...options.entityTypes.map((value) => ({ value, label: value })),
+              ]}
+            />
+            <CmsSelect
+              id="eventType"
+              name="eventType"
+              label="Event"
+              value={filter.eventType ?? ''}
+              options={eventOptions}
+            />
+            <CmsSelect
+              id="action"
+              name="action"
+              label="Action"
+              value={filter.action ?? ''}
+              options={[
+                { value: '', label: 'Any action' },
+                ...options.actions.map((value) => ({ value, label: value })),
+              ]}
+            />
+            <CmsSelect
+              id="classification"
+              name="classification"
+              label="Classification"
+              value={filter.classification ?? ''}
+              options={[
+                { value: '', label: 'Any' },
+                { value: 'SECURITY', label: 'Security' },
+                { value: 'CONFIGURATION', label: 'Configuration' },
+                { value: 'BUSINESS', label: 'Business' },
+              ]}
+            />
+            <label class="flex items-center gap-2 self-end text-cms-body-sm text-cms-ink">
+              <input
+                type="checkbox"
+                name="highRisk"
+                value="1"
+                checked={filter.highRiskOnly}
+                class="h-4 w-4 rounded border-cms-border text-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+              />
+              High-impact events only
+            </label>
+            <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
+              <CmsButton type="submit" variant="primary" icon="filter">
+                Apply
+              </CmsButton>
+              <CmsButton href="/app/administration/audit" variant="secondary">
+                Reset
+              </CmsButton>
+              {mayExport && (
+                <CmsButton href={exportHref} variant="secondary">
+                  Export this view
+                </CmsButton>
+              )}
+            </div>
+          </form>
+        </CmsCard>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <p class="text-cms-body-sm text-cms-muted">
+            <span class="font-semibold text-cms-ink">{page.total}</span> events from{' '}
+            {page.window.from} to {page.window.to}. The default window is the last{' '}
+            {DEFAULT_WINDOW_DAYS} days and the page size is {page.pageSize}.
+          </p>
+          {!securityAllowed && <CmsBadge tone="neutral" label="Security events not included" />}
+        </div>
+
+        <CmsCard bodyClass="p-0">
+          <div class="px-4 py-3">
+            <CmsAuditTable rows={page.items} />
+          </div>
+        </CmsCard>
+
+        {totalPages > 1 && (
+          <nav class="flex items-center justify-between gap-3" aria-label="Audit pagination">
+            <p class="text-cms-body-sm text-cms-muted">
+              Page {page.page} of {totalPages}
+            </p>
+            <span class="flex gap-2">
+              {page.page > 1 && (
+                <CmsButton href={pageHref(page.page - 1)} variant="secondary">
+                  Previous
+                </CmsButton>
+              )}
+              {page.page < totalPages && (
+                <CmsButton href={pageHref(page.page + 1)} variant="secondary">
+                  Next
+                </CmsButton>
+              )}
+            </span>
+          </nav>
+        )}
+      </div>
+    )
+  }
+</CmsLayout>

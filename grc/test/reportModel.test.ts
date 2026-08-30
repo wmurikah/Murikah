@@ -401,17 +401,25 @@ test('an observation section carries its evidence table and numbered recommendat
     { ...execFilters, risks: [...execFilters.risks], reportType: 'observations' },
     { header, now: NOW },
   );
-  const evidence = doc.blocks.find((b) => b.kind === 'table' && b.title === 'Evidence');
-  assert.ok(evidence && evidence.kind === 'table');
+  // The finding is a card block now (Build Prompt 67), carrying the same facts
+  // the one-row evidence table used to: the pack and the work paper's own
+  // screen render from one arrangement, so the reference, the risk and the
+  // status come from there rather than from a table built here.
+  const finding = doc.blocks.find((b) => b.kind === 'finding');
+  assert.ok(finding && finding.kind === 'finding', 'the observation is drawn as cards');
+  if (!finding || finding.kind !== 'finding') return;
+  assert.equal(finding.source.reference, data.observations[0].reference);
+  assert.equal(finding.source.status, 'Approved');
+  assert.equal(finding.source.riskRating, data.observations[0].riskRating);
+  // The implications are the finding's risk summary, which is the card that
+  // holds what it means for the business.
+  assert.match(finding.source.riskSummary, /may hide misstatement/);
+
   const list = doc.blocks.find((b) => b.kind === 'list');
   assert.ok(list && list.kind === 'list');
   if (!list || list.kind !== 'list') return;
   assert.deepEqual(list.items, ['Reconcile monthly.', 'Have the reconciliation reviewed.']);
   assert.equal(list.ordered, true);
-  // The implications belong to the analytical narrative, not a table.
-  assert.ok(
-    doc.blocks.some((b) => b.kind === 'narrative' && b.text.includes('may hide misstatement')),
-  );
 });
 
 test('the appendix carries the management response recorded for each observation', () => {

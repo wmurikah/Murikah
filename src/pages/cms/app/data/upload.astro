@@ -1,0 +1,364 @@
+---
+/**
+ * Data → Upload Centre → Upload a file.
+ *
+ * Three controls: the data type, the workbook, and Validate.
+ *
+ * THE FILE ANSWERS THE REST. This form used to ask for the affiliate, the
+ * reporting period and the source system as well. The extracts carry all
+ * three: the sales order file names its affiliate in its first column on
+ * every row, both files date their own documents, and both are Oracle EBS
+ * reports. Asking an operator to retype what the workbook already states is
+ * an invitation to state it differently, and the source system in particular
+ * defaulted to CRM Web Form, which was wrong for every upload it applied to
+ * and which quietly broke the username mapping that reads it.
+ *
+ * VALIDATION IS NOT A COMMIT: this screen reports what the file contains and
+ * what would happen. Nothing reaches a canonical table until somebody presses
+ * Import valid records.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { canUploadImports } from '@/lib/cms/permissions';
+import { IMPORT_TYPES, IMPORT_TYPE_LABELS, MAX_UPLOAD_BYTES } from '@/lib/cms/import/uploadCentre';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayUpload = canUploadImports(permissions);
+// The page reads nothing from the database: the only list it offers is the
+// two import types, which are a constant. That is why it costs no
+// subrequests at all.
+---
+
+<CmsLayout title="Upload a file">
+  {
+    !mayUpload ? (
+      <CmsErrorState
+        title="You do not have access to uploads"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Upload a file"
+          definition="Validating tells you what the file contains and what would change. Nothing is imported until you commit."
+          crumbs={[
+            { label: 'Home', href: '/app' },
+            { label: 'Data', href: '/app/data' },
+            { label: 'Upload' },
+          ]}
+        />
+
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+          <CmsCard title="The file">
+            <form id="cms-upload-form" novalidate class="flex flex-col gap-4">
+              <p
+                id="cms-upload-error"
+                role="alert"
+                hidden
+                class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+              />
+              <CmsSelect
+                id="up-importType"
+                name="importType"
+                label="Data type"
+                required
+                options={IMPORT_TYPES.map((type) => ({
+                  value: type,
+                  label: IMPORT_TYPE_LABELS[type],
+                }))}
+              />
+              <div class="flex flex-col gap-1.5">
+                <label for="up-file" class="text-cms-body-sm font-medium text-cms-ink">
+                  Workbook
+                </label>
+                <input
+                  id="up-file"
+                  name="file"
+                  type="file"
+                  accept=".xls,.xlsx"
+                  required
+                  data-max-bytes={String(MAX_UPLOAD_BYTES)}
+                  class="rounded-cms border border-cms-line bg-white px-3 py-2 text-cms-body-sm text-cms-ink outline-none file:mr-3 file:rounded-cms file:border-0 file:bg-cms-canvas file:px-3 file:py-1.5 file:text-cms-body-sm file:font-medium file:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+                />
+              </div>
+            </form>
+            <div class="mt-4 flex items-center gap-2">
+              <CmsButton id="cms-upload-validate" variant="primary" icon="data">
+                Validate file
+              </CmsButton>
+              <span
+                id="cms-upload-progress"
+                class="text-cms-body-sm text-cms-muted"
+                aria-live="polite"
+              />
+            </div>
+          </CmsCard>
+
+          <CmsCard title="What the file contains">
+            <div id="cms-upload-summary" class="text-cms-body-sm text-cms-muted">
+              Not validated yet.
+            </div>
+            <div id="cms-upload-actions" hidden class="mt-4 flex items-center gap-2">
+              <CmsButton id="cms-upload-commit" variant="primary" icon="check">
+                Import valid records
+              </CmsButton>
+              <CmsButton id="cms-upload-review" variant="ghost">
+                Review exceptions
+              </CmsButton>
+            </div>
+          </CmsCard>
+        </div>
+      </Fragment>
+    )
+  }
+</CmsLayout>
+
+<script>
+  const form = document.getElementById('cms-upload-form') as HTMLFormElement | null;
+  const validate = document.getElementById('cms-upload-validate');
+  const commit = document.getElementById('cms-upload-commit');
+  const review = document.getElementById('cms-upload-review');
+  const errorBox = document.getElementById('cms-upload-error');
+  const progress = document.getElementById('cms-upload-progress');
+  const summary = document.getElementById('cms-upload-summary');
+  const actions = document.getElementById('cms-upload-actions');
+
+  if (form && validate && summary) {
+    let batchId = '';
+
+    /**
+     * The trace id an error response carries, from `{ error: { traceId } }`.
+     *
+     * Null where the server did not issue one, which is every refusal it
+     * could describe in words. Only an unexpected throw gets an id, and that
+     * is exactly the case where the sentence on screen cannot say enough.
+     */
+    const traceOf = (body: unknown): string | null => {
+      const error = (body as { error?: { traceId?: unknown } } | null)?.error;
+      const traceId = error?.traceId;
+      return typeof traceId === 'string' && traceId !== '' ? traceId : null;
+    };
+
+    const showError = (message: string) => {
+      if (!errorBox) return;
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+    };
+
+    const line = (label: string, value: string) =>
+      `<div class="flex items-center justify-between gap-3 border-b border-cms-line py-1.5 last:border-0"><span>${label}</span><span class="font-medium text-cms-ink tabular-nums">${value}</span></div>`;
+
+    validate.addEventListener('click', async () => {
+      if (errorBox) errorBox.hidden = true;
+      const data = new FormData(form);
+      const file = data.get('file');
+      if (!(file instanceof File) || file.size === 0) {
+        showError('Choose a file to upload.');
+        return;
+      }
+      // The size limit lives on the input and in this message, which is the
+      // only place a person needs it: when they have exceeded it.
+      const input = document.getElementById('up-file') as HTMLInputElement | null;
+      const maxBytes = Number(input?.dataset.maxBytes ?? '0');
+      if (maxBytes > 0 && file.size > maxBytes) {
+        showError(
+          `That workbook is ${(file.size / 1048576).toFixed(1)} MB. The limit is ${Math.round(maxBytes / 1048576)} MB, so split the extract and upload it in parts.`,
+        );
+        return;
+      }
+      // Honest progress: uploading, then validating, then a stage word that
+      // says what actually happened.
+      if (progress) progress.textContent = 'Uploading';
+      let response: Response;
+      try {
+        if (progress) progress.textContent = 'Validating';
+        response = await fetch('/api/data/imports', { method: 'POST', body: data });
+      } catch {
+        if (progress) progress.textContent = '';
+        showError('The upload could not be sent.');
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (progress) progress.textContent = '';
+      if (!response.ok && body === null) {
+        showError('The upload was refused.');
+        return;
+      }
+      const outcome = (body ?? {}) as Record<string, unknown>;
+      const stage = String(outcome?.stage ?? '');
+      if (stage === 'REJECTED') {
+        showError(String(outcome?.rejectedReason ?? 'The file was refused.'));
+        summary.textContent = 'Nothing was imported.';
+        if (actions) actions.hidden = true;
+        return;
+      }
+      // TWO REFUSALS, AND THEY DO NOT SAY THE SAME THING. The bytes matching is
+      // one fact; the bytes differing while every cell agrees is another, and
+      // an operator who re-saved the workbook needs to be told that is what
+      // happened rather than left to argue that this is a different file.
+      if (stage === 'DUPLICATE' || stage === 'RESAVED') {
+        const duplicate = outcome?.duplicate as Record<string, unknown> | null;
+        const named = duplicate
+          ? `${String(duplicate.filename)}, uploaded on ${String(duplicate.uploadedAt)} by ${String(duplicate.uploadedBy)}`
+          : null;
+        showError(
+          stage === 'DUPLICATE'
+            ? named
+              ? `This is the same file. It was uploaded as ${named}. Nothing was re-imported.`
+              : 'This is the same file. It has been uploaded before.'
+            : named
+              ? `This workbook was saved again, but the data is identical to ${named}. Nothing was re-imported.`
+              : 'This workbook was saved again, but the data is identical to a file already uploaded.',
+        );
+        if (duplicate) {
+          summary.innerHTML = `<a class="text-cms-royal hover:underline" href="/app/data/history/${String(duplicate.batchId)}">Open the previous batch</a>`;
+        }
+        if (actions) actions.hidden = true;
+        return;
+      }
+      batchId = String(outcome?.batchId ?? '');
+      const counts = (outcome?.summary ?? {}) as Record<string, number>;
+      const unresolvedUsers = (outcome?.unresolvedUsers ?? []) as string[];
+      const unresolvedProducts = (outcome?.unresolvedProducts ?? []) as unknown[];
+      const unresolvedCustomers = (outcome?.unresolvedCustomers ?? []) as unknown[];
+      const derived = (outcome?.derivation ?? null) as Record<string, unknown> | null;
+
+      // A count that can be acted on is a link to the queue that holds it.
+      const queue = (label: string, count: number, anchor: string) =>
+        count === 0
+          ? line(label, '0')
+          : `<div class="flex items-center justify-between gap-3 border-b border-cms-line py-1.5 last:border-0"><span>${label}</span><a class="font-medium text-cms-royal tabular-nums hover:underline" href="/app/data/history/${batchId}#${anchor}">${count}</a></div>`;
+
+      const scope =
+        derived === null
+          ? ''
+          : derived.affiliateLabel === null
+            ? line(
+                'Scope',
+                derived.affiliateColumn === null
+                  ? 'Group-wide, the file carries no affiliate column'
+                  : 'Group-wide',
+              )
+            : line(
+                `Affiliate, from ${String(derived.affiliateColumn)}`,
+                String(derived.affiliateLabel),
+              );
+      const affiliatesSeen =
+        derived === null || (derived.affiliates as string[]).length <= 1
+          ? ''
+          : line('Affiliates detected', (derived.affiliates as string[]).join(', '));
+      const period =
+        derived === null
+          ? ''
+          : line(
+              `Period, from ${String(derived.periodColumn)}`,
+              `${String(derived.periodFrom ?? 'not dated')} to ${String(derived.periodTo ?? 'not dated')}`,
+            );
+
+      // A column the landing table cannot hold is named, not swallowed. Its
+      // values are in extra_json either way.
+      const unmapped = ((derived?.unmappedColumns ?? []) as string[]).length
+        ? `<p class="mt-3 text-cms-body-sm text-cms-muted">Unmapped columns, kept in extra_json: ${(derived?.unmappedColumns as string[]).join(', ')}</p>`
+        : '';
+
+      summary.innerHTML =
+        scope +
+        affiliatesSeen +
+        period +
+        // THE FOUR FIGURES, SIDE BY SIDE. A row is not a document, a document
+        // is not an order line, and a repeated line is not a repeated loading.
+        // Showing only the first two is what let a commit write one order line
+        // 134 times with whichever row arrived last winning.
+        line('Rows received', String(counts.rowsReceived ?? 0)) +
+        line('Documents', String(counts.uniqueDocuments ?? 0)) +
+        // HOW MUCH OF THIS IS ALREADY IN. An extract re-run a week later
+        // repeats every order that has not closed, which is not a fault and
+        // not a surprise once it is on the screen before the import runs.
+        line(
+          'Already imported',
+          `${String(Number(outcome?.documentsAlreadyImported ?? 0))} of these documents are in the system`,
+        ) +
+        line('Order lines', String(counts.orderLines ?? 0)) +
+        line(
+          'Additional loading events',
+          `${String(counts.additionalLoadingEvents ?? 0)} beyond one per order`,
+        ) +
+        line('New rows', String(counts.rowsNew ?? 0)) +
+        line('Changed rows', String(counts.rowsChanged ?? 0)) +
+        line(
+          'Repeat rows',
+          `${String(counts.rowsDuplicate ?? 0)} (a further event for a line already described)`,
+        ) +
+        line('Rows needing a mapping', String(counts.rowsUnresolved ?? 0)) +
+        line('Rejected rows', String(counts.rowsRejected ?? 0)) +
+        queue('Unresolved users', unresolvedUsers.length, 'users') +
+        queue('Unresolved customers', unresolvedCustomers.length, 'customers') +
+        queue('Unresolved products', unresolvedProducts.length, 'products') +
+        unmapped;
+      if (actions) actions.hidden = false;
+    });
+
+    commit?.addEventListener('click', async () => {
+      if (batchId === '') return;
+      if (progress) progress.textContent = 'Importing';
+      const response = await fetch(`/api/data/imports/${batchId}/commit`, { method: 'POST' });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (progress) progress.textContent = '';
+      if (!response.ok) {
+        // THE TRACE ID TRAVELS. The sentence stays general because a database
+        // error can name a customer or an Oracle code, but the id is what a
+        // person quotes to get the table, the constraint and the values out
+        // of the log. "The import could not be completed." on its own is what
+        // cost a day, three times.
+        showError(
+          traceOf(body) === null
+            ? 'The import could not be completed. Nothing was changed.'
+            : `The import could not be completed. Quote reference ${traceOf(body)} to your administrator.`,
+        );
+        return;
+      }
+      const result = (body ?? {}) as Record<string, unknown>;
+      const skipped = (result?.skippedReasons ?? []) as { reason: string; rows: number }[];
+      const notes = (result?.notes ?? []) as { note: string; count: number }[];
+      const status = String(result?.status ?? '');
+      summary.innerHTML =
+        line('Outcome', status === 'PARTIAL' ? 'Partial' : 'Complete') +
+        line('Documents created', String(result?.documentsCreated ?? 0)) +
+        line('Documents updated', String(result?.documentsUpdated ?? 0)) +
+        line('Documents unchanged', String(result?.documentsUnchanged ?? 0)) +
+        line('Documents not imported', String(result?.documentsSkipped ?? 0)) +
+        line('Lines written', String(result?.linesWritten ?? 0)) +
+        line('Workflow events appended', String(result?.workflowEventsAppended ?? 0)) +
+        // The reference records this commit created. Shown beside the document
+        // counts rather than tucked away, because an upload that writes 228
+        // accounts should say so on the screen that ran it.
+        line('Customers created', String(result?.accountsCreated ?? 0)) +
+        line('Products created', String(result?.productsCreated ?? 0)) +
+        line(
+          'Additional loading events recorded',
+          `${String(result?.additionalLoadingEvents ?? 0)} (the earliest reached the order; every one is on its page)`,
+        ) +
+        (notes.length === 0
+          ? ''
+          : `<p class="mt-3 text-cms-body-sm text-cms-muted">Imported, with a note:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${notes
+              .map((entry) => `<li>${entry.count}: ${entry.note}</li>`)
+              .join('')}</ul>`) +
+        (skipped.length === 0
+          ? ''
+          : `<p class="mt-3 text-cms-body-sm text-cms-muted">Not imported, and why:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${skipped
+              .map((entry) => `<li>${entry.rows} rows: ${entry.reason}</li>`)
+              .join('')}</ul>`) +
+        `<p class="mt-3"><a class="text-cms-royal hover:underline" href="/app/data/history/${batchId}">Open the batch</a></p>`;
+    });
+
+    review?.addEventListener('click', () => {
+      if (batchId !== '') window.location.href = `/app/data/history/${batchId}`;
+    });
+  }
+</script>

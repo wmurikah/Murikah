@@ -1,35 +1,44 @@
 ---
 /**
- * The Hass CMS front door: a full-viewport two-pane split, a brand panel beside a
- * paper form pane, mirroring Engineering Rhythm and GRC so the products read as
- * one family. Below 1024px it stacks. The brand colours and name come from the
- * tenant brand when known, else the Murikah default. A single-signal guard
- * disables the submit control on first click so repeated clicks send one request.
+ * The unauthenticated shell: a navy brand panel on the LEFT, the sign-in form
+ * on the RIGHT, a single column on mobile.
+ *
+ * THE BRAND IS ON THE LEFT AND THE TASK IS ON THE RIGHT. The eye enters at the
+ * top left, meets the brand, and travels to the work. The panels used to be the
+ * other way round, which put the brand at the end of the journey and the task
+ * at the start, so the first thing a person read was the thing they had already
+ * decided about.
+ *
+ * THE FORM SIDE IS THE WIDER OF THE TWO. It was `1fr` of brand against a form
+ * column capped at 34rem, which squeezed the work into a corner of a wide
+ * screen. The proportion is now roughly two to three in the form's favour, and
+ * the form column is capped generously rather than tightly, so it breathes
+ * vertically as well as horizontally.
+ *
+ * THE FORM STILL COMES FIRST IN THE DOM. The brand panel is decorative and is
+ * ordered visually with `order`, so a keyboard or screen-reader user reaches
+ * the form immediately and never travels past a wall of marketing to sign in.
+ * Reversing the visual order did not change that: it is the same trick pointing
+ * the other way.
+ *
+ * No image, no illustration, no gradient. The impression comes from proportion,
+ * type and restraint, and everything else is a download the user pays for.
+ *
+ * No marketing chrome, for the same reason as CmsLayout: this is the CMS host.
  */
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
-import '@/styles/cms.css';
-import { DEFAULT_BRANDING, type Branding } from '@cms/repos/branding';
+import CmsWordmark from '@/components/cms/CmsWordmark.astro';
 
 interface Props {
   title: string;
-  brand?: Branding;
-  headline?: string;
-  sub?: string;
 }
-const {
-  title,
-  brand = DEFAULT_BRANDING,
-  headline = 'Run your customers, orders and support in one place',
-  sub = 'The Hass customer management platform.',
-} = Astro.props;
-const pageTitle = `${title} - ${brand.appName}`;
-const brandVars = `--cms-brand-primary:${brand.primaryColor};--cms-brand-secondary:${brand.secondaryColor};--cms-brand-accent:${brand.accentColor};`;
-const initial = brand.appName.trim().charAt(0).toUpperCase() || 'H';
+const { title } = Astro.props;
+const pageTitle = `${title} - Hass Petroleum`;
 ---
 
 <!doctype html>
-<html lang="en-KE">
+<html lang="en-KE" class="h-full">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -37,52 +46,46 @@ const initial = brand.appName.trim().charAt(0).toUpperCase() || 'H';
     <title>{pageTitle}</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
-  <body class="cms cms-authbody" style={brandVars}>
-    <a href="#cms-auth-main" class="cms-skip">Skip to content</a>
-    <div class="cms-authsplit">
-      <aside class="cms-authbrand">
-        <a href="/login" class="cms-authbrand__mark">
-          <span class="cms-authbrand__badge" aria-hidden="true">{initial}</span>
-          <span>{brand.appName}</span>
-        </a>
-        <div>
-          <h2 class="cms-authbrand__headline">{headline}</h2>
-          <p class="cms-authbrand__sub">{sub}</p>
-        </div>
-        <p class="cms-authbrand__sub">A Murikah product</p>
-      </aside>
-
-      <main id="cms-auth-main" class="cms-authpane">
-        <div class="cms-authcard">
+  <body class="min-h-full bg-cms-canvas text-cms-ink antialiased">
+    <div class="flex min-h-dvh flex-col lg:grid lg:grid-cols-[minmax(20rem,2fr)_minmax(28rem,3fr)]">
+      {/* The form. First in the DOM, second on screen from lg upwards. */}
+      <main
+        class="flex flex-1 items-center justify-center px-5 py-10 sm:px-8 lg:order-2 lg:px-16 lg:py-16"
+      >
+        <div class="w-full max-w-md">
           <slot />
         </div>
       </main>
-    </div>
 
-    <script>
-      // Single-signal guard: on the first real submit, disable the submit button
-      // so repeated clicks send one request. Deferred so the button's name and
-      // value are still serialised.
-      document.addEventListener(
-        'submit',
-        (e) => {
-          const form = e.target;
-          if (!(form instanceof HTMLFormElement)) return;
-          if (form.dataset.cmsSubmitted === '1') {
-            e.preventDefault();
-            return;
-          }
-          form.dataset.cmsSubmitted = '1';
-          const btn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-          if (btn) {
-            setTimeout(() => {
-              btn.setAttribute('aria-busy', 'true');
-              btn.setAttribute('disabled', '');
-            }, 0);
-          }
-        },
-        true,
-      );
-    </script>
+      {
+        /*
+        The brand panel. Decorative: nothing here is the only copy of anything.
+
+        ONE IDEA AND A GREAT DEAL OF QUIET SPACE. It carries the wordmark, one
+        line of positioning and the system's name, and nothing else. On a small
+        screen it collapses to a slim band across the top so the form takes the
+        full width, which is why the positioning line is hidden below lg rather
+        than being allowed to push the form off the first screen.
+      */
+      }
+      <aside
+        class="relative order-first flex flex-col justify-between gap-10 overflow-hidden border-r border-white/10 bg-cms-navy px-6 py-6 sm:px-10 lg:order-1 lg:px-14 lg:py-16"
+        aria-hidden="true"
+      >
+        <CmsWordmark tone="onNavy" size="lg" />
+        <div class="hidden max-w-md lg:block">
+          <span class="mb-6 block h-1 w-12 rounded-full bg-cms-gold" aria-hidden="true"></span>
+          <p class="text-cms-display font-semibold tracking-tight text-balance text-white">
+            Customer operations, in one calm view.
+          </p>
+          <p class="mt-4 max-w-sm text-cms-body text-cms-rail-text">
+            From first enquiry to fulfilled order and resolved service request.
+          </p>
+        </div>
+        <p class="hidden text-cms-caption text-cms-rail-muted lg:block">
+          Customer Relationship, Helpdesk &amp; SLA Management System
+        </p>
+      </aside>
+    </div>
   </body>
 </html>

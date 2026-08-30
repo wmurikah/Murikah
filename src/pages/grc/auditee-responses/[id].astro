@@ -2,26 +2,43 @@
 export const prerender = false;
 
 /**
- * The response thread for one finding: the observation and its deadline, every
- * round recorded so far with its decision, and then whichever action this
- * visitor may take. An assigned auditee gets the response form (and can propose
- * action plans alongside it); a reviewer gets accept and request-changes on the
- * round awaiting a decision. Both sides see the same history.
+ * The auditee loop for one observation: what was found, who is holding the response
+ * right now, everything that has happened to it, and whichever action this
+ * visitor may take (Build Prompt 68).
  *
- * Visibility is enforced here as well as in the queries: an auditee who is not
- * assigned to this finding is refused, so the route cannot be used to read
- * another team's finding.
+ * FOUR KINDS OF READER, one page. A responsible (the unit manager) may respond,
+ * delegate the drafting, take it back and release it to audit. A delegate may
+ * draft, attach and return it, and their whole standing is the live delegation
+ * row. A CC recipient sees everything and does nothing, which is what being
+ * copied means. Audit reviews what was released. Nobody is shown a control they
+ * cannot use, and the server does not trust the screen: every endpoint asks the
+ * same stage machine again.
+ *
+ * The trail is one ordered list rather than three sections, because the question
+ * a unit manager actually has is "what has happened to this and when", and an
+ * answer split into responses over here, delegations over there and audit
+ * decisions somewhere else is one they have to assemble themselves.
  */
 import GrcLayout from '@/layouts/GrcLayout.astro';
 import GrcRichText from '@/components/grc/GrcRichText.astro';
+import GrcEvidence from '@/components/grc/GrcEvidence.astro';
 import { renderRichHtml } from '@grc/richtext';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { guardPageLoad } from '@grc/pageGuard';
 import { getWorkPaper, type WorkPaperDetail } from '@grc/repos/workPapers';
-import { listRounds, isAssignedAuditee, type ResponseRow } from '@grc/repos/auditeeResponses';
+import { listRounds, type ResponseRow } from '@grc/repos/auditeeResponses';
 import { listActionPlans, type ActionPlanListRow } from '@grc/repos/actionPlans';
+import {
+  listDelegations,
+  listDelegateCandidates,
+  type Delegation,
+  type DelegateCandidate,
+} from '@grc/repos/auditeeDelegations';
+import { auditeeStanding, maySeeThread } from '@grc/repos/auditeeStanding';
+import { listAttachments, type Attachment } from '@grc/repos/evidence';
+import { storageConfiguredFor } from '@grc/storage';
 import { getConfigValues } from '@grc/repos/orgConfig';
 import {
   responseDeadline,
@@ -33,72 +50,118 @@ import {
   DEFAULT_RESPONSE_DEADLINE_DAYS,
   DEFAULT_MAX_RESPONSE_ROUNDS,
 } from '@grc/workflow/responseRounds';
+import {
+  AUDITEE_STAGE,
+  DELEGATION_STATUS,
+  mayMove,
+  stageHint,
+  stageLabel,
+  stageOf,
+  type AuditeeStanding,
+} from '@grc/workflow/auditeeLoop';
 import { WP_STATUS } from '@grc/workflow/workPaperActions';
 
 const grc = Astro.locals.grc;
 if (!grc) return Astro.redirect('/login');
 const { id } = Astro.params;
 
-const canReview = grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review');
-const canRespondPerm = grc.isPlatformOwner || grc.perms.includes('AUDITEE.respond');
-
 let wp = null as WorkPaperDetail | null;
 let rounds: ResponseRow[] = [];
+let delegations: Delegation[] = [];
+let candidates: DelegateCandidate[] = [];
+let evidence: Attachment[] = [];
 let myPlans: ActionPlanListRow[] = [];
-let assigned = false;
+let storageReady = false;
 let deadlineDays = DEFAULT_RESPONSE_DEADLINE_DAYS;
 let maxRounds = DEFAULT_MAX_RESPONSE_ROUNDS;
 let loadError = false;
+// Nobody until the observation is loaded and the named lists are read: the default
+// is no standing at all, so a load that half-fails shows nothing rather than
+// offering an action to somebody who has no business with the observation.
+let standing: AuditeeStanding = {
+  isResponsible: false,
+  isCc: false,
+  isDelegate: false,
+  isAudit: grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review'),
+};
 
-if (id && (canReview || canRespondPerm)) {
+if (id) {
   loadError = !(await guardPageLoad('auditee-responses.thread', async () => {
     const db = await getDb(getGrcEnv());
-    const [detail, thread, isAssigned, config] = await Promise.all([
-      getWorkPaper(db, grc.organizationId, id),
+    const [detail, thread, handovers, who, attached, ready, config] = await Promise.all([
+      getWorkPaper(db, grc.organizationId, id, grc.affiliateScope),
       listRounds(db, grc.organizationId, id),
-      isAssignedAuditee(db, grc.organizationId, id, grc.userId),
+      listDelegations(db, grc.organizationId, id),
+      auditeeStanding(db, grc.organizationId, id, {
+        userId: grc.userId,
+        isPlatformOwner: grc.isPlatformOwner,
+        perms: grc.perms,
+      }),
+      listAttachments(db, grc.organizationId, 'work_paper', id),
+      storageConfiguredFor(grc.organizationId),
       getConfigValues(db, grc.organizationId, ['RESPONSE_DEADLINE_DAYS', 'MAX_RESPONSE_ROUNDS']),
     ]);
     wp = detail;
     rounds = thread;
-    assigned = isAssigned;
+    delegations = handovers;
+    standing = who;
+    evidence = attached;
+    storageReady = ready;
     deadlineDays = configuredNumber(
       config.get('RESPONSE_DEADLINE_DAYS'),
       DEFAULT_RESPONSE_DEADLINE_DAYS,
     );
     maxRounds = configuredNumber(config.get('MAX_RESPONSE_ROUNDS'), DEFAULT_MAX_RESPONSE_ROUNDS);
-    // The plans raised against this finding, so a response can point at them.
-    myPlans = detail
-      ? await listActionPlans(
-          db,
-          grc.organizationId,
-          {
-            userId: grc.userId,
-            roleCode: grc.roleCode,
-            perms: grc.perms,
-            isPlatformOwner: grc.isPlatformOwner,
-          },
-          {},
-        ).then((all) => all.filter((p) => p.workPaperId === id))
-      : [];
+    if (detail) {
+      // The staff this manager may hand the drafting to, and the plans already
+      // raised against the observation so a response can point at them.
+      candidates = who.isResponsible
+        ? await listDelegateCandidates(
+            db,
+            grc.organizationId,
+            (detail.affiliate_code as string | null) ?? null,
+            grc.userId,
+          )
+        : [];
+      myPlans = await listActionPlans(
+        db,
+        grc.organizationId,
+        {
+          userId: grc.userId,
+          roleCode: grc.roleCode,
+          perms: grc.perms,
+          isPlatformOwner: grc.isPlatformOwner,
+          affiliateScope: grc.affiliateScope,
+        },
+        {},
+      ).then((all) => all.filter((p) => p.workPaperId === id));
+    }
   }));
 }
 
-// A reader must be assigned to the finding or hold the review permission.
-const mayRead = canReview || assigned;
+const mayRead = maySeeThread(standing);
+const stage = stageOf(wp ? ((wp.auditee_stage as string | null) ?? null) : null);
 const currentRound = wp ? Number(wp.response_round ?? 1) || 1 : 1;
 const status = wp ? String(wp.status) : '';
 const awaitingReview = rounds.find(
   (r) => r.status === RESPONSE_STATUS.SUBMITTED && r.round === currentRound,
 );
-// The auditee may answer when the finding is with them, they are assigned, and
-// they have not already answered this round.
-const mayRespond =
-  wp != null &&
-  canRespondPerm &&
-  (assigned || grc.isPlatformOwner) &&
-  status === WP_STATUS.SENT_TO_AUDITEE &&
-  !awaitingReview;
+const liveDelegation = delegations.find((d) => d.status === DELEGATION_STATUS.ISSUED) ?? null;
+
+// What this reader may do, asked of the one stage machine the endpoints ask.
+// A responsible releasing is the manager's act; audit may release on their
+// behalf, which is the same allowance the submit endpoint makes.
+const releasing = { ...standing, isResponsible: standing.isResponsible || standing.isAudit };
+const onAuditeeSide = status === WP_STATUS.SENT_TO_AUDITEE;
+const mayDelegate = onAuditeeSide && mayMove(standing, stage, 'delegate');
+const mayReturn = onAuditeeSide && mayMove(standing, stage, 'return_to_manager');
+const mayRelease =
+  onAuditeeSide && mayMove(releasing, stage, 'release_to_audit') && !awaitingReview;
+// A delegate drafts into the same evidence panel the manager releases from:
+// what they attach is the support for the response, so it hangs off the observation
+// exactly like any other evidence.
+const mayDraft = onAuditeeSide && (standing.isDelegate || standing.isResponsible);
+const canUploadEvidence = mayDraft || standing.isAudit;
 const roundsUsedUp = roundsExhausted(nextRound(currentRound, 'request_changes'), maxRounds);
 
 const deadline = wp
@@ -112,16 +175,92 @@ const val = (key: string): string => {
   const raw = wp?.[key];
   return raw == null ? '' : String(raw);
 };
-const statusLabelFor = (s: string): string => {
-  if (s === RESPONSE_STATUS.ACCEPTED) return 'Accepted';
-  if (s === RESPONSE_STATUS.CHANGES_REQUESTED) return 'Changes requested';
-  return 'Awaiting review';
+/**
+ * A stored narrative as formatted HTML, the same pipeline the auditor's own
+ * screens use (Build Prompt 67). The auditee reads the observation here and nowhere
+ * else, so reading it with its headings and lists intact is not a nicety: a
+ * recommendation whose numbered steps arrive as one run of asterisks is a
+ * recommendation somebody has to decode before they can answer it.
+ */
+const rich = (key: string): string => {
+  const raw = wp?.[key];
+  return raw == null || String(raw) === '' ? '<p>None recorded.</p>' : renderRichHtml(String(raw));
 };
-const statusClassFor = (s: string): string => {
-  if (s === RESPONSE_STATUS.ACCEPTED) return 'grc-badge grc-badge--done';
-  if (s === RESPONSE_STATUS.CHANGES_REQUESTED) return 'grc-badge grc-badge--rejected';
-  return 'grc-badge grc-badge--review';
-};
+/**
+ * The whole loop as one ordered list (Build Prompt 68).
+ *
+ * Responses, handovers and audit decisions are separate tables and separate
+ * events, but they are one conversation, and a reader asking "what has happened
+ * to this" should not have to interleave three lists by date in their head. So
+ * they are merged here, oldest first, each entry saying who did what and what
+ * they said while doing it.
+ */
+interface TrailEntry {
+  at: string;
+  label: string;
+  who: string;
+  body: string | null;
+  /** Rendered as formatted narrative rather than a plain line. */
+  isRich: boolean;
+  tone: 'auditee' | 'delegate' | 'audit';
+}
+const trail: TrailEntry[] = [];
+if (wp && val('sent_to_auditee_date')) {
+  trail.push({
+    at: val('sent_to_auditee_date'),
+    label: 'Sent to the auditee',
+    who: val('approved_by_name') || 'Internal audit',
+    body: null,
+    isRich: false,
+    tone: 'audit',
+  });
+}
+for (const d of delegations) {
+  trail.push({
+    at: d.delegatedAt ?? '',
+    label: `Delegated to ${d.delegatedToName ?? d.delegatedTo}`,
+    who: d.delegatedByName ?? d.delegatedBy,
+    body: d.instructions,
+    isRich: true,
+    tone: 'auditee',
+  });
+  if (d.returnedAt) {
+    trail.push({
+      at: d.returnedAt,
+      label: 'Returned to the unit manager',
+      who: d.delegatedToName ?? d.delegatedTo,
+      body: d.returnNote,
+      isRich: true,
+      tone: 'delegate',
+    });
+  }
+}
+for (const r of rounds) {
+  trail.push({
+    at: r.submittedDate ?? '',
+    label: `Round ${r.round} released to audit`,
+    who: r.submittedByName ?? 'The auditee',
+    body: r.managementResponse,
+    isRich: true,
+    tone: 'auditee',
+  });
+  if (r.status !== RESPONSE_STATUS.SUBMITTED && r.reviewDate) {
+    trail.push({
+      at: r.reviewDate,
+      label:
+        r.status === RESPONSE_STATUS.ACCEPTED
+          ? `Round ${r.round} accepted by audit`
+          : `Round ${r.round} returned by audit`,
+      who: r.reviewedByName ?? 'Internal audit',
+      body: r.reviewComments,
+      isRich: true,
+      tone: 'audit',
+    });
+  }
+}
+// Oldest first: the loop reads as a story, and the newest thing is the one the
+// reader has just done and already knows about.
+trail.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 
 const done = Astro.url.searchParams.get('done');
 const failed = Astro.url.searchParams.get('error');
@@ -152,21 +291,17 @@ const failed = Astro.url.searchParams.get('error');
   }
 
   {
-    !canReview && !canRespondPerm ? (
-      <p class="grc-error" role="alert">
-        You do not have access to auditee responses.
-      </p>
-    ) : loadError ? (
+    loadError ? (
       <GrcErrorCard subject="This response thread" />
     ) : !wp ? (
       <div class="grc-empty">
         <p>
-          <strong>That finding was not found.</strong> It may have been removed.
+          <strong>That observation was not found.</strong> It may have been removed.
         </p>
       </div>
     ) : !mayRead ? (
       <p class="grc-error" role="alert">
-        That finding is not shared with you.
+        That observation is not shared with you.
       </p>
     ) : (
       <>
@@ -185,106 +320,206 @@ const failed = Astro.url.searchParams.get('error');
             </span>
           </div>
 
+          {/* Where the observation is on the auditee side, said plainly. Without
+              this the unit manager, the delegate and the copy list all saw the
+              same "sent to auditee" and had no way to tell whose turn it was
+              (Build Prompt 68). */}
+          <div class="grc-stage" data-auditee-stage={stage}>
+            <span class="grc-stage__badge">{stageLabel(stage)}</span>
+            {liveDelegation && stage === AUDITEE_STAGE.DELEGATED && (
+              <span class="grc-stage__who">
+                {liveDelegation.delegatedToName ?? liveDelegation.delegatedTo}
+              </span>
+            )}
+            <p class="grc-stage__hint">{stageHint(stage)}</p>
+          </div>
+
           <dl class="grc-deflist">
             <>
               <dt>Observation</dt>
-              <dd>{val('observation_description') || val('observation_title')}</dd>
+              <dd>{val('observation_title') || 'Untitled observation'}</dd>
+            </>
+            <>
+              <dt>Description</dt>
+              <dd class="grc-richbody" set:html={rich('observation_description')} />
             </>
             <>
               <dt>Recommendation</dt>
-              <dd>{val('recommendation') || 'None recorded.'}</dd>
+              <dd class="grc-richbody" set:html={rich('recommendation')} />
             </>
             <>
-              <dt>Finding status</dt>
+              <dt>Observation status</dt>
               <dd>{status}</dd>
             </>
           </dl>
         </section>
 
+        {/* The loop, in order: what audit sent, every handover, every draft and
+            every decision, so the back-and-forth is one story rather than three
+            lists to interleave by hand. */}
         <section class="grc-section">
-          <h2>Response history</h2>
-          {rounds.length === 0 ? (
+          <h2>What has happened</h2>
+          {trail.length === 0 ? (
             <div class="grc-empty">
               <p>
-                <strong>No response yet.</strong> Nothing has been submitted for this finding.
+                <strong>Nothing yet.</strong> Once this observation is answered, every step will be
+                listed here.
               </p>
             </div>
           ) : (
-            <ol class="grc-rounds">
-              {rounds.map((r) => (
-                <li class="grc-round">
+            <ol class="grc-rounds" data-auditee-trail>
+              {trail.map((t) => (
+                <li class="grc-round" data-tone={t.tone}>
                   <div class="grc-round__head">
-                    <span class="grc-round__n">Round {r.round}</span>
-                    <span class={statusClassFor(r.status)}>{statusLabelFor(r.status)}</span>
+                    <span class="grc-round__n">{t.label}</span>
                     <span class="grc-round__who">
-                      {r.submittedByName ?? 'Unknown'} on {fmtDate(r.submittedDate)}
+                      {t.who} on {fmtDate(t.at)}
                     </span>
                   </div>
-                  <div
-                    class="grc-round__body grc-richbody"
-                    set:html={renderRichHtml(r.managementResponse)}
-                  />
-                  {r.reviewComments && (
-                    <p class="grc-round__review">
-                      <strong>Reviewer:</strong>
-                      <span class="grc-richbody" set:html={renderRichHtml(r.reviewComments)} />
-                      <span class="grc-round__who">
-                        {' '}
-                        ({r.reviewedByName ?? 'Reviewer'}, {fmtDate(r.reviewDate)})
-                      </span>
-                    </p>
+                  {t.body && t.isRich && (
+                    <div class="grc-round__body grc-richbody" set:html={renderRichHtml(t.body)} />
                   )}
-                  {canReview && r.status === RESPONSE_STATUS.SUBMITTED && (
-                    <form
-                      method="post"
-                      action={`/api/auditee-responses/${r.responseId}/review`}
-                      class="grc-round__form"
-                    >
-                      <div class="grc-field">
-                        <label for={`rc-${r.responseId}`}>Review comments</label>
-                        <GrcRichText
-                          id={`rc-${r.responseId}`}
-                          name="review_comments"
-                          rows={3}
-                          maxlength={2000}
-                        />
-                      </div>
-                      <div class="grc-actionbar">
-                        <button
-                          type="submit"
-                          name="decision"
-                          value="accept"
-                          class="grc-btn grc-btn--primary"
-                        >
-                          Accept response
-                        </button>
-                        <button
-                          type="submit"
-                          name="decision"
-                          value="request_changes"
-                          class="grc-btn grc-btn--danger"
-                          disabled={roundsUsedUp}
-                        >
-                          Request changes
-                        </button>
-                      </div>
-                      {roundsUsedUp && (
-                        <p class="grc-field__hint">
-                          The {maxRounds} response rounds are used up, so changes can no longer be
-                          requested. Resolve the finding directly.
-                        </p>
-                      )}
-                    </form>
-                  )}
+                  {t.body && !t.isRich && <p class="grc-round__body">{t.body}</p>}
                 </li>
               ))}
             </ol>
           )}
         </section>
 
-        {mayRespond && (
+        {/* Audit decides on the round that is with them. Three decisions, not
+            two: modifying is audit fixing the wording and accepting it, which
+            beats making a unit manager run a whole extra round to correct a
+            sentence. */}
+        {standing.isAudit && awaitingReview && (
           <section class="grc-section">
-            <h2>Your response (round {currentRound})</h2>
+            <h2>Audit decision on round {awaitingReview.round}</h2>
+            <form
+              method="post"
+              action={`/api/auditee-responses/${awaitingReview.responseId}/review`}
+              class="grc-form"
+            >
+              <div class="grc-field">
+                <label for={`rc-${awaitingReview.responseId}`}>Review comments</label>
+                <GrcRichText
+                  id={`rc-${awaitingReview.responseId}`}
+                  name="review_comments"
+                  rows={3}
+                  maxlength={2000}
+                />
+                <p class="grc-field__hint">
+                  Required when you modify the response: say what you changed, so the trail shows
+                  your hand rather than presenting your words as management's.
+                </p>
+              </div>
+              <div class="grc-actionbar">
+                <button
+                  type="submit"
+                  name="decision"
+                  value="accept"
+                  class="grc-btn grc-btn--primary"
+                >
+                  Accept response
+                </button>
+                <button
+                  type="submit"
+                  name="decision"
+                  value="modify"
+                  class="grc-btn grc-btn--secondary"
+                >
+                  Modify and accept
+                </button>
+                <button
+                  type="submit"
+                  name="decision"
+                  value="request_change"
+                  class="grc-btn grc-btn--danger"
+                  disabled={roundsUsedUp}
+                >
+                  Request a change
+                </button>
+              </div>
+              {roundsUsedUp && (
+                <p class="grc-field__hint">
+                  The {maxRounds} response rounds are used up, so a change can no longer be
+                  requested. Resolve the observation directly.
+                </p>
+              )}
+            </form>
+          </section>
+        )}
+
+        {/* The manager hands the drafting to their staff. The person named gains
+            their whole standing from this row: they hold no audit permission and
+            are on neither named list. */}
+        {mayDelegate && (
+          <section class="grc-section">
+            <h2>Delegate the response</h2>
+            {candidates.length === 0 ? (
+              <p class="grc-field__hint">
+                There is nobody else in your affiliate to delegate to. Respond directly below.
+              </p>
+            ) : (
+              <form method="post" action="/api/auditee-responses/delegate" class="grc-form">
+                <input type="hidden" name="work_paper_id" value={id} />
+                <div class="grc-field">
+                  <label for="delegated_to">Delegate to</label>
+                  <select id="delegated_to" name="delegated_to" class="grc-select" required>
+                    <option value="">Choose a member of staff</option>
+                    {candidates.map((c) => (
+                      <option value={c.userId}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div class="grc-field">
+                  <label for="instructions">What you are asking them to do</label>
+                  <GrcRichText id="instructions" name="instructions" rows={3} maxlength={2000} />
+                  <p class="grc-field__hint">
+                    They will be emailed this brief and can draft the response, attach evidence and
+                    return it to you.
+                  </p>
+                </div>
+                <div class="grc-actionbar">
+                  <button type="submit" class="grc-btn grc-btn--secondary">
+                    Delegate the drafting
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        )}
+
+        {/* The delegate hands it back. This is the only move the delegation
+            entitles them to: deciding the response is finished is the
+            manager's, not theirs. */}
+        {mayReturn && (
+          <section class="grc-section">
+            <h2>Return the draft to the unit manager</h2>
+            <form method="post" action="/api/auditee-responses/return" class="grc-form">
+              <input type="hidden" name="work_paper_id" value={id} />
+              <div class="grc-field">
+                <label for="return_note">What you have done</label>
+                <GrcRichText id="return_note" name="return_note" rows={3} maxlength={2000} />
+                <p class="grc-field__hint">
+                  {liveDelegation?.instructions
+                    ? 'Answer the brief you were given, and say what you have attached.'
+                    : 'Say what you have drafted and what you have attached.'}
+                </p>
+              </div>
+              <div class="grc-actionbar">
+                <button type="submit" class="grc-btn grc-btn--primary">
+                  Return to the unit manager
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {/* The manager releases it. Deliberately absent while a delegate is
+            drafting: the stage machine refuses it and the screen does not offer
+            what the server will not do. */}
+        {mayRelease && (
+          <section class="grc-section">
+            <h2>Response to audit (round {currentRound})</h2>
             <form method="post" action="/api/auditee-responses/submit" class="grc-form">
               <input type="hidden" name="work_paper_id" value={id} />
               <div class="grc-field">
@@ -297,7 +532,8 @@ const failed = Astro.url.searchParams.get('error');
                   required
                 />
                 <p class="grc-field__hint">
-                  Explain what management accepts, disputes, and what will be done.
+                  Explain what management accepts, disputes, and what will be done. Releasing sends
+                  it to internal audit and closes any open delegation.
                 </p>
               </div>
 
@@ -323,7 +559,7 @@ const failed = Astro.url.searchParams.get('error');
 
               <div class="grc-actionbar">
                 <button type="submit" class="grc-btn grc-btn--primary">
-                  Submit response
+                  Release to audit
                 </button>
                 <a
                   href={`/action-plans/new?work_paper=${encodeURIComponent(id ?? '')}`}
@@ -336,10 +572,50 @@ const failed = Astro.url.searchParams.get('error');
           </section>
         )}
 
-        {!mayRespond && canRespondPerm && assigned && awaitingReview && (
+        {/* The plans management has proposed against this observation, on the page
+            where they are proposing them: a response that says "we will fix it"
+            and a plan that says how belong in the same view. */}
+        {myPlans.length > 0 && (
+          <section class="grc-section">
+            <h2>Action plans on this observation</h2>
+            <ul class="grc-plainlist">
+              {myPlans.map((p) => (
+                <li>
+                  <a href={`/action-plans/${p.id}`}>{p.actionNumber}</a>
+                  <span> {p.description.slice(0, 120)}</span>
+                  {p.auditeeProposed && (
+                    <span class="grc-badge grc-badge--pending">Proposed by auditee</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Evidence, attached by whoever is drafting: the delegate's uploads and
+            the manager's are the same evidence on the same observation, stored
+            through the organisation's own connector like any other. */}
+        <section class="grc-section">
+          <GrcEvidence
+            entityType="work_paper"
+            entityId={id!}
+            items={evidence}
+            canUpload={canUploadEvidence}
+            canDelete={mayDraft}
+            storageReady={storageReady}
+            heading="Supporting evidence"
+          />
+        </section>
+
+        {!mayRelease && !mayReturn && !mayDelegate && standing.isCc && !standing.isResponsible && (
           <p class="grc-notice" role="status">
-            Your round {currentRound} response is with the auditor. You will be able to respond
-            again if changes are requested.
+            You are copied on this observation, so you will be told about every step. The response
+            itself is the unit manager's to give.
+          </p>
+        )}
+        {awaitingReview && !standing.isAudit && (
+          <p class="grc-notice" role="status">
+            Round {awaitingReview.round} is with internal audit. You will be told what they decide.
           </p>
         )}
       </>
@@ -388,6 +664,40 @@ const failed = Astro.url.searchParams.get('error');
   .grc-deadline__round {
     margin-left: auto;
   }
+  /* Where the observation is on the auditee side. Colour alone never carries it:
+     the stage is spelled out in the badge, so the meaning survives without it. */
+  .grc-stage {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--grc-line);
+    border-left: 3px solid var(--grc-navy-2);
+    border-radius: var(--grc-radius-sm);
+    background: var(--grc-paper);
+  }
+  .grc-stage[data-auditee-stage='WITH_AUDIT'] {
+    border-left-color: var(--grc-gold-deep);
+  }
+  .grc-stage[data-auditee-stage='CLOSED'] {
+    border-left-color: var(--grc-status-impl);
+  }
+  .grc-stage__badge {
+    font-weight: 700;
+    color: var(--grc-navy);
+  }
+  .grc-stage__who {
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+  }
+  .grc-stage__hint {
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: var(--grc-fs-caption);
+    color: var(--grc-muted);
+  }
   .grc-rounds {
     list-style: none;
     margin: 0;
@@ -397,14 +707,25 @@ const failed = Astro.url.searchParams.get('error');
   }
   .grc-round {
     border: 1px solid var(--grc-line);
+    border-left: 3px solid var(--grc-line);
     border-radius: var(--grc-radius-sm);
     background: var(--grc-surface);
     padding: 0.85rem 1rem;
   }
+  /* Who spoke, at a glance, down the left edge of the story. */
+  .grc-round[data-tone='audit'] {
+    border-left-color: var(--grc-navy-2);
+  }
+  .grc-round[data-tone='auditee'] {
+    border-left-color: var(--grc-gold-deep);
+  }
+  .grc-round[data-tone='delegate'] {
+    border-left-color: var(--grc-stone);
+  }
   .grc-round__head {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: baseline;
     gap: 0.6rem;
     margin-bottom: 0.5rem;
   }
@@ -414,20 +735,23 @@ const failed = Astro.url.searchParams.get('error');
   .grc-round__who {
     font-size: var(--grc-fs-caption);
     color: var(--grc-muted);
+    margin-left: auto;
   }
   .grc-round__body {
     margin: 0;
-    white-space: pre-wrap;
   }
-  .grc-round__review {
-    margin: 0.6rem 0 0;
-    padding-top: 0.6rem;
-    border-top: 1px dashed var(--grc-line);
-    white-space: pre-wrap;
+  .grc-plainlist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.4rem;
   }
-  .grc-round__form {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--grc-line);
+  .grc-plainlist li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: var(--grc-fs-small);
   }
 </style>

@@ -1,0 +1,345 @@
+---
+/**
+ * Administration → Design reference.
+ *
+ * EVERY PRIMITIVE IN EVERY STATE, ON ONE PAGE, WITH NO BUILD TOOLING.
+ *
+ * Phase 28 asks for a component explorer and section 0 forbids Storybook,
+ * which is a large dependency with its own build, its own config and its own
+ * server. This is the alternative and it is better for this repository in
+ * three ways: it renders the REAL components rather than a story wrapper
+ * around them, so a divergence is impossible; it needs no tooling, so it
+ * cannot fall out of date with the build; and it is one file, so nobody has
+ * to maintain a story per component.
+ *
+ * It is behind the administration permission, not because the markup is
+ * sensitive, but because it belongs to the people who maintain the interface
+ * and would only confuse everybody else.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsSkeleton from '@/components/cms/CmsSkeleton.astro';
+import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
+import CmsTimeline from '@/components/cms/CmsTimeline.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
+import CmsAuditDiff from '@/components/cms/CmsAuditDiff.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsAvatar from '@/components/cms/CmsAvatar.astro';
+import CmsTooltip from '@/components/cms/CmsTooltip.astro';
+import CmsBreadcrumb from '@/components/cms/CmsBreadcrumb.astro';
+import { canManageUsers } from '@/lib/cms/permissions';
+import { CMS_ICONS, type CmsIconName } from '@/components/cms/icons';
+import { barChart } from '@/lib/cms/charts/svg';
+import { diffPayloads } from '@/lib/cms/audit/diff';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canManageUsers(permissions);
+
+// The tones CmsBadge actually accepts. 'accent' was listed here and is not one
+// of them, so the showcase was claiming a state the component cannot render.
+const TONES = ['neutral', 'success', 'warning', 'danger', 'info'] as const;
+const VARIANTS = ['primary', 'secondary', 'subtle', 'ghost', 'danger'] as const;
+
+const iconNames = Object.keys(CMS_ICONS) as CmsIconName[];
+
+const chart = barChart(
+  {
+    name: 'Orders by affiliate',
+    token: 'cms-series-1',
+    points: [
+      { label: 'Kenya', value: 412 },
+      { label: 'Uganda', value: 168 },
+      // A gap, so the reference shows what an absent value looks like: a
+      // marked space reading "n/a", never a bar of height zero.
+      { label: 'Tanzania', value: null },
+    ],
+  },
+  { unit: 'orders' },
+);
+
+const diff = diffPayloads(
+  JSON.stringify({ status: 'ACTIVE', target_minutes: 240, password_hash: 'secret', notes: null }),
+  JSON.stringify({ status: 'ON_HOLD', target_minutes: 120, password_hash: 'new', notes: 'Added' }),
+);
+---
+
+<CmsLayout title="Design reference">
+  <CmsPageHeader
+    title="Design reference"
+    crumbs={[
+      { label: 'Administration', href: '/app/administration' },
+      { label: 'Design reference' },
+    ]}
+  />
+
+  {
+    !mayRead ? (
+      <CmsEmptyState
+        icon="administration"
+        title="You do not have permission to see the design reference"
+        description="Ask an administrator for access."
+      />
+    ) : (
+      <div class="flex flex-col gap-6">
+        <p class="max-w-prose rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+          This page imports the same components the application imports. There is no story wrapper
+          and no separate build, so it cannot drift from what a user sees. It replaces a component
+          explorer that would have been a large dependency for the same result.
+        </p>
+
+        <CmsCard title="Buttons">
+          <div class="flex flex-col gap-4">
+            <div class="flex flex-wrap items-center gap-2">
+              {VARIANTS.map((variant) => (
+                <CmsButton variant={variant}>{variant}</CmsButton>
+              ))}
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <CmsButton variant="primary" size="lg">
+                Large
+              </CmsButton>
+              <CmsButton variant="primary" icon="plus">
+                With icon
+              </CmsButton>
+              <CmsButton variant="primary" disabled>
+                Disabled
+              </CmsButton>
+              <CmsButton variant="primary" loading>
+                Working
+              </CmsButton>
+              <CmsButton variant="secondary" href="#buttons">
+                As a link
+              </CmsButton>
+            </div>
+          </div>
+        </CmsCard>
+
+        <CmsCard title="Badges">
+          <div class="flex flex-wrap items-center gap-2">
+            {TONES.map((tone) => (
+              <CmsBadge tone={tone} label={tone} />
+            ))}
+            <CmsBadge tone="warning" label="With icon" icon="statusWarn" />
+          </div>
+        </CmsCard>
+
+        <CmsCard title="Form controls">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <CmsInput id="ref-text" name="ref-text" label="Text" value="A value" />
+            <CmsInput
+              id="ref-hint"
+              name="ref-hint"
+              label="With a hint"
+              hint="Hints sit under the control and are read out with it."
+            />
+            <CmsInput
+              id="ref-error"
+              name="ref-error"
+              label="With an error"
+              value="not-an-email"
+              error="Enter an email address, such as name@example.com."
+            />
+            <CmsInput id="ref-required" name="ref-required" label="Required" required />
+            <CmsInput
+              id="ref-disabled"
+              name="ref-disabled"
+              label="Disabled"
+              disabled
+              value="Set elsewhere"
+            />
+            <CmsInput id="ref-date" name="ref-date" label="Date" type="date" value="2026-08-27" />
+            <CmsInput
+              id="ref-password"
+              name="ref-password"
+              label="Password"
+              type="password"
+              revealable
+            />
+            <CmsSelect
+              id="ref-select"
+              name="ref-select"
+              label="Select"
+              value="two"
+              options={[
+                { value: 'one', label: 'One' },
+                { value: 'two', label: 'Two' },
+              ]}
+            />
+            <CmsCheckbox id="ref-check" name="ref-check" label="A checkbox" />
+            <CmsCheckbox id="ref-check-on" name="ref-check-on" label="Checked" checked />
+          </div>
+        </CmsCard>
+
+        <CmsCard title="Tabs and breadcrumbs">
+          <div class="flex flex-col gap-4">
+            <CmsBreadcrumb
+              items={[
+                { label: 'Administration', href: '/app/administration' },
+                { label: 'Design reference' },
+              ]}
+            />
+            <CmsTabs
+              label="Reference tabs"
+              current="#one"
+              tabs={[
+                { label: 'First', href: '#one' },
+                { label: 'Second', href: '#two', count: 12 },
+                { label: 'Third', href: '#three' },
+              ]}
+            />
+          </div>
+        </CmsCard>
+
+        <CmsCard title="Indicators">
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <CmsKpiCard label="Orders" value="412" />
+            <CmsKpiCard
+              label="Finance turnaround"
+              value="37 min"
+              context="Target 45 min"
+              tone="positive"
+            />
+            <CmsKpiCard label="Unknown on purpose" value="Not available" />
+          </div>
+        </CmsCard>
+
+        <CmsCard title="Table, with rows and without" bodyClass="p-0">
+          <div class="flex flex-col gap-6 px-4 py-3">
+            <CmsDataTable
+              caption="With rows"
+              columns={[
+                { key: 'a', label: 'Customer' },
+                { key: 'b', label: 'Orders', numeric: true },
+                { key: 'c', label: 'Status' },
+              ]}
+            >
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-ink">BluePeak Transport Ltd</td>
+                <td class="px-4 py-2.5 text-right text-cms-ink tabular-nums">12</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge tone="success" label="Active" />
+                </td>
+              </tr>
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-ink">Riftline Logistics Ltd</td>
+                {/* An unknown value, which is blank and says so, never a zero. */}
+                <td class="px-4 py-2.5 text-right text-cms-muted">Not available</td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge tone="warning" label="On hold" />
+                </td>
+              </tr>
+            </CmsDataTable>
+
+            <CmsDataTable caption="Empty" columns={[{ key: 'a', label: 'Customer' }]} empty />
+
+            <CmsDataTable
+              caption="Loading"
+              columns={[
+                { key: 'a', label: 'Customer' },
+                { key: 'b', label: 'Orders' },
+              ]}
+              loading
+              rowCount={3}
+            />
+          </div>
+        </CmsCard>
+
+        <CmsCard title="States">
+          <div class="flex flex-col gap-6">
+            <CmsEmptyState
+              icon="search"
+              title="Nothing matched"
+              description="An empty result is not a claim that nothing exists."
+            />
+            <CmsErrorState
+              title="That could not be loaded"
+              description="Please try again in a moment."
+            />
+            <div>
+              <p class="mb-2 text-cms-label text-cms-muted">Skeleton</p>
+              <CmsSkeleton />
+            </div>
+          </div>
+        </CmsCard>
+
+        <CmsCard title="Timeline">
+          <CmsTimeline
+            label="Reference timeline"
+            entries={[
+              {
+                title: 'Order created',
+                timestamp: '2026-08-01T08:00:00Z',
+                timeLabel: '1 August 2026, 08:00',
+                detail: 'Raised from the Kenya extract.',
+              },
+              {
+                title: 'Finance approved',
+                timestamp: '2026-08-01T09:30:00Z',
+                timeLabel: '1 August 2026, 09:30',
+                detail: '90 minutes on stage.',
+                actor: 'Gabriel Musembi',
+                tone: 'success',
+              },
+              {
+                title: 'Invoiced',
+                timestamp: '2026-08-02T11:00:00Z',
+                timeLabel: '2 August 2026, 11:00',
+              },
+            ]}
+          />
+        </CmsCard>
+
+        <CmsCard title="Chart">
+          <CmsChart
+            title="Orders by affiliate"
+            definition="Sales orders created in the period, counted per affiliate. Not a rate. Date basis: sales_orders.order_created_at."
+            chart={chart}
+            coverage="580 of 580 orders carry an affiliate"
+            unit="orders"
+          />
+        </CmsCard>
+
+        <CmsCard title="Audit diff" description="The one diff renderer, including a masked field.">
+          <CmsAuditDiff diff={diff} showTechnical={false} />
+        </CmsCard>
+
+        <CmsCard title="Icons" description="Every icon in the set, at the size the interface uses.">
+          <ul class="grid grid-cols-3 gap-3 sm:grid-cols-6">
+            {iconNames.map((name) => (
+              <li class="flex flex-col items-center gap-1 rounded-cms border border-cms-line px-2 py-3">
+                <CmsIcon name={name} size={20} />
+                <span class="text-cms-caption text-cms-muted">{name}</span>
+              </li>
+            ))}
+          </ul>
+        </CmsCard>
+
+        <CmsCard title="Avatar and tooltip">
+          <div class="flex flex-wrap items-center gap-4">
+            <CmsAvatar name="Catherine Mwangi" />
+            <CmsAvatar name="Gabriel Musembi" size="sm" />
+            <CmsAvatar name="Hassan Ali" tone="onNavy" />
+            <CmsTooltip
+              id="ref-tooltip"
+              text="Explains a control without hiding it behind hover alone: it opens on focus too."
+            >
+              <CmsButton variant="secondary">Hover or focus me</CmsButton>
+            </CmsTooltip>
+          </div>
+        </CmsCard>
+      </div>
+    )
+  }
+</CmsLayout>

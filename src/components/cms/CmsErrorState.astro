@@ -1,0 +1,34 @@
+---
+/**
+ * The failure state for a region that could not load.
+ *
+ * Distinct from CmsEmptyState on purpose: empty means there is nothing to show,
+ * this means something went wrong, and blurring the two teaches people to
+ * ignore both. It carries role="alert" so it is announced when it replaces a
+ * loading region, and it always offers a way forward through the slot.
+ */
+import CmsIcon from './CmsIcon.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  class?: string;
+}
+const { title, description, class: className } = Astro.props;
+---
+
+<div
+  role="alert"
+  class:list={[
+    'flex flex-col items-start gap-2 rounded-cms-lg border border-cms-negative/30',
+    'bg-cms-negative-tint px-5 py-4',
+    className,
+  ]}
+>
+  <p class="flex items-center gap-2 text-cms-card font-semibold text-cms-negative">
+    <CmsIcon name="statusBreach" size={17} class="shrink-0" />
+    {title}
+  </p>
+  {description && <p class="text-cms-body-sm text-cms-ink">{description}</p>}
+  <slot />
+</div>

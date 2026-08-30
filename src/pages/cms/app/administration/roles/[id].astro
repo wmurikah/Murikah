@@ -1,0 +1,293 @@
+---
+/**
+ * A role: its permission matrix, and the people who hold it.
+ *
+ * THE MATRIX IS RENDERED FROM THE TABLE
+ * Every module heading, resource group and action checkbox below comes from
+ * `permissions`. Nothing here names `ADMIN`, `CRM`, `VIEW` or any other value.
+ * When Build Prompt 05's organisation codes and later phases' codes are
+ * inserted, this grows with no code change.
+ *
+ * It is grouped module, then resource, then action, and never presented as a
+ * flat list of raw permission strings. Security configuration that looks like
+ * database rows gets configured like database rows.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
+import CmsMatrixScript from '@/components/cms/CmsMatrixScript.astro';
+
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageRoles } from '@/lib/cms/permissions';
+import {
+  getRole,
+  listRoleHolders,
+  permissionMatrix,
+  type MatrixModule,
+  type RoleRow,
+} from '@/lib/cms/repos/rbacAdmin';
+
+export const prerender = false;
+
+const mayManage = canManageRoles(Astro.locals.cms?.user.permissions ?? []);
+const roleId = Astro.params.id ?? '';
+
+let role: RoleRow | null = null;
+let modules: MatrixModule[] = [];
+let holders: Awaited<ReturnType<typeof listRoleHolders>> = [];
+let loadFailed = false;
+
+if (mayManage) {
+  try {
+    const db = await getDb(getCmsEnv());
+    role = await getRole(db, roleId);
+    if (role) {
+      [modules, holders] = await Promise.all([
+        permissionMatrix(db, roleId),
+        listRoleHolders(db, roleId),
+      ]);
+    }
+  } catch (error) {
+    console.error('[cms.roles.detail] load failed', error);
+    loadFailed = true;
+  }
+}
+
+/** `PRODUCT_CATALOG` is a database value, not a phrase a person should read. */
+const label = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const totalGranted = modules.reduce((n, m) => n + m.grantedCount, 0);
+const total = modules.reduce((n, m) => n + m.totalCount, 0);
+---
+
+<CmsLayout title={role?.roleName ?? 'Role'}>
+  {
+    !mayManage ? (
+      <CmsErrorState
+        title="You do not have access to role administration"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="This role could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : !role ? (
+      <CmsErrorState
+        title="That role could not be found"
+        description="It may have been renamed, or the link may be out of date."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          auditEntityType="ACCESS_ROLE"
+          auditEntityId={roleId}
+          title={role.roleName}
+          description={role.description ?? undefined}
+          crumbs={[
+            { label: 'Administration', href: '/app/administration' },
+            { label: 'Roles and permissions', href: '/app/administration/roles' },
+            { label: role.roleName },
+          ]}
+        >
+          {role.isSystemRole && <CmsBadge slot="actions" tone="warning" label="System role" />}
+          <CmsBadge
+            slot="actions"
+            tone={role.active ? 'success' : 'neutral'}
+            label={role.active ? 'Active' : 'Inactive'}
+          />
+        </CmsPageHeader>
+
+        {role.isSystemRole && (
+          <p class="flex items-start gap-2 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2 text-cms-body-sm text-cms-ink">
+            <CmsIcon name="statusWarn" size={15} class="mt-0.5 shrink-0" />
+            <span>
+              This is a system role. The platform depends on it existing, and a change here reaches
+              everybody who holds it.
+            </span>
+          </p>
+        )}
+
+        <form id="cms-matrix-form" data-role-id={role.roleId} class="flex flex-col gap-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-cms-body-sm text-cms-muted">
+              <span id="cms-matrix-count" class="font-semibold text-cms-ink">
+                {totalGranted}
+              </span>
+              {' of '}
+              {total} permissions granted.
+            </p>
+            <div class="flex items-center gap-2">
+              <CmsButton variant="ghost" type="button" data-cms-matrix-reset>
+                Discard changes
+              </CmsButton>
+              <button
+                type="submit"
+                id="cms-matrix-save"
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Save permissions
+              </button>
+            </div>
+          </div>
+
+          <p
+            id="cms-matrix-error"
+            role="alert"
+            hidden
+            class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+          />
+
+          {/*
+            The impact summary, built on the client from the ticks as they
+            change. Security configuration should say what it is about to do in
+            words before it does it.
+          */}
+          <div
+            id="cms-matrix-impact"
+            role="status"
+            hidden
+            class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-ink"
+          />
+
+          {modules.map((module) => (
+            <CmsCard>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-cms-card font-semibold text-cms-navy">{label(module.module)}</h2>
+                <div class="flex items-center gap-2">
+                  <span class="text-cms-caption text-cms-muted" data-module-count={module.module}>
+                    {module.grantedCount} of {module.totalCount}
+                  </span>
+                  <CmsButton variant="ghost" type="button" data-cms-select-all={module.module}>
+                    Select all
+                  </CmsButton>
+                  <CmsButton variant="ghost" type="button" data-cms-clear={module.module}>
+                    Clear
+                  </CmsButton>
+                </div>
+              </div>
+
+              <div class="mt-3 flex flex-col gap-3">
+                {module.resources.map((resource) => (
+                  <fieldset class="rounded-cms border border-cms-line p-3">
+                    <legend class="px-1 text-cms-label font-semibold text-cms-ink">
+                      {label(resource.resource)}
+                    </legend>
+                    <div class="flex flex-wrap gap-x-6 gap-y-2">
+                      {resource.actions.map((action) => (
+                        <label class="inline-flex items-start gap-2 text-cms-body-sm">
+                          <input
+                            type="checkbox"
+                            name="permission"
+                            value={action.permissionId}
+                            checked={action.granted}
+                            data-module={module.module}
+                            data-code={action.code}
+                            data-was={action.granted ? '1' : ''}
+                            class="mt-0.5 h-4 w-4 rounded border-cms-border text-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                          />
+                          <span class="flex flex-col">
+                            <span class="text-cms-ink">{label(action.action)}</span>
+                            {action.description && (
+                              <span class="text-cms-caption text-cms-muted">
+                                {action.description}
+                              </span>
+                            )}
+                            {action.withheld && (
+                              // A withheld row and an absent row read the same
+                              // to the resolver, and saying so is the honest
+                              // thing: unticking here does not take the code
+                              // away from somebody who also holds it elsewhere.
+                              <span class="text-cms-caption text-cms-caution">
+                                Recorded as withheld on this role. Another role granting the same
+                                code still grants it.
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                ))}
+              </div>
+            </CmsCard>
+          ))}
+        </form>
+
+        {/*
+          THE IMPACT LINE. The point of this screen is that nobody should have
+          to search user by user to answer "who would this change affect". The
+          count is stated before the table so the answer is visible without
+          reading it, and the current holders are separated from the ended
+          ones because only the first group is affected by a change today.
+        */}
+        <p class="max-w-prose rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+          <span class="font-semibold text-cms-ink">
+            Changing this role changes what {holders.filter((row) => row.current).length}{' '}
+            {holders.filter((row) => row.current).length === 1 ? 'person' : 'people'} can do.
+          </span>{' '}
+          It currently grants {totalGranted} of {total} permissions. A permission added here reaches
+          every current holder at once, in whatever scope each of them holds it. Approval authority
+          is granted separately and is not affected by anything on this page; see the{' '}
+          <a
+            href="/app/administration/access-review"
+            class="font-semibold text-cms-royal underline underline-offset-2 outline-none hover:text-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            access review
+          </a>{' '}
+          for the two side by side.
+        </p>
+
+        <h2 class="text-cms-card font-semibold text-cms-navy">Who holds this role</h2>
+        <CmsDataTable
+          caption="Holders"
+          columns={[
+            { key: 'name', label: 'Person' },
+            { key: 'scopes', label: 'Data scopes' },
+            { key: 'status', label: 'Status' },
+          ]}
+          empty={holders.length === 0}
+        >
+          {holders.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={`/app/administration/users/${row.userId}`}
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.displayName}
+                </a>
+                <span class="block text-cms-caption text-cms-muted">{row.email}</span>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">
+                {row.scopes.length === 0
+                  ? 'None, so this role reaches no records'
+                  : row.scopes.join('; ')}
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge
+                  tone={row.current ? 'success' : 'neutral'}
+                  label={row.current ? 'Current' : 'Ended'}
+                />
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="customers"
+              title="Nobody holds this role"
+              description="Assign it from a person's Roles tab."
+            />
+          </Fragment>
+        </CmsDataTable>
+        <CmsMatrixScript />
+      </Fragment>
+    )
+  }
+</CmsLayout>

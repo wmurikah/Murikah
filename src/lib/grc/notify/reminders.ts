@@ -106,6 +106,10 @@ export async function runStaleReminders(db: Client, clock: Clock): Promise<{ que
     const data = {
       reference: String(row.reference ?? id),
       title: String(row.title ?? ''),
+      // The status the digest lists the finding under (Build Prompt 60). These
+      // are the drafts by definition, but it is carried rather than assumed so
+      // the table says what the row actually is.
+      status: 'Draft',
       link: entityLink('work_paper', id),
     };
     await queueNotification(db, organizationId, {
