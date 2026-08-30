@@ -131,17 +131,17 @@ const stageOptions =
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to opportunities"
-        description="Ask a system administrator for the CRM.OPPORTUNITIES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="This opportunity could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : opportunity === null ? (
       <CmsErrorState
         title="Opportunity not found"
-        description="Either it does not exist or it sits outside your data scope. The two are answered the same way on purpose."
+        description="The opportunity may have been removed, or you may not have access to it."
       />
     ) : (
       <Fragment>
@@ -272,10 +272,7 @@ const stageOptions =
             </dl>
           </CmsCard>
 
-          <CmsCard
-            title="Products"
-            description="From the catalogue only. There is no free-text product on an opportunity; early uncertainty belongs on the lead."
-          >
+          <CmsCard title="Products">
             {products.length === 0 ? (
               <CmsEmptyState
                 icon="crm"
@@ -338,10 +335,7 @@ const stageOptions =
           </CmsCard>
         </div>
 
-        <CmsCard
-          title="Stage history"
-          description="Every move, with the time spent in the previous stage computed. History is written in the same transaction as the move, so this list cannot disagree with the current stage."
-        >
+        <CmsCard title="Stage history">
           <ol class="flex flex-col gap-3">
             {history.map((step) => (
               <li class="flex items-start gap-3">

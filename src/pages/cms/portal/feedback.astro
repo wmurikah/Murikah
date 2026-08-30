@@ -89,7 +89,7 @@ const missed = surveys.filter((row) => row.answeredAt === null && row.expired);
                     <CmsBadge tone="warning" label="Waiting for you" />
                   ) : (
                     <a
-                      href={`/portal/service/${row.caseId}`}
+                      href={`/portal/helpdesk/${row.caseId}`}
                       class="min-h-10 rounded-cms border border-cms-border px-3 py-2 text-cms-body-sm font-semibold text-cms-royal outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus"
                     >
                       Answer
@@ -124,10 +124,7 @@ const missed = surveys.filter((row) => row.answeredAt === null && row.expired);
         )}
 
         {missed.length > 0 && (
-          <CmsCard
-            title="Closed without an answer"
-            description="These have passed their date. There is nothing you need to do."
-          >
+          <CmsCard title="Closed without an answer">
             <ul class="flex flex-col gap-2">
               {missed.map((row) => (
                 <li class="text-cms-body-sm text-cms-muted">

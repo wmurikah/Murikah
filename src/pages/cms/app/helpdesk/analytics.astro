@@ -183,19 +183,19 @@ const categoryChart = distributionChart(
     points: categories.slice(0, 10).map((row) => ({
       label: `${row.categoryName} / ${row.subcategoryName}`,
       value: row.cases,
-      href: drillTo('/app/service', filter, { caseCategoryId: row.caseCategoryId }),
+      href: drillTo('/app/helpdesk', filter, { caseCategoryId: row.caseCategoryId }),
     })),
   },
   { unit: 'cases' },
 );
 ---
 
-<CmsLayout title="Service analytics">
+<CmsLayout title="Helpdesk analytics">
   {
     !mayView ? (
       <CmsErrorState
         title="You do not have access to service analytics"
-        description="Ask a system administrator for the SERVICE.CASES.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ||
       signals === null ||
@@ -203,16 +203,16 @@ const categoryChart = distributionChart(
       sla === null ||
       coverage === null ? (
       <CmsErrorState
-        title="Service analytics could not be loaded"
-        description="The database did not answer."
+        title="Helpdesk analytics could not be loaded"
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
         <CmsPageHeader
-          title="Service analytics"
+          title="Helpdesk analytics"
           crumbs={[
             { label: 'Home', href: '/app' },
-            { label: 'Service', href: '/app/service' },
+            { label: 'Helpdesk', href: '/app/helpdesk' },
             { label: 'Analytics' },
           ]}
         />
@@ -229,7 +229,7 @@ const categoryChart = distributionChart(
             'RESOLVED',
             'CLOSED',
           ]}
-          action="/app/service/analytics"
+          action="/app/helpdesk/analytics"
           showCredit={false}
         />
 
@@ -314,7 +314,7 @@ const categoryChart = distributionChart(
                     {card.comparisonPeriod && `. Compared against ${card.comparisonPeriod}`}
                   </p>
                   <a
-                    href={drillTo('/app/service', filter, card.drill)}
+                    href={drillTo('/app/helpdesk', filter, card.drill)}
                     class="mt-2 inline-block text-cms-body-sm font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
                   >
                     Open the records
@@ -398,10 +398,7 @@ const categoryChart = distributionChart(
           <h2 id="sla" class="sr-only">
             SLA
           </h2>
-          <CmsCard
-            title="SLA"
-            description="External is what the customer was promised. Internal is which stage or team held responsibility. Two different questions."
-          >
+          <CmsCard title="SLA">
             <CmsDataTable
               caption="SLA"
               columns={[
@@ -476,10 +473,7 @@ const categoryChart = distributionChart(
           <h2 id="satisfaction" class="sr-only">
             Satisfaction and handoffs
           </h2>
-          <CmsCard
-            title="Satisfaction"
-            description="Three instruments, three scales, never averaged together."
-          >
+          <CmsCard title="Satisfaction">
             <CmsDataTable
               caption="Satisfaction"
               columns={[

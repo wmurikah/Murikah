@@ -558,21 +558,13 @@ test('the computed stage duration and the source variance are shown side by side
   assert.ok(perStageDiffers > 100, 'and so differs from the per stage duration nearly everywhere');
 });
 
-test('an upload with no affiliate is refused before anything is written', async () => {
+test('an upload with no affiliate is Group scope, and an unknown one is still refused', async () => {
   const c = await db();
-  const rejected = await validatePoWorkbook(
-    asClient(c),
-    PO_FILE,
-    upload({ affiliateId: null }),
-    CTX,
-  );
-  assert.equal(rejected.batchId, null);
-  assert.ok(rejected.rejectedReason?.includes('no affiliate'));
-  const batches = await c.execute(
-    `SELECT COUNT(*) AS n FROM import_batches WHERE uploaded_at >= '2026-08-27'`,
-  );
-  assert.equal(Number(batches.rows[0]?.n), 0);
 
+  // An affiliate that is not configured is still refused, and BEFORE a batch
+  // row exists: were the file hash recorded against a rejected batch, the
+  // corrected re-upload of the same bytes would come back as an exact
+  // duplicate and could never be imported.
   const unknown = await validatePoWorkbook(
     asClient(c),
     PO_FILE,
@@ -580,10 +572,27 @@ test('an upload with no affiliate is refused before anything is written', async 
     CTX,
   );
   assert.ok(unknown.rejectedReason?.includes('not configured'));
+  const batches = await c.execute(
+    `SELECT COUNT(*) AS n FROM import_batches WHERE uploaded_at >= '2026-08-27'`,
+  );
+  assert.equal(Number(batches.rows[0]?.n), 0, 'nothing is written for a refused affiliate');
 
-  // Nothing was recorded, so the same bytes import cleanly once corrected.
-  const corrected = await validatePoWorkbook(asClient(c), PO_FILE, upload(), CTX);
-  assert.equal(corrected.rowsNew, 45);
+  // NO AFFILIATE COLUMN IS NOT A MISSING INPUT. The extract's 29 headers are
+  // approval dates, approvers, variances and the order's own fields; not one
+  // of them names an entity. A file that names no entity measures across all
+  // of them, so the batch is Group scope and validates. Asking the operator to
+  // pick one would have them state a fact the file never carried.
+  const groupWide = await validatePoWorkbook(
+    asClient(c),
+    PO_FILE,
+    upload({ affiliateId: null }),
+    CTX,
+  );
+  assert.equal(groupWide.rejectedReason, null, 'a Group-wide extract is legitimate');
+  assert.equal(groupWide.affiliateId, null, 'and it claims no affiliate');
+  assert.equal(groupWide.rowsReceived, 45);
+  assert.equal(groupWide.uniqueOrders, 45, '45 rows are 45 orders');
+  assert.equal(groupWide.rowsNew, 45, 'and all 45 are new');
 });
 
 test('status is derived conservatively and never claims receipt or posting', async () => {

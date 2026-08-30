@@ -87,8 +87,7 @@
         if (data.notPermitted.length > 0) {
           const note = document.createElement('p');
           note.className = 'border-t border-cms-line px-4 py-2 text-cms-caption text-cms-muted';
-          note.textContent =
-            'Some record types were not searched because you do not have permission for them.';
+          note.textContent = 'Some record types were not searched.';
           panel.appendChild(note);
         }
         status.textContent = `No results for ${data.query}.`;

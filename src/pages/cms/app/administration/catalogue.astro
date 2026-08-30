@@ -137,12 +137,12 @@ const selectionTitle =
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to the product catalogue"
-        description="Ask a system administrator for the ADMIN.PRODUCT_CATALOG.MANAGE permission. Nothing on this page is loaded without it."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed || tree === null ? (
       <CmsErrorState
         title="The catalogue could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
@@ -441,8 +441,7 @@ const selectionTitle =
 
               {products.total > products.pageSize && (
                 <p class="mt-3 text-cms-body-sm text-cms-muted">
-                  Showing {products.items.length} of {products.total}. Searching and paging happen
-                  on the server, so the whole catalogue is never sent to the browser.
+                  Showing {products.items.length} of {products.total} products
                 </p>
               )}
             </CmsCard>

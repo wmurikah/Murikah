@@ -15,6 +15,7 @@
 import CmsAvatar from './CmsAvatar.astro';
 import CmsDropdown from './CmsDropdown.astro';
 import CmsIcon from './CmsIcon.astro';
+import CmsWordmark from './CmsWordmark.astro';
 import CmsIconButton from './CmsIconButton.astro';
 import CmsMenuItem from './CmsMenuItem.astro';
 
@@ -83,8 +84,7 @@ const context = user ? organisationLine(user.assignment) : null;
       >/</kbd
     >
     <span id="cms-search-note" class="sr-only">
-      Press the forward slash key from anywhere to search. Results appear below as you type and are
-      grouped by record type. Only records you are permitted to see are searched.
+      Press the forward slash key from anywhere to search.
     </span>
     <div
       id="cms-search-results"
@@ -98,6 +98,17 @@ const context = user ? organisationLine(user.assignment) : null;
   </div>
 
   <div class="ms-auto flex items-center gap-1">
+    {
+      /*
+        Opens the assistant, which is rendered by the shell and reads nothing
+        until this is pressed. A real control: it opens a real panel.
+      */
+    }
+    {
+      principal !== null && (
+        <CmsIconButton icon="chat" label="Open the assistant" data-cms-modal-open="cms-assistant" />
+      )
+    }
     <CmsDropdown id="cms-notifications" label="Notifications">
       <span
         slot="trigger"
@@ -165,9 +176,7 @@ const context = user ? organisationLine(user.assignment) : null;
             {context && <p class="text-cms-caption text-cms-muted">{context}</p>}
           </div>
 
-          <p class="px-2.5 py-2 text-cms-caption text-cms-muted">
-            Profile settings arrive with the administration module.
-          </p>
+          <p class="px-2.5 py-2 text-cms-caption text-cms-muted">Account and profile settings</p>
 
           {/*
             A POST form, never a link. Sign-out on GET can be triggered by any

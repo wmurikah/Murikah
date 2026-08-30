@@ -79,12 +79,16 @@ export interface DashboardComposition {
   purchaseOrders: boolean;
   service: boolean;
   freshness: boolean;
-  /** The rule itself, in words, for the interface to show. */
-  rule: string;
 }
 
-export const COMPOSITION_RULE =
-  'This page is composed from your permission codes: a section appears when you hold the permission its module requires, and the scope resolver then decides which records it counts. There is no page per person and no section keyed to a job title.';
+/*
+ * There used to be a COMPOSITION_RULE here: a paragraph explaining to the
+ * reader that the page is composed from their permission codes, naming the
+ * scope resolver, and shipped to the dashboard as body text. It described the
+ * implementation to somebody who had asked for their figures, so it has gone
+ * along with the `rule` field that carried it. The behaviour it described is
+ * unchanged and is tested; it is simply no longer narrated on screen.
+ */
 
 export function composeDashboard(permissions: readonly string[]): DashboardComposition {
   const commercial = canViewOpportunities(permissions);
@@ -101,7 +105,6 @@ export function composeDashboard(permissions: readonly string[]): DashboardCompo
     purchaseOrders,
     service,
     freshness: canViewImports(permissions) || salesOrders || purchaseOrders,
-    rule: COMPOSITION_RULE,
   };
 }
 
@@ -217,7 +220,7 @@ export async function freshness(db: Client): Promise<Freshness[]> {
     },
     { source: 'CRM', lastImportedAt: null, lastFilename: null, wording: LIVE_WORDING, live: true },
     {
-      source: 'Service',
+      source: 'Helpdesk',
       lastImportedAt: null,
       lastFilename: null,
       wording: LIVE_WORDING,
@@ -346,7 +349,7 @@ export async function needsAttention(
         key: 'service_no_response',
         label: 'Cases with no first response',
         count: service.awaitingFirstResponse,
-        href: '/app/service',
+        href: '/app/helpdesk',
         destination: {},
         definition: 'Cases raised in this period with no first response timestamp recorded.',
       });
@@ -360,7 +363,7 @@ export async function needsAttention(
         key: 'service_cluster',
         label: `Complaint cluster: ${cluster.categoryName} / ${cluster.subcategoryName}`,
         count: cluster.complaints,
-        href: '/app/service',
+        href: '/app/helpdesk',
         destination: { caseCategoryId: cluster.caseCategoryId },
         definition:
           'Three or more complaints sharing one category in this period. A count of cases that look alike, not a finding about a cause.',
@@ -753,7 +756,7 @@ export async function connectedInsights(
         sampleSize: service.casesOpened + crm.steps[0].leads,
         comparisonPeriod: null,
         links: [
-          { label: 'Cases', href: '/app/service', params: {} },
+          { label: 'Cases', href: '/app/helpdesk', params: {} },
           { label: 'Leads', href: '/app/crm/leads', params: {} },
         ],
       });

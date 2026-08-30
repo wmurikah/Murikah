@@ -1,147 +1,122 @@
 ---
 /**
- * A single measure, at card size.
+ * One measure, at card size, in the reference deck's anatomy: a thin coloured
+ * rule along the top, a small capitalised label, one large figure, and a quiet
+ * line of context beneath.
  *
- * The number is the loudest thing on the card and uses tabular figures, so a
- * row of these stays aligned as the values change rather than jittering. The
- * trend is never a bare coloured arrow: direction, the figure and a word all
- * appear together, so it survives greyscale and a screen reader.
+ * THE TOP RULE CARRIES THE STATE, NOT DECORATION. Where the metric has a
+ * semantic reading, the rule takes that ramp; where it has none, it takes the
+ * neutral accent. It is never chosen for variety, which is what would turn a
+ * row of these into a row of colours that mean nothing.
  *
- * IT LINKS TO THE RECORDS BEHIND IT. A figure a person cannot open is a figure
- * they cannot act on, so `href` makes the number itself a link carrying the
- * filter it was computed under. A card with no destination, or whose value is
- * absent, renders as plain text: a link to a page that will show nothing is
- * worse than no link, because it costs a click to find that out.
+ * THE WHOLE CARD IS THE DRILL TARGET. Not the figure inside it: a four-pixel
+ * number is a poor target and Fitts's law is not a suggestion. The card is one
+ * anchor, so a keyboard user gets one stop and a mouse user gets the whole
+ * rectangle.
  *
- * ITS DEFINITION IS AVAILABLE, NOT PRINTED. The denominator and the date basis
- * live behind the control beside the label, for the reason given in
- * CmsDefinition.
+ * AND A CARD WITH NOTHING BEHIND IT IS NEVER A LINK. An absent value renders
+ * as text: a link to a page that will show nothing costs a click to discover
+ * and teaches people that the figures lie.
  *
- * NO BORDER AND NO SHADOW. The surface is a lighter plane than the canvas, and
- * that is the grouping. A card does not float.
- *
- * `loading` renders the card's own skeleton at the same size, so the row does
- * not reflow when the numbers arrive.
+ * THE DEFINITION IS ON DEMAND. Denominator and date basis sit behind the
+ * control in the corner, never printed under the number. It is a sibling of
+ * the card's anchor rather than inside it, because a <details> nested in an
+ * <a> is invalid and would swallow its own clicks.
  */
-import CmsIcon from './CmsIcon.astro';
-import CmsSkeleton from './CmsSkeleton.astro';
 import CmsDefinition from './CmsDefinition.astro';
-import type { CmsIconName } from './icons';
+import type { Chart } from '@/lib/cms/charts/svg';
 
 interface Props {
   label: string;
-  value?: string;
-  unit?: string;
-  icon?: CmsIconName;
+  /** Already formatted, or the absent string. */
+  value: string;
+  /** The target, the unit or the denominator. One quiet line, never a sentence. */
+  context?: string;
+  /** The metric's semantic reading, which colours the top rule. */
+  tone?: 'neutral' | 'positive' | 'caution' | 'negative' | 'info';
   /** Where the records behind this figure live, with the filter applied. */
   href?: string;
-  /** What is being measured. */
   definition?: string;
-  /** The population the figure was taken over. */
   denominator?: string;
-  /** Which timestamp decides the period. */
   dateBasis?: string;
-  trend?: {
-    direction: 'up' | 'down' | 'flat';
-    value: string;
-    sentiment: 'good' | 'bad' | 'neutral';
-  };
-  loading?: boolean;
+  /** A small trend inside the card, where direction matters more than figures. */
+  spark?: Chart;
   class?: string;
 }
 const {
   label,
   value,
-  unit,
-  icon,
+  context,
+  tone = 'neutral',
   href,
   definition,
   denominator,
   dateBasis,
-  trend,
-  loading = false,
+  spark,
   class: className,
 } = Astro.props;
 
-const sentiments = {
-  good: 'text-cms-positive',
-  bad: 'text-cms-negative',
-  neutral: 'text-cms-muted',
-};
-const directionWord = { up: 'up', down: 'down', flat: 'unchanged' };
-
-const absent = value === undefined || value === 'Not available' || value === '';
-const drillable = href !== undefined && href !== '' && !absent && !loading;
+const absent = value === 'Not available' || value === '';
+const drillable = href !== undefined && href !== '' && !absent;
 const hasDefinition = definition !== undefined || denominator !== undefined;
+
+const states = {
+  neutral: '',
+  positive: 'text-cms-positive',
+  caution: 'text-cms-caution',
+  negative: 'text-cms-negative',
+  info: 'text-cms-info',
+};
 ---
 
-<div
-  class:list={['flex flex-col gap-2 rounded-cms-lg bg-cms-surface px-4 py-4', className]}
-  aria-busy={loading ? 'true' : undefined}
->
-  <div class="flex items-start justify-between gap-2">
-    <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">{label}</p>
-    <div class="flex shrink-0 items-center gap-1">
-      {
-        hasDefinition && (
-          <CmsDefinition
-            label={label}
-            definition={definition}
-            denominator={denominator}
-            dateBasis={dateBasis}
-          />
-        )
-      }
-      {icon && <CmsIcon name={icon} size={16} class="shrink-0 text-cms-muted" />}
-    </div>
-  </div>
+<div class:list={['relative overflow-hidden rounded-cms bg-cms-surface', className]}>
+  {
+    hasDefinition && (
+      <CmsDefinition
+        label={label}
+        definition={definition}
+        denominator={denominator}
+        dateBasis={dateBasis}
+        class="absolute top-2 right-1.5 z-10"
+      />
+    )
+  }
 
   {
-    loading ? (
-      <>
-        <span class="sr-only">Loading {label}</span>
-        <CmsSkeleton variant="title" width="4.5rem" class="my-1" />
-        <CmsSkeleton variant="text" width="6rem" />
-      </>
+    drillable ? (
+      <a
+        href={href}
+        class="flex flex-col gap-1 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-focus [&:hover_[data-figure]]:underline"
+      >
+        <span class:list={['pr-6 text-cms-body-sm font-medium', states[tone] || 'text-cms-muted']}>
+          {label}
+        </span>
+        <span
+          data-figure
+          class="text-cms-kpi font-semibold text-cms-ink tabular-nums underline-offset-4"
+        >
+          {value}
+        </span>
+        {context && <span class="text-cms-caption text-cms-muted">{context}</span>}
+        {spark && <span class="mt-1 block text-cms-royal" set:html={spark.svg} />}
+        <span class="sr-only">Open the records behind this figure.</span>
+      </a>
     ) : (
-      <>
-        <p class="flex items-baseline gap-1.5">
-          {drillable ? (
-            <a
-              href={href}
-              class="rounded-cms text-cms-kpi font-semibold text-cms-royal tabular-nums underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-            >
-              {value}
-              <span class="sr-only">. Open the records behind this figure.</span>
-            </a>
-          ) : (
-            <span
-              class:list={[
-                'text-cms-kpi font-semibold tabular-nums',
-                absent ? 'text-cms-muted' : 'text-cms-ink',
-              ]}
-            >
-              {value ?? 'Not available'}
-            </span>
-          )}
-          {unit && <span class="text-cms-body-sm text-cms-muted">{unit}</span>}
-        </p>
-        {trend && (
-          <p
-            class:list={[
-              'flex items-center gap-1 text-cms-caption font-medium',
-              sentiments[trend.sentiment],
-            ]}
-          >
-            <span aria-hidden="true">
-              {trend.direction === 'up' ? '↑' : trend.direction === 'down' ? '↓' : '→'}
-            </span>
-            <span>
-              {trend.value} {directionWord[trend.direction]}
-            </span>
-          </p>
-        )}
-      </>
+      <div class="flex flex-col gap-1 px-4 py-4">
+        <span class:list={['pr-6 text-cms-body-sm font-medium', states[tone] || 'text-cms-muted']}>
+          {label}
+        </span>
+        <span
+          class:list={[
+            'text-cms-kpi font-semibold tabular-nums',
+            absent ? 'text-cms-muted' : 'text-cms-ink',
+          ]}
+        >
+          {value}
+        </span>
+        {context && <span class="text-cms-caption text-cms-muted">{context}</span>}
+        {spark && <span class="mt-1 block text-cms-royal" set:html={spark.svg} />}
+      </div>
     )
   }
 </div>

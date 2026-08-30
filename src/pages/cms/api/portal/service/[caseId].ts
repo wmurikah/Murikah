@@ -1,5 +1,5 @@
 /**
- * GET and POST /api/portal/service/{caseId} on cms.murikah.com.
+ * GET and POST /api/portal/helpdesk/{caseId} on cms.murikah.com.
  *
  * GET returns the case with its correspondence. An INTERNAL communication is
  * excluded in SQL, so it is not in this response body at all.

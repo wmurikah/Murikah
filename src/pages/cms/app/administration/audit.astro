@@ -28,7 +28,7 @@ import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsAuditTable from '@/components/cms/CmsAuditTable.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { canViewAudit, canExportAudit, AUDIT_SECURITY_VIEW } from '@/lib/cms/permissions';
+import { canViewAudit, canExportAudit } from '@/lib/cms/permissions';
 import {
   listAuditEvents,
   parseAuditFilter,
@@ -106,7 +106,7 @@ const eventOptions = [
       <CmsEmptyState
         icon="administration"
         title="You do not have permission to read the audit trail"
-        description="AUDIT.EVENTS.VIEW is needed. Ask an administrator if you need it for your work."
+        description="Ask an administrator for access."
       />
     ) : loadFailed ? (
       <CmsErrorState
@@ -129,7 +129,7 @@ const eventOptions = [
           stands.
         </p>
 
-        <CmsCard title="Filters" description="Every filter is applied in the query, on the server.">
+        <CmsCard title="Filters">
           <form method="get" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <CmsInput id="from" name="from" label="From" type="date" value={filter.from} />
             <CmsInput id="to" name="to" label="To" type="date" value={filter.to} />
@@ -224,15 +224,6 @@ const eventOptions = [
           </p>
           {!securityAllowed && <CmsBadge tone="neutral" label="Security events not included" />}
         </div>
-
-        {!securityAllowed && (
-          <p class="text-cms-caption text-cms-muted">
-            Sign-in, password, role-grant and scope events are excluded from this list because you
-            do not hold {AUDIT_SECURITY_VIEW}. They are not hidden rows in the count above; they
-            were never selected. If nobody holds that code, the operator has not yet run
-            docs/cms/audit/09_add_audit_permissions.sql.
-          </p>
-        )}
 
         <CmsCard bodyClass="p-0">
           <div class="px-4 py-3">

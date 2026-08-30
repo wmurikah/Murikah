@@ -50,8 +50,15 @@ import {
 import { logGrcError, grcErrorResponse } from '@grc/errorBoundary';
 import { scheduleCacheStatsRollUp } from '@grc/cache';
 import { toCmsAppPath } from '@/lib/hosts/cms';
-import { applySecurityHeaders, isSameOrigin, crossOriginRefusal } from '@/lib/cms/security/headers';
+import {
+  applySecurityHeaders,
+  writableResponse,
+  isSameOrigin,
+  crossOriginRefusal,
+  newCspNonce,
+} from '@/lib/cms/security/headers';
 import { getCmsEnv } from '@/lib/cms/env';
+import { renamedPath } from '@/lib/cms/routes';
 import { getDb as getCmsDb } from '@/lib/cms/db';
 import { readSessionCookie as readCmsSessionCookie } from '@/lib/cms/auth/cookie';
 import { resolveSession as resolveCmsSession } from '@/lib/cms/auth/loginFlow';
@@ -299,6 +306,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const appPath = toCmsAppPath(pathname);
     context.locals.cmsPath = appPath;
 
+    // Service became Helpdesk. Before anything else, because an old link
+    // should land on the new page whether or not the visitor is signed in,
+    // and one prefix rule covers every sub-path including the dynamic ones.
+    const renamed = renamedPath(appPath);
+    if (renamed !== null) {
+      return writableResponse(context.redirect(renamed + (context.url.search ?? ''), 301));
+    }
+    // One nonce per response, minted before anything renders, so the layout
+    // can stamp it on the rail's inline script and the header can name the
+    // same value. A hash would go stale the next time that script is edited.
+    const nonce = newCspNonce();
+    context.locals.cmsNonce = nonce;
+
     const isApi = isCmsApiPath(appPath);
     let anonymousReason: string = 'no_cookie';
 
@@ -383,16 +403,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // one of those.
     if (!isSameOrigin(context.request, context.url)) {
       const refused = crossOriginRefusal();
-      applySecurityHeaders(refused, { secure: isSecureRequest(context.request) });
+      applySecurityHeaders(refused, { secure: isSecureRequest(context.request), nonce });
       return refused;
     }
 
-    const response = await guarded();
+    // WRITABLE FIRST. A route may return `Response.redirect()`, whose headers
+    // are immutable; setting one throws and Astro turns the throw into an
+    // empty 500. See writableResponse: this is why every provider sign-in
+    // button returned 500, and it would have caught the successful sign-in
+    // callback too.
+    const response = writableResponse(await guarded());
     if (principal) response.headers.set('cache-control', 'no-store');
     // On every CMS response, signed in or not, including the sign-in page and
     // every redirect. A policy that applied only to authenticated pages would
     // leave the one page an unauthenticated attacker can reach unprotected.
-    applySecurityHeaders(response, { secure: isSecureRequest(context.request) });
+    applySecurityHeaders(response, { secure: isSecureRequest(context.request), nonce });
     return response;
   }
 

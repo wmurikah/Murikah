@@ -96,7 +96,6 @@
   --color-cms-ink-900: #0b1733; /* 16.27:1 on canvas, 17.44:1 on surface */
   --color-cms-ink-800: #1e2a48; /* 13.02:1 canvas */
   --color-cms-ink-700: #35425f; /* 9.20:1 canvas */
-  --color-cms-ink-600: #4e5974; /* 6.41:1 canvas */
   --color-cms-ink-500: #606b85; /* 4.89:1 canvas, 5.24:1 surface: body minimum */
   --color-cms-ink-400: #7b859d; /* 3.39:1 canvas, 3.63:1 surface: control edge */
   --color-cms-ink-300: #abb2c4; /* strong divider, never a control edge */
@@ -157,26 +156,15 @@
   --color-cms-neutral-border: #7d88a1;
   --color-cms-neutral-tint: #eef0f4; /* text on tint 5.19:1 */
 
-  /* ---- Chart series: deliberately NOT semantic ---------------------------
-     A line on a chart is not good or bad, so it must not borrow a colour that
-     means good or bad. Five hues at similar lightness, all at least 4.5:1 on
-     both planes, and every series is directly labelled at its end so the
-     reading never depends on telling two of these apart. */
-  --color-cms-series-1: #1a4f9e;
-  --color-cms-series-2: #694790;
-  --color-cms-series-3: #7c5f1d;
-  --color-cms-series-4: #1b6574;
-  --color-cms-series-5: #656f86;
-
   /* ---- CMS type scale ----------------------------------------------------
      Named by role rather than by size, and following the existing convention
      of a `--text-*` token with its `--line-height` and `--letter-spacing`
      companions. Body stays at 16px: this is an operational tool people read
      all day, not a dense financial terminal. */
-  --text-cms-display: 1.75rem;
+  --text-cms-display: 2.375rem;
   --text-cms-display--line-height: 1.15;
   --text-cms-display--letter-spacing: -0.015em;
-  --text-cms-page: 1.5rem; /* page title */
+  --text-cms-page: clamp(1.75rem, 2.4vw, 2.125rem); /* page title */
   --text-cms-page--line-height: 1.2;
   --text-cms-page--letter-spacing: -0.012em;
   --text-cms-section: 1.125rem; /* section heading */
@@ -242,7 +230,39 @@
       opacity: 0.5;
     }
   }
+}
 
+/**
+ * TOKENS NOTHING REFERENCES AS A CLASS, AND WHY THEY NEED `static`.
+ *
+ * Tailwind v4 tree-shakes an @theme value that no utility class mentions. Every
+ * token below is used ONLY as a raw `var(--color-...)` inside the SVG strings
+ * that src/lib/cms/charts/svg.ts builds on the server, which Tailwind cannot
+ * see, so it dropped them from the stylesheet and every chart in the
+ * application rendered black. `@theme static` emits them regardless.
+ *
+ * The failure had no error and no warning: the build succeeded, the markup was
+ * correct, `fill="var(--color-cms-series-1)"` simply resolved to nothing and
+ * SVG fell back to black. test/cms/designSweep.test.ts now asserts that every
+ * colour the chart module names is declared here or used as a class somewhere,
+ * so the next token added to a chart cannot disappear the same way.
+ */
+@theme static {
+  /* Chart series: deliberately NOT semantic. A line on a chart is not good or
+     bad, so it must not borrow a colour that means good or bad. Five hues at
+     similar lightness, all at least 4.5:1 on both planes, and every series is
+     directly labelled so the reading never depends on telling two apart. */
+  --color-cms-series-1: #1a4f9e;
+  --color-cms-series-2: #694790;
+  --color-cms-series-3: #7c5f1d;
+  --color-cms-series-4: #1b6574;
+  --color-cms-series-5: #656f86;
+
+  /* The dashed target line on a bar chart, and nothing else. */
+  --color-cms-ink-600: #4e5974;
+}
+
+@theme {
   /* ---- Type families ----------------------------------------------------- */
   /* Neutral, Apple-adjacent sans for both headings and body. Apple devices
      render native San Francisco via -apple-system; everything else falls back

@@ -57,7 +57,29 @@ const PREREQUISITES: { name: string; sql: string }[] = [
     name: 'Audit immutability triggers',
     sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_audit_events%'`,
   },
+  {
+    // SIX TABLES, COUNTED IN ONE QUERY, BECAUSE A PARTIAL RUN IS THE FAILURE
+    // THAT ACTUALLY HAPPENS. A script that created four of them and stopped
+    // leaves an application that configures a provider and then cannot record
+    // a single message, which is worse than one that refuses at the door.
+    name: 'Assistant and channel tables',
+    sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN
+            ('ai_providers','bot_conversations','bot_messages',
+             'channel_connections','channel_messages','message_classifications')`,
+  },
 ];
+
+/**
+ * How many rows each prerequisite must find to count as applied.
+ *
+ * A number rather than a boolean, because two of these are satisfied by more
+ * than one object and "at least one exists" would report a half-run script as
+ * a healthy one.
+ */
+const EXPECTED: Readonly<Record<string, number>> = {
+  'Audit immutability triggers': 2,
+  'Assistant and channel tables': 6,
+};
 
 export const GET: APIRoute = async () => {
   const checks: Check[] = [{ name: 'Application', state: 'ok', detail: 'Running.' }];
@@ -74,7 +96,7 @@ export const GET: APIRoute = async () => {
         const result = await db.execute(prerequisite.sql);
         const row = result.rows[0] as unknown as Record<string, unknown> | undefined;
         const present = Number(row?.n ?? 0);
-        const expected = prerequisite.name === 'Audit immutability triggers' ? 2 : 1;
+        const expected = EXPECTED[prerequisite.name] ?? 1;
         if (present >= expected) {
           checks.push({ name: prerequisite.name, state: 'ok', detail: 'Applied.' });
         } else {

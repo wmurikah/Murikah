@@ -47,65 +47,27 @@ export function parseWorkbook(buffer: ArrayBuffer | Uint8Array): ParsedSheet {
   return { sheetName, headers: headerRow.filter((h) => h !== ''), rows };
 }
 
-/** Days between 1899-12-30 (Excel's epoch) and 1970-01-01. */
-const EXCEL_EPOCH_OFFSET_DAYS = 25569;
-
 /**
- * An Excel day serial to "YYYY-MM-DD HH:MM:SS". Serials carry float noise
- * (46144.502337962964 is 12:03:22 and a bit), so the result is rounded to
- * the nearest second, which is the precision the source data actually has.
+ * THE TYPE CONVERSION LIVES IN ./cells.ts AND IS RE-EXPORTED HERE.
+ *
+ * One module, both importers, so the two cannot drift: the rules about
+ * identifiers keeping their leading zeros, blank cells becoming NULL rather
+ * than '', and an absent quantity never becoming 0, are decisions about the
+ * data rather than about the workbook reader. They are re-exported from this
+ * module because every importer already imports it, so no call site had to
+ * change to gain the single implementation.
  */
-export function excelSerialToTimestamp(serial: number): string {
-  const ms = Math.round((serial - EXCEL_EPOCH_OFFSET_DAYS) * 86400 * 1000);
-  const rounded = Math.round(ms / 1000) * 1000;
-  const date = new Date(rounded);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const y = date.getUTCFullYear();
-  const mo = pad(date.getUTCMonth() + 1);
-  const d = pad(date.getUTCDate());
-  const h = pad(date.getUTCHours());
-  const mi = pad(date.getUTCMinutes());
-  const se = pad(date.getUTCSeconds());
-  return y + '-' + mo + '-' + d + ' ' + h + ':' + mi + ':' + se;
-}
-
-/** A cell that should be a timestamp, whatever shape Excel gave it. */
-export function cellToTimestamp(value: unknown): string | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'number' && Number.isFinite(value)) return excelSerialToTimestamp(value);
-  const text = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/.test(text)) {
-    return text.length === 10 ? text + ' 00:00:00' : text.replace('T', ' ');
-  }
-  return null;
-}
-
-/**
- * A cell that identifies something: 3988 and "3988.0" and " 3988 " are all
- * the document "3988". Without this, every re-upload creates a new order.
- */
-export function cellToIdentifier(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Number.isInteger(value) ? String(value) : String(value).replace(/\.0+$/, '');
-  }
-  const text = String(value).trim();
-  if (text === '') return null;
-  if (/^\d+\.0+$/.test(text)) return text.replace(/\.0+$/, '');
-  return text;
-}
-
-export function cellToText(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return text === '' ? null : text;
-}
-
-export function cellToNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
+export {
+  excelSerialToTimestamp,
+  cellToTimestamp,
+  cellToIdentifier,
+  cellToText,
+  cellToNumber,
+  absentNumber,
+  absentText,
+  nullIfBlank,
+  type DbTimestamp,
+} from './cells.ts';
 
 /**
  * The canonical row hash. Keys sorted, values normalised to one
@@ -190,4 +152,114 @@ export function minutesBetween(from: string | null, to: string | null): number |
   const end = parse(to);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
   return Math.round((end - start) / 60000);
+}
+
+// ---- Change detection, in one read rather than one per row --------------------
+
+/** As many keys as SQLite will bind in one statement, with room to spare. */
+const KEY_CHUNK = 400;
+
+/**
+ * Every hash ever recorded against each of these source keys, outside this
+ * batch.
+ *
+ * WHY THIS IS NOT A PER-ROW QUERY. Both importers used to ask this question
+ * once per row, inside the row loop. On the sales order extract that is 1,386
+ * outbound subrequests for one validation; Cloudflare's Free plan allows 50
+ * per request, so the run died part-way through the loop and left the batch at
+ * VALIDATING with an empty row table and every count zero. Asking once for the
+ * whole key space costs a handful of reads whatever the extract's size, so a
+ * validation's cost follows the number of DISTINCT keys in chunks, not the
+ * number of rows.
+ *
+ * Chunked because a bind list has a limit, and returned as a map of key to the
+ * set of hashes seen for it, which is the membership test the callers make.
+ */
+export async function loadPriorHashes(
+  db: {
+    execute: (stmt: {
+      sql: string;
+      args: (string | number | null)[];
+    }) => Promise<{ rows: unknown[] }>;
+  },
+  keys: readonly string[],
+  excludeBatchId: string,
+): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  const distinct = [...new Set(keys)];
+  for (let start = 0; start < distinct.length; start += KEY_CHUNK) {
+    const slice = distinct.slice(start, start + KEY_CHUNK);
+    const placeholders = slice.map(() => '?').join(', ');
+    const result = await db.execute({
+      sql:
+        'SELECT DISTINCT source_record_key AS k, row_hash AS h FROM import_rows ' +
+        'WHERE import_batch_id <> ? AND source_record_key IN (' +
+        placeholders +
+        ')',
+      args: [excludeBatchId, ...slice],
+    });
+    for (const raw of result.rows) {
+      const row = raw as Record<string, unknown>;
+      const key = String(row.k);
+      const existing = out.get(key);
+      if (existing === undefined) out.set(key, new Set([String(row.h)]));
+      else existing.add(String(row.h));
+    }
+  }
+  return out;
+}
+
+// ---- Terminal states ---------------------------------------------------------
+
+/**
+ * Move a batch out of VALIDATING when the run cannot finish.
+ *
+ * VALIDATING IS NOT A RESTING PLACE. It means "a validation is in flight", and
+ * a batch that still reads VALIDATING an hour later is telling the operator
+ * something that is not true. Every exit from a validation therefore lands on
+ * READY, PARTIAL or REJECTED, including the exit where the run threw.
+ *
+ * The batch table has no column for a reason and this phase adds no schema, so
+ * the reason goes to `audit_events`, which the batch detail page already reads
+ * and which is where an auditor would look for it anyway.
+ */
+export async function rejectBatch(
+  db: {
+    execute: (stmt: { sql: string; args: (string | number | null)[] }) => Promise<unknown>;
+  },
+  batchId: string,
+  reason: string,
+  audit: { actorUserId: string; now: string; auditId: string },
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE import_batches SET status = 'REJECTED' WHERE import_batch_id = ?`,
+    args: [batchId],
+  });
+  await db.execute({
+    sql: `INSERT INTO audit_events
+            (audit_event_id, actor_user_id, event_type, entity_type, entity_id, action,
+             before_json, after_json, ip_address, user_agent, event_at)
+          VALUES (?, ?, 'IMPORT_REJECTED', 'IMPORT_BATCH', ?, 'VALIDATE', NULL, ?, NULL, ?, ?)`,
+    args: [
+      audit.auditId,
+      audit.actorUserId,
+      batchId,
+      JSON.stringify({ reason }),
+      'upload-centre',
+      audit.now,
+    ],
+  });
+}
+
+/**
+ * A failure, in words an operator can act on and with nothing leaked.
+ *
+ * The message goes on screen and into the audit trail, so it names what broke
+ * without carrying a stack trace or a row's contents into either.
+ */
+export function describeFailure(error: unknown): string {
+  if (error instanceof Error && error.message !== '') {
+    return error.message.length > 200 ? error.message.slice(0, 197) + '...' : error.message;
+  }
+  return 'The cause was not reported by the runtime.';
 }

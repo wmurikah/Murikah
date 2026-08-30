@@ -47,12 +47,8 @@ export const prerender = false;
 const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayRead = canManageUsers(permissions);
 
-/*
- * Five, not six. `accent` was retired from the badge in the design sweep: the
- * brand accent means "this is the action", and a badge is never an action, so
- * a sixth tone that meant nothing was one more colour competing with the five
- * that do. This page kept listing it because it branched before that landed.
- */
+// The tones CmsBadge actually accepts. 'accent' was listed here and is not one
+// of them, so the showcase was claiming a state the component cannot render.
 const TONES = ['neutral', 'success', 'warning', 'danger', 'info'] as const;
 const VARIANTS = ['primary', 'secondary', 'subtle', 'ghost', 'danger'] as const;
 
@@ -93,7 +89,7 @@ const diff = diffPayloads(
       <CmsEmptyState
         icon="administration"
         title="You do not have permission to see the design reference"
-        description="ADMIN.USERS.MANAGE is needed."
+        description="Ask an administrator for access."
       />
     ) : (
       <div class="flex flex-col gap-6">
@@ -130,10 +126,7 @@ const diff = diffPayloads(
           </div>
         </CmsCard>
 
-        <CmsCard
-          title="Badges"
-          description="A tone is never the only signal: every badge has a label."
-        >
+        <CmsCard title="Badges">
           <div class="flex flex-wrap items-center gap-2">
             {TONES.map((tone) => (
               <CmsBadge tone={tone} label={tone} />
@@ -211,15 +204,14 @@ const diff = diffPayloads(
 
         <CmsCard title="Indicators">
           <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <CmsKpiCard label="Orders" value="412" icon="orders" />
+            <CmsKpiCard label="Orders" value="412" />
             <CmsKpiCard
               label="Finance turnaround"
-              value="37"
-              unit="min"
-              trend={{ direction: 'down', value: '12 min', sentiment: 'good' }}
+              value="37 min"
+              context="Target 45 min"
+              tone="positive"
             />
-            <CmsKpiCard label="Unknown on purpose" />
-            <CmsKpiCard label="Loading" loading />
+            <CmsKpiCard label="Unknown on purpose" value="Not available" />
           </div>
         </CmsCard>
 
@@ -309,10 +301,7 @@ const diff = diffPayloads(
           />
         </CmsCard>
 
-        <CmsCard
-          title="Chart"
-          description="Server-rendered SVG, tokens only, with its text alternative and its table."
-        >
+        <CmsCard title="Chart">
           <CmsChart
             title="Orders by affiliate"
             definition="Sales orders created in the period, counted per affiliate. Not a rate. Date basis: sales_orders.order_created_at."
@@ -341,7 +330,7 @@ const diff = diffPayloads(
           <div class="flex flex-wrap items-center gap-4">
             <CmsAvatar name="Catherine Mwangi" />
             <CmsAvatar name="Gabriel Musembi" size="sm" />
-            <CmsAvatar name="Hassan Ali" tone="onNavy" class="bg-cms-navy" />
+            <CmsAvatar name="Hassan Ali" tone="onNavy" />
             <CmsTooltip
               id="ref-tooltip"
               text="Explains a control without hiding it behind hover alone: it opens on focus too."

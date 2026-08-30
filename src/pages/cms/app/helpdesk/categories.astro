@@ -50,12 +50,12 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to case categories"
-        description="Ask a system administrator for the SERVICE.CATEGORIES.MANAGE permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="Categories could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
@@ -64,7 +64,7 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
           definition="Two levels, category and subcategory, each pair unique, each with a default priority. Historical cases keep theirs; deactivation is the only removal."
           crumbs={[
             { label: 'Home', href: '/app' },
-            { label: 'Service', href: '/app/service' },
+            { label: 'Helpdesk', href: '/app/helpdesk' },
             { label: 'Categories' },
           ]}
         >

@@ -115,7 +115,7 @@ test(
   { skip: skip() },
   async () => {
     worker.clearCookies();
-    for (const path of ['/app', '/app/service', '/portal', '/']) {
+    for (const path of ['/app', '/app/helpdesk', '/portal', '/']) {
       const response = await worker.call('GET', path, { cookie: null });
       assert.equal(response.status, 302, `${path} status`);
       assert.equal(response.location, '/login', `${path} location`);
@@ -152,7 +152,10 @@ test('the session survives a second request with the same cookie', { skip: skip(
   assert.equal(first.status, 200);
   const second = await worker.call('GET', '/app');
   assert.equal(second.status, 200);
-  assert.match(second.body, /Welcome back/);
+  // The greeting is gone with the rest of the page's prose: Home now opens on
+  // the two turnaround charts and nothing above them. What proves the session
+  // survived is that the shell rendered at all for this cookie.
+  assert.match(second.body, /Purchase order approval/);
 });
 
 test('an authenticated response carries Cache-Control: no-store', { skip: skip() }, async () => {
@@ -162,14 +165,18 @@ test('an authenticated response carries Cache-Control: no-store', { skip: skip()
 
 test('the shell shows the name and the organisational context', { skip: skip() }, async () => {
   const response = await worker.call('GET', '/app');
-  assert.match(response.body, /Welcome back, Test/);
-  assert.match(response.body, /Customer Service Manager, Hass Petroleum Kenya/);
+  // The organisational context lives in the account menu, where it belongs: it
+  // is a fact about the reader, not a figure. The greeting that used to sit on
+  // the page header has gone with the rest of the prose, so the shell is now
+  // the only place these appear, which is what this test is about.
+  assert.match(response.body, /Customer Service Manager/, 'the job title is on the shell');
+  assert.match(response.body, /Hass Petroleum Kenya/, 'and so is the affiliate');
 });
 
 test('navigation is filtered by permission, not by name or title', { skip: skip() }, async () => {
   const response = await worker.call('GET', '/app');
   // ROLE-CSM holds SERVICE.CASES.VIEW and nothing else here.
-  assert.match(response.body, /\/app\/service/, 'Service must appear');
+  assert.match(response.body, /\/app\/helpdesk/, 'Helpdesk must appear');
   assert.ok(!response.body.includes('/app/administration'), 'Administration must not appear');
   assert.ok(!response.body.includes('/app/data'), 'Data must not appear');
 });
@@ -290,9 +297,26 @@ test('the shell ships the handler its drawer trigger depends on', { skip: skip()
 
   assert.match(page.body, /data-cms-modal-open="cms-nav-drawer"/, 'the trigger must be rendered');
   assert.match(page.body, /<dialog id="cms-nav-drawer"/, 'the drawer must be rendered');
+
   // cmsOverlaysBound is the guard the handler sets on first run, so finding it
-  // proves the listener itself reached the page rather than only its markup.
-  assert.match(page.body, /cmsOverlaysBound/, 'the overlay handler must reach the page');
+  // proves the listener itself ships rather than only its markup.
+  //
+  // IT IS FETCHED, NOT READ OUT OF THE HTML. This used to search the page body,
+  // which passed only while the build was inlining the script INTO the body,
+  // and that inlining is what `script-src 'self'` refused to execute: the
+  // assertion was quietly proving the bug. Scripts are now emitted as modules,
+  // so the honest question is whether the module the page references is served
+  // and contains the handler.
+  const sources = [...page.body.matchAll(/<script[^>]*\bsrc="(\/_astro\/[^"]+)"/g)].map(
+    (match) => match[1] as string,
+  );
+  assert.ok(sources.length > 0, 'the shell must reference at least one module');
+  let bound = false;
+  for (const src of sources) {
+    const asset = await worker.call('GET', src);
+    if (asset.status === 200 && /cmsOverlaysBound/.test(asset.body)) bound = true;
+  }
+  assert.ok(bound, `the overlay handler must reach the page; checked ${sources.join(', ')}`);
 });
 
 test('the apex, engr and grc hosts are unaffected', { skip: skip() }, async () => {
