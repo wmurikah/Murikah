@@ -575,3 +575,69 @@ export function drillPosition(
   const from = period.from ?? ymd(today);
   return { year: from.slice(0, 4), month: from.slice(0, 7) };
 }
+
+/* -------------------------------------------------------------------------
+ * THE BRIDGE INTO THE EXISTING FILTER
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The period, applied to the analytics filter every existing query already
+ * reads.
+ *
+ * THIS IS WHY THERE IS ONE IMPLEMENTATION AND NOT FIVE. Six analytical phases
+ * built their queries against `AnalyticsFilter.from`, `.to` and `.grain`.
+ * Rewriting each of them to take a period would have meant five migrations and
+ * five chances to diverge; overwriting those three fields from the resolved
+ * period means every query on every one of those pages obeys the control
+ * without being touched, and a page cannot opt half of itself out.
+ *
+ * It is applied by the PAGE rather than inside `parseFilter`, deliberately.
+ * `parseFilter` is called by two dozen API routes whose default is all time,
+ * and silently narrowing every one of them to the current month would empty
+ * screens nobody changed. A page that wants the control calls this; nothing
+ * else changes behaviour.
+ */
+export function withPeriod<T extends { from: string | null; to: string | null; grain: string }>(
+  filter: T,
+  period: ResolvedPeriod,
+): T {
+  return { ...filter, from: period.from, to: period.to, grain: period.grain };
+}
+
+/** Everything a page needs to render the control, from one calendar read. */
+export interface PeriodPage {
+  readonly asked: ResolvedPeriod;
+  readonly period: ResolvedPeriod;
+  readonly calendar: DataCalendar;
+  readonly notice: string | null;
+  readonly fellBackFrom: ResolvedPeriod | null;
+  /** Whether `?pick=1` asked for the drill to be open. */
+  readonly open: boolean;
+  /** The month whose days the drill should offer, for the calendar's bind. */
+  readonly drillMonth: string;
+}
+
+/** The period a page landed on, given the one calendar statement's rows. */
+export function resolvePeriodPage(
+  params: URLSearchParams,
+  today: Date,
+  calendarRows: readonly Record<string, unknown>[],
+): PeriodPage {
+  const asked = parsePeriod(params, today);
+  const calendar = readCalendar(calendarRows);
+  const choice = choosePeriod(asked, calendar, today, periodWasChosen(params));
+  return {
+    asked,
+    period: choice.period,
+    calendar,
+    notice: choice.notice,
+    fellBackFrom: choice.fellBackFrom,
+    open: params.get('pick') === '1',
+    drillMonth: (asked.from ?? '').slice(0, 7),
+  };
+}
+
+/** The month to bind into `calendarSql`, before the rows come back. */
+export function drillMonthOf(params: URLSearchParams, today: Date): string {
+  return (parsePeriod(params, today).from ?? '').slice(0, 7);
+}

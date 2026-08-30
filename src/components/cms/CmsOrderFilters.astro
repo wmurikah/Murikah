@@ -6,6 +6,19 @@
  * shared or bookmarked, and every drill-down from here carries the same
  * query string. One filter object, parsed in one place, applied by every
  * analytical query behind this page.
+ *
+ * THE DATES AND THE TREND GRAIN ARE NOT HERE ANY MORE. They were two
+ * `dd/mm/yyyy` boxes and a dropdown: a person had to type a date twice before
+ * seeing anything, and the grain asked a question the period they had just
+ * chosen already answers. All three moved to CmsPeriodControl, which every
+ * analytical page now renders above this. The period travels in the URL as one
+ * token and reaches the queries through `withPeriod`, so nothing behind this
+ * form had to change and no page can obey half of it.
+ *
+ * The hidden field below is what keeps them apart without losing either: this
+ * is a GET form, so submitting it replaces the whole query string, and a
+ * period not written back here would be silently discarded the first time
+ * somebody changed an affiliate.
  */
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
@@ -26,13 +39,26 @@ interface Props {
    * is broken when the numbers do not move.
    */
   showStatus?: boolean;
+  /** The period token this page is showing, so a submit does not discard it. */
+  period?: string | null;
+  /** Custom periods carry their own ends, which must survive the submit too. */
+  periodFrom?: string | null;
+  periodTo?: string | null;
 }
-const { filter, affiliates, statuses, action, showCredit = true, showStatus = true } = Astro.props;
+const {
+  filter,
+  affiliates,
+  statuses,
+  action,
+  showCredit = true,
+  showStatus = true,
+  period = null,
+  periodFrom = null,
+  periodTo = null,
+} = Astro.props;
 const titleCase = (value: string) =>
   value.charAt(0) + value.slice(1).toLowerCase().replace('_', ' ');
 const activeCount = [
-  filter.from,
-  filter.to,
   filter.affiliateId,
   filter.status,
   filter.slaStatus,
@@ -49,17 +75,15 @@ const activeCount = [
     away from the thing being filtered.
   */
   }
-  <Fragment slot="primary"
-    ><slot /><CmsInput
-      id="f-from"
-      name="from"
-      label="Created from"
-      type="date"
-      value={filter.from ?? ''}
-    /></Fragment
-  >
+  {period !== null && <input type="hidden" name="period" value={period} />}
+  {
+    period === 'custom' && periodFrom !== null && (
+      <input type="hidden" name="from" value={periodFrom} />
+    )
+  }
+  {period === 'custom' && periodTo !== null && <input type="hidden" name="to" value={periodTo} />}
+  <Fragment slot="primary"><slot /></Fragment>
   <Fragment slot="advanced">
-    <CmsInput id="f-to" name="to" label="To" type="date" value={filter.to ?? ''} />
     <CmsSelect
       id="f-affiliate"
       name="affiliateId"
@@ -109,17 +133,6 @@ const activeCount = [
         />
       )
     }
-    <CmsSelect
-      id="f-grain"
-      name="grain"
-      label="Trend grain"
-      value={filter.grain}
-      options={[
-        { value: 'DAY', label: 'Daily' },
-        { value: 'WEEK', label: 'Weekly' },
-        { value: 'MONTH', label: 'Monthly' },
-      ]}
-    />
     <CmsInput
       id="f-min-volume"
       name="minVolume"
