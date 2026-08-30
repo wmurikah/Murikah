@@ -33,7 +33,22 @@ export type HealthSeverity = 'BLOCKING' | 'ATTENTION' | 'INFORMATION';
 export interface HealthCheck {
   readonly key: string;
   readonly title: string;
-  /** The rule, in one sentence a reader can verify against the data. */
+  /**
+   * ONE LINE, ON THE PAGE. What this check looks for, short enough to be read
+   * while scanning eight of them.
+   *
+   * A diagnostic page earns a statement of what each check MEANS in a way an
+   * ordinary page does not earn a description: a count with no rule beside it
+   * is a number nobody can act on or argue with. But the full wording ran to
+   * three clauses, and eight of those stacked down a page is a wall nobody
+   * reads, which returns the reader to the same place as no rule at all.
+   */
+  readonly summary: string;
+  /**
+   * The full rule, behind the definition control the rest of the application
+   * uses. Auditors and whoever is correcting the configuration need the exact
+   * predicate; everybody else needs the line above.
+   */
   readonly rule: string;
   readonly severity: HealthSeverity;
   readonly count: number;
@@ -105,11 +120,16 @@ async function workflowRolesWithoutApprover(db: Client, today: string): Promise<
   return {
     key: 'workflow_roles_without_approver',
     title: 'Workflow roles with no eligible approver',
+    summary: 'A stage whose workflow role nobody active can fill.',
     rule: 'An active workflow stage assigned to a workflow role, where no active user holds that role today within the workflow’s own country, affiliate or business unit, and no Group holder exists.',
     severity: 'BLOCKING',
     count: rows.length,
     examples: rows,
-    href: '/app/administration/workflow-roles',
+    // WORKFLOW ROLES ARE MANAGED ON THE WORKFLOWS PAGE, under its own tab.
+    // This used to point at /app/administration/workflow-roles, which has only
+    // an [id] route and no index, so the control promised to take somebody to
+    // the fix and delivered "Page not found".
+    href: '/app/administration/workflows?tab=roles',
   };
 }
 
@@ -133,6 +153,7 @@ async function usersWithoutAssignment(db: Client, today: string): Promise<Health
   return {
     key: 'users_without_assignment',
     title: 'Active internal users with no organisational assignment',
+    summary: 'An active internal user with no country, affiliate or business unit.',
     rule: 'An ACTIVE INTERNAL user with no active user_assignments row effective today. Such a user has no country, affiliate or business unit, so every scoped query returns nothing for them.',
     severity: 'ATTENTION',
     count: rows.length,
@@ -164,6 +185,7 @@ async function unresolvedSourceIdentities(db: Client): Promise<HealthCheck> {
   return {
     key: 'unresolved_source_identities',
     title: 'Unresolved source names from imports',
+    summary: 'A name from an extract that is credited to nobody.',
     rule: 'An unresolved_actors row still UNRESOLVED. Until it is mapped, the work that name performed, approvals included, is credited to nobody and is missing from every performance figure.',
     severity: 'ATTENTION',
     count: count((counted.rows[0] as unknown as Record<string, unknown>).n),
@@ -191,6 +213,7 @@ async function openImportExceptions(db: Client): Promise<HealthCheck> {
   return {
     key: 'open_import_exceptions',
     title: 'Import rows still in exception',
+    summary: 'A row the extract carried that the system does not hold.',
     rule: 'An import_rows row with status UNRESOLVED or FAILED. Each is a record the extract carried and the system does not hold, so every count over that data is short by one.',
     severity: 'ATTENTION',
     count: count((counted.rows[0] as unknown as Record<string, unknown>).n),
@@ -223,6 +246,7 @@ async function slaRulesWithExpiredProfile(db: Client, today: string): Promise<He
   return {
     key: 'sla_rules_expired_profile',
     title: 'Active SLA rules on an expired or inactive profile',
+    summary: 'An active rule whose profile no longer applies.',
     rule: 'An active sla_rules row whose profile is inactive, or whose profile’s effective_to is in the past. The rule looks configured and the profile that would select it no longer applies.',
     severity: 'ATTENTION',
     count: rows.length,
@@ -254,6 +278,7 @@ async function inactiveProductsInUse(db: Client): Promise<HealthCheck> {
   return {
     key: 'inactive_products_in_use',
     title: 'Deactivated products still on open opportunities',
+    summary: 'An open opportunity quoting a withdrawn product.',
     rule: 'A product with active = 0 referenced by an opportunity_products row on an OPEN opportunity. The pipeline is quoting something the catalogue says is withdrawn.',
     severity: 'INFORMATION',
     count: rows.length,
@@ -282,6 +307,7 @@ async function suspendedPortalMemberships(db: Client): Promise<HealthCheck> {
   return {
     key: 'suspended_portal_memberships',
     title: 'Suspended portal memberships',
+    summary: 'Portal access suspended long enough to look forgotten.',
     rule: 'A customer_portal_memberships row at SUSPENDED. Suspension is meant to be temporary, so a long-standing one is either a decision nobody finished or access somebody expects to have.',
     severity: 'INFORMATION',
     count: rows.length,
@@ -308,11 +334,15 @@ async function teamsWithoutManager(db: Client): Promise<HealthCheck> {
   return {
     key: 'teams_without_manager',
     title: 'Active teams with no active manager',
+    summary: 'An active team whose escalation has nowhere to go.',
     rule: 'An active team whose manager_user_id is null, or names a user who is not ACTIVE. Escalation routes to the team manager, so an unmanaged team is an escalation that goes nowhere.',
     severity: 'ATTENTION',
     count: rows.length,
     examples: rows,
-    href: '/app/administration/organisation/teams',
+    // TEAMS ARE A TAB ON THE ORGANISATION PAGE. This used to point at
+    // /app/administration/organisation/teams, which has only an [id] route and
+    // no index, so it 404ed for the same reason as the check above.
+    href: '/app/administration/organisation?tab=teams',
   };
 }
 
