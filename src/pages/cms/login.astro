@@ -151,7 +151,13 @@ const notice =
   });
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!email || !password || !password.value) return;
+    if (!email || !password) return;
+    if (!password.value) {
+      setError('Enter your password.');
+      password.focus();
+      pose('password');
+      return;
+    }
     const submit = document.querySelector<HTMLButtonElement>('#cms-login-submit');
     if (submit) {
       submit.disabled = true;
