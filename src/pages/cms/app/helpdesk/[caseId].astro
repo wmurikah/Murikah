@@ -179,7 +179,7 @@ const allowedMoves = found === null ? [] : [...(CASE_TRANSITIONS[found.status] ?
                 <dt class="text-cms-caption text-cms-muted">Customer</dt>
                 <dd class="text-cms-body-sm">
                   <a
-                    href={`/app/customers/${found.accountId}`}
+                    href={`/app/operations/customers/${found.accountId}`}
                     class="rounded-cms text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
                   >
                     {found.accountName}
