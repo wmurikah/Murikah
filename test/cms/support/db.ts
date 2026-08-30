@@ -22,7 +22,8 @@ import { AUTH_SCHEMA_DDL } from './schema.ts';
 
 interface Stmt {
   sql: string;
-  args?: unknown[];
+  /** Positional or named, exactly as `@libsql/client` accepts them. */
+  args?: unknown[] | Record<string, unknown>;
 }
 
 /** The slice of the libSQL Client interface the CMS code actually calls. */
@@ -92,17 +93,34 @@ export function createTestDb(): TestClient {
       const args = typeof stmt === 'string' ? [] : (stmt.args ?? []);
       // node:sqlite rejects booleans and undefined; the worker's client accepts
       // them. Normalise the same way the real driver does.
-      const bound = args.map((a) => {
+      const normalise = (a: unknown) => {
         if (a === undefined) return null;
         if (typeof a === 'boolean') return a ? 1 : 0;
         return a;
-      }) as (string | number | null | bigint | Uint8Array)[];
+      };
+
+      // NAMED ARGUMENTS, BECAUSE THE REAL CLIENT TAKES THEM. `execute({sql,
+      // args: {since}})` binds `:since`, and several analytics repositories are
+      // written that way because a window that appears four times in a UNION
+      // would otherwise have to be passed four times in the right order. An
+      // adapter that only understood positional arrays made those repositories
+      // untestable while looking as though they were covered, which is how a
+      // query that had never once been executed reached production.
+      const bound = Array.isArray(args)
+        ? (args.map(normalise) as (string | number | null | bigint | Uint8Array)[])
+        : (Object.fromEntries(
+            Object.entries(args as Record<string, unknown>).map(([k, v]) => [k, normalise(v)]),
+          ) as never);
+      const call = (prepared: ReturnType<DatabaseSync['prepare']>, method: 'all' | 'run') =>
+        Array.isArray(bound)
+          ? (prepared[method] as (...a: unknown[]) => unknown)(...bound)
+          : (prepared[method] as (...a: unknown[]) => unknown)(bound);
 
       if (returnsRows(sql)) {
-        const rows = db.prepare(sql).all(...bound) as unknown as Record<string, unknown>[];
+        const rows = call(db.prepare(sql), 'all') as unknown as Record<string, unknown>[];
         return { rows, rowsAffected: 0 };
       }
-      const result = db.prepare(sql).run(...bound);
+      const result = call(db.prepare(sql), 'run') as { changes?: number };
       return { rows: [], rowsAffected: Number(result.changes ?? 0) };
     },
     close() {
