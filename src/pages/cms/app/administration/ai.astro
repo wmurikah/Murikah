@@ -189,47 +189,68 @@ const VERIFY_WORD: Readonly<Record<string, string>> = {
 
   {
     mayManage && (
-      <CmsModal id="cms-ai-new" title="Add a provider">
+      <CmsModal id="cms-ai-new" title="Add a provider" confirmOnDirty>
+        {/*
+          THE LABELS ARE WRITTEN IN THE LANGUAGE THE PERSON USES, not the column
+          name. `secret_name` is the name of the stored secret; `max_output_tokens`
+          is the longest reply. A label that repeats the database's word for a
+          thing is a label that only helps whoever wrote the table.
+        */}
         <form id="cms-ai-form" class="flex flex-col gap-4">
-          <CmsInput id="ai-name" name="providerName" label="Provider name" required autofocus />
+          <CmsInput id="ai-name" name="providerName" label="Name for this provider" required />
           <CmsSelect
             id="ai-type"
             name="providerType"
-            label="Provider type"
+            label="Which service it calls"
             required
             options={PROVIDER_TYPES.map((t) => ({ value: t, label: t }))}
           />
-          <CmsInput id="ai-model" name="model" label="Model name" required />
+          <CmsInput id="ai-model" name="model" label="Model" required />
+          {/*
+            THE ONE HELPER LINE IN THIS FORM, AND THE EXCEPTION IS EARNED. The
+            field asks for the NAME of a Cloudflare Worker secret and not the key
+            itself, which is genuinely counter-intuitive: every other system that
+            asks about an API key wants the key. Somebody who pastes the key here
+            stores a credential in the database, which is the one mistake this
+            design exists to prevent, so it is worth a sentence.
+          */}
           <CmsInput
             id="ai-secret"
             name="secretName"
-            label="Stored secret name"
+            label="Name of the stored secret"
             required
-            hint="Enter the name of the Cloudflare secret, not its key; for example, OPENAI_API_KEY."
+            hint="The name of the Cloudflare Worker secret that holds the key, not the key itself. For example ANTHROPIC_API_KEY."
           />
           <CmsSelect
             id="ai-purpose"
             name="purpose"
-            label="What this provider is for"
+            label="What it is used for"
             required
             options={PURPOSES.map((p) => ({ value: p, label: p }))}
           />
-          <CmsInput id="ai-base" name="baseUrl" label="Provider address" type="url" />
+          <CmsInput id="ai-base" name="baseUrl" label="Base address" type="url" />
           <CmsInput
             id="ai-max"
             name="maxOutputTokens"
-            label="Maximum output tokens"
+            label="Longest reply, in tokens"
             type="number"
           />
           <CmsInput id="ai-temp" name="temperature" label="Temperature" type="number" step="0.1" />
-          <CmsCheckbox id="ai-active" name="active" label="Active" />
+          <CmsCheckbox id="ai-active" name="active" label="Available for use" />
         </form>
-        <CmsButton slot="actions" type="button" variant="ghost" data-cms-modal-close>
-          Cancel
-        </CmsButton>
-        <CmsButton slot="actions" type="submit" form="cms-ai-form" variant="primary">
-          Add provider
-        </CmsButton>
+        {/*
+          ONE DOMINANT ACTION, CANCEL SUBORDINATE. The submit lives in the
+          actions slot and reaches the form by `form=`, so the foot of the modal
+          stays put while the body scrolls.
+        */}
+        <Fragment slot="actions">
+          <CmsButton type="submit" variant="primary" form="cms-ai-form">
+            Add provider
+          </CmsButton>
+          <CmsButton type="button" variant="ghost" data-cms-modal-close>
+            Cancel
+          </CmsButton>
+        </Fragment>
       </CmsModal>
     )
   }

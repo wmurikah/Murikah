@@ -14,6 +14,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  LEADERBOARD_HEADERS,
+  leaderboardColumns,
+} from '../../src/lib/cms/analytics/leaderboard.ts';
 import { join } from 'node:path';
 
 const TOKENS = 'src/styles/tokens.css';
@@ -231,6 +235,124 @@ test('the workspace is light: no content-area surface sits on a dark field', () 
   assert.deepEqual(offenders, [], `dark fields in the workspace:\n${offenders.join('\n')}`);
 });
 
+test('only the navigation drawer asks for a dark tone', () => {
+  // THE BLIND SPOT THE INVISIBLE FORM CAME THROUGH.
+  //
+  // The test above allowlists CmsDrawer as chrome, because the dark navy is
+  // genuinely written there and the mobile menu genuinely needs it. So it never
+  // asked the question that mattered: WHO CHOOSES that tone. `tone` defaulted
+  // to `navigation`, and two screens — "Add a provider" and "Add a connection"
+  // — simply omitted the prop. Light-canvas form fields rendered on navy and
+  // every label and every helper became invisible; what survived was the red
+  // required asterisks floating above white boxes with nothing to say what they
+  // were. Nineteen sibling drawers passed tone="form" and were fine, which is
+  // exactly what made it invisible in review.
+  //
+  // The default is now `form`, so a forgotten prop yields a legible screen, and
+  // the dark tone must be asked for by name. This asserts that only the shell's
+  // own navigation drawer asks.
+  const drawer = readFileSync('src/components/cms/CmsDrawer.astro', 'utf8');
+  assert.match(
+    drawer,
+    /tone = 'form'/,
+    'the drawer must default to the light form tone, so forgetting the prop is safe',
+  );
+
+  const dark: string[] = [];
+  for (const path of CMS_SOURCE.concat(CMS_PAGES)) {
+    const source = readFileSync(path, 'utf8');
+    for (const match of source.matchAll(/<CmsDrawer\b[^>]*>/g)) {
+      if (/tone="navigation"/.test(match[0])) dark.push(path);
+    }
+  }
+  assert.deepEqual(
+    [...new Set(dark)],
+    ['src/layouts/CmsLayout.astro'],
+    'only the shell navigation drawer may use the dark tone',
+  );
+});
+
+test('a short form uses the one modal, and there is only one', () => {
+  // ONE MODAL, NOT A SECOND IMPLEMENTATION. A drawer suits a long list beside
+  // the page you came from; these are short forms with a single outcome.
+  const overlays = CMS_SOURCE.filter((path) =>
+    /Cms(Modal|Dialog|Sheet|Popover)\.astro$/.test(path),
+  );
+  assert.deepEqual(overlays, ['src/components/cms/CmsModal.astro'], 'exactly one modal exists');
+
+  const modal = readFileSync('src/components/cms/CmsModal.astro', 'utf8');
+  // The surface is not negotiable: there is no tone prop to get wrong. Checked
+  // against the Props interface rather than the whole file, because the doc
+  // comment explains at length why the prop is absent.
+  const props = modal.slice(modal.indexOf('interface Props'), modal.indexOf('} = Astro.props'));
+  assert.ok(!/\btone\b/.test(props), 'the modal offers no tone to choose');
+  assert.match(modal, /bg-cms-surface text-cms-ink/, 'light surface, ink text');
+  // A full-screen sheet on a phone, a centred box from sm up, one elevation.
+  assert.match(modal, /h-dvh max-h-none w-screen/, 'it is a sheet at a mobile viewport');
+  assert.match(modal, /sm:w-\[min\(32rem,calc\(100vw-2rem\)\)\]/, 'and a box from sm up');
+  assert.equal((modal.match(/shadow-cms-/g) ?? []).length, 1, 'one elevation level, used once');
+  assert.match(modal, /overflow-y-auto/, 'the body scrolls inside the modal');
+
+  // Both reported screens use it, and neither uses a drawer any more.
+  for (const path of [
+    'src/pages/cms/app/administration/ai.astro',
+    'src/pages/cms/app/administration/channels.astro',
+  ]) {
+    const source = readFileSync(path, 'utf8');
+    assert.match(source, /<CmsModal/, `${path} does not use the modal`);
+    assert.ok(!/<CmsDrawer/.test(source), `${path} still uses a drawer`);
+  }
+});
+
+test('the modal returns focus, locks the page, and confirms a dirty discard', () => {
+  const script = readFileSync('src/components/cms/CmsOverlayScript.astro', 'utf8');
+  // Written once for every dialog in the shell rather than per modal.
+  assert.match(script, /openedBy\.set\(dialog, opener\)/, 'the opener is remembered');
+  assert.match(
+    script,
+    /opener\.isConnected.*\n?.*opener\.focus\(\)|opener\.isConnected\) opener\.focus\(\)/,
+  );
+  assert.match(script, /cms-overlay-open/, 'the page behind is locked');
+  assert.match(script, /cmsConfirmDirty/, 'a dirty form confirms before it is discarded');
+  assert.match(script, /'cancel'/, 'Escape is intercepted so the discard can be stopped');
+
+  const css = readFileSync('src/styles/global.css', 'utf8');
+  assert.match(css, /html\.cms-overlay-open\s*\{\s*overflow:\s*hidden/);
+  // Reserving the gutter at all times, so locking the scroll does not shift
+  // the layout sideways as the modal opens.
+  assert.match(css, /scrollbar-gutter:\s*stable/);
+});
+
+test('the two forms carry business-language labels and exactly one helper', () => {
+  for (const [path, field] of [
+    ['src/pages/cms/app/administration/ai.astro', 'ai-secret'],
+    ['src/pages/cms/app/administration/channels.astro', 'ch-secret'],
+  ] as const) {
+    const source = readFileSync(path, 'utf8');
+    const form = source.slice(source.indexOf('<CmsModal'), source.indexOf('</CmsModal>'));
+
+    // No label repeats a column name.
+    for (const match of form.matchAll(/label="([^"]+)"/g)) {
+      const label = match[1]!;
+      assert.ok(!/_/.test(label), `${path}: "${label}" reads like a column name`);
+      assert.ok(
+        !/^(Worker secret name|Number or mailbox)$/.test(label),
+        `${path}: "${label}" is the old technical wording`,
+      );
+    }
+
+    // EXACTLY ONE HELPER LINE, on the secret name, because that field is
+    // genuinely counter-intuitive: it asks for the NAME of a secret and not the
+    // key, and somebody who pastes the key stores a credential in the database.
+    const hints = [...form.matchAll(/hint="([^"]+)"/g)];
+    assert.equal(hints.length, 1, `${path} carries ${hints.length} helpers, expected exactly one`);
+    const secret = form.slice(form.indexOf(field));
+    assert.match(secret.slice(0, 400), /hint="/, 'the helper is on the secret name field');
+    assert.match(hints[0]![1]!, /not the key itself/, 'it says what the field is not');
+    assert.match(hints[0]![1]!, /For example [A-Z_]+/, 'and gives an example of a name');
+  }
+});
+
 test('exactly one elevation level exists, and only overlays use it', () => {
   const shadows = [...tokenSource.matchAll(/^\s*--shadow-(cms-[a-z-]+):/gm)].map((m) => m[1]!);
   assert.deepEqual(shadows, ['cms-overlay'], `CMS shadow tokens: ${shadows.join(', ')}`);
@@ -239,7 +361,9 @@ test('exactly one elevation level exists, and only overlays use it', () => {
   // and can be dismissed may carry the one shadow.
   const users = CMS_SOURCE.filter((p) => readFileSync(p, 'utf8').includes('shadow-cms-overlay'));
   const floats =
-    /Drawer|Modal|Dropdown|Tooltip|Toast|Definition|Overlay|TopBar|Layout|Search|Filter|Audit/;
+    // The period control's panel is a genuine overlay: it floats over the page,
+    // is dismissible, and is the one thing on an analytics page that does.
+    /Drawer|Modal|Dropdown|Tooltip|Toast|Definition|Overlay|TopBar|Layout|Search|Filter|Audit|Period/;
   const wrong = users.filter((p) => !floats.test(p));
   assert.deepEqual(wrong, [], `these are not overlays and must not float: ${wrong.join(', ')}`);
   console.log(`[elevation] one token, used by: ${users.map((p) => p.split('/').pop()).join(', ')}`);
@@ -471,24 +595,61 @@ test('a drillable figure is a real link with a focus ring', () => {
 });
 
 test('every figure on Home carries a destination', () => {
-  // Home is charts and two leaderboards now, so the figures are table cells
-  // and chart points rather than KPI cards. The rule is unchanged: a number
-  // nobody can open is a number nobody can check.
-  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  // Home is charts and two leaderboards now, and the leaderboards are one
+  // component used twice, so the countable figures live there. The rule is
+  // unchanged: a number nobody can open is a number nobody can check.
+  //
+  // Only the TEMPLATE is scanned. The frontmatter legitimately calls `count()`
+  // to build a sentence, and a helper that formats a number is not a figure on
+  // a screen; matching it would make the assertion about where code sits
+  // rather than about what a reader can click.
+  const templateOf = (path: string) => {
+    const file = readFileSync(path, 'utf8');
+    const end = file.indexOf('---', 3);
+    return end === -1 ? file : file.slice(end + 3);
+  };
+  const sources = [
+    templateOf('src/pages/cms/app/index.astro'),
+    templateOf('src/components/cms/CmsApprovalLeaderboard.astro'),
+  ];
 
-  // Every numeric cell renders {count(...)} or a duration. The countable ones
-  // must sit inside an anchor.
-  const counted = [...source.matchAll(/\{count\(([^)]*)\)\}/g)].map((m) => m[1]!);
-  assert.ok(counted.length >= 5, `expected Home's counts, found ${counted.length}`);
-  for (const figure of counted) {
-    const at = source.indexOf(`{count(${figure})}`);
-    const before = source.slice(Math.max(0, at - 400), at);
-    assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
+  let counted = 0;
+  for (const source of sources) {
+    for (const match of source.matchAll(/\{count\(([^)]*)\)\}/g)) {
+      const figure = match[1]!;
+      const at = match.index!;
+      // A count inside the sentence that explains an empty period is prose,
+      // not a figure: it has nothing to open because there is nothing there.
+      if (/outside this period/.test(source.slice(at, at + 200))) continue;
+      // The row detail's own figures are a distribution readout, not dashboard
+      // figures: fastest, slowest and count describe the rows already listed,
+      // and the slowest is the one of the three that opens anything.
+      const detailStart = source.lastIndexOf('<details class="cms-leader-detail"', at);
+      if (detailStart !== -1 && source.indexOf('</details>', detailStart) > at) continue;
+      counted += 1;
+      const before = source.slice(Math.max(0, at - 400), at);
+      assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
+    }
+  }
+  assert.ok(counted >= 6, `expected Home's counts, found ${counted}`);
+
+  // The two duration columns are links too, and they are the ones this phase
+  // added: Typical and Slowest 10% each open the records behind them.
+  const board = templateOf('src/components/cms/CmsApprovalLeaderboard.astro');
+  // Three columns carry a figure, and each opens its own records. `breaches`
+  // and `pending` went with the columns that opened them; the record page still
+  // serves those views for anything else that wants them.
+  for (const view of ['completed', 'typical', 'tail']) {
+    assert.ok(board.includes(`records(row, '${view}')`), `${view} has no destination`);
   }
 
   // And the chart points, which carry their own href into the SVG.
-  assert.match(source, /href: link\(f\.fn\)/, 'every chart bar is a drill target');
-  console.log(`[drill] ${counted.length} linked figures on Home`);
+  assert.match(
+    readFileSync('src/pages/cms/app/index.astro', 'utf8'),
+    /href: link\(f\.fn\)/,
+    'every chart bar is a drill target',
+  );
+  console.log(`[drill] ${counted} linked figures on Home`);
 });
 
 test('every Home destination carries the filter and the scope', () => {
@@ -540,24 +701,83 @@ test('each Home chart is followed by its grouped people leaderboard', () => {
 });
 
 test('the two leaderboards carry identical columns in identical order', () => {
-  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  // One COLUMNS constant, used by both tables. Two literals could drift; one
-  // cannot, and the eye moving between the tables depends on it.
-  assert.equal((source.match(/columns=\{COLUMNS\}/g) ?? []).length, 2);
-  const columns = /const COLUMNS = \[([\s\S]*?)\];/.exec(source)?.[1] ?? '';
-  const labels = [...columns.matchAll(/label: '([^']+)'/g)].map((m) => m[1]!);
-  assert.deepEqual(labels, ['Person', 'Volume', 'Typical', 'Slowest 10%']);
-  assert.doesNotMatch(columns, /Within SLA|Pending|Oldest pending/);
-  assert.match(source, /row\.userId !== null/, 'only recorded people reach the leaderboard');
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  // ONE component, rendered twice, taking its columns from ONE module. Two
+  // column literals could drift; one cannot, and the eye moving between the
+  // tables depends on it.
+  assert.equal(
+    (home.match(/<CmsApprovalLeaderboard/g) ?? []).length,
+    2,
+    'both leaderboards come from the same component',
+  );
+  // FOUR, NOT EIGHT. Eight did not fit at a laptop width and both tables
+  // scrolled sideways; a table you have to scroll to read is a table nobody
+  // reads. Function became a section heading, Within SLA went because no
+  // targets are configured so it was empty on every row, and Pending and
+  // Oldest pending went because that information sits above the table already
+  // and belongs to the function rather than to a person.
+  assert.deepEqual([...LEADERBOARD_HEADERS], ['Person', 'Volume', 'Typical', 'Slowest 10%']);
+  const columns = leaderboardColumns('x', 'y');
+  assert.deepEqual(
+    columns.map((column) => column.label),
+    [...LEADERBOARD_HEADERS],
+  );
+  // Every column carries its own definition, so a plain-English header can
+  // hide a technical name without hiding it from an auditor.
+  for (const column of columns) {
+    assert.ok(
+      (column.definition ?? '').length > 20,
+      `${column.label} has no definition a reader can open`,
+    );
+  }
+  assert.match(columns.find((c) => c.label === 'Typical')!.definition!, /MEDIAN/);
+  assert.match(columns.find((c) => c.label === 'Slowest 10%')!.definition!, /PERCENTILE/);
+});
+
+test('no average, fastest or slowest column appears in either table', () => {
+  // MEASURED, NOT A PREFERENCE. One 23,002-minute hold drags an average away
+  // from everybody; every person's fastest is a minute or two, so it
+  // distinguishes nobody; and the slowest inverts the ranking, because a single
+  // order left over a holiday decides it. Both extremes live in the row detail,
+  // which ranks nothing.
+  for (const label of LEADERBOARD_HEADERS) {
+    assert.ok(
+      !/^(Average|Mean|Fastest|Slowest|Function|Within SLA|Pending|Oldest pending)$/i.test(label),
+      `${label} is a column that has been removed`,
+    );
+  }
+  // The component defines no columns of its own, so there is nowhere for a
+  // ninth to be added quietly.
+  const board = readFileSync('src/components/cms/CmsApprovalLeaderboard.astro', 'utf8');
+  assert.deepEqual(
+    [...board.matchAll(/label: '([^']+)'/g)].map((m) => m[1]!),
+    [],
+  );
+  // And the repository no longer computes a mean, so no page can print one.
+  const repo = readFileSync('src/lib/cms/repos/approvalSla.ts', 'utf8');
+  assert.ok(!/meanMinutes/.test(repo), 'approvalSla still computes a mean');
+});
+
+test('nothing in the row detail sorts or ranks', () => {
+  const board = readFileSync('src/components/cms/CmsApprovalLeaderboard.astro', 'utf8');
+  const start = board.indexOf('<details class="cms-leader-detail"');
+  const end = board.indexOf('</details>', start);
+  assert.ok(start !== -1 && end !== -1, 'the row detail is a disclosure');
+  const detail = board.slice(start, end);
+  assert.ok(!/\bsort|\brank|aria-sort/i.test(detail), 'the row detail must not sort or rank');
+  // The extremes belong here, and the slowest opens the order that caused it.
+  for (const word of ['Fastest', 'Slowest', 'Count']) {
+    assert.ok(detail.includes(word), `the row detail is missing ${word}`);
+  }
+  assert.ok(detail.includes('row.slowestEntityId'), 'the slowest does not open its order');
 });
 
 test('a minimum volume before a rank is stated on the screen', () => {
-  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.equal(
-    (source.match(/Ranked from \{MINIMUM_RANKED_VOLUME\}/g) ?? []).length,
-    2,
-    'both tables say what the threshold is',
-  );
+  const board = readFileSync('src/components/cms/CmsApprovalLeaderboard.astro', 'utf8');
+  assert.match(board, /Ranked from \{MINIMUM_RANKED_VOLUME\}/, 'the table states the threshold');
+  // Rendered twice because the component is, so both tables state it.
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  assert.equal((home.match(/<CmsApprovalLeaderboard/g) ?? []).length, 2);
 });
 
 test('a section header cannot carry a description', () => {
@@ -901,4 +1121,260 @@ test('the sweep touched nothing outside the CMS', () => {
   ] as const) {
     assert.ok(shared.includes(`${name}: ${value}`), `${name} was changed and is shared`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Build Prompt 39: the period control, from one implementation
+// ---------------------------------------------------------------------------
+
+test('one period control, on every analytics page, from one implementation', () => {
+  // ONE COMPONENT AND ONE MODULE. A second copy is the defect this asserts
+  // against: the day two pages disagree about what "this quarter" means is the
+  // day nobody can say which figure is right.
+  const components = CMS_SOURCE.filter((path) => /CmsPeriod/.test(path));
+  assert.deepEqual(components, ['src/components/cms/CmsPeriodControl.astro']);
+
+  const PAGES = [
+    'src/pages/cms/app/index.astro',
+    'src/pages/cms/app/orders/purchases/performance.astro',
+    'src/pages/cms/app/orders/sales/performance.astro',
+    'src/pages/cms/app/crm/analytics.astro',
+    'src/pages/cms/app/helpdesk/analytics.astro',
+  ];
+  for (const page of PAGES) {
+    const source = readFileSync(page, 'utf8');
+    assert.match(source, /<CmsPeriodControl/, `${page} does not carry the period control`);
+    assert.match(
+      source,
+      /from '@\/lib\/cms\/analytics\/period'/,
+      `${page} does not resolve its period from the shared module`,
+    );
+  }
+
+  // The presets are declared in exactly one file. A page that listed its own
+  // would be a second implementation wearing the first one's name.
+  const declaring = CMS_SOURCE.concat(CMS_PAGES).filter((path) =>
+    /export const PRESETS/.test(readFileSync(path, 'utf8')),
+  );
+  assert.deepEqual(
+    declaring,
+    ['src/lib/cms/analytics/period.ts'],
+    'the presets live in src/lib/cms/analytics/period.ts alone',
+  );
+  console.log(`[period] one control on ${PAGES.length} pages`);
+});
+
+test('no From, To or Trend control survives on an analytics page', () => {
+  // The panel this replaced asked a person to type a date twice and then asked
+  // for a grain the period already answers. All three are gone, and the only
+  // date input left in the application is the one behind Custom.
+  const shared = readFileSync('src/components/cms/CmsOrderFilters.astro', 'utf8');
+  // The only `from` and `to` left in this form are hidden fields carrying a
+  // CUSTOM period through the GET submit, which is the opposite of a control:
+  // nobody sees them and nobody types into them.
+  assert.ok(
+    !/<CmsInput[^>]*name="(from|to)"/.test(shared),
+    'the two date boxes are gone from the filter form',
+  );
+  assert.ok(!/label="Trend grain"/.test(shared), 'the trend grain control is gone');
+  assert.ok(!/id="f-grain"/.test(shared), 'the trend grain control is gone');
+  assert.ok(!/id="f-from"|id="f-to"/.test(shared), 'the two date boxes are gone');
+
+  // The one remaining typed date is inside Custom, which is where it belongs.
+  const control = readFileSync('src/components/cms/CmsPeriodControl.astro', 'utf8');
+  const custom = control.slice(control.indexOf('Custom', control.indexOf('uppercase">')));
+  assert.match(custom, /type="date"/, 'Custom is where a date is typed');
+  assert.equal(
+    (control.match(/type="date"/g) ?? []).length,
+    2,
+    'exactly two typed dates exist, both inside Custom',
+  );
+});
+
+test('the empty periods are marked without relying on colour', () => {
+  const control = readFileSync('src/components/cms/CmsPeriodControl.astro', 'utf8');
+  // Dimming alone is colour carrying meaning. The accessible name says it too.
+  assert.match(control, /no data/, 'an empty period says so in its accessible name');
+  assert.match(control, /aria-label=\{mark\(/, 'every drill cell carries the mark');
+});
+
+test('the leaderboard groups by function and carries only people', () => {
+  const board = readFileSync('src/components/cms/CmsApprovalLeaderboard.astro', 'utf8');
+
+  // FUNCTION IS A HEADING, NOT A COLUMN. A real row header with a colspan, so
+  // a screen reader announces the rows beneath it as belonging to it rather
+  // than meeting a styled cell.
+  assert.match(board, /scope="colgroup"/, 'the function heading is a real group header');
+  assert.match(board, /colspan=\{COLUMNS\.length\}/, 'it spans the table');
+  // Grouped, and a person acting in two functions appears once under each,
+  // because the grouping is by the row's own function rather than by person.
+  assert.match(board, /groups\.find\(\(group\) => group\.fn === row\.fn\)/);
+
+  // A LEADERBOARD IS PEOPLE. A function whose extract records no actor is
+  // excluded whole — dropping the null rows and keeping the function would
+  // leave an empty heading claiming somebody worked on it.
+  assert.match(board, /filter\(\(row\) => row\.userId !== null\)/);
+  // And it is named beneath, so the same fact is still on the page. Matched on
+  // whitespace-normalised source, because the formatter is free to rewrap a
+  // sentence and an assertion that breaks when it does is testing prettier.
+  const flat = board.replace(/\s+/g, ' ');
+  assert.match(flat, /in the chart above and not in this table/);
+
+  // The three removed columns leave no trace in the markup.
+  for (const gone of ['Within SLA', 'Oldest pending', 'oldestPendingAt', 'row.pending']) {
+    assert.ok(!board.includes(gone), `${gone} still appears in the leaderboard`);
+  }
+});
+
+test('a panel never renders empty in silence while its own data is elsewhere', () => {
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  // THE PAGE-LEVEL FALLBACK IS NOT ENOUGH, and that is the whole lesson: it
+  // moves the period when NOTHING on the page has data, which is false the
+  // moment one board has data and the other does not.
+  assert.match(home, /const elsewhere = /, 'each panel checks its own board');
+  assert.equal(
+    (home.match(/elsewhere\((purchase|sales)Calendar/g) ?? []).length >= 2,
+    true,
+    'both panels carry the check',
+  );
+  // The count under each table is that board's own, never the page's mixed
+  // total across every entity type.
+  assert.match(home, /totalOutside=\{outsideFor\(purchaseCalendar, purchases\)\}/);
+  assert.match(home, /totalOutside=\{outsideFor\(salesCalendar, sales\)\}/);
+  assert.ok(!/totalOutside=\{outside\}/.test(home), 'the mixed page total is gone');
+
+  // The period is still resolved ONCE for the page.
+  assert.equal(
+    (home.match(/choosePeriod\(/g) ?? []).length,
+    1,
+    'the period must be resolved once for the page',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Build Prompt 40: the assistant panel, and where Customers lives
+// ---------------------------------------------------------------------------
+
+/**
+ * A file with its comments removed.
+ *
+ * These assertions are about what the code DOES, and the comments in this
+ * codebase explain at length why a thing is absent — "no avatars", "never
+ * innerHTML". Scanning the prose for the word makes the assertion fail on the
+ * explanation of the rule it is enforcing.
+ */
+const codeOf = (path: string) =>
+  readFileSync(path, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+test('the assistant reads as one calm column', () => {
+  const panel = codeOf('src/components/cms/CmsAssistant.astro');
+
+  // ONE COLUMN, 60 TO 75 CHARACTERS. A wide chat is hard to read because the
+  // eye loses the line return on the way back.
+  assert.match(panel, /max-w-\[68ch\]/, 'the message body is measured in characters');
+
+  // THE SPEAKERS DIFFER BY POSITION AND TONE, NOT BY TWO LOUD COLOURS. The
+  // person is on the royal tint at the trailing edge; the assistant is on the
+  // canvas at the leading edge. No dark bubble either way.
+  assert.match(
+    panel,
+    /self-end rounded-cms bg-cms-royal-tint/,
+    'the person is tinted and trailing',
+  );
+  assert.match(panel, /self-start text-cms-body-sm/, 'the assistant is plain and leading');
+  assert.ok(!/bg-cms-navy/.test(panel), 'no dark bubbles');
+
+  // NOTHING DECORATIVE. No gradient, no second elevation level, no typing dots
+  // implying a person at a keyboard, no avatars, no bubble tail, no emoji.
+  for (const banned of ['gradient', 'shadow-', 'avatar', 'Avatar']) {
+    assert.ok(!panel.includes(banned), `the assistant panel carries ${banned}`);
+  }
+  // One still dot, not three animated ones.
+  assert.equal(
+    (panel.match(/cms-assistant-dot/g) ?? []).length,
+    2,
+    'exactly one indicator dot, declared once and styled once',
+  );
+
+  // THE INDICATOR SITS WHERE THE REPLY WILL APPEAR, so the answer replaces it
+  // in place and nothing jumps.
+  const flat = panel.replace(/\s+/g, ' ');
+  assert.match(
+    flat,
+    /const reply = turn\('Assistant'\);.*working/s,
+    'the indicator is in the turn',
+  );
+  assert.match(panel, /working\.remove\(\)/, 'and the reply takes its place');
+
+  // AND IT IS STILL UNDER prefers-reduced-motion, via the global clamp rather
+  // than a second rule here that could drift from it.
+  const global = readFileSync('src/styles/global.css', 'utf8');
+  assert.match(global, /animation-duration: 0\.01ms !important|transition-duration: 0\.01ms/);
+});
+
+test('the assistant composer is an anchor, and Enter sends', () => {
+  const panel = readFileSync('src/components/cms/CmsAssistant.astro', 'utf8');
+  // FIXED AT THE FOOT: the transcript scrolls, the composer does not move as
+  // messages arrive.
+  assert.match(
+    panel,
+    /flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto/,
+    'the transcript scrolls',
+  );
+  assert.match(panel, /shrink-0 border-t border-cms-line/, 'the composer is pinned');
+  // At least 44px, which is the smallest thing a finger reliably hits.
+  assert.match(panel, /min-h-11/, 'the field is at least 44px');
+  assert.match(panel, /h-11 shrink-0/, 'and so is the send button');
+  // Enter submits, Shift+Enter is a newline.
+  assert.match(panel, /event\.key === 'Enter' && !event\.shiftKey/);
+
+  // SPACE BETWEEN TURNS EXCEEDS SPACE WITHIN ONE. gap-5 is 1.25rem between
+  // turns; gap-1 is 0.25rem between a speaker's label and their words.
+  assert.match(panel, /gap-5 overflow-y-auto/, 'turns are separated by 1.25rem');
+  assert.match(panel, /flex-col gap-1 self-(end|start)/, 'and a turn groups at 0.25rem');
+});
+
+test('a long answer is rendered as text, never as markup', () => {
+  const panel = codeOf('src/components/cms/CmsAssistant.astro');
+  // Paragraphs, lists and short headings, built with textContent. Rendering a
+  // model's output through innerHTML is the injection the CSP exists to
+  // prevent, and a Markdown dependency is one this phase may not add.
+  assert.ok(!/innerHTML/.test(panel), 'the assistant never writes markup from a response');
+  assert.match(panel, /\.textContent = /, 'every node is built from text');
+  assert.match(panel, /createElement\(\/\^\\d\/\.test\(lines\[0\]!\) \? 'ol' : 'ul'\)/);
+});
+
+test('Customers sits in Operations, immediately before Data', () => {
+  const rail = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
+  assert.match(rail, /\{ label: 'Operations', items: \['Customers', 'Data'\] \}/);
+  // And it is not left behind in the landing group.
+  assert.match(rail, /\{ label: null, items: \['Home', 'CRM', 'Helpdesk', 'Orders'\] \}/);
+  assert.equal(
+    (rail.match(/'Customers'/g) ?? []).length,
+    1,
+    'Customers appears in exactly one group',
+  );
+  // The order is the GROUP's, not the navigation model's, so moving an item
+  // between groups cannot silently reorder it.
+  assert.match(rail, /group\.items\s*\n?\s*\.map\(\(label\) => entries\.find/);
+
+  // Hidden entirely without the permission: visibleNav filters on the resolved
+  // codes, and an empty group is dropped whole.
+  const nav = readFileSync('src/lib/cms/nav.ts', 'utf8');
+  assert.match(nav, /permission: 'CUSTOMERS\.ACCOUNTS\.VIEW'/);
+  assert.match(rail, /\.filter\(\(group\) => group\.entries\.length > 0\)/);
+});
+
+test('the rail says when a pin is in force', () => {
+  // THE CAUSE OF "IT DOES NOT COLLAPSE". The collapse shipped and works; a rail
+  // that stays open is one where somebody pressed "Keep open" in that browser,
+  // possibly months ago. localStorage outranks a later change of default
+  // silently and for ever, and nothing on screen said a preference existed, so
+  // the only reading available was that the collapse was broken.
+  const script = readFileSync('src/components/cms/CmsRailScript.astro', 'utf8');
+  assert.match(script, /Kept open in this browser/, 'the pinned state is stated');
+  const layout = readFileSync('src/layouts/CmsLayout.astro', 'utf8');
+  assert.match(layout, /data-cms-rail-pin-note/, 'and there is somewhere to state it');
 });

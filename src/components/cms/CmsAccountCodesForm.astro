@@ -1,0 +1,282 @@
+---
+/**
+ * The Oracle customer code and the account code, edited deliberately.
+ *
+ * WHY THIS IS NOT PART OF THE CUSTOMER FORM.
+ *
+ * `oracle_customer_code` is the key the importer matches an extract row on.
+ * Changing it does not alter this customer's history and it does not move a
+ * single existing order; it changes where every FUTURE import lands, and the
+ * effect does not appear until the next extract arrives, possibly weeks later
+ * and possibly to somebody who has never heard of this edit. That is the
+ * definition of a change that needs a confirmation, and a confirmation shared
+ * with a corrected phone number is no confirmation at all.
+ *
+ * `account_code` is unique for the same structural reason and gets the same
+ * treatment.
+ *
+ * THE CONFIRMATION STATES CONSEQUENCE, NOT DANGER. "Are you sure?" is a
+ * question nobody can answer. This one says how many sales orders belong to
+ * this customer today and how many rows of imported extract carry the code
+ * literally, because those are the two numbers that decide whether the change
+ * is routine or serious. The second matters even when the first is zero: a code
+ * with no orders and four hundred extract rows is still consequential, and a
+ * confirmation showing only orders would have called it safe.
+ *
+ * A COLLISION NAMES THE ACCOUNT ALREADY HOLDING THE CODE and links to it,
+ * rather than surfacing a UNIQUE constraint. The holder is usually the record
+ * the person actually meant to edit.
+ *
+ * The change writes its own audit event — ACCOUNT_ORACLE_CODE_CHANGED or
+ * ACCOUNT_CODE_CHANGED — so finding out when it happened does not mean diffing
+ * two JSON blobs inside an ACCOUNT_UPDATED among fifteen other fields.
+ */
+import CmsInput from './CmsInput.astro';
+import type { AccountRow, OracleCodeUsage } from '@/lib/cms/repos/accountAdmin';
+
+interface Props {
+  account: AccountRow;
+  usage: OracleCodeUsage;
+}
+const { account, usage } = Astro.props;
+const count = (value: number) => value.toLocaleString('en-KE');
+---
+
+<form
+  id="cms-account-codes"
+  novalidate
+  class="flex flex-col gap-4"
+  data-account-id={account.accountId}
+>
+  <p
+    id="cms-account-codes-error"
+    role="alert"
+    hidden
+    class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+  >
+  </p>
+  <p
+    id="cms-account-codes-saved"
+    role="status"
+    hidden
+    class="rounded-cms border border-cms-positive bg-cms-positive-tint px-3 py-2 text-cms-body-sm text-cms-positive"
+  >
+  </p>
+
+  <div class="grid gap-4 sm:grid-cols-2">
+    <CmsInput
+      id="c-oracleCustomerCode"
+      name="oracleCustomerCode"
+      label="Oracle customer code"
+      value={account.oracleCustomerCode ?? ''}
+      hint="The key the importer matches an extract row on. Leave blank for a prospect with no Oracle master record yet."
+    />
+    <CmsInput
+      id="c-accountCode"
+      name="accountCode"
+      label="Account code"
+      value={account.accountCode ?? ''}
+      hint="Unique across every account."
+    />
+  </div>
+
+  {
+    /*
+      THE CONFIRMATION. It is in the markup rather than built by the script, so
+      the two numbers are server-rendered facts rather than something a reader
+      has to trust a fetch for, and so it reads correctly with no JavaScript.
+    */
+  }
+  <section
+    id="cms-account-codes-confirm"
+    hidden
+    class="rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-3 text-cms-body-sm text-cms-ink"
+  >
+    <h3 class="font-semibold">Change the codes this customer is matched on?</h3>
+    <p class="mt-1">
+      {count(usage.orders)} sales {usage.orders === 1 ? 'order belongs' : 'orders belong'} to
+      {account.accountName} today, and {count(usage.extractRows)} imported extract
+      {usage.extractRows === 1 ? 'row carries' : 'rows carry'} the Oracle code
+      {account.oracleCustomerCode ?? '(none)'}.
+    </p>
+    <p class="mt-1 text-cms-muted">
+      Nothing already recorded moves. What changes is where the NEXT import lands: an extract row
+      carrying the old code will stop matching this customer, and one carrying the new code will
+      start. The change is recorded as its own audit event.
+    </p>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button
+        type="button"
+        id="cms-account-codes-continue"
+        class="inline-flex h-9 items-center rounded-cms bg-cms-royal px-3 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        Change the code
+      </button>
+      <button
+        type="button"
+        id="cms-account-codes-back"
+        class="inline-flex h-9 items-center rounded-cms border border-cms-border px-3 text-cms-body-sm font-medium text-cms-ink outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        Go back and edit
+      </button>
+    </div>
+  </section>
+
+  <div class="flex flex-wrap items-center gap-2">
+    <button
+      type="submit"
+      data-cms-codes-save
+      class="inline-flex h-9 items-center rounded-cms border border-cms-border px-3.5 text-cms-body-sm font-semibold text-cms-ink outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      Save the codes
+    </button>
+  </div>
+</form>
+
+<script>
+  interface FieldError {
+    field: string;
+    message: string;
+    holderAccountId?: string;
+    holderAccountName?: string;
+  }
+
+  const form = document.getElementById('cms-account-codes') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-account-codes-error');
+  const savedBox = document.getElementById('cms-account-codes-saved');
+  const confirmPanel = document.getElementById('cms-account-codes-confirm');
+  const continueButton = document.getElementById('cms-account-codes-continue');
+  const backButton = document.getElementById('cms-account-codes-back');
+
+  if (form && confirmPanel && continueButton && backButton) {
+    const accountId = form.dataset.accountId ?? '';
+    const original = new FormData(form);
+    // Set once the person has read the confirmation and chosen to proceed, so
+    // the next submit goes through rather than looping on the same panel.
+    let acknowledged = false;
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      for (const box of [errorBox, savedBox]) {
+        if (box) {
+          box.hidden = true;
+          box.textContent = '';
+        }
+      }
+    };
+
+    const paint = (fields: FieldError[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        const element = field instanceof HTMLElement ? field : null;
+        if (!element || !element.id) continue;
+        element.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${element.id}-error`);
+        if (!message) continue;
+        message.textContent = item.message;
+        if (item.holderAccountId) {
+          const link = document.createElement('a');
+          link.href = `/app/customers/${item.holderAccountId}`;
+          link.className = 'ms-1 font-semibold underline underline-offset-2';
+          link.textContent = 'Open it';
+          message.appendChild(link);
+        }
+        message.classList.remove('hidden');
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    const changed = () => {
+      const now = new FormData(form);
+      return (
+        String(now.get('oracleCustomerCode') ?? '') !==
+          String(original.get('oracleCustomerCode') ?? '') ||
+        String(now.get('accountCode') ?? '') !== String(original.get('accountCode') ?? '')
+      );
+    };
+
+    const send = async () => {
+      const save = form.querySelector<HTMLButtonElement>('[data-cms-codes-save]');
+      if (save) save.disabled = true;
+      try {
+        const response = await fetch(`/api/customers/accounts/${accountId}/identifiers`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            oracleCustomerCode: String(new FormData(form).get('oracleCustomerCode') ?? ''),
+            accountCode: String(new FormData(form).get('accountCode') ?? ''),
+          }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          fields?: FieldError[];
+          message?: string;
+        };
+        if (response.ok) {
+          confirmPanel.hidden = true;
+          acknowledged = false;
+          if (savedBox) {
+            savedBox.textContent =
+              'The codes are changed, and the change is recorded as its own audit event. Reload to see the updated match counts.';
+            savedBox.hidden = false;
+          }
+          return;
+        }
+        confirmPanel.hidden = true;
+        acknowledged = false;
+        if (Array.isArray(data.fields) && data.fields.length > 0) {
+          paint(data.fields);
+          return;
+        }
+        if (errorBox) {
+          errorBox.textContent = data.message ?? 'The codes could not be changed. Try again.';
+          errorBox.hidden = false;
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.textContent =
+            'The codes could not be changed. Check your connection and try again.';
+          errorBox.hidden = false;
+        }
+      } finally {
+        if (save) save.disabled = false;
+      }
+    };
+
+    continueButton.addEventListener('click', () => {
+      acknowledged = true;
+      void send();
+    });
+
+    backButton.addEventListener('click', () => {
+      confirmPanel.hidden = true;
+      acknowledged = false;
+      form.querySelector<HTMLInputElement>('#c-oracleCustomerCode')?.focus();
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      clear();
+      // A SAVE THAT CHANGES NOTHING NEEDS NO CONFIRMATION, and a confirmation
+      // shown for a no-op is how people learn to click through them.
+      if (!changed()) {
+        if (savedBox) {
+          savedBox.textContent = 'Neither code changed, so nothing was written.';
+          savedBox.hidden = false;
+        }
+        return;
+      }
+      if (!acknowledged) {
+        confirmPanel.hidden = false;
+        continueButton.focus();
+        return;
+      }
+      void send();
+    });
+  }
+</script>
