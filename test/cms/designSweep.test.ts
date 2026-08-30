@@ -210,6 +210,11 @@ test('the workspace is light: no content-area surface sits on a dark field', () 
     'src/components/cms/CmsDrawer.astro',
     'src/components/cms/CmsAvatar.astro',
     'src/components/cms/CmsIconButton.astro',
+    // The design reference exists to show every primitive in every state,
+    // which includes the two tones that only ever appear on the rail. It is
+    // the one page that renders chrome out of its context, on purpose, and it
+    // is behind an administration permission.
+    'src/pages/cms/app/administration/components.astro',
   ]);
   const offenders: string[] = [];
   for (const path of CMS_SOURCE) {

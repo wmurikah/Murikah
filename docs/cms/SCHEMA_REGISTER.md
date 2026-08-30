@@ -91,7 +91,7 @@ this section.
 ```
 1. hass_cms_turso_v1_FINAL.sql          (creates everything, seeds the demo)
 2. the SO/PO source completeness rebuild
-3. docs/cms/organisation/01 ... docs/cms/audit/09, in number order
+3. docs/cms/organisation/01 ... docs/cms/executive/08, in number order
 4. GET /api/health                       (expect status "ok")
 5. production/10_production_cleanup.sql  (production only, after review)
 6. pnpm db:cms:bootstrap-admin           (creates the first real administrator)

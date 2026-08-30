@@ -98,6 +98,20 @@ import {
   insights as serviceInsights,
 } from '../../src/lib/cms/repos/serviceAnalytics.ts';
 import {
+  systemHealth,
+  expiringAuthority,
+  accessReview,
+  authorityReview,
+} from '../../src/lib/cms/repos/controlCentre.ts';
+import {
+  listAuditEvents,
+  auditFilterOptions,
+  maySeeSecurityEvents,
+  securityEvents,
+  parseAuditFilter,
+} from '../../src/lib/cms/repos/auditTrail.ts';
+import { REPORTS } from '../../src/lib/cms/reports/catalogue.ts';
+import {
   resetCaseEventHandlers,
   resetLeadEventHandlers,
   resetSlaWiring,
