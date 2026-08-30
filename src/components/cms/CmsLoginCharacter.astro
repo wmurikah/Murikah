@@ -1,0 +1,99 @@
+---
+/** Decorative sign-in character. State never replaces form labels or feedback. */
+---
+
+<div
+  class="cms-login-character mx-auto mt-8 w-44 text-cms-rail-text"
+  data-cms-login-character
+  data-state="rest"
+  aria-hidden="true"
+>
+  <svg viewBox="0 0 180 150" role="presentation" class="block h-auto w-full">
+    <path class="body" d="M43 132V72c0-28 20-48 47-48s47 20 47 48v60Z"></path>
+    <path class="face" d="M57 78c0-22 13-37 33-37s33 15 33 37v32H57Z"></path>
+    <g class="eyes">
+      <circle cx="78" cy="76" r="4"></circle><circle cx="102" cy="76" r="4"></circle>
+    </g>
+    <path class="ack" d="M84 94q6 5 12 0"></path>
+    <g class="hands">
+      <path d="M47 119q15-27 34-31"></path><path d="M133 119q-15-27-34-31"></path>
+      <circle cx="80" cy="88" r="8"></circle><circle cx="100" cy="88" r="8"></circle>
+    </g>
+  </svg>
+</div>
+
+<style>
+  .cms-login-character {
+    transform-origin: 50% 100%;
+    transition: transform 180ms ease;
+  }
+  .cms-login-character .body {
+    fill: var(--color-cms-navy-soft);
+    stroke: var(--color-cms-gold);
+    stroke-width: 3;
+  }
+  .cms-login-character .face {
+    fill: var(--color-cms-rail-text);
+  }
+  .cms-login-character .eyes {
+    fill: var(--color-cms-navy);
+    transform-origin: center;
+    transition: transform 160ms ease;
+  }
+  .cms-login-character .ack,
+  .cms-login-character .hands path {
+    fill: none;
+    stroke: var(--color-cms-navy);
+    stroke-linecap: round;
+    stroke-width: 4;
+  }
+  .cms-login-character .hands circle {
+    fill: var(--color-cms-gold);
+  }
+  .cms-login-character .hands {
+    opacity: 0;
+    transform: translateY(28px);
+    transform-origin: center;
+    transition:
+      opacity 120ms ease,
+      transform 180ms ease;
+  }
+  .cms-login-character[data-state='email'] .eyes {
+    transform: translateX(4px);
+  }
+  .cms-login-character[data-state='typing'] .eyes {
+    transform: translateX(7px);
+  }
+  .cms-login-character[data-state='valid'] {
+    transform: translateY(-3px);
+  }
+  .cms-login-character[data-state='valid'] .eyes {
+    transform: translateX(5px) scaleY(0.7);
+  }
+  .cms-login-character[data-state='password'] .hands,
+  .cms-login-character[data-state='peek'] .hands {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .cms-login-character[data-state='peek'] .hands {
+    transform: translateX(8px);
+  }
+  .cms-login-character[data-state='retry'] {
+    transform: translateX(-3px) rotate(-1deg);
+  }
+  .cms-login-character[data-state='success'] {
+    transform: translateY(-4px) scale(1.02);
+  }
+  .cms-login-character[data-state='loading'] .eyes {
+    transform: scaleY(0.45);
+  }
+  .cms-login-character[data-state='loading'] {
+    transform: translateY(-2px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cms-login-character,
+    .cms-login-character * {
+      transition: none !important;
+    }
+  }
+</style>

@@ -323,6 +323,16 @@ const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
   };
 };
 
+const peopleByFunction = (board: ApprovalBoard | null) =>
+  (board?.functions ?? []).map((fn) => ({
+    fn,
+    people: (board?.leaders ?? []).filter((row) => row.fn === fn.fn && row.userId !== null),
+  }));
+const omittedFunctions = (board: ApprovalBoard | null) =>
+  (board?.functions ?? [])
+    .filter((fn) => !(board?.leaders ?? []).some((row) => row.fn === fn.fn && row.userId !== null))
+    .map((fn) => fn.fn);
+
 /**
  * The definition every figure on this page shares, one control away.
  *
@@ -524,7 +534,7 @@ const DEFINITION =
                 <td class="px-3 py-2">
                   <a
                     class="font-medium text-cms-royal hover:underline"
-                    href={`/app/customers/${row.accountId}`}
+                    href={`/app/operations/customers/${row.accountId}`}
                   >
                     {row.customerName}
                   </a>

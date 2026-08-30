@@ -2,64 +2,130 @@
 import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsAuthProviders from '@/components/cms/CmsAuthProviders.astro';
+import CmsLoginCharacter from '@/components/cms/CmsLoginCharacter.astro';
+
 export const prerender = false;
 const verified = Astro.url.searchParams.get('verified') === '1';
 const email = Astro.url.searchParams.get('email') ?? '';
 const grant = Astro.url.searchParams.get('grant') ?? '';
+const reason = Astro.url.searchParams.get('reason');
+const notice = Astro.url.searchParams.has('provider_error')
+  ? "We couldn't verify that provider. Try again or choose another company identity."
+  : reason === 'internal'
+    ? 'Hass Petroleum employees are provisioned by an administrator.'
+    : reason === 'company_email'
+      ? 'Use a company email address. Personal email domains cannot request customer access.'
+      : null;
 ---
 
-<CmsAuthLayout title="Create customer access"
-  ><div class="flex flex-col gap-6">
-    <header>
-      <h1 class="text-cms-display font-semibold">Create customer access</h1><p
-        class="mt-2 text-cms-body text-cms-muted"
-      >
-        Use your company identity. Access begins only after Hass approval.
+<CmsAuthLayout title="Create customer access">
+  <CmsLoginCharacter slot="brand-character" />
+  <div class="flex flex-col gap-6">
+    <header class="space-y-1.5">
+      <p class="text-cms-label font-semibold tracking-[0.12em] text-cms-gold-ink uppercase">
+        Customer access
       </p>
-    </header><div class="grid gap-2.5">
-      <a
-        href="/api/auth/oidc/microsoft/start?purpose=REGISTER"
-        class="flex min-h-11 items-center justify-center rounded-cms border border-cms-border bg-cms-surface font-semibold"
-        >Continue with Microsoft</a
-      ><a
-        href="/api/auth/oidc/google/start?purpose=REGISTER"
-        class="flex min-h-11 items-center justify-center rounded-cms border border-cms-border bg-cms-surface font-semibold"
-        >Continue with Google</a
-      >
-    </div><form id="register" class="flex flex-col gap-4">
+      <h1 class="text-cms-display font-semibold text-cms-ink">Join your company workspace</h1>
+      <p class="text-cms-body-sm text-cms-muted">
+        Verify a company identity. Access begins only after Hass approval.
+      </p>
+    </header>
+
+    {
+      notice && (
+        <p
+          role="alert"
+          class="rounded-cms border border-cms-caution-border bg-cms-caution-tint px-3.5 py-3 text-cms-body-sm text-cms-caution"
+        >
+          {notice}
+        </p>
+      )
+    }
+
+    <CmsAuthProviders purpose="REGISTER" />
+    <p class="text-cms-caption text-cms-muted">
+      Use Microsoft or Google for the first request. Apple can be linked after corporate access is
+      approved.
+    </p>
+
+    <div class="flex items-center gap-3 text-cms-caption text-cms-muted" aria-hidden="true">
+      <span class="h-px flex-1 bg-cms-line"></span><span>company details</span><span
+        class="h-px flex-1 bg-cms-line"></span>
+    </div>
+
+    <form id="register" class="flex flex-col gap-4">
       <input type="hidden" name="grant" value={grant} />
-      <p role="alert" data-message class="min-h-6 text-cms-body-sm"></p><CmsInput
+      <p role="status" data-message class="min-h-6 text-cms-body-sm text-cms-muted">
+        {
+          verified
+            ? 'Company identity verified. Complete the request.'
+            : 'Verify with Microsoft or Google to continue.'
+        }
+      </p>
+      <CmsInput
         id="register-email"
         name="email"
-        label="Work email"
+        label="Company email"
         type="email"
         value={email}
         readonly={verified}
         disabled={!verified}
         required
-      /><CmsInput id="contact-name" name="contactName" label="Your name" required /><CmsInput
+      />
+      <CmsInput
+        id="contact-name"
+        name="contactName"
+        label="Your name"
+        required
+        disabled={!verified}
+      />
+      <CmsInput
         id="company-name"
         name="companyName"
-        label="Company"
+        label="Company name"
         required
-      /><CmsButton type="submit" variant="primary" size="lg" full disabled={!verified}
-        >Request access</CmsButton
-      >
-    </form><p class="text-cms-body-sm text-cms-muted">
-      Already have access? <a href="/login" class="font-semibold text-cms-royal">Sign in</a>
+        disabled={!verified}
+      />
+      <CmsButton type="submit" variant="primary" size="lg" full disabled={!verified}>
+        Request customer access
+      </CmsButton>
+    </form>
+
+    <p class="text-cms-caption text-cms-muted">
+      Personal email addresses cannot request customer access. Hass Petroleum employees are
+      provisioned by an administrator.
     </p>
-  </div></CmsAuthLayout
->
+    <p class="text-cms-body-sm text-cms-muted">
+      Already have access? <a href="/login" class="font-semibold text-cms-royal hover:underline"
+        >Sign in</a
+      >
+    </p>
+  </div>
+</CmsAuthLayout>
+
 <script>
-  document.querySelector<HTMLFormElement>('#register')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const response = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget as HTMLFormElement))),
+  document
+    .querySelector<HTMLFormElement>('#register')
+    ?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget as HTMLFormElement;
+      const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = 'Sending request…';
+      }
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(new FormData(form))),
+      });
+      const data = (await response.json()) as { ok: boolean; message: string };
+      const message = document.querySelector<HTMLElement>('[data-message]');
+      if (message) message.textContent = data.message;
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = 'Request customer access';
+      }
     });
-    const data = (await response.json()) as { ok: boolean; message: string };
-    const message = document.querySelector<HTMLElement>('[data-message]');
-    if (message) message.textContent = data.message;
-  });
 </script>
