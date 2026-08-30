@@ -48,5 +48,3 @@ The broken registration entry was a route-policy defect rather than an anchor de
 A decorative inline-SVG assistant reacts to email attention, typing, password privacy, validation, waiting and completion. It is hidden from assistive technology, uses only namespaced CMS tokens, adds no dependency, and retains state changes without transitions under reduced motion. Password and provider authentication still terminate in the existing `auth_sessions` path.
 
 Live provider validation remains dependent on the Microsoft, Google and Apple Worker-secret configuration described below; unavailable providers return to the correct login or registration entry with a stable error message.
-
-The final interaction check also synchronizes the privacy pose after the password reveal control has changed the field type, so “show password” consistently produces the peek state. Submitting an empty password now leaves the layout stable, announces an explicit field-level instruction, and returns focus to the labelled password control.

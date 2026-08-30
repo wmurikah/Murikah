@@ -43,5 +43,3 @@ The authentication architecture is unchanged. Phase 4.1 adds presentation and co
 Provider controls are ordinary same-origin links to the existing Authorization Code + PKCE start routes. Login offers Microsoft, Google and Apple with purpose `SIGN_IN`. Registration offers Microsoft and Google with purpose `REGISTER`; the server continues to reject Apple registration and the UI does not suggest otherwise. Provider start/callback failures return to the entry page matching the transaction purpose.
 
 The SVG assistant and auth-panel effects are decorative. They do not participate in validation, identity policy, provider verification, session creation, or routing. The form remains labelled and operable when the assistant script is absent.
-
-The password reveal integration observes the input's resulting type after the shared reveal handler completes; it changes only the decorative pose and does not read, copy or transmit the password value. Empty-password feedback remains ordinary form feedback and is not delegated to the character.
