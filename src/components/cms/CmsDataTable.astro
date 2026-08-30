@@ -24,6 +24,7 @@
  * genuinely meet.
  */
 import CmsSkeleton from './CmsSkeleton.astro';
+import CmsDefinition from './CmsDefinition.astro';
 
 export interface CmsColumn {
   key: string;
@@ -31,6 +32,22 @@ export interface CmsColumn {
   numeric?: boolean;
   /** Hide below the sm breakpoint, for columns that are context, not content. */
   secondary?: boolean;
+  /**
+   * What this column measures, available on demand from its own header.
+   *
+   * IT BELONGS IN THE HEADER AND NOWHERE ELSE. A definition parked in a
+   * footnote is a definition nobody reads, and a row of identical info icons
+   * under a table tells a reader nothing about which one explains which
+   * column. Here the control is attached to the word it defines, so a column
+   * whose plain-English header hides a technical name — `Typical` for the
+   * median, `Slowest 10%` for the P90 — can be read by everybody and traced by
+   * an auditor from the same place.
+   */
+  definition?: string;
+  /** The population the column's figures are taken over. */
+  denominator?: string;
+  /** Which timestamp decides the period. */
+  dateBasis?: string;
 }
 
 interface Props {
@@ -58,7 +75,7 @@ const {
   loading = false,
   empty = false,
   rowCount = 4,
-  emptyMessage = 'No results match the current view.',
+  emptyMessage = 'No rows for this selection. An empty result is not a claim that nothing exists: check the filters and the date range.',
   stickyHead = false,
   class: className,
 } = Astro.props;
@@ -94,7 +111,24 @@ const hasMobileRows = Astro.slots.has('mobile');
                   column.secondary ? 'hidden sm:table-cell' : '',
                 ]}
               >
-                {column.label}
+                {column.definition === undefined ? (
+                  column.label
+                ) : (
+                  <span
+                    class:list={[
+                      'inline-flex items-center gap-1',
+                      column.numeric ? 'flex-row-reverse' : '',
+                    ]}
+                  >
+                    {column.label}
+                    <CmsDefinition
+                      label={column.label}
+                      definition={column.definition}
+                      denominator={column.denominator}
+                      dateBasis={column.dateBasis}
+                    />
+                  </span>
+                )}
               </th>
             ))
           }
