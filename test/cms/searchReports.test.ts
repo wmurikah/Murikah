@@ -619,5 +619,5 @@ test('drill-through resolves to the live record', async () => {
   if (run.rows.length === 0) return;
   const href = run.hrefFor?.(run.rows[0]!) ?? null;
   assert.notEqual(href, null);
-  assert.match(href!, /^\/app\/customers\/ACC-/);
+  assert.match(href!, /^\/app\/operations\/customers\/ACC-/);
 });

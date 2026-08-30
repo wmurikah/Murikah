@@ -53,3 +53,13 @@ Review each image for primary-task clarity, one dominant action, scan order, ali
 - Confirm login validation and server-error states introduce no layout shift.
 - Confirm Dashboard scan order begins with Needs attention and that secondary metrics and charts do not compete with it.
 - Confirm portal language remains customer-facing and no internal permission, workflow, scope, or implementation terminology appears.
+
+## Phase 4.1 auth-entry pending items
+
+| ID      | Area                         | What remains                                                                                                 | Why it remains                                                                                        | Severity | Recommended next action                                                               |
+| ------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| P4.1-01 | Live SSO                     | Exercise Microsoft, Google and Apple sign-in against configured provider consoles.                           | Provider credentials and callback registrations are external deployment state.                        | HIGH     | Configure Worker secrets and allowed callbacks, then run login smoke tests.           |
+| P4.1-02 | Responsive visual acceptance | Review login, registration, forgot-password and reset-password at desktop, laptop, tablet and mobile widths. | Automated source/build checks do not replace real-browser visual and keyboard review.                 | MEDIUM   | Capture the four auth routes at 1440, 1280, 834 and 390 pixels in browser-enabled CI. |
+| P4.1-03 | Registration approval        | Implement the approved operator workflow that turns a pending request into account-scoped portal membership. | Phase 4 intentionally stops before granting tenant access without a business-approved selection flow. | HIGH     | Agree account/contact/role approval policy before adding any mutation.                |
+
+Source validation now covers the complete character state set, reduced-motion fallback, password reveal/peek synchronization, public registration route, provider destinations and recovery link. Real-provider and multi-viewport browser acceptance remain pending external checks P4.1-01 and P4.1-02; neither is represented as complete by source tests.
