@@ -24,11 +24,29 @@ interface Props {
    * only their surface and their edge differ; a second component would have
    * been a second place for those five things to drift.
    */
+  /*
+   * THE DEFAULT IS `form`, AND THE INVERSION IS THE POINT.
+   *
+   * It used to default to `navigation`, which is the rail's dark navy. Two
+   * screens — "Add a provider" and "Add a connection" — simply omitted the
+   * prop, so light-canvas form fields rendered on a navy panel and every label
+   * and every helper became invisible. What survived was the red required
+   * asterisks floating above white boxes with nothing to say what they were.
+   *
+   * Nineteen other form drawers passed `tone="form"` and were fine, which is
+   * exactly what made this so hard to see: the fault was not in any of the
+   * screens that broke, it was in the one that did not have to say anything.
+   *
+   * A default that can produce an unreadable screen is the defect. The dark
+   * tone is now opt-in, asked for by name, and the only caller that asks is
+   * the navigation drawer in CmsLayout — which is chrome, not content, and is
+   * where the design sweep permits a dark field.
+   */
   tone?: 'navigation' | 'form';
   /** Announced with the close control, so it names what is being closed. */
   closeLabel?: string;
 }
-const { id, title, tone = 'navigation', closeLabel } = Astro.props;
+const { id, title, tone = 'form', closeLabel } = Astro.props;
 const titleId = `${id}-title`;
 const form = tone === 'form';
 ---
