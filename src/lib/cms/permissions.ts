@@ -134,6 +134,26 @@ export const ACCOUNTS_MANAGE = 'CUSTOMERS.ACCOUNTS.MANAGE';
  */
 export const PORTAL_ACCESS_VIEW = 'CUSTOMERS.PORTAL_ACCESS.VIEW';
 
+/**
+ * A customer's credit limit and credit days, which are their own permission.
+ *
+ * THEY ARE COMMERCIALLY SENSITIVE AND NOT EVERY READER OF A CUSTOMER RECORD
+ * NEEDS THEM. A credit limit says what the business will carry for this
+ * customer; a service agent reading a case does not need to know it, and a
+ * sales executive knowing every account's ceiling changes how they negotiate.
+ * Bundling the two fields into the ordinary customer read would give them to
+ * everybody who can open a customer, which is most of the organisation.
+ *
+ * The two fields are therefore hidden rather than shown empty when the code is
+ * absent, and the screen says the fields exist and are not visible, so nobody
+ * concludes the customer has no credit terms.
+ */
+export const CREDIT_TERMS_VIEW = 'CUSTOMERS.CREDIT_TERMS.VIEW';
+
+export function canViewCreditTerms(permissions: readonly string[]): boolean {
+  return permissions.includes(CREDIT_TERMS_VIEW);
+}
+
 /** MANAGE implies VIEW, for the reason stated on canViewOrganisation. */
 export function canViewAccounts(permissions: readonly string[]): boolean {
   return permissions.includes(ACCOUNTS_VIEW) || permissions.includes(ACCOUNTS_MANAGE);
