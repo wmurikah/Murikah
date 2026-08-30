@@ -28,7 +28,7 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsAuditTable from '@/components/cms/CmsAuditTable.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { canViewAudit, AUDIT_SECURITY_VIEW } from '@/lib/cms/permissions';
+import { canViewAudit } from '@/lib/cms/permissions';
 import {
   securityEvents,
   parseAuditFilter,
@@ -88,7 +88,7 @@ const pageHref = (target: number) =>
       <CmsEmptyState
         icon="administration"
         title="You do not have permission to read the audit trail"
-        description="AUDIT.EVENTS.VIEW is needed."
+        description="Ask an administrator for access."
       />
     ) : loadFailed ? (
       <CmsErrorState
@@ -99,7 +99,7 @@ const pageHref = (target: number) =>
       <CmsEmptyState
         icon="administration"
         title="Security events need a permission you do not hold"
-        description={`${AUDIT_SECURITY_VIEW} is required, and it is deliberately separate from the ordinary audit read. If nobody in the organisation holds it, the operator has not yet run docs/cms/audit/09_add_audit_permissions.sql, and until they do this view correctly refuses everybody including a system administrator.`}
+        description="Ask an administrator for access."
       />
     ) : (
       <div class="flex flex-col gap-6">

@@ -29,7 +29,20 @@ import { hashPassword } from '../../../src/lib/cms/auth/password.ts';
  */
 const PLAYWRIGHT = process.env.PLAYWRIGHT_MODULE ?? 'playwright-core';
 const CHROMIUM = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const { chromium } = (await import(PLAYWRIGHT)) as {
+/**
+ * `playwright-core` is a CommonJS package, so importing it from ESM puts its
+ * exports on `default` rather than naming them. Measured rather than assumed:
+ * `import(...)` gives `{ default: { chromium } }` while `require(...)` gives
+ * `{ chromium }`. Reading both shapes costs one line and stops this failing
+ * with "Cannot read properties of undefined" on a different Node.
+ */
+const playwright = (await import(PLAYWRIGHT)) as {
+  chromium?: unknown;
+  default?: { chromium?: unknown };
+};
+const { chromium } = (
+  playwright.chromium !== undefined ? playwright : (playwright.default ?? {})
+) as {
   chromium: {
     launch(options: unknown): Promise<{
       newContext(options: unknown): Promise<{
@@ -37,7 +50,11 @@ const { chromium } = (await import(PLAYWRIGHT)) as {
         addInitScript(fn: () => void): Promise<void>;
         newPage(): Promise<{
           goto(url: string, options: unknown): Promise<unknown>;
-          $(selector: string): Promise<{ boundingBox(): Promise<{ x: number } | null> } | null>;
+          $(selector: string): Promise<{
+            boundingBox(): Promise<{ x: number } | null>;
+            hover(): Promise<void>;
+          } | null>;
+          waitForTimeout(ms: number): Promise<void>;
           screenshot(options: unknown): Promise<unknown>;
         }>;
         close(): Promise<void>;
@@ -118,10 +135,26 @@ const jar = (cookie ?? '')
     return { name: name!, value: rest.join('='), domain: 'cms.localhost', path: '/' };
   });
 
-const shoot = async (name: string, width: number, height: number, pin: boolean) => {
+/**
+ * One picture, and the one measurement that goes with it.
+ *
+ * `hover` is the interesting state, not `pin`. Pinning deliberately widens the
+ * rail's footprint and moves the content, which is what a person asks for when
+ * they pin it. HOVERING must not: the expanded panel is absolutely positioned
+ * and overlays the page. So the overlay claim is measured by taking
+ * `#cms-main`'s x before and after a hover, in the same context, and the two
+ * numbers have to be identical.
+ */
+const shoot = async (
+  name: string,
+  path: string,
+  width: number,
+  height: number,
+  mode: 'collapsed' | 'hover' | 'pinned',
+) => {
   const context = await browser.newContext({ viewport: { width, height } });
   await context.addCookies(jar);
-  if (pin) {
+  if (mode === 'pinned') {
     await context.addInitScript(() => {
       try {
         localStorage.setItem('cms.rail.pinned', '1');
@@ -131,26 +164,49 @@ const shoot = async (name: string, width: number, height: number, pin: boolean) 
     });
   }
   const page = await context.newPage();
-  await page.goto(`${base}/app`, { waitUntil: 'networkidle' });
-  // Where the content starts, so the overlay claim can be measured rather than
-  // described: the rail must not move it.
+  await page.goto(`${base}${path}`, { waitUntil: 'networkidle' });
   const main = await page.$('#cms-main');
-  const box = main ? await main.boundingBox() : null;
-  await page.screenshot({ path: `${OUT}/${name}.png` });
-  console.log(`${name}: main starts at x=${box?.x ?? 'unknown'}`);
+  const before = main ? await main.boundingBox() : null;
+  if (mode === 'hover') {
+    const rail = await page.$('[data-cms-rail]');
+    if (rail) await rail.hover();
+    // Longer than the 150ms width transition, so the measurement is of the
+    // settled state rather than of the animation.
+    await page.waitForTimeout(400);
+  }
+  const after = main ? await main.boundingBox() : null;
+  await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+  console.log(
+    `${name}: main x before=${before?.x ?? 'n/a'} after=${after?.x ?? 'n/a'} ` +
+      `shift=${(after?.x ?? 0) - (before?.x ?? 0)}`,
+  );
   await context.close();
-  return box?.x ?? null;
+  return { before: before?.x ?? null, after: after?.x ?? null };
 };
 
-const collapsed = await shoot('after-desktop-collapsed', 1440, 900, false);
-const pinned = await shoot('after-desktop-expanded', 1440, 900, true);
-await shoot('after-laptop-collapsed', 1280, 720, false);
-await shoot('after-laptop-expanded', 1280, 720, true);
+const LABEL = process.env.SHOT_LABEL ?? 'after';
+const home = await shoot(`${LABEL}-home-collapsed`, '/app', 1440, 900, 'collapsed');
+const hovered = await shoot(`${LABEL}-home-hover`, '/app', 1440, 900, 'hover');
+await shoot(`${LABEL}-home-pinned`, '/app', 1440, 900, 'pinned');
+await shoot(`${LABEL}-list-collapsed`, '/app/orders/sales', 1440, 900, 'collapsed');
+await shoot(`${LABEL}-list-hover`, '/app/orders/sales', 1440, 900, 'hover');
+await shoot(`${LABEL}-home-narrow`, '/app', 430, 900, 'collapsed');
+
+// The sign-in page, which no session should reach.
+{
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await page.goto(`${base}/login`, { waitUntil: 'networkidle' });
+  await page.screenshot({ path: `${OUT}/${LABEL}-login.png`, fullPage: true });
+  console.log(`${LABEL}-login: taken`);
+  await context.close();
+}
+
 console.log(
   JSON.stringify({
-    contentXCollapsed: collapsed,
-    contentXPinned: pinned,
-    shift: (pinned ?? 0) - (collapsed ?? 0),
+    contentXCollapsed: home.after,
+    contentXOnHover: hovered.after,
+    shiftOnHover: (hovered.after ?? 0) - (hovered.before ?? 0),
   }),
 );
 

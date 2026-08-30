@@ -198,12 +198,23 @@ const mayUpload = canUploadImports(permissions);
         if (actions) actions.hidden = true;
         return;
       }
-      if (stage === 'DUPLICATE') {
+      // TWO REFUSALS, AND THEY DO NOT SAY THE SAME THING. The bytes matching is
+      // one fact; the bytes differing while every cell agrees is another, and
+      // an operator who re-saved the workbook needs to be told that is what
+      // happened rather than left to argue that this is a different file.
+      if (stage === 'DUPLICATE' || stage === 'RESAVED') {
         const duplicate = outcome?.duplicate as Record<string, unknown> | null;
+        const named = duplicate
+          ? `${String(duplicate.filename)}, uploaded on ${String(duplicate.uploadedAt)} by ${String(duplicate.uploadedBy)}`
+          : null;
         showError(
-          duplicate
-            ? `This exact file was already uploaded as ${String(duplicate.filename)} on ${String(duplicate.uploadedAt)} by ${String(duplicate.uploadedBy)}. Nothing was re-imported.`
-            : 'This exact file has been uploaded before.',
+          stage === 'DUPLICATE'
+            ? named
+              ? `This is the same file. It was uploaded as ${named}. Nothing was re-imported.`
+              : 'This is the same file. It has been uploaded before.'
+            : named
+              ? `This workbook was saved again, but the data is identical to ${named}. Nothing was re-imported.`
+              : 'This workbook was saved again, but the data is identical to a file already uploaded.',
         );
         if (duplicate) {
           summary.innerHTML = `<a class="text-cms-royal hover:underline" href="/app/data/history/${String(duplicate.batchId)}">Open the previous batch</a>`;
@@ -266,6 +277,13 @@ const mayUpload = canUploadImports(permissions);
         // 134 times with whichever row arrived last winning.
         line('Rows received', String(counts.rowsReceived ?? 0)) +
         line('Documents', String(counts.uniqueDocuments ?? 0)) +
+        // HOW MUCH OF THIS IS ALREADY IN. An extract re-run a week later
+        // repeats every order that has not closed, which is not a fault and
+        // not a surprise once it is on the screen before the import runs.
+        line(
+          'Already imported',
+          `${String(Number(outcome?.documentsAlreadyImported ?? 0))} of these documents are in the system`,
+        ) +
         line('Order lines', String(counts.orderLines ?? 0)) +
         line(
           'Additional loading events',

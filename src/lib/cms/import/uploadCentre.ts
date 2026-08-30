@@ -189,7 +189,17 @@ export interface UploadRequest {
   bytes: Uint8Array;
 }
 
-export type UploadStage = 'REJECTED' | 'DUPLICATE' | 'READY';
+/**
+ * THREE WAYS AN UPLOAD CAN END, AND THE MIDDLE ONE IS NEW.
+ *
+ *   DUPLICATE  The same bytes. This file has been uploaded before.
+ *   RESAVED    Different bytes, identical data. Excel re-saved the workbook
+ *              and every cell still says what it said. This is the case that
+ *              got through the byte check and imported a second time.
+ *   READY      New data, validated, nothing written yet.
+ *   REJECTED   The file could not be read or the batch could not validate.
+ */
+export type UploadStage = 'REJECTED' | 'DUPLICATE' | 'RESAVED' | 'READY';
 
 export interface UploadOutcome {
   /** What the file itself said, and which column said it. */
@@ -205,6 +215,17 @@ export interface UploadOutcome {
     uploadedAt: string;
     uploadedBy: string;
   } | null;
+  /** The workbook's data fingerprint, whatever the outcome. */
+  contentSha256: string | null;
+  /**
+   * How many documents in this file already exist in the canonical tables.
+   *
+   * Set on a READY upload, because an operator about to import a file has a
+   * right to know how much of it the system already holds. An extract re-run a
+   * week later repeats every order that has not closed, and that is not a
+   * fault: it is the reason the import is idempotent per document.
+   */
+  documentsAlreadyImported: number;
   summary: {
     rowsReceived: number;
     uniqueDocuments: number;
@@ -306,6 +327,8 @@ export async function receiveUpload(
     fileSha256: null,
     rejectedReason: null,
     duplicate: null,
+    contentSha256: null,
+    documentsAlreadyImported: 0,
     summary: null,
     accountsToCreate: [],
     productsToCreate: [],
@@ -351,7 +374,17 @@ export async function receiveUpload(
         ...empty,
         stage: 'DUPLICATE',
         fileSha256: validation.fileSha256,
+        contentSha256: validation.contentSha256,
         duplicate: await describeBatch(db, validation.duplicateOfBatchId),
+      };
+    }
+    if (validation.resavedOfBatchId !== null) {
+      return {
+        ...empty,
+        stage: 'RESAVED',
+        fileSha256: validation.fileSha256,
+        contentSha256: validation.contentSha256,
+        duplicate: await describeBatch(db, validation.resavedOfBatchId),
       };
     }
     const batchId = validation.batchId ?? '';
@@ -360,6 +393,10 @@ export async function receiveUpload(
       importType: input.importType,
       filename,
       sha256: validation.fileSha256,
+      // THE CONTENT FINGERPRINT LIVES HERE. There is no column for it and no
+      // schema change in this phase; this event is the batch's own metadata
+      // and is written exactly once per upload. See ./contentHash.ts.
+      contentSha256: validation.contentSha256,
       affiliateId: validation.affiliateId,
       rowsReceived: validation.rowsReceived,
     });
@@ -389,6 +426,8 @@ export async function receiveUpload(
       stage: 'READY',
       batchId,
       fileSha256: validation.fileSha256,
+      contentSha256: validation.contentSha256,
+      documentsAlreadyImported: validation.documentsAlreadyImported,
       rejectedReason: null,
       duplicate: null,
       summary: {
@@ -439,7 +478,17 @@ export async function receiveUpload(
       ...empty,
       stage: 'DUPLICATE',
       fileSha256: validation.fileSha256,
+      contentSha256: validation.contentSha256,
       duplicate: await describeBatch(db, validation.duplicateOfBatchId),
+    };
+  }
+  if (validation.resavedOfBatchId !== null) {
+    return {
+      ...empty,
+      stage: 'RESAVED',
+      fileSha256: validation.fileSha256,
+      contentSha256: validation.contentSha256,
+      duplicate: await describeBatch(db, validation.resavedOfBatchId),
     };
   }
   const batchId = validation.batchId ?? '';
@@ -448,6 +497,10 @@ export async function receiveUpload(
     importType: input.importType,
     filename,
     sha256: validation.fileSha256,
+    // THE CONTENT FINGERPRINT LIVES HERE. There is no column for it and no
+    // schema change in this phase; this event is the batch's own metadata
+    // and is written exactly once per upload. See ./contentHash.ts.
+    contentSha256: validation.contentSha256,
     rowsReceived: validation.rowsReceived,
   });
   await writeAudit(db, ctx, 'IMPORT_VALIDATED', batchId, 'VALIDATE', {
@@ -481,6 +534,8 @@ export async function receiveUpload(
     stage: 'READY',
     batchId,
     fileSha256: validation.fileSha256,
+    contentSha256: validation.contentSha256,
+    documentsAlreadyImported: validation.documentsAlreadyImported,
     rejectedReason: null,
     duplicate: null,
     summary: {

@@ -220,7 +220,7 @@ export async function freshness(db: Client): Promise<Freshness[]> {
     },
     { source: 'CRM', lastImportedAt: null, lastFilename: null, wording: LIVE_WORDING, live: true },
     {
-      source: 'Service',
+      source: 'Helpdesk',
       lastImportedAt: null,
       lastFilename: null,
       wording: LIVE_WORDING,
@@ -349,7 +349,7 @@ export async function needsAttention(
         key: 'service_no_response',
         label: 'Cases with no first response',
         count: service.awaitingFirstResponse,
-        href: '/app/service',
+        href: '/app/helpdesk',
         destination: {},
         definition: 'Cases raised in this period with no first response timestamp recorded.',
       });
@@ -363,7 +363,7 @@ export async function needsAttention(
         key: 'service_cluster',
         label: `Complaint cluster: ${cluster.categoryName} / ${cluster.subcategoryName}`,
         count: cluster.complaints,
-        href: '/app/service',
+        href: '/app/helpdesk',
         destination: { caseCategoryId: cluster.caseCategoryId },
         definition:
           'Three or more complaints sharing one category in this period. A count of cases that look alike, not a finding about a cause.',
@@ -756,7 +756,7 @@ export async function connectedInsights(
         sampleSize: service.casesOpened + crm.steps[0].leads,
         comparisonPeriod: null,
         links: [
-          { label: 'Cases', href: '/app/service', params: {} },
+          { label: 'Cases', href: '/app/helpdesk', params: {} },
           { label: 'Leads', href: '/app/crm/leads', params: {} },
         ],
       });

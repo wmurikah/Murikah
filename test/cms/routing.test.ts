@@ -115,7 +115,7 @@ test(
   { skip: skip() },
   async () => {
     worker.clearCookies();
-    for (const path of ['/app', '/app/service', '/portal', '/']) {
+    for (const path of ['/app', '/app/helpdesk', '/portal', '/']) {
       const response = await worker.call('GET', path, { cookie: null });
       assert.equal(response.status, 302, `${path} status`);
       assert.equal(response.location, '/login', `${path} location`);
@@ -152,9 +152,10 @@ test('the session survives a second request with the same cookie', { skip: skip(
   assert.equal(first.status, 200);
   const second = await worker.call('GET', '/app');
   assert.equal(second.status, 200);
-  // The dashboard greets by first name. It used to say "Welcome back"; the
-  // merged dashboard leads with SLA and keeps the greeting to one short line.
-  assert.match(second.body, /Good day, Test/);
+  // The greeting is gone with the rest of the page's prose: Home now opens on
+  // the two turnaround charts and nothing above them. What proves the session
+  // survived is that the shell rendered at all for this cookie.
+  assert.match(second.body, /Purchase order approval/);
 });
 
 test('an authenticated response carries Cache-Control: no-store', { skip: skip() }, async () => {
@@ -164,11 +165,10 @@ test('an authenticated response carries Cache-Control: no-store', { skip: skip()
 
 test('the shell shows the name and the organisational context', { skip: skip() }, async () => {
   const response = await worker.call('GET', '/app');
-  assert.match(response.body, /Good day, Test/);
-  // The organisational context moved off the page header and into the account
-  // menu, where it belongs: it is a fact about the reader, not a figure, and a
-  // dashboard's first line should be the reader's name and then the numbers.
-  // It is still on the shell, which is what this test is about.
+  // The organisational context lives in the account menu, where it belongs: it
+  // is a fact about the reader, not a figure. The greeting that used to sit on
+  // the page header has gone with the rest of the prose, so the shell is now
+  // the only place these appear, which is what this test is about.
   assert.match(response.body, /Customer Service Manager/, 'the job title is on the shell');
   assert.match(response.body, /Hass Petroleum Kenya/, 'and so is the affiliate');
 });
@@ -176,7 +176,7 @@ test('the shell shows the name and the organisational context', { skip: skip() }
 test('navigation is filtered by permission, not by name or title', { skip: skip() }, async () => {
   const response = await worker.call('GET', '/app');
   // ROLE-CSM holds SERVICE.CASES.VIEW and nothing else here.
-  assert.match(response.body, /\/app\/service/, 'Service must appear');
+  assert.match(response.body, /\/app\/helpdesk/, 'Helpdesk must appear');
   assert.ok(!response.body.includes('/app/administration'), 'Administration must not appear');
   assert.ok(!response.body.includes('/app/data'), 'Data must not appear');
 });

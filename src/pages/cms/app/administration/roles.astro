@@ -94,9 +94,7 @@ if (mayManage) {
           />
           <span>
             {administrators} {administrators === 1 ? 'person can' : 'people can'} administer roles.
-            {administrators <= 1
-              ? ' Removing that last grant is refused by the server, because there is no way back from it through the interface. Grant ADMIN.ROLES.MANAGE to somebody else.'
-              : ''}
+            {administrators <= 1 ? ' Removing the last one is refused.' : ''}
           </span>
         </p>
 
