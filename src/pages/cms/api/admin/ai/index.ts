@@ -8,7 +8,12 @@ import type { APIRoute } from 'astro';
 import { requireUsersManage, writeContext } from '../../../../../lib/cms/admin/guard.ts';
 import { connect } from '../../../../../lib/cms/admin/crudRoute.ts';
 import { listProviders, createProvider } from '../../../../../lib/cms/ai/providers.ts';
-import { invalid, methodNotAllowed, ok, serverError } from '../../../../../lib/cms/admin/respond.ts';
+import {
+  invalid,
+  methodNotAllowed,
+  ok,
+  serverError,
+} from '../../../../../lib/cms/admin/respond.ts';
 
 export const prerender = false;
 
@@ -27,13 +32,16 @@ export const GET: APIRoute = async (context) => {
 const readInput = (body: Record<string, unknown>) => ({
   providerName: String(body.providerName ?? ''),
   providerType: String(body.providerType ?? ''),
-  baseUrl: body.baseUrl === undefined || body.baseUrl === null || body.baseUrl === ''
-    ? null
-    : String(body.baseUrl),
+  baseUrl:
+    body.baseUrl === undefined || body.baseUrl === null || body.baseUrl === ''
+      ? null
+      : String(body.baseUrl),
   model: String(body.model ?? ''),
   secretName: String(body.secretName ?? ''),
   maxOutputTokens:
-    body.maxOutputTokens === undefined || body.maxOutputTokens === null || body.maxOutputTokens === ''
+    body.maxOutputTokens === undefined ||
+    body.maxOutputTokens === null ||
+    body.maxOutputTokens === ''
       ? null
       : Number(body.maxOutputTokens),
   temperature:

@@ -3,7 +3,12 @@ import type { APIRoute } from 'astro';
 import { requireUsersManage, writeContext } from '../../../../../lib/cms/admin/guard.ts';
 import { connect } from '../../../../../lib/cms/admin/crudRoute.ts';
 import { listConnections, createConnection } from '../../../../../lib/cms/ai/channels.ts';
-import { invalid, methodNotAllowed, ok, serverError } from '../../../../../lib/cms/admin/respond.ts';
+import {
+  invalid,
+  methodNotAllowed,
+  ok,
+  serverError,
+} from '../../../../../lib/cms/admin/respond.ts';
 
 export const prerender = false;
 
