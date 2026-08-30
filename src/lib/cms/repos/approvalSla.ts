@@ -104,6 +104,57 @@ export interface ApprovalBoard {
   readonly leaders: LeaderRow[];
 }
 
+export interface ApprovalPeriod {
+  readonly from: string;
+  readonly before: string;
+  readonly label: string;
+  readonly fallback: boolean;
+}
+
+/** Resolve one month for both Home panels, falling back to the latest month shared by both. */
+export async function resolveApprovalPeriod(
+  db: Client,
+  requested: string | null,
+): Promise<ApprovalPeriod> {
+  const requestedMonth = requested?.slice(0, 7) ?? null;
+  const result = await db.execute({
+    sql: `WITH po(month) AS (
+            SELECT DISTINCT substr(wsi.completed_at, 1, 7)
+              FROM workflow_stage_instances wsi
+              JOIN workflow_instances wi ON wi.workflow_instance_id = wsi.workflow_instance_id
+             WHERE wi.entity_type = 'PURCHASE_ORDER' AND wsi.completed_at IS NOT NULL
+          ), so(month) AS (
+            SELECT DISTINCT substr(COALESCE(wsi.completed_at, so.invoice_created_at, so.loading_authority_at), 1, 7)
+              FROM sales_orders so
+              LEFT JOIN workflow_instances wi ON wi.entity_id = so.sales_order_id AND wi.entity_type = 'SALES_ORDER'
+              LEFT JOIN workflow_stage_instances wsi ON wsi.workflow_instance_id = wi.workflow_instance_id
+             WHERE COALESCE(wsi.completed_at, so.invoice_created_at, so.loading_authority_at) IS NOT NULL
+          ), common(month) AS (SELECT po.month FROM po JOIN so USING (month))
+          SELECT CASE WHEN ? IS NOT NULL AND EXISTS (SELECT 1 FROM common WHERE month = ?)
+                      THEN ? ELSE (SELECT MAX(month) FROM common) END AS month`,
+    args: [requestedMonth, requestedMonth, requestedMonth],
+  });
+  const raw = (result.rows[0] as Record<string, unknown> | undefined)?.month;
+  const month =
+    typeof raw === 'string' && /^\d{4}-\d{2}$/.test(raw)
+      ? raw
+      : new Date().toISOString().slice(0, 7);
+  const from = `${month}-01`;
+  const next = new Date(`${from}T00:00:00Z`);
+  next.setUTCMonth(next.getUTCMonth() + 1);
+  const label = new Intl.DateTimeFormat('en-KE', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${from}T00:00:00Z`));
+  return {
+    from,
+    before: next.toISOString().slice(0, 10),
+    label,
+    fallback: requestedMonth !== null && requestedMonth !== month,
+  };
+}
+
 /**
  * Below this many completed items a person is listed but not ranked.
  *
@@ -207,7 +258,7 @@ const PO_SOURCE = `
    WHERE wi.entity_type = 'PURCHASE_ORDER'
      AND wsi.status IN ('APPROVED', 'COMPLETED')
      AND wsi.started_at IS NOT NULL AND wsi.completed_at IS NOT NULL
-     AND wsi.completed_at >= :since`;
+     AND wsi.completed_at >= :since AND wsi.completed_at < :before`;
 
 /**
  * Sales order: the four functions, two of which have a person and two of which
@@ -236,7 +287,7 @@ const SO_SOURCE = `
    WHERE wi.entity_type = 'SALES_ORDER' AND ws.stage_code = 'FINANCE_APPROVAL'
      AND wsi.status IN ('APPROVED', 'COMPLETED')
      AND wsi.started_at IS NOT NULL AND wsi.completed_at IS NOT NULL
-     AND wsi.completed_at >= :since
+     AND wsi.completed_at >= :since AND wsi.completed_at < :before
 
   UNION ALL
 
@@ -257,7 +308,7 @@ const SO_SOURCE = `
    WHERE wi.entity_type = 'SALES_ORDER' AND ws.stage_code = 'CREDIT_CHECK'
      AND wsi.status IN ('APPROVED', 'COMPLETED')
      AND wsi.started_at IS NOT NULL AND wsi.completed_at IS NOT NULL
-     AND wsi.completed_at >= :since
+     AND wsi.completed_at >= :since AND wsi.completed_at < :before
 
   UNION ALL
 
@@ -266,7 +317,7 @@ const SO_SOURCE = `
          NULL AS target_minutes
     FROM sales_orders so
    WHERE so.invoice_created_at IS NOT NULL
-     AND so.invoice_created_at >= :since
+     AND so.invoice_created_at >= :since AND so.invoice_created_at < :before
 
   UNION ALL
 
@@ -276,7 +327,7 @@ const SO_SOURCE = `
          NULL AS target_minutes
     FROM sales_orders so
    WHERE so.loading_authority_at IS NOT NULL
-     AND so.loading_authority_at >= :since`;
+     AND so.loading_authority_at >= :since AND so.loading_authority_at < :before`;
 
 /** What is still waiting, per function and per person. */
 const PO_PENDING = `
@@ -329,13 +380,14 @@ export async function approvalBoard(
   db: Client,
   process: ApprovalProcess,
   since: string,
+  before?: string,
 ): Promise<ApprovalBoard> {
   const source = process === 'PURCHASE_ORDER' ? PO_SOURCE : SO_SOURCE;
   const pendingSql = process === 'PURCHASE_ORDER' ? PO_PENDING : SO_PENDING;
 
   const [byFunction, byPerson, pending] = await Promise.all([
-    db.execute({ sql: statsOver(source, false), args: { since } }),
-    db.execute({ sql: statsOver(source, true), args: { since } }),
+    db.execute({ sql: statsOver(source, false), args: { since, before: before ?? '9999-12-31' } }),
+    db.execute({ sql: statsOver(source, true), args: { since, before: before ?? '9999-12-31' } }),
     db.execute({ sql: pendingSql, args: {} }),
   ]);
 
