@@ -59,7 +59,9 @@ import {
   periodHref,
   periodWasChosen,
   previousPeriod,
-  readCalendar,
+  readCalendars,
+  periodHasData,
+  periodFromToken,
   EMPTY_CALENDAR,
   type DataCalendar,
 } from '@/lib/cms/analytics/period';
@@ -77,17 +79,38 @@ const today = new Date();
 const now = toDbTimestamp(today);
 
 /**
- * WHICH DATES COUNT AS ACTIVITY ON THIS PAGE.
+ * WHICH DATES COUNT AS ACTIVITY, AND FOR WHICH BOARD.
  *
- * The same four functions the boards measure, so a month the control marks as
- * holding data is a month the boards will actually draw something for. A
- * calendar built over a different basis would mark May as full and then render
- * it empty, which is the failure this whole control exists to remove.
+ * THE FAULT THIS SHAPE FIXES, RECORDED BECAUSE IT COST A WHOLE PANEL. These
+ * sources used to be unioned into one population with no `series` and no
+ * entity_type restriction, so "does this period hold data" was answered for the
+ * PAGE, over every entity type in `workflow_stage_instances` — leads and cases
+ * included. On 30 August 2026 the calendar saw one lead and one sales order
+ * completed in August, answered yes, and the fallback never fired. The purchase
+ * order board, whose data runs 1 to 30 May, then drew an empty chart and an
+ * empty table in silence while its own 2,624 completions sat one period away.
+ *
+ * The period is still resolved ONCE, from the combined calendar. Each panel now
+ * also knows whether ITS OWN data is in that period, from the same single
+ * statement, and says so when it is not.
  */
 const CALENDAR_SOURCES = [
-  { table: 'workflow_stage_instances', column: 'completed_at' },
-  { table: 'sales_orders', column: 'invoice_created_at' },
-  { table: 'sales_orders', column: 'loading_authority_at' },
+  {
+    table: 'workflow_stage_instances',
+    column: 'completed_at',
+    series: 'PURCHASE_ORDER',
+    where: `workflow_instance_id IN (
+      SELECT workflow_instance_id FROM workflow_instances WHERE entity_type = 'PURCHASE_ORDER')`,
+  },
+  {
+    table: 'workflow_stage_instances',
+    column: 'completed_at',
+    series: 'SALES_ORDER',
+    where: `workflow_instance_id IN (
+      SELECT workflow_instance_id FROM workflow_instances WHERE entity_type = 'SALES_ORDER')`,
+  },
+  { table: 'sales_orders', column: 'invoice_created_at', series: 'SALES_ORDER' },
+  { table: 'sales_orders', column: 'loading_authority_at', series: 'SALES_ORDER' },
 ] as const;
 
 /**
@@ -114,6 +137,9 @@ const explicit = periodWasChosen(params);
 const drillMonth = (asked.from ?? '').slice(0, 7);
 
 let calendar: DataCalendar = EMPTY_CALENDAR;
+/** Each board's own activity, so a panel's data check matches what it draws. */
+let purchaseCalendar: DataCalendar = EMPTY_CALENDAR;
+let salesCalendar: DataCalendar = EMPTY_CALENDAR;
 let purchases: ApprovalBoard | null = null;
 let sales: ApprovalBoard | null = null;
 let previousPurchases: ApprovalBoard | null = null;
@@ -157,7 +183,12 @@ if (user) {
         countSalesOrders(client, userId, { ...filter, status: SO_LEAD_WAITING }, now),
       ),
     ]);
-    if (cal.ok) calendar = readCalendar(cal.value.rows as Record<string, unknown>[]);
+    if (cal.ok) {
+      const read = readCalendars(cal.value.rows as Record<string, unknown>[]);
+      calendar = read.combined;
+      purchaseCalendar = read.series.get('PURCHASE_ORDER') ?? EMPTY_CALENDAR;
+      salesCalendar = read.series.get('SALES_ORDER') ?? EMPTY_CALENDAR;
+    }
     if (attention.ok) customers = attention.value;
     if (poCount.ok) poWaiting = poCount.value;
     if (soCount.ok) soWaiting = soCount.value;
@@ -246,17 +277,51 @@ const comparison = (board: ApprovalBoard | null, prior: ApprovalBoard | null): s
   if (board === null || before === null) return null;
   const nowVolume = volumeOf(board);
   const wasVolume = volumeOf(prior);
+  // EACH HALF NAMES ITS OWN ROLE. "0 completed. Nothing completed in July 2026."
+  // read as two claims about two periods, and next to a panel headed August it
+  // looked like the page disagreed with itself. It never did: the first figure
+  // is this period and the second is the one before it. The sentence now says
+  // so.
   if (wasVolume === 0)
-    return `${count(nowVolume)} completed. Nothing completed in ${before.label}.`;
+    return `${count(nowVolume)} completed in ${shown.label}, against none in ${before.label}.`;
   const change = Math.round(((nowVolume - wasVolume) / wasVolume) * 100);
   const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'level';
-  return `${count(nowVolume)} completed, ${direction}${
+  return `${count(nowVolume)} completed in ${shown.label}, ${direction}${
     change === 0 ? '' : ` ${Math.abs(change)}%`
   } on ${before.label} (${count(wasVolume)}).`;
 };
 
-/** How many completions lie outside the period, so an empty view can say so. */
-const outside = calendar.total;
+/**
+ * How many of THIS BOARD's completions lie outside the period.
+ *
+ * It used to be `calendar.total`, the page's whole mixed population — leads,
+ * cases, sales orders and purchase orders together — printed under one board as
+ * though it were that board's own. A wrong number in the wrong place is worse
+ * than no number, because it is checkable and it is checkably false.
+ */
+const outsideFor = (own: DataCalendar, board: ApprovalBoard | null) =>
+  Math.max(0, own.total - volumeOf(board));
+
+/**
+ * The one line a panel says when it is empty and its own data is elsewhere.
+ *
+ * The page-level fallback moves the period when NOTHING on the page has data.
+ * This is the other half: the period is right for the page, and wrong for this
+ * board. Never an empty chart in silence.
+ */
+const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
+  if (volumeOf(board) > 0 || own.total === 0 || own.latest === null) return null;
+  const target = periodFromToken(own.latest.slice(0, 7), today);
+  if (target === null || periodHasData(shown, own)) return null;
+  return {
+    line:
+      `Nothing here in ${shown.label}. ${count(own.total)} ` +
+      `${own.total === 1 ? 'completion sits' : 'completions sit'} in other periods, the most ` +
+      `recent in ${target.label}.`,
+    href: periodHref('/app', target),
+    label: `Show ${target.label}`,
+  };
+};
 
 /**
  * The definition every figure on this page shares, one control away.
@@ -345,12 +410,32 @@ const DEFINITION =
         </a>{' '}
         in approval
       </p>
+      {
+        /*
+          NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
+          period when NOTHING on the page has data; this is the other half,
+          where the period is right for the page and wrong for this board.
+        */
+      }
+      {
+        elsewhere(purchaseCalendar, purchases) !== null && (
+          <p class="text-cms-body-sm text-cms-muted">
+            {elsewhere(purchaseCalendar, purchases)!.line}{' '}
+            <a
+              class="font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              href={elsewhere(purchaseCalendar, purchases)!.href}
+            >
+              {elsewhere(purchaseCalendar, purchases)!.label}
+            </a>
+          </p>
+        )
+      }
       <CmsApprovalLeaderboard
         caption="Purchase order approvers"
         process="PURCHASE_ORDER"
         board={purchases}
         period={shown}
-        totalOutside={outside}
+        totalOutside={outsideFor(purchaseCalendar, purchases)}
         widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
         orderPath="/app/orders/purchases"
       />
@@ -378,12 +463,32 @@ const DEFINITION =
         </a>{' '}
         awaiting finance approval
       </p>
+      {
+        /*
+          NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
+          period when NOTHING on the page has data; this is the other half,
+          where the period is right for the page and wrong for this board.
+        */
+      }
+      {
+        elsewhere(salesCalendar, sales) !== null && (
+          <p class="text-cms-body-sm text-cms-muted">
+            {elsewhere(salesCalendar, sales)!.line}{' '}
+            <a
+              class="font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              href={elsewhere(salesCalendar, sales)!.href}
+            >
+              {elsewhere(salesCalendar, sales)!.label}
+            </a>
+          </p>
+        )
+      }
       <CmsApprovalLeaderboard
         caption="Sales order approvers"
         process="SALES_ORDER"
         board={sales}
         period={shown}
-        totalOutside={outside}
+        totalOutside={outsideFor(salesCalendar, sales)}
         widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
         orderPath="/app/orders/sales"
       />
