@@ -208,7 +208,7 @@ test('navigation hrefs are unique', () => {
 
 test('activeNavItem marks the section, including a child path', () => {
   assert.equal(activeNavItem('/app')?.label, 'Home');
-  assert.equal(activeNavItem('/app/customers')?.label, 'Customers');
-  assert.equal(activeNavItem('/app/customers/12345')?.label, 'Customers');
+  assert.equal(activeNavItem('/app/operations/customers')?.label, 'Customers');
+  assert.equal(activeNavItem('/app/operations/customers/12345')?.label, 'Customers');
   assert.equal(activeNavItem('/nowhere'), null);
 });

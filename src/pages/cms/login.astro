@@ -2,6 +2,7 @@
 import CmsAuthLayout from '@/layouts/CmsAuthLayout.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsLoginCharacter from '@/components/cms/CmsLoginCharacter.astro';
 import { EXPIRED_FLAG, EXPIRED_MESSAGE } from '@/lib/cms/routes';
 export const prerender = false;
 const notice =
@@ -15,6 +16,7 @@ const notice =
 ---
 
 <CmsAuthLayout title="Sign in">
+  <CmsLoginCharacter slot="brand-character" />
   <div class="flex flex-col gap-6">
     <header>
       <h1 class="text-cms-display font-semibold text-cms-ink">Sign in</h1>
@@ -78,11 +80,6 @@ const notice =
         >
       </section>
     </form>
-    <p class="text-cms-body-sm text-cms-muted">
-      New customer? <a href="/register" class="font-semibold text-cms-royal"
-        >Create customer access</a
-      >
-    </p>
   </div>
 </CmsAuthLayout>
 <script>
@@ -94,11 +91,28 @@ const notice =
     passwordStep = document.querySelector<HTMLElement>('[data-password-step]'),
     errorBox = document.querySelector<HTMLElement>('#cms-login-error'),
     error = errorBox?.querySelector<HTMLElement>('[data-error-text]');
+  const character = document.querySelector<HTMLElement>('[data-cms-login-character]');
+  let settle = 0;
+  const pose = (state: string) => {
+    if (character) character.dataset.state = state;
+  };
   const setError = (message: string) => {
     if (error) error.textContent = message;
     if (errorBox) errorBox.toggleAttribute('data-empty', !message);
   };
   const valid = () => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim());
+  email?.addEventListener('focus', () => pose('email'));
+  email?.addEventListener('input', () => {
+    pose(valid() ? 'valid' : 'typing');
+    window.clearTimeout(settle);
+    settle = window.setTimeout(() => pose(valid() ? 'valid' : 'email'), 240);
+  });
+  email?.addEventListener('blur', () => pose('rest'));
+  password?.addEventListener('focus', () => pose(password.type === 'text' ? 'peek' : 'password'));
+  password?.addEventListener('blur', () => pose('rest'));
+  document
+    .querySelector('[data-reveal-for="cms-password"]')
+    ?.addEventListener('click', () => pose(password?.type === 'text' ? 'password' : 'peek'));
   document.querySelector('#cms-continue')?.addEventListener('click', () => {
     if (!valid()) {
       setError('Enter a complete work email address.');
@@ -126,8 +140,14 @@ const notice =
       submit.textContent = 'Signing in…';
     }
     const result = await submitCredentials({ email: email.value.trim(), password: password.value });
-    if (result.status === 'success') location.assign(result.landing);
-    else setError(authResultMessage(result) ?? 'Sign-in could not be completed. Try again.');
+    if (result.status === 'success') {
+      pose('success');
+      window.setTimeout(() => location.assign(result.landing), 140);
+    } else {
+      pose('retry');
+      setError(authResultMessage(result) ?? 'Sign-in could not be completed. Try again.');
+      window.setTimeout(() => pose('password'), 260);
+    }
     password.value = '';
     if (submit) {
       submit.disabled = false;
