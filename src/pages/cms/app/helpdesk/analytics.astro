@@ -20,10 +20,18 @@ import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
+import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { canViewCases } from '@/lib/cms/permissions';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import {
+  calendarSql,
+  drillMonthOf,
+  periodHref,
+  resolvePeriodPage,
+  withPeriod,
+} from '@/lib/cms/analytics/period';
 import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
 import {
   summary,
@@ -62,7 +70,32 @@ export const prerender = false;
 const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayView = canViewCases(permissions);
 const userId = Astro.locals.cms?.user.userId ?? '';
-const filter = parseFilter(Astro.url.searchParams);
+const params = Astro.url.searchParams;
+const today = new Date();
+
+/*
+ * THE PERIOD IS RESOLVED BEFORE ANY FIGURE IS READ, in its own wave.
+ *
+ * One statement marks every year, month and day that holds activity, and the
+ * resolution that follows is what stops this page rendering an empty view in
+ * silence while the data sits in another month. `withPeriod` then writes the
+ * period's ends onto the filter every query here already reads, which is why
+ * five pages share one control without five migrations.
+ */
+const CALENDAR_SOURCES = [{ table: 'service_cases', column: 'created_at' }];
+let calendarRows: Record<string, unknown>[] = [];
+try {
+  const calDb = await getDb(getCmsEnv());
+  const found = await calDb.execute({
+    sql: calendarSql(CALENDAR_SOURCES),
+    args: [drillMonthOf(params, today)],
+  });
+  calendarRows = found.rows as Record<string, unknown>[];
+} catch (error) {
+  console.error('[cms.period] calendar unavailable', error);
+}
+const page = resolvePeriodPage(params, today, calendarRows);
+const filter = withPeriod(parseFilter(params), page.period);
 const now = toDbTimestamp(new Date());
 
 let signals: ServiceSummary | null = null;
@@ -217,6 +250,22 @@ const categoryChart = distributionChart(
           ]}
         />
 
+        <CmsPeriodControl
+          action="/app/helpdesk/analytics"
+          period={page.period}
+          calendar={page.calendar}
+          today={today}
+          open={page.open}
+          notice={page.notice}
+          revertHref={
+            page.fellBackFrom === null
+              ? null
+              : periodHref('/app/helpdesk/analytics', page.fellBackFrom, { pick: null })
+          }
+          revertLabel={page.fellBackFrom === null ? null : `Show ${page.fellBackFrom.label} anyway`}
+          class="mb-3"
+        />
+
         <CmsOrderFilters
           filter={filter}
           affiliates={affiliates}
@@ -231,6 +280,9 @@ const categoryChart = distributionChart(
           ]}
           action="/app/helpdesk/analytics"
           showCredit={false}
+          period={page.period.key}
+          periodFrom={page.period.from}
+          periodTo={page.period.to}
         />
 
         <section aria-labelledby="signals" class="mb-6">

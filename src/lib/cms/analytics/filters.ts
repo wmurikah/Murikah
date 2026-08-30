@@ -17,7 +17,12 @@
  * filter only ever narrows what the scope already allows.
  */
 
-export const PERIOD_GRAINS = ['DAY', 'WEEK', 'MONTH'] as const;
+/**
+ * `HOUR` exists because a single day's trend needs it: the period control
+ * derives the grain from the span, and a day shows hours. `WEEK` stays for the
+ * pages that still choose their own bucket.
+ */
+export const PERIOD_GRAINS = ['HOUR', 'DAY', 'WEEK', 'MONTH'] as const;
 export type PeriodGrain = (typeof PERIOD_GRAINS)[number];
 
 export const TRIPLE_STATES = ['ANY', 'YES', 'NO'] as const;
@@ -225,6 +230,7 @@ export function dateWindow(column: string, filter: AnalyticsFilter): SqlFragment
  * have and may not add.
  */
 export function bucketExpression(column: string, grain: PeriodGrain): string {
+  if (grain === 'HOUR') return `strftime('%Y-%m-%d %H:00', ${column})`;
   if (grain === 'DAY') return `strftime('%Y-%m-%d', ${column})`;
   if (grain === 'WEEK') return `strftime('%Y-W%W', ${column})`;
   return `strftime('%Y-%m', ${column})`;
