@@ -534,7 +534,7 @@ export async function resolveNotificationTarget(
     case 'OPPORTUNITY':
       return `/app/crm/opportunities/${entityId}`;
     case 'ACCOUNT':
-      return `/app/customers/${entityId}`;
+      return `/app/operations/customers/${entityId}`;
     default:
       return null;
   }

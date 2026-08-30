@@ -35,3 +35,13 @@ Reset tokens contain 256 random bits. Only an HMAC is stored. Responses are gene
 ## Approval boundary
 
 Approval UI and mutation are deliberately pending: approval must select an existing account, authorized portal role and appropriate contact under business policy. Implementing a guess would risk cross-tenant access. Until that workflow is approved, requests remain pending and cannot create memberships.
+
+## Phase 4.1 entry routing and presentation
+
+The authentication architecture is unchanged. Phase 4.1 adds presentation and corrects the public route map. `/login`, `/register`, `/forgot-password` and `/reset-password` are the complete public page set; all other non-API CMS pages remain default-deny. A signed-in caller reaching one of those entry pages is sent to `homeFor(...)`, preserving the INTERNAL/EXTERNAL surface split.
+
+Provider controls are ordinary same-origin links to the existing Authorization Code + PKCE start routes. Login offers Microsoft, Google and Apple with purpose `SIGN_IN`. Registration offers Microsoft and Google with purpose `REGISTER`; the server continues to reject Apple registration and the UI does not suggest otherwise. Provider start/callback failures return to the entry page matching the transaction purpose.
+
+The SVG assistant and auth-panel effects are decorative. They do not participate in validation, identity policy, provider verification, session creation, or routing. The form remains labelled and operable when the assistant script is absent.
+
+The password reveal integration observes the input's resulting type after the shared reveal handler completes; it changes only the decorative pose and does not read, copy or transmit the password value. Empty-password feedback remains ordinary form feedback and is not delegated to the character.
