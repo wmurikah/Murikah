@@ -723,9 +723,10 @@ test('the brand panel is on the left and the form on the right', () => {
     'the form still comes first in the DOM',
   );
   // And the form side is the wider of the two.
-  const grid = /lg:grid-cols-\[minmax\(([\d.]+)rem,(\d)fr\)_minmax\(([\d.]+)rem,(\d)fr\)\]/.exec(
-    layout,
-  );
+  const grid =
+    /lg:grid-cols-\[minmax\(([\d.]+)rem,([\d.]+)fr\)_minmax\(([\d.]+)rem,([\d.]+)fr\)\]/.exec(
+      layout,
+    );
   assert.ok(grid, 'the two columns are declared as fractions');
   assert.ok(
     Number(grid![4]) > Number(grid![2]),
@@ -763,7 +764,9 @@ test('the brand panel collapses on a small screen and the form takes the width',
   assert.match(layout, /class="flex min-h-dvh flex-col lg:grid/);
   // And the panel's prose is desktop-only, so it cannot push the form off the
   // first screen on a phone.
-  assert.match(layout, /<div class="hidden max-w-md lg:block">/);
+  assert.match(layout, /<div class="hidden lg:block">/);
+  assert.match(layout, /min-h-40[\s\S]*lg:min-h-dvh/, 'the mobile brand panel is compact');
+  assert.match(layout, /<slot name="brand-character"/, 'the mascot follows the responsive panel');
 });
 
 // ---------------------------------------------------------------------------

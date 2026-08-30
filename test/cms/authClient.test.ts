@@ -12,6 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   submitCredentials,
   authResultMessage,
@@ -19,6 +20,7 @@ import {
   type CmsAuthResult,
 } from '../../src/lib/cms/auth/client.ts';
 import { CMS_NAV, activeNavItem } from '../../src/lib/cms/nav.ts';
+import { isPublicPath, isCmsAuthEntryPage, isOidcCallbackPath } from '../../src/lib/cms/routes.ts';
 
 /** A fetch stand-in that records the call and returns a scripted response. */
 function stubFetch(response: { status: number; body?: unknown; throws?: boolean }) {
@@ -204,6 +206,35 @@ test('exactly one entry is reachable without a permission, and it is the landing
 test('navigation hrefs are unique', () => {
   const hrefs = CMS_NAV.map((item) => item.href);
   assert.equal(new Set(hrefs).size, hrefs.length);
+});
+
+test('all four auth entry pages are public and only entry pages redirect signed-in users', () => {
+  for (const path of ['/login', '/register', '/forgot-password', '/reset-password']) {
+    assert.equal(isPublicPath(path), true, `${path} is reachable anonymously`);
+    assert.equal(isCmsAuthEntryPage(path), true, `${path} is an auth entry page`);
+  }
+  assert.equal(isPublicPath('/app'), false);
+  assert.equal(isCmsAuthEntryPage('/api/auth/login'), false);
+});
+
+test('auth entry markup wires providers, recovery and customer registration without dead controls', () => {
+  const login = readFileSync('src/pages/cms/login.astro', 'utf8');
+  const register = readFileSync('src/pages/cms/register.astro', 'utf8');
+  assert.match(login, /<CmsAuthProviders purpose="SIGN_IN" apple/);
+  assert.match(login, /href="\/forgot-password"/);
+  assert.match(login, /href="\/register"/);
+  assert.match(register, /<CmsAuthProviders purpose="REGISTER"/);
+  assert.doesNotMatch(register, /purpose="REGISTER" apple/);
+  assert.match(register, /href="\/login"/);
+});
+
+test('only known OIDC callback paths receive the state-and-PKCE CSRF exception', () => {
+  for (const provider of ['google', 'microsoft', 'apple']) {
+    assert.equal(isOidcCallbackPath(`/api/auth/oidc/${provider}/callback`), true);
+  }
+  assert.equal(isOidcCallbackPath('/api/auth/oidc/apple/start'), false);
+  assert.equal(isOidcCallbackPath('/api/auth/login'), false);
+  assert.equal(isOidcCallbackPath('/api/auth/oidc/unknown/callback'), false);
 });
 
 test('activeNavItem marks the section, including a child path', () => {
