@@ -1,45 +1,45 @@
 ---
 /**
- * One leaderboard. Eight columns, every figure a link, and no scoreboard.
+ * One leaderboard. Four columns, grouped by function, and it is about people.
  *
- * WHY THESE EIGHT AND NOT THE OLD NINE.
+ * WHY FOUR AND NOT EIGHT. Eight columns did not fit at a laptop width and both
+ * tables scrolled sideways. A table you have to scroll to read is a table
+ * nobody reads, so the question was not which column is least useful but which
+ * four earn their width.
  *
- * THE AVERAGE IS GONE, and it is measured rather than a preference: on this
- * data a single 23,002-minute hold drags the mean upward far enough that it
- * describes nobody in the table. `Typical` and `Slowest 10%` answer the two
- * questions an average blurs into one — what a normal approval costs, and what
- * the tail costs — and neither can be recovered from the other.
+ * FUNCTION IS A HEADING, NOT A COLUMN. That returns a column's worth of width
+ * and reads better: a heading is scanned once, a repeated cell is read on every
+ * row. The separation the whole design rests on is unchanged — a person acting
+ * in two functions still appears once under each — it simply moved from a cell
+ * to a heading.
  *
- * THERE IS NO FASTEST COLUMN AND NO SLOWEST COLUMN, also measured. Every
- * person's fastest is zero to two minutes across every function, so a fastest
- * column distinguishes nobody. And the slowest INVERTS the ranking: on credit
- * release one officer has the best slowest figure of the three while being
- * clearly the worst on every other measure, because a single order left over a
- * holiday decides that column. A person must never be ranked by one event
- * outside their control. Both extremes still have a home, in the row detail,
- * where nothing ranks and nothing sorts.
+ * WITHIN SLA IS GONE because no SLA targets are configured for these functions,
+ * so it was empty on every row. An empty column is worse than an absent one: it
+ * takes width and teaches the reader that the table has nothing to say. It
+ * comes back when targets exist.
  *
- * THE HEADERS ARE THE PLAIN WORDS AND THE TECHNICAL NAMES ARE ONE CONTROL
- * AWAY. Nobody needs to know what a percentile is to understand that one
- * approval in ten took at least that long. Auditors and the board do need the
- * technical name to trace a figure, so each column's definition states it
- * exactly: the median, and the P90 with the wording that nine of ten were
- * faster and one in ten was slower.
+ * PENDING AND OLDEST PENDING ARE GONE because that information sits directly
+ * above the table already, and it belongs to the FUNCTION rather than to a
+ * person. Those lines stay and are links.
  *
- * EVERY FIGURE OPENS ITS HISTORY, AND THE DESTINATION'S COUNT EQUALS THE
- * FIGURE. The list behind a number is the aggregate query with the grouping
- * removed — the same source, the same bound period, the same person predicate,
- * and the tail cut at the same integer index the P90 is read at. Two queries
- * written to agree eventually disagree; one query cannot.
+ * A LEADERBOARD IS PEOPLE. Invoicing and loading authority record no actor in
+ * the source extract, so their rows read "Not recorded" — honest, and the right
+ * answer for the CHART above, where those functions genuinely have turnaround
+ * times worth drawing. But a row that is not a person does not belong in a
+ * table of people, so those functions are excluded here and named in one line
+ * beneath instead. Same fact, in the place where it makes sense.
  *
- * THE ROW DETAIL IS A DISCLOSURE ON THE PERSON CELL, and that is a deliberate
- * constraint rather than a shortcut. A `<details>` cannot span table rows, and
- * the alternatives were a script or abandoning the table. A disclosure on the
- * leading cell keeps a real table, works from the keyboard, announces itself,
- * and needs no JavaScript.
+ * THE AVERAGE, THE FASTEST AND THE SLOWEST are all absent, and each for a
+ * measured reason recorded in src/lib/cms/analytics/leaderboard.ts. The two
+ * extremes live in the row detail, which sorts nothing and ranks nobody.
+ *
+ * EVERY FIGURE OPENS ITS HISTORY, and the destination's count equals the figure
+ * by construction: the list behind a number is the aggregate query with the
+ * grouping removed, so the two can only disagree if somebody writes the second
+ * one twice.
  */
 import CmsDataTable from './CmsDataTable.astro';
-import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import { formatDuration } from '@/lib/cms/analytics/stats';
 import {
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
@@ -54,11 +54,11 @@ interface Props {
   process: ApprovalProcess;
   board: ApprovalBoard | null;
   period: ResolvedPeriod;
-  /** Every completion the data holds, so an empty period can say how many. */
+  /** How many completions this BOARD holds outside the period. Never a mixed count. */
   totalOutside: number;
   /** Where "show all time" goes, so an empty period offers to widen. */
   widenHref: string;
-  /** Where a single order lives, for the oldest pending and the slowest. */
+  /** Where a single order lives, for the slowest in the row detail. */
   orderPath: string;
   class?: string;
 }
@@ -73,16 +73,35 @@ const {
   class: className,
 } = Astro.props;
 
-const leaders = board?.leaders ?? [];
-// ONE DEFINITION, BOTH TABLES. Identical columns in identical order is what
-// lets a reader compare position rather than re-read headers, and defining
-// them in one module is what makes that true by construction.
 const COLUMNS = leaderboardColumns(
   `${caption}, ${period.label}`,
   'The timestamp the function completed at.',
 );
-const empty = leaders.length === 0;
 const count = (value: number) => value.toLocaleString('en-KE');
+
+/**
+ * The rows that are people, grouped under their function.
+ *
+ * A function is excluded WHOLE rather than row by row: `user_id` is null for
+ * every row of invoicing and loading authority because the extract carries no
+ * actor column at all, so dropping the nulls and keeping the function would
+ * leave an empty heading claiming somebody worked on it.
+ */
+const withActor = (board?.leaders ?? []).filter((row) => row.userId !== null);
+const groups: { fn: string; order: number; rows: LeaderRow[] }[] = [];
+for (const row of withActor) {
+  const found = groups.find((group) => group.fn === row.fn);
+  if (found) found.rows.push(row);
+  else groups.push({ fn: row.fn, order: row.order, rows: [row] });
+}
+groups.sort((a, b) => a.order - b.order);
+
+/** The functions the chart draws and this table cannot, named in one line. */
+const withoutActor = [...new Set((board?.functions ?? []).map((f) => f.fn))].filter(
+  (fn) => !withActor.some((row) => row.fn === fn),
+);
+
+const empty = groups.length === 0;
 
 /** The records behind a figure: same source, same period, same person. */
 const records = (row: LeaderRow, view: string) =>
@@ -105,26 +124,27 @@ const linkClass =
     caption={caption}
     columns={COLUMNS}
     empty={empty}
-    rowCount={leaders.length}
-    emptyMessage={totalOutside > 0
-      ? `Nothing was completed in ${period.label}. ${count(totalOutside)} completions lie outside this period.`
-      : `Nothing was completed in ${period.label}.`}
+    rowCount={withActor.length}
+    emptyMessage={`Nobody completed one of these in ${period.label}.`}
   >
     <Fragment slot="empty">
       {
         /*
-          AN EMPTY PERIOD SAYS HOW MANY LIE OUTSIDE IT AND OFFERS TO WIDEN.
-          Rendering nothing and saying nothing is what made a working system
-          look broken; a count and a link is what a person can act on.
+          AN EMPTY PERIOD SAYS HOW MANY OF THIS BOARD'S OWN COMPLETIONS LIE
+          OUTSIDE IT, AND OFFERS TO WIDEN. The count used to be the whole page's
+          calendar total — every entity type and both processes mixed — printed
+          under one board as if it were that board's. A wrong number in the
+          wrong place is worse than no number.
         */
       }
       <span>
-        Nothing was completed in {period.label}.
+        Nobody completed one of these in {period.label}.
         {
           totalOutside > 0 && (
             <>
               {' '}
-              {count(totalOutside)} completions lie outside this period.{' '}
+              {count(totalOutside)} {totalOutside === 1 ? 'completion lies' : 'completions lie'}{' '}
+              outside this period.{' '}
               <a class={linkClass} href={widenHref}>
                 Show all time
               </a>
@@ -135,84 +155,91 @@ const linkClass =
     </Fragment>
 
     {
-      leaders.map((row: LeaderRow) => (
-        <tr class="border-b border-cms-line last:border-0">
-          <td class="px-3 py-2 align-top">
-            {/* THE ROW DETAIL. Nothing in it sorts and nothing in it ranks. */}
-            <details class="cms-leader-detail">
-              <summary class="cursor-pointer list-none rounded-cms outline-none hover:text-cms-royal focus-visible:ring-2 focus-visible:ring-focus">
-                {row.person ?? 'Not recorded'}
-              </summary>
-              <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-cms-caption text-cms-muted">
-                <dt>Fastest</dt>
-                <dd class="text-cms-ink tabular-nums">{formatDuration(row.fastestMinutes)}</dd>
-                <dt>Slowest</dt>
-                <dd class="text-cms-ink tabular-nums">
-                  {row.slowestEntityId === null ? (
-                    formatDuration(row.slowestMinutes)
-                  ) : (
-                    <a class={linkClass} href={`${orderPath}/${row.slowestEntityId}`}>
-                      {formatDuration(row.slowestMinutes)}
-                      {row.slowestDocumentNumber === null ? '' : ` on ${row.slowestDocumentNumber}`}
-                    </a>
-                  )}
-                </dd>
-                <dt>Count</dt>
-                <dd class="text-cms-ink tabular-nums">{count(row.volume)}</dd>
-              </dl>
-            </details>
-          </td>
-          <td class="px-3 py-2 align-top">{row.fn}</td>
-          <td class="px-3 py-2 text-right align-top tabular-nums">
-            <a class={linkClass} href={records(row, 'completed')}>
-              {count(row.volume)}
-            </a>
-          </td>
-          <td class="px-3 py-2 text-right align-top tabular-nums">
-            <a class={linkClass} href={records(row, 'typical')}>
-              {formatDuration(row.medianMinutes)}
-            </a>
-          </td>
-          <td class="px-3 py-2 text-right align-top tabular-nums">
-            <a class={linkClass} href={records(row, 'tail')}>
-              {formatDuration(row.p90Minutes)}
-            </a>
-          </td>
-          <td class="hidden px-3 py-2 text-right align-top tabular-nums sm:table-cell">
-            {row.targetMinutes === null ? (
-              'No target'
-            ) : (
-              <a class={linkClass} href={records(row, 'breaches')}>
-                {formatRate(row.withinTarget)}
-              </a>
-            )}
-          </td>
-          <td class="px-3 py-2 text-right align-top tabular-nums">
-            <a class={linkClass} href={records(row, 'pending')}>
-              {count(row.pending)}
-            </a>
-          </td>
-          <td class="hidden px-3 py-2 align-top sm:table-cell">
-            {row.oldestPendingEntityId === null ? (
-              (row.oldestPendingAt ?? 'Nothing waiting')
-            ) : (
-              <a class={linkClass} href={`${orderPath}/${row.oldestPendingEntityId}`}>
-                {row.oldestPendingAt ?? 'Waiting'}
-              </a>
-            )}
-          </td>
-        </tr>
+      groups.map((group) => (
+        <>
+          {/*
+            THE FUNCTION, AS A HEADING SPANNING THE TABLE. A `th` with `scope`
+            and a colspan, so it is a real row header to a screen reader rather
+            than a styled cell, and the rows beneath it are announced as
+            belonging to it.
+          */}
+          <tr class="border-b border-cms-line bg-cms-sunken">
+            <th
+              scope="colgroup"
+              colspan={COLUMNS.length}
+              class="px-3 py-1.5 text-start text-cms-caption font-semibold tracking-wide text-cms-muted uppercase"
+            >
+              {group.fn}
+            </th>
+          </tr>
+          {group.rows.map((row: LeaderRow) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-3 py-2 align-top">
+                {/* THE ROW DETAIL. Nothing in it sorts and nothing in it ranks. */}
+                <details class="cms-leader-detail">
+                  <summary class="cursor-pointer list-none rounded-cms outline-none hover:text-cms-royal focus-visible:ring-2 focus-visible:ring-focus">
+                    {row.person ?? 'Not recorded'}
+                  </summary>
+                  <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-cms-caption text-cms-muted">
+                    <dt>Fastest</dt>
+                    <dd class="text-cms-ink tabular-nums">{formatDuration(row.fastestMinutes)}</dd>
+                    <dt>Slowest</dt>
+                    <dd class="text-cms-ink tabular-nums">
+                      {row.slowestEntityId === null ? (
+                        formatDuration(row.slowestMinutes)
+                      ) : (
+                        <a class={linkClass} href={`${orderPath}/${row.slowestEntityId}`}>
+                          {formatDuration(row.slowestMinutes)}
+                          {row.slowestDocumentNumber === null
+                            ? ''
+                            : ` on ${row.slowestDocumentNumber}`}
+                        </a>
+                      )}
+                    </dd>
+                    <dt>Count</dt>
+                    <dd class="text-cms-ink tabular-nums">{count(row.volume)}</dd>
+                  </dl>
+                </details>
+              </td>
+              <td class="px-3 py-2 text-right align-top tabular-nums">
+                <a class={linkClass} href={records(row, 'completed')}>
+                  {count(row.volume)}
+                </a>
+              </td>
+              <td class="px-3 py-2 text-right align-top tabular-nums">
+                <a class={linkClass} href={records(row, 'typical')}>
+                  {formatDuration(row.medianMinutes)}
+                </a>
+              </td>
+              <td class="px-3 py-2 text-right align-top tabular-nums">
+                <a class={linkClass} href={records(row, 'tail')}>
+                  {formatDuration(row.p90Minutes)}
+                </a>
+              </td>
+            </tr>
+          ))}
+        </>
       ))
     }
   </CmsDataTable>
 
   {
     /*
-      THE THRESHOLD IS ON THE SCREEN, because a threshold nobody can see is a
-      threshold nobody can argue with. A person below it is listed with their
-      figures and no comparative rank.
+      THE SAME FACT, WHERE IT MAKES SENSE. The chart above draws these functions
+      because they genuinely have turnaround times; this table cannot list them
+      because nobody is recorded as having done them.
     */
   }
+  {
+    withoutActor.length > 0 && (
+      <p class="text-cms-caption text-cms-muted">
+        {withoutActor.join(' and ')} {withoutActor.length === 1 ? 'is' : 'are'} in the chart above
+        and not in this table: the source extract records no actor for{' '}
+        {withoutActor.length === 1 ? 'it' : 'them'}.
+      </p>
+    )
+  }
+
   <p class="text-cms-caption text-cms-muted">
     Listed from the first completion. Ranked from {MINIMUM_RANKED_VOLUME} completions; below that, figures
     are shown without a comparative rank.

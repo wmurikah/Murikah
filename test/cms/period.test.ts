@@ -27,6 +27,7 @@ import {
   presetPeriod,
   previousPeriod,
   readCalendar,
+  readCalendars,
   type DataCalendar,
 } from '../../src/lib/cms/analytics/period.ts';
 
@@ -187,4 +188,102 @@ test('the calendar is one statement, and it reads the real schema', async () => 
   assert.ok(calendar.years.has('2026'), 'the seed has 2026 activity');
   assert.ok(calendar.latest !== null);
   db.close();
+});
+
+/* ---------------------------------------------------------------------------
+ * Build Prompt 40, section 4a: the panel that was empty while data existed
+ * ------------------------------------------------------------------------ */
+
+test('a calendar built over the wrong rows lets an empty panel render in silence', async () => {
+  // THE REPRODUCTION, KEPT. On 30 August 2026 Home showed an empty purchase
+  // order chart and an empty table while 2,624 completions existed, and the
+  // fallback never fired. The cause was not the period resolution — that
+  // happens once — it was the data check: the calendar counted every entity
+  // type in workflow_stage_instances, so a LEAD completed in August answered
+  // "August has data" on behalf of a purchase order board whose data ran 1 to
+  // 30 May.
+  const db = createTestDb();
+  await seedHass(db);
+  for (let i = 1; i <= 4; i += 1) {
+    const n = String(i).padStart(2, '0');
+    const day = String(i + 9).padStart(2, '0');
+    await db.execute(
+      `INSERT INTO purchase_orders (purchase_order_id, document_number, affiliate_id, po_created_at, status)
+       VALUES ('PO-M${n}','DOC-M${n}','AFF-KE','2026-05-${day} 07:00:00','APPROVED')`,
+    );
+    await db.execute(
+      `INSERT INTO workflow_instances VALUES
+       ('WFI-M${n}','WFD-002','PURCHASE_ORDER','PO-M${n}','COMPLETED','2026-05-${day} 08:00:00','2026-05-${day} 09:00:00','WST-005',CURRENT_TIMESTAMP)`,
+    );
+    await db.execute(
+      `INSERT INTO workflow_stage_instances VALUES
+       ('WSI-M${n}','WFI-M${n}','WST-005','USR-GAB','TEAM-FIN-KE','APPROVED','2026-05-${day} 08:00:00','2026-05-${day} 08:00:00','2026-05-${day} 09:00:00','ok')`,
+    );
+  }
+
+  // THE OLD SHAPE: one unioned population, no series, no entity_type filter.
+  const mixed = readCalendar(
+    (
+      await db.execute({
+        sql: calendarSql([{ table: 'workflow_stage_instances', column: 'completed_at' }]),
+        args: ['2026-08'],
+      })
+    ).rows as Record<string, unknown>[],
+  );
+  const august = parsePeriod(new URLSearchParams(), TODAY);
+  assert.equal(august.label, 'August 2026');
+  assert.equal(
+    periodHasData(august, mixed),
+    true,
+    'the mixed calendar claims August holds data, which is how the fallback was skipped',
+  );
+
+  // THE FIX: the same single statement, with each source labelled, so the
+  // purchase order board's own question gets its own answer.
+  const set = readCalendars(
+    (
+      await db.execute({
+        sql: calendarSql([
+          {
+            table: 'workflow_stage_instances',
+            column: 'completed_at',
+            series: 'PURCHASE_ORDER',
+            where: `workflow_instance_id IN (
+              SELECT workflow_instance_id FROM workflow_instances WHERE entity_type = 'PURCHASE_ORDER')`,
+          },
+          {
+            table: 'workflow_stage_instances',
+            column: 'completed_at',
+            series: 'SALES_ORDER',
+            where: `workflow_instance_id IN (
+              SELECT workflow_instance_id FROM workflow_instances WHERE entity_type = 'SALES_ORDER')`,
+          },
+        ]),
+        args: ['2026-08'],
+      })
+    ).rows as Record<string, unknown>[],
+  );
+
+  const purchases = set.series.get('PURCHASE_ORDER')!;
+  assert.equal(
+    periodHasData(august, purchases),
+    false,
+    'the purchase order board has no August activity, and now says so',
+  );
+  assert.equal(purchases.latest?.slice(0, 7), '2026-05', 'its data is in May, one period away');
+  // The sales board genuinely does have August activity, which is why the two
+  // panels differed and why one calendar for the page could never be right.
+  assert.equal(periodHasData(august, set.series.get('SALES_ORDER')!), true);
+  // And the page's own period is still resolved from ONE combined calendar.
+  assert.ok(set.combined.total >= purchases.total, 'the combined population is the page-wide one');
+  db.close();
+});
+
+test('the calendar is still one statement once it carries a series', () => {
+  const sql = calendarSql([
+    { table: 'workflow_stage_instances', column: 'completed_at', series: 'PURCHASE_ORDER' },
+    { table: 'sales_orders', column: 'invoice_created_at', series: 'SALES_ORDER' },
+  ]);
+  // Answering the question per board must not cost a query per board.
+  assert.equal(sql.split(';').length, 1);
 });
