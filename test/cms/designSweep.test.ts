@@ -1254,3 +1254,131 @@ test('a panel never renders empty in silence while its own data is elsewhere', (
     'the period must be resolved once for the page',
   );
 });
+
+// ---------------------------------------------------------------------------
+// Build Prompt 40: the assistant panel, and where Customers lives
+// ---------------------------------------------------------------------------
+
+/**
+ * A file with its comments removed.
+ *
+ * These assertions are about what the code DOES, and the comments in this
+ * codebase explain at length why a thing is absent — "no avatars", "never
+ * innerHTML". Scanning the prose for the word makes the assertion fail on the
+ * explanation of the rule it is enforcing.
+ */
+const codeOf = (path: string) =>
+  readFileSync(path, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+test('the assistant reads as one calm column', () => {
+  const panel = codeOf('src/components/cms/CmsAssistant.astro');
+
+  // ONE COLUMN, 60 TO 75 CHARACTERS. A wide chat is hard to read because the
+  // eye loses the line return on the way back.
+  assert.match(panel, /max-w-\[68ch\]/, 'the message body is measured in characters');
+
+  // THE SPEAKERS DIFFER BY POSITION AND TONE, NOT BY TWO LOUD COLOURS. The
+  // person is on the royal tint at the trailing edge; the assistant is on the
+  // canvas at the leading edge. No dark bubble either way.
+  assert.match(
+    panel,
+    /self-end rounded-cms bg-cms-royal-tint/,
+    'the person is tinted and trailing',
+  );
+  assert.match(panel, /self-start text-cms-body-sm/, 'the assistant is plain and leading');
+  assert.ok(!/bg-cms-navy/.test(panel), 'no dark bubbles');
+
+  // NOTHING DECORATIVE. No gradient, no second elevation level, no typing dots
+  // implying a person at a keyboard, no avatars, no bubble tail, no emoji.
+  for (const banned of ['gradient', 'shadow-', 'avatar', 'Avatar']) {
+    assert.ok(!panel.includes(banned), `the assistant panel carries ${banned}`);
+  }
+  // One still dot, not three animated ones.
+  assert.equal(
+    (panel.match(/cms-assistant-dot/g) ?? []).length,
+    2,
+    'exactly one indicator dot, declared once and styled once',
+  );
+
+  // THE INDICATOR SITS WHERE THE REPLY WILL APPEAR, so the answer replaces it
+  // in place and nothing jumps.
+  const flat = panel.replace(/\s+/g, ' ');
+  assert.match(
+    flat,
+    /const reply = turn\('Assistant'\);.*working/s,
+    'the indicator is in the turn',
+  );
+  assert.match(panel, /working\.remove\(\)/, 'and the reply takes its place');
+
+  // AND IT IS STILL UNDER prefers-reduced-motion, via the global clamp rather
+  // than a second rule here that could drift from it.
+  const global = readFileSync('src/styles/global.css', 'utf8');
+  assert.match(global, /animation-duration: 0\.01ms !important|transition-duration: 0\.01ms/);
+});
+
+test('the assistant composer is an anchor, and Enter sends', () => {
+  const panel = readFileSync('src/components/cms/CmsAssistant.astro', 'utf8');
+  // FIXED AT THE FOOT: the transcript scrolls, the composer does not move as
+  // messages arrive.
+  assert.match(
+    panel,
+    /flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto/,
+    'the transcript scrolls',
+  );
+  assert.match(panel, /shrink-0 border-t border-cms-line/, 'the composer is pinned');
+  // At least 44px, which is the smallest thing a finger reliably hits.
+  assert.match(panel, /min-h-11/, 'the field is at least 44px');
+  assert.match(panel, /h-11 shrink-0/, 'and so is the send button');
+  // Enter submits, Shift+Enter is a newline.
+  assert.match(panel, /event\.key === 'Enter' && !event\.shiftKey/);
+
+  // SPACE BETWEEN TURNS EXCEEDS SPACE WITHIN ONE. gap-5 is 1.25rem between
+  // turns; gap-1 is 0.25rem between a speaker's label and their words.
+  assert.match(panel, /gap-5 overflow-y-auto/, 'turns are separated by 1.25rem');
+  assert.match(panel, /flex-col gap-1 self-(end|start)/, 'and a turn groups at 0.25rem');
+});
+
+test('a long answer is rendered as text, never as markup', () => {
+  const panel = codeOf('src/components/cms/CmsAssistant.astro');
+  // Paragraphs, lists and short headings, built with textContent. Rendering a
+  // model's output through innerHTML is the injection the CSP exists to
+  // prevent, and a Markdown dependency is one this phase may not add.
+  assert.ok(!/innerHTML/.test(panel), 'the assistant never writes markup from a response');
+  assert.match(panel, /\.textContent = /, 'every node is built from text');
+  assert.match(panel, /createElement\(\/\^\\d\/\.test\(lines\[0\]!\) \? 'ol' : 'ul'\)/);
+});
+
+test('Customers sits in Operations, immediately before Data', () => {
+  const rail = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
+  assert.match(rail, /\{ label: 'Operations', items: \['Customers', 'Data'\] \}/);
+  // And it is not left behind in the landing group.
+  assert.match(rail, /\{ label: null, items: \['Home', 'CRM', 'Helpdesk', 'Orders'\] \}/);
+  assert.equal(
+    (rail.match(/'Customers'/g) ?? []).length,
+    1,
+    'Customers appears in exactly one group',
+  );
+  // The order is the GROUP's, not the navigation model's, so moving an item
+  // between groups cannot silently reorder it.
+  assert.match(rail, /group\.items\s*\n?\s*\.map\(\(label\) => entries\.find/);
+
+  // Hidden entirely without the permission: visibleNav filters on the resolved
+  // codes, and an empty group is dropped whole.
+  const nav = readFileSync('src/lib/cms/nav.ts', 'utf8');
+  assert.match(nav, /permission: 'CUSTOMERS\.ACCOUNTS\.VIEW'/);
+  assert.match(rail, /\.filter\(\(group\) => group\.entries\.length > 0\)/);
+});
+
+test('the rail says when a pin is in force', () => {
+  // THE CAUSE OF "IT DOES NOT COLLAPSE". The collapse shipped and works; a rail
+  // that stays open is one where somebody pressed "Keep open" in that browser,
+  // possibly months ago. localStorage outranks a later change of default
+  // silently and for ever, and nothing on screen said a preference existed, so
+  // the only reading available was that the collapse was broken.
+  const script = readFileSync('src/components/cms/CmsRailScript.astro', 'utf8');
+  assert.match(script, /Kept open in this browser/, 'the pinned state is stated');
+  const layout = readFileSync('src/layouts/CmsLayout.astro', 'utf8');
+  assert.match(layout, /data-cms-rail-pin-note/, 'and there is somewhere to state it');
+});
