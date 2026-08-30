@@ -1,0 +1,216 @@
+---
+/**
+ * Helpdesk → Review.
+ *
+ * Everything a channel has read that no person has decided about yet, with the
+ * model's suggestion beside it.
+ *
+ * THE QUEUE INCLUDES MESSAGES WITH NO SUGGESTION, deliberately. With no active
+ * classifier that is every message in it, and a queue that showed only
+ * classified rows would look empty while filling up. The line at the top says
+ * which of the two is happening.
+ *
+ * THREE ACTIONS AND NO FOURTH. Accept takes the suggestion as it stands,
+ * Correct takes it with changes, Reject discards it. Each writes the decision
+ * beside the suggestion rather than over it, so "is the model any good" stays a
+ * query somebody can run rather than an opinion.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canViewCases, canCreateCases } from '@/lib/cms/permissions';
+import { reviewQueue, AUTO_CASE_CONFIDENCE, type QueueRow } from '@/lib/cms/ai/inbox';
+import { activeProvider } from '@/lib/cms/ai/providers';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewCases(permissions);
+const mayDecide = canCreateCases(permissions);
+
+let queue: QueueRow[] = [];
+let classifierOn = false;
+let loadFailed = false;
+if (mayView) {
+  try {
+    // TWO ROUND TRIPS: the queue, and whether a classifier exists at all. The
+    // second is what lets the page tell "nothing has arrived" apart from
+    // "nothing can be classified", which are different problems.
+    const db = await getDb(getCmsEnv());
+    const [rows, provider] = await Promise.all([
+      reviewQueue(db),
+      activeProvider(db, 'CLASSIFICATION'),
+    ]);
+    queue = rows;
+    classifierOn = provider !== null;
+  } catch (error) {
+    console.error('[cms.helpdesk.review] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const percent = (value: number | null) =>
+  value === null ? 'Not scored' : `${Math.round(value * 100)}%`;
+---
+
+<CmsLayout title="Review">
+  <CmsPageHeader
+    title="Review"
+    crumbs={[
+      { label: 'Home', href: '/app' },
+      { label: 'Helpdesk', href: '/app/helpdesk' },
+      { label: 'Review' },
+    ]}
+    definition={`A suggestion is what a model proposed for one message. It becomes a case only when somebody accepts or corrects it, or, on a connection configured to create cases without review, when the model is at least ${Math.round(AUTO_CASE_CONFIDENCE * 100)}% confident. Both the suggestion and the decision are kept.`}
+  />
+
+  {
+    !mayView && (
+      <CmsEmptyState
+        title="You do not have permission to review messages"
+        description="Ask an administrator for access."
+      />
+    )
+  }
+  {
+    loadFailed && (
+      <CmsErrorState
+        title="The queue could not be loaded"
+        description="Please try again in a moment."
+      />
+    )
+  }
+
+  {
+    mayView && !loadFailed && !classifierOn && (
+      <CmsErrorState
+        title="No classifier is configured"
+        description="Messages are being read and queued unclassified. An administrator can set a provider up under Administration."
+      />
+    )
+  }
+
+  {
+    mayView && !loadFailed && queue.length === 0 && (
+      <CmsEmptyState title="Nothing is waiting to be reviewed." />
+    )
+  }
+
+  {
+    mayView && queue.length > 0 && (
+      <CmsCard title="Waiting">
+        <ul class="flex flex-col gap-3">
+          {queue.map((row) => (
+            <li class="rounded-cms border border-cms-line px-3 py-3" data-cms-review-row>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-cms-body-sm font-semibold text-cms-ink">
+                  {row.subject ?? 'No subject'}
+                </span>
+                <span class="flex items-center gap-2">
+                  <CmsBadge tone="neutral" label={row.channel} />
+                  {row.classificationId === null ? (
+                    <CmsBadge tone="warning" label="Not classified" />
+                  ) : (
+                    <CmsBadge
+                      tone={(row.confidence ?? 0) >= AUTO_CASE_CONFIDENCE ? 'success' : 'warning'}
+                      label={`Confidence ${percent(row.confidence)}`}
+                    />
+                  )}
+                </span>
+              </div>
+              <p class="mt-1 text-cms-caption text-cms-muted">
+                {row.connectionName} · {row.fromAddress ?? 'unknown sender'} · {row.receivedAt}
+              </p>
+              <p class="mt-2 line-clamp-3 text-cms-body-sm text-cms-ink">{row.body ?? ''}</p>
+
+              {row.classificationId !== null && (
+                <dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-cms-caption text-cms-muted sm:grid-cols-4">
+                  <div>
+                    <dt class="inline">Type</dt>{' '}
+                    <dd class="inline text-cms-ink">{row.suggestedCaseType ?? 'None'}</dd>
+                  </div>
+                  <div>
+                    <dt class="inline">Category</dt>{' '}
+                    <dd class="inline text-cms-ink">{row.suggestedCategory ?? 'None'}</dd>
+                  </div>
+                  <div>
+                    <dt class="inline">Priority</dt>{' '}
+                    <dd class="inline text-cms-ink">{row.suggestedPriority ?? 'None'}</dd>
+                  </div>
+                  <div>
+                    <dt class="inline">Customer</dt>{' '}
+                    <dd class="inline text-cms-ink">{row.suggestedAccount ?? 'None'}</dd>
+                  </div>
+                  {row.rationale !== null && (
+                    <div class="col-span-2 sm:col-span-4">
+                      <dt class="inline">Because</dt>{' '}
+                      <dd class="inline text-cms-ink">{row.rationale}</dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+
+              {mayDecide && row.classificationId !== null && (
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <CmsButton
+                    variant="primary"
+                    data-cms-review={row.classificationId}
+                    data-cms-action="ACCEPT"
+                  >
+                    Accept
+                  </CmsButton>
+                  <CmsButton
+                    variant="ghost"
+                    data-cms-review={row.classificationId}
+                    data-cms-action="REJECT"
+                  >
+                    Reject
+                  </CmsButton>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </CmsCard>
+    )
+  }
+
+  <p
+    id="cms-review-message"
+    role="status"
+    aria-live="polite"
+    class="mt-4 text-cms-body-sm text-cms-muted"
+  >
+  </p>
+</CmsLayout>
+
+<script>
+  const message = document.querySelector<HTMLElement>('#cms-review-message');
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-cms-review]')) {
+    button.addEventListener('click', async () => {
+      const id = button.dataset.cmsReview ?? '';
+      const action = button.dataset.cmsAction ?? 'ACCEPT';
+      button.disabled = true;
+      const response = await fetch(`/api/helpdesk/review/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok) {
+        button.disabled = false;
+        const errors = (body?.errors ?? []) as { message: string }[];
+        if (message)
+          message.textContent = errors.map((e) => e.message).join(' ') || 'That could not be done.';
+        return;
+      }
+      location.reload();
+    });
+  }
+</script>

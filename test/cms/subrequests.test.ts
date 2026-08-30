@@ -37,6 +37,9 @@ import { parseFilter, drillTo } from '../../src/lib/cms/analytics/filters.ts';
 import { approvalBoard, windowStart } from '../../src/lib/cms/repos/approvalSla.ts';
 import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
 import { countPurchaseOrders } from '../../src/lib/cms/repos/poPerformance.ts';
+import { listProviders, activeProvider } from '../../src/lib/cms/ai/providers.ts';
+import { listConnections } from '../../src/lib/cms/ai/channels.ts';
+import { reviewQueue } from '../../src/lib/cms/ai/inbox.ts';
 import {
   dashboard,
   attentionCustomers,
@@ -200,6 +203,50 @@ test('/app stays inside its subrequest budget', async () => {
  * the link carries, so the only way they can diverge is if the page stops
  * using it, which is what the assertion below would catch.
  */
+/**
+ * The three screens part 7 adds, and the shell control that adds nothing.
+ *
+ * The assistant panel is the interesting number here: it is rendered on EVERY
+ * page, so a single query in it would be a query added to all of them, and
+ * Home is at thirteen of fifteen. It reads nothing until somebody opens it.
+ */
+test('the assistant and channel screens stay inside their budgets', async () => {
+  const client = await seeded();
+
+  const ai = await cost(async (b) => {
+    await listProviders(b.for('admin.ai') as never);
+  }, client);
+  assertWithinBudget('/app/administration/ai', ai.trips, ai.statements);
+
+  const channels = await cost(async (b) => {
+    const db = b.for('admin.channels') as never;
+    await Promise.all([
+      listConnections(db),
+      (db as { execute: (sql: string) => Promise<unknown> }).execute(
+        `SELECT case_category_id, category_name, subcategory_name FROM case_categories
+          WHERE active = 1 ORDER BY category_name, subcategory_name`,
+      ),
+    ]);
+  }, client);
+  assertWithinBudget('/app/administration/channels', channels.trips, channels.statements);
+
+  const review = await cost(async (b) => {
+    const db = b.for('helpdesk.review') as never;
+    await Promise.all([reviewQueue(db), activeProvider(db, 'CLASSIFICATION')]);
+  }, client);
+  assertWithinBudget('/app/helpdesk/review', review.trips, review.statements);
+
+  // THE PANEL IN THE SHELL, WHICH IS ON EVERY PAGE. Asserted as zero rather
+  // than as "small": a query here is multiplied by every page in the product.
+  const panel = readFileSync('src/components/cms/CmsAssistant.astro', 'utf8');
+  const frontmatter = panel.slice(0, panel.indexOf('---', 3));
+  assert.ok(
+    !/getDb|db\.execute|await\s+list|await\s+reviewQueue/.test(frontmatter),
+    'the assistant panel reads nothing at render time',
+  );
+  console.log('[subrequests] assistant panel in the shell: 0 round trips');
+});
+
 test('a Home figure equals the count of the records behind it', async () => {
   const db = await seeded();
   const status = 'PENDING_FINANCE';
