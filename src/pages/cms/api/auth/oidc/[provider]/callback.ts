@@ -22,6 +22,7 @@ import { createRegistrationGrant } from '@/lib/cms/auth/registrationGrant';
 export const prerender = false;
 const callback: APIRoute = async ({ params, request, url }) => {
   const provider = String(params.provider ?? '').toUpperCase() as IdentityProvider;
+  let purpose = 'SIGN_IN';
   try {
     const data =
         request.method === 'POST' ? new URLSearchParams(await request.text()) : url.searchParams,
@@ -35,6 +36,7 @@ const callback: APIRoute = async ({ params, request, url }) => {
         new Date(),
       );
     if (!txn || txn.provider !== provider || !code) throw new Error('invalid_state');
+    purpose = txn.purpose;
     const redirectUri = `${url.origin}/api/auth/oidc/${provider.toLowerCase()}/callback`,
       claims = await exchangeAndVerify(await providerConfig(provider, env), {
         code,
@@ -129,7 +131,11 @@ const callback: APIRoute = async ({ params, request, url }) => {
     return response;
   } catch (error) {
     console.error('[cms.oidc.callback]', error);
-    return Response.redirect(new URL(`/login?provider_error=${provider.toLowerCase()}`, url), 303);
+    const entry = purpose === 'REGISTER' ? '/register' : '/login';
+    return Response.redirect(
+      new URL(`${entry}?provider_error=${provider.toLowerCase()}`, url),
+      303,
+    );
   }
 };
 export const GET = callback;

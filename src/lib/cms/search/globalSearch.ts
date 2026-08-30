@@ -375,9 +375,9 @@ async function buildQueries(
 function hrefFor(group: SearchGroup, id: string, accountId: string): string {
   switch (group) {
     case 'ACCOUNT':
-      return `/app/customers/${id}`;
+      return `/app/operations/customers/${id}`;
     case 'CONTACT':
-      return `/app/customers/${accountId}?tab=contacts`;
+      return `/app/operations/customers/${accountId}?tab=contacts`;
     case 'LEAD':
       return `/app/crm/${id}`;
     case 'OPPORTUNITY':
