@@ -50,12 +50,12 @@ if (mayView) {
     !mayView ? (
       <CmsErrorState
         title="You do not have access to the Upload Centre"
-        description="Ask a system administrator for the DATA.IMPORTS.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed || quality === null ? (
       <CmsErrorState
         title="The Upload Centre could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
@@ -72,29 +72,20 @@ if (mayView) {
         </CmsPageHeader>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <CmsKpiCard
-            label="Unresolved users"
-            value={String(quality.unresolvedUsers)}
-            icon="administration"
-          />
+          <CmsKpiCard label="Unresolved users" value={String(quality.unresolvedUsers)} />
           <CmsKpiCard
             label="Rows awaiting a customer"
             value={String(quality.unresolvedCustomerRows)}
-            icon="customers"
           />
           <CmsKpiCard
             label="Rows awaiting a product"
             value={String(quality.unresolvedProductRows)}
-            icon="orders"
           />
-          <CmsKpiCard label="Rejected rows" value={String(quality.rejectedRows)} icon="data" />
+          <CmsKpiCard label="Rejected rows" value={String(quality.rejectedRows)} />
         </div>
 
         <div class="mt-6 grid gap-4 lg:grid-cols-2">
-          <CmsCard
-            title="Recent imports"
-            description="Rows and documents are always reported separately."
-          >
+          <CmsCard title="Recent imports">
             {recent.length === 0 ? (
               <CmsEmptyState
                 icon="data"
@@ -126,10 +117,7 @@ if (mayView) {
             </div>
           </CmsCard>
 
-          <CmsCard
-            title="Partial imports"
-            description="A partial import says exactly what did not land and why."
-          >
+          <CmsCard title="Partial imports">
             {quality.recentPartialImports.length === 0 ? (
               <CmsEmptyState
                 icon="data"
@@ -151,9 +139,12 @@ if (mayView) {
                 ))}
               </ul>
             )}
-            <div class="mt-4">
+            <div class="mt-4 flex flex-wrap gap-2">
               <CmsButton variant="ghost" href="/app/data/exceptions">
                 Exceptions and unresolved users
+              </CmsButton>
+              <CmsButton variant="ghost" href="/app/data/review">
+                Created from import
               </CmsButton>
             </div>
           </CmsCard>

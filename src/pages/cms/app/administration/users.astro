@@ -158,12 +158,12 @@ const pageHref = (n: number) => {
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to user administration"
-        description="Ask a system administrator for the ADMIN.USERS.MANAGE permission. Nothing on this page is loaded without it."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="The user directory could not be loaded"
-        description="The database did not answer. Try again in a moment."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>

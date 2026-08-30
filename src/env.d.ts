@@ -73,6 +73,17 @@ declare namespace Cloudflare {
     TURSO_CMS_DATABASE_URL?: string;
     TURSO_CMS_AUTH_TOKEN?: string;
     CMS_SESSION_SECRET?: string;
+    CMS_AUTH_MAIL_ENDPOINT?: string;
+    CMS_AUTH_MAIL_SECRET?: string;
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
+    MICROSOFT_CLIENT_ID?: string;
+    MICROSOFT_CLIENT_SECRET?: string;
+    MICROSOFT_TENANT?: string;
+    APPLE_CLIENT_ID?: string;
+    APPLE_TEAM_ID?: string;
+    APPLE_KEY_ID?: string;
+    APPLE_PRIVATE_KEY?: string;
     /**
      * Set to the exact string 'development' to let the CMS show an invitation
      * link to the administrator who created a user. Off everywhere else,
@@ -274,6 +285,11 @@ declare namespace App {
      * signed in or not.
      */
     cmsPath?: string;
+    /**
+     * The request's CSP nonce, for the one inline script the rail needs.
+     * Set in the CMS branch of the middleware, read by CmsLayout.
+     */
+    cmsNonce?: string;
 
     /**
      * The signed-in CMS principal, attached by the middleware guard from a

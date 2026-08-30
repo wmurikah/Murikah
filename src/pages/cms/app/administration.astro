@@ -14,7 +14,6 @@
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
-import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import {
   canManageCatalogue,
@@ -38,88 +37,80 @@ const permissions = Astro.locals.cms?.user.permissions ?? [];
 interface Section {
   label: string;
   href: string | null;
-  description: string;
   ready: boolean;
   visible: boolean;
 }
 
 const sections: Section[] = [
   {
+    label: 'AI',
+    href: '/app/administration/ai',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
+    label: 'Channels',
+    href: '/app/administration/channels',
+    ready: true,
+    visible: canManageUsers(permissions),
+  },
+  {
     label: 'Organisation',
     href: ORGANISATION_PATH,
-    description:
-      'Countries, affiliates, business units, departments and teams. The structures that drive visibility, assignments, approvals and reporting.',
     ready: true,
     visible: canViewOrganisation(permissions),
   },
   {
     label: 'Users',
     href: '/app/administration/users',
-    description:
-      'Accounts, organisational assignments, job titles, team membership and external account mappings.',
     ready: true,
     visible: canManageUsers(permissions),
   },
   {
     label: 'Roles and permissions',
     href: '/app/administration/roles',
-    description: 'Access roles, the permission matrix, data scopes and who holds what.',
     ready: true,
     visible: canManageRoles(permissions),
   },
   {
     label: 'Workflows',
     href: WORKFLOW_PATH,
-    description:
-      'Workflow roles and scoped approval authority, versioned approval chains, and the preview that answers who would approve a transaction before one exists.',
     ready: true,
     visible: canViewWorkflows(permissions),
   },
   {
     label: 'Product catalogue',
     href: '/app/administration/catalogue',
-    description:
-      'One product master for the whole platform: groups, nested categories and the products beneath them. Orders, cases, SLA reporting and approval authority all read these same records.',
     ready: true,
     visible: canManageCatalogue(permissions),
   },
   {
     label: 'Audit trail',
     href: '/app/administration/audit',
-    description:
-      'Who changed what, and when. Every row is evidence, and two database triggers refuse any attempt to alter or delete one, including by a system administrator.',
     ready: true,
     visible: canViewAudit(permissions),
   },
   {
     label: 'System health',
     href: '/app/administration/health',
-    description:
-      'Configuration checks with a stated rule each, including the workflow roles nobody currently holds, which is how a transaction ends up with no approver.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
   {
     label: 'Access review',
     href: '/app/administration/access-review',
-    description:
-      'Application access and approval authority, side by side and never merged. They are different things, and reading them as one list is how authority gets granted by accident.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
   {
     label: 'Design reference',
     href: '/app/administration/components',
-    description:
-      'Every interface primitive in every state, rendered from the real components. One page, no build tooling, so it cannot drift from what a user sees.',
     ready: true,
     visible: canManageUsers(permissions),
   },
   {
     label: 'Workflow authority review',
     href: '/app/administration/authority',
-    description:
-      'Who can approve this today. Assignments are effective-dated, so the configuration can look correct while nobody actually holds the authority any more.',
     ready: true,
     visible: canManageUsers(permissions) || canManageWorkflowRoles(permissions),
   },
@@ -143,28 +134,26 @@ const visible = sections.filter((section) => section.visible);
         </p>
       </CmsCard>
     ) : (
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="overflow-hidden rounded-cms-lg border border-cms-line bg-cms-surface">
         {visible.map((section) =>
           section.ready && section.href ? (
             <a
               href={section.href}
-              class="flex flex-col gap-2 rounded-cms-lg border border-cms-line bg-cms-surface p-5 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+              class:list={[
+                'group flex items-center gap-4 border-b border-cms-line px-5 py-4 outline-none last:border-0 hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset',
+                section.label === 'Design reference' && 'bg-cms-canvas',
+              ]}
             >
-              <span class="flex items-center justify-between gap-2">
-                <span class="text-cms-card font-semibold text-cms-navy">{section.label}</span>
-                <CmsIcon name="chevronRight" size={17} class="text-cms-muted" />
+              <span class="min-w-0 flex-1 text-cms-card font-semibold text-cms-navy">
+                {section.label}
               </span>
-              <span class="text-cms-body-sm text-cms-muted">{section.description}</span>
+              <CmsIcon
+                name="chevronRight"
+                size={17}
+                class="shrink-0 text-cms-muted group-hover:text-cms-royal"
+              />
             </a>
-          ) : (
-            <div class="flex flex-col gap-2 rounded-cms-lg border border-dashed border-cms-line bg-cms-canvas p-5">
-              <span class="flex items-center justify-between gap-2">
-                <span class="text-cms-card font-semibold text-cms-muted">{section.label}</span>
-                <CmsBadge tone="neutral" label="Not built yet" />
-              </span>
-              <span class="text-cms-body-sm text-cms-muted">{section.description}</span>
-            </div>
-          ),
+          ) : null,
         )}
       </div>
     )

@@ -38,7 +38,9 @@ const pageTitle = `${title} - Hass Petroleum`;
 const NAV = [
   { href: '/portal', label: 'Home' },
   { href: '/portal/orders', label: 'Orders' },
-  { href: '/portal/service', label: 'Service' },
+  { href: '/portal/helpdesk', label: 'Helpdesk' },
+] as const;
+const MORE = [
   { href: '/portal/documents', label: 'Documents' },
   { href: '/portal/feedback', label: 'Feedback' },
   { href: '/portal/profile', label: 'Profile' },
@@ -114,6 +116,31 @@ const activeName =
               </li>
             ))
           }
+          <li>
+            <details class="group relative">
+              <summary
+                class="flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-t-cms px-3 text-cms-body-sm text-cms-rail-text outline-none hover:bg-cms-navy-soft hover:text-white focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                More <CmsIcon name="chevronDown" size={14} />
+              </summary>
+              <ul
+                class="absolute right-0 z-30 mt-1 min-w-40 rounded-cms border border-cms-line bg-cms-surface p-1 shadow-cms-overlay"
+              >
+                {
+                  MORE.map((item) => (
+                    <li>
+                      <a
+                        href={item.href}
+                        class="block rounded-cms px-3 py-2 text-cms-body-sm text-cms-ink outline-none hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        {item.label}
+                      </a>
+                    </li>
+                  ))
+                }
+              </ul>
+            </details>
+          </li>
         </ul>
       </nav>
     </header>
@@ -165,8 +192,8 @@ const activeName =
       >
         <p>Hass Petroleum{activeName === null ? '' : ` - ${activeName}`}</p>
         <p>
-          If anything here does not look right, raise a request under Service and somebody will come
-          back to you.
+          If anything here does not look right, raise a request under Helpdesk and somebody will
+          come back to you.
         </p>
       </div>
     </footer>

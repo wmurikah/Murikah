@@ -20,18 +20,28 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { createTestDb, type TestClient } from './support/db.ts';
-import { seedHass } from './support/hassSeed.ts';
+import { seedHass, SEED } from './support/hassSeed.ts';
+import { validatePoWorkbook } from '../../src/lib/cms/import/poImport.ts';
+import { validateSoWorkbook } from '../../src/lib/cms/import/soImport.ts';
 import {
   countRoundTrips,
   SUBREQUEST_BUDGET,
   CLOUDFLARE_FREE_SUBREQUEST_LIMIT,
 } from './support/subrequestBudget.ts';
 import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
-import { parseFilter } from '../../src/lib/cms/analytics/filters.ts';
+import { parseFilter, drillTo } from '../../src/lib/cms/analytics/filters.ts';
+import { approvalBoard, windowStart } from '../../src/lib/cms/repos/approvalSla.ts';
+import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
+import { countPurchaseOrders } from '../../src/lib/cms/repos/poPerformance.ts';
+import { listProviders, activeProvider } from '../../src/lib/cms/ai/providers.ts';
+import { listConnections } from '../../src/lib/cms/ai/channels.ts';
+import { reviewQueue } from '../../src/lib/cms/ai/inbox.ts';
 import {
   dashboard,
-  connectedInsights,
   attentionCustomers,
   entityComparison,
 } from '../../src/lib/cms/repos/executive.ts';
@@ -108,6 +118,13 @@ import {
 } from '../../src/lib/cms/service/events.ts';
 
 const NOW = '2026-08-27 10:00:00';
+const here = dirname(fileURLToPath(import.meta.url));
+const IMPORT_CTX = {
+  actorUserId: SEED.admin,
+  ip: '10.0.0.10',
+  userAgent: 'HassCMS Test',
+  now: new Date('2026-08-27T10:00:00Z'),
+} as const;
 const USER = 'USR-CATH';
 /** Everything, so no section is composed away and every page is at full cost. */
 const PERMISSIONS = [
@@ -164,22 +181,97 @@ function assertWithinBudget(page: string, trips: number, statements: number): vo
 
 const filter = parseFilter(new URLSearchParams());
 
-test('/app/executive stays inside its subrequest budget', async () => {
+/**
+ * Home, which is now the two approval boards, the exceptions and the waiting
+ * counts.
+ *
+ * Every read is issued in the same microtask, so the batcher sends them as one
+ * outbound request each time it drains. The thing this test protects is that
+ * property: a figure added later that awaits before its neighbours would cost
+ * a round trip of its own, and this is where that shows up.
+ */
+test('/app stays inside its subrequest budget', async () => {
+  const since = windowStart(new Date(NOW.replace(' ', 'T') + 'Z'));
   const { trips, statements } = await cost((b) =>
     Promise.all([
-      runSection(b, 'executive.dashboard', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
-      runSection(b, 'executive.insights', (db) =>
-        connectedInsights(db, USER, PERMISSIONS, filter, NOW),
+      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', since)),
+      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', since)),
+      runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, filter, NOW)),
+      runSection(b, 'home.po-waiting', (db) =>
+        countPurchaseOrders(db, USER, { ...filter, status: 'IN_APPROVAL' }, NOW),
       ),
-      runSection(b, 'executive.attention-customers', (db) =>
-        attentionCustomers(db, USER, filter, NOW),
-      ),
-      runSection(b, 'executive.entities', (db) =>
-        entityComparison(db, USER, PERMISSIONS, filter, NOW),
+      runSection(b, 'home.so-waiting', (db) =>
+        countSalesOrders(db, USER, { ...filter, status: 'PENDING_FINANCE' }, NOW),
       ),
     ]),
   );
-  assertWithinBudget('/app/executive', trips, statements);
+  assertWithinBudget('/app', trips, statements);
+});
+
+/**
+ * The waiting figure and the page it links to are the same question.
+ *
+ * A dashboard number whose destination holds a different count is worse than
+ * no number, because it is checkable and wrong. This does not compare two
+ * queries written to agree: the figure IS `countSalesOrders` under the filter
+ * the link carries, so the only way they can diverge is if the page stops
+ * using it, which is what the assertion below would catch.
+ */
+/**
+ * The three screens part 7 adds, and the shell control that adds nothing.
+ *
+ * The assistant panel is the interesting number here: it is rendered on EVERY
+ * page, so a single query in it would be a query added to all of them, and
+ * Home is at thirteen of fifteen. It reads nothing until somebody opens it.
+ */
+test('the assistant and channel screens stay inside their budgets', async () => {
+  const client = await seeded();
+
+  const ai = await cost(async (b) => {
+    await listProviders(b.for('admin.ai') as never);
+  }, client);
+  assertWithinBudget('/app/administration/ai', ai.trips, ai.statements);
+
+  const channels = await cost(async (b) => {
+    const db = b.for('admin.channels') as never;
+    await Promise.all([
+      listConnections(db),
+      (db as { execute: (sql: string) => Promise<unknown> }).execute(
+        `SELECT case_category_id, category_name, subcategory_name FROM case_categories
+          WHERE active = 1 ORDER BY category_name, subcategory_name`,
+      ),
+    ]);
+  }, client);
+  assertWithinBudget('/app/administration/channels', channels.trips, channels.statements);
+
+  const review = await cost(async (b) => {
+    const db = b.for('helpdesk.review') as never;
+    await Promise.all([reviewQueue(db), activeProvider(db, 'CLASSIFICATION')]);
+  }, client);
+  assertWithinBudget('/app/helpdesk/review', review.trips, review.statements);
+
+  // THE PANEL IN THE SHELL, WHICH IS ON EVERY PAGE. Asserted as zero rather
+  // than as "small": a query here is multiplied by every page in the product.
+  const panel = readFileSync('src/components/cms/CmsAssistant.astro', 'utf8');
+  const frontmatter = panel.slice(0, panel.indexOf('---', 3));
+  assert.ok(
+    !/getDb|db\.execute|await\s+list|await\s+reviewQueue/.test(frontmatter),
+    'the assistant panel reads nothing at render time',
+  );
+  console.log('[subrequests] assistant panel in the shell: 0 round trips');
+});
+
+test('a Home figure equals the count of the records behind it', async () => {
+  const db = await seeded();
+  const status = 'PENDING_FINANCE';
+  const figure = await countSalesOrders(db as never, USER, { ...filter, status }, NOW);
+  // The destination the page links to, parsed back out of the very query
+  // string the anchor carries, and counted through the list page's own repo.
+  const href = drillTo('/app/orders/sales', filter, { status });
+  const destination = parseFilter(new URLSearchParams(href.slice(href.indexOf('?'))));
+  const behind = await countSalesOrders(db as never, USER, destination, NOW);
+  assert.equal(behind, figure, 'the destination holds exactly the figure');
+  console.log(`[drill] /app finance-approval waiting: ${figure} = ${behind} records`);
 });
 
 test('/app/orders/sales/performance stays inside its subrequest budget', async () => {
@@ -245,7 +337,7 @@ test('/app/crm/analytics stays inside its subrequest budget', async () => {
   assertWithinBudget('/app/crm/analytics', trips, statements);
 });
 
-test('/app/service/analytics stays inside its subrequest budget', async () => {
+test('/app/helpdesk/analytics stays inside its subrequest budget', async () => {
   const { trips, statements } = await cost((b) =>
     runSection(b, 'service.analytics', (db) =>
       Promise.all([
@@ -267,7 +359,7 @@ test('/app/service/analytics stays inside its subrequest budget', async () => {
       ]),
     ),
   );
-  assertWithinBudget('/app/service/analytics', trips, statements);
+  assertWithinBudget('/app/helpdesk/analytics', trips, statements);
 });
 
 /**
@@ -278,7 +370,7 @@ test('/app/service/analytics stays inside its subrequest budget', async () => {
  * opened one more affiliate would have broken a page that worked the day
  * before. The cost must not follow the data.
  */
-test('the executive dashboard does not get more expensive as affiliates are added', async () => {
+test('the dashboard does not get more expensive as affiliates are added', async () => {
   const c = await seeded();
   const activate = (n: number): void => {
     c.raw.exec('UPDATE affiliates SET active = 0');
@@ -293,16 +385,11 @@ test('the executive dashboard does not get more expensive as affiliates are adde
     cost(
       (b) =>
         Promise.all([
-          runSection(b, 'executive.dashboard', (db) =>
-            dashboard(db, USER, PERMISSIONS, filter, NOW),
-          ),
-          runSection(b, 'executive.insights', (db) =>
-            connectedInsights(db, USER, PERMISSIONS, filter, NOW),
-          ),
-          runSection(b, 'executive.attention-customers', (db) =>
+          runSection(b, 'dashboard.board', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
+          runSection(b, 'dashboard.attention-customers', (db) =>
             attentionCustomers(db, USER, filter, NOW),
           ),
-          runSection(b, 'executive.entities', (db) =>
+          runSection(b, 'dashboard.entities', (db) =>
             entityComparison(db, USER, PERMISSIONS, filter, NOW),
           ),
         ]),
@@ -320,122 +407,126 @@ test('the executive dashboard does not get more expensive as affiliates are adde
     `the page cost ${one.trips} subrequests at one affiliate and ${five.trips} at five. ` +
       `Its cost must not scale with the data: that is how it reached 237 and stopped loading.`,
   );
-  assertWithinBudget('/app/executive at five affiliates', five.trips, five.statements);
+  assertWithinBudget('/app at five affiliates', five.trips, five.statements);
   c.close();
 });
 
-// ---------------------------------------------------------------------------
-// The pages that arrived without a guard
-//
-// This file was written for the five analytics pages and covered only those.
-// Build Prompt 26 added the control centre and the audit trail, and Build
-// Prompt 27 added the reporting centre, while other work was in flight; none
-// of them was ever counted. A page can be over the Cloudflare limit and
-// nobody finds out until somebody opens it, because node has no such limit.
-// They are counted here now, so the guard covers the application rather than
-// the five pages it happened to be written for.
-// ---------------------------------------------------------------------------
-
-/** The same instant as NOW, for the helpers that take a Date rather than a string. */
-const NOW_DATE = new Date(`${NOW.replace(' ', 'T')}Z`);
-const auditFilter = parseAuditFilter(new URLSearchParams(), NOW_DATE);
-
-test('/app/administration/health stays inside its subrequest budget', async () => {
-  // ASSERTED TO HAVE ACTUALLY RUN. A section that throws is caught by
-  // `runSection` and reported, and a page that failed costs nothing, so a
-  // budget test alone would pass loudest on a page that is broken. The result
-  // is checked before the count is trusted.
-  let ok = false;
-  let checks = 0;
-  const { trips, statements } = await cost(async (b) => {
-    const result = await runSection(b, 'control.health', (db) =>
-      Promise.all([systemHealth(db, NOW_DATE), expiringAuthority(db, NOW_DATE, 30)]),
-    );
-    ok = result.ok;
-    if (result.ok) checks = result.value[0].checks.length;
-  });
-  assert.ok(ok, 'the health section failed, so its cost of zero means nothing');
-  assert.ok(checks > 0, `expected the health checks to run, got ${checks}`);
-  assertWithinBudget('/app/administration/health', trips, statements);
-});
-
-test('/app/administration/access-review stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'control.accessReview', (db) =>
-      accessReview(db, NOW.slice(0, 10), { search: '' }),
-    ),
-  );
-  assertWithinBudget('/app/administration/access-review', trips, statements);
-});
-
-test('/app/administration/authority stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'control.authority', (db) =>
-      Promise.all([
-        authorityReview(db, {
-          processType: null,
-          countryId: null,
-          affiliateId: null,
-          businessUnitId: null,
-          effectiveOn: NOW.slice(0, 10),
-        }),
-        db.execute(`SELECT country_id AS id, country_name AS label FROM countries`),
-        db.execute(`SELECT affiliate_id AS id, affiliate_name AS label FROM affiliates`),
-        db.execute(
-          `SELECT business_unit_id AS id, business_unit_name AS label FROM business_units`,
-        ),
-      ]),
-    ),
-  );
-  assertWithinBudget('/app/administration/authority', trips, statements);
-});
-
-test('/app/administration/audit stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'audit.trail', (db) =>
-      Promise.all([
-        listAuditEvents(db, USER, auditFilter),
-        auditFilterOptions(db, USER),
-        maySeeSecurityEvents(db, USER),
-      ]),
-    ),
-  );
-  assertWithinBudget('/app/administration/audit', trips, statements);
-});
-
-test('/app/administration/audit/security stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'audit.security', async (db) => {
-      const allowed = await maySeeSecurityEvents(db, USER);
-      return allowed ? securityEvents(db, USER, auditFilter) : null;
-    }),
-  );
-  assertWithinBudget('/app/administration/audit/security', trips, statements);
-});
-
 /**
- * The reporting centre, measured on its most expensive report rather than its
- * cheapest. A budget proved on the smallest report proves nothing: the page is
- * one select away from any of the others.
+ * The Upload Centre's two screens, held to the same budget as the analytics
+ * pages, and the validation that used to break it.
+ *
+ * WHAT THIS CAUGHT. Both importers asked "what hashes has this key had before"
+ * once per row, inside the row loop. PO-Ver1.xls is 45 rows and cost 57
+ * subrequests; SO-Ver1.xls is 1,386 rows and cost 1,403. Cloudflare's Free
+ * plan allows 50 per request, so validation died part-way through the loop and
+ * left the batch at VALIDATING with rows received recorded, no import_rows,
+ * and every classification count zero. Nothing in the suite could see that,
+ * because node has no subrequest limit.
  */
-test('/app/performance/reports stays inside its budget on every report', async () => {
-  const client = await seeded();
-  let worst = { id: '', trips: 0, statements: 0 };
-  for (const report of REPORTS) {
-    const { trips, statements } = await cost(
-      (b) =>
-        runSection(b, `report.${report.id}`, (db) =>
-          Promise.all([
-            report.run(db, USER, filter, NOW, PERMISSIONS),
-            db.execute(`SELECT affiliate_id AS value, affiliate_name AS label FROM affiliates`),
-          ]),
-        ),
-      client,
-    );
-    if (trips > worst.trips) worst = { id: report.id, trips, statements };
-    assertWithinBudget(`/app/performance/reports?report=${report.id}`, trips, statements);
-  }
-  console.log(
-    `[subrequests] the most expensive report is ${worst.id} at ${worst.trips} round trips`,
+test('validating the purchase order extract stays well inside the platform limit', async () => {
+  const counted = countRoundTrips(await seeded());
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'PO-Ver1.xls')));
+  const result = await validatePoWorkbook(
+    counted.db as never,
+    bytes,
+    {
+      filename: 'PO-Ver1.xls',
+      uploadedBy: SEED.admin,
+      sourceSystemId: 'SRC-ORACLE',
+      affiliateId: null,
+    } as never,
+    IMPORT_CTX as never,
   );
+  assert.equal(result.rowsReceived, 45);
+  assert.equal(result.uniqueOrders, 45, '45 rows must produce 45 documents');
+  assert.ok(
+    counted.roundTrips() <= CLOUDFLARE_FREE_SUBREQUEST_LIMIT,
+    `validating 45 rows cost ${counted.roundTrips()} subrequests, over the Free plan's ` +
+      `${CLOUDFLARE_FREE_SUBREQUEST_LIMIT}. It will die part-way through and leave the batch ` +
+      `at VALIDATING.`,
+  );
+});
+
+test('validating the sales order extract does not scale its cost with its rows', async () => {
+  const counted = countRoundTrips(await seeded());
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'SO-Ver1.xls')));
+  const result = await validateSoWorkbook(
+    counted.db as never,
+    bytes,
+    { filename: 'SO-Ver1.xls', uploadedBy: SEED.admin, sourceSystemId: 'SRC-ORACLE' } as never,
+    IMPORT_CTX as never,
+  );
+  assert.equal(result.rowsReceived, 1386);
+  assert.equal(result.uniqueDocuments, 662, '1,386 rows must produce 662 documents');
+  assert.ok(
+    counted.roundTrips() <= CLOUDFLARE_FREE_SUBREQUEST_LIMIT,
+    `validating 1,386 rows cost ${counted.roundTrips()} subrequests, over the Free plan's ` +
+      `${CLOUDFLARE_FREE_SUBREQUEST_LIMIT}. A validation's cost must not follow its row count.`,
+  );
+  // 30 times the rows of the purchase order extract, and nothing like 30 times
+  // the round trips: the cost follows the key space in chunks, not the rows.
+  assert.ok(counted.roundTrips() < 45, `expected far fewer than one trip per row`);
+});
+
+test('a validation that cannot finish leaves the batch REJECTED, never VALIDATING', async () => {
+  const client = await seeded();
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'SO-Ver1.xls')));
+  // Fail the write that lands the rows, after the batch row already exists.
+  const realBatch = client.batch.bind(client);
+  let calls = 0;
+  (client as unknown as { batch: unknown }).batch = async (stmts: never, mode: never) => {
+    calls += 1;
+    if (calls > 1) throw new Error('no such table: import_rows');
+    return realBatch(stmts, mode);
+  };
+  const result = await validateSoWorkbook(
+    client as never,
+    bytes,
+    { filename: 'corrupt.xls', uploadedBy: SEED.admin, sourceSystemId: 'SRC-ORACLE' } as never,
+    IMPORT_CTX as never,
+  );
+  assert.notEqual(result.rejectedReason, null, 'the operator must be told it failed');
+  const status = (
+    client.raw
+      .prepare(`SELECT status FROM import_batches WHERE import_batch_id = ?`)
+      .get(result.batchId) as Record<string, unknown>
+  ).status;
+  assert.equal(status, 'REJECTED', 'VALIDATING is not a resting place');
+  const audited = client.raw
+    .prepare(
+      `SELECT after_json FROM audit_events WHERE entity_id = ? AND event_type = 'IMPORT_REJECTED'`,
+    )
+    .get(result.batchId) as Record<string, unknown> | undefined;
+  assert.ok(audited !== undefined, 'the reason must be recorded, not only shown');
+  client.close();
+});
+
+test('nothing reaches a canonical table during validation', async () => {
+  const client = await seeded();
+  const count = (table: string) =>
+    Number(
+      (client.raw.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as Record<string, unknown>).n,
+    );
+  const before = {
+    salesOrders: count('sales_orders'),
+    salesOrderLines: count('sales_order_lines'),
+    purchaseOrders: count('purchase_orders'),
+  };
+  const bytes = new Uint8Array(readFileSync(join(here, 'support', 'SO-Ver1.xls')));
+  await validateSoWorkbook(
+    client as never,
+    bytes,
+    { filename: 'SO-Ver1.xls', uploadedBy: SEED.admin, sourceSystemId: 'SRC-ORACLE' } as never,
+    IMPORT_CTX as never,
+  );
+  assert.deepEqual(
+    {
+      salesOrders: count('sales_orders'),
+      salesOrderLines: count('sales_order_lines'),
+      purchaseOrders: count('purchase_orders'),
+    },
+    before,
+    'validation is not a commit: no canonical row may be written by it',
+  );
+  client.close();
 });

@@ -1125,6 +1125,18 @@ export interface OrderDetail {
   stages: OrderStage[];
   /** The lifecycle, in the order it happens, with what is known of each step. */
   lifecycle: { step: string; at: string | null; note: string }[];
+  /**
+   * Every loading authority this order carried, earliest first.
+   *
+   * ONE ORDER LINE CAN BE LOADED MORE THAN ONCE, and `sales_orders` holds one
+   * `loading_authority_at`. The column therefore records a CHOICE — the
+   * earliest, by the rule the importer states — and this is the rest of what
+   * there was, so the figure on screen is never mistaken for the whole story.
+   * Read from the order's current snapshot, which the commit writes with the
+   * full set beside the one it picked; empty for an order that predates this
+   * or was not imported.
+   */
+  loadingAuthorities: string[];
   snapshots: { versionNo: number; capturedAt: string; isCurrent: boolean; snapshotJson: string }[];
 }
 
@@ -1193,6 +1205,35 @@ export async function orderDetail(
   ]);
 
   const creditRequired = Number(row.credit_required) === 1;
+
+  /**
+   * The loading authorities the import recorded for this order.
+   *
+   * From the CURRENT snapshot, which the commit writes with the whole set
+   * beside the one it chose. Read from there rather than from
+   * `so_extract_rows`, which is keyed by batch and row number and has no index
+   * that answers "this order" — a scan of every landed row on every order page
+   * is not a cost a detail view should carry.
+   *
+   * Anything unreadable, absent or of the wrong shape yields an empty list and
+   * the page falls back to the plain note. A snapshot written before this
+   * phase has no such field, and that is not an error.
+   */
+  const loadingAuthorities: string[] = (() => {
+    const current = snapshots.rows.find(
+      (raw) => Number((raw as unknown as Record<string, unknown>).is_current) === 1,
+    );
+    if (current === undefined) return [];
+    try {
+      const parsed = JSON.parse(
+        text((current as unknown as Record<string, unknown>).snapshot_json),
+      ) as { loadingAuthorities?: unknown };
+      if (!Array.isArray(parsed.loadingAuthorities)) return [];
+      return parsed.loadingAuthorities.filter((v): v is string => typeof v === 'string').sort();
+    } catch {
+      return [];
+    }
+  })();
   const stageRows: OrderStage[] = stages.rows.map((raw) => {
     const record = raw as unknown as Record<string, unknown>;
     return {
@@ -1253,6 +1294,7 @@ export async function orderDetail(
     // The lifecycle, step by step. Where credit was not required the step
     // says "Not required", which is a different statement from "0 min" and
     // the one the data actually supports.
+    loadingAuthorities,
     lifecycle: [
       { step: 'Created', at: text(row.created), note: 'The order was raised.' },
       {
@@ -1282,7 +1324,18 @@ export async function orderDetail(
       {
         step: 'Loading authority',
         at: nullableText(row.loading_authority),
-        note: row.loading_authority === null ? 'Not available.' : 'Loading authority issued.',
+        // THE RULE, BESIDE THE FIGURE. A reader seeing one timestamp on an
+        // order that was loaded seven times has been told something false by
+        // omission, and the number feeds the order-to-loading-authority
+        // metric, so it has to say which of the seven it is.
+        note:
+          row.loading_authority === null
+            ? 'Not available.'
+            : loadingAuthorities.length > 1
+              ? `The earliest of ${loadingAuthorities.length} loading authorities on this order, ` +
+                `the last being ${loadingAuthorities[loadingAuthorities.length - 1]}. ` +
+                `Every one is kept in the imported rows.`
+              : 'Loading authority issued.',
       },
       {
         step: 'Loaded',

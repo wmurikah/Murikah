@@ -141,6 +141,44 @@ export function escapeForDisplay(value: string): string {
 
 // ---- Upload and validate -----------------------------------------------------
 
+/**
+ * WHICH SYSTEM AN EXTRACT COMES FROM IS NOT A QUESTION.
+ *
+ * Both extracts this product accepts are Oracle EBS reports. The form used to
+ * ask, and defaulted to CRM Web Form, so a sales order extract was routinely
+ * recorded as arriving from a web form. That is not cosmetic: `source_identities`
+ * resolves usernames against the source system, so the wrong value maps the
+ * wrong people, or nobody. Deriving it removes both the question and the
+ * default that was wrong more often than it was right.
+ */
+export const SOURCE_SYSTEM_FOR_IMPORT: Readonly<Record<ImportType, string>> = {
+  SALES_ORDER: 'SRC-ORACLE',
+  PURCHASE_ORDER: 'SRC-ORACLE',
+};
+
+/**
+ * Where a derived fact came from, so the preview can show the reasoning
+ * rather than a number that appeared from nowhere.
+ */
+export interface DerivationNote {
+  /** The affiliate the file named, or null for a Group-wide extract. */
+  affiliateLabel: string | null;
+  /** The column the affiliate was read from, or null where there is none. */
+  affiliateColumn: string | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+  /** The column the period was derived from. */
+  periodColumn: string;
+  /** Every distinct affiliate the file named. */
+  affiliates: string[];
+  /**
+   * Headers the landing table has no column for. Their values are kept in
+   * extra_json rather than dropped, and named here so a column that appears in
+   * next month's extract announces itself instead of vanishing.
+   */
+  unmappedColumns: string[];
+}
+
 export interface UploadRequest {
   importType: ImportType;
   sourceSystemId: string;
@@ -151,9 +189,21 @@ export interface UploadRequest {
   bytes: Uint8Array;
 }
 
-export type UploadStage = 'REJECTED' | 'DUPLICATE' | 'READY';
+/**
+ * THREE WAYS AN UPLOAD CAN END, AND THE MIDDLE ONE IS NEW.
+ *
+ *   DUPLICATE  The same bytes. This file has been uploaded before.
+ *   RESAVED    Different bytes, identical data. Excel re-saved the workbook
+ *              and every cell still says what it said. This is the case that
+ *              got through the byte check and imported a second time.
+ *   READY      New data, validated, nothing written yet.
+ *   REJECTED   The file could not be read or the batch could not validate.
+ */
+export type UploadStage = 'REJECTED' | 'DUPLICATE' | 'RESAVED' | 'READY';
 
 export interface UploadOutcome {
+  /** What the file itself said, and which column said it. */
+  derivation: DerivationNote | null;
   stage: UploadStage;
   batchId: string | null;
   fileSha256: string | null;
@@ -165,15 +215,55 @@ export interface UploadOutcome {
     uploadedAt: string;
     uploadedBy: string;
   } | null;
+  /** The workbook's data fingerprint, whatever the outcome. */
+  contentSha256: string | null;
+  /**
+   * How many documents in this file already exist in the canonical tables.
+   *
+   * Set on a READY upload, because an operator about to import a file has a
+   * right to know how much of it the system already holds. An extract re-run a
+   * week later repeats every order that has not closed, and that is not a
+   * fault: it is the reason the import is idempotent per document.
+   */
+  documentsAlreadyImported: number;
   summary: {
     rowsReceived: number;
     uniqueDocuments: number;
+    /**
+     * FOUR FIGURES, NOT TWO, AND NONE OF THEM DERIVED FROM ANOTHER.
+     *
+     * Rows, documents, order lines and additional loading events are four
+     * different facts about one file, and the real extract makes that obvious:
+     * 1,386 rows describe 662 documents over 1,252 order lines carrying 100
+     * loading authorities beyond the first. A preview that showed only rows
+     * and documents was how a commit came to write one order line 134 times
+     * with the last row winning.
+     *
+     * Zero on a purchase order preview, which has no line grain at all.
+     */
+    orderLines: number;
+    additionalLoadingEvents: number;
     rowsNew: number;
     rowsChanged: number;
     rowsDuplicate: number;
     rowsUnresolved: number;
     rowsRejected: number;
   } | null;
+  /**
+   * WHAT THE COMMIT WILL CREATE, SHOWN BEFORE IT DOES.
+   *
+   * The counts and the full lists, so nobody discovers 228 new accounts and
+   * 108 new products after the fact. This is a preview and nothing here has
+   * been written yet, so a person who does not like what they see can still
+   * stop. Every created product goes to the Unclassified category: the
+   * hierarchy drives approval routing, so a guessed category would route an
+   * order to the wrong approver.
+   */
+  accountsToCreate: { code: string; name: string | null; rows: number }[];
+  productsToCreate: { code: string; unitOfMeasure: string | null; rows: number }[];
+  /** Codes that matched with a different name. Flagged for review, never overwritten. */
+  nameMismatches: { code: string; storedName: string; fileName: string }[];
+  /** A person is still never created. This is for an administrator to map. */
   unresolvedUsers: string[];
   unresolvedProducts: { item: string; rows: number }[];
   unresolvedCustomers: { code: string; name: string | null; rows: number }[];
@@ -231,12 +321,18 @@ export async function receiveUpload(
   ctx: WriteContext,
 ): Promise<UploadOutcome> {
   const empty: UploadOutcome = {
+    derivation: null,
     stage: 'REJECTED',
     batchId: null,
     fileSha256: null,
     rejectedReason: null,
     duplicate: null,
+    contentSha256: null,
+    documentsAlreadyImported: 0,
     summary: null,
+    accountsToCreate: [],
+    productsToCreate: [],
+    nameMismatches: [],
     unresolvedUsers: [],
     unresolvedProducts: [],
     unresolvedCustomers: [],
@@ -278,7 +374,17 @@ export async function receiveUpload(
         ...empty,
         stage: 'DUPLICATE',
         fileSha256: validation.fileSha256,
+        contentSha256: validation.contentSha256,
         duplicate: await describeBatch(db, validation.duplicateOfBatchId),
+      };
+    }
+    if (validation.resavedOfBatchId !== null) {
+      return {
+        ...empty,
+        stage: 'RESAVED',
+        fileSha256: validation.fileSha256,
+        contentSha256: validation.contentSha256,
+        duplicate: await describeBatch(db, validation.resavedOfBatchId),
       };
     }
     const batchId = validation.batchId ?? '';
@@ -287,6 +393,10 @@ export async function receiveUpload(
       importType: input.importType,
       filename,
       sha256: validation.fileSha256,
+      // THE CONTENT FINGERPRINT LIVES HERE. There is no column for it and no
+      // schema change in this phase; this event is the batch's own metadata
+      // and is written exactly once per upload. See ./contentHash.ts.
+      contentSha256: validation.contentSha256,
       affiliateId: validation.affiliateId,
       rowsReceived: validation.rowsReceived,
     });
@@ -301,20 +411,49 @@ export async function receiveUpload(
     });
     await notifyExceptions(db, ctx, batchId, validation.unresolvedActors.length);
     return {
+      derivation: {
+        // The purchase order extract has no affiliate column: 29 headers and
+        // not one of them names an entity. A file that names no entity
+        // measures across all of them.
+        affiliateLabel: validation.affiliateId === null ? null : validation.affiliateId,
+        affiliateColumn: null,
+        periodFrom: validation.dateRange.from,
+        periodTo: validation.dateRange.to,
+        periodColumn: 'ORIGINAL_CREATION_DATE',
+        affiliates: [],
+        unmappedColumns: validation.unmappedColumns,
+      },
       stage: 'READY',
       batchId,
       fileSha256: validation.fileSha256,
+      contentSha256: validation.contentSha256,
+      documentsAlreadyImported: validation.documentsAlreadyImported,
       rejectedReason: null,
       duplicate: null,
       summary: {
         rowsReceived: validation.rowsReceived,
         uniqueDocuments: validation.uniqueOrders,
+        // The purchase order extract has no line grain and no loading column,
+        // which Build Prompt 33 established and this reports rather than
+        // leaving a reader to wonder why two figures are missing.
+        orderLines: 0,
+        additionalLoadingEvents: 0,
         rowsNew: validation.rowsNew,
         rowsChanged: validation.rowsChanged,
         rowsDuplicate: validation.rowsDuplicate,
         rowsUnresolved: 0,
         rowsRejected: validation.rowsRejected,
       },
+      // A purchase order extract creates NO reference records at all. NATURE
+      // holds PRODUCT, LPG and LUBES, and Req Description carries a mixture of
+      // fuel, LPG, lubricants and general procurement such as `MGL 19021` and
+      // `TOP RICH-INV NO 11407`. None of that is a product code, and mapping
+      // general procurement into the petroleum catalogue would file stationery
+      // under liquefied petroleum gas. The extract has no line grain either,
+      // so nothing here ever reaches products.
+      accountsToCreate: [],
+      productsToCreate: [],
+      nameMismatches: [],
       unresolvedUsers: validation.unresolvedActors.map((a) => a.username),
       unresolvedProducts: [],
       unresolvedCustomers: [],
@@ -324,12 +463,32 @@ export async function receiveUpload(
   }
 
   const validation: SoValidation = await validateSoWorkbook(db, input.bytes, uploadInput, ctx);
+  // The run did not finish. The batch is already REJECTED with its reason in
+  // the audit trail; the operator is told what happened rather than shown a
+  // batch that says it is still validating.
+  if (validation.rejectedReason !== null) {
+    return {
+      ...empty,
+      fileSha256: validation.fileSha256,
+      rejectedReason: validation.rejectedReason,
+    };
+  }
   if (validation.duplicateOfBatchId !== null) {
     return {
       ...empty,
       stage: 'DUPLICATE',
       fileSha256: validation.fileSha256,
+      contentSha256: validation.contentSha256,
       duplicate: await describeBatch(db, validation.duplicateOfBatchId),
+    };
+  }
+  if (validation.resavedOfBatchId !== null) {
+    return {
+      ...empty,
+      stage: 'RESAVED',
+      fileSha256: validation.fileSha256,
+      contentSha256: validation.contentSha256,
+      duplicate: await describeBatch(db, validation.resavedOfBatchId),
     };
   }
   const batchId = validation.batchId ?? '';
@@ -338,6 +497,10 @@ export async function receiveUpload(
     importType: input.importType,
     filename,
     sha256: validation.fileSha256,
+    // THE CONTENT FINGERPRINT LIVES HERE. There is no column for it and no
+    // schema change in this phase; this event is the batch's own metadata
+    // and is written exactly once per upload. See ./contentHash.ts.
+    contentSha256: validation.contentSha256,
     rowsReceived: validation.rowsReceived,
   });
   await writeAudit(db, ctx, 'IMPORT_VALIDATED', batchId, 'VALIDATE', {
@@ -358,20 +521,37 @@ export async function receiveUpload(
     validation.unresolvedCustomers.length;
   await notifyExceptions(db, ctx, batchId, exceptions);
   return {
+    derivation: {
+      affiliateLabel:
+        validation.affiliates.length === 1 ? (validation.affiliates[0] ?? null) : null,
+      affiliateColumn: 'AFFILIATE',
+      periodFrom: validation.dateRange.from,
+      periodTo: validation.dateRange.to,
+      periodColumn: 'CREATE_DATE_TIME',
+      affiliates: validation.affiliates,
+      unmappedColumns: validation.unmappedColumns,
+    },
     stage: 'READY',
     batchId,
     fileSha256: validation.fileSha256,
+    contentSha256: validation.contentSha256,
+    documentsAlreadyImported: validation.documentsAlreadyImported,
     rejectedReason: null,
     duplicate: null,
     summary: {
       rowsReceived: validation.rowsReceived,
       uniqueDocuments: validation.uniqueDocuments,
+      orderLines: validation.orderLines,
+      additionalLoadingEvents: validation.additionalLoadingEvents,
       rowsNew: validation.rowsNew,
       rowsChanged: validation.rowsChanged,
       rowsDuplicate: validation.rowsDuplicate,
       rowsUnresolved: validation.rowsUnresolved,
       rowsRejected: validation.rowsRejected,
     },
+    accountsToCreate: validation.accountsToCreate,
+    productsToCreate: validation.productsToCreate,
+    nameMismatches: validation.nameMismatches,
     unresolvedUsers: validation.unresolvedUsers,
     unresolvedProducts: validation.unresolvedProducts,
     unresolvedCustomers: validation.unresolvedCustomers,
@@ -453,8 +633,24 @@ export interface CommitOutcome {
   documentsSkipped: number;
   linesWritten: number;
   workflowEventsAppended: number;
+  /** Reference records this commit created, and the names it refused to overwrite. */
+  accountsCreated: number;
+  productsCreated: number;
+  nameMismatches: number;
+  /** Loading authorities beyond the first, per order, that this commit recorded. */
+  additionalLoadingEvents: number;
   /** What did not import, and why, in words rather than a status word. */
   skippedReasons: { reason: string; rows: number }[];
+  /**
+   * What DID import but is incomplete, and why.
+   *
+   * Separate from skippedReasons because the two are different facts and the
+   * screen says so in different words: a skipped document is not in the
+   * database, while a note here is about something that is. Putting "imported
+   * without approval history" under a heading that reads "Not imported" would
+   * be a message that contradicts itself.
+   */
+  notes: { note: string; count: number }[];
 }
 
 /**
@@ -491,7 +687,27 @@ export async function commitBatch(
             documentsSkipped: result.ordersSkipped,
             linesWritten: result.linesWritten,
             workflowEventsAppended: result.stageEventsAppended,
+            // A purchase order import creates no reference records at all.
+            accountsCreated: 0,
+            productsCreated: 0,
+            nameMismatches: 0,
+            additionalLoadingEvents: 0,
             skippedReasons: [],
+            notes:
+              result.ordersWithoutWorkflowDefinition === 0
+                ? []
+                : [
+                    {
+                      // NOT SILENT. These orders imported, but their approval
+                      // history did not, because no workflow definition matches
+                      // their scope. Saying so is the difference between a gap
+                      // somebody can act on and one they find months later.
+                      note:
+                        'Imported without approval history: no active PURCHASE_ORDER workflow ' +
+                        'definition matches this batch. Configure one and reprocess the batch.',
+                      count: result.ordersWithoutWorkflowDefinition,
+                    },
+                  ],
           };
         })()
       : await (async () => {
@@ -505,7 +721,22 @@ export async function commitBatch(
             documentsSkipped: result.documentsSkipped,
             linesWritten: result.linesWritten,
             workflowEventsAppended: result.workflowEventsAppended,
+            accountsCreated: result.accountsCreated,
+            productsCreated: result.productsCreated,
+            nameMismatches: result.nameMismatches,
+            additionalLoadingEvents: result.additionalLoadingEvents,
             skippedReasons: [],
+            notes:
+              result.nameMismatches === 0
+                ? []
+                : [
+                    {
+                      note:
+                        'Customer codes matched an account whose stored name differs from the ' +
+                        'file. The stored name was kept; see Data → Created from import.',
+                      count: result.nameMismatches,
+                    },
+                  ],
           };
         })();
 
@@ -523,7 +754,12 @@ export async function commitBatch(
       documentsSkipped: outcome.documentsSkipped,
       linesWritten: outcome.linesWritten,
       workflowEventsAppended: outcome.workflowEventsAppended,
+      accountsCreated: outcome.accountsCreated,
+      productsCreated: outcome.productsCreated,
+      nameMismatches: outcome.nameMismatches,
+      additionalLoadingEvents: outcome.additionalLoadingEvents,
       skippedReasons: outcome.skippedReasons,
+      notes: outcome.notes,
     },
   );
   return outcome;
@@ -781,7 +1017,23 @@ export async function listBatches(db: Client, limit = 50): Promise<BatchSummaryR
             b.status AS status,
             (SELECT COUNT(DISTINCT ir.source_record_key) FROM import_rows ir
               WHERE ir.import_batch_id = b.import_batch_id AND ir.source_record_key IS NOT NULL)
-              AS distinct_keys
+              AS distinct_keys,
+            -- DOCUMENTS, NOT KEYS. A sales order row's key is
+            -- affiliate|document|line, so counting distinct keys counts LINES:
+            -- SO-Ver1.xls has 1,386 rows over 662 orders and 1,252 distinct
+            -- line keys, and reporting 1,252 documents would overstate the
+            -- month by nearly a factor of two. The count validation actually
+            -- made is already recorded on its IMPORT_VALIDATED event, so it is
+            -- read back from there rather than re-derived from a key whose
+            -- grain differs per import type. Purchase order keys are the order
+            -- itself, so the fallback below is correct for them and for any
+            -- batch written before this event carried the figure.
+            (SELECT CAST(json_extract(ae.after_json, '$.uniqueDocuments') AS INTEGER)
+               FROM audit_events ae
+              WHERE ae.entity_type = 'IMPORT_BATCH'
+                AND ae.entity_id = b.import_batch_id
+                AND ae.event_type = 'IMPORT_VALIDATED'
+              ORDER BY ae.event_at DESC LIMIT 1) AS audited_documents
           FROM import_batches b
           LEFT JOIN source_systems ss ON ss.source_system_id = b.source_system_id
           LEFT JOIN users u ON u.user_id = b.uploaded_by_user_id
@@ -806,7 +1058,10 @@ export async function listBatches(db: Client, limit = 50): Promise<BatchSummaryR
       rowsDuplicate: Number(row.rows_duplicate),
       rowsRejected: Number(row.rows_rejected),
       status: text(row.status),
-      uniqueDocuments: Number(row.distinct_keys),
+      uniqueDocuments:
+        row.audited_documents === null || row.audited_documents === undefined
+          ? Number(row.distinct_keys)
+          : Number(row.audited_documents),
     };
   });
 }
@@ -986,4 +1241,144 @@ export async function dataQuality(db: Client): Promise<DataQuality> {
       };
     }),
   };
+}
+
+// ---- Reprocessing a batch that never finished --------------------------------
+
+/** The statuses a batch can be reprocessed from. IMPORTED is not one. */
+export const REPROCESSABLE = new Set(['VALIDATING', 'REJECTED', 'PARTIAL']);
+
+/** Whether this batch is sitting somewhere it should not be left. */
+export function isNonTerminal(status: string): boolean {
+  return status === 'VALIDATING';
+}
+
+/**
+ * Fetch the stored workbook for a batch.
+ *
+ * A SEAM, DELIBERATELY. `file_objects` records a `storage_key` and a hash but
+ * NOT the bytes, and this product has no file storage connected: the portal's
+ * own download path says so to the customer in as many words. Until a store
+ * exists, this returns null and a reprocess ends REJECTED with that as its
+ * recorded reason, which is a terminal state and an honest one. When a store
+ * is connected this function is the only thing that changes.
+ */
+export type StoredWorkbookLoader = (db: Client, batchId: string) => Promise<Uint8Array | null>;
+
+export const storedWorkbookUnavailable: StoredWorkbookLoader = async () => null;
+
+/**
+ * Whether the stored workbook can be read back at all.
+ *
+ * False until a store is connected, and the screen uses it to say so BEFORE
+ * somebody presses Reprocess rather than after. An action that is offered,
+ * pressed, and then explains it was never going to work is a worse answer than
+ * one that says what it needs up front.
+ */
+export const FILE_STORAGE_CONNECTED = false;
+
+/** What to tell a person when a batch cannot be recovered. */
+export const NO_FILE_STORAGE_MESSAGE =
+  'This batch cannot be reprocessed: the uploaded workbook is not retrievable, because file storage is not connected to this environment. Upload the file again to replace it.';
+
+export interface ReprocessOutcome {
+  ok: boolean;
+  batchId: string;
+  previousStatus: string;
+  newStatus: string;
+  /** Present when the run could not be attempted or could not finish. */
+  reason: string | null;
+}
+
+/**
+ * Run an existing batch again, in place.
+ *
+ * THE SAME BATCH, NOT A NEW ONE. The identifier, the uploader, the upload
+ * timestamp and the file hash are all untouched; what is rebuilt is the rows,
+ * the landing and the counts. A batch stuck at VALIDATING is the case this
+ * exists for, and it must not require the operator to find the workbook again.
+ *
+ * NOTHING CANONICAL IS WRITTEN. A reprocess ends where a first run would end,
+ * at READY or PARTIAL or REJECTED. The commit stays a separate, deliberate act.
+ */
+export async function reprocessBatch(
+  db: Client,
+  batchId: string,
+  ctx: WriteContext,
+  loadWorkbook: StoredWorkbookLoader = storedWorkbookUnavailable,
+): Promise<ReprocessOutcome> {
+  const found = await db.execute({
+    sql: `SELECT status, import_type, original_filename, source_system_id
+          FROM import_batches WHERE import_batch_id = ? LIMIT 1`,
+    args: [batchId],
+  });
+  const row = found.rows[0] as Record<string, unknown> | undefined;
+  if (row === undefined) {
+    return {
+      ok: false,
+      batchId,
+      previousStatus: '',
+      newStatus: '',
+      reason: 'That batch does not exist.',
+    };
+  }
+  const previousStatus = String(row.status);
+  if (!REPROCESSABLE.has(previousStatus)) {
+    // An imported batch has written canonical rows. Running it again would
+    // mean deciding what to do with those, which is a different act with a
+    // different name, so it is refused here rather than half-attempted.
+    return {
+      ok: false,
+      batchId,
+      previousStatus,
+      newStatus: previousStatus,
+      reason:
+        previousStatus === 'IMPORTED'
+          ? 'That batch has already been imported. Reprocessing would not know what to do with the documents it created, so it is refused.'
+          : `A batch at ${previousStatus} cannot be reprocessed.`,
+    };
+  }
+
+  const bytes = await loadWorkbook(db, batchId);
+  if (bytes === null) {
+    const reason =
+      'The stored workbook could not be read: file storage is not connected to this environment, so the original bytes are not retrievable. Upload the file again.';
+    await db.execute({
+      sql: `UPDATE import_batches SET status = 'REJECTED' WHERE import_batch_id = ?`,
+      args: [batchId],
+    });
+    await writeAudit(db, ctx, 'IMPORT_REPROCESSED', batchId, 'VALIDATE', {
+      previousStatus,
+      newStatus: 'REJECTED',
+      reason,
+    });
+    return { ok: false, batchId, previousStatus, newStatus: 'REJECTED', reason };
+  }
+
+  const importType = String(row.import_type) as ImportType;
+  const filename = String(row.original_filename);
+  const sourceSystemId = String(row.source_system_id);
+  const uploadInput = {
+    filename,
+    uploadedBy: ctx.actorUserId,
+    sourceSystemId,
+    reprocessBatchId: batchId,
+  };
+
+  if (importType === 'PURCHASE_ORDER') {
+    await validatePoWorkbook(db, bytes, { ...uploadInput, affiliateId: null }, ctx);
+  } else {
+    await validateSoWorkbook(db, bytes, uploadInput, ctx);
+  }
+
+  const after = await db.execute({
+    sql: `SELECT status FROM import_batches WHERE import_batch_id = ? LIMIT 1`,
+    args: [batchId],
+  });
+  const newStatus = String((after.rows[0] as Record<string, unknown> | undefined)?.status ?? '');
+  await writeAudit(db, ctx, 'IMPORT_REPROCESSED', batchId, 'VALIDATE', {
+    previousStatus,
+    newStatus,
+  });
+  return { ok: newStatus !== 'REJECTED', batchId, previousStatus, newStatus, reason: null };
 }

@@ -48,6 +48,16 @@ interface Props {
   error?: string;
   required?: boolean;
   disabled?: boolean;
+  /**
+   * `sm` is the compact filter-bar control: 36px rather than 44px.
+   *
+   * ONE IMPLEMENTATION, TWO SIZES. A second small-input component would be a
+   * second set of label, hint and error behaviour to keep in step, and the
+   * first thing to drift would be the part nobody looks at, which is the error
+   * association. A filter control is never a page's primary action, so it is
+   * not held to the 44px figure; it is still far above the 24px floor.
+   */
+  size?: 'sm' | 'md';
   readonly?: boolean;
   autocomplete?: string;
   inputmode?: 'text' | 'email' | 'numeric' | 'tel' | 'search' | 'url' | 'decimal';
@@ -70,6 +80,7 @@ const {
   error,
   required = false,
   disabled = false,
+  size = 'md',
   readonly = false,
   autocomplete,
   inputmode,
@@ -121,7 +132,10 @@ const describedBy = [hintId, errorId].filter(Boolean).join(' ');
       aria-describedby={describedBy || undefined}
       aria-invalid={error ? 'true' : 'false'}
       class:list={[
-        'h-11 w-full rounded-cms border bg-cms-surface px-3 text-cms-body text-cms-ink',
+        size === 'sm'
+          ? 'h-9 w-full rounded-cms border bg-cms-surface px-2.5 text-cms-body-sm'
+          : 'h-11 w-full rounded-cms border bg-cms-surface px-3 text-cms-body',
+        'text-cms-ink',
         'transition-colors duration-150 placeholder:text-cms-muted/70',
         'outline-none focus-visible:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
         'disabled:cursor-not-allowed disabled:bg-cms-canvas disabled:text-cms-muted',

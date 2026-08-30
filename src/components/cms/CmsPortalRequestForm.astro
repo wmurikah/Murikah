@@ -121,7 +121,7 @@ const TYPES = [
         return;
       }
       submit.disabled = true;
-      void fetch('/api/portal/service', {
+      void fetch('/api/portal/helpdesk', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
@@ -130,8 +130,8 @@ const TYPES = [
           if (response.ok) {
             const body = (await response.json()) as { caseId?: string };
             window.location.href = body.caseId
-              ? `/portal/service/${body.caseId}`
-              : '/portal/service';
+              ? `/portal/helpdesk/${body.caseId}`
+              : '/portal/helpdesk';
             return;
           }
           if (response.status === 429) {

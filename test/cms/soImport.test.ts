@@ -157,13 +157,22 @@ test('numbers normalise: DOCUMENT_NUMBER 3988 stores as the string "3988"', asyn
   assert.match(excelSerialToTimestamp(46144.45520833333), /^2026-05-02 10:55:30$/);
 });
 
-test('an unknown Oracle customer code creates an exception and no account; an unknown approver creates an unresolved actor and no user', async () => {
+test('a customer is created from its code, a person never is, and validation still writes nothing', async () => {
+  // THE RULE THIS ASSERTS REPLACED ITS OPPOSITE. An unknown customer code
+  // used to be a permanent exception, which put all 1,386 rows of the real
+  // file in the queue behind 228 customers nobody had keyed in yet. It is now
+  // created. An unknown PERSON is not, and that half has not moved: a
+  // customer is a reference record, a user is an identity with an email, a
+  // credential and a permission set.
   const c = await db();
   const accountsBefore = await c.execute({ sql: 'SELECT COUNT(*) AS n FROM accounts', args: [] });
   const usersBefore = await c.execute({ sql: 'SELECT COUNT(*) AS n FROM users', args: [] });
 
   const validation = await validateSoWorkbook(asClient(c), SO_FILE, uploadInput, CTX);
-  assert.equal(validation.unresolvedCustomers.length > 0, true);
+  // Named for creation rather than refused, and nothing is unresolvable: an
+  // unresolved customer here would mean a row that names no code at all.
+  assert.equal(validation.accountsToCreate.length, 228);
+  assert.equal(validation.unresolvedCustomers.length, 0);
   // SULEKHA is not among the seeded identities: an unresolved actor, once.
   assert.equal(validation.unresolvedUsers.includes('SULEKHA'), true);
   const actors = await c.execute({
@@ -172,23 +181,61 @@ test('an unknown Oracle customer code creates an exception and no account; an un
   });
   assert.equal(Number(actors.rows[0]?.n), 1);
 
+  // VALIDATION IS A PREVIEW. It named 228 accounts and created none of them,
+  // which is what makes the preview something a person can still stop.
+  const accountsAfterValidation = await c.execute({
+    sql: 'SELECT COUNT(*) AS n FROM accounts',
+    args: [],
+  });
+  assert.equal(
+    Number(accountsAfterValidation.rows[0]?.n),
+    Number(accountsBefore.rows[0]?.n),
+    'validation must write no account',
+  );
+
+  await commitSoBatch(asClient(c), validation.batchId ?? '', CTX);
   const accountsAfter = await c.execute({ sql: 'SELECT COUNT(*) AS n FROM accounts', args: [] });
   const usersAfter = await c.execute({ sql: 'SELECT COUNT(*) AS n FROM users', args: [] });
-  assert.equal(Number(accountsAfter.rows[0]?.n), Number(accountsBefore.rows[0]?.n));
-  assert.equal(Number(usersAfter.rows[0]?.n), Number(usersBefore.rows[0]?.n));
+  assert.equal(
+    Number(accountsAfter.rows[0]?.n),
+    Number(accountsBefore.rows[0]?.n) + 228,
+    'the commit creates the customers the file named',
+  );
+  assert.equal(
+    Number(usersAfter.rows[0]?.n),
+    Number(usersBefore.rows[0]?.n),
+    'and never a user, on either path',
+  );
   c.close();
 });
 
-test('an unresolved product is never fuzzy-matched: the row waits as an exception', async () => {
+test('an unmatched item is created unclassified, never fuzzy-matched into a fuel category', async () => {
+  // The no-guessing rule is the part that did NOT change. GHOS50PG, HS-03-208
+  // and OM-01-208 are not recognisable, and the product hierarchy drives
+  // approval routing, so filing one under AGO would send its orders to the
+  // wrong approver. It is created and left unclassified for a person.
   const c = await db();
   const validation = await validateSoWorkbook(asClient(c), SO_FILE, uploadInput, CTX);
-  // The extract's item codes (GHOS50PG and friends) match no product_code.
-  assert.equal(validation.unresolvedProducts.length > 0, true);
+  assert.equal(validation.unresolvedProducts.length, 0, 'nothing is refused any more');
+  assert.equal(
+    validation.productsToCreate.length,
+    108,
+    '111 in the file, 3 already in the catalogue',
+  );
   const rows = await c.execute({
     sql: `SELECT COUNT(*) AS n FROM import_rows WHERE import_batch_id = ? AND row_status = 'UNRESOLVED'`,
     args: [validation.batchId],
   });
-  assert.equal(Number(rows.rows[0]?.n) > 0, true);
+  assert.equal(Number(rows.rows[0]?.n), 0, 'no row waits behind master data any more');
+
+  await commitSoBatch(asClient(c), validation.batchId ?? '', CTX);
+  const guessed = await c.execute({
+    sql: `SELECT COUNT(*) AS n FROM products p
+          JOIN product_categories pc ON pc.product_category_id = p.product_category_id
+          WHERE p.product_code = 'GHOS50PG' AND pc.category_code != 'UNCLASSIFIED'`,
+    args: [],
+  });
+  assert.equal(Number(guessed.rows[0]?.n), 0, 'GHOS50PG must never land in a fuel category');
   c.close();
 });
 
@@ -206,11 +253,11 @@ test('the 18-line document imports as one order with its lines, NULL commercial 
   const validation = await validateSoWorkbook(asClient(c), SO_FILE, uploadInput, CTX);
   assert.notEqual(validation.batchId, null);
   const result = await commitSoBatch(asClient(c), validation.batchId ?? '', CTX);
-  // The mapped customer legitimately owns several documents in the extract,
-  // and mapping their items resolves those documents too: each imports.
-  // What matters here: at least the 18-line one, and the rest stay skipped.
-  assert.equal(result.documentsCreated >= 1, true);
-  assert.equal(result.documentsSkipped > 0, true);
+  // Every document imports now: the customers and products the rest of the
+  // extract names are created rather than refused, so nothing is skipped
+  // waiting for master data. The 18-line document is still the subject.
+  assert.equal(result.documentsCreated, 662);
+  assert.equal(result.documentsSkipped, 0);
 
   const order = await c.execute({
     sql: `SELECT sales_order_id, document_number, currency_code, order_value, status,
@@ -284,8 +331,10 @@ test('a harmless Excel reformat produces zero CHANGED rows, and a real change pr
   );
   assert.notEqual(revalidated.batchId, null);
   assert.equal(revalidated.rowsChanged, 0);
-  // The resolvable rows now read as exact duplicates; the 18-line document's
-  // are among them.
+  // The resolvable rows now read as duplicates: an exact duplicate of a row
+  // already in the database, or a repeat of a line already described in this
+  // same file. Both are DUPLICATE, and the 18-row document's rows are among
+  // them either way.
   assert.equal(revalidated.rowsDuplicate >= 18, true);
 
   // A later extract adding an invoice timestamp: exactly the changed rows
@@ -318,7 +367,17 @@ test('a harmless Excel reformat produces zero CHANGED rows, and a real change pr
     { ...uploadInput, filename: 'SO-Ver1-later.xls' },
     CTX,
   );
-  assert.equal(editedValidation.rowsChanged, touched);
+  // CHANGED COUNTS ORDER LINES, NOT ROWS, AND THAT IS THE POINT OF THIS PHASE.
+  // The edit touched all 18 rows of the document, but those 18 rows describe
+  // only 7 distinct order lines: the extract repeats a line once per loading
+  // authority, credit-hold episode and invoice. The first row for each line is
+  // CHANGED against what the database holds; the other 11 are further events
+  // for a line this same file has already described, so they are DUPLICATE.
+  // Calling all 18 CHANGED, which is what happened before, said that a second
+  // loading of a truck was a change to the first one.
+  assert.equal(touched, 18, 'the edit really did touch every row of the document');
+  assert.equal(editedValidation.rowsChanged, doc.distinctLines);
+  assert.equal(editedValidation.rowsChanged, 7);
   const commit = await commitSoBatch(asClient(c), editedValidation.batchId ?? '', CTX);
   assert.equal(commit.documentsCreated, 0);
   assert.equal(commit.documentsUpdated, 1);

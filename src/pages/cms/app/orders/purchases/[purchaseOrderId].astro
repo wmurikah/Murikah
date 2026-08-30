@@ -53,12 +53,12 @@ const NOT_AVAILABLE = 'Not available';
     !mayView ? (
       <CmsErrorState
         title="You do not have access to purchase orders"
-        description="Ask a system administrator for the ORDERS.PURCHASE_ORDER.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="The order could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : detail === null ? (
       <CmsErrorState
@@ -149,10 +149,7 @@ const NOT_AVAILABLE = 'Not available';
             </dl>
           </CmsCard>
 
-          <CmsCard
-            title="Approval workflow"
-            description="The stages this order has. Nothing is drawn for a level it never used."
-          >
+          <CmsCard title="Approval workflow">
             <CmsDataTable
               caption="Approval stages"
               columns={[
@@ -247,10 +244,7 @@ const NOT_AVAILABLE = 'Not available';
             )}
           </CmsCard>
 
-          <CmsCard
-            title="Source history"
-            description="What each upload said, kept for reconciliation and never used as a metric."
-          >
+          <CmsCard title="Source history">
             {detail.snapshots.length === 0 ? (
               <p class="text-cms-body-sm text-cms-muted">
                 This order was not created by an import, so it has no source snapshots.

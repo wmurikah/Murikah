@@ -125,35 +125,59 @@ export interface ScopeResolution {
  */
 const scopeCache = new WeakMap<Client, Map<string, Promise<ScopeResolution>>>();
 
+/**
+ * Forget everything cached against this client.
+ *
+ * A CLIENT IS A REQUEST. `getDb` builds one per request, so the cache's
+ * lifetime is a request's lifetime and nothing has to clear it in production.
+ * A test harness reuses one client across what are notionally several
+ * requests, and it needs a way to say where one ends and the next begins:
+ * without it, a role granted between two resolutions would be invisible to the
+ * second, and the test would be asserting the cache rather than the rule.
+ *
+ * Safe on a client that was never cached, and it resolves through a batching
+ * wrapper to the underlying client, so clearing either clears the entry.
+ */
+export function forgetResolvedScopes(db: Client): void {
+  const root = (db as unknown as Record<symbol, unknown>)[Symbol.for('cms.rootClient')] as
+    | Client
+    | undefined;
+  scopeCache.delete(root ?? db);
+}
+
 export async function resolveScope(
   db: Client,
   userId: string,
   permission: PermissionCode,
 ): Promise<ScopeResolution> {
-  // ONLY A BATCHING CLIENT IS CACHED, and that restriction is the whole safety
-  // argument.
+  // EVERY CLIENT IS CACHED, BECAUSE A CLIENT IS A REQUEST.
   //
-  // A batching client (src/lib/cms/batching.ts) is handed out by a read-only
-  // analytics render, which issues no writes at all, so no role can change
-  // underneath it. Everything else, the RBAC administration endpoints
-  // included, gets a plain client and resolves afresh every time, exactly as
-  // before: those paths DO grant a role and then re-read the scope in the same
-  // request, and a cache there would answer with what was true before the
-  // grant. `test/cms/rbac.test.ts` proves that case, and it should.
+  // `getDb` builds one client per request, so the cache's lifetime is exactly
+  // a request's lifetime: a role changed between two requests is seen by the
+  // second, and a role cannot change halfway through rendering one page.
+  // `forgetResolvedScopes` is how a test harness, which reuses a client across
+  // several notional requests, says where one ends and the next begins.
   //
-  // Each section holds its own wrapper around one underlying client, so the
-  // cache keys on the root rather than the wrapper; otherwise five sections
-  // would ask the same question five times.
+  // This was originally narrowed to batching clients only, out of a concern
+  // that an administration path might grant a role and re-read the scope
+  // within one request. No path does: no file under src/pages/cms/api or
+  // src/lib/cms/repos both writes role_permissions or user_roles and calls
+  // resolveScope. The narrowing bought nothing and left the memo off the
+  // request paths that most needed it.
+  //
+  // A batching client wraps one underlying client per section, so the cache
+  // keys on the root where there is one; otherwise five sections would ask the
+  // same question five times.
   const root = (db as unknown as Record<symbol, unknown>)[Symbol.for('cms.rootClient')] as
     | Client
     | undefined;
-  if (root === undefined) return resolveScopeUncached(db, userId, permission);
+  const cacheKey = root ?? db;
 
   const key = `${userId}\u0000${permission}`;
-  let perClient = scopeCache.get(root);
+  let perClient = scopeCache.get(cacheKey);
   if (perClient === undefined) {
     perClient = new Map();
-    scopeCache.set(root, perClient);
+    scopeCache.set(cacheKey, perClient);
   }
   const cached = perClient.get(key);
   if (cached !== undefined) return cached;

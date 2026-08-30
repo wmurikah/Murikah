@@ -100,7 +100,7 @@ const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriori
       { value: '', label: 'Category default' },
       ...CASE_PRIORITIES.map((p) => ({ value: p, label: titleCase(p) })),
     ]}
-    hint="Defaults from the category. Changing it is recorded as an override and needs the case management permission."
+    hint="Defaults from the category. Changes are recorded as an override."
   />
   <CmsInput id="k-subject" name="subject" label="Subject" required />
   <div class="flex flex-col gap-1.5">
@@ -312,7 +312,9 @@ const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriori
         });
         if (response.ok) {
           const created = (await response.json()) as { caseId?: string };
-          window.location.href = created.caseId ? `/app/service/${created.caseId}` : '/app/service';
+          window.location.href = created.caseId
+            ? `/app/helpdesk/${created.caseId}`
+            : '/app/helpdesk';
           return;
         }
         const answer = (await response.json().catch(() => null)) as {

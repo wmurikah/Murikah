@@ -62,12 +62,12 @@ const departmentOptions = [
     !mayManage ? (
       <CmsErrorState
         title="You do not have access to user administration"
-        description="Ask a system administrator for the ADMIN.USERS.MANAGE permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="Job titles could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>

@@ -1,263 +1,412 @@
 ---
 /**
- * The internal application home, served at /app on cms.murikah.com.
+ * Home, and it answers one question: where is time being lost right now?
  *
- * This was the Build Prompt 02 shell at `/`. It moved here so the whole
- * internal application sits under one prefix, which is what makes the rule
- * "an EXTERNAL user never renders an /app path" a single check rather than a
- * list. `/` is now a redirect by user type, handled in the middleware.
+ * THE ORDER IS THE ARGUMENT. Two charts, then the two leaderboards that sit
+ * under their own chart, then the exceptions that need somebody today. A
+ * purchase order chart above a purchase order leaderboard, a sales order chart
+ * above a sales order leaderboard: the column reads downward, so the eye never
+ * has to carry a figure across the page to find who it belongs to.
  *
- * The principal is read from locals, resolved once per request by the guard.
- * Nothing on this page fetches /api/auth/me, and there is no client-side
- * authentication store: the page is not rendered at all until the server knows
- * who is asking, which is why there is no loading state to design and why a
- * refresh keeps the user signed in without a line of code.
+ * THE TWO PROCESSES ARE NEVER BLENDED. Different approvers, different targets,
+ * different volumes, and the same person may act in both. One table would let
+ * a fast purchase order level flatter a slow credit release, and would answer
+ * a question nobody asked. So there are two of everything, with identical
+ * columns in identical order, which is what lets the eye move between them.
  *
- * PHASE 16 MADE THIS AN ACTION CENTRE.
- * Needs Attention leads: SLA breaches and at-risk instances in the caller's
- * scope, cases assigned to them, and their overdue follow-ups. No vanity
- * metric sits above urgent work; the profile card and workspace tiles moved
- * below it. Every number drills into the list it counts.
+ * WHAT CAME OFF THIS PAGE. The Orders, Commercial, Service and Data freshness
+ * sections, and every KPI card in them. They were true and none of them
+ * changed what anybody did today: a person who wants order volumes opens
+ * Orders, which is one click away in the rail. What is left is the turnaround
+ * figures and the exceptions, because those are the two things a person can
+ * act on from here.
+ *
+ * EVERY FIGURE IS A LINK. A number on a dashboard that cannot be opened is a
+ * number nobody can check. The waiting count on each chart is the one whose
+ * destination holds exactly that many records, and it is exact by
+ * construction: the figure IS the destination's count, read through the same
+ * repository function with the same filter rather than a second query written
+ * to agree with it.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
-import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
-import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsChart from '@/components/cms/CmsChart.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
-import { visibleNav } from '@/lib/cms/nav';
-import { assignmentSummary, organisationLine } from '@/lib/cms/organisation';
+import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { sweepDueSlas } from '@/lib/cms/sla/engine';
-import { sweepNotifications } from '@/lib/cms/notify/notifications';
-import { listSlaInstances } from '@/lib/cms/repos/slaAdmin';
-import { caseIndicators } from '@/lib/cms/repos/serviceAdmin';
-import { myWork } from '@/lib/cms/repos/activityAdmin';
-import { canViewSlaDashboard, canViewCases } from '@/lib/cms/permissions';
+import { createBatcher, runSection } from '@/lib/cms/batching';
+import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import { attentionCustomers, type AttentionCustomer } from '@/lib/cms/repos/executive';
+import { countSalesOrders } from '@/lib/cms/repos/soPerformance';
+import { countPurchaseOrders } from '@/lib/cms/repos/poPerformance';
+import {
+  approvalBoard,
+  windowStart,
+  MINIMUM_RANKED_VOLUME,
+  WINDOW_DAYS,
+  type ApprovalBoard,
+  type LeaderRow,
+} from '@/lib/cms/repos/approvalSla';
+import { horizontalBarChart, type ChartPoint } from '@/lib/cms/charts/svg';
+import { toDbTimestamp } from '@/lib/cms/auth/session';
 
-const principal = Astro.locals.cms;
-// The guard redirects an anonymous request before this renders, so a missing
-// principal here would be a bug rather than a state to design for. Rendering
-// nothing is the safe answer if it ever happens.
-const user = principal?.user;
-
-const context = user ? organisationLine(user.assignment) : null;
-const summary = user ? assignmentSummary(user.assignment) : null;
-
-// The workspace tiles are the navigation, minus Home, filtered by the same
-// permission codes. One source, so a tile can never appear for a section the
-// rail hides.
-const workspaces = user
-  ? visibleNav(user.permissions).filter((item) => item.permission !== null)
-  : [];
-// Rendered on the server for every request, never prerendered. Without this the
-// page is baked at build time, the middleware guard runs once during the build
-// instead of per request, and the route protection becomes a static artefact:
-// a signed-in user would be served whatever the build decided.
 export const prerender = false;
 
-// Needs Attention: computed under the caller's own scope, after a sweep so
-// the figures are current. Each block appears only where the permission does,
-// and a database failure degrades to the profile page rather than an error.
-let attentionBreached = 0;
-let attentionAtRisk = 0;
-let attentionMyCases = 0;
-let attentionOverdue = 0;
-let attentionLoaded = false;
+const principal = Astro.locals.cms;
+const user = principal?.user;
+const userId = user?.userId ?? '';
+const filter = parseFilter(Astro.url.searchParams);
+const now = toDbTimestamp(new Date());
+const since = windowStart(new Date());
+
+/**
+ * WHERE EACH FUNCTION'S QUEUE LIVES, AS A STATUS.
+ *
+ * A sales order sitting at PENDING_FINANCE is waiting on finance approval, one
+ * at READY has been approved and not yet invoiced, and one at INVOICED is
+ * waiting for its loading authority. Each function therefore has exactly one
+ * status that means "waiting here", which is what makes the count and its
+ * destination the same question.
+ */
+const SO_WAITING: Readonly<Record<string, string>> = {
+  'Finance approval': 'PENDING_FINANCE',
+  'Credit release': 'PENDING_CREDIT',
+  Invoicing: 'READY',
+  'Loading authority': 'INVOICED',
+};
+const PO_WAITING_STATUS = 'IN_APPROVAL';
+/** The one sales order queue the page prints a figure for. */
+const SO_LEAD_WAITING = 'PENDING_FINANCE';
+
+let purchases: ApprovalBoard | null = null;
+let sales: ApprovalBoard | null = null;
+let soWaiting = 0;
+let poWaiting = 0;
+let customers: AttentionCustomer[] = [];
+let failure: { traceId: string } | null = null;
+let connectionFailed = false;
+
 if (user) {
   try {
     const db = await getDb(getCmsEnv());
-    const now = new Date();
-    await sweepDueSlas(db, now);
-    await sweepNotifications(db, now);
-    if (canViewSlaDashboard(user.permissions)) {
-      const [breached, atRisk] = await Promise.all([
-        listSlaInstances(
-          db,
-          user.userId,
-          { slaType: null, entityType: null, status: null, bucket: 'breached', page: 1 },
-          now,
-        ),
-        listSlaInstances(
-          db,
-          user.userId,
-          { slaType: null, entityType: null, status: null, bucket: 'at-risk', page: 1 },
-          now,
-        ),
-      ]);
-      attentionBreached = breached.total;
-      attentionAtRisk = atRisk.total;
-    }
-    if (canViewCases(user.permissions)) {
-      attentionMyCases = (await caseIndicators(db, user.userId, now)).assignedToMe;
-    }
-    attentionOverdue = (await myWork(db, user.userId, now)).overdue.length;
-    attentionLoaded = true;
+    // ONE QUEUE FOR THE WHOLE PAGE. Every read issued in the same microtask
+    // leaves as a single batch, which is how a dashboard of this size costs a
+    // handful of round trips rather than one per figure.
+    const batcher = createBatcher(db);
+    // ONLY THE TWO FIGURES THE PAGE ACTUALLY SHOWS. Counting all four sales
+    // order queues cost three round trips nobody read: `countSalesOrders`
+    // resolves the scope before it counts, so each call is its own trip and
+    // cannot join the batch. The other three statuses are still the link
+    // targets for their rows; a link costs nothing.
+    const [po, so, attention, poCount, soCount] = await Promise.all([
+      runSection(batcher, 'home.purchases', (client) =>
+        approvalBoard(client, 'PURCHASE_ORDER', since),
+      ),
+      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', since)),
+      runSection(batcher, 'home.attention', (client) =>
+        attentionCustomers(client, userId, filter, now),
+      ),
+      runSection(batcher, 'home.po-waiting', (client) =>
+        countPurchaseOrders(client, userId, { ...filter, status: PO_WAITING_STATUS }, now),
+      ),
+      runSection(batcher, 'home.so-waiting', (client) =>
+        countSalesOrders(client, userId, { ...filter, status: SO_LEAD_WAITING }, now),
+      ),
+    ]);
+    if (po.ok) purchases = po.value;
+    else failure = { traceId: po.traceId };
+    if (so.ok) sales = so.value;
+    else if (failure === null) failure = { traceId: so.traceId };
+    if (attention.ok) customers = attention.value;
+    if (poCount.ok) poWaiting = poCount.value;
+    if (soCount.ok) soWaiting = soCount.value;
   } catch (error) {
-    console.error('[cms.home] needs attention failed', error);
+    console.error('[cms.home] no database connection', error);
+    connectionFailed = true;
   }
 }
 
-const attention = [
-  {
-    label: 'Breached SLAs',
-    count: attentionBreached,
-    href: '/app/performance?bucket=breached',
-    tone: 'danger' as const,
-    show: user ? canViewSlaDashboard(user.permissions) : false,
-  },
-  {
-    label: 'At-risk SLAs',
-    count: attentionAtRisk,
-    href: '/app/performance?bucket=at-risk',
-    tone: 'warning' as const,
-    show: user ? canViewSlaDashboard(user.permissions) : false,
-  },
-  {
-    label: 'Cases assigned to me',
-    count: attentionMyCases,
-    href: '/app/service?queue=mine',
-    tone: 'info' as const,
-    show: user ? canViewCases(user.permissions) : false,
-  },
-  {
-    label: 'Follow-ups past due date',
-    count: attentionOverdue,
-    href: '/app/crm/activities',
-    tone: 'warning' as const,
-    show: true,
-  },
-].filter((item) => item.show);
+const count = (value: number) => value.toLocaleString('en-KE');
+
+/** The record list behind a purchase order function. */
+const toPurchases = (extra: Record<string, string | null> = {}) =>
+  drillTo('/app/orders/purchases', filter, extra);
+const toSales = (extra: Record<string, string | null> = {}) =>
+  drillTo('/app/orders/sales', filter, extra);
+
+const chartOf = (board: ApprovalBoard | null, link: (fn: string) => string) =>
+  horizontalBarChart(
+    {
+      name: 'Median turnaround',
+      token: 'cms-series-1',
+      points: (board?.functions ?? []).map<ChartPoint>((f) => ({
+        label: f.fn,
+        value: f.medianMinutes,
+        marker: f.p90Minutes,
+        target: f.targetMinutes,
+        href: link(f.fn),
+      })),
+    },
+    { unit: 'minutes', format: formatDuration, height: 30 * (board?.functions.length ?? 1) + 12 },
+  );
+
+const purchaseChart = chartOf(purchases, () => toPurchases({ status: PO_WAITING_STATUS }));
+const salesChart = chartOf(sales, (fn) => toSales({ status: SO_WAITING[fn] ?? null }));
+
+const COLUMNS = [
+  { key: 'person', label: 'Person' },
+  { key: 'function', label: 'Function' },
+  { key: 'volume', label: 'Volume', numeric: true },
+  { key: 'average', label: 'Average', numeric: true, secondary: true },
+  { key: 'median', label: 'Median', numeric: true },
+  { key: 'p90', label: 'P90', numeric: true },
+  { key: 'within', label: 'Within SLA', numeric: true, secondary: true },
+  { key: 'pending', label: 'Pending', numeric: true },
+  { key: 'oldest', label: 'Oldest pending', secondary: true },
+];
+
+/**
+ * The definition every figure on this page shares, one control away.
+ *
+ * The measurement basis belongs somewhere a reader can reach it and nowhere it
+ * has to be read past: the bars are elapsed minutes and the dashed target is
+ * configured against a business calendar, which agree inside a working day and
+ * diverge across a weekend.
+ */
+const DEFINITION =
+  `Elapsed minutes from the start of a function to its completion, over the last ${WINDOW_DAYS} days. ` +
+  'Purchase order functions are the configured approval levels; sales order functions are finance ' +
+  'approval, credit release, invoicing and loading authority. Invoicing and loading authority record ' +
+  'no actor in the source extract. The dashed target is the configured SLA target for that function, ' +
+  'which is measured in business hours, so it and an elapsed figure agree within a working day and ' +
+  'diverge across a weekend. A person is listed from the first approval and ranked from ' +
+  `${MINIMUM_RANKED_VOLUME}.`;
 ---
 
-<CmsLayout title="Home">
+<CmsLayout title="Home" width="data">
+  <CmsPageHeader title="Home" definition={DEFINITION} />
+
+  {connectionFailed && <CmsErrorState title="The dashboard could not be loaded" />}
   {
-    user && (
-      <>
-        <CmsPageHeader
-          title={`Welcome back, ${user.firstName}`}
-          description={summary ?? 'No organisational assignment is recorded against your account.'}
-        >
-          <CmsBadge
-            slot="actions"
-            tone="info"
-            label={`${user.roles.length} role${user.roles.length === 1 ? '' : 's'}`}
-          />
-        </CmsPageHeader>
-
-        {attentionLoaded && (
-          <section aria-labelledby="attention-heading" class="flex flex-col gap-3">
-            <h2 id="attention-heading" class="text-cms-section font-semibold text-cms-navy">
-              Needs attention
-            </h2>
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {attention.map((item) => (
-                <a
-                  href={item.href}
-                  class:list={[
-                    'flex items-center justify-between rounded-cms-lg border bg-cms-surface px-4 py-4 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus',
-                    item.count > 0 && item.tone === 'danger'
-                      ? 'border-cms-negative'
-                      : 'border-cms-line',
-                  ]}
-                >
-                  <span class="text-cms-body-sm font-medium text-cms-ink">{item.label}</span>
-                  <CmsBadge
-                    tone={item.count === 0 ? 'success' : item.tone}
-                    label={String(item.count)}
-                  />
-                </a>
-              ))}
-            </div>
-            <p class="text-cms-caption text-cms-muted">
-              Every number opens the list it counts, already filtered. Nothing decorative sits above
-              this section on purpose.
-            </p>
-          </section>
-        )}
-
-        <CmsCard title="Your details">
-          <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Name
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">{user.displayName}</dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Email
-              </dt>
-              <dd class="truncate text-cms-body-sm text-cms-ink">{user.email}</dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Job title
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">
-                {user.assignment?.jobTitle ?? 'Not assigned'}
-              </dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Organisation
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">{context ?? 'Not assigned'}</dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Department
-              </dt>
-              <dd class="text-cms-body-sm text-cms-ink">
-                {user.assignment?.department ?? 'Not assigned'}
-              </dd>
-            </div>
-            <div class="flex flex-col gap-1">
-              <dt class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
-                Access roles
-              </dt>
-              <dd class="flex flex-wrap gap-1.5">
-                {user.roles.map((role) => (
-                  <CmsBadge tone="neutral" label={role.roleName} />
-                ))}
-              </dd>
-            </div>
-          </dl>
-        </CmsCard>
-
-        <section aria-labelledby="workspace-heading" class="flex flex-col gap-3">
-          <h2 id="workspace-heading" class="text-cms-section font-semibold text-cms-navy">
-            Your workspace
-          </h2>
-          {workspaces.length > 0 ? (
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {workspaces.map((item) => (
-                <a
-                  href={item.href}
-                  class="flex min-h-10 items-start gap-3 rounded-cms-lg border border-cms-line bg-cms-surface px-4 py-4 transition-colors duration-150 outline-none hover:border-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  <span class="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-cms bg-cms-royal-tint text-cms-royal">
-                    <CmsIcon name={item.icon} size={18} />
-                  </span>
-                  <span class="min-w-0">
-                    <span class="block text-cms-card font-semibold text-cms-navy">
-                      {item.label} workspace
-                    </span>
-                    <span class="mt-0.5 block text-cms-body-sm text-cms-muted">{item.summary}</span>
-                  </span>
-                </a>
-              ))}
-            </div>
-          ) : (
-            <CmsEmptyState
-              icon="administration"
-              title="No workspaces are available to you yet"
-              description="Your access roles do not currently grant any module. Contact your administrator."
-            />
-          )}
-        </section>
-      </>
+    failure !== null && (
+      <CmsErrorState
+        title="The turnaround figures could not be loaded"
+        description={`Quote reference ${failure.traceId} to your administrator.`}
+      />
     )
   }
+
+  {
+    /*
+      TWO COLUMNS, EACH READ DOWNWARD. On a narrow screen they stack, purchase
+      orders first, and each leaderboard stays under its own chart because the
+      grid places them in that order rather than because a second layout says
+      so.
+    */
+  }
+  <div class="grid gap-6 lg:grid-cols-2">
+    <div class="flex flex-col gap-4">
+      <CmsChart
+        title="Purchase order approval"
+        definition={DEFINITION}
+        chart={purchaseChart}
+        unit="minutes"
+        coverage={`${count(purchases?.functions.reduce((n, f) => n + f.volume, 0) ?? 0)} approvals`}
+      />
+      <p class="text-cms-body-sm text-cms-muted">
+        <a
+          class="font-semibold text-cms-royal hover:underline"
+          href={toPurchases({ status: PO_WAITING_STATUS })}
+        >
+          {count(poWaiting)}
+        </a>{' '}
+        in approval
+      </p>
+      <CmsDataTable
+        caption="Purchase order approvers"
+        columns={COLUMNS}
+        empty={(purchases?.leaders.length ?? 0) === 0}
+        rowCount={purchases?.leaders.length ?? 0}
+        emptyMessage="No approvals completed in this window."
+      >
+        {
+          (purchases?.leaders ?? []).map((row: LeaderRow) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-3 py-2">{row.person ?? 'Not recorded'}</td>
+              <td class="px-3 py-2">{row.fn}</td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toPurchases({ status: PO_WAITING_STATUS })}
+                >
+                  {count(row.volume)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {formatDuration(row.meanMinutes)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.medianMinutes)}</td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.p90Minutes)}</td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {row.targetMinutes === null ? 'No target' : formatRate(row.withinTarget)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toPurchases({ status: PO_WAITING_STATUS, ownerId: row.userId })}
+                >
+                  {count(row.pending)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 sm:table-cell">
+                {row.oldestPendingAt ?? 'Nothing waiting'}
+              </td>
+            </tr>
+          ))
+        }
+      </CmsDataTable>
+      <p class="text-cms-caption text-cms-muted">
+        Ranked from {MINIMUM_RANKED_VOLUME} completed approvals.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-4">
+      <CmsChart
+        title="Sales order approval"
+        definition={DEFINITION}
+        chart={salesChart}
+        unit="minutes"
+        coverage={`${count(sales?.functions.reduce((n, f) => n + f.volume, 0) ?? 0)} completions`}
+      />
+      <p class="text-cms-body-sm text-cms-muted">
+        <a
+          class="font-semibold text-cms-royal hover:underline"
+          href={toSales({ status: SO_WAITING['Finance approval'] ?? null })}
+        >
+          {count(soWaiting)}
+        </a>{' '}
+        awaiting finance approval
+      </p>
+      <CmsDataTable
+        caption="Sales order approvers"
+        columns={COLUMNS}
+        empty={(sales?.leaders.length ?? 0) === 0}
+        rowCount={sales?.leaders.length ?? 0}
+        emptyMessage="No completions in this window."
+      >
+        {
+          (sales?.leaders ?? []).map((row: LeaderRow) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-3 py-2">{row.person ?? 'Not recorded'}</td>
+              <td class="px-3 py-2">{row.fn}</td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toSales({ status: SO_WAITING[row.fn] ?? null })}
+                >
+                  {count(row.volume)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {formatDuration(row.meanMinutes)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.medianMinutes)}</td>
+              <td class="px-3 py-2 text-right tabular-nums">{formatDuration(row.p90Minutes)}</td>
+              <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+                {row.targetMinutes === null ? 'No target' : formatRate(row.withinTarget)}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                <a
+                  class="text-cms-royal hover:underline"
+                  href={toSales({ status: SO_WAITING[row.fn] ?? null, ownerId: row.userId })}
+                >
+                  {count(row.pending)}
+                </a>
+              </td>
+              <td class="hidden px-3 py-2 sm:table-cell">
+                {row.oldestPendingAt ?? 'Nothing waiting'}
+              </td>
+            </tr>
+          ))
+        }
+      </CmsDataTable>
+      <p class="text-cms-caption text-cms-muted">
+        Ranked from {MINIMUM_RANKED_VOLUME} completed functions.
+      </p>
+    </div>
+  </div>
+
+  {
+    /*
+      THE ONLY OTHER THING ON THE PAGE, AND EVERY ROW OPENS. An exception that
+      cannot be drilled into is a worry rather than a task.
+    */
+  }
+  <section>
+    <CmsSectionHeader id="attention" title="Needs attention" />
+    {
+      customers.length === 0 ? (
+        <CmsEmptyState title="No customer is showing an exception." />
+      ) : (
+        <CmsCard>
+          <CmsDataTable
+            caption="Customers needing attention"
+            columns={[
+              { key: 'customer', label: 'Customer' },
+              { key: 'orders', label: 'Open orders', numeric: true },
+              { key: 'cases', label: 'Open cases', numeric: true },
+              { key: 'breaches', label: 'SLA breaches', numeric: true },
+              { key: 'manager', label: 'Account manager', secondary: true },
+            ]}
+            rowCount={customers.length}
+          >
+            {customers.map((row) => (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-3 py-2">
+                  <a
+                    class="font-medium text-cms-royal hover:underline"
+                    href={`/app/customers/${row.accountId}`}
+                  >
+                    {row.customerName}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums">
+                  <a
+                    class="text-cms-royal hover:underline"
+                    href={toSales({ accountId: row.accountId })}
+                  >
+                    {count(row.openOrders)}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums">
+                  <a
+                    class="text-cms-royal hover:underline"
+                    href={drillTo('/app/helpdesk', filter, { accountId: row.accountId })}
+                  >
+                    {count(row.openCases)}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums">
+                  <a
+                    class="text-cms-royal hover:underline"
+                    href={drillTo('/app/performance', filter, { accountId: row.accountId })}
+                  >
+                    {count(row.slaBreaches)}
+                  </a>
+                </td>
+                <td class="hidden px-3 py-2 sm:table-cell">
+                  {row.accountManager ?? 'Not assigned'}
+                </td>
+              </tr>
+            ))}
+          </CmsDataTable>
+        </CmsCard>
+      )
+    }
+  </section>
 </CmsLayout>
