@@ -14,19 +14,20 @@
  * a question nobody asked. So there are two of everything, with identical
  * columns in identical order, which is what lets the eye move between them.
  *
- * WHAT CAME OFF THIS PAGE. The Orders, Commercial, Service and Data freshness
- * sections, and every KPI card in them. They were true and none of them
- * changed what anybody did today: a person who wants order volumes opens
- * Orders, which is one click away in the rail. What is left is the turnaround
- * figures and the exceptions, because those are the two things a person can
- * act on from here.
+ * EVERY FIGURE IS A LINK, AND EVERY DESTINATION HOLDS EXACTLY THAT MANY
+ * RECORDS. A number on a dashboard that cannot be opened is a number nobody can
+ * check. The count is exact by construction rather than by agreement: the list
+ * behind a figure is the same query with the grouping removed, so the two can
+ * only disagree if somebody writes the second one twice.
  *
- * EVERY FIGURE IS A LINK. A number on a dashboard that cannot be opened is a
- * number nobody can check. The waiting count on each chart is the one whose
- * destination holds exactly that many records, and it is exact by
- * construction: the figure IS the destination's count, read through the same
- * repository function with the same filter rather than a second query written
- * to agree with it.
+ * WHAT THIS PAGE USED TO DO WRONG, RECORDED SO IT IS NOT REINTRODUCED. It read
+ * a rolling ninety-day window that nothing on the page named, and the
+ * statement behind both boards had never executed: it grouped by an alias that
+ * was out of scope, so every load raised `no such column: d.fn` and both
+ * leaderboards rendered empty while the footer still printed the ranking
+ * threshold. That combination read as "ten completions exist and the window
+ * found none of them", and sent the diagnosis after the window instead of the
+ * SQL. Both are fixed, and they were two faults rather than one.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
@@ -36,6 +37,8 @@ import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
+import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
+import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
@@ -46,12 +49,22 @@ import { countSalesOrders } from '@/lib/cms/repos/soPerformance';
 import { countPurchaseOrders } from '@/lib/cms/repos/poPerformance';
 import {
   approvalBoard,
-  resolveApprovalPeriod,
   MINIMUM_RANKED_VOLUME,
-  WINDOW_DAYS,
   type ApprovalBoard,
-  type LeaderRow,
 } from '@/lib/cms/repos/approvalSla';
+import {
+  calendarSql,
+  choosePeriod,
+  parsePeriod,
+  periodHref,
+  periodWasChosen,
+  previousPeriod,
+  readCalendars,
+  periodHasData,
+  periodFromToken,
+  EMPTY_CALENDAR,
+  type DataCalendar,
+} from '@/lib/cms/analytics/period';
 import { horizontalBarChart, type ChartPoint } from '@/lib/cms/charts/svg';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
 
@@ -60,9 +73,45 @@ export const prerender = false;
 const principal = Astro.locals.cms;
 const user = principal?.user;
 const userId = user?.userId ?? '';
-const filter = parseFilter(Astro.url.searchParams);
-const now = toDbTimestamp(new Date());
-let period = { from: '', before: '', label: '', fallback: false };
+const params = Astro.url.searchParams;
+const filter = parseFilter(params);
+const today = new Date();
+const now = toDbTimestamp(today);
+
+/**
+ * WHICH DATES COUNT AS ACTIVITY, AND FOR WHICH BOARD.
+ *
+ * THE FAULT THIS SHAPE FIXES, RECORDED BECAUSE IT COST A WHOLE PANEL. These
+ * sources used to be unioned into one population with no `series` and no
+ * entity_type restriction, so "does this period hold data" was answered for the
+ * PAGE, over every entity type in `workflow_stage_instances` — leads and cases
+ * included. On 30 August 2026 the calendar saw one lead and one sales order
+ * completed in August, answered yes, and the fallback never fired. The purchase
+ * order board, whose data runs 1 to 30 May, then drew an empty chart and an
+ * empty table in silence while its own 2,624 completions sat one period away.
+ *
+ * The period is still resolved ONCE, from the combined calendar. Each panel now
+ * also knows whether ITS OWN data is in that period, from the same single
+ * statement, and says so when it is not.
+ */
+const CALENDAR_SOURCES = [
+  {
+    table: 'workflow_stage_instances',
+    column: 'completed_at',
+    series: 'PURCHASE_ORDER',
+    where: `workflow_instance_id IN (
+      SELECT workflow_instance_id FROM workflow_instances WHERE entity_type = 'PURCHASE_ORDER')`,
+  },
+  {
+    table: 'workflow_stage_instances',
+    column: 'completed_at',
+    series: 'SALES_ORDER',
+    where: `workflow_instance_id IN (
+      SELECT workflow_instance_id FROM workflow_instances WHERE entity_type = 'SALES_ORDER')`,
+  },
+  { table: 'sales_orders', column: 'invoice_created_at', series: 'SALES_ORDER' },
+  { table: 'sales_orders', column: 'loading_authority_at', series: 'SALES_ORDER' },
+] as const;
 
 /**
  * WHERE EACH FUNCTION'S QUEUE LIVES, AS A STATUS.
@@ -83,36 +132,46 @@ const PO_WAITING_STATUS = 'IN_APPROVAL';
 /** The one sales order queue the page prints a figure for. */
 const SO_LEAD_WAITING = 'PENDING_FINANCE';
 
+const asked = parsePeriod(params, today);
+const explicit = periodWasChosen(params);
+const drillMonth = (asked.from ?? '').slice(0, 7);
+
+let calendar: DataCalendar = EMPTY_CALENDAR;
+/** Each board's own activity, so a panel's data check matches what it draws. */
+let purchaseCalendar: DataCalendar = EMPTY_CALENDAR;
+let salesCalendar: DataCalendar = EMPTY_CALENDAR;
 let purchases: ApprovalBoard | null = null;
 let sales: ApprovalBoard | null = null;
+let previousPurchases: ApprovalBoard | null = null;
+let previousSales: ApprovalBoard | null = null;
 let soWaiting = 0;
 let poWaiting = 0;
 let customers: AttentionCustomer[] = [];
-let failure: { traceId: string } | null = null;
+/** Which figures failed, so the message can name them rather than a number. */
+let failed: string[] = [];
+let traceId: string | null = null;
 let connectionFailed = false;
+let choice = {
+  period: asked,
+  fellBackFrom: null as typeof asked | null,
+  notice: null as string | null,
+};
 
 if (user) {
   try {
     const db = await getDb(getCmsEnv());
-    // ONE PERIOD FOR THE PAGE. Both panels receive these exact bounds; if the
-    // requested month has no data, the resolver selects the latest month that
-    // both processes share instead of letting either panel fail silently.
-    period = await resolveApprovalPeriod(db, filter.from);
-    // ONE QUEUE FOR THE WHOLE PAGE. Every read issued in the same microtask
-    // leaves as a single batch, which is how a dashboard of this size costs a
-    // handful of round trips rather than one per figure.
+    // ONE QUEUE FOR THE WHOLE PAGE, IN TWO WAVES.
+    //
+    // Wave one is everything that does not depend on which period is shown:
+    // the exceptions, the two waiting counts, and the single statement behind
+    // the period control. Wave two is the boards, which genuinely cannot be
+    // issued earlier, because a fallback off an empty default changes what
+    // they are asked for. Two waves is two round trips, and the whole page
+    // costs six of a budget of fifteen.
     const batcher = createBatcher(db);
-    // ONLY THE TWO FIGURES THE PAGE ACTUALLY SHOWS. Counting all four sales
-    // order queues cost three round trips nobody read: `countSalesOrders`
-    // resolves the scope before it counts, so each call is its own trip and
-    // cannot join the batch. The other three statuses are still the link
-    // targets for their rows; a link costs nothing.
-    const [po, so, attention, poCount, soCount] = await Promise.all([
-      runSection(batcher, 'home.purchases', (client) =>
-        approvalBoard(client, 'PURCHASE_ORDER', period.from, period.before),
-      ),
-      runSection(batcher, 'home.sales', (client) =>
-        approvalBoard(client, 'SALES_ORDER', period.from, period.before),
+    const [cal, attention, poCount, soCount] = await Promise.all([
+      runSection(batcher, 'home.calendar', (client) =>
+        client.execute({ sql: calendarSql(CALENDAR_SOURCES), args: [drillMonth] }),
       ),
       runSection(batcher, 'home.attention', (client) =>
         attentionCustomers(client, userId, filter, now),
@@ -124,18 +183,58 @@ if (user) {
         countSalesOrders(client, userId, { ...filter, status: SO_LEAD_WAITING }, now),
       ),
     ]);
-    if (po.ok) purchases = po.value;
-    else failure = { traceId: po.traceId };
-    if (so.ok) sales = so.value;
-    else if (failure === null) failure = { traceId: so.traceId };
+    if (cal.ok) {
+      const read = readCalendars(cal.value.rows as Record<string, unknown>[]);
+      calendar = read.combined;
+      purchaseCalendar = read.series.get('PURCHASE_ORDER') ?? EMPTY_CALENDAR;
+      salesCalendar = read.series.get('SALES_ORDER') ?? EMPTY_CALENDAR;
+    }
     if (attention.ok) customers = attention.value;
     if (poCount.ok) poWaiting = poCount.value;
     if (soCount.ok) soWaiting = soCount.value;
+
+    choice = choosePeriod(asked, calendar, today, explicit);
+    const shown = choice.period;
+    const before = previousPeriod(shown);
+
+    const [po, so, poPrev, soPrev] = await Promise.all([
+      runSection(batcher, 'home.purchases', (client) =>
+        approvalBoard(client, 'PURCHASE_ORDER', shown),
+      ),
+      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', shown)),
+      // THE COMPARISON FOLLOWS THE SELECTION AND IS NEVER CHOSEN SEPARATELY.
+      // It rides in the same batch, so naming last month costs nothing.
+      before === null
+        ? Promise.resolve({ ok: true as const, value: null })
+        : runSection(batcher, 'home.purchases-prev', (client) =>
+            approvalBoard(client, 'PURCHASE_ORDER', before),
+          ),
+      before === null
+        ? Promise.resolve({ ok: true as const, value: null })
+        : runSection(batcher, 'home.sales-prev', (client) =>
+            approvalBoard(client, 'SALES_ORDER', before),
+          ),
+    ]);
+    if (po.ok) purchases = po.value;
+    else {
+      failed.push('purchase order approval');
+      traceId = po.traceId;
+    }
+    if (so.ok) sales = so.value;
+    else {
+      failed.push('sales order approval');
+      traceId = traceId ?? so.traceId;
+    }
+    if (poPrev.ok) previousPurchases = poPrev.value;
+    if (soPrev.ok) previousSales = soPrev.value;
   } catch (error) {
     console.error('[cms.home] no database connection', error);
     connectionFailed = true;
   }
 }
+
+const shown = choice.period;
+const before = previousPeriod(shown);
 
 const count = (value: number) => value.toLocaleString('en-KE');
 
@@ -148,7 +247,7 @@ const toSales = (extra: Record<string, string | null> = {}) =>
 const chartOf = (board: ApprovalBoard | null, link: (fn: string) => string) =>
   horizontalBarChart(
     {
-      name: 'Median turnaround',
+      name: 'Typical turnaround',
       token: 'cms-series-1',
       points: (board?.functions ?? []).map<ChartPoint>((f) => ({
         label: f.fn,
@@ -164,12 +263,105 @@ const chartOf = (board: ApprovalBoard | null, link: (fn: string) => string) =>
 const purchaseChart = chartOf(purchases, () => toPurchases({ status: PO_WAITING_STATUS }));
 const salesChart = chartOf(sales, (fn) => toSales({ status: SO_WAITING[fn] ?? null }));
 
-const COLUMNS = [
-  { key: 'person', label: 'Person' },
-  { key: 'volume', label: 'Volume', numeric: true },
-  { key: 'typical', label: 'Typical', numeric: true },
-  { key: 'slowest', label: 'Slowest 10%', numeric: true },
-];
+const volumeOf = (board: ApprovalBoard | null) =>
+  (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
+
+/**
+ * The comparison sentence, which names the period it compares against.
+ *
+ * A percentage against an unnamed baseline is a number nobody can check, so
+ * the previous period is spelled out. Where the previous period holds nothing
+ * the sentence says that rather than dividing by zero and printing an infinity.
+ */
+const comparison = (board: ApprovalBoard | null, prior: ApprovalBoard | null): string | null => {
+  if (board === null || before === null) return null;
+  const nowVolume = volumeOf(board);
+  const wasVolume = volumeOf(prior);
+  // EACH HALF NAMES ITS OWN ROLE. "0 completed. Nothing completed in July 2026."
+  // read as two claims about two periods, and next to a panel headed August it
+  // looked like the page disagreed with itself. It never did: the first figure
+  // is this period and the second is the one before it. The sentence now says
+  // so.
+  if (wasVolume === 0)
+    return `${count(nowVolume)} completed in ${shown.label}, against none in ${before.label}.`;
+  const change = Math.round(((nowVolume - wasVolume) / wasVolume) * 100);
+  const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'level';
+  return `${count(nowVolume)} completed in ${shown.label}, ${direction}${
+    change === 0 ? '' : ` ${Math.abs(change)}%`
+  } on ${before.label} (${count(wasVolume)}).`;
+};
+
+/**
+ * How many of THIS BOARD's completions lie outside the period.
+ *
+ * It used to be `calendar.total`, the page's whole mixed population — leads,
+ * cases, sales orders and purchase orders together — printed under one board as
+ * though it were that board's own. A wrong number in the wrong place is worse
+ * than no number, because it is checkable and it is checkably false.
+ */
+const outsideFor = (own: DataCalendar, board: ApprovalBoard | null) =>
+  Math.max(0, own.total - volumeOf(board));
+
+/**
+ * The one line a panel says when it is empty and its own data is elsewhere.
+ *
+ * The page-level fallback moves the period when NOTHING on the page has data.
+ * This is the other half: the period is right for the page, and wrong for this
+ * board. Never an empty chart in silence.
+ */
+const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
+  if (volumeOf(board) > 0 || own.total === 0 || own.latest === null) return null;
+  const target = periodFromToken(own.latest.slice(0, 7), today);
+  if (target === null || periodHasData(shown, own)) return null;
+  return {
+    line:
+      `Nothing here in ${shown.label}. ${count(own.total)} ` +
+      `${own.total === 1 ? 'completion sits' : 'completions sit'} in other periods, the most ` +
+      `recent in ${target.label}.`,
+    href: periodHref('/app', target),
+    label: `Show ${target.label}`,
+  };
+};
+
+const peopleByFunction = (board: ApprovalBoard | null) =>
+  (board?.functions ?? []).map((fn) => ({
+    fn,
+    people: (board?.leaders ?? []).filter((row) => row.fn === fn.fn && row.userId !== null),
+  }));
+const omittedFunctions = (board: ApprovalBoard | null) =>
+  (board?.functions ?? [])
+    .filter((fn) => !(board?.leaders ?? []).some((row) => row.fn === fn.fn && row.userId !== null))
+    .map((fn) => fn.fn);
+
+const peopleByFunction = (board: ApprovalBoard | null) =>
+  (board?.functions ?? []).map((fn) => ({
+    fn,
+    people: (board?.leaders ?? []).filter((row) => row.fn === fn.fn && row.userId !== null),
+  }));
+const omittedFunctions = (board: ApprovalBoard | null) =>
+  (board?.functions ?? [])
+    .filter((fn) => !(board?.leaders ?? []).some((row) => row.fn === fn.fn && row.userId !== null))
+    .map((fn) => fn.fn);
+
+const peopleByFunction = (board: ApprovalBoard | null) =>
+  (board?.functions ?? []).map((fn) => ({
+    fn,
+    people: (board?.leaders ?? []).filter((row) => row.fn === fn.fn && row.userId !== null),
+  }));
+const omittedFunctions = (board: ApprovalBoard | null) =>
+  (board?.functions ?? [])
+    .filter((fn) => !(board?.leaders ?? []).some((row) => row.fn === fn.fn && row.userId !== null))
+    .map((fn) => fn.fn);
+
+const peopleByFunction = (board: ApprovalBoard | null) =>
+  (board?.functions ?? []).map((fn) => ({
+    fn,
+    people: (board?.leaders ?? []).filter((row) => row.fn === fn.fn && row.userId !== null),
+  }));
+const omittedFunctions = (board: ApprovalBoard | null) =>
+  (board?.functions ?? [])
+    .filter((fn) => !(board?.leaders ?? []).some((row) => row.fn === fn.fn && row.userId !== null))
+    .map((fn) => fn.fn);
 
 const peopleByFunction = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).map((fn) => ({
@@ -190,7 +382,7 @@ const omittedFunctions = (board: ApprovalBoard | null) =>
  * diverge across a weekend.
  */
 const DEFINITION =
-  `Elapsed minutes from the start of a function to its completion, over the last ${WINDOW_DAYS} days. ` +
+  `Elapsed minutes from the start of a function to its completion, over ${shown.label}. ` +
   'Purchase order functions are the configured approval levels; sales order functions are finance ' +
   'approval, credit release, invoicing and loading authority. Invoicing and loading authority record ' +
   'no actor in the source extract. The dashed target is the configured SLA target for that function, ' +
@@ -202,21 +394,37 @@ const DEFINITION =
 <CmsLayout title="Home" width="data">
   <CmsPageHeader title="Home" definition={DEFINITION} />
 
-  {
-    period.label && (
-      <p class="text-cms-body-sm text-cms-muted">
-        Showing {period.label}
-        {period.fallback ? ' — the most recent period with data for both processes.' : '.'}
-      </p>
-    )
-  }
+  <CmsPeriodControl
+    action="/app"
+    period={shown}
+    calendar={calendar}
+    today={today}
+    open={params.get('pick') === '1'}
+    notice={choice.notice}
+    revertHref={choice.fellBackFrom === null
+      ? null
+      : periodHref('/app', choice.fellBackFrom, { pick: null })}
+    revertLabel={choice.fellBackFrom === null ? null : `Show ${choice.fellBackFrom.label} anyway`}
+  />
 
   {connectionFailed && <CmsErrorState title="The dashboard could not be loaded" />}
   {
-    failure !== null && (
+    /*
+      A MESSAGE THAT NAMES WHAT FAILED AND WHAT TO DO. The old one printed a
+      reference number and nothing else, which told a reader neither which
+      figures were missing nor whether the rest of the page could be trusted.
+    */
+  }
+  {
+    failed.length > 0 && (
       <CmsErrorState
-        title="The turnaround figures could not be loaded"
-        description={`Quote reference ${failure.traceId} to your administrator.`}
+        title={`The ${failed.join(' and ')} figures could not be loaded`}
+        description={
+          `Everything else on this page loaded and is correct. The charts and leaderboards ` +
+          `above are the only figures affected. Try ${shown.label} again, or choose another ` +
+          `period; if it keeps failing, send your administrator reference ${traceId ?? 'unknown'} ` +
+          `and the period you chose, which is what the server log is keyed on.`
+        }
       />
     )
   }
@@ -236,8 +444,13 @@ const DEFINITION =
         definition={DEFINITION}
         chart={purchaseChart}
         unit="minutes"
-        coverage={`${period.label}: ${(purchases?.functions.reduce((n, f) => n + f.volume, 0) ?? 0).toLocaleString('en-KE')} approvals`}
+        coverage={`${count(volumeOf(purchases))} approvals in ${shown.label}`}
       />
+      {
+        comparison(purchases, previousPurchases) !== null && (
+          <p class="text-cms-body-sm text-cms-muted">{comparison(purchases, previousPurchases)}</p>
+        )
+      }
       <p class="text-cms-body-sm text-cms-muted">
         <a
           class="font-semibold text-cms-royal hover:underline"
@@ -248,60 +461,34 @@ const DEFINITION =
         in approval
       </p>
       {
-        peopleByFunction(purchases).map(
-          ({ fn, people }) =>
-            people.length > 0 && (
-              <section class="flex flex-col gap-2" aria-labelledby={`po-${fn.order}`}>
-                <h3 id={`po-${fn.order}`} class="text-cms-label font-semibold text-cms-muted">
-                  {fn.fn}
-                </h3>
-                <CmsDataTable
-                  caption={`${fn.fn} approvers`}
-                  columns={COLUMNS}
-                  rowCount={people.length}
-                >
-                  {people.map((row: LeaderRow) => (
-                    <tr class="border-b border-cms-line last:border-0">
-                      <td class="px-3 py-2">{row.person}</td>
-                      {[
-                        count(row.volume),
-                        formatDuration(row.medianMinutes),
-                        formatDuration(row.p90Minutes),
-                      ].map((value) => (
-                        <td class="px-3 py-2 text-right tabular-nums">
-                          <a
-                            class="text-cms-royal hover:underline"
-                            href={toPurchases({ status: PO_WAITING_STATUS, ownerId: row.userId })}
-                          >
-                            {value}
-                          </a>
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </CmsDataTable>
-              </section>
-            ),
-        )
+        /*
+          NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
+          period when NOTHING on the page has data; this is the other half,
+          where the period is right for the page and wrong for this board.
+        */
       }
       {
-        (purchases?.leaders.filter((row) => row.userId !== null).length ?? 0) === 0 && (
+        elsewhere(purchaseCalendar, purchases) !== null && (
           <p class="text-cms-body-sm text-cms-muted">
-            No recorded approvers completed work in this period.
+            {elsewhere(purchaseCalendar, purchases)!.line}{' '}
+            <a
+              class="font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              href={elsewhere(purchaseCalendar, purchases)!.href}
+            >
+              {elsewhere(purchaseCalendar, purchases)!.label}
+            </a>
           </p>
         )
       }
-      {
-        omittedFunctions(purchases).length > 0 && (
-          <p class="text-cms-caption text-cms-muted">
-            Not included in the people leaderboard because no actor was recorded:{' '}
-            {omittedFunctions(purchases).join(', ')}.
-          </p>
-        )
-      }
-      <p class="text-cms-caption text-cms-muted">
-        Ranked from {MINIMUM_RANKED_VOLUME} completed approvals.
-      </p>
+      <CmsApprovalLeaderboard
+        caption="Purchase order approvers"
+        process="PURCHASE_ORDER"
+        board={purchases}
+        period={shown}
+        totalOutside={outsideFor(purchaseCalendar, purchases)}
+        widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
+        orderPath="/app/orders/purchases"
+      />
     </div>
 
     <div class="flex flex-col gap-4">
@@ -310,8 +497,13 @@ const DEFINITION =
         definition={DEFINITION}
         chart={salesChart}
         unit="minutes"
-        coverage={`${period.label}: ${(sales?.functions.reduce((n, f) => n + f.volume, 0) ?? 0).toLocaleString('en-KE')} completions`}
+        coverage={`${count(volumeOf(sales))} completions in ${shown.label}`}
       />
+      {
+        comparison(sales, previousSales) !== null && (
+          <p class="text-cms-body-sm text-cms-muted">{comparison(sales, previousSales)}</p>
+        )
+      }
       <p class="text-cms-body-sm text-cms-muted">
         <a
           class="font-semibold text-cms-royal hover:underline"
@@ -322,63 +514,34 @@ const DEFINITION =
         awaiting finance approval
       </p>
       {
-        peopleByFunction(sales).map(
-          ({ fn, people }) =>
-            people.length > 0 && (
-              <section class="flex flex-col gap-2" aria-labelledby={`so-${fn.order}`}>
-                <h3 id={`so-${fn.order}`} class="text-cms-label font-semibold text-cms-muted">
-                  {fn.fn}
-                </h3>
-                <CmsDataTable
-                  caption={`${fn.fn} approvers`}
-                  columns={COLUMNS}
-                  rowCount={people.length}
-                >
-                  {people.map((row: LeaderRow) => (
-                    <tr class="border-b border-cms-line last:border-0">
-                      <td class="px-3 py-2">{row.person}</td>
-                      {[
-                        count(row.volume),
-                        formatDuration(row.medianMinutes),
-                        formatDuration(row.p90Minutes),
-                      ].map((value) => (
-                        <td class="px-3 py-2 text-right tabular-nums">
-                          <a
-                            class="text-cms-royal hover:underline"
-                            href={toSales({
-                              status: SO_WAITING[row.fn] ?? null,
-                              ownerId: row.userId,
-                            })}
-                          >
-                            {value}
-                          </a>
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </CmsDataTable>
-              </section>
-            ),
-        )
+        /*
+          NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
+          period when NOTHING on the page has data; this is the other half,
+          where the period is right for the page and wrong for this board.
+        */
       }
       {
-        (sales?.leaders.filter((row) => row.userId !== null).length ?? 0) === 0 && (
+        elsewhere(salesCalendar, sales) !== null && (
           <p class="text-cms-body-sm text-cms-muted">
-            No recorded approvers completed work in this period.
+            {elsewhere(salesCalendar, sales)!.line}{' '}
+            <a
+              class="font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              href={elsewhere(salesCalendar, sales)!.href}
+            >
+              {elsewhere(salesCalendar, sales)!.label}
+            </a>
           </p>
         )
       }
-      {
-        omittedFunctions(sales).length > 0 && (
-          <p class="text-cms-caption text-cms-muted">
-            Not included in the people leaderboard because no actor was recorded:{' '}
-            {omittedFunctions(sales).join(', ')}.
-          </p>
-        )
-      }
-      <p class="text-cms-caption text-cms-muted">
-        Ranked from {MINIMUM_RANKED_VOLUME} completed functions.
-      </p>
+      <CmsApprovalLeaderboard
+        caption="Sales order approvers"
+        process="SALES_ORDER"
+        board={sales}
+        period={shown}
+        totalOutside={outsideFor(salesCalendar, sales)}
+        widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
+        orderPath="/app/orders/sales"
+      />
     </div>
   </div>
 

@@ -34,7 +34,13 @@ import {
 } from './support/subrequestBudget.ts';
 import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
 import { parseFilter, drillTo } from '../../src/lib/cms/analytics/filters.ts';
-import { approvalBoard, windowStart } from '../../src/lib/cms/repos/approvalSla.ts';
+import { approvalBoard } from '../../src/lib/cms/repos/approvalSla.ts';
+import {
+  calendarSql,
+  choosePeriod,
+  parsePeriod,
+  readCalendar,
+} from '../../src/lib/cms/analytics/period.ts';
 import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
 import { countPurchaseOrders } from '../../src/lib/cms/repos/poPerformance.ts';
 import { listProviders, activeProvider } from '../../src/lib/cms/ai/providers.ts';
@@ -191,11 +197,24 @@ const filter = parseFilter(new URLSearchParams());
  * a round trip of its own, and this is where that shows up.
  */
 test('/app stays inside its subrequest budget', async () => {
-  const since = windowStart(new Date(NOW.replace(' ', 'T') + 'Z'));
-  const { trips, statements } = await cost((b) =>
-    Promise.all([
-      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', since)),
-      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', since)),
+  const today = new Date(NOW.replace(' ', 'T') + 'Z');
+  const params = new URLSearchParams();
+  const { trips, statements } = await cost(async (b) => {
+    // WAVE ONE: everything that does not depend on which period is shown.
+    // The calendar behind the period control rides along with the exceptions
+    // and the two waiting counts rather than costing a trip of its own, which
+    // is the whole reason it is one statement instead of one per level.
+    const [calendarRows, , ,] = await Promise.all([
+      runSection(b, 'home.calendar', (db) =>
+        db.execute({
+          sql: calendarSql([
+            { table: 'workflow_stage_instances', column: 'completed_at' },
+            { table: 'sales_orders', column: 'invoice_created_at' },
+            { table: 'sales_orders', column: 'loading_authority_at' },
+          ]),
+          args: ['2026-08'],
+        }),
+      ),
       runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, filter, NOW)),
       runSection(b, 'home.po-waiting', (db) =>
         countPurchaseOrders(db, USER, { ...filter, status: 'IN_APPROVAL' }, NOW),
@@ -203,8 +222,18 @@ test('/app stays inside its subrequest budget', async () => {
       runSection(b, 'home.so-waiting', (db) =>
         countSalesOrders(db, USER, { ...filter, status: 'PENDING_FINANCE' }, NOW),
       ),
-    ]),
-  );
+    ]);
+    const calendar = readCalendar(
+      calendarRows.ok ? (calendarRows.value.rows as Record<string, unknown>[]) : [],
+    );
+    // WAVE TWO: the boards, which cannot be issued until the period is known,
+    // because a fallback off an empty default changes what they are asked.
+    const choice = choosePeriod(parsePeriod(params, today), calendar, today, false);
+    await Promise.all([
+      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', choice.period)),
+      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', choice.period)),
+    ]);
+  });
   assertWithinBudget('/app', trips, statements);
 });
 
@@ -275,8 +304,18 @@ test('a Home figure equals the count of the records behind it', async () => {
 });
 
 test('/app/orders/sales/performance stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'sales.performance', (db) =>
+  const { trips, statements } = await cost(async (b) => {
+    // THE PERIOD CONTROL'S OWN COST, COUNTED HERE RATHER THAN ASSUMED. It is
+    // one statement in a wave of its own, because the period it resolves
+    // decides what every figure below is asked for. One trip, on every page
+    // that carries the control.
+    await runSection(b, 'sales.performance.calendar', (db) =>
+      db.execute({
+        sql: calendarSql([{ table: 'sales_orders', column: 'order_created_at' }]),
+        args: ['2026-08'],
+      }),
+    );
+    return runSection(b, 'sales.performance', (db) =>
       Promise.all([
         soSummary(db, USER, filter, NOW),
         soApprovers(db, USER, filter, NOW),
@@ -286,14 +325,24 @@ test('/app/orders/sales/performance stays inside its subrequest budget', async (
         soTrend(db, USER, filter, NOW),
         db.execute(AFFILIATE_LIST),
       ]),
-    ),
-  );
+    );
+  });
   assertWithinBudget('/app/orders/sales/performance', trips, statements);
 });
 
 test('/app/orders/purchases/performance stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'purchases.performance', (db) =>
+  const { trips, statements } = await cost(async (b) => {
+    // THE PERIOD CONTROL'S OWN COST, COUNTED HERE RATHER THAN ASSUMED. It is
+    // one statement in a wave of its own, because the period it resolves
+    // decides what every figure below is asked for. One trip, on every page
+    // that carries the control.
+    await runSection(b, 'purchases.performance.calendar', (db) =>
+      db.execute({
+        sql: calendarSql([{ table: 'purchase_orders', column: 'po_created_at' }]),
+        args: ['2026-08'],
+      }),
+    );
+    return runSection(b, 'purchases.performance', (db) =>
       Promise.all([
         coverage(db, USER, filter, NOW),
         durations(db, USER, filter, NOW),
@@ -306,14 +355,27 @@ test('/app/orders/purchases/performance stays inside its subrequest budget', asy
         stockConstraint(db, USER, filter, NOW),
         db.execute(AFFILIATE_LIST),
       ]),
-    ),
-  );
+    );
+  });
   assertWithinBudget('/app/orders/purchases/performance', trips, statements);
 });
 
 test('/app/crm/analytics stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'crm.analytics', (db) =>
+  const { trips, statements } = await cost(async (b) => {
+    // THE PERIOD CONTROL'S OWN COST, COUNTED HERE RATHER THAN ASSUMED. It is
+    // one statement in a wave of its own, because the period it resolves
+    // decides what every figure below is asked for. One trip, on every page
+    // that carries the control.
+    await runSection(b, 'crm.analytics.calendar', (db) =>
+      db.execute({
+        sql: calendarSql([
+          { table: 'opportunities', column: 'created_at' },
+          { table: 'leads', column: 'created_at' },
+        ]),
+        args: ['2026-08'],
+      }),
+    );
+    return runSection(b, 'crm.analytics', (db) =>
       Promise.all([
         funnel(db, USER, filter),
         winRate(db, USER, filter),
@@ -332,14 +394,24 @@ test('/app/crm/analytics stays inside its subrequest budget', async () => {
         crmTrend(db, USER, filter),
         db.execute(AFFILIATE_LIST),
       ]),
-    ),
-  );
+    );
+  });
   assertWithinBudget('/app/crm/analytics', trips, statements);
 });
 
 test('/app/helpdesk/analytics stays inside its subrequest budget', async () => {
-  const { trips, statements } = await cost((b) =>
-    runSection(b, 'service.analytics', (db) =>
+  const { trips, statements } = await cost(async (b) => {
+    // THE PERIOD CONTROL'S OWN COST, COUNTED HERE RATHER THAN ASSUMED. It is
+    // one statement in a wave of its own, because the period it resolves
+    // decides what every figure below is asked for. One trip, on every page
+    // that carries the control.
+    await runSection(b, 'service.analytics.calendar', (db) =>
+      db.execute({
+        sql: calendarSql([{ table: 'service_cases', column: 'created_at' }]),
+        args: ['2026-08'],
+      }),
+    );
+    return runSection(b, 'service.analytics', (db) =>
       Promise.all([
         serviceSummary(db, USER, filter),
         waitingBreakdown(db, USER, filter),
@@ -357,8 +429,8 @@ test('/app/helpdesk/analytics stays inside its subrequest budget', async () => {
         serviceInsights(db, USER, filter),
         db.execute(AFFILIATE_LIST),
       ]),
-    ),
-  );
+    );
+  });
   assertWithinBudget('/app/helpdesk/analytics', trips, statements);
 });
 
