@@ -1,5 +1,5 @@
 /**
- * GET and POST /api/portal/service on cms.murikah.com.
+ * GET and POST /api/portal/helpdesk on cms.murikah.com.
  *
  * GET lists the customer's own requests. POST raises a real service case
  * with `channel = 'WEB'`, the account from the membership and the priority

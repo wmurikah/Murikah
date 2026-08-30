@@ -511,7 +511,7 @@ export async function resolveNotificationTarget(
     if (row === undefined) return null;
     const businessType = text(row.business_type);
     const businessId = text(row.business_id);
-    if (businessType === 'CASE') return `/app/service/${businessId}`;
+    if (businessType === 'CASE') return `/app/helpdesk/${businessId}`;
     if (businessType === 'LEAD') return `/app/crm/${businessId}`;
     return '/app/performance';
   }
@@ -528,7 +528,7 @@ export async function resolveNotificationTarget(
   if (!access.ok) return null;
   switch (entityType) {
     case 'CASE':
-      return `/app/service/${entityId}`;
+      return `/app/helpdesk/${entityId}`;
     case 'LEAD':
       return `/app/crm/${entityId}`;
     case 'OPPORTUNITY':

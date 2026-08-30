@@ -43,8 +43,6 @@ export interface CmsNavItem {
    * every entry from everybody.
    */
   readonly permission: string | readonly string[] | null;
-  /** One line of context for the section landing page and the page header. */
-  readonly summary: string;
 }
 
 export const CMS_NAV: readonly CmsNavItem[] = [
@@ -53,49 +51,42 @@ export const CMS_NAV: readonly CmsNavItem[] = [
     href: '/app',
     icon: 'home',
     permission: null,
-    summary: 'SLA, exceptions, orders, commercial and service.',
   },
   {
     label: 'Customers',
     href: '/app/customers',
     icon: 'customers',
     permission: 'CUSTOMERS.ACCOUNTS.VIEW',
-    summary: 'Accounts, contacts, delivery locations and documents.',
   },
   {
     label: 'CRM',
     href: '/app/crm',
     icon: 'crm',
     permission: 'CRM.LEADS.VIEW',
-    summary: 'Leads, opportunities, retention and churn risk.',
   },
   {
-    label: 'Service',
-    href: '/app/service',
+    label: 'Helpdesk',
+    href: '/app/helpdesk',
     icon: 'service',
     permission: 'SERVICE.CASES.VIEW',
-    summary: 'Tickets, escalations and the SLA clock.',
   },
   {
     label: 'Orders',
     href: '/app/orders',
     icon: 'orders',
     permission: 'ORDERS.SALES_ORDER.VIEW',
-    summary: 'Sales orders, purchase orders, invoices and deliveries.',
   },
   {
     label: 'Performance',
     href: '/app/performance',
     icon: 'performance',
     permission: 'SLA.DASHBOARD.VIEW',
-    summary: 'SLA attainment, resolution times and team load.',
   },
   {
     label: 'Data',
     href: '/app/data',
     icon: 'data',
     permission: 'DATA.IMPORTS.VIEW',
-    summary: 'Reference data, imports and integration activity.',
   },
   {
     label: 'Administration',
@@ -110,7 +101,6 @@ export const CMS_NAV: readonly CmsNavItem[] = [
       'ADMIN.WORKFLOW_ROLES.MANAGE',
       'ADMIN.PRODUCT_CATALOG.MANAGE',
     ],
-    summary: 'Users, roles, organisation structure and system configuration.',
   },
 ];
 

@@ -352,7 +352,7 @@ test('a notification is not an access grant: the target re-runs access control n
   const allowed = await resolveNotificationTarget(asClient(c), SEED.admin, {
     ...notification,
   });
-  assert.equal(allowed, `/app/service/${made.value.caseId}`);
+  assert.equal(allowed, `/app/helpdesk/${made.value.caseId}`);
   c.close();
 });
 

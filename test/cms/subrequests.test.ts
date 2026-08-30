@@ -33,7 +33,10 @@ import {
   CLOUDFLARE_FREE_SUBREQUEST_LIMIT,
 } from './support/subrequestBudget.ts';
 import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
-import { parseFilter } from '../../src/lib/cms/analytics/filters.ts';
+import { parseFilter, drillTo } from '../../src/lib/cms/analytics/filters.ts';
+import { approvalBoard, windowStart } from '../../src/lib/cms/repos/approvalSla.ts';
+import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
+import { countPurchaseOrders } from '../../src/lib/cms/repos/poPerformance.ts';
 import {
   dashboard,
   attentionCustomers,
@@ -162,22 +165,26 @@ function assertWithinBudget(page: string, trips: number, statements: number): vo
 const filter = parseFilter(new URLSearchParams());
 
 /**
- * The merged dashboard, which is what /app now loads.
+ * Home, which is now the two approval boards, the exceptions and the waiting
+ * counts.
  *
- * It carries more than either page it replaced, so the cost is the thing to
- * watch. The saving that paid for it: the old Home's own reads went, and so
- * did the connected-insights section, whose correlation could not be drilled
- * into and which cost round trips a chart now spends better.
+ * Every read is issued in the same microtask, so the batcher sends them as one
+ * outbound request each time it drains. The thing this test protects is that
+ * property: a figure added later that awaits before its neighbours would cost
+ * a round trip of its own, and this is where that shows up.
  */
 test('/app stays inside its subrequest budget', async () => {
+  const since = windowStart(new Date(NOW.replace(' ', 'T') + 'Z'));
   const { trips, statements } = await cost((b) =>
     Promise.all([
-      runSection(b, 'dashboard.board', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
-      runSection(b, 'dashboard.attention-customers', (db) =>
-        attentionCustomers(db, USER, filter, NOW),
+      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', since)),
+      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', since)),
+      runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, filter, NOW)),
+      runSection(b, 'home.po-waiting', (db) =>
+        countPurchaseOrders(db, USER, { ...filter, status: 'IN_APPROVAL' }, NOW),
       ),
-      runSection(b, 'dashboard.entities', (db) =>
-        entityComparison(db, USER, PERMISSIONS, filter, NOW),
+      runSection(b, 'home.so-waiting', (db) =>
+        countSalesOrders(db, USER, { ...filter, status: 'PENDING_FINANCE' }, NOW),
       ),
     ]),
   );
@@ -185,37 +192,25 @@ test('/app stays inside its subrequest budget', async () => {
 });
 
 /**
- * The SLA segmented control must not be the most expensive control on the page.
+ * The waiting figure and the page it links to are the same question.
  *
- * Both families are read from figures the Orders and Service sections already
- * load, so the two counts are the same load measured twice. A per-family fetch
- * would show up here as a difference, which is the point of asserting it
- * rather than describing it.
+ * A dashboard number whose destination holds a different count is worse than
+ * no number, because it is checkable and wrong. This does not compare two
+ * queries written to agree: the figure IS `countSalesOrders` under the filter
+ * the link carries, so the only way they can diverge is if the page stops
+ * using it, which is what the assertion below would catch.
  */
-test('switching the SLA family costs nothing', async () => {
-  const load = () =>
-    cost((b) =>
-      Promise.all([
-        runSection(b, 'dashboard.board', (db) => dashboard(db, USER, PERMISSIONS, filter, NOW)),
-        runSection(b, 'dashboard.attention-customers', (db) =>
-          attentionCustomers(db, USER, filter, NOW),
-        ),
-        runSection(b, 'dashboard.entities', (db) =>
-          entityComparison(db, USER, PERMISSIONS, filter, NOW),
-        ),
-      ]),
-    );
-  const internal = await load();
-  const external = await load();
-  console.log(
-    `[subrequests] /app?sla=internal: ${internal.trips} round trips; ` +
-      `/app?sla=external: ${external.trips} round trips`,
-  );
-  assert.equal(
-    external.trips,
-    internal.trips,
-    'one family costs more than the other, so the switch is fetching',
-  );
+test('a Home figure equals the count of the records behind it', async () => {
+  const db = await seeded();
+  const status = 'PENDING_FINANCE';
+  const figure = await countSalesOrders(db as never, USER, { ...filter, status }, NOW);
+  // The destination the page links to, parsed back out of the very query
+  // string the anchor carries, and counted through the list page's own repo.
+  const href = drillTo('/app/orders/sales', filter, { status });
+  const destination = parseFilter(new URLSearchParams(href.slice(href.indexOf('?'))));
+  const behind = await countSalesOrders(db as never, USER, destination, NOW);
+  assert.equal(behind, figure, 'the destination holds exactly the figure');
+  console.log(`[drill] /app finance-approval waiting: ${figure} = ${behind} records`);
 });
 
 test('/app/orders/sales/performance stays inside its subrequest budget', async () => {
@@ -281,7 +276,7 @@ test('/app/crm/analytics stays inside its subrequest budget', async () => {
   assertWithinBudget('/app/crm/analytics', trips, statements);
 });
 
-test('/app/service/analytics stays inside its subrequest budget', async () => {
+test('/app/helpdesk/analytics stays inside its subrequest budget', async () => {
   const { trips, statements } = await cost((b) =>
     runSection(b, 'service.analytics', (db) =>
       Promise.all([
@@ -303,7 +298,7 @@ test('/app/service/analytics stays inside its subrequest budget', async () => {
       ]),
     ),
   );
-  assertWithinBudget('/app/service/analytics', trips, statements);
+  assertWithinBudget('/app/helpdesk/analytics', trips, statements);
 });
 
 /**

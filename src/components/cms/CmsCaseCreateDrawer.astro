@@ -312,7 +312,9 @@ const defaults = Object.fromEntries(categories.map((c) => [c.id, c.defaultPriori
         });
         if (response.ok) {
           const created = (await response.json()) as { caseId?: string };
-          window.location.href = created.caseId ? `/app/service/${created.caseId}` : '/app/service';
+          window.location.href = created.caseId
+            ? `/app/helpdesk/${created.caseId}`
+            : '/app/helpdesk';
           return;
         }
         const answer = (await response.json().catch(() => null)) as {

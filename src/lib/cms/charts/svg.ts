@@ -29,6 +29,22 @@ export interface ChartPoint {
   value: number | null;
   /** Where clicking this point should lead, if anywhere. */
   href?: string;
+  /**
+   * A second, lighter measure on the SAME row: the tail beside the middle.
+   *
+   * A median on its own flatters everybody. Drawing P90 as a marker on the bar
+   * it belongs to puts the gap between them in one saccade, which is the
+   * reading the page exists for. Horizontal bars only.
+   */
+  marker?: number | null;
+  /**
+   * This row's own target, drawn as a dashed rule across the row.
+   *
+   * Per point rather than per chart, because two approval functions do not
+   * share a target and one line across the whole chart would be wrong for
+   * every row but one. Absent where nothing is configured: no target, no line.
+   */
+  target?: number | null;
 }
 
 export interface ChartSeries {
@@ -519,7 +535,12 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
   const barHeight = 14;
   const height = options.height ?? series.points.length * rowHeight + 12;
   const trackWidth = width - labelWidth - valueWidth - 16;
-  const ceiling = niceCeiling(Math.max(...series.points.map((p) => p.value ?? 0), 0));
+  // THE SCALE MUST HOLD EVERY MARK, not only the bars. A P90 marker or a
+  // target sitting past the frame would be drawn outside the chart, which is
+  // how a tail becomes invisible at exactly the moment it matters.
+  const ceiling = niceCeiling(
+    Math.max(...series.points.map((p) => Math.max(p.value ?? 0, p.marker ?? 0, p.target ?? 0)), 0),
+  );
 
   const rows = series.points
     .map((point, index) => {
@@ -539,11 +560,34 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
         `<rect x="${labelWidth + 8}" y="${round(y + 3)}" width="${round(barWidth)}" ` +
         `height="${barHeight}" rx="2" fill="var(--color-${series.token})">` +
         `<title>${escape(`${point.label}: ${format(point.value)}`)}</title></rect>`;
+      const at = (v: number): number => labelWidth + 8 + (v / ceiling) * trackWidth;
+
+      // THE TAIL, ON THE SAME ROW AS THE MIDDLE. A lighter, taller tick rather
+      // than a second bar: two bars per row read as two categories, and this
+      // is one category measured twice.
+      const marker =
+        point.marker === null || point.marker === undefined
+          ? ''
+          : `<rect x="${round(at(point.marker) - 1)}" y="${round(y)}" width="2" ` +
+            `height="${barHeight + 6}" rx="1" fill="var(--color-${series.token})" ` +
+            `opacity="0.45"><title>${escape(`${point.label}, P90: ${format(point.marker)}`)}` +
+            `</title></rect>`;
+
+      // The target, dashed, so it is never mistaken for a measurement.
+      const target =
+        point.target === null || point.target === undefined
+          ? ''
+          : `<line x1="${round(at(point.target))}" y1="${round(y)}" ` +
+            `x2="${round(at(point.target))}" y2="${round(y + barHeight + 6)}" ` +
+            `stroke="var(--color-cms-ink-600)" stroke-width="1.5" stroke-dasharray="3 2">` +
+            `<title>${escape(`${point.label}, target: ${format(point.target)}`)}</title></line>`;
+
+      const furthest = Math.max(point.value, point.marker ?? 0);
       const value =
-        `<text x="${round(labelWidth + 16 + barWidth)}" y="${round(y + barHeight)}" ` +
+        `<text x="${round(at(furthest) + 8)}" y="${round(y + barHeight)}" ` +
         `font-size="11" fill="var(--color-cms-muted)">${escape(format(point.value))}</text>`;
       const drawn = point.href === undefined ? bar : `<a href="${escape(point.href)}">${bar}</a>`;
-      return label + drawn + value;
+      return label + drawn + marker + target + value;
     })
     .join('');
 
