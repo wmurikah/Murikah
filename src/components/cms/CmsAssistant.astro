@@ -1,0 +1,133 @@
+---
+/**
+ * The assistant panel, available on every page and costing every page nothing.
+ *
+ * ZERO ROUND TRIPS AT RENDER TIME, AND THAT IS A HARD REQUIREMENT RATHER THAN
+ * A PREFERENCE. This sits in the shell, so any query it made would be added to
+ * EVERY page in the application, and Home is already at thirteen of its budget
+ * of fifteen. So the markup is static: an empty transcript, a text box, and a
+ * script that talks to `/api/assistant` when somebody actually opens it. A
+ * person who never presses the button costs exactly what they did before.
+ *
+ * THE PANEL HOLDS NO ACCESS LOGIC, and could not usefully hold any. Every
+ * answer is composed on the server from records already read through the
+ * asker's own scope predicate, and a conversation about an entity is checked
+ * with `resolveEntityAccess`, the same function an activity uses. Nothing here
+ * decides what may be seen; it renders what came back.
+ *
+ * A NATIVE <dialog>, so Escape closes it, focus is trapped by the platform,
+ * and there is no focus management to get wrong.
+ */
+import CmsDrawer from './CmsDrawer.astro';
+import CmsButton from './CmsButton.astro';
+
+interface Props {
+  id: string;
+}
+const { id } = Astro.props;
+---
+
+<CmsDrawer id={id} title="Assistant" tone="form" closeLabel="Close the assistant">
+  <div class="flex h-full flex-col gap-3 p-4">
+    <ol
+      id="cms-assistant-transcript"
+      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+      aria-live="polite"
+      aria-label="Conversation"
+    >
+    </ol>
+
+    <p id="cms-assistant-note" class="text-cms-caption text-cms-muted"></p>
+
+    <form id="cms-assistant-form" class="flex flex-col gap-2">
+      <label class="text-cms-label font-medium text-cms-ink" for="cms-assistant-question">
+        Ask about your records
+      </label>
+      <textarea
+        id="cms-assistant-question"
+        name="question"
+        rows="3"
+        required
+        maxlength="2000"
+        class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      ></textarea>
+      <CmsButton type="submit" variant="primary" id="cms-assistant-send">Ask</CmsButton>
+    </form>
+  </div>
+</CmsDrawer>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>('#cms-assistant-form');
+  const question = document.querySelector<HTMLTextAreaElement>('#cms-assistant-question');
+  const transcript = document.querySelector<HTMLOListElement>('#cms-assistant-transcript');
+  const note = document.querySelector<HTMLElement>('#cms-assistant-note');
+  const send = document.querySelector<HTMLButtonElement>('#cms-assistant-send');
+
+  // THE CONVERSATION ID LIVES FOR THE PAGE, NOT FOR THE BROWSER. It is not
+  // persisted: a conversation is the server's record, and a stale id in
+  // storage would be an id this person may no longer own.
+  let conversationId = '';
+
+  const bubble = (who: string, text: string) => {
+    if (transcript === null) return;
+    const item = document.createElement('li');
+    item.className =
+      who === 'You'
+        ? 'self-end rounded-cms bg-cms-royal-tint px-3 py-2 text-cms-body-sm text-cms-ink'
+        : 'rounded-cms bg-cms-sunken px-3 py-2 text-cms-body-sm text-cms-ink';
+    const label = document.createElement('span');
+    label.className = 'block text-cms-caption text-cms-muted';
+    label.textContent = who;
+    const body = document.createElement('span');
+    body.textContent = text;
+    item.appendChild(label);
+    item.appendChild(body);
+    transcript.appendChild(item);
+    transcript.scrollTop = transcript.scrollHeight;
+  };
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const asked = (question?.value ?? '').trim();
+    if (asked === '') return;
+    bubble('You', asked);
+    if (question !== null) question.value = '';
+    if (send !== null) send.disabled = true;
+    if (note !== null) note.textContent = 'Thinking.';
+
+    let body: Record<string, unknown> | null = null;
+    try {
+      const response = await fetch('/api/assistant', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question: asked, conversationId }),
+      });
+      body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    } catch {
+      body = null;
+    }
+
+    if (send !== null) send.disabled = false;
+    if (body === null) {
+      if (note !== null) note.textContent = '';
+      bubble('Assistant', 'The assistant could not be reached. Nothing was changed.');
+      return;
+    }
+
+    const returned = String(body.conversationId ?? '');
+    if (returned !== '') conversationId = returned;
+    bubble('Assistant', String(body.answer ?? ''));
+
+    // WHAT IT COST, ON THE SCREEN. The token counts and the latency are
+    // recorded on every message; showing them here means the person spending
+    // them can see the number rather than meeting it on an invoice.
+    const usage = body.usage as Record<string, unknown> | null;
+    if (note !== null) {
+      note.textContent =
+        usage === null
+          ? ''
+          : `${String(usage.model)} · ${String(usage.inputTokens ?? '?')} in, ` +
+            `${String(usage.outputTokens ?? '?')} out · ${String(usage.latencyMs ?? '?')}ms`;
+    }
+  });
+</script>

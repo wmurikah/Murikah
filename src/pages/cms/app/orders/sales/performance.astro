@@ -168,12 +168,12 @@ const complianceTrend =
     !mayView ? (
       <CmsErrorState
         title="You do not have access to sales order performance"
-        description="Ask a system administrator for the ORDERS.SALES_ORDER.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed || summary === null ? (
       <CmsErrorState
         title="Performance could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
@@ -445,10 +445,7 @@ const complianceTrend =
           <h2 id="products" class="sr-only">
             Products and customers
           </h2>
-          <CmsCard
-            title="Products"
-            description="Group, category and product, from the structured hierarchy."
-          >
+          <CmsCard title="Products">
             <CmsDataTable
               caption="Product performance"
               columns={[

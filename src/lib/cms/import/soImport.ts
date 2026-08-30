@@ -38,9 +38,30 @@ import {
   minutesBetween,
   type HeaderTreatment,
   type MappingReportLine,
+  loadPriorHashes,
+  rejectBatch,
+  describeFailure,
 } from './workbook.ts';
+import {
+  planLanding,
+  landingStatements,
+  clearLandingStatement,
+  SO_LANDING_TABLE,
+} from './landing.ts';
 import { verifyColumns } from './completeness.ts';
-import { insertSnapshot, SALES_ORDER_SNAPSHOT } from './snapshots.ts';
+import { decideDuplicate } from './contentHash.ts';
+import { alreadyCanonical } from './retry.ts';
+import { newTraceId } from '../errors.ts';
+import { logWriteFailure } from './writeFailure.ts';
+import {
+  planMasterData,
+  createMasterData,
+  normaliseProductCode,
+  type AccountRequest,
+  type ProductRequest,
+  type MasterDataPlan,
+  type NameMismatch,
+} from './masterData.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 const text = (v: unknown): string => String(v ?? '');
@@ -238,19 +259,70 @@ export interface SoValidation {
   batchId: string | null;
   fileSha256: string;
   duplicateOfBatchId: string | null;
+  /** The workbook's data fingerprint, independent of how the file was saved. */
+  contentSha256: string | null;
+  /** Set where the bytes differ but every cell is the same as an earlier batch. */
+  resavedOfBatchId: string | null;
+  resavedFilename: string | null;
+  resavedUploadedAt: string | null;
+  /** Documents in this file that already exist in the canonical tables. */
+  documentsAlreadyImported: number;
+  /**
+   * Set when the run could not finish. The batch is REJECTED by then, never
+   * left at VALIDATING, and this is what the operator is told.
+   */
+  rejectedReason: string | null;
   rowsReceived: number;
   uniqueDocuments: number;
+  /**
+   * Distinct (affiliate, document, line) keys, which is how many
+   * `sales_order_lines` rows a commit will write.
+   *
+   * NOT the row count. The real file's 1,386 rows describe 1,252 order lines,
+   * because one line can be loaded more than once and the extract repeats the
+   * line to say so.
+   */
+  orderLines: number;
+  /**
+   * Loading authorities beyond the first, summed over every ORDER.
+   *
+   * Distinct timestamps, never rows: the repeats are a cross-product of the
+   * loading, credit-hold and invoice events, so a line loaded seven times
+   * against two credit episodes appears fourteen times and has seven events.
+   * Per order, because that is the grain of the column the rule fills.
+   */
+  additionalLoadingEvents: number;
   rowsNew: number;
   rowsChanged: number;
   rowsDuplicate: number;
   rowsUnresolved: number;
   rowsRejected: number;
+  /**
+   * Customers and products the extract names that do not exist yet.
+   *
+   * These are no longer refusals. Under the rule this phase adopts they are
+   * what the commit WILL CREATE, and they are reported here so a person sees
+   * the counts and the lists before committing: nobody should discover 228
+   * new accounts after the fact. A preview is only a preview if it can still
+   * be stopped, so nothing below is written at validation.
+   */
+  accountsToCreate: { code: string; name: string | null; rows: number }[];
+  productsToCreate: { code: string; unitOfMeasure: string | null; rows: number }[];
+  /** A code that matched with a different name. Flagged, never overwritten. */
+  nameMismatches: { code: string; storedName: string; fileName: string }[];
+  /**
+   * What genuinely cannot be resolved and is not creatable: a blank customer
+   * code names no customer, so there is nothing to create.
+   */
   unresolvedCustomers: { code: string; name: string | null; rows: number }[];
   unresolvedProducts: { item: string; rows: number }[];
+  /** Still never created. A user is an identity, not a reference record. */
   unresolvedUsers: string[];
   report: MappingReportLine[];
   dateRange: { from: string | null; to: string | null };
   affiliates: string[];
+  /** Headers with no column in the landing table. Kept in extra_json. */
+  unmappedColumns: string[];
 }
 
 interface ResolutionMaps {
@@ -303,7 +375,23 @@ export function resolveProduct(products: Map<string, string>, item: string | nul
 export async function validateSoWorkbook(
   db: Client,
   buffer: ArrayBuffer | Uint8Array,
-  input: { filename: string; uploadedBy: string; sourceSystemId: string },
+  input: {
+    filename: string;
+    uploadedBy: string;
+    sourceSystemId: string;
+    /**
+     * Set only when reprocessing: the batch to run again, in place.
+     *
+     * HOW THIS SEPARATES THE TWO CASES. `UNIQUE(file_sha256)` and the
+     * duplicate check exist to answer one question: is somebody uploading a
+     * file that has been uploaded before? Reprocessing is not a second
+     * upload. It declares up front which batch it IS, so the question is
+     * never asked, no batch row is created and no file_objects row is
+     * written. The identity, the uploader, the upload timestamp and the file
+     * hash all stay exactly as they were.
+     */
+    reprocessBatchId?: string | null;
+  },
   ctx: WriteContext,
 ): Promise<SoValidation> {
   const completeness = await verifySourceCompleteness(db);
@@ -314,230 +402,513 @@ export async function validateSoWorkbook(
   }
 
   const fileSha256 = await hashFile(buffer);
-  const existing = await db.execute({
-    sql: `SELECT import_batch_id FROM import_batches WHERE file_sha256 = ? LIMIT 1`,
-    args: [fileSha256],
+  // REPROCESSING IS NOT A SECOND UPLOAD, so the duplicate question is not put
+  // to it. An upload asks "have these bytes been seen before"; a reprocess has
+  // already said which batch it is and is running that batch again.
+  const reprocessOf = input.reprocessBatchId ?? null;
+  // TWO QUESTIONS, ASKED IN ORDER. The bytes first, because a file uploaded
+  // unchanged should be told exactly that; then the data, which is what
+  // catches a workbook Excel has re-saved.
+  const seen = await decideDuplicate(db, buffer, {
+    importType: 'SALES_ORDER',
+    reprocessBatchId: reprocessOf,
+    fileSha256,
   });
-  if (existing.rows[0] !== undefined) {
-    // The exact file was uploaded before. The hash, not the filename, is the
-    // rule; nothing is re-imported and the previous batch is named.
+  const contentSha256 = seen.contentSha256;
+  if (seen.kind !== 'new') {
+    // The same file, or the same data saved again. Nothing is re-imported and
+    // the earlier batch is named either way; which of the two it was decides
+    // the sentence the operator reads.
     return {
       batchId: null,
       fileSha256,
-      duplicateOfBatchId: text(existing.rows[0].import_batch_id),
+      contentSha256,
+      duplicateOfBatchId: seen.kind === 'bytes' ? (seen.match?.batchId ?? null) : null,
+      resavedOfBatchId: seen.kind === 'content' ? (seen.match?.batchId ?? null) : null,
+      resavedFilename: seen.kind === 'content' ? (seen.match?.filename ?? null) : null,
+      resavedUploadedAt: seen.kind === 'content' ? (seen.match?.uploadedAt ?? null) : null,
+      documentsAlreadyImported: 0,
+      rejectedReason: null,
       rowsReceived: 0,
       uniqueDocuments: 0,
+      orderLines: 0,
+      additionalLoadingEvents: 0,
       rowsNew: 0,
       rowsChanged: 0,
       rowsDuplicate: 0,
       rowsUnresolved: 0,
       rowsRejected: 0,
+      accountsToCreate: [],
+      productsToCreate: [],
+      nameMismatches: [],
       unresolvedCustomers: [],
       unresolvedProducts: [],
       unresolvedUsers: [],
       report: [],
       dateRange: { from: null, to: null },
       affiliates: [],
+      unmappedColumns: [],
     };
   }
 
   const sheet = parseWorkbook(buffer);
   const maps = await loadResolutionMaps(db);
-  const batchId = newId('IMP');
+  const batchId = reprocessOf ?? newId('IMP');
   const now = toDbTimestamp(ctx.now);
 
-  await db.batch(
-    [
-      {
-        sql: `INSERT INTO file_objects (file_id, original_filename, storage_key, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_at)
+  // A reprocess keeps the batch it was given: the same identifier, uploader,
+  // upload timestamp and file hash. Only its rows are rebuilt, and the status
+  // is put back to VALIDATING for the duration of the run.
+  const creationStatements = [
+    {
+      sql: `INSERT INTO file_objects (file_id, original_filename, storage_key, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_at)
               VALUES (?, ?, ?, 'application/vnd.ms-excel', ?, ?, ?, ?)`,
-        args: [
-          newId('FILE'),
-          input.filename,
-          `imports/${batchId}/${input.filename}`,
-          buffer instanceof Uint8Array ? buffer.byteLength : buffer.byteLength,
-          fileSha256,
-          input.uploadedBy,
-          now,
-        ],
-      },
-      {
-        sql: `INSERT INTO import_batches
+      args: [
+        newId('FILE'),
+        input.filename,
+        `imports/${batchId}/${input.filename}`,
+        buffer instanceof Uint8Array ? buffer.byteLength : buffer.byteLength,
+        fileSha256,
+        input.uploadedBy,
+        now,
+      ],
+    },
+    {
+      sql: `INSERT INTO import_batches
                 (import_batch_id, source_system_id, import_type, original_filename, file_sha256,
                  uploaded_by_user_id, uploaded_at, rows_received, status)
               VALUES (?, ?, 'SALES_ORDER', ?, ?, ?, ?, ?, 'VALIDATING')`,
-        args: [
-          batchId,
-          input.sourceSystemId,
-          input.filename,
-          fileSha256,
-          input.uploadedBy,
-          now,
-          sheet.rows.length,
+      args: [
+        batchId,
+        input.sourceSystemId,
+        input.filename,
+        fileSha256,
+        input.uploadedBy,
+        now,
+        sheet.rows.length,
+      ],
+    },
+  ];
+
+  await db.batch(
+    reprocessOf === null
+      ? creationStatements
+      : [
+          // The same batch, run again: its previous rows and landing go, the
+          // status returns to VALIDATING, and nothing about its identity moves.
+          {
+            sql: `DELETE FROM import_rows WHERE import_batch_id = ?`,
+            args: [batchId],
+          },
+          {
+            sql: `DELETE FROM unresolved_actors WHERE import_batch_id = ?`,
+            args: [batchId],
+          },
+          {
+            sql: `UPDATE import_batches
+                    SET status = 'VALIDATING', rows_received = ?, rows_new = 0, rows_changed = 0,
+                        rows_exact_duplicate = 0, rows_rejected = 0
+                  WHERE import_batch_id = ?`,
+            args: [sheet.rows.length, batchId],
+          },
         ],
-      },
-    ],
     'write',
   );
+  // FROM HERE THE BATCH ROW EXISTS, SO EVERY EXIT MUST LEAVE IT TERMINAL.
+  // A throw below used to leave the batch at VALIDATING for ever, with rows
+  // received recorded and nothing else. Now it lands on REJECTED with the
+  // reason in the audit trail.
+  try {
+    const documents = new Set<string>();
+    const unresolvedCustomers = new Map<string, { name: string | null; rows: number }>();
+    const unresolvedProducts = new Map<string, number>();
+    const unresolvedUsers = new Set<string>();
+    let rowsNew = 0;
+    let rowsChanged = 0;
+    let rowsDuplicate = 0;
+    let rowsUnresolved = 0;
+    let rowsRejected = 0;
+    let from: string | null = null;
+    let to: string | null = null;
+    const affiliates = new Set<string>();
+    const seenInBatch = new Map<string, string[]>();
+    const statements: Stmt[] = [];
 
-  const documents = new Set<string>();
-  const unresolvedCustomers = new Map<string, { name: string | null; rows: number }>();
-  const unresolvedProducts = new Map<string, number>();
-  const unresolvedUsers = new Set<string>();
-  let rowsNew = 0;
-  let rowsChanged = 0;
-  let rowsDuplicate = 0;
-  let rowsUnresolved = 0;
-  let rowsRejected = 0;
-  let from: string | null = null;
-  let to: string | null = null;
-  const affiliates = new Set<string>();
-  const seenInBatch = new Map<string, string[]>();
-  const statements: Stmt[] = [];
-
-  for (let index = 0; index < sheet.rows.length; index++) {
-    const raw = sheet.rows[index] ?? {};
-    const row = await normaliseRow(raw, index + 1);
-    if (row.affiliateText !== null) affiliates.add(row.affiliateText);
-    if (row.documentNumber !== null && row.affiliateId !== null) {
-      documents.add(`${row.affiliateId}|${row.documentNumber}`);
+    // EVERY ROW NORMALISED FIRST, THEN ONE READ FOR THE PRIOR HASHES.
+    //
+    // This loop used to ask `SELECT DISTINCT row_hash` once per row, inside the
+    // loop. On this extract that is 1,386 outbound subrequests for a single
+    // validation, against a Cloudflare Free plan that allows 50 per request, so
+    // the run died at the 51st: the batch row existed at VALIDATING with
+    // rows_received set, and the statements that write import_rows and set
+    // READY were never reached. Resolving the whole key space up front costs a
+    // few reads whatever the extract's size.
+    const normalised = [];
+    for (let index = 0; index < sheet.rows.length; index++) {
+      normalised.push(await normaliseRow(sheet.rows[index] ?? {}, index + 1));
     }
-    if (row.orderCreatedAt !== null) {
-      if (from === null || row.orderCreatedAt < from) from = row.orderCreatedAt;
-      if (to === null || row.orderCreatedAt > to) to = row.orderCreatedAt;
+    const priorByKey = await loadPriorHashes(
+      db,
+      normalised.map((r) => r.sourceKey).filter((k): k is string => k !== null),
+      batchId,
+    );
+
+    // WHAT THIS FILE WOULD CREATE, PLANNED BUT NOT CREATED.
+    //
+    // The customers and products an extract names for the first time are no
+    // longer refusals; they are records the commit will create. Planning them
+    // here does two things: it lets a row whose customer does not exist YET
+    // count as importable rather than unresolved, which is what left all
+    // 1,386 rows of the real file in the exception queue; and it produces the
+    // counts and lists the preview puts in front of a person before they
+    // commit. Nothing is written at validation.
+    const accountRowCounts = new Map<string, number>();
+    const productRowCounts = new Map<string, number>();
+    const accountRequests: AccountRequest[] = [];
+    const productRequests: ProductRequest[] = [];
+    for (const row of normalised) {
+      if (row.customerCode !== null) {
+        accountRowCounts.set(row.customerCode, (accountRowCounts.get(row.customerCode) ?? 0) + 1);
+        accountRequests.push({
+          code: row.customerCode,
+          name: row.customerName,
+          affiliateId: row.affiliateId,
+        });
+      }
+      if (row.orderedItem !== null) {
+        const code = normaliseProductCode(row.orderedItem);
+        productRowCounts.set(code, (productRowCounts.get(code) ?? 0) + 1);
+        // The sales order extract has all 31 of its headers classified and
+        // none of them is a unit of measure, so this is always null here and
+        // the stated default applies. It is passed rather than omitted so a
+        // future extract that does carry one needs no change at this site.
+        productRequests.push({ code, unitOfMeasure: null });
+      }
+    }
+    // THE OTHER TWO FIGURES THE PREVIEW OWES A READER. Rows and documents were
+    // never the whole story: 1,386 rows describe 662 documents over 1,252
+    // order lines, and 100 of the loading authorities on those orders are
+    // beyond the first. Four separate numbers, because collapsing any pair of
+    // them is what let a commit quietly write one line 134 times.
+    const orderLineKeys = new Set<string>();
+    const authoritiesByOrder = new Map<string, Set<string>>();
+    for (const row of normalised) {
+      if (row.sourceKey !== null) orderLineKeys.add(row.sourceKey);
+      if (row.affiliateId === null || row.documentNumber === null) continue;
+      if (row.loadingAuthorityAt === null) continue;
+      const order = `${row.affiliateId}|${row.documentNumber}`;
+      const set = authoritiesByOrder.get(order) ?? new Set<string>();
+      set.add(row.loadingAuthorityAt);
+      authoritiesByOrder.set(order, set);
+    }
+    let additionalLoadingEvents = 0;
+    for (const set of authoritiesByOrder.values()) additionalLoadingEvents += set.size - 1;
+
+    const plan = await planMasterData(db, accountRequests, productRequests);
+    const willCreateAccounts = new Set(plan.accountsToCreate.map((a) => a.code));
+    const willCreateProducts = new Set(plan.productsToCreate.map((p) => p.code));
+
+    // The landing plan: which of this extract's headers this database can hold
+    // in a column of their own, and which have to go to extra_json. One read.
+    const landing = await planLanding(db, SO_LANDING_TABLE, sheet.headers);
+    if (landing !== null) {
+      // A re-landing replaces the batch's rows rather than adding to them.
+      statements.push(clearLandingStatement(SO_LANDING_TABLE, batchId));
     }
 
-    let status: 'NEW' | 'CHANGED' | 'DUPLICATE' | 'REJECTED' | 'UNRESOLVED';
-    let error: string | null = null;
+    for (let index = 0; index < sheet.rows.length; index++) {
+      const raw = sheet.rows[index] ?? {};
+      const row = normalised[index]!;
+      if (row.affiliateText !== null) affiliates.add(row.affiliateText);
+      if (row.documentNumber !== null && row.affiliateId !== null) {
+        documents.add(`${row.affiliateId}|${row.documentNumber}`);
+      }
+      if (row.orderCreatedAt !== null) {
+        if (from === null || row.orderCreatedAt < from) from = row.orderCreatedAt;
+        if (to === null || row.orderCreatedAt > to) to = row.orderCreatedAt;
+      }
 
-    if (row.sourceKey === null || row.orderCreatedAt === null) {
-      status = 'REJECTED';
-      error = 'The row lacks an identity (affiliate, document, line) or a creation timestamp.';
-      rowsRejected += 1;
-    } else {
-      const resolvedAccount =
-        row.customerCode === null ? null : (maps.accounts.get(row.customerCode) ?? null);
-      const resolvedProduct = resolveProduct(maps.products, row.orderedItem);
-      const problems: string[] = [];
-      if (resolvedAccount === null) {
-        problems.push(`unknown Oracle customer code ${row.customerCode ?? '(blank)'}`);
-        const key = row.customerCode ?? '(blank)';
-        const entry = unresolvedCustomers.get(key) ?? { name: row.customerName, rows: 0 };
-        entry.rows += 1;
-        unresolvedCustomers.set(key, entry);
-      }
-      if (resolvedProduct === null && row.orderedItem !== null) {
-        problems.push(`unmapped product ${row.orderedItem}`);
-        unresolvedProducts.set(row.orderedItem, (unresolvedProducts.get(row.orderedItem) ?? 0) + 1);
-      }
-      for (const actor of [row.createdBy, row.approver, row.creditReleasedBy]) {
-        if (actor !== null && !maps.identities.has(actor.toUpperCase())) {
-          unresolvedUsers.add(actor.toUpperCase());
+      let status: 'NEW' | 'CHANGED' | 'DUPLICATE' | 'REJECTED' | 'UNRESOLVED';
+      let error: string | null = null;
+
+      if (row.sourceKey === null || row.orderCreatedAt === null) {
+        status = 'REJECTED';
+        error = 'The row lacks an identity (affiliate, document, line) or a creation timestamp.';
+        rowsRejected += 1;
+      } else {
+        const resolvedAccount =
+          row.customerCode === null ? null : (maps.accounts.get(row.customerCode) ?? null);
+        const resolvedProduct = resolveProduct(maps.products, row.orderedItem);
+        const problems: string[] = [];
+        // A CODE THE COMMIT WILL CREATE IS NOT A PROBLEM. Only a row that
+        // names no customer at all is, because a blank code names nothing to
+        // create and nothing to look up.
+        if (resolvedAccount === null) {
+          if (row.customerCode === null) {
+            problems.push('the row names no Oracle customer code');
+            const entry = unresolvedCustomers.get('(blank)') ?? { name: row.customerName, rows: 0 };
+            entry.rows += 1;
+            unresolvedCustomers.set('(blank)', entry);
+          } else if (!willCreateAccounts.has(row.customerCode)) {
+            // Planned but not creatable: the affiliate named no country, and
+            // accounts.country_id cannot be NULL. Reported, never guessed.
+            problems.push(`unknown Oracle customer code ${row.customerCode}`);
+            const entry = unresolvedCustomers.get(row.customerCode) ?? {
+              name: row.customerName,
+              rows: 0,
+            };
+            entry.rows += 1;
+            unresolvedCustomers.set(row.customerCode, entry);
+          }
+        }
+        if (resolvedProduct === null && row.orderedItem !== null) {
+          if (!willCreateProducts.has(normaliseProductCode(row.orderedItem))) {
+            problems.push(`unmapped product ${row.orderedItem}`);
+            unresolvedProducts.set(
+              row.orderedItem,
+              (unresolvedProducts.get(row.orderedItem) ?? 0) + 1,
+            );
+          }
+        }
+        for (const actor of [row.createdBy, row.approver, row.creditReleasedBy]) {
+          if (actor !== null && !maps.identities.has(actor.toUpperCase())) {
+            unresolvedUsers.add(actor.toUpperCase());
+          }
+        }
+
+        // Change detection at the line's own grain, against every hash ever
+        // seen for this key in the DATABASE. NEW is a key nothing has seen;
+        // CHANGED is a known key whose values moved. Both are comparisons
+        // against stored state.
+        const priorHashes = new Set(priorByKey.get(row.sourceKey) ?? []);
+        // A WITHIN-BATCH REPEAT IS A DIFFERENT QUESTION, AND IT GETS ITS OWN
+        // ANSWER. 1,386 rows of the real file carry only 1,252 distinct
+        // (affiliate, document, line) keys, because one order line can be
+        // loaded more than once and the extract expresses that by repeating
+        // the line — a cross-product of the loading, credit-hold and invoice
+        // events, so a line loaded seven times against two credit episodes
+        // appears fourteen times.
+        //
+        // Such a row is competing with a SIBLING IN THE SAME FILE, not with
+        // the database, so neither NEW nor CHANGED describes it: both of those
+        // are verdicts about stored state, and calling the second loading of a
+        // truck a "change" to the first is simply false. It was being called
+        // CHANGED 131 times and DUPLICATE 3 times, which is two wrong answers
+        // rather than one.
+        //
+        // DUPLICATE, of the five the CHECK allows. Not REJECTED, which means
+        // the row could not be read, and it was read and it landed. Not
+        // UNRESOLVED, which means a reference is missing, and none is. Not
+        // NEW or CHANGED, for the reason above. DUPLICATE is the only one of
+        // the five that says what is actually true: this row adds no new
+        // canonical record. Its loading authority is not lost — every row is
+        // in so_extract_rows, the order carries the count and the range, and
+        // the snapshot records the whole set beside the one that was chosen.
+        const repeatOfEarlierRow = seenInBatch.has(row.sourceKey);
+        const batchSeen = seenInBatch.get(row.sourceKey) ?? [];
+        batchSeen.push(row.rowHash);
+        seenInBatch.set(row.sourceKey, batchSeen);
+
+        if (problems.length > 0) {
+          status = 'UNRESOLVED';
+          error = problems.join('; ');
+          rowsUnresolved += 1;
+        } else if (repeatOfEarlierRow) {
+          status = 'DUPLICATE';
+          error = 'A further event for an order line this file has already described.';
+          rowsDuplicate += 1;
+        } else if (priorHashes.size === 0) {
+          status = 'NEW';
+          rowsNew += 1;
+        } else if (priorHashes.has(row.rowHash)) {
+          status = 'DUPLICATE';
+          rowsDuplicate += 1;
+        } else {
+          status = 'CHANGED';
+          rowsChanged += 1;
         }
       }
 
-      // Change detection at the line's own grain, against EVERY hash ever
-      // seen for this key: the extract genuinely repeats keys inside one
-      // file, sometimes with differing values, so "the last one" is not a
-      // stable comparison point. A row whose exact values have been seen
-      // before is a DUPLICATE; a known key with a new hash is CHANGED; an
-      // unknown key is NEW. A byte-level reformat can therefore never
-      // produce a false CHANGED, because its values have all been seen.
-      const prior = await db.execute({
-        sql: `SELECT DISTINCT ir.row_hash FROM import_rows ir
-              WHERE ir.source_record_key = ? AND ir.import_batch_id <> ?`,
-        args: [row.sourceKey, batchId],
-      });
-      const priorHashes = new Set(
-        prior.rows.map((r) => String((r as Record<string, unknown>).row_hash)),
-      );
-      for (const seen of seenInBatch.get(row.sourceKey) ?? []) priorHashes.add(seen);
-      const batchSeen = seenInBatch.get(row.sourceKey) ?? [];
-      batchSeen.push(row.rowHash);
-      seenInBatch.set(row.sourceKey, batchSeen);
-
-      if (problems.length > 0) {
-        status = 'UNRESOLVED';
-        error = problems.join('; ');
-        rowsUnresolved += 1;
-      } else if (priorHashes.size === 0) {
-        status = 'NEW';
-        rowsNew += 1;
-      } else if (priorHashes.has(row.rowHash)) {
-        status = 'DUPLICATE';
-        rowsDuplicate += 1;
-      } else {
-        status = 'CHANGED';
-        rowsChanged += 1;
-      }
-    }
-
-    statements.push({
-      sql: `INSERT INTO import_rows
+      statements.push({
+        sql: `INSERT INTO import_rows
               (import_row_id, import_batch_id, source_row_number, source_record_key, entity_type,
                row_hash, row_status, error_message, raw_json)
             VALUES (?, ?, ?, ?, 'SALES_ORDER', ?, ?, ?, ?)`,
-      args: [
-        newId('IROW'),
-        batchId,
-        row.sourceRowNumber,
-        row.sourceKey,
-        row.rowHash,
-        status,
-        error,
-        JSON.stringify(raw),
-      ],
-    });
-  }
+        args: [
+          newId('IROW'),
+          batchId,
+          row.sourceRowNumber,
+          row.sourceKey,
+          row.rowHash,
+          status,
+          error,
+          JSON.stringify(raw),
+        ],
+      });
+    }
 
-  // Unresolved actors, once per username per batch, never a user created.
-  for (const username of unresolvedUsers) {
-    statements.push({
-      sql: `INSERT INTO unresolved_actors
+    // EVERY PARSED ROW LANDED, AS THE WORKBOOK GAVE IT.
+    //
+    // These statements join the queue the loop already built, so a 1,386-row
+    // extract lands in the same chunked writes as its import_rows and costs no
+    // round trip of its own. Landing writes only to so_extract_rows: no
+    // canonical row is created by a validation.
+    if (landing !== null) {
+      statements.push(
+        ...landingStatements(
+          landing,
+          batchId,
+          normalised.map((row, index) => ({
+            sourceRowNumber: row.sourceRowNumber,
+            sourceRecordKey: row.sourceKey,
+            rowHash: row.rowHash,
+            raw: sheet.rows[index] ?? {},
+          })),
+          now,
+          newId,
+        ),
+      );
+    }
+
+    // Unresolved actors, once per username per batch, never a user created.
+    for (const username of unresolvedUsers) {
+      statements.push({
+        sql: `INSERT INTO unresolved_actors
               (unresolved_actor_id, import_batch_id, source_system_id, external_username, status)
             VALUES (?, ?, ?, ?, 'OPEN')`,
-      args: [newId('UACT'), batchId, input.sourceSystemId, username],
-    });
-  }
-  statements.push({
-    sql: `UPDATE import_batches SET rows_new = ?, rows_changed = ?, rows_exact_duplicate = ?,
+        args: [newId('UACT'), batchId, input.sourceSystemId, username],
+      });
+    }
+    statements.push({
+      sql: `UPDATE import_batches SET rows_new = ?, rows_changed = ?, rows_exact_duplicate = ?,
             rows_rejected = ?, status = 'READY'
           WHERE import_batch_id = ?`,
-    args: [rowsNew, rowsChanged, rowsDuplicate, rowsRejected, batchId],
-  });
-  // Chunked writes: a workbook of any size lands in slices, never one giant
-  // statement array and never a whole table in memory at once.
-  for (let start = 0; start < statements.length; start += 200) {
-    await db.batch(statements.slice(start, start + 200), 'write');
-  }
+      args: [rowsNew, rowsChanged, rowsDuplicate, rowsRejected, batchId],
+    });
+    // Chunked writes: a workbook of any size lands in slices, never one giant
+    // statement array and never a whole table in memory at once.
+    for (let start = 0; start < statements.length; start += 200) {
+      await db.batch(statements.slice(start, start + 200), 'write');
+    }
 
-  return {
-    batchId,
-    fileSha256,
-    duplicateOfBatchId: null,
-    rowsReceived: sheet.rows.length,
-    uniqueDocuments: documents.size,
-    rowsNew,
-    rowsChanged,
-    rowsDuplicate,
-    rowsUnresolved,
-    rowsRejected,
-    unresolvedCustomers: [...unresolvedCustomers.entries()].map(([code, v]) => ({
-      code,
-      name: v.name,
-      rows: v.rows,
-    })),
-    unresolvedProducts: [...unresolvedProducts.entries()].map(([item, rows]) => ({ item, rows })),
-    unresolvedUsers: [...unresolvedUsers],
-    report: mappingReport(sheet.headers, sheet.rows),
-    dateRange: { from, to },
-    affiliates: [...affiliates],
-  };
+    // HOW MUCH OF THIS FILE IS ALREADY IN THE SYSTEM. A genuinely different
+    // workbook still overlaps an earlier one: an extract re-run a week later
+    // repeats every order that has not closed. Saying so before the import
+    // runs is the difference between a considered decision and a surprise.
+    const documentsAlreadyImported = (
+      await alreadyCanonical(
+        db,
+        'SALES_ORDER',
+        [...documents].map((key) => {
+          const parts = key.split('|');
+          return { affiliateId: parts[0] ?? '', documentNumber: parts[1] ?? '' };
+        }),
+      )
+    ).size;
+
+    return {
+      batchId,
+      fileSha256,
+      contentSha256,
+      duplicateOfBatchId: null,
+      resavedOfBatchId: null,
+      resavedFilename: null,
+      resavedUploadedAt: null,
+      documentsAlreadyImported,
+      rejectedReason: null,
+      rowsReceived: sheet.rows.length,
+      uniqueDocuments: documents.size,
+      orderLines: orderLineKeys.size,
+      additionalLoadingEvents,
+      rowsNew,
+      rowsChanged,
+      rowsDuplicate,
+      rowsUnresolved,
+      rowsRejected,
+      accountsToCreate: plan.accountsToCreate.map((a) => ({
+        code: a.code,
+        name: a.name,
+        rows: accountRowCounts.get(a.code) ?? 0,
+      })),
+      productsToCreate: plan.productsToCreate.map((p) => ({
+        code: p.code,
+        unitOfMeasure: p.unitOfMeasure,
+        rows: productRowCounts.get(p.code) ?? 0,
+      })),
+      nameMismatches: plan.nameMismatches.map((m) => ({
+        code: m.code,
+        storedName: m.storedName,
+        fileName: m.fileName,
+      })),
+      unresolvedCustomers: [...unresolvedCustomers.entries()].map(([code, v]) => ({
+        code,
+        name: v.name,
+        rows: v.rows,
+      })),
+      unresolvedProducts: [...unresolvedProducts.entries()].map(([item, rows]) => ({ item, rows })),
+      unresolvedUsers: [...unresolvedUsers],
+      report: mappingReport(sheet.headers, sheet.rows),
+      dateRange: { from, to },
+      affiliates: [...affiliates],
+      unmappedColumns: landing === null ? [] : landing.unmapped,
+    };
+  } catch (error) {
+    await rejectBatch(db, batchId, describeFailure(error), {
+      actorUserId: ctx.actorUserId,
+      now: toDbTimestamp(ctx.now),
+      auditId: newId('AEV'),
+    });
+    return {
+      batchId,
+      fileSha256,
+      contentSha256,
+      duplicateOfBatchId: null,
+      resavedOfBatchId: null,
+      resavedFilename: null,
+      resavedUploadedAt: null,
+      documentsAlreadyImported: 0,
+      rejectedReason:
+        'Validation could not be completed, so nothing was imported. ' + describeFailure(error),
+      rowsReceived: sheet.rows.length,
+      uniqueDocuments: 0,
+      orderLines: 0,
+      additionalLoadingEvents: 0,
+      rowsNew: 0,
+      rowsChanged: 0,
+      rowsDuplicate: 0,
+      rowsUnresolved: 0,
+      rowsRejected: 0,
+      accountsToCreate: [],
+      productsToCreate: [],
+      nameMismatches: [],
+      unresolvedCustomers: [],
+      unresolvedProducts: [],
+      unresolvedUsers: [],
+      report: [],
+      dateRange: { from: null, to: null },
+      affiliates: [],
+      unmappedColumns: [],
+    };
+  }
 }
 
 // ---- Commit ------------------------------------------------------------------
 
 export interface SoCommitResult {
+  /**
+   * Loading authorities beyond the first, summed over every order.
+   *
+   * DISTINCT timestamps, not rows. A line loaded seven times against two
+   * credit-hold episodes appears as fourteen rows, and reporting fourteen
+   * would be repeating the extract's join back at the reader. Counted per
+   * ORDER, which is the grain `sales_orders.loading_authority_at` has and the
+   * grain the rule that fills it uses.
+   */
+  additionalLoadingEvents: number;
+  /** Reference records this commit created, and the names it refused to overwrite. */
+  accountsCreated: number;
+  productsCreated: number;
+  nameMismatches: number;
   documentsCreated: number;
   documentsUpdated: number;
   documentsUnchanged: number;
@@ -561,12 +932,24 @@ interface DocumentGroup {
  * means loading. Loaded is never inferred: the file has no load timestamp,
  * so loaded_at stays NULL everywhere and no status claims otherwise.
  */
-export function deriveSoStatus(head: NormalisedSoRow): string {
+export function deriveSoStatus(
+  head: NormalisedSoRow,
+  /**
+   * The order's loading authority, which is not necessarily the head row's.
+   *
+   * The commit stores the EARLIEST authority across the whole order, and the
+   * status has to be derived from the same value or the two can disagree: an
+   * order whose head row happens to carry no authority would be reported
+   * INVOICED while its own column said LOADING. Defaulted to the head row so
+   * every existing caller keeps its meaning.
+   */
+  orderLoadingAuthorityAt: string | null = head.loadingAuthorityAt,
+): string {
   const financeApproved = head.approvalStatus === 'APPROVE' && head.approvalAt !== null;
   const creditOpen = head.creditRequired && head.creditReleaseAt === null;
   if (!financeApproved) return 'PENDING_FINANCE';
   if (creditOpen) return 'PENDING_CREDIT';
-  if (head.loadingAuthorityAt !== null) return 'LOADING';
+  if (orderLoadingAuthorityAt !== null) return 'LOADING';
   if (head.invoiceCreatedAt !== null) return 'INVOICED';
   return 'READY';
 }
@@ -579,17 +962,32 @@ export function deriveSoStatus(head: NormalisedSoRow): string {
  * document came from, so the batch's PARTIAL report can say exactly what did
  * not import rather than only that something did not.
  */
-async function isolateDocument(
+async function isolateDocuments(
   db: Client,
-  importRowIds: Map<number, string>,
-  error: unknown,
+  documents: readonly { importRowIds: Map<number, string> }[],
+  reason: string,
 ): Promise<void> {
-  const reason = `The document could not be written: ${String(error)}`.slice(0, 400);
-  const statements: Stmt[] = [...importRowIds.values()].map((importRowId) => ({
-    sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
-          WHERE import_row_id = ? AND imported_at IS NULL`,
-    args: [reason, importRowId],
-  }));
+  const statements: Stmt[] = [];
+  for (const document of documents) {
+    for (const importRowId of document.importRowIds.values()) {
+      // AND NOT ONE THAT WAS ALREADY REFUSED AT VALIDATION. A row rejected for
+      // being malformed carries its own reason, and overwriting it with a
+      // write failure would replace the true explanation with a later one that
+      // is not about this row at all. It also matters to a retry, which
+      // re-opens rejected rows: a validation rejection must stay rejected.
+      statements.push({
+        sql: `UPDATE import_rows SET row_status = 'REJECTED', error_message = ?
+              WHERE import_row_id = ? AND imported_at IS NULL
+                AND row_status <> 'REJECTED'`,
+        args: [reason.slice(0, 400), importRowId],
+      });
+    }
+  }
+  // MANY DOCUMENTS PER BATCH, NOT ONE BATCH PER DOCUMENT. Isolation used to
+  // cost a round trip per failed document, so a batch where everything failed
+  // spent more subrequests being sorry than it did importing. The whole point
+  // of this phase is that nothing in the commit is per document any more, and
+  // that has to include the unhappy path.
   for (let start = 0; start < statements.length; start += 200) {
     await db.batch(statements.slice(start, start + 200), 'write');
   }
@@ -615,13 +1013,142 @@ async function isolateDocument(
  * because the extract's approval columns are the finance approval the
  * business described, and the stage code names that meaning explicitly.
  */
+/**
+ * Plan and create the reference records a batch's rows name.
+ *
+ * Kept beside the commit rather than inside it because it is a distinct act
+ * with its own rule: it decides what to CREATE, while the commit decides what
+ * to write. Recomputing the plan against the live tables is what makes a
+ * second upload of the same file a no-op, which is criterion 9.
+ */
+async function createMasterDataForBatch(
+  db: Client,
+  rows: readonly unknown[],
+  batchId: string,
+  ctx: WriteContext,
+  now: string,
+): Promise<{
+  accounts: Map<string, string>;
+  products: Map<string, string>;
+  nameMismatches: readonly NameMismatch[];
+}> {
+  const accountRequests: AccountRequest[] = [];
+  const productRequests: ProductRequest[] = [];
+  for (const raw of rows) {
+    const record = raw as Record<string, unknown>;
+    const parsed = JSON.parse(text(record.raw_json)) as Record<string, unknown>;
+    const row = await normaliseRow(parsed, Number(record.source_row_number));
+    if (row.customerCode !== null) {
+      accountRequests.push({
+        code: row.customerCode,
+        name: row.customerName,
+        affiliateId: row.affiliateId,
+      });
+    }
+    if (row.orderedItem !== null) {
+      productRequests.push({ code: normaliseProductCode(row.orderedItem), unitOfMeasure: null });
+    }
+  }
+  const plan: MasterDataPlan = await planMasterData(db, accountRequests, productRequests);
+  return createMasterData(db, plan, batchId, ctx, now);
+}
+
+/**
+ * Read a keyed lookup for a whole batch in a handful of round trips.
+ *
+ * WHY EVERY READ BELOW IS CHUNKED. The commit used to ask its questions one
+ * document at a time: 662 documents cost 662 order lookups, 662 workflow
+ * instance lookups, 662 snapshot version reads and 1,117 stage-instance
+ * checks. Cloudflare allows 50 outbound subrequests per request on the Free
+ * plan and 1,000 on paid, and `@libsql/client/web` spends one per execute, so
+ * the real file cost 4,444 and the worker died partway through with nothing
+ * to say for itself. That is the whole of "The import could not be
+ * completed."
+ *
+ * An IN list cannot simply be unbounded either: SQLite's default
+ * SQLITE_MAX_VARIABLE_NUMBER is 999, so a 1,386-row batch would break the
+ * statement instead of the platform. 200 is comfortably inside it and turns
+ * 662 reads into four.
+ */
+const IN_CHUNK = 200;
+
+async function readInChunks(
+  db: Client,
+  values: readonly string[],
+  sql: (placeholders: string) => string,
+  onRow: (row: Record<string, unknown>) => void,
+  extraArgs: readonly unknown[] = [],
+): Promise<void> {
+  for (let start = 0; start < values.length; start += IN_CHUNK) {
+    const chunk = values.slice(start, start + IN_CHUNK);
+    if (chunk.length === 0) continue;
+    const result = await db.execute({
+      sql: sql(chunk.map(() => '?').join(',')),
+      args: [...extraArgs, ...chunk] as never[],
+    });
+    for (const raw of result.rows) onRow(raw as unknown as Record<string, unknown>);
+  }
+}
+
+/**
+ * The loading authorities an order carries, earliest first, de-duplicated.
+ *
+ * THE GRAIN THE EXTRACT ACTUALLY HAS. One order line can be loaded more than
+ * once, and the file expresses that by repeating the line: 1,386 rows carry
+ * only 1,252 distinct (affiliate, document, line) keys. A repeated row is not
+ * a duplicate and not a change; it is another event.
+ *
+ * BUT THE REPEAT IS A CROSS-PRODUCT, NOT A LIST. Measured across all 97
+ * repeated keys in the real file: the rows are a product of the event
+ * dimensions, so a line with seven loading authorities and two credit-hold
+ * episodes appears as FOURTEEN rows, not seven. Counting rows would report
+ * fourteen loadings for a line that was loaded seven times. Everything below
+ * therefore counts DISTINCT loading timestamps, which is the only figure the
+ * source actually supports.
+ */
+export function loadingAuthorities(rows: readonly NormalisedSoRow[]): string[] {
+  const distinct = new Set<string>();
+  for (const row of rows) {
+    if (row.loadingAuthorityAt !== null) distinct.add(row.loadingAuthorityAt);
+  }
+  // The timestamps are already `YYYY-MM-DD HH:MM:SS`, so lexical order IS
+  // chronological order. They are NOT compared as the raw Excel serials the
+  // landing table keeps, where a text sort only agrees with a numeric one by
+  // accident of every serial in this file having five integer digits.
+  return [...distinct].sort();
+}
+
+/**
+ * THE RULE, IN ONE SENTENCE: the order's `loading_authority_at` is the
+ * EARLIEST loading authority anywhere on the order.
+ *
+ * `sales_orders` holds one such column, per order rather than per line, and
+ * this phase adds no schema. So one of several real events has to be chosen,
+ * and the choice must be a documented rule rather than whichever row the
+ * spreadsheet happened to put first — which is what it was, and what made the
+ * figure unreproducible.
+ *
+ * EARLIEST, because of what the column feeds. The order-to-loading-authority
+ * metric measures how long the customer waited for their first truck. The
+ * later authorities are subsequent loads against the same order, and taking
+ * one of those would report the wait as longer than the customer experienced
+ * it — inflating the number that the SLA is judged on, on exactly the 73
+ * orders that load more than once.
+ *
+ * The ones not chosen are not lost. Every row is in `so_extract_rows`, the
+ * count and the range are shown on the order, and the preview reports the
+ * additional events as a figure of their own.
+ */
+export function earliestLoadingAuthority(rows: readonly NormalisedSoRow[]): string | null {
+  return loadingAuthorities(rows)[0] ?? null;
+}
+
 export async function commitSoBatch(
   db: Client,
   batchId: string,
   ctx: WriteContext,
 ): Promise<SoCommitResult> {
   const now = toDbTimestamp(ctx.now);
-  const maps = await loadResolutionMaps(db);
   const result: SoCommitResult = {
     documentsCreated: 0,
     documentsUpdated: 0,
@@ -629,17 +1156,42 @@ export async function commitSoBatch(
     documentsSkipped: 0,
     linesWritten: 0,
     workflowEventsAppended: 0,
+    accountsCreated: 0,
+    productsCreated: 0,
+    nameMismatches: 0,
+    additionalLoadingEvents: 0,
   };
 
   const rowsResult = await db.execute({
-    sql: `SELECT import_row_id, source_row_number, row_status, raw_json FROM import_rows
-          WHERE import_batch_id = ? ORDER BY source_row_number`,
+    sql: `SELECT import_row_id, source_row_number, row_status, raw_json, imported_at
+          FROM import_rows WHERE import_batch_id = ? ORDER BY source_row_number`,
     args: [batchId],
   });
 
+  // ---- The reference records this batch names for the first time ------------
+  //
+  // BEFORE ANY ORDER IS WRITTEN, because a sales order's account_id and a
+  // line's product_id are foreign keys: an order whose customer is created
+  // halfway through the run would fail on the rows that came first. The plan
+  // is recomputed here rather than carried from validation, so a record
+  // somebody created by hand in between is found and not duplicated, and a
+  // second upload of the same file creates nothing at all.
+  const created = await createMasterDataForBatch(db, rowsResult.rows, batchId, ctx, now);
+  result.accountsCreated = created.accounts.size;
+  result.productsCreated = created.products.size;
+  result.nameMismatches = created.nameMismatches.length;
+
+  // Read AFTER the creation, so the maps contain what was just created.
+  const maps = await loadResolutionMaps(db);
+
   const groups = new Map<
     string,
-    DocumentGroup & { importRowIds: Map<number, string>; statuses: Map<number, string> }
+    DocumentGroup & {
+      importRowIds: Map<number, string>;
+      statuses: Map<number, string>;
+      /** Rows this batch has already written. They are never actioned twice. */
+      alreadyImported: Set<number>;
+    }
   >();
   for (const raw of rowsResult.rows) {
     const record = raw as unknown as Record<string, unknown>;
@@ -653,10 +1205,12 @@ export async function commitSoBatch(
       rows: [],
       importRowIds: new Map<number, string>(),
       statuses: new Map<number, string>(),
+      alreadyImported: new Set<number>(),
     };
     group.rows.push(row);
     group.importRowIds.set(row.sourceRowNumber, text(record.import_row_id));
     group.statuses.set(row.sourceRowNumber, text(record.row_status));
+    if (record.imported_at !== null) group.alreadyImported.add(row.sourceRowNumber);
     groups.set(key, group);
   }
 
@@ -677,8 +1231,108 @@ export async function commitSoBatch(
     });
   }
 
+  // ---- Everything the loop needs to know, asked once ------------------------
+  //
+  // Four questions that used to be asked per document or per event. The
+  // answers are the same either way; the difference is 3,103 round trips.
+
+  // 1. Which of these documents already exist. Grouped by affiliate so the
+  //    predicate stays (affiliate, document) rather than document alone, which
+  //    would match another entity's identically numbered order.
+  const orderIdByDocKey = new Map<string, string>();
+  const documentsByAffiliate = new Map<string, string[]>();
   for (const group of groups.values()) {
+    const list = documentsByAffiliate.get(group.affiliateId) ?? [];
+    list.push(group.documentNumber);
+    documentsByAffiliate.set(group.affiliateId, list);
+  }
+  for (const [affiliateId, documents] of documentsByAffiliate) {
+    await readInChunks(
+      db,
+      documents,
+      (placeholders) =>
+        `SELECT sales_order_id, affiliate_id, document_number FROM sales_orders
+         WHERE affiliate_id = ? AND document_number IN (${placeholders})`,
+      (row) => {
+        orderIdByDocKey.set(
+          `${text(row.affiliate_id)}|${text(row.document_number)}`,
+          text(row.sales_order_id),
+        );
+      },
+      [affiliateId],
+    );
+  }
+
+  // 2. The id every document will use, decided before any write, so the reads
+  //    below can be asked about all of them at once. A minted id belongs to a
+  //    document that does not exist yet, so it has no instance and no
+  //    snapshot, and asking about it would be wasted.
+  const orderIdFor = new Map<string, string>();
+  for (const [key, group] of groups) {
+    orderIdFor.set(key, orderIdByDocKey.get(key) ?? newId('SO'));
+    void group;
+  }
+  const existingOrderIds = [...orderIdByDocKey.values()];
+
+  // 3. The workflow instance of each existing order, and 4. which of its
+  //    stages already have an instance. The stage check was 1,117 round trips
+  //    on its own, one per event the extract described.
+  const instanceByOrderId = new Map<string, string>();
+  await readInChunks(
+    db,
+    existingOrderIds,
+    (placeholders) =>
+      `SELECT workflow_instance_id, entity_id FROM workflow_instances
+       WHERE entity_type = 'SALES_ORDER' AND entity_id IN (${placeholders})`,
+    (row) => instanceByOrderId.set(text(row.entity_id), text(row.workflow_instance_id)),
+  );
+  const stageInstanceKeys = new Set<string>();
+  await readInChunks(
+    db,
+    [...instanceByOrderId.values()],
+    (placeholders) =>
+      `SELECT workflow_instance_id, workflow_stage_id FROM workflow_stage_instances
+       WHERE workflow_instance_id IN (${placeholders})`,
+    (row) =>
+      stageInstanceKeys.add(`${text(row.workflow_instance_id)}|${text(row.workflow_stage_id)}`),
+  );
+
+  // 5. The snapshot version each existing order is on. insertSnapshot reads
+  //    this per record and guards it with UNIQUE(entity_type, entity_id,
+  //    version_no); the guard is kept below, the per-record read is not.
+  const snapshotVersion = new Map<string, number>();
+  await readInChunks(
+    db,
+    existingOrderIds,
+    (placeholders) =>
+      `SELECT entity_id, MAX(version_no) AS v FROM record_snapshots
+       WHERE entity_type = 'SALES_ORDER' AND entity_id IN (${placeholders})
+       GROUP BY entity_id`,
+    (row) => snapshotVersion.set(text(row.entity_id), Number(row.v ?? 0)),
+  );
+
+  // ---- Plan every document, writing nothing ---------------------------------
+  interface PlannedDocument {
+    group: DocumentGroup & { importRowIds: Map<number, string>; statuses: Map<number, string> };
+    salesOrderId: string;
+    isNew: boolean;
+    statements: Stmt[];
+    lines: number;
+    events: number;
+    extraLoadings: number;
+  }
+  const planned: PlannedDocument[] = [];
+
+  for (const [key, group] of groups) {
+    // A ROW THAT HAS ALREADY LANDED IS NEVER ACTIONED AGAIN. `imported_at` is
+    // the record that this batch wrote this row, and re-actioning it would
+    // rewrite a canonical record that is already correct and mint a fresh
+    // snapshot version for it. That is what made a retry of a PARTIAL batch
+    // report importing 662 documents when three needed importing: the other
+    // 659 were re-written for nothing. A commit is now idempotent at the row
+    // level, which is what lets a retry press safely.
     const actionable = group.rows.filter((r) => {
+      if (group.alreadyImported.has(r.sourceRowNumber)) return false;
       const status = group.statuses.get(r.sourceRowNumber);
       return status === 'NEW' || status === 'CHANGED';
     });
@@ -699,13 +1353,30 @@ export async function commitSoBatch(
       continue;
     }
 
-    const existing = await db.execute({
-      sql: `SELECT sales_order_id FROM sales_orders WHERE affiliate_id = ? AND document_number = ? LIMIT 1`,
-      args: [group.affiliateId, group.documentNumber],
-    });
-    const existingId = existing.rows[0]?.sales_order_id;
-    const salesOrderId = existingId === undefined ? newId('SO') : text(existingId);
-    const status = deriveSoStatus(head);
+    const existingId = orderIdByDocKey.get(key);
+    const salesOrderId = orderIdFor.get(key)!;
+
+    // THE ORDER'S LOADING AUTHORITY, BY THE RULE. Computed from every row of
+    // the document, because a loading authority is a fact of the order
+    // whatever status its row carries, and de-duplicated because the repeats
+    // are a cross-product rather than a list of events.
+    const authorities = loadingAuthorities(group.rows);
+    const loadingAuthorityAt = authorities[0] ?? null;
+    if (authorities.length > 1) result.additionalLoadingEvents += authorities.length - 1;
+
+    // The credit-hold episodes the order carried, counted the same way: by
+    // distinct (held at, released at), never by row.
+    const creditHoldEpisodes = [
+      ...new Set(
+        group.rows
+          .filter((r) => r.creditHoldAt !== null)
+          .map((r) => `${r.creditHoldAt}|${r.creditReleaseAt ?? ''}`),
+      ),
+    ];
+
+    // Derived from the SAME value the column will hold, so the two can never
+    // report different things about one order.
+    const status = deriveSoStatus(head, loadingAuthorityAt);
     const statements: Stmt[] = [];
 
     if (existingId === undefined) {
@@ -727,7 +1398,7 @@ export async function commitSoBatch(
           head.creditRequired ? 1 : 0,
           head.creditReleaseReason,
           head.invoiceCreatedAt,
-          head.loadingAuthorityAt,
+          loadingAuthorityAt,
           status,
           now,
         ],
@@ -741,40 +1412,55 @@ export async function commitSoBatch(
           head.creditRequired ? 1 : 0,
           head.creditReleaseReason,
           head.invoiceCreatedAt,
-          head.loadingAuthorityAt,
+          loadingAuthorityAt,
           status,
           salesOrderId,
         ],
       });
     }
 
-    // Lines: only rows whose product resolves. Unresolved lines stay in the
-    // exception queue for revalidation; the order does not wait for them.
+    // ---- Lines: ONE per (affiliate, document, line) -------------------------
+    //
+    // The repeated rows describe one line loaded several times, so they
+    // collapse to one `sales_order_lines` row. Every column of the line is
+    // identical across the group by construction — the repeats differ only in
+    // the event columns, which the line table does not hold — so there is no
+    // ambiguity about what to write.
+    //
+    // The upsert stays. It is what makes a re-upload idempotent, and it is NOT
+    // what made this correct: with 1,386 rows and 1,252 keys it was silently
+    // overwriting a line 134 times and letting the last row win, which is how
+    // an arbitrary loading authority reached the order.
+    const byLine = new Map<number, NormalisedSoRow>();
     for (const row of actionable) {
+      if (row.lineNumber === null) continue;
+      if (!byLine.has(row.lineNumber)) byLine.set(row.lineNumber, row);
+    }
+    let lines = 0;
+    for (const [lineNumber, row] of byLine) {
       const productId = resolveProduct(maps.products, row.orderedItem);
-      if (productId === null || row.lineNumber === null) continue;
+      if (productId === null) continue;
       statements.push({
         sql: `INSERT INTO sales_order_lines
                 (sales_order_line_id, sales_order_id, line_number, product_id, quantity,
                  unit_price, line_value)
               VALUES (?, ?, ?, ?, NULL, NULL, NULL)
               ON CONFLICT(sales_order_id, line_number) DO UPDATE SET product_id = excluded.product_id`,
-        args: [newId('SOL'), salesOrderId, row.lineNumber, productId],
+        args: [newId('SOL'), salesOrderId, lineNumber, productId],
       });
-      result.linesWritten += 1;
+      lines += 1;
     }
 
-    // Workflow reconstruction, idempotent on (instance, stage).
+    // ---- Workflow reconstruction, idempotent on (instance, stage) -----------
+    let events = 0;
     const finance = stages.get('FINANCE_APPROVAL');
     if (finance !== undefined) {
-      const instance = await db.execute({
-        sql: `SELECT workflow_instance_id FROM workflow_instances
-              WHERE entity_type = 'SALES_ORDER' AND entity_id = ? LIMIT 1`,
-        args: [salesOrderId],
-      });
-      let workflowInstanceId = instance.rows[0]?.workflow_instance_id as string | undefined;
+      let workflowInstanceId = instanceByOrderId.get(salesOrderId);
       if (workflowInstanceId === undefined) {
         workflowInstanceId = newId('WFI');
+        // Recorded so a second document for the same order in one batch, and
+        // the stage checks below, both see the instance this run is minting.
+        instanceByOrderId.set(salesOrderId, workflowInstanceId);
         statements.push({
           sql: `INSERT INTO workflow_instances
                   (workflow_instance_id, workflow_definition_id, entity_type, entity_id, status,
@@ -792,12 +1478,9 @@ export async function commitSoBatch(
       }
       const financeUser =
         head.approver === null ? null : (maps.identities.get(head.approver.toUpperCase()) ?? null);
-      const financeExists = await db.execute({
-        sql: `SELECT workflow_stage_instance_id FROM workflow_stage_instances
-              WHERE workflow_instance_id = ? AND workflow_stage_id = ? LIMIT 1`,
-        args: [String(workflowInstanceId), finance.stageId],
-      });
-      if (financeExists.rows[0] === undefined && head.approvalAt !== null) {
+      const financeKey = `${workflowInstanceId}|${finance.stageId}`;
+      if (!stageInstanceKeys.has(financeKey) && head.approvalAt !== null) {
+        stageInstanceKeys.add(financeKey);
         statements.push({
           sql: `INSERT INTO workflow_stage_instances
                   (workflow_stage_instance_id, workflow_instance_id, workflow_stage_id,
@@ -805,7 +1488,7 @@ export async function commitSoBatch(
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Reconstructed from the SO extract')`,
           args: [
             newId('WSI'),
-            String(workflowInstanceId),
+            workflowInstanceId,
             finance.stageId,
             financeUser,
             head.approvalStatus === 'REJECT' ? 'REJECTED' : 'APPROVED',
@@ -814,16 +1497,13 @@ export async function commitSoBatch(
             head.approvalAt,
           ],
         });
-        result.workflowEventsAppended += 1;
+        events += 1;
       }
       const credit = stages.get('CREDIT_CHECK');
       if (credit !== undefined && head.creditRequired && head.creditHoldAt !== null) {
-        const creditExists = await db.execute({
-          sql: `SELECT workflow_stage_instance_id FROM workflow_stage_instances
-                WHERE workflow_instance_id = ? AND workflow_stage_id = ? LIMIT 1`,
-          args: [String(workflowInstanceId), credit.stageId],
-        });
-        if (creditExists.rows[0] === undefined) {
+        const creditKey = `${workflowInstanceId}|${credit.stageId}`;
+        if (!stageInstanceKeys.has(creditKey)) {
+          stageInstanceKeys.add(creditKey);
           const creditUser =
             head.creditReleasedBy === null
               ? null
@@ -835,7 +1515,7 @@ export async function commitSoBatch(
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Reconstructed from the SO extract credit columns')`,
             args: [
               newId('WSI'),
-              String(workflowInstanceId),
+              workflowInstanceId,
               credit.stageId,
               creditUser,
               head.creditReleaseAt === null ? 'ACTIVE' : 'APPROVED',
@@ -844,64 +1524,247 @@ export async function commitSoBatch(
               head.creditReleaseAt,
             ],
           });
-          result.workflowEventsAppended += 1;
+          events += 1;
         }
       }
     }
 
-    // The rows this document consumed become part of the same transaction.
-    for (const row of actionable) {
+    // Every row the document consumed, including the repeats: they belong to
+    // this order and their provenance says so, whatever the canonical model
+    // could hold of them.
+    for (const row of group.rows) {
       const importRowId = group.importRowIds.get(row.sourceRowNumber);
-      if (importRowId !== undefined) {
-        statements.push({
-          sql: `UPDATE import_rows SET entity_id = ?, imported_at = ? WHERE import_row_id = ?`,
-          args: [salesOrderId, now, importRowId],
-        });
-      }
+      const status = group.statuses.get(row.sourceRowNumber);
+      if (importRowId === undefined) continue;
+      // Including the repeats, which are DUPLICATE: they belong to this order
+      // and their provenance says so, whatever the canonical model could hold
+      // of them.
+      if (status !== 'NEW' && status !== 'CHANGED' && status !== 'DUPLICATE') continue;
+      statements.push({
+        sql: `UPDATE import_rows SET entity_id = ?, imported_at = ? WHERE import_row_id = ?`,
+        args: [salesOrderId, now, importRowId],
+      });
     }
 
-    // The document is the unit of integrity: everything above lands in one
-    // transaction, and a document that cannot land is isolated here rather
-    // than taking the rest of the batch down with it. That is the stated
-    // policy, and the batch reports PARTIAL with the reason attached to the
-    // rows that failed.
-    try {
-      await db.batch(statements, 'write');
-    } catch (error) {
-      await isolateDocument(db, group.importRowIds, error);
-      result.documentsSkipped += 1;
-      result.linesWritten -= actionable.filter(
-        (row) => resolveProduct(maps.products, row.orderedItem) !== null && row.lineNumber !== null,
-      ).length;
+    // The snapshot, planned with the version this run allocates. The database
+    // still guards it: UNIQUE(entity_type, entity_id, version_no) is what
+    // makes two concurrent commits impossible to reconcile silently, and the
+    // fallback below re-reads and retries exactly as before if it fires.
+    const nextVersion = (snapshotVersion.get(salesOrderId) ?? 0) + 1;
+    snapshotVersion.set(salesOrderId, nextVersion);
+    const snapshotId = newId('SNAP');
+    const headRow = actionable[0] ?? head;
+    statements.push(
+      {
+        sql: `UPDATE record_snapshots SET is_current = 0
+              WHERE entity_type = 'SALES_ORDER' AND entity_id = ? AND is_current = 1`,
+        args: [salesOrderId],
+      },
+      {
+        sql: `INSERT INTO record_snapshots
+                (snapshot_id, entity_type, entity_id, import_batch_id, source_record_key,
+                 version_no, row_hash, snapshot_json, captured_at, is_current)
+              VALUES (?, 'SALES_ORDER', ?, ?, ?, ?, ?, ?, ?, 1)`,
+        args: [
+          snapshotId,
+          salesOrderId,
+          batchId,
+          `${group.affiliateId}|${group.documentNumber}`,
+          nextVersion,
+          headRow.rowHash,
+          JSON.stringify({
+            documentNumber: group.documentNumber,
+            affiliateId: group.affiliateId,
+            accountId,
+            orderCreatedAt: head.orderCreatedAt,
+            approvalAt: head.approvalAt,
+            approvalStatus: head.approvalStatus,
+            creditRequired: head.creditRequired,
+            invoiceCreatedAt: head.invoiceCreatedAt,
+            // The chosen one, the rule that chose it, and every one there was,
+            // so the snapshot records the decision and not only its result.
+            loadingAuthorityAt,
+            loadingAuthorityRule: 'earliest',
+            loadingAuthorities: authorities,
+            // THE OTHER DIMENSION THE REPEATS CARRY. The rows are a
+            // cross-product, and loading is only one of its axes: 38 lines in
+            // the real file carry a SECOND credit-hold episode, which is why a
+            // line loaded seven times can appear fourteen times. The canonical
+            // model holds one credit envelope per order and this phase adds no
+            // schema, so the count is recorded here rather than being lost
+            // between a row count nobody can explain and a single date. Every
+            // episode itself is in so_extract_rows.
+            creditHoldEpisodes: creditHoldEpisodes.length,
+            status,
+            lines: [...byLine.keys()].sort((a, b) => a - b),
+          }),
+          now,
+        ],
+      },
+      {
+        sql: `UPDATE sales_orders SET latest_snapshot_id = ? WHERE sales_order_id = ?`,
+        args: [snapshotId, salesOrderId],
+      },
+    );
+
+    planned.push({
+      group,
+      salesOrderId,
+      isNew: existingId === undefined,
+      statements,
+      lines,
+      events,
+      extraLoadings: Math.max(0, authorities.length - 1),
+    });
+  }
+
+  // ---- Write, in chunks, isolating a document only when one actually fails ---
+  //
+  // THE DOCUMENT IS STILL THE UNIT OF INTEGRITY. It just is not the unit of
+  // ROUND TRIPS any more. Documents are packed into batches until the
+  // statement budget is reached and sent together; if a batch is refused,
+  // its documents are retried one at a time so the broken one is isolated
+  // with its own reason and the rest still land. The happy path costs a
+  // handful of writes and the unhappy path costs what it used to.
+  // ---- Write, in chunks, isolating a document only when one actually fails ---
+  //
+  // THE DOCUMENT IS STILL THE UNIT OF INTEGRITY. It just is not the unit of
+  // ROUND TRIPS any more. Documents are packed into batches until the
+  // statement budget is reached and sent together; if a batch is refused, its
+  // documents are retried one at a time so the broken one is isolated with its
+  // own reason and the rest still land.
+  //
+  // AND THE UNHAPPY PATH IS BOUNDED, which is the part that matters. Retrying
+  // every document of every chunk individually would cost roughly 2 round
+  // trips per document: on a batch where everything fails that is about 1,400
+  // for this file, which is over Cloudflare's paid limit of 1,000 and 28 times
+  // the free one. It would reproduce the exact production symptom — the worker
+  // dies mid-flight, the batch is stranded at READY, and the browser says "The
+  // import could not be completed." — while claiming to have fixed it.
+  //
+  // So there is a budget. A handful of bad documents in a good batch is worth
+  // finding one by one. Hundreds of bad documents is not a hundred separate
+  // problems, it is one systemic problem, and the honest answer is to stop
+  // guessing, name the constraint from the failure already in hand, and mark
+  // the rest without pretending each was examined.
+  const WRITE_CHUNK = 400;
+  // EIGHT, AND THE NUMBER IS THE PLATFORM'S NOT A TASTE. A retry of a failed
+  // batch re-enters this path by definition, and the whole request has already
+  // spent about 36 subrequests by the time it gets here. Cloudflare allows 50.
+  // Twenty-four individual retries would put the worst case at 60 and kill the
+  // request mid-flight — which is the exact failure this control exists to
+  // recover from, reproduced by the recovery.
+  const MAX_INDIVIDUAL_RETRIES = 8;
+
+  const chunks: PlannedDocument[][] = [];
+  let current: PlannedDocument[] = [];
+  let size = 0;
+  for (const document of planned) {
+    if (current.length > 0 && size + document.statements.length > WRITE_CHUNK) {
+      chunks.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(document);
+    size += document.statements.length;
+  }
+  if (current.length > 0) chunks.push(current);
+
+  const succeed = (document: PlannedDocument) => {
+    result.linesWritten += document.lines;
+    result.workflowEventsAppended += document.events;
+    if (document.isNew) result.documentsCreated += 1;
+    else result.documentsUpdated += 1;
+  };
+  const failed: { document: PlannedDocument; reason: string }[] = [];
+  const fail = (document: PlannedDocument, reason: string) => {
+    failed.push({ document, reason });
+    result.documentsSkipped += 1;
+    result.additionalLoadingEvents -= document.extraLoadings;
+  };
+
+  let retriesLeft = MAX_INDIVIDUAL_RETRIES;
+  let abandoned: PlannedDocument[] = [];
+  let systemicReason: string | null = null;
+
+  for (const [index, chunk] of chunks.entries()) {
+    if (systemicReason !== null) {
+      abandoned = abandoned.concat(chunk);
       continue;
     }
-    // The snapshot after the canonical write, per the ordering rule:
-    // latest_snapshot_id moves only once both have committed.
-    const headRow = actionable[0] ?? head;
-    await insertSnapshot(
+    const statements = chunk.flatMap((d) => d.statements);
+    try {
+      await db.batch(statements, 'write');
+      for (const document of chunk) succeed(document);
+      continue;
+    } catch (error) {
+      // A refused chunk says only that ONE of its documents is bad. Naming
+      // which, with the table, the constraint and the values, is what the log
+      // is for; the trace id is what a person quotes to find this line.
+      const traceId = newTraceId();
+      const report = await logWriteFailure(db, 'import.so.commit', traceId, statements, error);
+      const reason =
+        `The document could not be written: ${report.constraint}` +
+        `${report.table === null ? '' : ` on ${report.table}`}. Trace ${traceId}.`;
+
+      if (chunk.length === 1) {
+        fail(chunk[0]!, reason);
+        continue;
+      }
+      if (retriesLeft < chunk.length) {
+        // Not enough budget to examine this chunk document by document. Every
+        // remaining chunk is abandoned with the constraint that was actually
+        // reported, rather than spending a thousand round trips discovering
+        // the same thing 662 times.
+        systemicReason =
+          `${reason} The batch was stopped after ${index + 1} of ${chunks.length} write ` +
+          `batches: too many documents were failing for each to be examined on its own.`;
+        abandoned = abandoned.concat(chunk);
+        continue;
+      }
+      // Retried one document at a time, which is the old behaviour, reached
+      // only when something genuinely failed and the budget allows it.
+      for (const document of chunk) {
+        retriesLeft -= 1;
+        try {
+          await db.batch(document.statements, 'write');
+          succeed(document);
+        } catch (documentError) {
+          const documentTrace = newTraceId();
+          const documentReport = await logWriteFailure(
+            db,
+            'import.so.commit',
+            documentTrace,
+            document.statements,
+            documentError,
+          );
+          fail(
+            document,
+            `The document could not be written: ${documentReport.constraint}` +
+              `${documentReport.table === null ? '' : ` on ${documentReport.table}`}. ` +
+              `Trace ${documentTrace}.`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const document of abandoned) fail(document, systemicReason ?? 'The batch was stopped.');
+
+  // One pass over everything that failed, grouped by the reason it failed for,
+  // so the whole unhappy path costs a few round trips rather than one each.
+  const byReason = new Map<string, PlannedDocument[]>();
+  for (const entry of failed) {
+    const list = byReason.get(entry.reason) ?? [];
+    list.push(entry.document);
+    byReason.set(entry.reason, list);
+  }
+  for (const [reason, documents] of byReason) {
+    await isolateDocuments(
       db,
-      SALES_ORDER_SNAPSHOT,
-      salesOrderId,
-      `${group.affiliateId}|${group.documentNumber}`,
-      headRow.rowHash,
-      JSON.stringify({
-        documentNumber: group.documentNumber,
-        affiliateId: group.affiliateId,
-        accountId,
-        orderCreatedAt: head.orderCreatedAt,
-        approvalAt: head.approvalAt,
-        approvalStatus: head.approvalStatus,
-        creditRequired: head.creditRequired,
-        invoiceCreatedAt: head.invoiceCreatedAt,
-        loadingAuthorityAt: head.loadingAuthorityAt,
-        status,
-        lines: group.rows.map((r) => ({ line: r.lineNumber, item: r.orderedItem })),
-      }),
-      batchId,
-      now,
+      documents.map((d) => ({ importRowIds: d.group.importRowIds })),
+      reason,
     );
-    if (existingId === undefined) result.documentsCreated += 1;
-    else result.documentsUpdated += 1;
   }
 
   const finalStatus = result.documentsSkipped > 0 ? 'PARTIAL' : 'IMPORTED';

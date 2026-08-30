@@ -78,7 +78,7 @@ const { caseId } = Astro.props;
         replyError.hidden = false;
         return;
       }
-      void post(`/api/portal/service/${caseId}`, { message }, replyError, replySend);
+      void post(`/api/portal/helpdesk/${caseId}`, { message }, replyError, replySend);
     });
   }
 

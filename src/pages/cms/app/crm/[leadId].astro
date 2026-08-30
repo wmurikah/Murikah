@@ -145,17 +145,17 @@ const facts =
     !mayRead ? (
       <CmsErrorState
         title="You do not have access to leads"
-        description="Ask a system administrator for the CRM.LEADS.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
       <CmsErrorState
         title="This lead could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : lead === null ? (
       <CmsErrorState
         title="Lead not found"
-        description="Either it does not exist or it sits outside your data scope. The two are answered the same way on purpose, so this page never confirms that a record you may not see exists."
+        description="The lead may have been removed, or you may not have access to it."
       />
     ) : (
       <Fragment>
@@ -254,10 +254,7 @@ const facts =
             )}
           </CmsCard>
 
-          <CmsCard
-            title="Qualification"
-            description="Four dimensions, each scored 0 to 5. The total is arithmetic, not a verdict: it does not gate conversion and no threshold is applied to it anywhere in this product."
-          >
+          <CmsCard title="Qualification">
             {qualification === null ? (
               <CmsEmptyState
                 icon="statusInfo"

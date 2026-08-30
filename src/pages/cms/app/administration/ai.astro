@@ -1,0 +1,285 @@
+---
+/**
+ * Administration → AI.
+ *
+ * THERE IS NO FIELD FOR THE KEY, AND THAT IS THE FEATURE. What an
+ * administrator types is the NAME of a Worker secret. The value never reaches
+ * this form, this request, or any row: a key in the database is readable by
+ * anyone holding the Turso token, lands in every backup and every copy taken
+ * for staging, and cannot be rotated without an UPDATE against production.
+ *
+ * WHAT THE SCREEN SHOWS INSTEAD, so an administrator can still see the
+ * connection is live:
+ *
+ *   Secret present   Read from this Worker's environment at render time. A
+ *                    boolean, derived, never stored.
+ *   Last verified    `last_verify_status` and `last_verified_at`, written by
+ *                    the smallest call that proves the key opens the model.
+ *
+ * Between them the two answer "is this working" without the value ever having
+ * existed outside the secret store.
+ */
+import { env } from 'cloudflare:workers';
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
+import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { canManageUsers } from '@/lib/cms/permissions';
+import { listProviders, PROVIDER_TYPES, PURPOSES, type AiProvider } from '@/lib/cms/ai/providers';
+import { secretPresent } from '@/lib/cms/ai/model';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageUsers(permissions);
+
+let providers: AiProvider[] = [];
+let loadFailed = false;
+if (mayManage) {
+  try {
+    // ONE ROUND TRIP. The secret check is not a query: it reads this Worker's
+    // own environment, which costs nothing and reaches no network.
+    providers = await listProviders(await getDb(getCmsEnv()));
+  } catch (error) {
+    console.error('[cms.admin.ai] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const environment = env as unknown as Record<string, unknown>;
+const present = new Map(
+  providers.map((p) => [p.aiProviderId, secretPresent(environment, p.secretName)]),
+);
+
+const VERIFY_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'neutral'>> = {
+  OK: 'success',
+  UNAUTHORISED: 'danger',
+  UNREACHABLE: 'warning',
+  ERROR: 'danger',
+};
+const VERIFY_WORD: Readonly<Record<string, string>> = {
+  OK: 'Answered',
+  UNAUTHORISED: 'Key refused',
+  UNREACHABLE: 'Could not be reached',
+  ERROR: 'Failed',
+};
+---
+
+<CmsLayout title="AI">
+  <CmsPageHeader
+    title="AI"
+    crumbs={[
+      { label: 'Home', href: '/app' },
+      { label: 'Administration', href: '/app/administration' },
+      { label: 'AI' },
+    ]}
+    definition={'A provider is a model this system may call. The key is held as a Worker secret and this screen stores only its name: the value is never written to the database, so it cannot appear in a backup and is rotated with wrangler rather than with an UPDATE.'}
+  >
+    {
+      mayManage && (
+        <CmsButton slot="actions" variant="primary" data-cms-modal-open="cms-ai-new">
+          Add a provider
+        </CmsButton>
+      )
+    }
+  </CmsPageHeader>
+
+  {
+    !mayManage && (
+      <CmsEmptyState
+        title="You do not have permission to configure AI"
+        description="Ask an administrator for access."
+      />
+    )
+  }
+  {
+    loadFailed && (
+      <CmsErrorState
+        title="The providers could not be loaded"
+        description="Please try again in a moment."
+      />
+    )
+  }
+
+  {
+    mayManage && !loadFailed && providers.length === 0 && (
+      <CmsEmptyState
+        title="No provider is configured"
+        description="Add one to switch the assistant and the message classifier on."
+      />
+    )
+  }
+
+  {
+    mayManage && providers.length > 0 && (
+      <CmsCard title="Providers">
+        <ul class="flex flex-col gap-2">
+          {providers.map((p) => (
+            <li class="rounded-cms border border-cms-line px-3 py-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-cms-body-sm font-semibold text-cms-ink">{p.providerName}</span>
+                <span class="flex items-center gap-2">
+                  <CmsBadge
+                    tone={p.active ? 'success' : 'neutral'}
+                    label={p.active ? 'Active' : 'Off'}
+                  />
+                  <CmsBadge
+                    tone={present.get(p.aiProviderId) === true ? 'success' : 'danger'}
+                    label={
+                      present.get(p.aiProviderId) === true ? 'Secret present' : 'Secret missing'
+                    }
+                  />
+                  {p.lastVerifyStatus !== null && (
+                    <CmsBadge
+                      tone={VERIFY_TONE[p.lastVerifyStatus] ?? 'neutral'}
+                      label={VERIFY_WORD[p.lastVerifyStatus] ?? p.lastVerifyStatus}
+                    />
+                  )}
+                </span>
+              </div>
+              <dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-cms-caption text-cms-muted sm:grid-cols-4">
+                <div>
+                  <dt class="inline">Type</dt> <dd class="inline text-cms-ink">{p.providerType}</dd>
+                </div>
+                <div>
+                  <dt class="inline">Model</dt> <dd class="inline text-cms-ink">{p.model}</dd>
+                </div>
+                <div>
+                  <dt class="inline">For</dt> <dd class="inline text-cms-ink">{p.purpose}</dd>
+                </div>
+                <div>
+                  <dt class="inline">Secret</dt>{' '}
+                  <dd class="inline font-mono text-cms-ink">{p.secretName}</dd>
+                </div>
+                {p.lastVerifiedAt !== null && (
+                  <div class="col-span-2">
+                    <dt class="inline">Checked</dt>{' '}
+                    <dd class="inline text-cms-ink">{p.lastVerifiedAt}</dd>
+                  </div>
+                )}
+              </dl>
+              <div class="mt-2">
+                <CmsButton variant="ghost" data-cms-ai-verify={p.aiProviderId}>
+                  Test the connection
+                </CmsButton>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CmsCard>
+    )
+  }
+
+  <p
+    id="cms-ai-message"
+    role="status"
+    aria-live="polite"
+    class="mt-4 text-cms-body-sm text-cms-muted"
+  >
+  </p>
+
+  {
+    mayManage && (
+      <CmsDrawer id="cms-ai-new" title="Add a provider">
+        <form id="cms-ai-form" class="flex flex-col gap-4">
+          <CmsInput id="ai-name" name="providerName" label="Name" required />
+          <CmsSelect
+            id="ai-type"
+            name="providerType"
+            label="Type"
+            required
+            options={PROVIDER_TYPES.map((t) => ({ value: t, label: t }))}
+          />
+          <CmsInput id="ai-model" name="model" label="Model" required />
+          <CmsInput id="ai-secret" name="secretName" label="Worker secret name" required />
+          <CmsSelect
+            id="ai-purpose"
+            name="purpose"
+            label="Purpose"
+            required
+            options={PURPOSES.map((p) => ({ value: p, label: p }))}
+          />
+          <CmsInput id="ai-base" name="baseUrl" label="Base URL" type="url" />
+          <CmsInput
+            id="ai-max"
+            name="maxOutputTokens"
+            label="Maximum output tokens"
+            type="number"
+          />
+          <CmsInput id="ai-temp" name="temperature" label="Temperature" type="number" step="0.1" />
+          <CmsCheckbox id="ai-active" name="active" label="Active" />
+          <CmsButton type="submit" variant="primary">
+            Save
+          </CmsButton>
+        </form>
+      </CmsDrawer>
+    )
+  }
+</CmsLayout>
+
+<script>
+  const message = document.querySelector<HTMLElement>('#cms-ai-message');
+  const say = (text: string) => {
+    if (message) message.textContent = text;
+  };
+
+  document
+    .querySelector<HTMLFormElement>('#cms-ai-form')
+    ?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.target as HTMLFormElement;
+      const data = new FormData(form);
+      const payload: Record<string, unknown> = {};
+      for (const [key, value] of data.entries()) payload[key] = value;
+      payload.active = data.get('active') !== null;
+      const response = await fetch('/api/admin/ai', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok) {
+        const errors = (body?.errors ?? []) as { message: string }[];
+        say(errors.map((e) => e.message).join(' ') || 'The provider could not be saved.');
+        return;
+      }
+      location.reload();
+    });
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-cms-ai-verify]')) {
+    button.addEventListener('click', async () => {
+      const id = button.dataset.cmsAiVerify ?? '';
+      say('Testing.');
+      const response = await fetch(`/api/admin/ai/${encodeURIComponent(id)}/verify`, {
+        method: 'POST',
+      });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      const status = String(body?.status ?? 'ERROR');
+      // THE SECRET'S PRESENCE AND THE CALL'S RESULT ARE DIFFERENT FACTS. A
+      // missing secret is fixed with wrangler; a refused key is fixed with the
+      // provider. Saying which one it is saves an hour.
+      if (body?.secretPresent === false) {
+        say('That Worker secret is not set on this deployment. Set it, then test again.');
+        return;
+      }
+      say(
+        status === 'OK'
+          ? 'The provider answered.'
+          : status === 'UNAUTHORISED'
+            ? 'The key was refused. Rotate it and test again.'
+            : status === 'UNREACHABLE'
+              ? 'The provider could not be reached. Try again shortly.'
+              : 'The call failed.',
+      );
+    });
+  }
+</script>

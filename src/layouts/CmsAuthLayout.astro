@@ -69,15 +69,21 @@ const pageTitle = `${title} - Hass Petroleum`;
       */
       }
       <aside
-        class="order-first flex flex-col justify-between gap-10 bg-cms-navy px-6 py-6 sm:px-10 lg:order-1 lg:px-14 lg:py-16"
+        class="relative order-first flex flex-col justify-between gap-10 overflow-hidden border-r border-white/10 bg-cms-navy px-6 py-6 sm:px-10 lg:order-1 lg:px-14 lg:py-16"
         aria-hidden="true"
       >
         <CmsWordmark tone="onNavy" size="lg" />
-        <p class="hidden max-w-sm text-cms-display font-semibold text-balance text-white lg:block">
-          One view of the customer, from first enquiry to closed ticket.
-        </p>
+        <div class="hidden max-w-md lg:block">
+          <span class="mb-6 block h-1 w-12 rounded-full bg-cms-gold" aria-hidden="true"></span>
+          <p class="text-cms-display font-semibold tracking-tight text-balance text-white">
+            Customer operations, in one calm view.
+          </p>
+          <p class="mt-4 max-w-sm text-cms-body text-cms-rail-text">
+            From first enquiry to fulfilled order and resolved service request.
+          </p>
+        </div>
         <p class="hidden text-cms-caption text-cms-rail-muted lg:block">
-          Customer Relationship, Service &amp; SLA Management System
+          Customer Relationship, Helpdesk &amp; SLA Management System
         </p>
       </aside>
     </div>

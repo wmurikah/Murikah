@@ -142,12 +142,12 @@ const bottleneckChart = distributionChart(
     !mayView ? (
       <CmsErrorState
         title="You do not have access to purchase order performance"
-        description="Ask a system administrator for the ORDERS.PURCHASE_ORDER.VIEW permission."
+        description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed || durationSet === null ? (
       <CmsErrorState
         title="Performance could not be loaded"
-        description="The database did not answer."
+        description="Please try again in a moment."
       />
     ) : (
       <Fragment>
@@ -289,10 +289,7 @@ const bottleneckChart = distributionChart(
           <h2 id="stages" class="sr-only">
             Stages
           </h2>
-          <CmsCard
-            title="Stage turnaround"
-            description="The stages these orders actually used. A level nobody used has no row here."
-          >
+          <CmsCard title="Stage turnaround">
             <CmsDataTable
               caption="Stage turnaround"
               columns={[
@@ -416,10 +413,7 @@ const bottleneckChart = distributionChart(
           <h2 id="mix" class="sr-only">
             What was bought
           </h2>
-          <CmsCard
-            title="What these orders were for"
-            description="Catalogue groups where the order has resolved lines, and the source's own classification where it does not."
-          >
+          <CmsCard title="What these orders were for">
             <CmsDataTable
               caption="Procurement mix"
               columns={[
