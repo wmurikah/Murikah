@@ -74,6 +74,12 @@ export interface RoleGrant {
   isAllowed: boolean;
 }
 
+export interface Grant {
+  moduleCode: string;
+  actionCode: string;
+  isAllowed: boolean;
+}
+
 /**
  * The reference rows every grant depends on, as batch statements.
  *

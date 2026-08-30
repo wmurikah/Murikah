@@ -220,6 +220,10 @@ export function createTables(db: DatabaseSync, tables: Map<string, string[]>): v
        observation_title, observation_description, recommendation,
        content='work_papers')`,
   );
+  // The worker turns foreign keys on for every connection (src/lib/grc/db.ts);
+  // node:sqlite leaves them off, so without this the references declared above
+  // would be documentation rather than a test.
+  db.exec('PRAGMA foreign_keys = ON');
 }
 
 function toSqliteArg(v: HranaValue): null | number | bigint | string | Uint8Array {
