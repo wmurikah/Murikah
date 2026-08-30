@@ -1,0 +1,226 @@
+---
+/**
+ * One leaderboard. Eight columns, every figure a link, and no scoreboard.
+ *
+ * WHY THESE EIGHT AND NOT THE OLD NINE.
+ *
+ * THE AVERAGE IS GONE, and it is measured rather than a preference: on this
+ * data a single 23,002-minute hold drags the mean upward far enough that it
+ * describes nobody in the table. `Typical` and `Slowest 10%` answer the two
+ * questions an average blurs into one — what a normal approval costs, and what
+ * the tail costs — and neither can be recovered from the other.
+ *
+ * THERE IS NO FASTEST COLUMN AND NO SLOWEST COLUMN, also measured. Every
+ * person's fastest is zero to two minutes across every function, so a fastest
+ * column distinguishes nobody. And the slowest INVERTS the ranking: on credit
+ * release one officer has the best slowest figure of the three while being
+ * clearly the worst on every other measure, because a single order left over a
+ * holiday decides that column. A person must never be ranked by one event
+ * outside their control. Both extremes still have a home, in the row detail,
+ * where nothing ranks and nothing sorts.
+ *
+ * THE HEADERS ARE THE PLAIN WORDS AND THE TECHNICAL NAMES ARE ONE CONTROL
+ * AWAY. Nobody needs to know what a percentile is to understand that one
+ * approval in ten took at least that long. Auditors and the board do need the
+ * technical name to trace a figure, so each column's definition states it
+ * exactly: the median, and the P90 with the wording that nine of ten were
+ * faster and one in ten was slower.
+ *
+ * EVERY FIGURE OPENS ITS HISTORY, AND THE DESTINATION'S COUNT EQUALS THE
+ * FIGURE. The list behind a number is the aggregate query with the grouping
+ * removed — the same source, the same bound period, the same person predicate,
+ * and the tail cut at the same integer index the P90 is read at. Two queries
+ * written to agree eventually disagree; one query cannot.
+ *
+ * THE ROW DETAIL IS A DISCLOSURE ON THE PERSON CELL, and that is a deliberate
+ * constraint rather than a shortcut. A `<details>` cannot span table rows, and
+ * the alternatives were a script or abandoning the table. A disclosure on the
+ * leading cell keeps a real table, works from the keyboard, announces itself,
+ * and needs no JavaScript.
+ */
+import CmsDataTable from './CmsDataTable.astro';
+import { formatDuration, formatRate } from '@/lib/cms/analytics/stats';
+import {
+  MINIMUM_RANKED_VOLUME,
+  type ApprovalBoard,
+  type ApprovalProcess,
+  type LeaderRow,
+} from '@/lib/cms/repos/approvalSla';
+import { periodParams, type ResolvedPeriod } from '@/lib/cms/analytics/period';
+import { leaderboardColumns } from '@/lib/cms/analytics/leaderboard';
+
+interface Props {
+  caption: string;
+  process: ApprovalProcess;
+  board: ApprovalBoard | null;
+  period: ResolvedPeriod;
+  /** Every completion the data holds, so an empty period can say how many. */
+  totalOutside: number;
+  /** Where "show all time" goes, so an empty period offers to widen. */
+  widenHref: string;
+  /** Where a single order lives, for the oldest pending and the slowest. */
+  orderPath: string;
+  class?: string;
+}
+const {
+  caption,
+  process,
+  board,
+  period,
+  totalOutside,
+  widenHref,
+  orderPath,
+  class: className,
+} = Astro.props;
+
+const leaders = board?.leaders ?? [];
+// ONE DEFINITION, BOTH TABLES. Identical columns in identical order is what
+// lets a reader compare position rather than re-read headers, and defining
+// them in one module is what makes that true by construction.
+const COLUMNS = leaderboardColumns(
+  `${caption}, ${period.label}`,
+  'The timestamp the function completed at.',
+);
+const empty = leaders.length === 0;
+const count = (value: number) => value.toLocaleString('en-KE');
+
+/** The records behind a figure: same source, same period, same person. */
+const records = (row: LeaderRow, view: string) =>
+  `/app/performance/approvals?${new URLSearchParams({
+    ...periodParams(period),
+    process,
+    view,
+    fn: row.fn,
+    ...(row.userId === null ? { person: 'none' } : { user: row.userId }),
+  }).toString()}`;
+
+/** A figure that opens its history. Keyboard reachable, with a focus ring. */
+const linkClass =
+  'rounded-cms text-cms-royal underline-offset-2 outline-none hover:underline ' +
+  'focus-visible:ring-2 focus-visible:ring-focus';
+---
+
+<div class:list={['flex flex-col gap-2', className]}>
+  <CmsDataTable
+    caption={caption}
+    columns={COLUMNS}
+    empty={empty}
+    rowCount={leaders.length}
+    emptyMessage={totalOutside > 0
+      ? `Nothing was completed in ${period.label}. ${count(totalOutside)} completions lie outside this period.`
+      : `Nothing was completed in ${period.label}.`}
+  >
+    <Fragment slot="empty">
+      {
+        /*
+          AN EMPTY PERIOD SAYS HOW MANY LIE OUTSIDE IT AND OFFERS TO WIDEN.
+          Rendering nothing and saying nothing is what made a working system
+          look broken; a count and a link is what a person can act on.
+        */
+      }
+      <span>
+        Nothing was completed in {period.label}.
+        {
+          totalOutside > 0 && (
+            <>
+              {' '}
+              {count(totalOutside)} completions lie outside this period.{' '}
+              <a class={linkClass} href={widenHref}>
+                Show all time
+              </a>
+            </>
+          )
+        }
+      </span>
+    </Fragment>
+
+    {
+      leaders.map((row: LeaderRow) => (
+        <tr class="border-b border-cms-line last:border-0">
+          <td class="px-3 py-2 align-top">
+            {/* THE ROW DETAIL. Nothing in it sorts and nothing in it ranks. */}
+            <details class="cms-leader-detail">
+              <summary class="cursor-pointer list-none rounded-cms outline-none hover:text-cms-royal focus-visible:ring-2 focus-visible:ring-focus">
+                {row.person ?? 'Not recorded'}
+              </summary>
+              <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-cms-caption text-cms-muted">
+                <dt>Fastest</dt>
+                <dd class="text-cms-ink tabular-nums">{formatDuration(row.fastestMinutes)}</dd>
+                <dt>Slowest</dt>
+                <dd class="text-cms-ink tabular-nums">
+                  {row.slowestEntityId === null ? (
+                    formatDuration(row.slowestMinutes)
+                  ) : (
+                    <a class={linkClass} href={`${orderPath}/${row.slowestEntityId}`}>
+                      {formatDuration(row.slowestMinutes)}
+                      {row.slowestDocumentNumber === null ? '' : ` on ${row.slowestDocumentNumber}`}
+                    </a>
+                  )}
+                </dd>
+                <dt>Count</dt>
+                <dd class="text-cms-ink tabular-nums">{count(row.volume)}</dd>
+              </dl>
+            </details>
+          </td>
+          <td class="px-3 py-2 align-top">{row.fn}</td>
+          <td class="px-3 py-2 text-right align-top tabular-nums">
+            <a class={linkClass} href={records(row, 'completed')}>
+              {count(row.volume)}
+            </a>
+          </td>
+          <td class="px-3 py-2 text-right align-top tabular-nums">
+            <a class={linkClass} href={records(row, 'typical')}>
+              {formatDuration(row.medianMinutes)}
+            </a>
+          </td>
+          <td class="px-3 py-2 text-right align-top tabular-nums">
+            <a class={linkClass} href={records(row, 'tail')}>
+              {formatDuration(row.p90Minutes)}
+            </a>
+          </td>
+          <td class="hidden px-3 py-2 text-right align-top tabular-nums sm:table-cell">
+            {row.targetMinutes === null ? (
+              'No target'
+            ) : (
+              <a class={linkClass} href={records(row, 'breaches')}>
+                {formatRate(row.withinTarget)}
+              </a>
+            )}
+          </td>
+          <td class="px-3 py-2 text-right align-top tabular-nums">
+            <a class={linkClass} href={records(row, 'pending')}>
+              {count(row.pending)}
+            </a>
+          </td>
+          <td class="hidden px-3 py-2 align-top sm:table-cell">
+            {row.oldestPendingEntityId === null ? (
+              (row.oldestPendingAt ?? 'Nothing waiting')
+            ) : (
+              <a class={linkClass} href={`${orderPath}/${row.oldestPendingEntityId}`}>
+                {row.oldestPendingAt ?? 'Waiting'}
+              </a>
+            )}
+          </td>
+        </tr>
+      ))
+    }
+  </CmsDataTable>
+
+  {
+    /*
+      THE THRESHOLD IS ON THE SCREEN, because a threshold nobody can see is a
+      threshold nobody can argue with. A person below it is listed with their
+      figures and no comparative rank.
+    */
+  }
+  <p class="text-cms-caption text-cms-muted">
+    Listed from the first completion. Ranked from {MINIMUM_RANKED_VOLUME} completions; below that, figures
+    are shown without a comparative rank.
+  </p>
+</div>
+
+<style>
+  .cms-leader-detail > summary::-webkit-details-marker {
+    display: none;
+  }
+</style>

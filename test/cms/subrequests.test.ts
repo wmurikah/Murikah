@@ -34,7 +34,13 @@ import {
 } from './support/subrequestBudget.ts';
 import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
 import { parseFilter, drillTo } from '../../src/lib/cms/analytics/filters.ts';
-import { approvalBoard, windowStart } from '../../src/lib/cms/repos/approvalSla.ts';
+import { approvalBoard } from '../../src/lib/cms/repos/approvalSla.ts';
+import {
+  calendarSql,
+  choosePeriod,
+  parsePeriod,
+  readCalendar,
+} from '../../src/lib/cms/analytics/period.ts';
 import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
 import { countPurchaseOrders } from '../../src/lib/cms/repos/poPerformance.ts';
 import { listProviders, activeProvider } from '../../src/lib/cms/ai/providers.ts';
@@ -191,11 +197,24 @@ const filter = parseFilter(new URLSearchParams());
  * a round trip of its own, and this is where that shows up.
  */
 test('/app stays inside its subrequest budget', async () => {
-  const since = windowStart(new Date(NOW.replace(' ', 'T') + 'Z'));
-  const { trips, statements } = await cost((b) =>
-    Promise.all([
-      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', since)),
-      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', since)),
+  const today = new Date(NOW.replace(' ', 'T') + 'Z');
+  const params = new URLSearchParams();
+  const { trips, statements } = await cost(async (b) => {
+    // WAVE ONE: everything that does not depend on which period is shown.
+    // The calendar behind the period control rides along with the exceptions
+    // and the two waiting counts rather than costing a trip of its own, which
+    // is the whole reason it is one statement instead of one per level.
+    const [calendarRows, , ,] = await Promise.all([
+      runSection(b, 'home.calendar', (db) =>
+        db.execute({
+          sql: calendarSql([
+            { table: 'workflow_stage_instances', column: 'completed_at' },
+            { table: 'sales_orders', column: 'invoice_created_at' },
+            { table: 'sales_orders', column: 'loading_authority_at' },
+          ]),
+          args: ['2026-08'],
+        }),
+      ),
       runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, filter, NOW)),
       runSection(b, 'home.po-waiting', (db) =>
         countPurchaseOrders(db, USER, { ...filter, status: 'IN_APPROVAL' }, NOW),
@@ -203,8 +222,18 @@ test('/app stays inside its subrequest budget', async () => {
       runSection(b, 'home.so-waiting', (db) =>
         countSalesOrders(db, USER, { ...filter, status: 'PENDING_FINANCE' }, NOW),
       ),
-    ]),
-  );
+    ]);
+    const calendar = readCalendar(
+      calendarRows.ok ? (calendarRows.value.rows as Record<string, unknown>[]) : [],
+    );
+    // WAVE TWO: the boards, which cannot be issued until the period is known,
+    // because a fallback off an empty default changes what they are asked.
+    const choice = choosePeriod(parsePeriod(params, today), calendar, today, false);
+    await Promise.all([
+      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', choice.period)),
+      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', choice.period)),
+    ]);
+  });
   assertWithinBudget('/app', trips, statements);
 });
 
