@@ -22,7 +22,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
-import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import { getCmsEnv } from '@/lib/cms/env';
@@ -188,20 +188,48 @@ const STATUS_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'n
 
   {
     mayManage && (
-      <CmsDrawer id="cms-channel-new" title="Add a connection">
+      <CmsModal id="cms-channel-new" title="Add a connection" confirmOnDirty>
+        {/*
+          BUSINESS LANGUAGE, NOT COLUMN NAMES. `account_identifier` is the
+          mailbox or the WhatsApp number; `webhook_secret_name` is the name of
+          the secret that signs the incoming webhook. A label that repeats the
+          database's word for a thing only helps whoever wrote the table.
+        */}
         <form id="cms-channel-form" class="flex flex-col gap-4">
           <CmsSelect
             id="ch-channel"
             name="channel"
-            label="Channel"
+            label="WhatsApp or email"
             required
             options={CHANNELS.map((c) => ({ value: c, label: c }))}
           />
-          <CmsInput id="ch-name" name="displayName" label="Name" required />
-          <CmsInput id="ch-provider" name="provider" label="Provider" required />
-          <CmsInput id="ch-account" name="accountIdentifier" label="Number or mailbox" required />
-          <CmsInput id="ch-secret" name="secretName" label="Worker secret name" required />
-          <CmsInput id="ch-webhook" name="webhookSecretName" label="Webhook secret name" />
+          <CmsInput id="ch-name" name="displayName" label="Name for this connection" required />
+          <CmsInput id="ch-provider" name="provider" label="Who provides the service" required />
+          <CmsInput
+            id="ch-account"
+            name="accountIdentifier"
+            label="The mailbox or WhatsApp number it reads"
+            required
+          />
+          {/*
+            THE ONE HELPER LINE IN THIS FORM, for the same reason as on the
+            provider form: the field asks for the NAME of a Cloudflare Worker
+            secret and not the key, which is genuinely counter-intuitive, and
+            somebody who pastes the key here stores a credential in the
+            database.
+          */}
+          <CmsInput
+            id="ch-secret"
+            name="secretName"
+            label="Name of the stored secret"
+            required
+            hint="The name of the Cloudflare Worker secret that holds the key, not the key itself. For example WHATSAPP_API_KEY."
+          />
+          <CmsInput
+            id="ch-webhook"
+            name="webhookSecretName"
+            label="Name of the secret that signs incoming messages"
+          />
           <CmsSelect
             id="ch-status"
             name="status"
@@ -212,7 +240,7 @@ const STATUS_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'n
           <CmsSelect
             id="ch-category"
             name="defaultCaseCategoryId"
-            label="Category for created cases"
+            label="Category for cases this connection opens"
             options={[{ value: '', label: 'None' }, ...categories]}
           />
           <CmsCheckbox
@@ -220,11 +248,16 @@ const STATUS_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'n
             name="autoCreateCase"
             label="Create cases without review, above the confidence threshold"
           />
-          <CmsButton type="submit" variant="primary">
-            Save
-          </CmsButton>
         </form>
-      </CmsDrawer>
+        <Fragment slot="actions">
+          <CmsButton type="submit" variant="primary" form="cms-channel-form">
+            Add connection
+          </CmsButton>
+          <CmsButton type="button" variant="ghost" data-cms-modal-close>
+            Cancel
+          </CmsButton>
+        </Fragment>
+      </CmsModal>
     )
   }
 </CmsLayout>

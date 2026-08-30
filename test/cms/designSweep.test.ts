@@ -235,6 +235,124 @@ test('the workspace is light: no content-area surface sits on a dark field', () 
   assert.deepEqual(offenders, [], `dark fields in the workspace:\n${offenders.join('\n')}`);
 });
 
+test('only the navigation drawer asks for a dark tone', () => {
+  // THE BLIND SPOT THE INVISIBLE FORM CAME THROUGH.
+  //
+  // The test above allowlists CmsDrawer as chrome, because the dark navy is
+  // genuinely written there and the mobile menu genuinely needs it. So it never
+  // asked the question that mattered: WHO CHOOSES that tone. `tone` defaulted
+  // to `navigation`, and two screens — "Add a provider" and "Add a connection"
+  // — simply omitted the prop. Light-canvas form fields rendered on navy and
+  // every label and every helper became invisible; what survived was the red
+  // required asterisks floating above white boxes with nothing to say what they
+  // were. Nineteen sibling drawers passed tone="form" and were fine, which is
+  // exactly what made it invisible in review.
+  //
+  // The default is now `form`, so a forgotten prop yields a legible screen, and
+  // the dark tone must be asked for by name. This asserts that only the shell's
+  // own navigation drawer asks.
+  const drawer = readFileSync('src/components/cms/CmsDrawer.astro', 'utf8');
+  assert.match(
+    drawer,
+    /tone = 'form'/,
+    'the drawer must default to the light form tone, so forgetting the prop is safe',
+  );
+
+  const dark: string[] = [];
+  for (const path of CMS_SOURCE.concat(CMS_PAGES)) {
+    const source = readFileSync(path, 'utf8');
+    for (const match of source.matchAll(/<CmsDrawer\b[^>]*>/g)) {
+      if (/tone="navigation"/.test(match[0])) dark.push(path);
+    }
+  }
+  assert.deepEqual(
+    [...new Set(dark)],
+    ['src/layouts/CmsLayout.astro'],
+    'only the shell navigation drawer may use the dark tone',
+  );
+});
+
+test('a short form uses the one modal, and there is only one', () => {
+  // ONE MODAL, NOT A SECOND IMPLEMENTATION. A drawer suits a long list beside
+  // the page you came from; these are short forms with a single outcome.
+  const overlays = CMS_SOURCE.filter((path) =>
+    /Cms(Modal|Dialog|Sheet|Popover)\.astro$/.test(path),
+  );
+  assert.deepEqual(overlays, ['src/components/cms/CmsModal.astro'], 'exactly one modal exists');
+
+  const modal = readFileSync('src/components/cms/CmsModal.astro', 'utf8');
+  // The surface is not negotiable: there is no tone prop to get wrong. Checked
+  // against the Props interface rather than the whole file, because the doc
+  // comment explains at length why the prop is absent.
+  const props = modal.slice(modal.indexOf('interface Props'), modal.indexOf('} = Astro.props'));
+  assert.ok(!/\btone\b/.test(props), 'the modal offers no tone to choose');
+  assert.match(modal, /bg-cms-surface text-cms-ink/, 'light surface, ink text');
+  // A full-screen sheet on a phone, a centred box from sm up, one elevation.
+  assert.match(modal, /h-dvh max-h-none w-screen/, 'it is a sheet at a mobile viewport');
+  assert.match(modal, /sm:w-\[min\(32rem,calc\(100vw-2rem\)\)\]/, 'and a box from sm up');
+  assert.equal((modal.match(/shadow-cms-/g) ?? []).length, 1, 'one elevation level, used once');
+  assert.match(modal, /overflow-y-auto/, 'the body scrolls inside the modal');
+
+  // Both reported screens use it, and neither uses a drawer any more.
+  for (const path of [
+    'src/pages/cms/app/administration/ai.astro',
+    'src/pages/cms/app/administration/channels.astro',
+  ]) {
+    const source = readFileSync(path, 'utf8');
+    assert.match(source, /<CmsModal/, `${path} does not use the modal`);
+    assert.ok(!/<CmsDrawer/.test(source), `${path} still uses a drawer`);
+  }
+});
+
+test('the modal returns focus, locks the page, and confirms a dirty discard', () => {
+  const script = readFileSync('src/components/cms/CmsOverlayScript.astro', 'utf8');
+  // Written once for every dialog in the shell rather than per modal.
+  assert.match(script, /openedBy\.set\(dialog, opener\)/, 'the opener is remembered');
+  assert.match(
+    script,
+    /opener\.isConnected.*\n?.*opener\.focus\(\)|opener\.isConnected\) opener\.focus\(\)/,
+  );
+  assert.match(script, /cms-overlay-open/, 'the page behind is locked');
+  assert.match(script, /cmsConfirmDirty/, 'a dirty form confirms before it is discarded');
+  assert.match(script, /'cancel'/, 'Escape is intercepted so the discard can be stopped');
+
+  const css = readFileSync('src/styles/global.css', 'utf8');
+  assert.match(css, /html\.cms-overlay-open\s*\{\s*overflow:\s*hidden/);
+  // Reserving the gutter at all times, so locking the scroll does not shift
+  // the layout sideways as the modal opens.
+  assert.match(css, /scrollbar-gutter:\s*stable/);
+});
+
+test('the two forms carry business-language labels and exactly one helper', () => {
+  for (const [path, field] of [
+    ['src/pages/cms/app/administration/ai.astro', 'ai-secret'],
+    ['src/pages/cms/app/administration/channels.astro', 'ch-secret'],
+  ] as const) {
+    const source = readFileSync(path, 'utf8');
+    const form = source.slice(source.indexOf('<CmsModal'), source.indexOf('</CmsModal>'));
+
+    // No label repeats a column name.
+    for (const match of form.matchAll(/label="([^"]+)"/g)) {
+      const label = match[1]!;
+      assert.ok(!/_/.test(label), `${path}: "${label}" reads like a column name`);
+      assert.ok(
+        !/^(Worker secret name|Number or mailbox)$/.test(label),
+        `${path}: "${label}" is the old technical wording`,
+      );
+    }
+
+    // EXACTLY ONE HELPER LINE, on the secret name, because that field is
+    // genuinely counter-intuitive: it asks for the NAME of a secret and not the
+    // key, and somebody who pastes the key stores a credential in the database.
+    const hints = [...form.matchAll(/hint="([^"]+)"/g)];
+    assert.equal(hints.length, 1, `${path} carries ${hints.length} helpers, expected exactly one`);
+    const secret = form.slice(form.indexOf(field));
+    assert.match(secret.slice(0, 400), /hint="/, 'the helper is on the secret name field');
+    assert.match(hints[0]![1]!, /not the key itself/, 'it says what the field is not');
+    assert.match(hints[0]![1]!, /For example [A-Z_]+/, 'and gives an example of a name');
+  }
+});
+
 test('exactly one elevation level exists, and only overlays use it', () => {
   const shadows = [...tokenSource.matchAll(/^\s*--shadow-(cms-[a-z-]+):/gm)].map((m) => m[1]!);
   assert.deepEqual(shadows, ['cms-overlay'], `CMS shadow tokens: ${shadows.join(', ')}`);
