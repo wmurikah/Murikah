@@ -125,15 +125,20 @@ const shortRule = (rule: string) => rule.split(/(?<=[.!?])\s/, 1)[0] ?? rule;
                   {check.count}
                 </span>
               </div>
-              <div class="mt-2 flex max-w-prose items-start gap-2 text-cms-body-sm text-cms-muted">
-                <p class="line-clamp-1 min-w-0">
-                  <span class="font-semibold text-cms-ink">The rule:</span> {shortRule(check.rule)}
-                </p>
-                <CmsDefinition
-                  label={`${check.title} rule`}
-                  definition={check.rule}
-                  class="shrink-0"
-                />
+              {/*
+                ONE LINE ON THE PAGE, THE FULL PREDICATE ON DEMAND.
+                A diagnostic page earns a statement of what each check means,
+                unlike an ordinary page description: a count with no rule beside
+                it is a number nobody can act on or argue with. But the full
+                wording runs to three clauses, and eight of those stacked down a
+                page is a wall nobody reads, which leaves the reader exactly
+                where no rule at all would have left them. Auditors and whoever
+                is correcting the configuration get the exact predicate from the
+                same definition control the rest of the application uses.
+              */}
+              <div class="mt-2 flex max-w-prose items-start gap-1.5">
+                <p class="text-cms-body-sm text-cms-muted">{check.summary}</p>
+                <CmsDefinition label={check.title} definition={check.rule} class="mt-px shrink-0" />
               </div>
               {check.examples.length > 0 && (
                 <ul class="mt-3 flex flex-col gap-1.5 border-t border-cms-line pt-3">

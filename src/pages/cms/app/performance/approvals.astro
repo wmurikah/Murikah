@@ -1,0 +1,237 @@
+---
+/**
+ * The records behind a figure on Home's leaderboards.
+ *
+ * SIX FIGURES, SIX DESTINATIONS, ONE PAGE. Volume opens what a person
+ * completed; Typical opens the same set sorted by duration with the median row
+ * marked; Slowest 10% opens ONLY the slowest tenth, slowest first; Within SLA
+ * opens the breaches, because those are the actionable half; Pending opens what
+ * is still waiting on them, oldest first. The sixth, Oldest pending, opens the
+ * order itself rather than landing here, because it is one record and a list of
+ * one is a worse answer than the record.
+ *
+ * THE COUNT ON THIS PAGE EQUALS THE FIGURE THAT OPENED IT, and it is exact by
+ * construction rather than by agreement. `approvalRecords` is the aggregate
+ * query with the grouping removed: the same source expression, the same bound
+ * period, the same `user_id IS ?` predicate, and the tail cut at the same
+ * integer index the P90 is read at. Two queries written to agree eventually
+ * disagree, and where an aggregate and its list disagree the cause is almost
+ * never rounding — it is two different scope rules, which is a data-leak class
+ * of defect. One query cannot have two scope rules.
+ *
+ * EVERY ROW SHOWS THE TIMESTAMPS ITS DURATION WAS COMPUTED FROM, so a figure
+ * can be checked rather than trusted. A duration with no visible ends is an
+ * assertion.
+ *
+ * NOTHING HERE RANKS ANYBODY. It is one person's records for one function over
+ * one period, in duration order or waiting order. There is no comparison on the
+ * page and no position in a field.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsDataTable from '@/components/cms/CmsDataTable.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { createBatcher, runSection } from '@/lib/cms/batching';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import {
+  approvalRecords,
+  RECORD_VIEWS,
+  type ApprovalProcess,
+  type ApprovalRecord,
+  type RecordView,
+} from '@/lib/cms/repos/approvalSla';
+import { parsePeriod, periodParams } from '@/lib/cms/analytics/period';
+
+export const prerender = false;
+
+const params = Astro.url.searchParams;
+const today = new Date();
+const period = parsePeriod(params, today);
+
+const process: ApprovalProcess =
+  params.get('process') === 'SALES_ORDER' ? 'SALES_ORDER' : 'PURCHASE_ORDER';
+const fn = (params.get('fn') ?? '').slice(0, 120);
+// `person=none` is how the two sales order functions that record no actor are
+// addressed. An absent `user` would be indistinguishable from "everybody", and
+// the aggregate genuinely groups those rows under a null, so the URL has to be
+// able to say null out loud.
+const userId = params.get('person') === 'none' ? null : (params.get('user') ?? '') || null;
+const viewRaw = params.get('view') ?? 'completed';
+const view: RecordView = (RECORD_VIEWS as readonly string[]).includes(viewRaw)
+  ? (viewRaw as RecordView)
+  : 'completed';
+
+/** What each view is, said in the words the column that opened it used. */
+const TITLES: Readonly<Record<RecordView, string>> = {
+  completed: 'Completed approvals',
+  typical: 'Completed approvals, by duration',
+  tail: 'The slowest tenth',
+  breaches: 'Approvals outside the target',
+  pending: 'Still waiting',
+};
+
+const EXPLANATIONS: Readonly<Record<RecordView, string>> = {
+  completed: 'Every completion this figure counted, in duration order.',
+  typical:
+    'The same set, sorted by duration, with the row the median was read at marked. On an even ' +
+    'count two rows are marked and the printed figure is their mean.',
+  tail:
+    'Only the completions at or past the 90th percentile, slowest first. This is the set the ' +
+    'Slowest 10% figure describes, and it is cut at the same index that figure is read at.',
+  breaches:
+    'Only the completions that missed the configured target. Targets are business hours and these ' +
+    'durations are elapsed, so the two agree within a working day and diverge across a weekend.',
+  pending: 'What is still waiting, oldest first. These have no duration yet, which is the point.',
+};
+
+const orderPath = process === 'SALES_ORDER' ? '/app/orders/sales' : '/app/orders/purchases';
+const processLabel = process === 'SALES_ORDER' ? 'Sales order' : 'Purchase order';
+
+let records: ApprovalRecord[] = [];
+let traceId: string | null = null;
+let connectionFailed = false;
+
+if (Astro.locals.cms?.user && fn !== '') {
+  try {
+    const db = await getDb(getCmsEnv());
+    const batcher = createBatcher(db);
+    const found = await runSection(batcher, 'approvals.records', (client) =>
+      approvalRecords(client, process, view, fn, userId, period),
+    );
+    if (found.ok) records = found.value;
+    else traceId = found.traceId;
+  } catch (error) {
+    console.error('[cms.approvals] no database connection', error);
+    connectionFailed = true;
+  }
+}
+
+const person = records.find((record) => record.person !== null)?.person ?? null;
+const count = (value: number) => value.toLocaleString('en-KE');
+const backToHome = `/app?${new URLSearchParams(periodParams(period)).toString()}`;
+
+const COLUMNS = [
+  { key: 'document', label: 'Order' },
+  {
+    key: 'started',
+    label: 'Started',
+    definition: 'The timestamp the duration was measured from.',
+  },
+  {
+    key: 'completed',
+    label: 'Completed',
+    definition: 'The timestamp the duration was measured to.',
+  },
+  {
+    key: 'duration',
+    label: 'Duration',
+    numeric: true,
+    definition:
+      'Elapsed minutes between the two timestamps on this row. Every figure on the leaderboard ' +
+      'is computed from these and nothing else, so a figure can be checked here rather than ' +
+      'trusted.',
+  },
+  { key: 'target', label: 'Target', numeric: true, secondary: true },
+  { key: 'outcome', label: 'Against target' },
+];
+---
+
+<CmsLayout title={TITLES[view]} width="data">
+  <CmsPageHeader title={TITLES[view]} definition={EXPLANATIONS[view]} />
+
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <span class="text-cms-body-sm text-cms-ink">
+      {processLabel} · {fn === '' ? 'No function named' : fn} · {person ?? 'Not recorded'} ·{' '}
+      {period.label}
+    </span>
+    {
+      /*
+        THE COUNT, STATED, so the check a reader came here to make can be made
+        without counting rows by eye.
+      */
+    }
+    <CmsBadge tone="info" label={`${count(records.length)} records`} />
+    <a
+      class="rounded-cms text-cms-body-sm font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+      href={backToHome}
+    >
+      Back to Home
+    </a>
+  </div>
+
+  {connectionFailed && <CmsErrorState title="The records could not be loaded" />}
+  {
+    traceId !== null && (
+      <CmsErrorState
+        title="The records behind this figure could not be loaded"
+        description={
+          `The figure on Home is unaffected; only this list failed. Try again, or choose a ` +
+          `different period. If it keeps failing, send your administrator reference ${traceId} ` +
+          `and the address of this page.`
+        }
+      />
+    )
+  }
+
+  <CmsCard>
+    <CmsDataTable
+      caption={`${TITLES[view]} for ${person ?? 'an unrecorded actor'} on ${fn}`}
+      columns={COLUMNS}
+      empty={records.length === 0}
+      rowCount={records.length}
+      emptyMessage={fn === ''
+        ? 'No function was named in the address, so there is nothing to list.'
+        : `No records match ${fn} for this person in ${period.label}.`}
+      stickyHead={records.length > 20}
+    >
+      {
+        records.map((record) => (
+          <tr
+            class:list={[
+              'border-b border-cms-line last:border-0',
+              record.isMedian && view === 'typical' ? 'bg-cms-royal-tint' : '',
+            ]}
+          >
+            <td class="px-3 py-2">
+              {record.entityId === null ? (
+                (record.documentNumber ?? 'Not recorded')
+              ) : (
+                <a
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  href={`${orderPath}/${record.entityId}`}
+                >
+                  {record.documentNumber ?? record.entityId}
+                </a>
+              )}
+              {record.isMedian && view === 'typical' && (
+                <span class="ms-2 text-cms-caption font-semibold text-cms-royal">Median row</span>
+              )}
+            </td>
+            <td class="px-3 py-2 tabular-nums">{record.startedAt ?? 'Not recorded'}</td>
+            <td class="px-3 py-2 tabular-nums">{record.completedAt ?? 'Still waiting'}</td>
+            <td class="px-3 py-2 text-right tabular-nums">
+              {record.minutes === null ? 'Still waiting' : formatDuration(record.minutes)}
+            </td>
+            <td class="hidden px-3 py-2 text-right tabular-nums sm:table-cell">
+              {record.targetMinutes === null ? 'No target' : formatDuration(record.targetMinutes)}
+            </td>
+            <td class="px-3 py-2">
+              {record.withinTarget === null ? (
+                <span class="text-cms-muted">Not measured</span>
+              ) : (
+                <CmsBadge
+                  tone={record.withinTarget ? 'success' : 'danger'}
+                  label={record.withinTarget ? 'Within target' : 'Outside target'}
+                />
+              )}
+            </td>
+          </tr>
+        ))
+      }
+    </CmsDataTable>
+  </CmsCard>
+</CmsLayout>
