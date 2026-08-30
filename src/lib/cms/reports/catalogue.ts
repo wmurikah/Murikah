@@ -794,7 +794,7 @@ export const REPORTS: ReportDefinition[] = [
               'Credit information is not in this report because you do not hold CREDIT.EXCEPTION.APPROVE. The column is absent rather than empty, so nothing is implied about what is behind it.',
             ],
         hrefFor: (row) =>
-          typeof row.accountId === 'string' ? `/app/customers/${row.accountId}` : null,
+          typeof row.accountId === 'string' ? `/app/operations/customers/${row.accountId}` : null,
       };
     },
   },

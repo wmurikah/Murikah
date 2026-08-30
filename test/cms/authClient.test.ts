@@ -12,6 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   submitCredentials,
   authResultMessage,
@@ -19,6 +20,7 @@ import {
   type CmsAuthResult,
 } from '../../src/lib/cms/auth/client.ts';
 import { CMS_NAV, activeNavItem } from '../../src/lib/cms/nav.ts';
+import { isPublicPath, isCmsAuthEntryPage, isOidcCallbackPath } from '../../src/lib/cms/routes.ts';
 
 /** A fetch stand-in that records the call and returns a scripted response. */
 function stubFetch(response: { status: number; body?: unknown; throws?: boolean }) {
@@ -206,9 +208,60 @@ test('navigation hrefs are unique', () => {
   assert.equal(new Set(hrefs).size, hrefs.length);
 });
 
+test('all four auth entry pages are public and only entry pages redirect signed-in users', () => {
+  for (const path of ['/login', '/register', '/forgot-password', '/reset-password']) {
+    assert.equal(isPublicPath(path), true, `${path} is reachable anonymously`);
+    assert.equal(isCmsAuthEntryPage(path), true, `${path} is an auth entry page`);
+  }
+  assert.equal(isPublicPath('/app'), false);
+  assert.equal(isCmsAuthEntryPage('/api/auth/login'), false);
+});
+
+test('auth entry markup wires providers, recovery and customer registration without dead controls', () => {
+  const login = readFileSync('src/pages/cms/login.astro', 'utf8');
+  const register = readFileSync('src/pages/cms/register.astro', 'utf8');
+  assert.match(login, /<CmsAuthProviders purpose="SIGN_IN" apple/);
+  assert.match(login, /href="\/forgot-password"/);
+  assert.match(login, /href="\/register"/);
+  assert.match(register, /<CmsAuthProviders purpose="REGISTER"/);
+  assert.doesNotMatch(register, /purpose="REGISTER" apple/);
+  assert.match(register, /href="\/login"/);
+});
+
+test('the login character covers, peeks, waits and acknowledges without owning form feedback', () => {
+  const login = readFileSync('src/pages/cms/login.astro', 'utf8');
+  const character = readFileSync('src/components/cms/CmsLoginCharacter.astro', 'utf8');
+  for (const state of [
+    'email',
+    'typing',
+    'valid',
+    'password',
+    'peek',
+    'loading',
+    'retry',
+    'success',
+  ]) {
+    assert.match(`${login}\n${character}`, new RegExp(`['"]${state}['"]`), `${state} pose exists`);
+  }
+  assert.match(login, /queueMicrotask\(\(\) => pose\(passwordInput\.type === 'text' \? 'peek'/);
+  assert.doesNotMatch(login, /email!\.|password!\./);
+  assert.match(login, /setError\('Enter your password\.'\)/);
+  assert.match(character, /aria-hidden="true"/);
+  assert.match(character, /prefers-reduced-motion: reduce/);
+});
+
+test('only known OIDC callback paths receive the state-and-PKCE CSRF exception', () => {
+  for (const provider of ['google', 'microsoft', 'apple']) {
+    assert.equal(isOidcCallbackPath(`/api/auth/oidc/${provider}/callback`), true);
+  }
+  assert.equal(isOidcCallbackPath('/api/auth/oidc/apple/start'), false);
+  assert.equal(isOidcCallbackPath('/api/auth/login'), false);
+  assert.equal(isOidcCallbackPath('/api/auth/oidc/unknown/callback'), false);
+});
+
 test('activeNavItem marks the section, including a child path', () => {
   assert.equal(activeNavItem('/app')?.label, 'Home');
-  assert.equal(activeNavItem('/app/customers')?.label, 'Customers');
-  assert.equal(activeNavItem('/app/customers/12345')?.label, 'Customers');
+  assert.equal(activeNavItem('/app/operations/customers')?.label, 'Customers');
+  assert.equal(activeNavItem('/app/operations/customers/12345')?.label, 'Customers');
   assert.equal(activeNavItem('/nowhere'), null);
 });

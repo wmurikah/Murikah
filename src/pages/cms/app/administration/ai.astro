@@ -28,7 +28,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
-import CmsDrawer from '@/components/cms/CmsDrawer.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import { getCmsEnv } from '@/lib/cms/env';
@@ -189,26 +189,32 @@ const VERIFY_WORD: Readonly<Record<string, string>> = {
 
   {
     mayManage && (
-      <CmsDrawer id="cms-ai-new" title="Add a provider">
+      <CmsModal id="cms-ai-new" title="Add a provider">
         <form id="cms-ai-form" class="flex flex-col gap-4">
-          <CmsInput id="ai-name" name="providerName" label="Name" required />
+          <CmsInput id="ai-name" name="providerName" label="Provider name" required autofocus />
           <CmsSelect
             id="ai-type"
             name="providerType"
-            label="Type"
+            label="Provider type"
             required
             options={PROVIDER_TYPES.map((t) => ({ value: t, label: t }))}
           />
-          <CmsInput id="ai-model" name="model" label="Model" required />
-          <CmsInput id="ai-secret" name="secretName" label="Worker secret name" required />
+          <CmsInput id="ai-model" name="model" label="Model name" required />
+          <CmsInput
+            id="ai-secret"
+            name="secretName"
+            label="Stored secret name"
+            required
+            hint="Enter the name of the Cloudflare secret, not its key; for example, OPENAI_API_KEY."
+          />
           <CmsSelect
             id="ai-purpose"
             name="purpose"
-            label="Purpose"
+            label="What this provider is for"
             required
             options={PURPOSES.map((p) => ({ value: p, label: p }))}
           />
-          <CmsInput id="ai-base" name="baseUrl" label="Base URL" type="url" />
+          <CmsInput id="ai-base" name="baseUrl" label="Provider address" type="url" />
           <CmsInput
             id="ai-max"
             name="maxOutputTokens"
@@ -217,11 +223,14 @@ const VERIFY_WORD: Readonly<Record<string, string>> = {
           />
           <CmsInput id="ai-temp" name="temperature" label="Temperature" type="number" step="0.1" />
           <CmsCheckbox id="ai-active" name="active" label="Active" />
-          <CmsButton type="submit" variant="primary">
-            Save
-          </CmsButton>
         </form>
-      </CmsDrawer>
+        <CmsButton slot="actions" type="button" variant="ghost" data-cms-modal-close>
+          Cancel
+        </CmsButton>
+        <CmsButton slot="actions" type="submit" form="cms-ai-form" variant="primary">
+          Add provider
+        </CmsButton>
+      </CmsModal>
     )
   }
 </CmsLayout>
