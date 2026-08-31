@@ -10,7 +10,7 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# TWO INDEPENDENT JOBS, AND THE SPLIT IS THE FIX.
+# THREE INDEPENDENT CHECKS, AND THE SPLIT IS THE FIX.
 #
 # This used to be one job running lint, format check, build and test as
 # sequential steps. Sequential steps skip everything after the first failure,
@@ -21,16 +21,23 @@ concurrency:
 # of those runs was "red", but it was the same red as yesterday's, so it read
 # as noise rather than as a broken build.
 #
-# Now the build cannot be masked: it is its own job with its own named status
-# check, and a formatting nit fails alongside it instead of in front of it.
-# For a merge to be BLOCKED on these, they must also be marked as required
-# status checks on the main branch (Settings → Branches → branch protection
-# for main → "Require status checks to pass" → select both job names below).
-# That is repository configuration, not workflow content, and only an
-# administrator can set it.
+# The build is therefore its own job with its own named status check, which is
+# the one to mark REQUIRED: it is exactly what the Cloudflare deploy runs, and
+# nothing else in the pipeline can mask it or be mistaken for it. The tests
+# are a separate check because the suite carries four GRC failures that exist
+# on main today; folding them into the build's job would make the deploy gate
+# red for a reason that has nothing to do with the deploy, and a check that is
+# always red cannot be required.
+#
+# For a merge to be BLOCKED on any of these, branch protection must also mark
+# it required (Settings → Branches → protection for main → "Require status
+# checks to pass" → select the job names below). That is repository
+# configuration, not workflow content, and only an administrator can set it.
+# Start with "Build (astro check + astro build)" and "Lint and format"; add
+# "Test (unit + smoke)" once the four GRC failures on main are fixed.
 jobs:
   build:
-    name: Build and test
+    name: Build (astro check + astro build)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -54,15 +61,40 @@ jobs:
       # `pnpm run build` is `astro check && astro build`: the type check the
       # Cloudflare deploy runs first, then the real build. This is the step
       # that proves a merge cannot break the deploy.
-      - name: Build (astro check + astro build)
+      - name: Build
         run: pnpm run build
 
-      # The unit tests plus the GRC smoke test (Build Prompt 22): the smoke
-      # test boots the built worker (dist/ from the step above) against a
+  test:
+    name: Test (unit + smoke)
+    # After the build, because a broken build makes every test result noise,
+    # and the run should spend its minutes on the failure that explains them.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The GRC smoke test (Build Prompt 22) boots the BUILT worker against a
       # seeded throwaway database, loads every page and dry-runs every
-      # mutation, and fails the build on any 500. It needs dist/, which is why
-      # it lives behind the build rather than in the quality job.
-      - name: Test (unit + smoke)
+      # mutation, and fails on any 500 — so this job needs its own dist/ and
+      # builds one. `astro build` alone: the type check already gated in the
+      # job above, and running it twice per pipeline buys nothing.
+      - name: Build the worker for the smoke test
+        run: pnpm exec astro build
+
+      - name: Test
         run: pnpm run test
 
   quality:
