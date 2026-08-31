@@ -1,22 +1,25 @@
 /**
- * The CMS navigation model.
+ * The CMS navigation rail.
  *
- * The sidebar has to become permission-driven in a later phase, so the
- * navigation is data rather than markup: one typed array here, one component
- * (CmsSidebar.astro) that renders it, and one place to change when a module
- * arrives. Markup that hard-codes destinations cannot be filtered later without
- * being rewritten, which is the mistake this avoids.
+ * The rail has to become permission-driven, so the navigation is data rather
+ * than markup: one typed array, one component (CmsSidebar.astro) that renders
+ * it, and one place to change when a module arrives. Markup that hard-codes
+ * destinations cannot be filtered later without being rewritten, which is the
+ * mistake this avoids.
  *
- * Every entry carries the permission it requires, and Build Prompt 04 turned
- * that from a promise into a filter: the sidebar renders `visibleNav(...)` and
- * nothing else. The entries themselves did not have to change when it did,
- * which was the point of writing the model as data in the first place.
+ * IT IS NOW DERIVED RATHER THAN WRITTEN. The rail is the subset of
+ * ./destinations.ts that carries an icon, because that catalogue also feeds
+ * the Administration page and page search, and three hand-maintained lists of
+ * the same destinations diverge on the first change nobody remembers to make
+ * in all three. A rail entry's label, path and permission are stated once.
  *
  * Paths are root-relative on cms.murikah.com. The worker has already rewritten
  * the request to the internal /cms route by the time a page renders, so a link
- * is written `/customers`, never `/cms/customers`. See src/lib/hosts/cms.ts.
+ * is written `/app/customers`, never `/cms/app/customers`. See
+ * src/lib/hosts/cms.ts.
  */
 import type { CmsIconName } from '@/components/cms/icons';
+import { CMS_DESTINATIONS, destinationAllowed } from './destinations.ts';
 
 export interface CmsNavItem {
   /** The visible label. Recognition over recall: never a code, always a word. */
@@ -33,82 +36,31 @@ export interface CmsNavItem {
    * A list means any one of them is enough. Administration is the reason: it
    * covers more than one subject, and a Country Manager holding only
    * ADMIN.ORGANISATION.VIEW would otherwise be given a workspace with no route
-   * to it. The alternative was to widen a single code until it meant
-   * "administration in general", which is how a permission stops meaning
-   * anything.
-   *
-   * These were placeholders of the form `cms.customers.view` when the model was
-   * written, before the schema was available. They are now the real codes from
-   * the `permissions` table, because a key that matches nothing would hide
-   * every entry from everybody.
+   * to it.
    */
   readonly permission: string | readonly string[] | null;
 }
 
-export const CMS_NAV: readonly CmsNavItem[] = [
-  {
-    label: 'Home',
-    href: '/app',
-    icon: 'home',
-    permission: null,
-  },
-  {
-    label: 'Customers',
-    href: '/app/operations/customers',
-    icon: 'customers',
-    permission: 'CUSTOMERS.ACCOUNTS.VIEW',
-  },
-  {
-    label: 'CRM',
-    href: '/app/crm',
-    icon: 'crm',
-    permission: 'CRM.LEADS.VIEW',
-  },
-  {
-    label: 'Helpdesk',
-    href: '/app/helpdesk',
-    icon: 'service',
-    permission: 'SERVICE.CASES.VIEW',
-  },
-  {
-    label: 'Orders',
-    href: '/app/orders',
-    icon: 'orders',
-    permission: 'ORDERS.SALES_ORDER.VIEW',
-  },
-  {
-    label: 'Performance',
-    href: '/app/performance',
-    icon: 'performance',
-    permission: 'SLA.DASHBOARD.VIEW',
-  },
-  {
-    label: 'Data',
-    href: '/app/data',
-    icon: 'data',
-    permission: 'DATA.IMPORTS.VIEW',
-  },
-  {
-    label: 'Administration',
-    href: '/app/administration',
-    icon: 'administration',
-    permission: [
-      'ADMIN.USERS.MANAGE',
-      'ADMIN.ORGANISATION.VIEW',
-      'ADMIN.ORGANISATION.MANAGE',
-      'ADMIN.ROLES.MANAGE',
-      'ADMIN.WORKFLOWS.MANAGE',
-      'ADMIN.WORKFLOW_ROLES.MANAGE',
-      'ADMIN.PRODUCT_CATALOG.MANAGE',
-    ],
-  },
-];
+/**
+ * The rail, in rail order: the catalogue entries that carry an icon.
+ *
+ * An icon is the marker because it is the thing only a rail entry needs. A
+ * separate `rail: true` flag would be a second fact to keep true; this one
+ * cannot be set without also giving the entry the picture it renders.
+ */
+export const CMS_NAV: readonly CmsNavItem[] = CMS_DESTINATIONS.filter(
+  (destination): destination is typeof destination & { icon: CmsIconName } =>
+    destination.icon !== undefined,
+).map((destination) => ({
+  label: destination.label,
+  href: destination.href,
+  icon: destination.icon,
+  permission: destination.permission,
+}));
 
 /** Whether a principal's codes satisfy one entry's requirement. */
 export function navItemAllowed(item: CmsNavItem, permissions: readonly string[]): boolean {
-  if (item.permission === null) return true;
-  if (typeof item.permission === 'string') return permissions.includes(item.permission);
-  return item.permission.some((code) => permissions.includes(code));
+  return destinationAllowed(item, permissions);
 }
 
 /**
