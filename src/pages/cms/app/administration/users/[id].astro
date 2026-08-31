@@ -2,17 +2,24 @@
 /**
  * A user: who they are, where they sit, and what the record says about them.
  *
- * Eight tabs, driven by the URL rather than by client state, so a tab can be
- * bookmarked and survives a reload. Two of them are read-only in this phase and
- * say so on screen, because a missing button that nobody explained gets reported
- * as a defect:
+ * Nine tabs, driven by the URL rather than by client state, so a tab can be
+ * bookmarked and survives a reload.
  *
- *   Roles              Build Prompt 07 makes this writable
- *   Workflow Authority Build Prompt 08 owns it
+ * EDIT IS CURRENT STATE; THE OTHER TABS ARE THE RECORD. The Edit tab now
+ * carries a Position & Access panel — job title, access roles, what those
+ * roles grant, workflow authority — because setting somebody up was four
+ * screens and no screen showed the result. Assignments, Roles and Workflow
+ * authority stay exactly where they were: they carry the effective dates, the
+ * superseded rows and the history that a current-state panel would have to
+ * hide to stay usable.
  *
- * The Roles tab being read-only is also the security posture. This phase
- * exposes no path from editing a profile to granting access, which is the
- * simplest possible defence against a user elevating their own permissions.
+ * WHAT IS EDITABLE IS DECIDED BY THREE SEPARATE PERMISSIONS —
+ * ADMIN.USERS.MANAGE for the title, ADMIN.ROLES.MANAGE for access roles,
+ * ADMIN.WORKFLOW_ROLES.MANAGE for authority — and by the server, every time.
+ * Nothing here is a control: each endpoint checks its own code, and the
+ * repository refuses a grant whose subject is the caller, so an administrator
+ * cannot escalate themselves by editing their own record however the markup is
+ * rewritten.
  *
  * The Security tab shows whether a credential exists and whether MFA is on. It
  * never shows a hash, a token or a secret, and the queries behind it select
@@ -31,20 +38,33 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsAvatar from '@/components/cms/CmsAvatar.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsUserRoleDrawer from '@/components/cms/CmsUserRoleDrawer.astro';
+import CmsUserAccessPanel from '@/components/cms/CmsUserAccessPanel.astro';
+import CmsUserAuthorityDrawer from '@/components/cms/CmsUserAuthorityDrawer.astro';
+import CmsApplyDefaultsDrawer from '@/components/cms/CmsApplyDefaultsDrawer.astro';
 
 import { userActivity, type AuditRow as AuditTrailRow } from '@/lib/cms/repos/auditTrail';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { canManageRoles, canManageUsers } from '@/lib/cms/permissions';
+import { canManageRoles, canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
+import { rolePermissionMap, type RolePermissionMap } from '@/lib/cms/repos/rbacAdmin';
+import { mappingsForTitle, type MappingRow } from '@/lib/cms/repos/jobTitleMappings';
+import {
+  listAffiliates,
+  listBusinessUnits,
+  listCountries,
+  listTeams,
+} from '@/lib/cms/repos/organisationAdmin';
 import {
   getSecurity,
   getUser,
   listAssignments,
   listSourceIdentities,
   listUserRoles,
+  listJobTitles,
   listUserTeams,
   listWorkflowAuthority,
   type AssignmentRow,
+  type JobTitleRow,
   type RoleView,
   type SecurityView,
   type SourceIdentityRow,
@@ -63,6 +83,10 @@ const mayManage = canManageUsers(permissions);
 // grant access, which is the escalation the read-only tab was protecting
 // against.
 const mayManageRoles = canManageRoles(permissions);
+// Approval authority is its own capability. A person who may grant access
+// roles does not thereby become able to make somebody an approver, and the
+// endpoints behind both controls check their own code rather than this.
+const mayManageAuthority = canManageWorkflowRoles(permissions);
 const userId = Astro.params.id ?? '';
 // The reader, not the subject. The audit scope belongs to whoever is looking.
 const viewerUserId = Astro.locals.cms?.user.userId ?? '';
@@ -91,6 +115,18 @@ let roles: RoleView[] = [];
 let authority: WorkflowAuthorityView[] = [];
 let identities: SourceIdentityRow[] = [];
 let security: SecurityView | null = null;
+// The Edit tab's Position & Access panel: the title catalogue, what every
+// active role grants (so the preview needs no round trip), and what the
+// person's current title suggests. All read once, with everything else.
+let jobTitles: JobTitleRow[] = [];
+let permissionMap: RolePermissionMap = { granted: {}, permissions: [] };
+let suggested: { access: MappingRow[]; workflow: MappingRow[] } = { access: [], workflow: [] };
+let scopeTargets = {
+  countries: [] as { value: string; label: string }[],
+  affiliates: [] as { value: string; label: string }[],
+  units: [] as { value: string; label: string }[],
+  teams: [] as { value: string; label: string }[],
+};
 // The Audit tab is what this person CHANGED, read through the audit
 // repository so it carries the same scope, the same security gate and the
 // same masking as the workspace. The previous query here selected events
@@ -104,7 +140,17 @@ if (mayManage) {
     const db = await getDb(getCmsEnv());
     user = await getUser(db, userId);
     if (user) {
-      [assignments, teams, roles, authority, identities, security, audit] = await Promise.all([
+      [
+        assignments,
+        teams,
+        roles,
+        authority,
+        identities,
+        security,
+        audit,
+        jobTitles,
+        permissionMap,
+      ] = await Promise.all([
         listAssignments(db, userId),
         listUserTeams(db, userId),
         listUserRoles(db, userId),
@@ -112,7 +158,39 @@ if (mayManage) {
         listSourceIdentities(db, userId),
         getSecurity(db, userId),
         userActivity(db, viewerUserId, userId),
+        listJobTitles(db),
+        rolePermissionMap(db),
       ]);
+      // Second round, because the title's defaults depend on which title the
+      // first round found. The scope lookups ride along with it rather than
+      // taking a third.
+      const currentTitle =
+        assignments.find((a) => a.current && a.isPrimary)?.jobTitleId ??
+        assignments.find((a) => a.current)?.jobTitleId ??
+        '';
+      const [titleDefaults, countries, affiliates, units, teamRows] = await Promise.all([
+        mappingsForTitle(db, currentTitle),
+        listCountries(db),
+        listAffiliates(db),
+        listBusinessUnits(db),
+        listTeams(db),
+      ]);
+      suggested = titleDefaults;
+      scopeTargets = {
+        countries: countries
+          .filter((c) => c.active)
+          .map((c) => ({ value: c.countryId, label: c.countryName })),
+        // `affiliate_name` is not unique in this schema; the code disambiguates.
+        affiliates: affiliates
+          .filter((a) => a.active)
+          .map((a) => ({ value: a.affiliateId, label: `${a.affiliateName} (${a.affiliateCode})` })),
+        units: units
+          .filter((b) => b.active)
+          .map((b) => ({ value: b.businessUnitId, label: b.businessUnitName })),
+        teams: teamRows
+          .filter((t) => t.active)
+          .map((t) => ({ value: t.teamId, label: t.teamName })),
+      };
     }
   } catch (error) {
     console.error('[cms.users.detail] load failed', error);
@@ -226,11 +304,51 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
             <CmsCard>
               <CmsUserEditForm user={user} />
             </CmsCard>
-            <p class="text-cms-body-sm text-cms-muted">
-              Roles and assignments are not edited here. The Roles tab stays read-only, which is
-              also the simplest protection against somebody editing their own access from a profile
-              screen.
-            </p>
+            <CmsCard>
+              <CmsUserAccessPanel
+                userId={userId}
+                userType={user.userType}
+                assignments={assignments}
+                jobTitles={jobTitles}
+                roles={roles}
+                authority={authority}
+                permissionMap={permissionMap}
+                suggested={suggested}
+                mayManageUsers={mayManage}
+                mayManageRoles={mayManageRoles}
+                mayManageAuthority={mayManageAuthority}
+                isSelf={userId === viewerUserId}
+              />
+            </CmsCard>
+            {/*
+              THE DRAWERS ARE RENDERED ONLY FOR A VIEWER WHO MAY USE THEM, and
+              that is presentation rather than protection: each endpoint behind
+              them checks its own permission code, and the self-grant refusal
+              lives in the repository. Not rendering them simply means a screen
+              that does not offer what it cannot do.
+            */}
+            {mayManageRoles && userId !== viewerUserId && <CmsUserRoleDrawer userId={userId} />}
+            {mayManageAuthority && userId !== viewerUserId && (
+              <CmsUserAuthorityDrawer userId={userId} />
+            )}
+            {(mayManageRoles || mayManageAuthority) &&
+              (suggested.access.length > 0 || suggested.workflow.length > 0) && (
+                <CmsApplyDefaultsDrawer
+                  userId={userId}
+                  suggested={suggested}
+                  primary={
+                    assignments.find((a) => a.current && a.isPrimary) ??
+                    assignments.find((a) => a.current)
+                  }
+                  heldRoleIds={roles.filter((r) => r.active).map((r) => r.roleId)}
+                  countries={scopeTargets.countries}
+                  affiliates={scopeTargets.affiliates}
+                  units={scopeTargets.units}
+                  teams={scopeTargets.teams}
+                  mayManageRoles={mayManageRoles}
+                  mayManageAuthority={mayManageAuthority}
+                />
+              )}
           </Fragment>
         )}
 
@@ -345,7 +463,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
 
         {tab === 'roles' && (
           <Fragment>
-            {mayManageRoles ? (
+            {mayManageRoles && userId !== viewerUserId ? (
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <p class="text-cms-body-sm text-cms-muted">
                   An access role says what this person may do. A data scope says which records it
@@ -355,6 +473,12 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
                   Assign a role
                 </CmsButton>
               </div>
+            ) : mayManageRoles ? (
+              <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+                <strong class="font-semibold text-cms-ink">Your own record.</strong> Nobody grants
+                themselves access; the server refuses it whatever the screen offers. Ask another
+                administrator.
+              </p>
             ) : (
               <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
                 Read-only for you.
@@ -408,17 +532,29 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
                 />
               </Fragment>
             </CmsDataTable>
-            {mayManageRoles && <CmsUserRoleDrawer userId={userId} />}
+            {mayManageRoles && userId !== viewerUserId && <CmsUserRoleDrawer userId={userId} />}
           </Fragment>
         )}
 
         {tab === 'authority' && (
           <Fragment>
-            <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
-              <strong class="font-semibold text-cms-ink">Read-only.</strong> Workflow authority is
-              what a person may approve in a business process, which is a different thing from an
-              access role and from a job title. It is administered in a later phase.
-            </p>
+            {mayManageAuthority && userId !== viewerUserId ? (
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-cms-body-sm text-cms-muted">
+                  What this person may approve in a business process. A different thing from an
+                  access role and from a job title, and never inferred from either.
+                </p>
+                <CmsButton variant="primary" icon="plus" data-cms-authority-create>
+                  Add authority
+                </CmsButton>
+              </div>
+            ) : (
+              <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+                <strong class="font-semibold text-cms-ink">Read-only for you.</strong> Workflow
+                authority is what a person may approve in a business process, which is a different
+                thing from an access role and from a job title.
+              </p>
+            )}
             <CmsDataTable
               caption="Workflow authority"
               columns={[
@@ -460,6 +596,9 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
                 />
               </Fragment>
             </CmsDataTable>
+            {mayManageAuthority && userId !== viewerUserId && (
+              <CmsUserAuthorityDrawer userId={userId} />
+            )}
           </Fragment>
         )}
 

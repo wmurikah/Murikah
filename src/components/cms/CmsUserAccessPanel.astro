@@ -1,0 +1,423 @@
+---
+/**
+ * POSITION & ACCESS: a person's job title, their access roles, what those
+ * roles actually grant, and their approval authority — on the screen where an
+ * administrator already is.
+ *
+ * WHY THIS IS ONE PANEL AND STILL FOUR CONCEPTS.
+ *
+ * Before this, setting somebody up meant the Edit tab for their name, the
+ * Assignments tab for their title, the Roles tab for their access and the
+ * Workflow Authority tab for what they may approve — four screens for one
+ * administrative act, and no screen anywhere that showed the result. That is a
+ * fragmentation of the INTERFACE, and fixing it does not require merging the
+ * CONCEPTS, which stay exactly as they were:
+ *
+ *   Job title          organisational position. Grants nothing, anywhere.
+ *   Access role        application permissions, resolved through role_permissions.
+ *   Permission         belongs to a role. There is no user-level permission and
+ *                      no title-level permission, so a role can never say NO
+ *                      while an override says YES.
+ *   Workflow authority approval authority in a business process. Never inferred
+ *                      from an access role and never from a title.
+ *
+ * The four tabs stay too. This is current-state administration; they are the
+ * history, with the effective dates, the superseded rows and the audit detail
+ * that a convenience surface would have to hide to stay usable.
+ *
+ * THREE PERMISSIONS DECIDE WHAT IS EDITABLE HERE, AND THE SERVER DECIDES
+ * AGAIN. `ADMIN.USERS.MANAGE` reaches the title, `ADMIN.ROLES.MANAGE` the
+ * access roles, `ADMIN.WORKFLOW_ROLES.MANAGE` the authority. A viewer who
+ * holds the first alone sees the other two as read-only lists — which is a
+ * presentation of the rule, not the rule: every endpoint behind these controls
+ * checks the same codes itself, and refuses a request that reaches it any
+ * other way.
+ *
+ * THE PERMISSION PREVIEW IS COMPUTED IN THE BROWSER FROM DATA RENDERED HERE,
+ * so ticking a role updates it with no round trip, and it is computed the same
+ * way the resolver computes it: the union of what each active role grants,
+ * with a withholding row contributing nothing. It is a PREVIEW of the roles
+ * currently selected; it is not itself editable, because a permission belongs
+ * to a role and the only honest place to change one is the role.
+ */
+import CmsSelect from './CmsSelect.astro';
+import CmsBadge from './CmsBadge.astro';
+import CmsButton from './CmsButton.astro';
+import type { AssignmentRow, JobTitleRow, WorkflowAuthorityView } from '@/lib/cms/repos/userAdmin';
+import type { RoleView } from '@/lib/cms/repos/userAdmin';
+import type { RolePermissionMap } from '@/lib/cms/repos/rbacAdmin';
+import { effectivePermissions } from '@/lib/cms/repos/rbacAdmin';
+import type { MappingRow } from '@/lib/cms/repos/jobTitleMappings';
+
+interface Props {
+  userId: string;
+  /** EXTERNAL users get no organisational position and no internal authority. */
+  userType: string;
+  assignments: AssignmentRow[];
+  jobTitles: JobTitleRow[];
+  roles: RoleView[];
+  authority: WorkflowAuthorityView[];
+  permissionMap: RolePermissionMap;
+  /** What the person's CURRENT title suggests, so the panel can say so. */
+  suggested: { access: MappingRow[]; workflow: MappingRow[] };
+  mayManageUsers: boolean;
+  mayManageRoles: boolean;
+  mayManageAuthority: boolean;
+  /** Whether the viewer is looking at their own record. */
+  isSelf: boolean;
+}
+const {
+  userId,
+  userType,
+  assignments,
+  jobTitles,
+  roles,
+  authority,
+  permissionMap,
+  suggested,
+  mayManageUsers,
+  mayManageRoles,
+  mayManageAuthority,
+  isSelf,
+} = Astro.props;
+
+const external = userType === 'EXTERNAL';
+const primary =
+  assignments.find((a) => a.current && a.isPrimary) ?? assignments.find((a) => a.current);
+
+/**
+ * A title can only be CHANGED where there is an assignment to change.
+ *
+ * `user_assignments` requires a department and a level with its matching
+ * location, and neither can be derived from a title. Creating one from this
+ * control would mean inventing an organisational placement, which is a worse
+ * answer than pointing at the tab that asks for it properly.
+ */
+const titleEditable = mayManageUsers && !external && primary !== undefined;
+const titleOptions = [
+  { value: '', label: 'Select job title' },
+  ...jobTitles
+    // A deactivated title is still shown when it is the one in force, because
+    // hiding it would render the control as if the person had no title.
+    .filter((t) => t.active || t.jobTitleId === primary?.jobTitleId)
+    .map((t) => ({
+      value: t.jobTitleId,
+      label: t.active ? t.titleName : `${t.titleName} (inactive)`,
+    })),
+];
+
+const currentRoles = roles.filter((r) => r.active);
+const currentAuthority = authority.filter((a) => a.active);
+const preview = effectivePermissions(
+  permissionMap,
+  currentRoles.map((r) => r.roleId),
+);
+const scopeLabel = (value: string) =>
+  value === 'OWN'
+    ? 'Own records'
+    : value === 'GROUP'
+      ? 'Group'
+      : value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+/**
+ * MAPPED OR MANUAL, and the distinction is never guessed at write time.
+ *
+ * A role the person holds that their current title also maps to is shown as
+ * Mapped; anything else is Manual. It is derived for DISPLAY only: nothing
+ * stores which of the two a grant was, and nothing removes a role because a
+ * title changed. Manual roles survive a title change precisely because no code
+ * anywhere revokes on a title.
+ */
+const mappedIds = new Set(suggested.access.map((m) => m.targetId));
+const mappedAuthorityIds = new Set(suggested.workflow.map((m) => m.targetName));
+---
+
+<section class="flex flex-col gap-5" data-cms-access-panel data-user-id={userId}>
+  <h3 class="text-cms-body font-semibold text-cms-ink">Position &amp; access</h3>
+
+  {
+    external ? (
+      <p class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+        Customer portal account. No internal position or authority.
+      </p>
+    ) : (
+      <div class="flex flex-col gap-5">
+        {/* ---- job title ---------------------------------------------- */}
+        <div class="flex flex-col gap-2">
+          <form id="cms-title-form" novalidate class="flex flex-wrap items-end gap-3">
+            <div class="min-w-56 flex-1">
+              <CmsSelect
+                id="u-jobTitle"
+                name="jobTitleId"
+                label="Primary job title"
+                options={titleOptions}
+                value={primary?.jobTitleId ?? ''}
+                disabled={!titleEditable}
+              />
+            </div>
+            {titleEditable && (
+              <button
+                type="submit"
+                data-cms-title-save
+                class="inline-flex h-11 items-center rounded-cms bg-cms-royal px-3.5 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                Set title
+              </button>
+            )}
+          </form>
+          {primary === undefined && !external && (
+            <p class="text-cms-caption text-cms-muted">
+              No current assignment.{' '}
+              <a
+                class="font-medium text-cms-royal underline-offset-2 hover:underline"
+                href={`/app/administration/users/${userId}?tab=assignments`}
+              >
+                Add one
+              </a>
+            </p>
+          )}
+          {primary !== undefined && (
+            <p class="text-cms-caption text-cms-muted">
+              Supersedes the current assignment. History is kept.
+            </p>
+          )}
+          <p
+            id="cms-title-message"
+            role="status"
+            hidden
+            class="rounded-cms border border-cms-line bg-cms-sunken px-3 py-2 text-cms-body-sm text-cms-ink"
+          />
+        </div>
+
+        {/* ---- suggested defaults for the title ------------------------ */}
+        <div
+          id="cms-title-defaults"
+          hidden={suggested.access.length === 0 && suggested.workflow.length === 0}
+          class="rounded-cms border border-cms-line bg-cms-sunken px-3 py-3"
+        >
+          <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+            Mapped access available
+          </p>
+          <ul class="mt-1.5 flex flex-col gap-1" data-cms-suggestions>
+            {suggested.access.map((mapping) => (
+              <li class="flex flex-wrap items-center gap-2 text-cms-body-sm text-cms-ink">
+                <span>{mapping.targetName}</span>
+                <CmsBadge tone="neutral" label="Access role" />
+                {mappedIds.has(mapping.targetId) &&
+                  currentRoles.some((r) => r.roleId === mapping.targetId) && (
+                    <span class="text-cms-caption text-cms-muted">Already held</span>
+                  )}
+              </li>
+            ))}
+            {suggested.workflow.map((mapping) => (
+              <li class="flex flex-wrap items-center gap-2 text-cms-body-sm text-cms-ink">
+                <span>{mapping.targetName}</span>
+                <CmsBadge tone="neutral" label="Workflow" />
+              </li>
+            ))}
+          </ul>
+          {mayManageRoles || mayManageAuthority ? (
+            <div class="mt-2.5">
+              <CmsButton variant="secondary" data-cms-apply-defaults>
+                Apply mapped access
+              </CmsButton>
+              <p class="mt-1 text-cms-caption text-cms-muted">Each needs a scope.</p>
+            </div>
+          ) : (
+            <p class="mt-1.5 text-cms-caption text-cms-muted">Read-only for you.</p>
+          )}
+        </div>
+
+        {/* ---- access roles ------------------------------------------- */}
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-cms-body-sm font-semibold text-cms-ink">Access roles</p>
+            {mayManageRoles && !isSelf && (
+              <CmsButton variant="secondary" icon="plus" data-cms-userrole-create>
+                Add role
+              </CmsButton>
+            )}
+          </div>
+          <ul class="flex flex-wrap gap-2" data-cms-role-chips>
+            {currentRoles.length === 0 && (
+              <li class="text-cms-body-sm text-cms-muted">No access role</li>
+            )}
+            {currentRoles.map((role) => (
+              <li
+                data-role-id={role.roleId}
+                class="inline-flex items-center gap-2 rounded-cms border border-cms-line bg-cms-surface px-2.5 py-1.5 text-cms-body-sm text-cms-ink"
+              >
+                <span class="font-medium">{role.roleName}</span>
+                <span class="text-cms-caption text-cms-muted">
+                  {role.scopes.length === 0
+                    ? 'No scope'
+                    : role.scopes
+                        .map((s) =>
+                          s.target
+                            ? `${scopeLabel(s.scopeType)}: ${s.target}`
+                            : scopeLabel(s.scopeType),
+                        )
+                        .join('; ')}
+                </span>
+                <CmsBadge
+                  tone={mappedIds.has(role.roleId) ? 'info' : 'neutral'}
+                  label={mappedIds.has(role.roleId) ? 'Mapped' : 'Manual'}
+                />
+              </li>
+            ))}
+          </ul>
+          {isSelf && mayManageRoles && (
+            <p class="text-cms-caption text-cms-muted">
+              Your own access. Ask another administrator.
+            </p>
+          )}
+          {!mayManageRoles && <p class="text-cms-caption text-cms-muted">Read-only for you.</p>}
+        </div>
+
+        {/* ---- effective permissions ----------------------------------- */}
+        <div class="flex flex-col gap-2">
+          <p class="text-cms-body-sm font-semibold text-cms-ink">Effective permissions</p>
+          <div
+            id="cms-permission-preview"
+            class="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            {preview.length === 0 && <p class="text-cms-body-sm text-cms-muted">No permission</p>}
+            {preview.map((group) => (
+              <div>
+                <p class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                  {group.module}
+                </p>
+                <ul class="mt-0.5 flex flex-col">
+                  {group.entries.map((entry) => (
+                    <li class="text-cms-body-sm text-cms-ink" title={entry.code}>
+                      {entry.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          {mayManageRoles && currentRoles.length > 0 && (
+            <details class="text-cms-body-sm">
+              <summary class="cursor-pointer font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                Manage role permissions
+              </summary>
+              <div class="mt-2 flex flex-col gap-1.5 rounded-cms border border-cms-caution bg-cms-caution-tint px-3 py-2">
+                <p class="text-cms-body-sm text-cms-ink">
+                  Changing a role changes it for every holder.
+                </p>
+                <ul class="flex flex-col gap-0.5">
+                  {currentRoles.map((role) => (
+                    <li>
+                      <a
+                        class="font-medium text-cms-royal underline-offset-2 hover:underline"
+                        href={`/app/administration/roles/${role.roleId}`}
+                      >
+                        {role.roleName}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
+          )}
+        </div>
+
+        {/* ---- workflow authority -------------------------------------- */}
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-cms-body-sm font-semibold text-cms-ink">Workflow authority</p>
+            {mayManageAuthority && !isSelf && (
+              <CmsButton variant="secondary" icon="plus" data-cms-authority-create>
+                Add authority
+              </CmsButton>
+            )}
+          </div>
+          <ul class="flex flex-wrap gap-2">
+            {currentAuthority.length === 0 && (
+              <li class="text-cms-body-sm text-cms-muted">No workflow authority</li>
+            )}
+            {currentAuthority.map((row) => (
+              <li class="inline-flex items-center gap-2 rounded-cms border border-cms-line bg-cms-surface px-2.5 py-1.5 text-cms-body-sm text-cms-ink">
+                <span class="font-medium">{row.roleName}</span>
+                <span class="text-cms-caption text-cms-muted">
+                  {row.scopeType === 'GROUP' ? 'Group' : (row.target ?? scopeLabel(row.scopeType))}
+                </span>
+                {mappedAuthorityIds.has(row.roleName) && <CmsBadge tone="info" label="Mapped" />}
+              </li>
+            ))}
+          </ul>
+          {isSelf && mayManageAuthority && (
+            <p class="text-cms-caption text-cms-muted">
+              Your own authority. Ask another administrator.
+            </p>
+          )}
+          {!mayManageAuthority && <p class="text-cms-caption text-cms-muted">Read-only for you.</p>}
+        </div>
+      </div>
+    )
+  }
+</section>
+
+<script>
+  /**
+   * Setting a title, and offering what it maps to.
+   *
+   * The PUT writes the assignment and nothing else — no role, no scope, no
+   * authority — and returns the defaults the new title suggests so the panel
+   * can offer them. Applying them is a second, deliberate request the
+   * administrator makes, which is what stops a dropdown change from being a
+   * privilege escalation.
+   */
+  const panel = document.querySelector<HTMLElement>('[data-cms-access-panel]');
+  const form = document.getElementById('cms-title-form') as HTMLFormElement | null;
+  const message = document.getElementById('cms-title-message');
+
+  if (panel && form) {
+    const userId = panel.dataset.userId ?? '';
+    const say = (text: string) => {
+      if (!message) return;
+      message.textContent = text;
+      message.hidden = false;
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      // Narrowed by instance: `querySelector<HTMLSelectElement>` does not
+      // satisfy the generic's `Element` constraint in this DOM lib, because
+      // `HTMLSelectElement.remove(index)` differs from `Element.remove()`.
+      const node = document.getElementById('u-jobTitle');
+      const select = node instanceof HTMLSelectElement ? node : null;
+      const save = form.querySelector<HTMLButtonElement>('[data-cms-title-save]');
+      if (!select || select.value === '') {
+        say('Choose a job title.');
+        return;
+      }
+      if (save) save.disabled = true;
+      try {
+        const response = await fetch(`/api/admin/users/${userId}/job-title`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jobTitleId: select.value }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          fields?: { field: string; message: string }[];
+          message?: string;
+        };
+        if (response.ok) {
+          // Reloaded rather than patched in place: the title change supersedes
+          // an assignment, which changes what the Assignments tab, the header
+          // and the suggestion panel all say. Repainting three of those from a
+          // response is three chances to disagree with the database.
+          window.location.reload();
+          return;
+        }
+        say(data.fields?.[0]?.message ?? data.message ?? 'That could not be saved.');
+      } catch {
+        say('That could not be saved. Check your connection and try again.');
+      } finally {
+        if (save) save.disabled = false;
+      }
+    });
+  }
+</script>
