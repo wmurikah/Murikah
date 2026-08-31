@@ -373,11 +373,37 @@ function scopeColumns(input: AssignmentInput): {
   }
 }
 
+/**
+ * NOBODY MAKES THEMSELVES AN APPROVER.
+ *
+ * User administration now offers workflow authority from the same screen that
+ * edits a person's name, and an administrator can open their own record. So
+ * the refusal lives here, at the route into `workflow_role_assignments`, and
+ * compares the subject against the SESSION's actor rather than against
+ * anything in the payload — hiding the control would be presentation, and the
+ * endpoint is reachable with curl.
+ *
+ * The same rule as an access role, for the same reason and one more: approval
+ * authority is what an audit asks about by name. "Who gave this person the
+ * authority to approve this?" must never answer "they did".
+ */
+const SELF_AUTHORITY_REFUSAL: WriteResult<never> = {
+  ok: false,
+  kind: 'invalid_reference',
+  fields: [
+    {
+      field: 'userId',
+      message: 'You cannot give yourself approval authority. Ask another administrator.',
+    },
+  ],
+};
+
 export async function createAssignment(
   db: Client,
   input: AssignmentInput,
   ctx: WriteContext,
 ): Promise<WriteResult<WorkflowAssignmentRow>> {
+  if (input.userId === ctx.actorUserId) return SELF_AUTHORITY_REFUSAL;
   const id = newId('WRA');
   const scope = scopeColumns(input);
   try {

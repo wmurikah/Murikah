@@ -1,0 +1,344 @@
+---
+/**
+ * Administration → Users → Job titles → what each title comes with by default.
+ *
+ * A DEFAULT IS NOT A GRANT, AND THIS SCREEN SAYS SO WHERE IT MATTERS. Adding
+ * "Finance Approver" as a default for Finance Manager changes nobody's access:
+ * no user_roles row is written, no permission is resolved differently, and
+ * everybody already holding the title is unaffected. It changes what the next
+ * administrator is OFFERED on the user Edit screen, and they still have to
+ * choose a data scope and confirm it.
+ *
+ * THE TWO KINDS STAY APART. Access role defaults and workflow role defaults
+ * are separate columns backed by separate tables, because an access role and
+ * approval authority are separate things and a screen that merged them would
+ * be the first place the distinction went. There is no title-to-permission
+ * mapping and there will not be one: a permission belongs to a role, which is
+ * the one place to configure it.
+ *
+ * THE PERMISSION COUNT IS ON THE ROW BECAUSE THE POINT OF A DEFAULT IS WHAT IT
+ * WILL GRANT. "Finance Manager Access" says nothing; "Finance Manager Access,
+ * 12 permissions" with the list one disclosure away is what an administrator
+ * needs before deciding that every future Finance Manager should be offered
+ * it.
+ */
+import CmsBadge from './CmsBadge.astro';
+import CmsButton from './CmsButton.astro';
+import CmsDrawer from './CmsDrawer.astro';
+import CmsSelect from './CmsSelect.astro';
+import type { JobTitleRow } from '@/lib/cms/repos/userAdmin';
+import type { MappingRow } from '@/lib/cms/repos/jobTitleMappings';
+import type { RolePermissionMap } from '@/lib/cms/repos/rbacAdmin';
+import { effectivePermissions } from '@/lib/cms/repos/rbacAdmin';
+
+interface Props {
+  titles: JobTitleRow[];
+  accessMappings: MappingRow[];
+  workflowMappings: MappingRow[];
+  roleOptions: { value: string; label: string }[];
+  workflowRoleOptions: { value: string; label: string }[];
+  permissionMap: RolePermissionMap;
+}
+const {
+  titles,
+  accessMappings,
+  workflowMappings,
+  roleOptions,
+  workflowRoleOptions,
+  permissionMap,
+} = Astro.props;
+
+const accessFor = (id: string) => accessMappings.filter((m) => m.jobTitleId === id);
+const workflowFor = (id: string) => workflowMappings.filter((m) => m.jobTitleId === id);
+
+/** What one role actually carries, for the count and the disclosure beside it. */
+const grantsOf = (roleId: string) => effectivePermissions(permissionMap, [roleId]);
+const countOf = (roleId: string) =>
+  grantsOf(roleId).reduce((total, group) => total + group.entries.length, 0);
+
+const titleOptions = [
+  { value: '', label: 'Choose a job title' },
+  ...titles.filter((t) => t.active).map((t) => ({ value: t.jobTitleId, label: t.titleName })),
+];
+---
+
+<section class="flex flex-col gap-3">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-cms-card font-semibold text-cms-navy">Job title mappings</h2>
+      <p class="text-cms-body-sm text-cms-muted">
+        Offered when a title is set. Nothing is granted until an administrator applies it with a
+        scope.
+      </p>
+    </div>
+    <CmsButton variant="primary" icon="plus" data-cms-mapping-create>Add default</CmsButton>
+  </div>
+
+  <div class="overflow-x-auto rounded-cms-lg border border-cms-line bg-cms-surface">
+    <table class="w-full border-collapse text-cms-body-sm">
+      <caption class="sr-only">Default access and workflow roles by job title</caption>
+      <thead>
+        <tr>
+          <th
+            scope="col"
+            class="border-b border-cms-line px-4 py-2.5 text-left font-medium text-cms-muted"
+            >Job title</th
+          >
+          <th
+            scope="col"
+            class="border-b border-cms-line px-4 py-2.5 text-left font-medium text-cms-muted"
+            >Access roles</th
+          >
+          <th
+            scope="col"
+            class="border-b border-cms-line px-4 py-2.5 text-left font-medium text-cms-muted"
+            >Workflow authority</th
+          >
+        </tr>
+      </thead>
+      <tbody>
+        {
+          titles.map((title) => (
+            <tr class="border-b border-cms-line align-top last:border-0">
+              <td class="px-4 py-2.5 font-medium text-cms-ink">
+                {title.titleName}
+                {!title.active && <CmsBadge tone="neutral" label="Inactive" class="ms-2" />}
+              </td>
+              <td class="px-4 py-2.5">
+                {accessFor(title.jobTitleId).length === 0 ? (
+                  <span class="text-cms-muted">—</span>
+                ) : (
+                  <ul class="flex flex-col gap-1.5">
+                    {accessFor(title.jobTitleId).map((mapping) => (
+                      <li class="flex flex-col gap-0.5">
+                        <span class="flex flex-wrap items-center gap-2">
+                          <span class="text-cms-ink">{mapping.targetName}</span>
+                          {!mapping.active && <CmsBadge tone="neutral" label="Off" />}
+                          {!mapping.targetActive && (
+                            <CmsBadge tone="warning" label="Role inactive" />
+                          )}
+                          <button
+                            type="button"
+                            data-cms-mapping-remove={mapping.mappingId}
+                            data-kind="ACCESS"
+                            data-label={`${mapping.targetName} from ${mapping.jobTitle}`}
+                            class="rounded-cms px-1.5 py-0.5 text-cms-caption font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                          >
+                            Remove
+                          </button>
+                        </span>
+                        <details>
+                          <summary class="cursor-pointer text-cms-caption text-cms-muted outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                            {countOf(mapping.targetId)}{' '}
+                            {countOf(mapping.targetId) === 1 ? 'permission' : 'permissions'}
+                          </summary>
+                          <ul class="mt-1 flex flex-col gap-0.5 ps-2">
+                            {grantsOf(mapping.targetId).map((group) => (
+                              <li class="text-cms-caption text-cms-muted">
+                                <span class="font-medium text-cms-ink">{group.module}</span>:{' '}
+                                {group.entries.map((entry) => entry.label).join(', ')}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </td>
+              <td class="px-4 py-2.5">
+                {workflowFor(title.jobTitleId).length === 0 ? (
+                  <span class="text-cms-muted">—</span>
+                ) : (
+                  <ul class="flex flex-col gap-1.5">
+                    {workflowFor(title.jobTitleId).map((mapping) => (
+                      <li class="flex flex-wrap items-center gap-2">
+                        <span class="text-cms-ink">{mapping.targetName}</span>
+                        {!mapping.active && <CmsBadge tone="neutral" label="Off" />}
+                        {!mapping.targetActive && <CmsBadge tone="warning" label="Role inactive" />}
+                        <button
+                          type="button"
+                          data-cms-mapping-remove={mapping.mappingId}
+                          data-kind="WORKFLOW"
+                          data-label={`${mapping.targetName} from ${mapping.jobTitle}`}
+                          class="rounded-cms px-1.5 py-0.5 text-cms-caption font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <CmsDrawer id="cms-mapping-drawer" tone="form" title="Add a default">
+    <form id="cms-mapping-form" novalidate class="flex flex-col gap-4">
+      <p
+        id="cms-mapping-error"
+        role="alert"
+        hidden
+        class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+      >
+      </p>
+      <CmsSelect
+        id="jm-jobTitleId"
+        name="jobTitleId"
+        label="Job title"
+        options={titleOptions}
+        required
+      />
+      <CmsSelect
+        id="jm-kind"
+        name="kind"
+        label="Kind"
+        options={[
+          { value: 'ACCESS', label: 'Access role' },
+          { value: 'WORKFLOW', label: 'Workflow authority' },
+        ]}
+        required
+      />
+      <div data-kind-field="ACCESS">
+        <CmsSelect
+          id="jm-roleId"
+          name="accessRoleId"
+          label="Access role"
+          options={[{ value: '', label: 'Choose a role' }, ...roleOptions]}
+        />
+      </div>
+      <div data-kind-field="WORKFLOW" hidden>
+        <CmsSelect
+          id="jm-workflowRoleId"
+          name="workflowRoleId"
+          label="Workflow role"
+          options={[{ value: '', label: 'Choose a role' }, ...workflowRoleOptions]}
+        />
+      </div>
+      <p class="text-cms-body-sm text-cms-muted">
+        This grants nobody anything. It is offered when the title is set.
+      </p>
+    </form>
+    <Fragment slot="actions">
+      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+      <button
+        type="submit"
+        id="cms-mapping-save"
+        form="cms-mapping-form"
+        class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        Add
+      </button>
+    </Fragment>
+  </CmsDrawer>
+</section>
+
+<script>
+  const drawer = document.getElementById('cms-mapping-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-mapping-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-mapping-error');
+  const save = document.getElementById('cms-mapping-save') as HTMLButtonElement | null;
+
+  if (drawer && form && save) {
+    // `querySelector<HTMLSelectElement>` does not satisfy the generic's
+    // `Element` constraint in this DOM lib, so the narrow is by instance.
+    const selectNamed = (name: string): HTMLSelectElement | null => {
+      const node = form.elements.namedItem(name);
+      return node instanceof HTMLSelectElement ? node : null;
+    };
+
+    // One control per kind, shown and enabled only for the chosen one. A
+    // disabled control is not submitted, so the other kind's role never
+    // reaches the server as an empty string.
+    const applyKind = () => {
+      const kind = selectNamed('kind')?.value ?? 'ACCESS';
+      form.querySelectorAll<HTMLElement>('[data-kind-field]').forEach((group) => {
+        const mine = group.dataset.kindField === kind;
+        group.hidden = !mine;
+        group.querySelectorAll('select').forEach((field) => {
+          if (field instanceof HTMLSelectElement) field.disabled = !mine;
+        });
+      });
+    };
+
+    const say = (text: string) => {
+      if (!errorBox) return;
+      errorBox.textContent = text;
+      errorBox.hidden = text === '';
+    };
+
+    form.addEventListener('change', applyKind);
+
+    document.addEventListener('click', async (event) => {
+      const target = event.target as HTMLElement | null;
+      const opener = target?.closest('[data-cms-mapping-create]');
+      if (opener) {
+        say('');
+        form.reset();
+        applyKind();
+        drawer.showModal();
+        form.querySelector<HTMLElement>('select')?.focus();
+        return;
+      }
+
+      const remove = target?.closest<HTMLElement>('[data-cms-mapping-remove]');
+      if (!remove) return;
+      const mappingId = remove.dataset.cmsMappingRemove ?? '';
+      const kind = remove.dataset.kind ?? 'ACCESS';
+      // A default removes nobody's access, so this asks once and plainly
+      // rather than through a consequence dialogue that would overstate it.
+      if (!window.confirm(`Remove ${remove.dataset.label ?? 'this default'}?`)) return;
+      const response = await fetch(
+        `/api/admin/job-title-mappings/${encodeURIComponent(mappingId)}?kind=${kind}`,
+        { method: 'DELETE', credentials: 'same-origin' },
+      );
+      if (response.ok) window.location.reload();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      say('');
+      save.disabled = true;
+      const kind = selectNamed('kind')?.value ?? 'ACCESS';
+      const targetId =
+        kind === 'WORKFLOW'
+          ? (selectNamed('workflowRoleId')?.value ?? '')
+          : (selectNamed('accessRoleId')?.value ?? '');
+      try {
+        const response = await fetch('/api/admin/job-title-mappings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            kind,
+            jobTitleId: selectNamed('jobTitleId')?.value ?? '',
+            targetId,
+            active: true,
+          }),
+        });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+        say(
+          payload?.error?.fields?.[0]?.message ??
+            payload?.error?.message ??
+            'That could not be saved. Please try again.',
+        );
+      } catch {
+        say('There was a problem reaching the server. Check your connection.');
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    applyKind();
+  }
+</script>
