@@ -144,20 +144,15 @@ const listOf = (items: string[]) =>
 /**
  * WHY THE TABLE IS EMPTY, AND THE TWO ANSWERS ARE NOT THE SAME.
  *
- * "Nobody completed one of these" is true when the period holds no completions
- * and FALSE when it holds hundreds that record no actor — which is the real
- * extract's normal state until the unresolved approvers are mapped. Saying the
- * first when the second is true is a checkable lie sitting directly beneath a
- * chart that shows the completions. So the message is chosen from the board
- * rather than from the absence of rows.
+ * "No completions" is true when the period holds none and FALSE when it holds
+ * hundreds that record no actor — which is the real extract's normal state
+ * until the unresolved approvers are mapped. Saying the first when the second
+ * is true is a checkable lie sitting directly beneath a chart that shows the
+ * completions. So the message is chosen from the board rather than from the
+ * absence of rows, in two words rather than two sentences.
  */
 const completions = (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
-const emptyBecause =
-  completions === 0
-    ? `Nobody completed one of these in ${period.label}.`
-    : `${completions.toLocaleString('en-KE')} ${
-        completions === 1 ? 'completion is' : 'completions are'
-      } in the chart above and none of them records who performed it, so there is nobody to list.`;
+const emptyBecause = completions === 0 ? 'No completions' : 'No approver recorded';
 
 const empty = groups.length === 0;
 
@@ -208,9 +203,7 @@ const linkClass =
         {
           totalOutside > 0 && (
             <>
-              {' '}
-              {count(totalOutside)} {totalOutside === 1 ? 'completion lies' : 'completions lie'}{' '}
-              outside this period.{' '}
+              {' · '}
               <a class={linkClass} href={widenHref}>
                 Show all time
               </a>
@@ -254,7 +247,7 @@ const linkClass =
                     colspan={COLUMNS.length}
                     class="px-3 pt-3 pb-1 text-start text-cms-caption font-normal text-cms-muted"
                   >
-                    Fewer than {MINIMUM_RANKED_VOLUME} completions, so no comparative position
+                    Under {MINIMUM_RANKED_VOLUME} completions
                   </th>
                 </tr>
               )}
@@ -332,24 +325,22 @@ const linkClass =
 
   {
     /*
-      THE SAME FACT, WHERE IT MAKES SENSE. The chart above draws these functions
-      because they genuinely have turnaround times; this table cannot list them
-      because nobody is recorded as having done them.
+      THE TWO CAVEATS, AS ONE QUIET LINE RATHER THAN TWO PARAGRAPHS.
+      Both facts still matter — a reader must not conclude that invoicing takes
+      nobody's time, nor that an unranked person is a slow one — but a dashboard
+      states them and a memo explains them. The full wording is one control
+      away, in the definition on each column header.
     */
   }
-  {
-    withoutActor.length > 0 && (
-      <p class="text-cms-caption text-cms-muted">
-        {listOf(withoutActor)} {withoutActor.length === 1 ? 'is' : 'are'} in the chart above and not
-        in this table: the source extract records no actor for{' '}
-        {withoutActor.length === 1 ? 'it' : 'them'}.
-      </p>
-    )
-  }
-
   <p class="text-cms-caption text-cms-muted">
-    Listed from the first completion. Ranked from {MINIMUM_RANKED_VOLUME} completions; below that, figures
-    are shown without a comparative rank.
+    {
+      withoutActor.length > 0 && (
+        <>
+          <span title={listOf(withoutActor)}>No approver recorded</span> ·{' '}
+        </>
+      )
+    }
+    Ranked from {MINIMUM_RANKED_VOLUME} completions.
   </p>
 </div>
 
