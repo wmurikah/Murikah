@@ -61,8 +61,25 @@ export async function scopedPurchaseOrders(db: Client, userId: string): Promise<
   });
 }
 
+/**
+ * The purchase order population.
+ *
+ * THE AFFILIATE JOIN IS OUTER, AND THE INNER ONE IT REPLACES DROPPED EVERY REAL
+ * PURCHASE ORDER. The extract carries no affiliate column, so every imported
+ * order is Group-wide with `affiliate_id IS NULL`, and the schema declares the
+ * column nullable for exactly that reason. An inner join to `affiliates`
+ * removed all 45 of them from the population BEFORE any access rule ran, so
+ * even a Group-scoped reader — who is entitled to every row — saw a count of
+ * zero, and Home printed "0 orders" beside a chart drawn from 174 approvals of
+ * those same orders.
+ *
+ * NOTHING ABOUT WHO MAY SEE WHAT HAS CHANGED. Visibility is still decided by
+ * `scopePredicate`, which requires a non-null column to match and therefore
+ * still excludes a Group-wide order from a country- or affiliate-scoped reader,
+ * deliberately and unchanged. The join no longer pre-empts that decision.
+ */
 export const PO_SOURCE = `purchase_orders po
-  JOIN affiliates af ON af.affiliate_id = po.affiliate_id
+  LEFT JOIN affiliates af ON af.affiliate_id = po.affiliate_id
   LEFT JOIN business_units bu ON bu.business_unit_id = po.business_unit_id`;
 
 export interface Population {

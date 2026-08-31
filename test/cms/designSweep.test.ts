@@ -18,6 +18,7 @@ import {
   LEADERBOARD_HEADERS,
   leaderboardColumns,
 } from '../../src/lib/cms/analytics/leaderboard.ts';
+import { SERIES_TOKENS } from '../../src/lib/cms/charts/svg.ts';
 import { join } from 'node:path';
 
 const TOKENS = 'src/styles/tokens.css';
@@ -175,8 +176,13 @@ test('measured contrast: every pair meets its WCAG 2.2 threshold', () => {
       [`${role} status edge on surface`, token(`cms-${role}-border`), surface, 3],
     );
   }
-  for (let n = 1; n <= 5; n++) {
+  // SEVEN, BECAUSE THE PURCHASE ORDER TEMPLATE ALLOWS SEVEN APPROVAL LEVELS and
+  // the bar chart takes one token per function. The loop follows the palette
+  // rather than a number written twice, so an eighth token cannot be added
+  // without a measurement.
+  for (let n = 1; n <= SERIES_TOKENS.length; n++) {
     pairs.push([`chart series ${n} on surface`, token(`cms-series-${n}`), surface, 4.5]);
+    pairs.push([`chart series ${n} on canvas`, token(`cms-series-${n}`), canvas, 4.5]);
   }
 
   const table: string[] = [];
@@ -631,6 +637,30 @@ test('every figure on Home carries a destination', () => {
       assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
     }
   }
+  // THE KPI STRIP'S FIGURES ARE FIGURES TOO, and they are formatted in the
+  // frontmatter because the card renders its own anchor around them. The regex
+  // above cannot see inside a component, so the cards are asserted directly:
+  // every one of them carries a destination, which is the property the scan
+  // exists to protect rather than the string position it happens to check.
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  const cards = [...home.matchAll(/<CmsKpiCard[\s\S]*?\/>/g)].map((m) => m[0]);
+  assert.ok(cards.length > 0, 'Home renders no KPI card');
+  for (const card of cards) {
+    assert.match(card, /href=\{/, 'a KPI card carries no destination');
+    assert.match(card, /value=\{/, 'a KPI card carries no figure');
+  }
+  // And each card is built from a list whose every entry has an href, so a
+  // fifth card cannot be added without one.
+  for (const strip of ['purchaseKpis', 'salesKpis']) {
+    const start = home.indexOf(`const ${strip}: Kpi[] = [`);
+    assert.ok(start !== -1, `${strip} is not declared`);
+    const block = home.slice(start, home.indexOf('\n];', start));
+    const labels = [...block.matchAll(/label: '([^']+)'/g)].length;
+    const hrefs = [...block.matchAll(/\n {4}href:/g)].length;
+    assert.equal(labels, 4, `${strip} should carry four measures`);
+    assert.equal(hrefs, 4, `${strip} has a measure with no destination`);
+    counted += 4;
+  }
   assert.ok(counted >= 6, `expected Home's counts, found ${counted}`);
 
   // The two duration columns are links too, and they are the ones this phase
@@ -672,17 +702,30 @@ test('every Home destination carries the filter and the scope', () => {
   assert.match(source, /drillTo\('\/app\/orders\/sales', filter/);
 });
 
-test('each Home chart is followed by its grouped people leaderboard', () => {
+test('Home leads with the two charts, then the two leaderboards', () => {
   const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
 
   // The charts come first, purchase orders then sales orders, and each
   // leaderboard follows its own chart inside the same column. Reading the
   // order out of the file is what proves the column reads downward: a grid
   // that placed them side by side would interleave these four markers.
-  assert.ok(
-    source.indexOf('Purchase order approval') < source.indexOf('peopleByFunction(purchases)'),
-  );
-  assert.ok(source.indexOf('Sales order approval') < source.indexOf('peopleByFunction(sales)'));
+  //
+  // ASSERTED AGAINST MARKERS THE PAGE ACTUALLY RENDERS. The #199 merge changed
+  // this test to look for `peopleByFunction(...)`, a helper from a rewrite of
+  // the page that the same merge dropped, so the assertion searched for a
+  // string no file contained and failed on main itself — unseen, because the
+  // pipeline never reached the test step.
+  const marks = [
+    ...source.matchAll(
+      /title="(Purchase order approval|Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
+    ),
+  ].map((m) => m[1] ?? m[2]!);
+  assert.deepEqual(marks, [
+    'Purchase order approval',
+    'Purchase order approvers',
+    'Sales order approval',
+    'Sales order approvers',
+  ]);
 
   // Everything that used to sit between them is gone; the one section left is
   // the exception list, and it is below all four.
@@ -691,7 +734,7 @@ test('each Home chart is followed by its grouped people leaderboard', () => {
   );
   assert.deepEqual(order, ['Needs attention']);
   assert.ok(
-    source.indexOf('Needs attention') > source.indexOf('peopleByFunction(sales)'),
+    source.indexOf('Needs attention') > source.indexOf('Sales order approvers'),
     'the exceptions sit below the leaderboards',
   );
 
@@ -1049,7 +1092,10 @@ test('an empty table does not claim that nothing exists', () => {
   const fallback = /emptyMessage = '([^']+)'/.exec(table);
   assert.ok(fallback, 'the table declares a default empty message');
   assert.notEqual(fallback![1], 'Nothing to show yet.', 'the old message is gone');
-  assert.equal(fallback![1]!, 'No results match the current view.');
+  // The MESSAGE THE COMPONENT ACTUALLY DECLARES. The #199 merge changed this
+  // assertion to a wording CmsDataTable never received, so it failed on main
+  // itself.
+  assert.match(fallback![1]!, /An empty result is not a claim that nothing exists/);
 });
 
 test('numbers are tabular and right aligned in every table', () => {
