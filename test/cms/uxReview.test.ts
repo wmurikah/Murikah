@@ -17,7 +17,6 @@ import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
 import { countRoundTrips } from './support/subrequestBudget.ts';
 import { CMS_NAV, visibleNav, navItemAllowed } from '../../src/lib/cms/nav.ts';
 
-
 function walk(dir: string, ext: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
