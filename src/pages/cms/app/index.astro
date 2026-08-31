@@ -459,7 +459,9 @@ const trendOf = (
   const enumerated = periodBuckets(period);
   const buckets =
     enumerated ??
-    [...new Set(points.map((p) => p.bucket))].sort().map((key) => ({ key, label: key, token: key }));
+    [...new Set(points.map((p) => p.bucket))]
+      .sort()
+      .map((key) => ({ key, label: key, token: key }));
   const byFunction = new Map<string, Map<string, number | null>>();
   for (const point of points) {
     const row = byFunction.get(point.fn) ?? new Map<string, number | null>();
@@ -780,10 +782,9 @@ const BAR_DEFINITION =
   `${DEFINITION} The bar is the typical figure, the pale run past its end is the slowest tenth, ` +
   'and the distance between them is the delay a normal reading misses.';
 
-const TREND_DEFINITION =
-  `${DEFINITION} Each line is one function's typical figure per ${
-    shown.grain === 'HOUR' ? 'hour' : shown.grain === 'DAY' ? 'day' : 'month'
-  }, and a break in a line is a period with no completions rather than a completion of no length.`;
+const TREND_DEFINITION = `${DEFINITION} Each line is one function's typical figure per ${
+  shown.grain === 'HOUR' ? 'hour' : shown.grain === 'DAY' ? 'day' : 'month'
+}, and a break in a line is a period with no completions rather than a completion of no length.`;
 
 /** The affiliate now in force, for the control and for the one line beneath it. */
 const affiliateName = affiliates.find((one) => one.value === filter.affiliateId)?.label ?? null;
@@ -804,9 +805,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       revertHref={choice.fellBackFrom === null
         ? null
         : periodHref('/app', choice.fellBackFrom, { pick: null })}
-      revertLabel={choice.fellBackFrom === null
-        ? null
-        : `Show ${choice.fellBackFrom.label} anyway`}
+      revertLabel={choice.fellBackFrom === null ? null : `Show ${choice.fellBackFrom.label} anyway`}
     />
 
     {
@@ -877,13 +876,15 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         Purchase orders
       </h2>
 
-      {/*
+      {
+        /*
         TWO COLUMNS, NEVER FOUR. A panel is half the workspace, so four cards
         across it are 150 pixels each: "1 h 15 min" at the figure size does not
         fit in one, and every label wraps to three lines. Two by two gives each
         card the width its figure needs at 1,280 as well as at 1,440, and the
         strip still reads as one block of four.
-      */}
+      */
+      }
       <div class="grid grid-cols-2 gap-2">
         {
           purchaseKpis.map((kpi) => (
@@ -978,13 +979,15 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
     <section class="flex flex-col gap-4" aria-labelledby="panel-sales">
       <h2 id="panel-sales" class="text-cms-section font-semibold text-cms-ink">Sales orders</h2>
 
-      {/*
+      {
+        /*
         TWO COLUMNS, NEVER FOUR. A panel is half the workspace, so four cards
         across it are 150 pixels each: "1 h 15 min" at the figure size does not
         fit in one, and every label wraps to three lines. Two by two gives each
         card the width its figure needs at 1,280 as well as at 1,440, and the
         strip still reads as one block of four.
-      */}
+      */
+      }
       <div class="grid grid-cols-2 gap-2">
         {
           salesKpis.map((kpi) => (

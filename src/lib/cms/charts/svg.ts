@@ -183,8 +183,7 @@ export const SERIES_TOKENS = [
  * that Tailwind had tree-shaken took out every chart in the application once
  * already.
  */
-export const seriesToken = (index: number): string =>
-  SERIES_TOKENS[index % SERIES_TOKENS.length]!;
+export const seriesToken = (index: number): string => SERIES_TOKENS[index % SERIES_TOKENS.length]!;
 
 const escape = (value: string): string =>
   value
