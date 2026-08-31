@@ -18,7 +18,8 @@ import {
   LEADERBOARD_HEADERS,
   leaderboardColumns,
 } from '../../src/lib/cms/analytics/leaderboard.ts';
-import { SERIES_TOKENS } from '../../src/lib/cms/charts/svg.ts';
+import { SERIES_TOKENS, lineChart } from '../../src/lib/cms/charts/svg.ts';
+import { formatDuration } from '../../src/lib/cms/analytics/stats.ts';
 import { join } from 'node:path';
 
 const TOKENS = 'src/styles/tokens.css';
@@ -1181,7 +1182,6 @@ test('one period control, on every analytics page, from one implementation', () 
   assert.deepEqual(components, ['src/components/cms/CmsPeriodControl.astro']);
 
   const PAGES = [
-    'src/pages/cms/app/index.astro',
     'src/pages/cms/app/orders/purchases/performance.astro',
     'src/pages/cms/app/orders/sales/performance.astro',
     'src/pages/cms/app/crm/analytics.astro',
@@ -1197,6 +1197,32 @@ test('one period control, on every analytics page, from one implementation', () 
     );
   }
 
+  // HOME ASKS THE SAME QUESTION WITH TWO DROPDOWNS, and that is a deliberate
+  // difference rather than a second implementation. An analytics page compares
+  // arbitrary windows and needs presets, a quarter, all time and a typed range;
+  // a dashboard is read one month at a time, and every extra way of asking is a
+  // decision taken before the first figure is read. What must NOT differ is the
+  // meaning of a month, so Home resolves its period from the same module — and
+  // it renders no date input of its own, which is what stops the escape hatch
+  // growing back one control at a time.
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  assert.match(home, /<CmsMonthYearControl/, 'Home carries the month and year control');
+  assert.ok(!/<CmsPeriodControl/.test(home), 'Home does not carry both controls');
+  assert.match(
+    home,
+    /from '@\/lib\/cms\/analytics\/period'/,
+    'Home does not resolve its period from the shared module',
+  );
+  const monthYear = readFileSync('src/components/cms/CmsMonthYearControl.astro', 'utf8');
+  assert.ok(!/type="date"/.test(monthYear), 'the dashboard control has no date input');
+  for (const field of ['name="month"', 'name="year"']) {
+    assert.ok(monthYear.includes(field), `the dashboard control is missing ${field}`);
+  }
+  // And it reads its months and years from the period module rather than
+  // listing twelve names of its own.
+  assert.match(monthYear, /MONTH_OPTIONS/, 'the months come from the period module');
+  assert.match(monthYear, /yearOptions/, 'the years come from the period module');
+
   // The presets are declared in exactly one file. A page that listed its own
   // would be a second implementation wearing the first one's name.
   const declaring = CMS_SOURCE.concat(CMS_PAGES).filter((path) =>
@@ -1208,6 +1234,202 @@ test('one period control, on every analytics page, from one implementation', () 
     'the presets live in src/lib/cms/analytics/period.ts alone',
   );
   console.log(`[period] one control on ${PAGES.length} pages`);
+});
+
+/* -------------------------------------------------------------------------
+ * Phase 4.2: the dashboard reads as a dashboard
+ * ------------------------------------------------------------------------- */
+
+test('Home carries no paragraph, only microcopy', () => {
+  // THE GREP IS THE TEST, AND THE LIMIT IS FIVE WORDS. Home had grown a
+  // sentence under every widget — why no target line is drawn, how the ranking
+  // threshold works, which month the data is really in — and a dashboard that
+  // has to be read rather than scanned is a report. Everything that survives is
+  // a label; everything that needed explaining moved behind a definition
+  // control, which is one press away and costs no pixels until it is asked for.
+  const file = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  const template = file.slice(file.indexOf('---', 3) + 3);
+  const offenders: string[] = [];
+  for (const match of template.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)) {
+    // The literal words only: an interpolation is a value, not prose, and its
+    // own length is asserted where it is built.
+    const words = match[1]!
+      .replace(/\{[^}]*\}/g, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&\w+;/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((word) => /[a-z]/i.test(word));
+    if (words.length > 5) offenders.push(`${words.length} words: ${words.join(' ').slice(0, 70)}`);
+  }
+  assert.deepEqual(offenders, [], `Home still carries prose:\n${offenders.join('\n')}`);
+
+  // A KPI's quiet line is microcopy too, and it is a prop rather than a
+  // paragraph, so the scan above cannot see it.
+  for (const match of file.matchAll(/context: `([^`]*)`/g)) {
+    const words = match[1]!
+      .replace(/\$\{[^}]*\}/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((word) => /[a-z]/i.test(word));
+    assert.ok(words.length <= 5, `a KPI line runs to ${words.length} words: ${match[1]}`);
+  }
+
+  // The sentences that were there are gone by name, so they cannot drift back.
+  for (const gone of [
+    'so no target line is drawn',
+    'completions sit in other periods',
+    'which is too few to compare',
+    'stays in view under',
+  ]) {
+    assert.ok(!file.includes(gone), `Home still says "${gone}"`);
+  }
+});
+
+test('the leaderboard states its caveats rather than explaining them', () => {
+  const board = readFileSync('src/components/cms/CmsApprovalLeaderboard.astro', 'utf8');
+  const template = board.slice(board.indexOf('---', 3) + 3);
+  const offenders: string[] = [];
+  for (const match of template.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)) {
+    // FRAGMENT BY FRAGMENT, because a meta line is several pieces of microcopy
+    // separated by a middot, not one sentence. Each piece is held to the limit;
+    // joining two of them with a separator does not buy either more words.
+    for (const piece of match[1]!.split('·')) {
+      const words = piece
+        .replace(/\{[^}]*\}/g, ' ')
+        .replace(/<[^>]*>/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter((word) => /[a-z]/i.test(word));
+      if (words.length > 5)
+        offenders.push(`${words.length} words: ${words.join(' ').slice(0, 70)}`);
+    }
+  }
+  assert.deepEqual(offenders, [], `the leaderboard still carries prose:\n${offenders.join('\n')}`);
+  for (const gone of [
+    'Listed from the first completion',
+    'below that, figures are shown',
+    'so there is nobody to list',
+    'so no comparative position',
+  ]) {
+    assert.ok(!board.includes(gone), `the leaderboard still says "${gone}"`);
+  }
+});
+
+test('every Home chart names both of its axes', () => {
+  // A TICK SAYS "37 min"; A TITLE SAYS WHAT IS BEING MEASURED. Both charts on
+  // both panels carry the pair, and the trend's are the two the brief names:
+  // months across, minutes up.
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  assert.equal(
+    (home.match(/xAxisLabel:/g) ?? []).length,
+    2,
+    'the bar chart and the trend each name their x axis',
+  );
+  assert.equal((home.match(/yAxisLabel:/g) ?? []).length, 2, 'and each names its y axis');
+  assert.match(
+    home,
+    /xAxisLabel: 'Month',\n\s*yAxisLabel: 'Minutes',/,
+    'the trend is months by minutes',
+  );
+  assert.match(
+    home,
+    /xAxisLabel: 'Minutes',\n\s*yAxisLabel: 'Function',/,
+    'the bars are minutes by function',
+  );
+
+  // The chart module draws them, rather than a page hand-placing text in SVG.
+  const svg = readFileSync('src/lib/cms/charts/svg.ts', 'utf8');
+  assert.match(svg, /function axisTitles\(/, 'one implementation draws every axis title');
+});
+
+test('the Home trend is a line over months, not a scatter over days', () => {
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  // ONE VALUE PER MONTH, over the year ending at the month on screen. Bucketing
+  // one month's DAYS is what produced the scatter: a mark wherever an approval
+  // landed and a gap on every other day.
+  assert.match(home, /approvalTrend\(client, 'PURCHASE_ORDER', trendScope, 'MONTH'\)/);
+  assert.match(home, /approvalTrend\(client, 'SALES_ORDER', trendScope, 'MONTH'\)/);
+  assert.match(
+    home,
+    /trailingMonths\(shown, trendSpan\(shown, calendar\)\)/,
+    'the window is the months ending at this one, sized to the data',
+  );
+  assert.ok(!/approvalTrend\([^)]*shown\.grain/.test(home), 'the trend no longer follows the span');
+
+  // And the line is a line: a stroked path, with the markers as decoration on
+  // it rather than the whole of it.
+  const svg = readFileSync('src/lib/cms/charts/svg.ts', 'utf8');
+  assert.match(svg, /stroke="var\(--color-\$\{one\.token\}\)" stroke-width="2"/);
+
+  // ONE MONTH IS NOT A TREND. The purchase order extract covers a single month,
+  // and a line chart over it drew one dot per function against a row of empty
+  // months, which is the scatter the brief asked to be rid of.
+  assert.match(home, /minimumCategories: 2,/, 'a trend needs two months before it draws');
+});
+
+test('a chart never clips the units off its own axis', () => {
+  // The sales order trend reads in hours, so its top tick is "8 h 20 min" and a
+  // fixed 56-pixel gutter cut it to "h 20 min". An axis whose unit is sliced
+  // off is not an axis, so the gutter is measured from the labels themselves.
+  const line = lineChart(
+    [
+      {
+        name: 'Finance approval',
+        token: 'cms-series-1',
+        points: [
+          { label: 'Apr', value: 100 },
+          { label: 'May', value: 500 },
+        ],
+      },
+    ],
+    { format: formatDuration, yAxisLabel: 'Minutes', xAxisLabel: 'Month' },
+  );
+  const ticks = [...line.svg.matchAll(/<text x="(-?\d+)" y="\d+" text-anchor="end"/g)];
+  assert.ok(ticks.length >= 3, 'three ticks are drawn');
+  for (const tick of ticks) assert.ok(Number(tick[1]) >= 8, 'no tick starts off the left edge');
+  const widest = Math.max(...line.table.rows.map((row) => (row[1] ?? '').length));
+  assert.ok(widest >= 8, 'this fixture really does carry a long duration');
+  // Both titles are still drawn, and the plot starts after the gutter.
+  assert.match(line.svg, /MINUTES/);
+  assert.match(line.svg, /MONTH/);
+});
+
+test('a trend with one month of history says so instead of drawing a scatter', () => {
+  const one = [
+    {
+      name: 'Finance approval',
+      token: 'cms-series-1',
+      points: [
+        { label: 'Apr', value: null },
+        { label: 'May', value: 20 },
+      ],
+    },
+  ];
+  const stood = lineChart(one, { minimumCategories: 2, emptyMessage: 'Need more history' });
+  assert.match(stood.svg, /Need more history/);
+  assert.equal(/<path d="M/.test(stood.svg), false, 'no line is drawn over one month');
+  assert.ok(!stood.svg.includes('MINUTES'), 'and no axis is titled over a plot that is not there');
+  // The numbers are not lost: the alt says why, then reads the value out, and
+  // the table underneath still carries it.
+  assert.match(stood.alt, /^Need more history\./);
+  assert.match(stood.alt, /20/);
+  assert.equal(stood.table.rows.length, 2);
+  // Two months of history and it draws.
+  const drawn = lineChart(
+    [
+      {
+        ...one[0]!,
+        points: [
+          { label: 'Apr', value: 10 },
+          { label: 'May', value: 20 },
+        ],
+      },
+    ],
+    { minimumCategories: 2, emptyMessage: 'Need more history' },
+  );
+  assert.equal(drawn.svg.includes('Need more history'), false);
+  assert.match(drawn.svg, /<path d="M/);
 });
 
 test('no From, To or Trend control survives on an analytics page', () => {
@@ -1260,11 +1482,13 @@ test('the leaderboard groups by function and carries only people', () => {
   // excluded whole — dropping the null rows and keeping the function would
   // leave an empty heading claiming somebody worked on it.
   assert.match(board, /filter\(\(row\) => row\.userId !== null\)/);
-  // And it is named beneath, so the same fact is still on the page. Matched on
-  // whitespace-normalised source, because the formatter is free to rewrap a
-  // sentence and an assertion that breaks when it does is testing prettier.
+  // And it is named beneath, so the same fact is still on the page — now as a
+  // caption rather than the sentence it used to be, because a dashboard states
+  // a caveat and a memo explains it. Matched on whitespace-normalised source,
+  // because the formatter is free to rewrap and an assertion that breaks when
+  // it does is testing prettier.
   const flat = board.replace(/\s+/g, ' ');
-  assert.match(flat, /in the chart above and not in this table/);
+  assert.match(flat, /title=\{listOf\(withoutActor\)\}>No approver recorded</);
 
   // The three removed columns leave no trace in the markup.
   for (const gone of ['Within SLA', 'Oldest pending', 'oldestPendingAt', 'row.pending']) {

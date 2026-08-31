@@ -21,14 +21,22 @@ import {
   drillMonths,
   drillYears,
   grainFor,
+  monthOf,
+  monthToken,
+  parseDashboardPeriod,
   parsePeriod,
+  periodBuckets,
+  periodFromToken,
   periodHasData,
   periodHref,
   presetPeriod,
   previousPeriod,
   readCalendar,
   readCalendars,
+  trailingMonths,
+  trendSpan,
   type DataCalendar,
+  type ResolvedPeriod,
 } from '../../src/lib/cms/analytics/period.ts';
 
 const TODAY = new Date('2026-08-30T09:00:00Z');
@@ -286,4 +294,82 @@ test('the calendar is still one statement once it carries a series', () => {
   ]);
   // Answering the question per board must not cost a query per board.
   assert.equal(sql.split(';').length, 1);
+});
+
+/* -------------------------------------------------------------------------
+ * Phase 4.2: the dashboard trend is a run of months
+ * ------------------------------------------------------------------------- */
+
+test('the trend window is whole months, bucketed by month whatever its span', () => {
+  const may = periodFromToken('2026-05', TODAY) as ResolvedPeriod;
+
+  // TWO MONTHS IS SIXTY-ONE DAYS, and `grainFor` reads sixty-one days as DAY.
+  // Inheriting that grain made `periodBuckets` enumerate sixty-one daily keys
+  // against a query returning two monthly ones: nothing matched and the trend
+  // drew "no data" with the rows in hand. The window is months by construction.
+  const short = trailingMonths(may, 2);
+  assert.equal(short.grain, 'MONTH');
+  assert.equal(short.from, '2026-04-01');
+  assert.equal(short.to, '2026-05-31');
+  assert.deepEqual(
+    (periodBuckets(short) ?? []).map((bucket) => bucket.key),
+    ['2026-04', '2026-05'],
+  );
+
+  // A full year still ends at the month on screen and starts eleven back.
+  const year = trailingMonths(may, 12);
+  assert.equal(year.grain, 'MONTH');
+  assert.equal(year.from, '2025-06-01');
+  assert.equal(year.to, '2026-05-31');
+  assert.equal((periodBuckets(year) ?? []).length, 12);
+  // Inside a year no month repeats, so a bucket is named by its month alone.
+  assert.deepEqual(
+    (periodBuckets(year) ?? []).slice(0, 2).map((bucket) => bucket.label),
+    ['Jun', 'Jul'],
+  );
+});
+
+test('the trend spans the data it has, never a year of empty columns', () => {
+  const may = periodFromToken('2026-05', TODAY) as ResolvedPeriod;
+  const twoMonths = EXTRACT;
+  // The one extract covers two months. A twelve-column axis would draw ten
+  // blank ones and squeeze the line into the last inch, which is the clustered
+  // reading a trend exists to replace.
+  assert.equal(trendSpan(may, twoMonths), 2);
+
+  const wide: DataCalendar = { ...EXTRACT, months: new Set(['2023-01', '2026-05']) };
+  assert.equal(trendSpan(may, wide), 12, 'and never more than a year');
+
+  // Two is the floor: one column is a bar, not a trend.
+  const single: DataCalendar = { ...EXTRACT, months: new Set(['2026-05']) };
+  assert.equal(trendSpan(may, single), 2);
+});
+
+test('a month and a year name the period, from either shape of URL', () => {
+  // The control posts month and year; every drill and every link elsewhere
+  // carries the one token the rest of the application speaks. Both land here.
+  const fromControl = parseDashboardPeriod(
+    new URLSearchParams({ month: '5', year: '2026' }),
+    TODAY,
+  );
+  assert.equal(fromControl.period.key, '2026-05');
+  assert.equal(fromControl.chosen, true);
+
+  const fromToken = parseDashboardPeriod(new URLSearchParams({ period: '2026-05' }), TODAY);
+  assert.equal(fromToken.period.key, '2026-05');
+  assert.equal(fromToken.chosen, true);
+
+  // A period the two dropdowns cannot express still arrives, as the month its
+  // window ends in, so a link from an analytics page is never a dead end.
+  const fromYear = parseDashboardPeriod(new URLSearchParams({ period: '2026' }), TODAY);
+  assert.equal(fromYear.period.level, 'MONTH');
+  assert.equal(fromYear.period.key, '2026-12');
+
+  // Nothing chosen is nothing chosen, so the fallback may still move it.
+  assert.equal(parseDashboardPeriod(new URLSearchParams(), TODAY).chosen, false);
+
+  // And the round trip the control depends on.
+  const at = monthOf(periodFromToken('2026-05', TODAY) as ResolvedPeriod, TODAY);
+  assert.deepEqual(at, { month: 5, year: 2026 });
+  assert.equal(monthToken(at.month, at.year), '2026-05');
 });
