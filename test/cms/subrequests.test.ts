@@ -34,12 +34,18 @@ import {
 } from './support/subrequestBudget.ts';
 import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
 import { parseFilter, drillTo } from '../../src/lib/cms/analytics/filters.ts';
-import { approvalBoard } from '../../src/lib/cms/repos/approvalSla.ts';
+import {
+  approvalBoard,
+  approvalCycle,
+  approvalTrend,
+} from '../../src/lib/cms/repos/approvalSla.ts';
 import {
   calendarSql,
   choosePeriod,
   parsePeriod,
+  previousPeriod,
   readCalendar,
+  withPeriod,
 } from '../../src/lib/cms/analytics/period.ts';
 import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
 import { countPurchaseOrders } from '../../src/lib/cms/repos/poPerformance.ts';
@@ -188,53 +194,106 @@ function assertWithinBudget(page: string, trips: number, statements: number): vo
 const filter = parseFilter(new URLSearchParams());
 
 /**
- * Home, which is now the two approval boards, the exceptions and the waiting
- * counts.
+ * Home: two panels, each a KPI strip, a bar chart, a trend and a leaderboard.
  *
- * Every read is issued in the same microtask, so the batcher sends them as one
- * outbound request each time it drains. The thing this test protects is that
- * property: a figure added later that awaits before its neighbours would cost
- * a round trip of its own, and this is where that shows up.
+ * THE SHAPE IS THE ASSERTION. The calendar is read on its own, because nothing
+ * else on the page can be asked for until the period is known — a fallback off
+ * an empty default changes what every figure is a figure OF. Everything after
+ * it is issued into the same queue in one go, so the batcher coalesces it: the
+ * cost of the page scales with the depth of its deepest chain and not with the
+ * number of figures on it.
+ *
+ * The thing this test protects is that property. A figure added later that
+ * awaits before its neighbours would open a wave of its own and cost a round
+ * trip, and this is where that shows up rather than in production.
  */
 test('/app stays inside its subrequest budget', async () => {
   const today = new Date(NOW.replace(' ', 'T') + 'Z');
   const params = new URLSearchParams();
   const { trips, statements } = await cost(async (b) => {
-    // WAVE ONE: everything that does not depend on which period is shown.
-    // The calendar behind the period control rides along with the exceptions
-    // and the two waiting counts rather than costing a trip of its own, which
-    // is the whole reason it is one statement instead of one per level.
-    const [calendarRows, , ,] = await Promise.all([
-      runSection(b, 'home.calendar', (db) =>
-        db.execute({
-          sql: calendarSql([
-            { table: 'workflow_stage_instances', column: 'completed_at' },
-            { table: 'sales_orders', column: 'invoice_created_at' },
-            { table: 'sales_orders', column: 'loading_authority_at' },
-          ]),
-          args: ['2026-08'],
-        }),
-      ),
-      runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, filter, NOW)),
-      runSection(b, 'home.po-waiting', (db) =>
-        countPurchaseOrders(db, USER, { ...filter, status: 'IN_APPROVAL' }, NOW),
-      ),
-      runSection(b, 'home.so-waiting', (db) =>
-        countSalesOrders(db, USER, { ...filter, status: 'PENDING_FINANCE' }, NOW),
-      ),
-    ]);
+    // THE CALENDAR, ALONE. One statement for the whole period control.
+    const calendarRows = await runSection(b, 'home.calendar', (db) =>
+      db.execute({
+        sql: calendarSql([
+          {
+            table: 'workflow_stage_instances',
+            column: 'completed_at',
+            series: 'PURCHASE_ORDER',
+            where: `workflow_instance_id IN (
+              SELECT workflow_instance_id FROM workflow_instances
+               WHERE entity_type = 'PURCHASE_ORDER')`,
+          },
+          {
+            table: 'workflow_stage_instances',
+            column: 'completed_at',
+            series: 'SALES_ORDER',
+            where: `workflow_instance_id IN (
+              SELECT workflow_instance_id FROM workflow_instances
+               WHERE entity_type = 'SALES_ORDER')`,
+          },
+          { table: 'sales_orders', column: 'invoice_created_at', series: 'SALES_ORDER' },
+          { table: 'sales_orders', column: 'loading_authority_at', series: 'SALES_ORDER' },
+        ]),
+        args: ['2026-08'],
+      }),
+    );
     const calendar = readCalendar(
       calendarRows.ok ? (calendarRows.value.rows as Record<string, unknown>[]) : [],
     );
-    // WAVE TWO: the boards, which cannot be issued until the period is known,
-    // because a fallback off an empty default changes what they are asked.
     const choice = choosePeriod(parsePeriod(params, today), calendar, today, false);
+    const shown = choice.period;
+    const before = previousPeriod(shown);
+    const active = withPeriod(filter, shown);
+    const scope = { from: shown.from, to: shown.to, affiliateId: filter.affiliateId };
+    const priorScope = before === null ? null : { ...scope, from: before.from, to: before.to };
+
+    // EVERYTHING ELSE, IN ONE GO: the exceptions, four counts, four boards,
+    // two trends, two end-to-end spans and the affiliate list.
     await Promise.all([
-      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', choice.period)),
-      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', choice.period)),
+      runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, active, NOW)),
+      runSection(b, 'home.po-total', (db) => countPurchaseOrders(db, USER, active, NOW)),
+      runSection(b, 'home.so-total', (db) => countSalesOrders(db, USER, active, NOW)),
+      runSection(b, 'home.po-waiting', (db) =>
+        countPurchaseOrders(db, USER, { ...active, status: 'IN_APPROVAL' }, NOW),
+      ),
+      runSection(b, 'home.so-waiting', (db) =>
+        countSalesOrders(db, USER, { ...active, status: 'PENDING_FINANCE' }, NOW),
+      ),
+      runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', scope)),
+      runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', scope)),
+      priorScope === null
+        ? Promise.resolve(null)
+        : runSection(b, 'home.purchases-prev', (db) =>
+            approvalBoard(db, 'PURCHASE_ORDER', priorScope),
+          ),
+      priorScope === null
+        ? Promise.resolve(null)
+        : runSection(b, 'home.sales-prev', (db) => approvalBoard(db, 'SALES_ORDER', priorScope)),
+      runSection(b, 'home.purchases-trend', (db) =>
+        approvalTrend(db, 'PURCHASE_ORDER', scope, shown.grain),
+      ),
+      runSection(b, 'home.sales-trend', (db) =>
+        approvalTrend(db, 'SALES_ORDER', scope, shown.grain),
+      ),
+      runSection(b, 'home.purchases-cycle', (db) => approvalCycle(db, 'PURCHASE_ORDER', scope)),
+      runSection(b, 'home.sales-cycle', (db) => approvalCycle(db, 'SALES_ORDER', scope)),
+      runSection(b, 'home.affiliates', (db) =>
+        db.execute(
+          `SELECT affiliate_id, affiliate_name FROM affiliates
+            WHERE active = 1 ORDER BY affiliate_name`,
+        ),
+      ),
     ]);
   });
   assertWithinBudget('/app', trips, statements);
+  // THE FIGURE THE BRIEF ASKS FOR, PRINTED RATHER THAN DESCRIBED. The panels
+  // this phase rebuilt added a KPI strip, two trends and two end-to-end spans
+  // to each side of the page, and the page must not have become more expensive
+  // for it. Sixteen statements were added; no round trip was.
+  assert.ok(
+    trips <= 6,
+    `/app cost ${trips} round trips, up from the 6 it cost before the panels were rebuilt`,
+  );
 });
 
 /**

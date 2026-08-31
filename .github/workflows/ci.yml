@@ -10,9 +10,34 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# THREE INDEPENDENT CHECKS, AND THE SPLIT IS THE FIX.
+#
+# This used to be one job running lint, format check, build and test as
+# sequential steps. Sequential steps skip everything after the first failure,
+# and prettier had been red on main for days over three files nobody formatted
+# — so the Build step was SKIPPED on every run, `astro check` never executed
+# on any pull request, and five merges carried eleven type errors onto main
+# while the deploy died at a step the pipeline had stopped reaching. Every one
+# of those runs was "red", but it was the same red as yesterday's, so it read
+# as noise rather than as a broken build.
+#
+# The build is therefore its own job with its own named status check, which is
+# the one to mark REQUIRED: it is exactly what the Cloudflare deploy runs, and
+# nothing else in the pipeline can mask it or be mistaken for it. The tests
+# are a separate check because the suite carries four GRC failures that exist
+# on main today; folding them into the build's job would make the deploy gate
+# red for a reason that has nothing to do with the deploy, and a check that is
+# always red cannot be required.
+#
+# For a merge to be BLOCKED on any of these, branch protection must also mark
+# it required (Settings → Branches → protection for main → "Require status
+# checks to pass" → select the job names below). That is repository
+# configuration, not workflow content, and only an administrator can set it.
+# Start with "Build (astro check + astro build)" and "Lint and format"; add
+# "Test (unit + smoke)" once the four GRC failures on main are fixed.
 jobs:
   build:
-    name: Install, lint, build and test
+    name: Build (astro check + astro build)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,18 +58,66 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `pnpm run build` is `astro check && astro build`: the type check the
+      # Cloudflare deploy runs first, then the real build. This is the step
+      # that proves a merge cannot break the deploy.
+      - name: Build
+        run: pnpm run build
+
+  test:
+    name: Test (unit + smoke)
+    # After the build, because a broken build makes every test result noise,
+    # and the run should spend its minutes on the failure that explains them.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The GRC smoke test (Build Prompt 22) boots the BUILT worker against a
+      # seeded throwaway database, loads every page and dry-runs every
+      # mutation, and fails on any 500 — so this job needs its own dist/ and
+      # builds one. `astro build` alone: the type check already gated in the
+      # job above, and running it twice per pipeline buys nothing.
+      - name: Build the worker for the smoke test
+        run: pnpm exec astro build
+
+      - name: Test
+        run: pnpm run test
+
+  quality:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Lint
         run: pnpm run lint
 
       - name: Format check
         run: pnpm run format:check
-
-      - name: Build (astro check + astro build)
-        run: pnpm run build
-
-      # The unit tests plus the GRC smoke test (Build Prompt 22): the smoke test
-      # boots the built worker (dist/ from the step above) against a seeded
-      # throwaway database, loads every page and dry-runs every mutation, and
-      # fails the build on any 500.
-      - name: Test (unit + smoke)
-        run: pnpm run test

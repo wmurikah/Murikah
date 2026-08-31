@@ -45,15 +45,18 @@ import {
   type ApprovalBoard,
   type ApprovalProcess,
   type LeaderRow,
+  type RecordView,
 } from '@/lib/cms/repos/approvalSla';
-import { periodParams, type ResolvedPeriod } from '@/lib/cms/analytics/period';
-import { leaderboardColumns } from '@/lib/cms/analytics/leaderboard';
+import { type ResolvedPeriod } from '@/lib/cms/analytics/period';
+import { leaderboardColumns, approvalRecordsHref } from '@/lib/cms/analytics/leaderboard';
 
 interface Props {
   caption: string;
   process: ApprovalProcess;
   board: ApprovalBoard | null;
   period: ResolvedPeriod;
+  /** The affiliate the figures were taken under, carried into every drill. */
+  affiliateId: string | null;
   /** How many completions this BOARD holds outside the period. Never a mixed count. */
   totalOutside: number;
   /** Where "show all time" goes, so an empty period offers to widen. */
@@ -67,6 +70,7 @@ const {
   process,
   board,
   period,
+  affiliateId,
   totalOutside,
   widenHref,
   orderPath,
@@ -96,22 +100,84 @@ for (const row of withActor) {
 }
 groups.sort((a, b) => a.order - b.order);
 
+/**
+ * A NUMERIC POSITION, AND NEVER ONE EARNED ON SPEED ALONE.
+ *
+ * A rank is offered only to somebody who completed at least
+ * MINIMUM_RANKED_VOLUME of the function, because a median over three approvals
+ * is noise and publishing a league table built on noise is how a dashboard
+ * turns into an accusation. Everybody else is listed after, in volume order,
+ * with every figure they earned and no position: the threshold hides a
+ * comparison, never a person.
+ *
+ * NO MEDAL, AND THE REFERENCE DECK'S THREE ARE DELIBERATELY ABSENT. Gold,
+ * silver and bronze turn a performance table into a scoreboard, and this table
+ * is read by the people in it. A plain integer says the same thing without
+ * awarding anything.
+ *
+ * The rank is per FUNCTION, never across the panel: a fast finance approval
+ * and a slow credit release are different work, and one list across both would
+ * rank people against a job they do not do.
+ */
+const placed = groups.map((group) => {
+  const ranked = group.rows
+    .filter((row) => row.volume >= MINIMUM_RANKED_VOLUME)
+    .sort((a, b) => (a.medianMinutes ?? Infinity) - (b.medianMinutes ?? Infinity))
+    .map((row, index) => ({ row, rank: index + 1 }));
+  const unranked = group.rows
+    .filter((row) => row.volume < MINIMUM_RANKED_VOLUME)
+    .sort((a, b) => b.volume - a.volume)
+    .map((row) => ({ row, rank: null }));
+  return { ...group, rows: [...ranked, ...unranked], firstUnranked: ranked.length };
+});
+
 /** The functions the chart draws and this table cannot, named in one line. */
 const withoutActor = [...new Set((board?.functions ?? []).map((f) => f.fn))].filter(
   (fn) => !withActor.some((row) => row.fn === fn),
 );
+/** "A, B, C and D" rather than "A and B and C and D", which reads as a fault. */
+const listOf = (items: string[]) =>
+  items.length <= 1
+    ? (items[0] ?? '')
+    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+/**
+ * WHY THE TABLE IS EMPTY, AND THE TWO ANSWERS ARE NOT THE SAME.
+ *
+ * "Nobody completed one of these" is true when the period holds no completions
+ * and FALSE when it holds hundreds that record no actor — which is the real
+ * extract's normal state until the unresolved approvers are mapped. Saying the
+ * first when the second is true is a checkable lie sitting directly beneath a
+ * chart that shows the completions. So the message is chosen from the board
+ * rather than from the absence of rows.
+ */
+const completions = (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
+const emptyBecause =
+  completions === 0
+    ? `Nobody completed one of these in ${period.label}.`
+    : `${completions.toLocaleString('en-KE')} ${
+        completions === 1 ? 'completion is' : 'completions are'
+      } in the chart above and none of them records who performed it, so there is nobody to list.`;
 
 const empty = groups.length === 0;
 
-/** The records behind a figure: same source, same period, same person. */
-const records = (row: LeaderRow, view: string) =>
-  `/app/performance/approvals?${new URLSearchParams({
-    ...periodParams(period),
+/**
+ * The records behind a figure: the same source, the same period, the same
+ * affiliate and the same person.
+ *
+ * Serialised by the one builder both panels and the destination page share, so
+ * the scope a figure was computed under and the scope its list is read under
+ * cannot be written twice and drift.
+ */
+const records = (row: LeaderRow, view: RecordView) =>
+  approvalRecordsHref({
+    period,
+    affiliateId,
     process,
     view,
     fn: row.fn,
-    ...(row.userId === null ? { person: 'none' } : { user: row.userId }),
-  }).toString()}`;
+    actor: { kind: 'PERSON', userId: row.userId },
+  });
 
 /** A figure that opens its history. Keyboard reachable, with a focus ring. */
 const linkClass =
@@ -125,7 +191,7 @@ const linkClass =
     columns={COLUMNS}
     empty={empty}
     rowCount={withActor.length}
-    emptyMessage={`Nobody completed one of these in ${period.label}.`}
+    emptyMessage={emptyBecause}
   >
     <Fragment slot="empty">
       {
@@ -138,7 +204,7 @@ const linkClass =
         */
       }
       <span>
-        Nobody completed one of these in {period.label}.
+        {emptyBecause}
         {
           totalOutside > 0 && (
             <>
@@ -155,7 +221,7 @@ const linkClass =
     </Fragment>
 
     {
-      groups.map((group) => (
+      placed.map((group) => (
         <>
           {/*
             THE FUNCTION, AS A HEADING SPANNING THE TABLE. A `th` with `scope`
@@ -172,51 +238,92 @@ const linkClass =
               {group.fn}
             </th>
           </tr>
-          {group.rows.map((row: LeaderRow) => (
-            <tr class="border-b border-cms-line last:border-0">
-              <td class="px-3 py-2 align-top">
-                {/* THE ROW DETAIL. Nothing in it sorts and nothing in it ranks. */}
-                <details class="cms-leader-detail">
-                  <summary class="cursor-pointer list-none rounded-cms outline-none hover:text-cms-royal focus-visible:ring-2 focus-visible:ring-focus">
-                    {row.person ?? 'Not recorded'}
-                  </summary>
-                  <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-cms-caption text-cms-muted">
-                    <dt>Fastest</dt>
-                    <dd class="text-cms-ink tabular-nums">{formatDuration(row.fastestMinutes)}</dd>
-                    <dt>Slowest</dt>
-                    <dd class="text-cms-ink tabular-nums">
-                      {row.slowestEntityId === null ? (
-                        formatDuration(row.slowestMinutes)
-                      ) : (
-                        <a class={linkClass} href={`${orderPath}/${row.slowestEntityId}`}>
-                          {formatDuration(row.slowestMinutes)}
-                          {row.slowestDocumentNumber === null
-                            ? ''
-                            : ` on ${row.slowestDocumentNumber}`}
-                        </a>
-                      )}
-                    </dd>
-                    <dt>Count</dt>
-                    <dd class="text-cms-ink tabular-nums">{count(row.volume)}</dd>
-                  </dl>
-                </details>
-              </td>
-              <td class="px-3 py-2 text-right align-top tabular-nums">
-                <a class={linkClass} href={records(row, 'completed')}>
-                  {count(row.volume)}
-                </a>
-              </td>
-              <td class="px-3 py-2 text-right align-top tabular-nums">
-                <a class={linkClass} href={records(row, 'typical')}>
-                  {formatDuration(row.medianMinutes)}
-                </a>
-              </td>
-              <td class="px-3 py-2 text-right align-top tabular-nums">
-                <a class={linkClass} href={records(row, 'tail')}>
-                  {formatDuration(row.p90Minutes)}
-                </a>
-              </td>
-            </tr>
+          {group.rows.map(({ row, rank }, index: number) => (
+            <>
+              {/*
+                WHERE THE COMPARISON STOPS, SAID ON THE SCREEN. Everybody below
+                this line kept every figure they earned; what they did not earn
+                is a position, because the volume behind it is too small for one
+                to mean anything. Drawn only when there is somebody on each side
+                of it, so a table of newcomers is not headed by an apology.
+              */}
+              {index === group.firstUnranked && index > 0 && (
+                <tr class="border-b border-cms-line">
+                  <th
+                    scope="colgroup"
+                    colspan={COLUMNS.length}
+                    class="px-3 pt-3 pb-1 text-start text-cms-caption font-normal text-cms-muted"
+                  >
+                    Fewer than {MINIMUM_RANKED_VOLUME} completions, so no comparative position
+                  </th>
+                </tr>
+              )}
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-3 py-2 align-top">
+                  <div class="flex items-baseline gap-2">
+                    {/*
+                      A PLAIN INTEGER, NOT A MEDAL. It is `aria-hidden` and the
+                      position is spoken as words instead, because "1." beside a
+                      name is read aloud as an ordinal nobody asked for while
+                      the sighted reading of the column is unambiguous.
+                    */}
+                    <span
+                      aria-hidden="true"
+                      class="w-4 shrink-0 text-end text-cms-caption text-cms-muted tabular-nums"
+                    >
+                      {rank ?? ''}
+                    </span>
+                    {rank !== null && (
+                      <span class="sr-only">
+                        Position {rank} in {group.fn},
+                      </span>
+                    )}
+                    {/* THE ROW DETAIL. Nothing in it sorts and nothing in it ranks. */}
+                    <details class="cms-leader-detail">
+                      <summary class="cursor-pointer list-none rounded-cms outline-none hover:text-cms-royal focus-visible:ring-2 focus-visible:ring-focus">
+                        {row.person ?? 'Not recorded'}
+                      </summary>
+                      <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-cms-caption text-cms-muted">
+                        <dt>Fastest</dt>
+                        <dd class="text-cms-ink tabular-nums">
+                          {formatDuration(row.fastestMinutes)}
+                        </dd>
+                        <dt>Slowest</dt>
+                        <dd class="text-cms-ink tabular-nums">
+                          {row.slowestEntityId === null ? (
+                            formatDuration(row.slowestMinutes)
+                          ) : (
+                            <a class={linkClass} href={`${orderPath}/${row.slowestEntityId}`}>
+                              {formatDuration(row.slowestMinutes)}
+                              {row.slowestDocumentNumber === null
+                                ? ''
+                                : ` on ${row.slowestDocumentNumber}`}
+                            </a>
+                          )}
+                        </dd>
+                        <dt>Count</dt>
+                        <dd class="text-cms-ink tabular-nums">{count(row.volume)}</dd>
+                      </dl>
+                    </details>
+                  </div>
+                </td>
+                <td class="px-3 py-2 text-right align-top tabular-nums">
+                  <a class={linkClass} href={records(row, 'completed')}>
+                    {count(row.volume)}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right align-top tabular-nums">
+                  <a class={linkClass} href={records(row, 'typical')}>
+                    {formatDuration(row.medianMinutes)}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right align-top tabular-nums">
+                  <a class={linkClass} href={records(row, 'tail')}>
+                    {formatDuration(row.p90Minutes)}
+                  </a>
+                </td>
+              </tr>
+            </>
           ))}
         </>
       ))
@@ -233,8 +340,8 @@ const linkClass =
   {
     withoutActor.length > 0 && (
       <p class="text-cms-caption text-cms-muted">
-        {withoutActor.join(' and ')} {withoutActor.length === 1 ? 'is' : 'are'} in the chart above
-        and not in this table: the source extract records no actor for{' '}
+        {listOf(withoutActor)} {withoutActor.length === 1 ? 'is' : 'are'} in the chart above and not
+        in this table: the source extract records no actor for{' '}
         {withoutActor.length === 1 ? 'it' : 'them'}.
       </p>
     )

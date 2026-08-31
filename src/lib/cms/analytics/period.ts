@@ -365,6 +365,86 @@ export function bucketFor(column: string, grain: PeriodGrain): string {
   return `strftime('%Y-%m', ${column})`;
 }
 
+/** One bucket of a trend: its key in the data, its label, and where it drills. */
+export interface PeriodBucket {
+  /** Matches `bucketFor`'s output exactly, so a row can be looked up by it. */
+  readonly key: string;
+  /** What the axis prints. */
+  readonly label: string;
+  /**
+   * The period token this bucket drills to.
+   *
+   * An hour has no token — `periodFromToken` reads years, months and days —
+   * so an hourly bucket drills to the day that contains it. That is the
+   * narrowest period the URL can actually name, and naming a period the
+   * destination cannot resolve would land the reader on a different population
+   * from the one they clicked.
+   */
+  readonly token: string;
+}
+
+const SHORT_MONTHS = MONTH_NAMES.map((name) => name.slice(0, 3));
+
+/**
+ * Every bucket the period covers, in order, whether or not it holds data.
+ *
+ * A TREND MUST SHOW ITS GAPS. Plotting only the buckets that returned rows
+ * compresses a quiet fortnight into the space of a day and draws a line that
+ * says the work was continuous. Enumerating the period instead means a day
+ * with no approvals is a break in the line rather than a shortcut across it,
+ * which is why the caller fills a missing bucket with null and never with
+ * zero: "nothing was approved" and "an approval took no time" are different
+ * statements.
+ *
+ * Returns null for all time, whose length is unknown until the data is read.
+ * There the caller has no choice but to plot the buckets that exist.
+ */
+export function periodBuckets(period: ResolvedPeriod): PeriodBucket[] | null {
+  if (period.from === null || period.to === null) return null;
+  const out: PeriodBucket[] = [];
+  if (period.grain === 'HOUR') {
+    const day = period.from;
+    for (let h = 0; h < 24; h += 1) {
+      const hh = String(h).padStart(2, '0');
+      out.push({ key: `${day} ${hh}:00`, label: `${hh}:00`, token: day });
+    }
+    return out;
+  }
+  const start = partsOf(period.from);
+  const end = partsOf(period.to);
+  if (period.grain === 'DAY') {
+    // A span inside one month labels by day number alone; one that crosses a
+    // month has to say which month, or 1 reads as the same mark twice.
+    const oneMonth = period.from.slice(0, 7) === period.to.slice(0, 7);
+    for (
+      let cursor = utc(start.y, start.m, start.d);
+      ymd(cursor) <= period.to;
+      cursor = utc(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1)
+    ) {
+      const key = ymd(cursor);
+      out.push({
+        key,
+        label: oneMonth
+          ? String(cursor.getUTCDate())
+          : `${cursor.getUTCDate()} ${SHORT_MONTHS[cursor.getUTCMonth()]}`,
+        token: key,
+      });
+    }
+    return out;
+  }
+  const oneYear = start.y === end.y;
+  for (let y = start.y, m = start.m; y < end.y || (y === end.y && m <= end.m); ) {
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+    out.push({ key, label: oneYear ? SHORT_MONTHS[m]! : `${SHORT_MONTHS[m]} ${y}`, token: key });
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  return out;
+}
+
 /* -------------------------------------------------------------------------
  * WHICH PERIODS HOLD DATA
  * ------------------------------------------------------------------------- */
