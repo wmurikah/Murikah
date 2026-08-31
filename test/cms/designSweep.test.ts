@@ -364,14 +364,27 @@ test('exactly one elevation level exists, and only overlays use it', () => {
   const shadows = [...tokenSource.matchAll(/^\s*--shadow-(cms-[a-z-]+):/gm)].map((m) => m[1]!);
   assert.deepEqual(shadows, ['cms-overlay'], `CMS shadow tokens: ${shadows.join(', ')}`);
 
-  // A card does not float. Only something that genuinely floats over the page
-  // and can be dismissed may carry the one shadow.
+  /*
+    A CARD DOES NOT FLOAT, and the rule now says that structurally rather than
+    by file name. An allowlist of component names had to be extended every time
+    a genuine overlay appeared somewhere new — which is a rule that gets weaker
+    each time it is enforced. What actually distinguishes an overlay is that it
+    is OUT OF FLOW: absolutely or fixed positioned, or a native dialog. A card
+    in normal flow cannot satisfy that however it is named.
+  */
   const users = CMS_SOURCE.filter((p) => readFileSync(p, 'utf8').includes('shadow-cms-overlay'));
-  const floats =
-    // The period control's panel is a genuine overlay: it floats over the page,
-    // is dismissible, and is the one thing on an analytics page that does.
-    /Drawer|Modal|Dropdown|Tooltip|Toast|Definition|Overlay|TopBar|Layout|Search|Filter|Audit|Period/;
-  const wrong = users.filter((p) => !floats.test(p));
+  const outOfFlow = /\babsolute\b|\bfixed\b|<dialog/;
+  const wrong = users.filter((path) => {
+    const source = readFileSync(path, 'utf8');
+    // The window is the element the shadow is on: its class list and the tag
+    // that opens it, which in a documented component is a commented block away.
+    // Wide enough for that, narrow enough that an `absolute` in a different
+    // component further down the file cannot excuse it.
+    return [...source.matchAll(/shadow-cms-overlay/g)].some((match) => {
+      const start = Math.max(0, match.index - 1200);
+      return !outOfFlow.test(source.slice(start, match.index + 200));
+    });
+  });
   assert.deepEqual(wrong, [], `these are not overlays and must not float: ${wrong.join(', ')}`);
   console.log(`[elevation] one token, used by: ${users.map((p) => p.split('/').pop()).join(', ')}`);
 });
@@ -1616,9 +1629,9 @@ test('a long answer is rendered as text, never as markup', () => {
   assert.match(panel, /createElement\(\/\^\\d\/\.test\(lines\[0\]!\) \? 'ol' : 'ul'\)/);
 });
 
-test('Customers sits in Operations, immediately before Data', () => {
+test('Customers sits in Operations, immediately before the Upload Centre', () => {
   const rail = readFileSync('src/components/cms/CmsSidebar.astro', 'utf8');
-  assert.match(rail, /\{ label: 'Operations', items: \['Customers', 'Data'\] \}/);
+  assert.match(rail, /\{ label: 'Operations', items: \['Customers', 'Upload Centre'\] \}/);
   // And it is not left behind in the landing group.
   assert.match(rail, /\{ label: null, items: \['Home', 'CRM', 'Helpdesk', 'Orders'\] \}/);
   assert.equal(
@@ -1631,9 +1644,11 @@ test('Customers sits in Operations, immediately before Data', () => {
   assert.match(rail, /group\.items\s*\n?\s*\.map\(\(label\) => entries\.find/);
 
   // Hidden entirely without the permission: visibleNav filters on the resolved
-  // codes, and an empty group is dropped whole.
-  const nav = readFileSync('src/lib/cms/nav.ts', 'utf8');
-  assert.match(nav, /permission: 'CUSTOMERS\.ACCOUNTS\.VIEW'/);
+  // codes, and an empty group is dropped whole. The permission is stated in the
+  // destination catalogue the rail is now derived from, so it is asserted where
+  // it is written rather than where it is read.
+  const catalogue = readFileSync('src/lib/cms/destinations.ts', 'utf8');
+  assert.match(catalogue, /permission: 'CUSTOMERS\.ACCOUNTS\.VIEW'/);
   assert.match(rail, /\.filter\(\(group\) => group\.entries\.length > 0\)/);
 });
 

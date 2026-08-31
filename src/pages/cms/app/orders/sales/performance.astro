@@ -14,6 +14,7 @@
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsOrdersNav from '@/components/cms/CmsOrdersNav.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsChart from '@/components/cms/CmsChart.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
@@ -232,6 +233,8 @@ const complianceTrend =
             </CmsButton>
           </Fragment>
         </CmsPageHeader>
+
+        <CmsOrdersNav process="sales" mode="performance" permissions={permissions} />
 
         <CmsPeriodControl
           action="/app/orders/sales/performance"

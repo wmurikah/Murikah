@@ -1,0 +1,92 @@
+---
+/**
+ * Orders: two questions, in the same place on all four screens.
+ *
+ * THE GRID IS TWO BY TWO AND FOUR EQUAL TABS WOULD HIDE THAT. Sales
+ * operations, sales performance, purchase operations, purchase performance is
+ * one process choice and one mode choice, not four destinations; presenting
+ * them as four names makes a person read all four and work out the pattern
+ * themselves every time. Two small choosers say it in the shape it actually
+ * has, and switching one dimension keeps the other — the reader moves from
+ * sales performance to purchase performance without passing through the hub.
+ *
+ * SPATIAL CONSISTENCY IS THE WHOLE POINT. It renders in the same position,
+ * with the same controls, on all four pages. A control that moves between
+ * sibling screens is a control that has to be found again on each of them.
+ *
+ * PERMISSION-AWARE, AND THE PROCESS CHOOSER DISAPPEARS WHEN THERE IS NO
+ * CHOICE. Somebody who may see sales orders and not purchase orders is offered
+ * one process, so offering a chooser with a single option would be a control
+ * that cannot do anything.
+ *
+ * URLS ARE UNTOUCHED. `/app/orders/sales`, `/app/orders/sales/performance` and
+ * their purchase counterparts are production contracts and every link here
+ * points at exactly those.
+ */
+import { canViewPurchaseOrders, canViewSalesOrders } from '@/lib/cms/permissions';
+
+interface Props {
+  process: 'sales' | 'purchases';
+  mode: 'operations' | 'performance';
+  permissions: readonly string[];
+  class?: string;
+}
+const { process, mode, permissions, class: className } = Astro.props;
+
+const maySales = canViewSalesOrders(permissions);
+const mayPurchases = canViewPurchaseOrders(permissions);
+
+/**
+ * Switching one dimension keeps the other, which is the behaviour that makes
+ * this worth having: a reader comparing sales and purchase turnaround presses
+ * one control twice rather than navigating out and back in.
+ */
+const href = (p: 'sales' | 'purchases', m: 'operations' | 'performance') =>
+  m === 'operations' ? `/app/orders/${p}` : `/app/orders/${p}/performance`;
+
+const processes = [
+  { key: 'sales' as const, label: 'Sales orders', allowed: maySales },
+  { key: 'purchases' as const, label: 'Purchase orders', allowed: mayPurchases },
+].filter((entry) => entry.allowed);
+
+const modes = [
+  { key: 'operations' as const, label: 'Operations' },
+  { key: 'performance' as const, label: 'Performance' },
+];
+
+const segment =
+  'inline-flex h-9 items-center rounded-cms px-3 text-cms-body-sm outline-none focus-visible:ring-2 focus-visible:ring-focus';
+const chosen = 'border border-cms-line bg-cms-surface font-semibold text-cms-ink';
+const unchosen = 'font-medium text-cms-muted hover:text-cms-ink';
+---
+
+<div class:list={['flex flex-wrap items-center gap-3', className]}>
+  {
+    processes.length > 1 && (
+      <nav aria-label="Order process" class="flex gap-1 rounded-cms bg-cms-sunken p-1">
+        {processes.map((entry) => (
+          <a
+            href={href(entry.key, mode)}
+            aria-current={entry.key === process ? 'page' : undefined}
+            class:list={[segment, entry.key === process ? chosen : unchosen]}
+          >
+            {entry.label}
+          </a>
+        ))}
+      </nav>
+    )
+  }
+  <nav aria-label="Order view" class="flex gap-1 rounded-cms bg-cms-sunken p-1">
+    {
+      modes.map((entry) => (
+        <a
+          href={href(process, entry.key)}
+          aria-current={entry.key === mode ? 'page' : undefined}
+          class:list={[segment, entry.key === mode ? chosen : unchosen]}
+        >
+          {entry.label}
+        </a>
+      ))
+    }
+  </nav>
+</div>

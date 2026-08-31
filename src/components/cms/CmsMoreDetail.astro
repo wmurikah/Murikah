@@ -1,0 +1,105 @@
+---
+/**
+ * The deeper half of a dashboard panel, behind one disclosure that remembers.
+ *
+ * HOME'S FIRST VIEW ANSWERS ONE QUESTION: where is time being lost. The
+ * headline figures and the function breakdown answer it. The month-over-month
+ * trend and the approver leaderboard answer the next question, which is a
+ * different errand and one most readers are not on — and four panels of it
+ * below the fold is what makes a dashboard something people stop reading.
+ *
+ * SO IT IS DISCLOSED, NOT DELETED. Every figure is still computed, still
+ * server-rendered, still in the markup, and still in the accessible tree the
+ * moment the disclosure is opened. A `details` element hides its content from
+ * sight; it does not stop the page producing it, and nothing here is an excuse
+ * to stop computing a business metric.
+ *
+ * IT REMEMBERS, PER PERSON, IN THE BROWSER. Somebody who works from the trend
+ * every morning should not press the same control every morning. The
+ * preference is one key in `localStorage` — no schema, no request, nothing
+ * shared between people — and the same pattern the rail already uses for its
+ * pin. A blocked or empty storage simply means the default, which is why every
+ * read is wrapped: `localStorage` throws outright in some privacy modes, and a
+ * dashboard must not fail to render because a preference could not be read.
+ *
+ * "MORE DETAIL", NOT "MORE". The reader can predict what is inside, which is
+ * the difference between progressive disclosure and hiding things.
+ *
+ * NO MOTION. `details` opens instantly. A dashboard section that animates open
+ * costs attention to say nothing, and the point of this control is to spend
+ * less of it.
+ */
+interface Props {
+  /** Distinguishes one panel's preference from another's. */
+  id: string;
+  label?: string;
+  class?: string;
+}
+const { id, label = 'More detail', class: className } = Astro.props;
+---
+
+<details class:list={['group/detail flex flex-col gap-4', className]} data-cms-more-detail={id}>
+  <summary
+    class="inline-flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-cms text-cms-body-sm font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+  >
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      class="transition-none group-open/detail:rotate-90"
+    >
+      <path d="m9.5 6 6 6-6 6"></path>
+    </svg>
+    {label}
+  </summary>
+  <div class="mt-4 flex flex-col gap-4">
+    <slot />
+  </div>
+</details>
+
+<script>
+  /**
+   * Remember whether this reader keeps the detail open.
+   *
+   * One key per panel, so the purchase and sales panels are independent — a
+   * person who watches purchase turnaround and not sales gets exactly what
+   * they asked for.
+   *
+   * EVERY ACCESS IS GUARDED. `localStorage` is not merely empty in a private
+   * window or with site data blocked: reading it throws. An unguarded read
+   * here would take the whole page's scripts down with it, so the failure mode
+   * is "the disclosure does not remember", which is a preference lost and not
+   * a dashboard lost.
+   */
+  const KEY = (id: string) => `cms.home.detail.${id}`;
+
+  const read = (id: string): boolean | null => {
+    try {
+      const value = window.localStorage.getItem(KEY(id));
+      return value === null ? null : value === '1';
+    } catch {
+      return null;
+    }
+  };
+  const write = (id: string, open: boolean): void => {
+    try {
+      window.localStorage.setItem(KEY(id), open ? '1' : '0');
+    } catch {
+      /* A preference that cannot be saved is not an error worth reporting. */
+    }
+  };
+
+  for (const node of document.querySelectorAll<HTMLDetailsElement>('[data-cms-more-detail]')) {
+    const id = node.dataset.cmsMoreDetail ?? '';
+    if (id === '') continue;
+    const remembered = read(id);
+    if (remembered !== null) node.open = remembered;
+    node.addEventListener('toggle', () => write(id, node.open));
+  }
+</script>
