@@ -1,0 +1,77 @@
+---
+/**
+ * CRM's local navigation: three workspaces, and everything else behind one
+ * entry.
+ *
+ * THE THREE ARE THE JOB. Leads, Opportunities, Activities — that is what a
+ * salesperson opens all day, and they stay first-class and identical on all
+ * three screens so switching between them costs no rediscovery.
+ *
+ * THE REST WAS UNREACHABLE, WHICH IS WORSE THAN CLUTTERED. Lead sources had a
+ * small link on the Leads page and nowhere else; Pipelines, Lost reasons and
+ * CRM analytics had no link anywhere in the product and could be opened only
+ * by typing the URL. So this is not only a decluttering: adding one contextual
+ * entry gives three real pages their first route in.
+ *
+ * "CRM SETTINGS", NOT "MORE". A disclosure whose label nobody can predict is
+ * a worse affordance than the clutter it replaced — the reader has to open it
+ * to find out whether it was worth opening. The narrowest understandable label
+ * wins, and "CRM settings" says exactly what is inside.
+ *
+ * IT IS A NATIVE DISCLOSURE. `details`/`summary`, so it works from the
+ * keyboard, is announced as one, closes on Escape in every browser that
+ * supports it, and needs no script. The menu is not rendered at all when the
+ * reader may open none of its destinations, because an empty menu is a
+ * promise the interface cannot keep.
+ */
+import CmsTabs from './CmsTabs.astro';
+import CmsIcon from './CmsIcon.astro';
+import { CMS_DESTINATIONS, destinationAllowed } from '@/lib/cms/destinations';
+
+interface Props {
+  /** The path of the page rendering this, so the right tab is marked current. */
+  current: string;
+  permissions: readonly string[];
+  class?: string;
+}
+const { current, permissions, class: className } = Astro.props;
+
+/**
+ * The three operational tabs, and the settings, both read from the one
+ * destination catalogue rather than written here — so a CRM page added to the
+ * catalogue appears in this menu and in page search together.
+ */
+const OPERATIONAL = ['Leads', 'Opportunities', 'Activities'];
+const crm = CMS_DESTINATIONS.filter((d) => d.area === 'CRM');
+const tabs = crm
+  .filter((d) => OPERATIONAL.includes(d.label))
+  .sort((a, b) => OPERATIONAL.indexOf(a.label) - OPERATIONAL.indexOf(b.label))
+  .map((d) => ({ label: d.label, href: d.href }));
+const settings = crm.filter(
+  (d) => !OPERATIONAL.includes(d.label) && destinationAllowed(d, permissions),
+);
+---
+
+<div class:list={['flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className]}>
+  <CmsTabs label="CRM" current={current} tabs={tabs} class="min-w-0 flex-1" />
+  {
+    settings.length > 0 && (
+      <details class="relative mb-1 shrink-0" data-cms-crm-settings>
+        <summary class="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-cms px-2.5 text-cms-body-sm font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus">
+          CRM settings
+          <CmsIcon name="chevronDown" size={15} />
+        </summary>
+        <div class="absolute end-0 z-20 mt-1 w-56 overflow-hidden rounded-cms border border-cms-line bg-cms-surface shadow-cms-overlay">
+          {settings.map((entry) => (
+            <a
+              href={entry.href}
+              class="block px-3 py-2.5 text-cms-body-sm text-cms-ink outline-none hover:bg-cms-sunken focus-visible:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+            >
+              {entry.label}
+            </a>
+          ))}
+        </div>
+      </details>
+    )
+  }
+</div>

@@ -17,7 +17,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
-import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsCrmNav from '@/components/cms/CmsCrmNav.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
@@ -168,7 +168,7 @@ const withoutOpportunityFilter = (key: string) => {
           definition="Probability shows the current confidence assigned to the opportunity."
           crumbs={[
             { label: 'Home', href: '/app' },
-            { label: 'CRM', href: '/app/crm' },
+            { label: 'Leads', href: '/app/crm' },
             { label: 'Opportunities' },
           ]}
         >
@@ -181,14 +181,9 @@ const withoutOpportunityFilter = (key: string) => {
           </Fragment>
         </CmsPageHeader>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <CmsTabs
-            label="CRM"
+          <CmsCrmNav
             current="/app/crm/opportunities"
-            tabs={[
-              { label: 'Leads', href: '/app/crm' },
-              { label: 'Opportunities', href: '/app/crm/opportunities' },
-              { label: 'Activities', href: '/app/crm/activities' },
-            ]}
+            permissions={permissions}
             class="min-w-0 flex-1"
           />
           <div

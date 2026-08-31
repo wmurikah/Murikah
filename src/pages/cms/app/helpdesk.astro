@@ -13,6 +13,7 @@ import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
+import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
@@ -108,15 +109,28 @@ function ageDays(raisedAt: string): number {
   );
 }
 
-const QUEUES = [
-  { key: null, label: 'All' },
-  { key: 'mine', label: 'My Cases' },
+/*
+  SEVEN EQUAL QUEUES WAS SEVEN DECISIONS, EVERY TIME.
+  Three of them are what an agent actually opens: their own work, the pile
+  nobody has taken, and everything. The other four are real and stay real —
+  same keys, same URLs, same predicates — but they are a second question, so
+  they are asked second, behind one disclosure. Nothing was removed: `?queue=`
+  still accepts every key it ever accepted, including from a bookmark that
+  never goes through this strip.
+*/
+const PRIMARY_QUEUES = [
+  { key: 'mine', label: 'My cases' },
   { key: 'unassigned', label: 'Unassigned' },
+  { key: null, label: 'All' },
+];
+const MORE_QUEUES = [
   { key: 'new', label: 'New' },
-  { key: 'waiting-customer', label: 'Waiting Customer' },
-  { key: 'waiting-internal', label: 'Waiting Internal' },
+  { key: 'waiting-customer', label: 'Waiting customer' },
+  { key: 'waiting-internal', label: 'Waiting internal' },
   { key: 'resolved', label: 'Resolved' },
 ];
+/** The selected queue's name, so a queue chosen from More says so on the strip. */
+const selectedMore = MORE_QUEUES.find((q) => q.key === query.queue) ?? null;
 function queueHref(key: string | null): string {
   const next = new URLSearchParams(params);
   if (key === null) next.delete('queue');
@@ -210,16 +224,34 @@ const withoutServiceFilter = (key: string) => {
           </div>
         )}
 
+        {/*
+            ONE OF THESE FIVE IS A LINK, AND THE OTHER FOUR ARE NOT. A figure
+            that opens a list showing a different number is worse than a figure
+            that opens nothing, so a KPI is only clickable where its predicate
+            is the queue's predicate, exactly:
+
+              New            status = 'NEW'                      = queue `new`   → linked
+              Assigned to me assigned to me AND still open       ≠ queue `mine`, which is
+                             every case ever assigned to me      → not linked
+              In progress    status = 'IN_PROGRESS'              no queue exists → not linked
+              Waiting        the two waiting statuses together   no single queue → not linked
+              Resolved today resolved_at is today                ≠ queue `resolved`, which is
+                                                                 every resolved case → not linked
+
+            Widening the queues to match the cards, or the cards to match the
+            queues, would be a business-logic change; both are correct as they
+            are and they simply answer different questions.
+          */}
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <CmsKpiCard label="New" value={String(indicators.newCases)} />
+          <CmsKpiCard label="New" value={String(indicators.newCases)} href={queueHref('new')} />
           <CmsKpiCard label="Assigned to me" value={String(indicators.assignedToMe)} />
           <CmsKpiCard label="In progress" value={String(indicators.inProgress)} />
           <CmsKpiCard label="Waiting" value={String(indicators.waiting)} />
           <CmsKpiCard label="Resolved today" value={String(indicators.resolvedToday)} />
         </div>
 
-        <nav aria-label="Queues" class="flex flex-wrap gap-2">
-          {QUEUES.map((q) => (
+        <nav aria-label="Queues" class="flex flex-wrap items-center gap-2">
+          {PRIMARY_QUEUES.map((q) => (
             <a
               href={queueHref(q.key)}
               aria-current={query.queue === q.key ? 'page' : undefined}
@@ -233,6 +265,44 @@ const withoutServiceFilter = (key: string) => {
               {q.label}
             </a>
           ))}
+          {/*
+            "More views", not "More": a disclosure nobody can predict the
+            contents of is a worse affordance than the clutter it replaced. A
+            native details/summary, so it opens from the keyboard and is
+            announced as a disclosure with no script at all.
+
+            WHEN A QUEUE FROM INSIDE IS THE CURRENT ONE, THE SUMMARY SAYS SO
+            and the panel opens on arrival. A person who bookmarked
+            ?queue=resolved must be able to see which queue they are in without
+            opening anything, or the strip is lying about the page's state.
+          */}
+          <details class="relative" open={selectedMore !== null}>
+            <summary
+              class:list={[
+                'inline-flex cursor-pointer list-none items-center gap-1.5 rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                selectedMore === null
+                  ? 'text-cms-muted hover:bg-cms-canvas hover:text-cms-ink'
+                  : 'bg-cms-royal text-white',
+              ]}
+            >
+              {selectedMore === null ? 'More views' : selectedMore.label}
+              <CmsIcon name="chevronDown" size={15} />
+            </summary>
+            <div class="absolute start-0 z-20 mt-1 w-52 overflow-hidden rounded-cms border border-cms-line bg-cms-surface shadow-cms-overlay">
+              {MORE_QUEUES.map((q) => (
+                <a
+                  href={queueHref(q.key)}
+                  aria-current={query.queue === q.key ? 'page' : undefined}
+                  class:list={[
+                    'block px-3 py-2.5 text-cms-body-sm outline-none hover:bg-cms-sunken focus-visible:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset',
+                    query.queue === q.key ? 'font-semibold text-cms-royal' : 'text-cms-ink',
+                  ]}
+                >
+                  {q.label}
+                </a>
+              ))}
+            </div>
+          </details>
         </nav>
 
         <CmsFilterPanel action="/app/helpdesk" activeCount={activeFilters}>
