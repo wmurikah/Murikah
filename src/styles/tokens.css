@@ -130,6 +130,13 @@
   --color-cms-royal-deep: #17407f; /* hover, active */
   --color-cms-royal-tint: #e8effa; /* selected row; royal text on it 6.72:1 */
 
+  /* Auth-entry energy. These brighten the welcome panel without becoming a
+     second product palette: they are namespaced, decorative, and never carry
+     body text. Navy and royal remain the structural and interactive colours. */
+  --color-cms-auth-teal: #24a7a1;
+  --color-cms-auth-sky: #4e8fe8;
+  --color-cms-auth-mark: #263858;
+
   /* Hass gold: one emphasis per view and nothing else. It cannot carry text on
      a light surface, so the light-surface variant is a separate darker token. */
   --color-cms-gold: #c9a227; /* on navy only; 7.33:1 */
