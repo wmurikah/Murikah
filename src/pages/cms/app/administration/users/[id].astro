@@ -46,6 +46,12 @@ import { userActivity, type AuditRow as AuditTrailRow } from '@/lib/cms/repos/au
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { canManageRoles, canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
+import {
+  resolveUserTab,
+  userSectionHref,
+  USER_SECTION_MODEL,
+  type UserSection,
+} from '@/lib/cms/admin/userSections';
 import { rolePermissionMap, type RolePermissionMap } from '@/lib/cms/repos/rbacAdmin';
 import { mappingsForTitle, type MappingRow } from '@/lib/cms/repos/jobTitleMappings';
 import {
@@ -91,22 +97,21 @@ const userId = Astro.params.id ?? '';
 // The reader, not the subject. The audit scope belongs to whoever is looking.
 const viewerUserId = Astro.locals.cms?.user.userId ?? '';
 
-const TABS = [
-  'overview',
-  'edit',
-  'assignments',
-  'teams',
-  'roles',
-  'authority',
-  'identities',
-  'security',
-  'audit',
-] as const;
-type Tab = (typeof TABS)[number];
-const requested = Astro.url.searchParams.get('tab');
-const tab: Tab = (TABS as readonly string[]).includes(requested ?? '')
-  ? (requested as Tab)
-  : 'overview';
+/*
+  SIX SECTIONS, NINE OLD LINKS, ONE RESOLVER.
+
+  The primary choice is task-shaped rather than table-shaped, and every `?tab=`
+  the page has ever accepted still lands somewhere correct — `?tab=assignments`
+  opens Organisation with Assignments selected. The mapping is data in
+  @/lib/cms/admin/userSections so a test can walk the legacy keys and prove
+  none of them was dropped.
+*/
+const resolved = resolveUserTab(
+  Astro.url.searchParams.get('tab'),
+  Astro.url.searchParams.get('view'),
+);
+const tab = resolved.section;
+const view = resolved.view;
 
 let user: UserRow | null = null;
 let assignments: AssignmentRow[] = [];
@@ -199,7 +204,7 @@ if (mayManage) {
 }
 
 const base = `/app/administration/users/${userId}`;
-const href = (t: Tab) => `${base}?tab=${t}`;
+const href = (t: UserSection, v?: string | null) => userSectionHref(base, t, v);
 const label = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
 const statusTone = (status: string) =>
   status === 'ACTIVE'
@@ -210,17 +215,34 @@ const statusTone = (status: string) =>
         ? 'info'
         : 'neutral';
 
-const tabs = [
-  { label: 'Overview', href: href('overview') },
-  { label: 'Edit', href: href('edit') },
-  { label: 'Assignments', href: href('assignments'), count: assignments.length },
-  { label: 'Teams', href: href('teams'), count: teams.length },
-  { label: 'Roles', href: href('roles'), count: roles.length },
-  { label: 'Workflow authority', href: href('authority'), count: authority.length },
-  { label: 'Source identities', href: href('identities'), count: identities.length },
-  { label: 'Security', href: href('security') },
-  { label: 'Audit', href: href('audit'), count: audit.length },
-];
+/*
+  THE COUNT ON A SECTION IS THE SUM OF WHAT IT HOLDS, because a person reading
+  "Access 3" wants to know there are three things to look at, not which of two
+  subsections they are in. The subsection chooser inside carries its own.
+*/
+const sectionCounts: Readonly<Record<UserSection, number | undefined>> = {
+  overview: undefined,
+  edit: undefined,
+  organisation: assignments.length + teams.length,
+  access: roles.length + authority.length,
+  security: identities.length,
+  history: audit.length,
+};
+const tabs = USER_SECTION_MODEL.map((entry) => ({
+  label: entry.label,
+  href: href(entry.section),
+  count: sectionCounts[entry.section],
+}));
+
+/** The local chooser inside a section, or nothing where it holds one thing. */
+const views = USER_SECTION_MODEL.find((entry) => entry.section === tab)?.views ?? [];
+const viewCounts: Readonly<Record<string, number>> = {
+  assignments: assignments.length,
+  teams: teams.length,
+  roles: roles.length,
+  authority: authority.length,
+  identities: identities.length,
+};
 
 /**
  * The organisational line, rendered naturally.
@@ -292,6 +314,44 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
         </CmsCard>
 
         <CmsTabs tabs={tabs} current={href(tab)} label="User sections" />
+
+        {/*
+            THE LOCAL CHOOSER, INSIDE THE SECTION AND ONLY WHERE THERE IS A
+            CHOICE. Segmented links rather than a second tab strip, so the
+            primary six stay unmistakably primary and a reader can see at a
+            glance which level of the page they are steering. `aria-current`
+            marks the selected one for a screen reader; the fill and the weight
+            mark it for everybody else, so current state is never colour alone.
+          */}
+        {views.length > 0 && (
+          <nav
+            aria-label="Section views"
+            class="flex flex-wrap gap-1 rounded-cms bg-cms-sunken p-1"
+          >
+            {views.map((entry) => {
+              const selected = entry.key === view;
+              return (
+                <a
+                  href={href(tab, entry.key)}
+                  aria-current={selected ? 'page' : undefined}
+                  class:list={[
+                    'inline-flex h-9 items-center gap-2 rounded-cms px-3 text-cms-body-sm outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    selected
+                      ? 'border border-cms-line bg-cms-surface font-semibold text-cms-ink'
+                      : 'font-medium text-cms-muted hover:text-cms-ink',
+                  ]}
+                >
+                  {entry.label}
+                  {viewCounts[entry.key] !== undefined && (
+                    <span class="text-cms-caption text-cms-muted tabular-nums">
+                      {viewCounts[entry.key]}
+                    </span>
+                  )}
+                </a>
+              );
+            })}
+          </nav>
+        )}
 
         {tab === 'edit' && user !== null && (
           <Fragment>
@@ -377,7 +437,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
           </CmsCard>
         )}
 
-        {tab === 'assignments' && (
+        {tab === 'organisation' && view === 'assignments' && (
           <CmsDataTable
             caption="Assignments"
             columns={[
@@ -425,7 +485,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
           </CmsDataTable>
         )}
 
-        {tab === 'teams' && (
+        {tab === 'organisation' && view === 'teams' && (
           <CmsDataTable
             caption="Teams"
             columns={[
@@ -461,14 +521,11 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
           </CmsDataTable>
         )}
 
-        {tab === 'roles' && (
+        {tab === 'access' && view === 'roles' && (
           <Fragment>
             {mayManageRoles && userId !== viewerUserId ? (
               <div class="flex flex-wrap items-center justify-between gap-3">
-                <p class="text-cms-body-sm text-cms-muted">
-                  An access role says what this person may do. A data scope says which records it
-                  reaches. A scope is never inferred from a job title, a department or a team.
-                </p>
+                <p class="text-cms-body-sm text-cms-muted">Scopes are never inferred.</p>
                 <CmsButton variant="primary" icon="plus" data-cms-userrole-create>
                   Assign a role
                 </CmsButton>
@@ -536,14 +593,11 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
           </Fragment>
         )}
 
-        {tab === 'authority' && (
+        {tab === 'access' && view === 'authority' && (
           <Fragment>
             {mayManageAuthority && userId !== viewerUserId ? (
               <div class="flex flex-wrap items-center justify-between gap-3">
-                <p class="text-cms-body-sm text-cms-muted">
-                  What this person may approve in a business process. A different thing from an
-                  access role and from a job title, and never inferred from either.
-                </p>
+                <p class="text-cms-body-sm text-cms-muted">Never inferred from an access role.</p>
                 <CmsButton variant="primary" icon="plus" data-cms-authority-create>
                   Add authority
                 </CmsButton>
@@ -602,7 +656,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
           </Fragment>
         )}
 
-        {tab === 'identities' && (
+        {tab === 'security' && view === 'identities' && (
           <CmsDataTable
             caption="Source identities"
             columns={[
@@ -638,7 +692,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
           </CmsDataTable>
         )}
 
-        {tab === 'security' && security && (
+        {tab === 'security' && view === 'security' && security && (
           <Fragment>
             <CmsCard>
               <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -704,7 +758,7 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
           </Fragment>
         )}
 
-        {tab === 'audit' && (
+        {tab === 'history' && (
           <div class="flex flex-col gap-3">
             <p class="max-w-prose text-cms-body-sm text-cms-muted">
               What this person changed.{' '}

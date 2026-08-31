@@ -808,10 +808,22 @@ test('no direct user permission or title permission store was created', () => {
   }
 });
 
-test('the panel keeps the four tabs and shows an external user no internal position', () => {
+test('the panel keeps every section and shows an external user no internal position', () => {
   const page = readFileSync('src/pages/cms/app/administration/users/[id].astro', 'utf8');
-  for (const label of ['Assignments', 'Roles', 'Workflow authority']) {
-    assert.match(page, new RegExp(`label: '${label}'`), `the ${label} tab was removed`);
+  // The nine tabs became six task-shaped sections with the old nine inside
+  // them, so the capability check is on the SUBSECTIONS rather than on tab
+  // labels that deliberately no longer exist. The navigation ledger in
+  // navigationIa.test.ts walks every legacy link and proves none was dropped.
+  for (const [section, view] of [
+    ['organisation', 'assignments'],
+    ['access', 'roles'],
+    ['access', 'authority'],
+  ]) {
+    assert.match(
+      page,
+      new RegExp(`tab === '${section}' && view === '${view}'`),
+      `the ${section}/${view} capability was removed`,
+    );
   }
   const panel = readFileSync('src/components/cms/CmsUserAccessPanel.astro', 'utf8');
   assert.match(panel, /const external = userType === 'EXTERNAL';/);
