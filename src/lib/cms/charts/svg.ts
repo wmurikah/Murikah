@@ -147,6 +147,28 @@ export interface ChartOptions {
    * were none", and only one of the two is usually true.
    */
   emptyMessage?: string;
+  /**
+   * The fewest categories that make a line, below which none is drawn.
+   *
+   * A LINE NEEDS TWO POINTS. One month of history plots one dot per series
+   * against an axis of empty months, which reads as a scatter of outliers over
+   * a period that mostly measured nothing — the opposite of what one good
+   * month means. Below this count the chart states the shortfall instead, in
+   * `emptyMessage`, and the values it does hold stay in the alt text and the
+   * table underneath, so nothing measured is lost.
+   */
+  minimumCategories?: number;
+  /**
+   * What the two axes measure, drawn as titles beside their ticks.
+   *
+   * A TICK SAYS "37 min", A TITLE SAYS WHAT IS BEING MEASURED. Ticks alone
+   * leave a reader to infer the dimension from the numbers, which is a guess on
+   * every chart whose unit is not obvious. The titles are the smallest text on
+   * the chart and sit outside the plot, so they name the axes without competing
+   * with the data.
+   */
+  xAxisLabel?: string;
+  yAxisLabel?: string;
 }
 
 /** Above this many points a line carries no markers. See lineChart. */
@@ -155,6 +177,56 @@ const MARKER_LIMIT = 14;
 const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 240;
 const PADDING = { top: 16, right: 16, bottom: 34, left: 56 };
+/** Extra room under the category ticks for an x-axis title. */
+const X_TITLE_ROOM = 18;
+/** Extra room above the plot for a y-axis title on its own line. */
+const Y_TITLE_ROOM = 12;
+/** The height a line chart takes when it has stood down and drawn no line. */
+const EMPTY_HEIGHT = 56;
+
+/**
+ * How much room the value axis needs on the left: its widest tick label.
+ *
+ * PADDING.left was a fixed 56 pixels, which fits "50 min" and clips
+ * "1 h 20 min" to "h 20 min". An axis whose units are cut off is not an axis,
+ * and the sales order trend reads in hours. All three ticks are known before
+ * anything is drawn, so the gutter is measured from them rather than guessed:
+ * about six pixels a character at 11px, plus the eight-pixel gap the labels
+ * already leave between themselves and the axis.
+ */
+function valueGutter(ceiling: number, format: (v: number | null) => string): number {
+  const widest = Math.max(...[0, 0.5, 1].map((fraction) => format(ceiling * fraction).length));
+  return Math.max(PADDING.left, Math.ceil(widest * 6.2) + 14);
+}
+
+/**
+ * The two axis titles: the y title above its ticks, the x title under its own.
+ *
+ * The y title sits at the top-left rather than rotated up the side. A rotated
+ * label is read by tilting the head or not at all, and at this size the unit is
+ * two words; above the topmost tick it is read in the same pass as the tick.
+ */
+function axisTitles(
+  options: ChartOptions,
+  width: number,
+  height: number,
+  gutter = 0,
+  left = PADDING.left,
+): string {
+  const y =
+    options.yAxisLabel === undefined
+      ? ''
+      : `<text x="0" y="10" font-size="10" fill="var(--color-cms-muted)" ` +
+        `letter-spacing="0.04em">${escape(options.yAxisLabel.toUpperCase())}</text>`;
+  const x =
+    options.xAxisLabel === undefined
+      ? ''
+      : `<text x="${round(left + (width - left - PADDING.right - gutter) / 2)}" ` +
+        `y="${height - 4}" text-anchor="middle" font-size="10" ` +
+        `fill="var(--color-cms-muted)" letter-spacing="0.04em">` +
+        `${escape(options.xAxisLabel.toUpperCase())}</text>`;
+  return y + x;
+}
 
 /**
  * The palette, in the order series are added. Tokens only, never a hex.
@@ -232,6 +304,8 @@ function frame(
   format: (v: number | null) => string,
   /** Room reserved on the right for end labels, so the baseline stops short. */
   gutter = 0,
+  /** Room reserved on the left for the tick labels, measured from them. */
+  left = PADDING.left,
 ): string {
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const baseY = PADDING.top + innerHeight;
@@ -239,27 +313,33 @@ function frame(
     .map((fraction) => {
       const y = PADDING.top + innerHeight * (1 - fraction);
       return (
-        `<text x="${PADDING.left - 8}" y="${round(y + 4)}" text-anchor="end" font-size="11" ` +
+        `<text x="${left - 8}" y="${round(y + 4)}" text-anchor="end" font-size="11" ` +
         `fill="var(--color-cms-muted)">${escape(format(ceiling * fraction))}</text>`
       );
     })
     .join('');
   return (
-    `<line x1="${PADDING.left}" y1="${round(baseY)}" x2="${width - PADDING.right - gutter}" ` +
+    `<line x1="${left}" y1="${round(baseY)}" x2="${width - PADDING.right - gutter}" ` +
     `y2="${round(baseY)}" stroke="var(--color-cms-line)" stroke-width="1" />` +
     labels
   );
 }
 
-function categoryLabels(labels: string[], width: number, height: number, gutter = 0): string {
-  const inner = width - PADDING.left - PADDING.right - gutter;
+function categoryLabels(
+  labels: string[],
+  width: number,
+  height: number,
+  gutter = 0,
+  left = PADDING.left,
+): string {
+  const inner = width - left - PADDING.right - gutter;
   const step = inner / Math.max(labels.length, 1);
   // A label every nth category, so a year of weeks does not overprint itself.
   const stride = Math.max(1, Math.ceil(labels.length / 12));
   return labels
     .map((label, index) => {
       if (index % stride !== 0) return '';
-      const x = PADDING.left + step * (index + 0.5);
+      const x = left + step * (index + 0.5);
       return (
         `<text x="${round(x)}" y="${height - PADDING.bottom + 16}" text-anchor="middle" ` +
         `font-size="11" fill="var(--color-cms-muted)">${escape(label)}</text>`
@@ -274,22 +354,27 @@ function referenceLine(
   width: number,
   height: number,
   gutter = 0,
+  left = PADDING.left,
 ): string {
   if (reference === undefined) return '';
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const y = PADDING.top + innerHeight * (1 - Math.min(reference.value / ceiling, 1));
   return (
-    `<line x1="${PADDING.left}" y1="${round(y)}" x2="${width - PADDING.right - gutter}" y2="${round(y)}" ` +
+    `<line x1="${left}" y1="${round(y)}" x2="${width - PADDING.right - gutter}" y2="${round(y)}" ` +
     `stroke="var(--color-cms-ink-600)" stroke-width="1" stroke-dasharray="4 3" />` +
     `<text x="${width - PADDING.right - gutter}" y="${round(y - 5)}" text-anchor="end" font-size="11" ` +
     `fill="var(--color-cms-ink-600)">${escape(reference.label)}</text>`
   );
 }
 
-function tableOf(series: ChartSeries[], format: (v: number | null) => string): ChartTable {
+function tableOf(
+  series: ChartSeries[],
+  format: (v: number | null) => string,
+  categoryName = 'Period',
+): ChartTable {
   const labels = series[0]?.points.map((point) => point.label) ?? [];
   return {
-    columns: ['Period', ...series.map((one) => one.name)],
+    columns: [categoryName, ...series.map((one) => one.name)],
     rows: labels.map((label, index) => [
       label,
       ...series.map((one) => format(one.points[index]?.value ?? null)),
@@ -327,14 +412,15 @@ export function barChart(series: ChartSeries, options: ChartOptions = {}): Chart
   const unit = options.unit ?? 'units';
   const values = series.points.map((point) => point.value ?? 0);
   const ceiling = niceCeiling(Math.max(...values, 0));
-  const innerWidth = width - PADDING.left - PADDING.right;
+  const left = valueGutter(ceiling, format);
+  const innerWidth = width - left - PADDING.right;
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const step = innerWidth / Math.max(series.points.length, 1);
   const barWidth = Math.max(2, step * 0.62);
 
   const bars = series.points
     .map((point, index) => {
-      const x = PADDING.left + step * (index + 0.5) - barWidth / 2;
+      const x = left + step * (index + 0.5) - barWidth / 2;
       if (point.value === null) {
         return (
           `<text x="${round(x + barWidth / 2)}" y="${height - PADDING.bottom - 4}" ` +
@@ -355,14 +441,16 @@ export function barChart(series: ChartSeries, options: ChartOptions = {}): Chart
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
       `aria-label="${escape(`${series.name}. ${altOf([series], unit, format)}`)}" ` +
       `preserveAspectRatio="xMidYMid meet">` +
-      frame(width, height, ceiling, format) +
+      frame(width, height, ceiling, format, 0, left) +
       bars +
       categoryLabels(
         series.points.map((point) => point.label),
         width,
         height,
+        0,
+        left,
       ) +
-      referenceLine(options.reference, ceiling, width, height) +
+      referenceLine(options.reference, ceiling, width, height, 0, left) +
       `</svg>`,
     alt: altOf([series], unit, format),
     table: tableOf([series], format),
@@ -380,7 +468,10 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   const unit = options.unit ?? 'units';
   const all = series.flatMap((one) => one.points.map((point) => point.value ?? 0));
   const ceiling = niceCeiling(Math.max(...all, 0));
-  const innerHeight = height - PADDING.top - PADDING.bottom;
+  const left = valueGutter(ceiling, format);
+  // The plot stops short of the x-axis title, so the two never overlap.
+  const titleRoom = options.xAxisLabel === undefined ? 0 : X_TITLE_ROOM;
+  const innerHeight = height - PADDING.top - PADDING.bottom - titleRoom;
   const count = Math.max(series[0]?.points.length ?? 0, 1);
   // A dot on every point of a dense line is furniture: at thirty points the
   // markers merge into a thicker, noisier line and carry nothing the line did
@@ -402,7 +493,7 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
     options.endLabels === true && series.length > 0
       ? Math.min(170, Math.max(92, longest * 6 + 14))
       : 0;
-  const innerWidth = width - PADDING.left - PADDING.right - labelGutter;
+  const innerWidth = width - left - PADDING.right - labelGutter;
   const step = innerWidth / Math.max(count - 1, 1);
 
   const baseY = PADDING.top + innerHeight;
@@ -418,7 +509,7 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
       const runs: { x: number; y: number }[][] = [];
       let run: { x: number; y: number }[] = [];
       one.points.forEach((point, index) => {
-        const x = PADDING.left + step * index;
+        const x = left + step * index;
         if (point.value === null) {
           open = false;
           if (run.length > 0) runs.push(run);
@@ -449,6 +540,22 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
       // as a blank frame with an axis. The marker is already drawn above; this
       // prints the figure beside it, which is the honest rendering of "one
       // observation" and is what a reader came for.
+      // A RUN OF ONE DRAWS NOTHING WITHOUT A MARKER, and above the marker limit
+      // no marker is drawn at all — so a month whose neighbours hold no data
+      // vanished and the trend read as a broken scatter. Every isolated run
+      // gets its dot regardless of the limit, because one point is never the
+      // dense line that limit exists to thin.
+      const isolated = showMarkers
+        ? ''
+        : runs
+            .filter((points) => points.length === 1)
+            .map(
+              (points) =>
+                `<circle cx="${round(points[0]!.x)}" cy="${round(points[0]!.y)}" r="3" ` +
+                `fill="var(--color-${one.token})" />`,
+            )
+            .join('');
+
       const measured = one.points.filter((point) => point.value !== null);
       const alone = measured.length === 1 && runs.length === 1 ? runs[0]![0]! : null;
       // A PATH WITH ONE MOVETO DRAWS NOTHING, so a period holding a single
@@ -456,14 +563,23 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
       // whatever the marker limit says — one point is never a dense line — and
       // the figure is printed ABOVE it, where it cannot collide with the series
       // name written at the end of the same line.
+      // THE VALUE IS SUPPRESSED WHERE THE SERIES NAME IS ALREADY THERE. With
+      // end labels on, the name is written at that same point, and the two
+      // texts landed on top of each other. The figure is one row away in the
+      // data table, which is where an exact value should be read anyway.
       const single =
-        alone === null
+        alone === null || options.endLabels === true
           ? ''
-          : `<circle cx="${round(alone.x)}" cy="${round(alone.y)}" r="3" ` +
-            `fill="var(--color-${one.token})" />` +
-            `<text x="${round(alone.x)}" y="${round(alone.y - 7)}" text-anchor="middle" ` +
+          : `<text x="${round(alone.x)}" y="${round(alone.y - 7)}" text-anchor="middle" ` +
             `font-size="11" fill="var(--color-cms-ink)">` +
             `${escape(format(measured[0]!.value))}</text>`;
+      // The dot is drawn whatever the labels do: a path with one moveto renders
+      // nothing, so without it a period holding one month is a blank frame.
+      const aloneDot =
+        alone === null || showMarkers
+          ? ''
+          : `<circle cx="${round(alone.x)}" cy="${round(alone.y)}" r="3" ` +
+            `fill="var(--color-${one.token})" />`;
 
       const wash =
         options.area !== true
@@ -487,6 +603,8 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
         `<path d="${path.trim()}" fill="none" stroke="var(--color-${one.token})" stroke-width="2" ` +
         `stroke-linejoin="round" stroke-linecap="round" />` +
         marks.join('') +
+        isolated +
+        aloneDot +
         single
       );
     })
@@ -514,7 +632,7 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
       return {
         name: one.name,
         token: one.token,
-        x: PADDING.left + step * index,
+        x: left + step * index,
         y: PADDING.top + innerHeight * (1 - last.value / ceiling),
       };
     })
@@ -545,29 +663,51 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   // NEVER AN EMPTY FRAME IN SILENCE. A frame and an axis drawn over no series
   // reads as a measurement that came out flat, which is a different claim from
   // "nothing was completed" and only one of them is usually true.
-  const nothing = series.every((one) => one.points.every((point) => point.value === null));
+  const withValues = new Set(
+    series.flatMap((one) =>
+      one.points.filter((point) => point.value !== null).map((point) => point.label),
+    ),
+  );
+  const tooShort = withValues.size < (options.minimumCategories ?? 0);
+  const nothing =
+    tooShort || series.every((one) => one.points.every((point) => point.value === null));
+  // A PANEL THAT DREW NOTHING TAKES NO ROOM. Two hundred and forty pixels of
+  // blank surface with six words in the middle of it reads as a chart that
+  // failed to load; the same words on one short line read as a state.
+  const drawn = nothing ? EMPTY_HEIGHT : height;
   const body = nothing
-    ? `<text x="${PADDING.left}" y="${round(PADDING.top + innerHeight / 2)}" font-size="12" ` +
+    ? `<text x="${left}" y="${round(EMPTY_HEIGHT / 2 + 4)}" font-size="12" ` +
       `fill="var(--color-cms-muted)">` +
       `${escape(options.emptyMessage ?? 'No values in this period.')}</text>`
-    : frame(width, height, ceiling, format, labelGutter) +
+    : frame(width, height - titleRoom, ceiling, format, labelGutter, left) +
       paths +
       categoryLabels(
         (series[0]?.points ?? []).map((point) => point.label),
         width,
-        height,
+        height - titleRoom,
         labelGutter,
+        left,
       ) +
-      referenceLine(options.reference, ceiling, width, height, labelGutter) +
+      referenceLine(options.reference, ceiling, width, height - titleRoom, labelGutter, left) +
       endLabels;
+  const titles = nothing ? '' : axisTitles(options, width, height, labelGutter, left);
+  // STANDING DOWN IS NOT LOSING THE NUMBERS. Where the line is withheld for
+  // want of history, the reason is said first and the values that do exist are
+  // still read out, because a screen reader gets no help from a picture that
+  // decided not to draw itself.
+  const stoodDown = options.emptyMessage ?? 'Not enough history';
+  const described = tooShort
+    ? `${/[.!?]$/.test(stoodDown) ? stoodDown : `${stoodDown}.`} ${altOf(series, unit, format)}`
+    : altOf(series, unit, format);
   return {
     svg:
-      `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
-      `aria-label="${escape(altOf(series, unit, format))}" preserveAspectRatio="xMidYMid meet">` +
+      `<svg viewBox="0 0 ${width} ${drawn}" width="100%" height="${drawn}" role="img" ` +
+      `aria-label="${escape(described)}" preserveAspectRatio="xMidYMid meet">` +
       body +
+      titles +
       `</svg>`,
-    alt: altOf(series, unit, format),
-    table: tableOf(series, format),
+    alt: described,
+    table: tableOf(series, format, options.categoryName),
   };
 }
 
@@ -586,7 +726,8 @@ export function stackedBarChart(series: ChartSeries[], options: ChartOptions = {
     series.reduce((sum, one) => sum + (one.points[index]?.value ?? 0), 0),
   );
   const ceiling = niceCeiling(Math.max(...totals, 0));
-  const innerWidth = width - PADDING.left - PADDING.right;
+  const left = valueGutter(ceiling, format);
+  const innerWidth = width - left - PADDING.right;
   const innerHeight = height - PADDING.top - PADDING.bottom;
   const step = innerWidth / Math.max(count, 1);
   const barWidth = Math.max(2, step * 0.62);
@@ -599,7 +740,7 @@ export function stackedBarChart(series: ChartSeries[], options: ChartOptions = {
       if (value <= 0) continue;
       const barHeight = (value / ceiling) * innerHeight;
       cursor -= barHeight;
-      const x = PADDING.left + step * (index + 0.5) - barWidth / 2;
+      const x = left + step * (index + 0.5) - barWidth / 2;
       bars +=
         `<rect x="${round(x)}" y="${round(cursor)}" width="${round(barWidth)}" ` +
         `height="${round(barHeight)}" fill="var(--color-${one.token})">` +
@@ -611,12 +752,14 @@ export function stackedBarChart(series: ChartSeries[], options: ChartOptions = {
     svg:
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
       `aria-label="${escape(altOf(series, unit, format))}" preserveAspectRatio="xMidYMid meet">` +
-      frame(width, height, ceiling, format) +
+      frame(width, height, ceiling, format, 0, left) +
       bars +
       categoryLabels(
         (series[0]?.points ?? []).map((point) => point.label),
         width,
         height,
+        0,
+        left,
       ) +
       `</svg>`,
     alt: altOf(series, unit, format),
@@ -725,8 +868,10 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
   const axis = options.valueAxis === true;
   // Room under the last row for the tick labels, claimed only when there are
   // tick labels to put there.
-  const axisHeight = axis ? 22 : 0;
-  const plotHeight = options.height ?? series.points.length * rowHeight + 12;
+  const axisHeight = (axis ? 22 : 0) + (options.xAxisLabel === undefined ? 0 : X_TITLE_ROOM);
+  const plotHeight =
+    (options.height ?? series.points.length * rowHeight + 12) +
+    (options.yAxisLabel === undefined ? 0 : Y_TITLE_ROOM);
   const height = plotHeight + axisHeight;
   const trackWidth = width - labelWidth - valueWidth - 16;
   // THE SCALE MUST HOLD EVERY MARK, not only the bars. A P90 marker or a
@@ -762,9 +907,12 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
         })
         .join('');
 
+  // THE TITLE OWNS THE TOP LINE. Without this the first category label was
+  // drawn at the same height as the y-axis title and the two overprinted.
+  const rowTop = options.yAxisLabel === undefined ? 6 : 6 + Y_TITLE_ROOM;
   const rows = series.points
     .map((point, index) => {
-      const y = 6 + index * rowHeight;
+      const y = rowTop + index * rowHeight;
       // ONE COLOUR PER BAR where the caller assigned one, the series colour
       // where it did not, so a single-measure chart is unchanged.
       const token = point.token ?? series.token;
@@ -845,7 +993,9 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
     svg:
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
       `aria-label="${escape(`${series.name}. ${alt}`)}" ` +
-      `preserveAspectRatio="xMinYMin meet">${body}</svg>`,
+      `preserveAspectRatio="xMinYMin meet">${body}${
+        series.points.length === 0 ? '' : axisTitles(options, width, height)
+      }</svg>`,
     alt,
     table: categoryTable(series, format, options),
   };
