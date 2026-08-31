@@ -102,10 +102,27 @@ export class FakeCmsTurso {
     this.db.exec(ddl);
   }
 
+  /**
+   * NAMED ARGUMENTS ARE NAMED, NOT POSITIONAL, AND THE DIFFERENCE BROKE A PAGE.
+   *
+   * This used to push every `named_args` entry onto the positional list. A
+   * statement binding `:from` and `:to` twice each — which every analytics
+   * aggregate in this application does — then received two positional values
+   * for four references and failed inside the driver, so the worker harness
+   * rendered Home with both approval panels reporting that their figures could
+   * not be loaded. The suite never saw it, because the in-process client
+   * (support/db.ts) binds named arguments correctly and only the HTTP path went
+   * through here. node:sqlite takes named parameters as an object, with or
+   * without the prefix character, so they are passed as one.
+   */
   private runStatement(stmt: HranaStmt): Record<string, unknown> {
     const sql = stmt.sql ?? this.storedSql.get(stmt.sql_id ?? -1) ?? '';
-    const args = (stmt.args ?? []).map(toSql);
-    for (const named of stmt.named_args ?? []) args.push(toSql(named.value));
+    const positional = (stmt.args ?? []).map(toSql);
+    const named = Object.fromEntries(
+      (stmt.named_args ?? []).map((one) => [one.name, toSql(one.value)]),
+    );
+    const args =
+      Object.keys(named).length === 0 ? positional : ([...positional, named] as unknown[]);
 
     const prepared = this.db.prepare(sql);
     // node:sqlite throws on .all() for a non-returning statement, so the two

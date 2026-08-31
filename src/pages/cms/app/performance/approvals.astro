@@ -39,11 +39,15 @@ import { createBatcher, runSection } from '@/lib/cms/batching';
 import { formatDuration } from '@/lib/cms/analytics/stats';
 import {
   approvalRecords,
+  EVERYONE,
   RECORD_VIEWS,
+  type ApprovalActor,
   type ApprovalProcess,
   type ApprovalRecord,
+  type ApprovalScope,
   type RecordView,
 } from '@/lib/cms/repos/approvalSla';
+import { parseFilter } from '@/lib/cms/analytics/filters';
 import { parsePeriod, periodParams } from '@/lib/cms/analytics/period';
 
 export const prerender = false;
@@ -51,15 +55,33 @@ export const prerender = false;
 const params = Astro.url.searchParams;
 const today = new Date();
 const period = parsePeriod(params, today);
+// THE SAME PARSER THE PANELS USE. The affiliate has to be read here by the same
+// function that read it there, or the aggregate and this list narrow by two
+// different rules and the count stops matching the figure that opened it.
+const filter = parseFilter(params);
 
 const process: ApprovalProcess =
   params.get('process') === 'SALES_ORDER' ? 'SALES_ORDER' : 'PURCHASE_ORDER';
 const fn = (params.get('fn') ?? '').slice(0, 120);
-// `person=none` is how the two sales order functions that record no actor are
-// addressed. An absent `user` would be indistinguishable from "everybody", and
-// the aggregate genuinely groups those rows under a null, so the URL has to be
-// able to say null out loud.
-const userId = params.get('person') === 'none' ? null : (params.get('user') ?? '') || null;
+// THREE STATES IN THE URL, BECAUSE THERE ARE THREE QUESTIONS.
+//
+// `all=1` is a whole function across everybody, which is what a bar on the
+// chart measures. `person=none` is the null actor, which is how the two sales
+// order functions that record nobody are addressed. Anything else is one named
+// person. An absent `user` cannot mean both "everybody" and "the null actor",
+// which is why neither is expressed by absence.
+const actor: ApprovalActor =
+  params.get('all') === '1'
+    ? EVERYONE
+    : {
+        kind: 'PERSON',
+        userId: params.get('person') === 'none' ? null : (params.get('user') ?? '') || null,
+      };
+const scope: ApprovalScope = {
+  from: period.from,
+  to: period.to,
+  affiliateId: filter.affiliateId,
+};
 const viewRaw = params.get('view') ?? 'completed';
 const view: RecordView = (RECORD_VIEWS as readonly string[]).includes(viewRaw)
   ? (viewRaw as RecordView)
@@ -88,6 +110,7 @@ const EXPLANATIONS: Readonly<Record<RecordView, string>> = {
   pending: 'What is still waiting, oldest first. These have no duration yet, which is the point.',
 };
 
+const functionLabel = fn === '' ? 'every function' : fn;
 const orderPath = process === 'SALES_ORDER' ? '/app/orders/sales' : '/app/orders/purchases';
 const processLabel = process === 'SALES_ORDER' ? 'Sales order' : 'Purchase order';
 
@@ -95,12 +118,17 @@ let records: ApprovalRecord[] = [];
 let traceId: string | null = null;
 let connectionFailed = false;
 
-if (Astro.locals.cms?.user && fn !== '') {
+// AN EMPTY FUNCTION IS A REAL QUESTION when the actor is everybody: it is the
+// panel's own headline figure, every completion in the period across every
+// function. It is only a mistake when a person was named without one.
+const addressable = fn !== '' || actor.kind === 'EVERYONE';
+
+if (Astro.locals.cms?.user && addressable) {
   try {
     const db = await getDb(getCmsEnv());
     const batcher = createBatcher(db);
     const found = await runSection(batcher, 'approvals.records', (client) =>
-      approvalRecords(client, process, view, fn, userId, period),
+      approvalRecords(client, process, view, fn, actor, scope),
     );
     if (found.ok) records = found.value;
     else traceId = found.traceId;
@@ -111,6 +139,15 @@ if (Astro.locals.cms?.user && fn !== '') {
 }
 
 const person = records.find((record) => record.person !== null)?.person ?? null;
+/**
+ * Whose records these are, said in words rather than by absence.
+ *
+ * "Everybody" and "the actor the extract does not record" are different answers
+ * and a blank is neither of them. Invoicing and loading authority genuinely
+ * record nobody, so a list of them is honestly headed "not recorded" while a
+ * function-wide list is headed "everybody".
+ */
+const actorLabel = actor.kind === 'EVERYONE' ? 'everybody' : (person ?? 'an unrecorded actor');
 const count = (value: number) => value.toLocaleString('en-KE');
 const backToHome = `/app?${new URLSearchParams(periodParams(period)).toString()}`;
 
@@ -145,8 +182,7 @@ const COLUMNS = [
 
   <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
     <span class="text-cms-body-sm text-cms-ink">
-      {processLabel} · {fn === '' ? 'No function named' : fn} · {person ?? 'Not recorded'} ·{' '}
-      {period.label}
+      {processLabel} · {functionLabel} · {actorLabel} · {period.label}
     </span>
     {
       /*
@@ -179,13 +215,11 @@ const COLUMNS = [
 
   <CmsCard>
     <CmsDataTable
-      caption={`${TITLES[view]} for ${person ?? 'an unrecorded actor'} on ${fn}`}
+      caption={`${TITLES[view]} for ${actorLabel} on ${functionLabel}, ${period.label}`}
       columns={COLUMNS}
       empty={records.length === 0}
       rowCount={records.length}
-      emptyMessage={fn === ''
-        ? 'No function was named in the address, so there is nothing to list.'
-        : `No records match ${fn} for this person in ${period.label}.`}
+      emptyMessage={`Nothing matches ${functionLabel} for ${actorLabel} in ${period.label}.`}
       stickyHead={records.length > 20}
     >
       {

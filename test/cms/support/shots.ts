@@ -185,6 +185,10 @@ const shoot = async (
 };
 
 const LABEL = process.env.SHOT_LABEL ?? 'after';
+// BOTH LAPTOP WIDTHS, BECAUSE THE CLAIM IS ABOUT BOTH. The two panels sit side
+// by side and must fit with no horizontal scroll at 1,280 as well as at 1,440,
+// and 1,280 is the width that actually decides it.
+await shoot(`${LABEL}-home-1280`, '/app', 1280, 900, 'collapsed');
 const home = await shoot(`${LABEL}-home-collapsed`, '/app', 1440, 900, 'collapsed');
 const hovered = await shoot(`${LABEL}-home-hover`, '/app', 1440, 900, 'hover');
 await shoot(`${LABEL}-home-pinned`, '/app', 1440, 900, 'pinned');
