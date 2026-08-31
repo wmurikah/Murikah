@@ -446,15 +446,40 @@ test('user_id is not editable anywhere', () => {
   );
 });
 
-test('the Roles tab is still read-only from the edit form', () => {
+test('the person form writes no roles, and access lives in its own panel', () => {
   const source = readFileSync(USER_FORM, 'utf8');
-  // Nothing in this form touches a role, which is also the simplest protection
-  // against somebody editing their own access from a profile screen.
+  // The Edit tab now administers access as well as identity, but the PERSON
+  // form is still only a person: it posts to the user endpoint and nothing
+  // else, so a defect in name-editing can never reach `user_roles`.
   assert.ok(!/role/i.test(source.slice(source.indexOf('<form'))) || !/name="role/i.test(source));
   assert.ok(!/api\/admin\/users\/[^']*\/roles/.test(source), 'the user form writes roles');
-  // And the page says so where a reader can see it.
+
+  // Access is a separate component, and the page does not render its drawer
+  // for a viewer looking at their own record.
   const page = readFileSync('src/pages/cms/app/administration/users/[id].astro', 'utf8');
-  assert.match(page, /The Roles tab stays read-only/);
+  assert.match(page, /<CmsUserAccessPanel/, 'the Edit tab carries the access panel');
+  assert.match(
+    page,
+    /mayManageRoles && userId !== viewerUserId && <CmsUserRoleDrawer/,
+    'the role drawer is not offered on your own record',
+  );
+});
+
+test('the server, not the screen, refuses a self-grant', () => {
+  // Hiding the drawer is presentation. The rule is in the repository, at the
+  // only route into `user_roles`, and it compares the subject against the
+  // session's actor rather than against anything in the payload.
+  const repo = readFileSync('src/lib/cms/repos/rbacAdmin.ts', 'utf8');
+  assert.match(repo, /const SELF_GRANT_REFUSAL/);
+  const assign = repo.slice(repo.indexOf('export async function assignUserRole'));
+  assert.match(
+    assign.slice(0, assign.indexOf('const role =')),
+    /userId === ctx\.actorUserId/,
+    'assignUserRole refuses a grant to the caller',
+  );
+  // Giving up your own role is a de-escalation and stays allowed; reactivating
+  // one or replacing its scopes is not.
+  assert.match(repo, /userId === ctx\.actorUserId && \(!removing \|\| input\.scopes !== null\)/);
 });
 
 test('neither screen carries a page description', () => {

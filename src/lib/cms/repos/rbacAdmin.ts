@@ -498,6 +498,97 @@ export async function setRolePermissions(
   return updated ? { ok: true, value: updated } : { ok: false, kind: 'not_found' };
 }
 
+/**
+ * WHAT A SET OF ROLES ACTUALLY GRANTS, said in words rather than in codes.
+ *
+ * The user administration screen shows an administrator the ACCESS a person
+ * would end up with, which is a different question from "which roles are
+ * ticked". Two roles overlap; one role withholds a code another grants; a
+ * deactivated role contributes nothing. Answering it by eye from a list of
+ * role names is guesswork, and guessing is how somebody ends up with more
+ * than was intended.
+ *
+ * It is computed exactly the way the resolver computes it, from the same
+ * tables, with the same rule for `allowed = 0`: a withholding row contributes
+ * nothing and does not veto another role that grants the same code. See
+ * ../auth/rbac.ts, which is the authority on that rule; this reads the same
+ * data for display and decides nothing.
+ *
+ * READ FOR EVERY ACTIVE ROLE AT ONCE rather than per role, so the screen can
+ * recompute the preview as roles are ticked and unticked without another round
+ * trip. One statement, whatever the administrator does next.
+ */
+export interface RolePermissionMap {
+  /** roleId -> the permission ids that role grants (allowed = 1). */
+  granted: Record<string, string[]>;
+  /** Every permission in the catalogue, so a code can be named without a lookup. */
+  permissions: PermissionRow[];
+}
+
+export async function rolePermissionMap(db: Client): Promise<RolePermissionMap> {
+  const [permissions, rows] = await Promise.all([
+    listPermissions(db),
+    db.execute(
+      `SELECT rp.role_id, rp.permission_id
+         FROM role_permissions rp
+         JOIN access_roles ar ON ar.role_id = rp.role_id
+        WHERE rp.allowed = 1 AND ar.active = 1`,
+    ),
+  ]);
+  const granted: Record<string, string[]> = {};
+  for (const row of rows.rows) {
+    const roleId = text(row.role_id);
+    (granted[roleId] ??= []).push(text(row.permission_id));
+  }
+  return { granted, permissions };
+}
+
+export interface EffectiveGroup {
+  /** The module, as a readable heading: "Sales orders", not "ORDERS". */
+  module: string;
+  /** One readable label per capability, already de-duplicated across roles. */
+  entries: { label: string; code: string }[];
+}
+
+/**
+ * The preview, grouped by module and written in words.
+ *
+ * "Customers / View, Edit" rather than "CUSTOMERS.ACCOUNTS.VIEW,
+ * CUSTOMERS.ACCOUNTS.UPDATE". The raw code is carried alongside for the
+ * details disclosure, because an administrator debugging a grant needs the
+ * exact string and a person reading the screen does not.
+ */
+export function effectivePermissions(
+  map: RolePermissionMap,
+  roleIds: readonly string[],
+): EffectiveGroup[] {
+  const held = new Set<string>();
+  for (const roleId of roleIds) for (const id of map.granted[roleId] ?? []) held.add(id);
+  const byModule = new Map<string, { label: string; code: string }[]>();
+  for (const permission of map.permissions) {
+    if (!held.has(permission.permissionId)) continue;
+    const module = readable(permission.module);
+    const label = `${readable(permission.resource)}: ${readable(permission.action)}`;
+    const entries = byModule.get(module) ?? [];
+    if (!entries.some((entry) => entry.label === label)) {
+      entries.push({ label, code: permission.code });
+    }
+    byModule.set(module, entries);
+  }
+  return [...byModule.entries()]
+    .map(([module, entries]) => ({
+      module,
+      entries: [...entries].sort((a, b) => a.label.localeCompare(b.label)),
+    }))
+    .sort((a, b) => a.module.localeCompare(b.module));
+}
+
+/** SALES_ORDERS -> "Sales orders". Nothing is written down; the catalogue decides. */
+function readable(value: string): string {
+  const words = value.toLowerCase().replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 // ---- user roles and their scopes -------------------------------------------
 
 export interface ScopeInput {
@@ -607,6 +698,40 @@ function scopeColumns(scope: ScopeInput):
 }
 
 /**
+ * NOBODY GRANTS THEMSELVES ACCESS, and the server is where that is decided.
+ *
+ * GRANTS, not touches: giving up your own role is allowed, because it takes
+ * access away and the last-administrator guard already refuses the one removal
+ * that cannot be undone. What is refused is assigning yourself a role,
+ * reactivating one of your own that had lapsed, and replacing your own scopes
+ * — each of which ends with the caller holding more than they started with.
+ *
+ * User administration now edits a person's roles from the same screen that
+ * edits their name, and an administrator can open their own record. Hiding the
+ * control on that one screen would be presentation, not a control: the
+ * endpoint is reachable with curl and the payload is the attack surface. So
+ * the refusal lives at the only route into `user_roles`, and it compares the
+ * subject against the SESSION's actor rather than against anything in the
+ * body.
+ *
+ * Two administrators, not one, is the shape this enforces: access is granted
+ * by somebody else, which is the property an audit trail is supposed to be
+ * able to demonstrate. The last-administrator guard below keeps that from
+ * becoming a lockout — the capability can never be reduced to nobody, so there
+ * is always a second person who can do it.
+ */
+const SELF_GRANT_REFUSAL: WriteResult<never> = {
+  ok: false,
+  kind: 'invalid_reference',
+  fields: [
+    {
+      field: 'roleId',
+      message: 'You cannot change your own access. Ask another administrator.',
+    },
+  ],
+};
+
+/**
  * Assign a role to a user, with its scopes, in one write.
  *
  * A scope is never inferred from a job title, a department or a team
@@ -623,6 +748,7 @@ export async function assignUserRole(
     args: [userId],
   });
   if (user.rows.length === 0) return { ok: false, kind: 'not_found' };
+  if (userId === ctx.actorUserId) return SELF_GRANT_REFUSAL;
   const role = await getRole(db, input.roleId);
   if (!role) {
     return {
@@ -757,6 +883,15 @@ export async function updateUserRole(
   const removing =
     !input.active ||
     (input.effectiveTo !== null && input.effectiveTo < new Date().toISOString().slice(0, 10));
+  // GIVING UP YOUR OWN ACCESS IS NOT ESCALATION, so it is allowed; anything
+  // else on your own grant is refused. Reactivating a lapsed role and
+  // replacing its scopes both END with the caller holding more than they did,
+  // which is the thing the rule exists to stop, and neither announces itself
+  // as an assignment. A pure removal announces nothing but a loss, and the
+  // last-administrator guard below still decides whether it is survivable.
+  if (userId === ctx.actorUserId && (!removing || input.scopes !== null)) {
+    return SELF_GRANT_REFUSAL;
+  }
   if (removing) {
     const remaining = await countAdministrators(db, { excludeUserRoleId: userRoleId });
     const wasAdministrator = (await countAdministrators(db)) > remaining;

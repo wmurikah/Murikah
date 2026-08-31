@@ -1547,6 +1547,47 @@ CREATE TABLE IF NOT EXISTS message_classifications (
 );
 CREATE INDEX IF NOT EXISTS ix_msg_class_review ON message_classifications(review_status, created_at);
 
+/*
+  JOB TITLE DEFAULTS. A title does not grant anything: these two tables are a
+  catalogue of what an administrator would USUALLY give somebody holding a
+  title, offered as a suggestion when the title is set and applied only when
+  the administrator confirms it. Nothing in the permission resolver reads
+  either table, which is why a title can never become a back door into access.
+
+  Two tables rather than one with a discriminator, because an access role and
+  a workflow role are different concepts pointing at different tables, and a
+  single mapping row would have to carry a nullable column for each.
+*/
+CREATE TABLE IF NOT EXISTS job_title_access_role_mappings (
+    mapping_id TEXT PRIMARY KEY,
+    job_title_id TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by_user_id TEXT,
+    FOREIGN KEY (job_title_id) REFERENCES job_titles(job_title_id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES access_roles(role_id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    UNIQUE(job_title_id, role_id)
+);
+CREATE INDEX IF NOT EXISTS ix_jt_role_map_title ON job_title_access_role_mappings(job_title_id, active);
+
+CREATE TABLE IF NOT EXISTS job_title_workflow_role_mappings (
+    mapping_id TEXT PRIMARY KEY,
+    job_title_id TEXT NOT NULL,
+    workflow_role_id TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by_user_id TEXT,
+    FOREIGN KEY (job_title_id) REFERENCES job_titles(job_title_id) ON DELETE CASCADE,
+    FOREIGN KEY (workflow_role_id) REFERENCES workflow_roles(workflow_role_id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    UNIQUE(job_title_id, workflow_role_id)
+);
+CREATE INDEX IF NOT EXISTS ix_jt_wfrole_map_title ON job_title_workflow_role_mappings(job_title_id, active);
+
 CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_update
 BEFORE UPDATE ON audit_events
 BEGIN

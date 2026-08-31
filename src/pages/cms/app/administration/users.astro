@@ -26,6 +26,7 @@ import CmsUserCreateDrawer from '@/components/cms/CmsUserCreateDrawer.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { canManageUsers } from '@/lib/cms/permissions';
+import { listMappings } from '@/lib/cms/repos/jobTitleMappings';
 import { USER_STATUSES, USER_TYPES } from '@/lib/cms/admin/userInput';
 import {
   listUsers,
@@ -73,6 +74,10 @@ let businessUnits: BusinessUnitRow[] = [];
 let departments: DepartmentRow[] = [];
 let titles: JobTitleRow[] = [];
 let teams: TeamRow[] = [];
+// Which titles carry configured defaults, so the create drawer can say
+// "mapped access available" without a second request per title. Ids only:
+// what a title maps to is decided and confirmed on the person's own screen.
+let titlesWithDefaults: string[] = [];
 let loadFailed = false;
 
 if (mayManage) {
@@ -87,6 +92,13 @@ if (mayManage) {
       listJobTitles(db),
       listTeams(db),
     ]);
+    const [access, workflow] = await Promise.all([
+      listMappings(db, 'ACCESS'),
+      listMappings(db, 'WORKFLOW'),
+    ]);
+    titlesWithDefaults = [
+      ...new Set([...access, ...workflow].filter((m) => m.active).map((m) => m.jobTitleId)),
+    ];
   } catch (error) {
     console.error('[cms.users] load failed', error);
     loadFailed = true;
@@ -363,6 +375,7 @@ const pageHref = (n: number) => {
           businessUnits={businessUnits}
           departments={departments}
           titles={titles}
+          titlesWithDefaults={titlesWithDefaults}
         />
       </Fragment>
     )

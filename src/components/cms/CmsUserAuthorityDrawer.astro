@@ -1,0 +1,261 @@
+---
+/**
+ * Giving a person approval authority in a business process.
+ *
+ * A SEPARATE DRAWER FROM THE ACCESS ROLE ONE, BECAUSE THEY ARE SEPARATE
+ * THINGS. An access role says what somebody may do in the application; a
+ * workflow role says what they may approve in a process, and the two are
+ * resolved from different tables by different code. One drawer with a "kind"
+ * toggle would be the first step towards a screen that implies choosing either
+ * is the same decision, which is exactly the collapse this design refuses.
+ *
+ * ITS OWN PERMISSION TOO. `ADMIN.WORKFLOW_ROLES.MANAGE`, checked by the
+ * endpoint, not merely by whether this component was rendered. A person who
+ * administers access roles does not thereby gain the ability to make somebody
+ * an approver.
+ *
+ * The four workflow scopes are not the six role scopes: approval authority is
+ * organisational, so there is no OWN and no TEAM. `workflow_role_assignments`
+ * carries the CHECK that says so, and the control offers what the table
+ * accepts.
+ */
+import CmsDrawer from './CmsDrawer.astro';
+import CmsButton from './CmsButton.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import { getCmsEnv } from '@/lib/cms/env';
+import { getDb } from '@/lib/cms/db';
+import { WORKFLOW_SCOPE_TYPES } from '@/lib/cms/workflow/model';
+import { listWorkflowRoles } from '@/lib/cms/repos/workflowAdmin';
+import {
+  listAffiliates,
+  listBusinessUnits,
+  listCountries,
+} from '@/lib/cms/repos/organisationAdmin';
+
+interface Props {
+  userId: string;
+}
+const { userId } = Astro.props;
+
+let roleOptions: { value: string; label: string }[] = [];
+let countryOptions: { value: string; label: string }[] = [];
+let affiliateOptions: { value: string; label: string }[] = [];
+let unitOptions: { value: string; label: string }[] = [];
+
+try {
+  const db = await getDb(getCmsEnv());
+  const [workflowRoles, countries, affiliates, units] = await Promise.all([
+    listWorkflowRoles(db),
+    listCountries(db),
+    listAffiliates(db),
+    listBusinessUnits(db),
+  ]);
+  roleOptions = workflowRoles
+    .filter((r) => r.active)
+    .map((r) => ({ value: r.workflowRoleId, label: r.roleName }));
+  countryOptions = countries
+    .filter((c) => c.active)
+    .map((c) => ({ value: c.countryId, label: c.countryName }));
+  // `affiliate_name` is not unique in this schema; the code disambiguates.
+  affiliateOptions = affiliates
+    .filter((a) => a.active)
+    .map((a) => ({ value: a.affiliateId, label: `${a.affiliateName} (${a.affiliateCode})` }));
+  unitOptions = units
+    .filter((b) => b.active)
+    .map((b) => ({ value: b.businessUnitId, label: b.businessUnitName }));
+} catch (error) {
+  console.error('[cms.userAuthorityDrawer] lookups failed', error);
+}
+
+const scopeOptions = WORKFLOW_SCOPE_TYPES.map((value) => ({
+  value,
+  label:
+    value === 'GROUP'
+      ? 'Group, every affiliate'
+      : value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' '),
+}));
+const today = new Date().toISOString().slice(0, 10);
+---
+
+<CmsDrawer id="cms-authority-drawer" tone="form" title="Add workflow authority">
+  <form id="cms-authority-form" data-user-id={userId} novalidate class="flex flex-col gap-4">
+    <p
+      id="cms-authority-error"
+      role="alert"
+      hidden
+      class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+    >
+    </p>
+    <CmsSelect
+      id="wa-workflowRoleId"
+      name="workflowRoleId"
+      label="Workflow role"
+      options={roleOptions}
+      required
+    />
+    <CmsSelect id="wa-scopeType" name="scopeType" label="Scope" options={scopeOptions} required />
+    <div data-scope-field="COUNTRY" hidden>
+      <CmsSelect id="wa-countryId" name="countryId" label="Country" options={countryOptions} />
+    </div>
+    <div data-scope-field="AFFILIATE" hidden>
+      <CmsSelect
+        id="wa-affiliateId"
+        name="affiliateId"
+        label="Affiliate"
+        options={affiliateOptions}
+      />
+    </div>
+    <div data-scope-field="BUSINESS_UNIT" hidden>
+      <CmsSelect
+        id="wa-businessUnitId"
+        name="businessUnitId"
+        label="Business unit"
+        options={unitOptions}
+      />
+    </div>
+    <CmsInput
+      id="wa-effectiveFrom"
+      name="effectiveFrom"
+      label="Effective from"
+      value={today}
+      hint="YYYY-MM-DD."
+      required
+    />
+    <CmsInput id="wa-effectiveTo" name="effectiveTo" label="Effective to" hint="Optional." />
+    <p class="text-cms-body-sm text-cms-muted">
+      Authority to approve. Amount and product limits are set against the assignment on the workflow
+      role screen.
+    </p>
+  </form>
+
+  <Fragment slot="actions">
+    <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+    <button
+      type="submit"
+      id="cms-authority-save"
+      form="cms-authority-form"
+      class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      Add
+    </button>
+  </Fragment>
+</CmsDrawer>
+
+<script>
+  const drawer = document.getElementById('cms-authority-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-authority-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-authority-error');
+  const save = document.getElementById('cms-authority-save') as HTMLButtonElement | null;
+
+  if (drawer && form && save) {
+    // Only the target the chosen scope uses is shown AND enabled. A disabled
+    // control is not submitted, so the columns the scope excludes reach the
+    // server absent rather than as '' — which the table's CHECK would reject.
+    const applyScope = () => {
+      const scope = (form.elements.namedItem('scopeType') as HTMLSelectElement | null)?.value ?? '';
+      form.querySelectorAll<HTMLElement>('[data-scope-field]').forEach((group) => {
+        const mine = group.dataset.scopeField === scope;
+        group.hidden = !mine;
+        group.querySelectorAll('select').forEach((field) => {
+          if (field instanceof HTMLSelectElement) field.disabled = !mine;
+        });
+      });
+    };
+
+    const clear = () => {
+      form.querySelectorAll<HTMLElement>('[data-field-error]').forEach((n) => {
+        n.textContent = '';
+        n.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((n) => n.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    const paint = (fields: { field: string; message: string }[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        if (!(field instanceof HTMLElement) || !field.id) continue;
+        field.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${field.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+      form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    };
+
+    form.addEventListener('change', (event) => {
+      if ((event.target as HTMLElement | null)?.id === 'wa-scopeType') applyScope();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!(event.target as HTMLElement | null)?.closest('[data-cms-authority-create]')) return;
+      clear();
+      form.reset();
+      applyScope();
+      drawer.showModal();
+      form.querySelector<HTMLElement>('select')?.focus();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clear();
+      save.disabled = true;
+      const data = new FormData(form);
+      const roleId = String(data.get('workflowRoleId') ?? '');
+      try {
+        // The workflow role is the path; the person is the body. That is this
+        // endpoint's established shape, and the guard has already seen the
+        // role before a row is written.
+        const response = await fetch(
+          `/api/admin/workflow-roles/${encodeURIComponent(roleId)}/assignments`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              userId: form.dataset.userId ?? '',
+              scopeType: data.get('scopeType'),
+              countryId: data.get('countryId'),
+              affiliateId: data.get('affiliateId'),
+              businessUnitId: data.get('businessUnitId'),
+              effectiveFrom: data.get('effectiveFrom'),
+              effectiveTo: data.get('effectiveTo'),
+              priority: 100,
+              active: true,
+            }),
+          },
+        );
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+        if (payload?.error?.fields?.length) paint(payload.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            payload?.error?.message ?? 'That could not be saved. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    applyScope();
+  }
+</script>

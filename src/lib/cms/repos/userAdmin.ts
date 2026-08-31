@@ -22,6 +22,7 @@ import type { Client, InStatement } from '@libsql/client/web';
 import type { FieldError } from '../../validation.ts';
 import { newId, auditEventStmt } from './authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
+import { isoDay } from '../admin/userInput.ts';
 import type { WriteContext } from '../admin/guard.ts';
 import type {
   AssignmentInput,
@@ -931,6 +932,162 @@ export async function updateAssignment(
   }
   const updated = await getAssignment(db, id);
   return updated ? { ok: true, value: updated } : { ok: false, kind: 'not_found' };
+}
+
+/**
+ * CHANGING SOMEBODY'S JOB TITLE, WITHOUT REWRITING WHERE THEY HAVE BEEN.
+ *
+ * The user Edit screen offers one control for a title, because "what is this
+ * person's job title" is the question an administrator actually has. But a
+ * title is not a column on `users` and is not copied onto one: it is a
+ * property of an ASSIGNMENT, and the assignment is authoritative. So this ends
+ * the current primary assignment and inserts a superseding one carrying the
+ * new title at the same department, level and location.
+ *
+ * WHY SUPERSEDE RATHER THAN UPDATE `job_title_id` IN PLACE. `updateAssignment`
+ * above deliberately refuses to change an assignment's level or location,
+ * under the stated rule that "a historical row is never rewritten" — the
+ * record that somebody held the earlier post is the point of keeping it. A
+ * title is the same kind of fact. Updating the column would make it impossible
+ * to answer "who was the Credit Controller in March", which is exactly the
+ * question an audit asks. Superseding answers it from the rows.
+ *
+ * THE OLD ROW IS ENDED, NOT DELETED AND NOT DEACTIVATED WITHOUT AN END DATE:
+ * `effective_to` is set to today and `active` to 0, which is what
+ * `is_current` reads, so the assignment stops being in force from now while
+ * the row that says it once was stays exactly as written.
+ *
+ * NO CURRENT ASSIGNMENT MEANS NO TITLE TO CHANGE. `user_assignments` requires
+ * a department and a level with its matching location, and neither can be
+ * invented from a title. The refusal names the tab that can create one rather
+ * than guessing a placement, because guessing an organisational placement is a
+ * worse answer than asking for it.
+ */
+export async function changePrimaryJobTitle(
+  db: Client,
+  userId: string,
+  jobTitleId: string,
+  ctx: WriteContext,
+): Promise<WriteResult<AssignmentRow>> {
+  const user = await getUser(db, userId);
+  if (!user) return { ok: false, kind: 'not_found' };
+
+  const assignments = await listAssignments(db, userId);
+  const current =
+    assignments.find((a) => a.current && a.isPrimary) ?? assignments.find((a) => a.current);
+  if (current === undefined) {
+    return {
+      ok: false,
+      kind: 'invalid_reference',
+      fields: [
+        {
+          field: 'jobTitleId',
+          message:
+            'This person has no current assignment, so there is no title to change. Add one on the Assignments tab.',
+        },
+      ],
+    };
+  }
+  if (current.jobTitleId === jobTitleId) return { ok: true, value: current };
+
+  const title = await db.execute({
+    sql: `SELECT title_name, active FROM job_titles WHERE job_title_id = ? LIMIT 1`,
+    args: [jobTitleId],
+  });
+  const titleRow = title.rows[0];
+  if (!titleRow) {
+    return {
+      ok: false,
+      kind: 'invalid_reference',
+      fields: [{ field: 'jobTitleId', message: 'That job title does not exist.' }],
+    };
+  }
+  if (!flag(titleRow.active)) {
+    return {
+      ok: false,
+      kind: 'invalid_reference',
+      fields: [{ field: 'jobTitleId', message: 'That job title is deactivated.' }],
+    };
+  }
+
+  const today = isoDay(ctx.now);
+  // An assignment cannot end before it began. Somebody who was posted today and
+  // whose title is corrected the same day gets the end date pinned to the start
+  // date, which the table's own CHECK requires.
+  const endsAt = today < current.effectiveFrom ? current.effectiveFrom : today;
+  const assignmentId = newId('UA');
+  const after = {
+    userId,
+    jobTitleId,
+    jobTitle: text(titleRow.title_name),
+    departmentId: current.departmentId,
+    level: current.level,
+    countryId: current.countryId,
+    affiliateId: current.affiliateId,
+    businessUnitId: current.businessUnitId,
+    effectiveFrom: today,
+    supersedes: current.assignmentId,
+  };
+
+  const statements: Stmt[] = [
+    {
+      sql: `UPDATE user_assignments SET effective_to = ?, active = 0, is_primary = 0
+            WHERE assignment_id = ?`,
+      args: [endsAt, current.assignmentId],
+    },
+    {
+      sql: `INSERT INTO user_assignments (assignment_id, user_id, job_title_id, department_id,
+              assignment_level, country_id, affiliate_id, business_unit_id,
+              effective_from, effective_to, is_primary, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, 1, ?)`,
+      args: [
+        assignmentId,
+        userId,
+        jobTitleId,
+        current.departmentId,
+        current.level,
+        current.countryId,
+        current.affiliateId,
+        current.businessUnitId,
+        today,
+        toDbTimestamp(ctx.now),
+      ],
+    },
+    // One event, on the user, because "their title changed" is the fact an
+    // administrator searches for. Both assignment ids are in the payload, so
+    // the two rows it moved between are still reachable from it.
+    audit(
+      ctx,
+      'JOB_TITLE_CHANGED',
+      'USER',
+      userId,
+      'UPDATE',
+      {
+        jobTitleId: current.jobTitleId,
+        jobTitle: current.jobTitle,
+        assignmentId: current.assignmentId,
+        endedAt: endsAt,
+      },
+      { ...after, assignmentId },
+    ),
+  ];
+
+  try {
+    await db.batch(statements, 'write');
+  } catch (error) {
+    if (isForeignKeyViolation(error) || isCheckViolation(error)) {
+      return {
+        ok: false,
+        kind: 'invalid_reference',
+        fields: [
+          { field: 'jobTitleId', message: 'That title could not be applied to this assignment.' },
+        ],
+      };
+    }
+    throw error;
+  }
+  const created = await getAssignment(db, assignmentId);
+  return created ? { ok: true, value: created } : { ok: false, kind: 'not_found' };
 }
 
 // ---- job titles ------------------------------------------------------------
