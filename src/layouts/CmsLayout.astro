@@ -183,8 +183,25 @@ const ASSISTANT_ID = 'cms-assistant';
                 aria-pressed="false"
                 class="flex h-10 w-full items-center rounded-cms pr-3 text-cms-body-sm text-cms-rail-text outline-none hover:bg-cms-navy-soft hover:text-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
               >
-                <span class="flex w-16 shrink-0 items-center justify-center">
+                <span class="relative flex w-16 shrink-0 items-center justify-center">
                   <CmsIcon name="chevronRight" size={18} />
+                  {
+                    /*
+                      THE ONE-TIME CUE, AND IT HAS TO BE VISIBLE AT 64 PIXELS.
+                      A first-time reader sees an icon rail and no words; the
+                      pin control that would explain it is itself only legible
+                      once the rail is open, so telling them there is one is
+                      circular. A small marker beside the control is the part
+                      that survives the clip, and the script removes it for
+                      good the first time this browser expands or pins the
+                      rail. Experienced users never see it again.
+                    */
+                  }
+                  <span
+                    data-cms-rail-hint-dot
+                    hidden
+                    class="absolute end-3 top-2 h-1.5 w-1.5 rounded-full bg-cms-gold"
+                    aria-hidden="true"></span>
                 </span>
                 {
                   /*
@@ -203,6 +220,9 @@ const ASSISTANT_ID = 'cms-assistant';
                 <span class="flex flex-col items-start leading-tight whitespace-nowrap">
                   <span data-cms-rail-pin-label>Keep open</span>
                   <span class="text-cms-caption text-cms-rail-muted" data-cms-rail-pin-note></span>
+                  <span data-cms-rail-hint-text hidden class="text-cms-caption text-cms-rail-muted"
+                    >Hover to expand</span
+                  >
                 </span>
               </button>
             </div>

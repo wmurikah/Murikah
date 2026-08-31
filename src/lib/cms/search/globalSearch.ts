@@ -28,6 +28,7 @@ import { scopedOpportunities } from '../repos/opportunityAdmin.ts';
 import { scopedCases } from '../repos/serviceAdmin.ts';
 import { scopedSalesOrders } from '../repos/soPerformance.ts';
 import { scopedPurchaseOrders } from '../repos/poPerformance.ts';
+import { searchPages } from './pageSearch.ts';
 import {
   canViewAccounts,
   canViewLeads,
@@ -48,7 +49,22 @@ export const SEARCH_GROUPS = [
   'SALES_ORDER',
   'PURCHASE_ORDER',
 ] as const;
-export type SearchGroup = (typeof SEARCH_GROUPS)[number];
+/**
+ * The RECORD groups, which is what SEARCH_GROUPS has always meant: each one is
+ * a table with a scope predicate and a permission a person may not hold.
+ * `notPermitted` names members of this set and nothing else.
+ */
+export type RecordGroup = (typeof SEARCH_GROUPS)[number];
+/**
+ * PAGE is a group in the result and is not a record group.
+ *
+ * It has no table, no scope predicate and no "you do not hold this" state: a
+ * destination the caller may not open is simply not among the destinations
+ * offered. Keeping it out of SEARCH_GROUPS is what stops it appearing in
+ * `notPermitted`, being handed to the query builder, or needing a row in
+ * GROUP_LABEL.
+ */
+export type SearchGroup = RecordGroup | 'PAGE';
 
 export interface SearchHit {
   group: SearchGroup;
@@ -74,15 +90,32 @@ export interface SearchGroupResult {
   more: boolean;
 }
 
+/**
+ * A destination, in the same shape a record hit takes.
+ *
+ * The panel renders groups generically, so a page group needs no rendering
+ * code of its own: it is a group with a label and hits, and the reader gets
+ * one result list rather than two search boxes.
+ */
 export interface SearchResult {
   query: string;
   groups: SearchGroupResult[];
   total: number;
-  /** Groups the caller holds no permission for. Named, not silently absent. */
-  notPermitted: SearchGroup[];
+  /** Record groups the caller holds no permission for. Named, not silently absent. */
+  notPermitted: RecordGroup[];
 }
 
-export const GROUP_LABEL: Readonly<Record<SearchGroup, string>> = {
+/**
+ * The label the page group carries.
+ *
+ * "Go to" rather than "Pages", because it says what pressing one does. A
+ * heading reading Pages beside a heading reading Customers invites the reading
+ * that one lists documents and the other lists screens, which is exactly
+ * backwards from how a person thinks about arriving somewhere.
+ */
+export const PAGE_GROUP_LABEL = 'Go to';
+
+export const GROUP_LABEL: Readonly<Record<RecordGroup, string>> = {
   ACCOUNT: 'Customers',
   CONTACT: 'Contacts',
   LEAD: 'Leads',
@@ -146,7 +179,7 @@ function matchExpression(columns: string[]): string {
 }
 
 interface GroupQuery {
-  group: SearchGroup;
+  group: RecordGroup;
   sql: string;
   args: unknown[];
 }
@@ -161,10 +194,10 @@ async function buildQueries(
   userId: string,
   permissions: readonly string[],
   query: string,
-): Promise<{ queries: GroupQuery[]; notPermitted: SearchGroup[] }> {
+): Promise<{ queries: GroupQuery[]; notPermitted: RecordGroup[] }> {
   const { exact, prefix, contains } = likeTerms(query);
   const queries: GroupQuery[] = [];
-  const notPermitted: SearchGroup[] = [];
+  const notPermitted: RecordGroup[] = [];
 
   // ---- Customers and contacts --------------------------------------------
   if (canViewAccounts(permissions)) {
@@ -371,8 +404,13 @@ async function buildQueries(
   return { queries, notPermitted };
 }
 
-/** Where a hit goes. One place, so a group cannot link somewhere wrong. */
-function hrefFor(group: SearchGroup, id: string, accountId: string): string {
+/**
+ * Where a RECORD hit goes. One place, so a group cannot link somewhere wrong.
+ *
+ * A page hit needs none of this: its href is the destination itself, which is
+ * why the catalogue holds it and this switch has no PAGE arm to forget.
+ */
+function hrefFor(group: RecordGroup, id: string, accountId: string): string {
   switch (group) {
     case 'ACCOUNT':
       return `/app/operations/customers/${id}`;
@@ -432,7 +470,7 @@ export async function globalSearch(
       const row = raw as unknown as Record<string, unknown>;
       const id = text(row.id);
       return {
-        group,
+        group: group as SearchGroup,
         id,
         title: text(row.title),
         context: contextFor(row),
@@ -443,6 +481,37 @@ export async function globalSearch(
     });
     total += hits.length;
     groups.push({ group, label: GROUP_LABEL[group], hits, more });
+  }
+
+  /*
+   * DESTINATIONS JOIN THE SAME LIST, AND THEY EARN THEIR PLACE IN IT.
+   *
+   * The page group is sorted with the record groups on its best hit, so
+   * typing "users" puts Go to at the top — an exact page-name match is band 0
+   * — while typing a customer's name leaves it below them or absent. It is
+   * never pinned above records: a person searching a document number wants the
+   * document, and a navigation aid that pushed it down would have made the
+   * search worse in the name of making it broader.
+   *
+   * It costs no query. The destinations are a static array and the permissions
+   * are already on the request.
+   */
+  const pages = searchPages(permissions, query);
+  if (pages.length > 0) {
+    groups.push({
+      group: 'PAGE',
+      label: PAGE_GROUP_LABEL,
+      hits: pages.map((page) => ({
+        group: 'PAGE' as const,
+        id: page.href,
+        title: page.label,
+        context: page.context,
+        href: page.href,
+        rank: page.rank,
+      })),
+      more: false,
+    });
+    total += pages.length;
   }
 
   // Groups are ordered by their best hit, so typing a document number puts

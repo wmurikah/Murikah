@@ -1,6 +1,6 @@
 ---
 /**
- * CRM → My Work.
+ * CRM → Activities.
  *
  * The acting user's activities in four sections, all derived from timestamps
  * with no status column: overdue and upcoming split on the one due-time rule
@@ -19,6 +19,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsCrmNav from '@/components/cms/CmsCrmNav.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
@@ -27,6 +28,7 @@ import { myWork, type MyWork, type ActivityRow } from '@/lib/cms/repos/activityA
 export const prerender = false;
 
 const userId = Astro.locals.cms?.user.userId ?? '';
+const permissions = Astro.locals.cms?.user.permissions ?? [];
 
 let work: MyWork = { overdue: [], upcoming: [], recentlyCompleted: [], completedTotal: 0 };
 let loadFailed = false;
@@ -55,7 +57,7 @@ function parentHref(a: ActivityRow): string | null {
 }
 ---
 
-<CmsLayout title="My Work">
+<CmsLayout title="Activities">
   {
     loadFailed ? (
       <CmsErrorState
@@ -64,15 +66,20 @@ function parentHref(a: ActivityRow): string | null {
       />
     ) : (
       <Fragment>
+        {/*
+          ACTIVITIES, NOT "MY WORK". The CRM tab strip has always called this
+          Activities and the rail leads to it under that name; the page called
+          itself something else, so a person following the tab arrived
+          somewhere that appeared to be a different screen. One term per
+          concept — see docs/cms/NAVIGATION_GLOSSARY.md.
+        */}
         <CmsPageHeader
-          title="My Work"
+          title="Activities"
           definition="Due means the explicit follow-up deadline where one was set, and otherwise the scheduled time."
-          crumbs={[
-            { label: 'Home', href: '/app' },
-            { label: 'CRM', href: '/app/crm' },
-            { label: 'My Work' },
-          ]}
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Activities' }]}
         />
+
+        <CmsCrmNav current="/app/crm/activities" permissions={permissions} />
 
         <div class="grid gap-4 lg:grid-cols-2">
           <CmsCard title={`Past their due date (${work.overdue.length})`}>
