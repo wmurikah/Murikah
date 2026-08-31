@@ -19,7 +19,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsFilterPanel from '@/components/cms/CmsFilterPanel.astro';
-import CmsTabs from '@/components/cms/CmsTabs.astro';
+import CmsCrmNav from '@/components/cms/CmsCrmNav.astro';
 import CmsUnavailable from '@/components/cms/CmsUnavailable.astro';
 import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
@@ -30,7 +30,7 @@ import CmsLeadCreateDrawer from '@/components/cms/CmsLeadCreateDrawer.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { canViewLeads, canCreateLeads, canManageLeadSources } from '@/lib/cms/permissions';
+import { canViewLeads, canCreateLeads } from '@/lib/cms/permissions';
 import {
   ageInDays,
   leadIndicators,
@@ -48,7 +48,6 @@ export const prerender = false;
 const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayRead = canViewLeads(permissions);
 const mayCreate = canCreateLeads(permissions);
-const maySources = canManageLeadSources(permissions);
 const userId = Astro.locals.cms?.user.userId ?? '';
 
 const params = Astro.url.searchParams;
@@ -168,7 +167,7 @@ const withoutLeadFilter = (key: string) => {
         <CmsPageHeader
           title="Leads"
           definition="A lead may sit against an existing customer or against nobody at all, which is why an account is optional here and required at conversion."
-          crumbs={[{ label: 'Home', href: '/app' }, { label: 'CRM' }, { label: 'Leads' }]}
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Leads' }]}
         >
           <Fragment slot="actions">
             {mayCreate && (
@@ -178,37 +177,25 @@ const withoutLeadFilter = (key: string) => {
             )}
           </Fragment>
         </CmsPageHeader>
-        <div class="flex items-end justify-between gap-3">
-          <CmsTabs
-            label="CRM"
-            current="/app/crm"
-            tabs={[
-              { label: 'Leads', href: '/app/crm' },
-              { label: 'Opportunities', href: '/app/crm/opportunities' },
-              { label: 'Activities', href: '/app/crm/activities' },
-            ]}
-            class="min-w-0 flex-1"
-          />
-          {maySources && (
-            <a
-              href="/app/crm/lead-sources"
-              class="mb-2 shrink-0 rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
-            >
-              Lead sources
-            </a>
-          )}
-        </div>
+        <CmsCrmNav current="/app/crm" permissions={permissions} />
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <CmsKpiCard label="Leads in your scope" value={String(indicators.total)} />
           <CmsKpiCard label="Captured in the last 7 days" value={String(indicators.fresh)} />
-          <CmsKpiCard label="Awaiting first contact" value={String(indicators.needsFirstContact)} />
+          {/*
+            THE PARAGRAPH THAT WAS HERE SAID THE CARDS ARE COUNTS, WHICH THE
+            CARDS SHOW. Its one real fact — that "awaiting first contact" is an
+            absence of a record and not a judgement about lateness — is a
+            definition, so it lives on the card it defines, behind the info
+            affordance every other figure in the product uses.
+          */}
+          <CmsKpiCard
+            label="Awaiting first contact"
+            value={String(indicators.needsFirstContact)}
+            definition="No first contact has been recorded. Not a statement that anybody is late."
+          />
           <CmsKpiCard label="Qualified" value={String(indicators.qualified)} />
         </div>
-        <p class="text-cms-body-sm text-cms-muted">
-          Each card is a count of a stated condition over the same leads the list can show. Awaiting
-          first contact means no first contact has been recorded, not that anyone is late.
-        </p>
 
         <CmsFilterPanel action="/app/crm" activeCount={activeFilters}>
           <div slot="primary">

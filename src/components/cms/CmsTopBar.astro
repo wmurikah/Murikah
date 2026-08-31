@@ -61,7 +61,7 @@ const context = user ? organisationLine(user.assignment) : null;
   */
   }
   <div class="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm" data-cms-search>
-    <label for="cms-search" class="sr-only">Search customers, orders, cases and more</label>
+    <label for="cms-search" class="sr-only">Search records or pages</label>
     <CmsIcon
       name="search"
       size={17}
@@ -75,7 +75,7 @@ const context = user ? organisationLine(user.assignment) : null;
       aria-expanded="false"
       aria-controls="cms-search-results"
       aria-describedby="cms-search-note"
-      placeholder="Search"
+      placeholder="Search records or pages"
       class="h-10 w-full rounded-cms border border-cms-line bg-cms-canvas pr-14 pl-9 text-cms-body-sm text-cms-ink placeholder:text-cms-muted focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
     />
     <kbd

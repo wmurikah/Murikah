@@ -32,6 +32,14 @@
 <script>
   const PIN_KEY = 'cms.rail.pinned';
   const GROUPS_KEY = 'cms.rail.groups';
+  /**
+   * Whether this browser has already been shown the rail cue.
+   *
+   * A separate key from the pin, because "I have seen the hint" and "I keep
+   * the rail open" are different facts: somebody may read the hint, decide
+   * they prefer the rail collapsed, and must not be told again.
+   */
+  const HINT_KEY = 'cms.rail.hint';
   const root = document.body;
   const button = document.querySelector<HTMLButtonElement>('[data-cms-rail-pin]');
   const label = document.querySelector<HTMLElement>('[data-cms-rail-pin-label]');
@@ -59,7 +67,41 @@
   }
   paint(pinned);
 
+  /*
+    THE CUE APPEARS ONCE, FOR SOMEBODY WITH NO RECORDED PREFERENCE AT ALL.
+    A person who has pinned or unpinned the rail has met the control and is
+    told nothing; so is a person who has already seen and dismissed it. Any
+    first expansion — hover, keyboard focus or the pin itself — counts as
+    having found it, and it never returns.
+  */
+  const hintDot = document.querySelector<HTMLElement>('[data-cms-rail-hint-dot]');
+  const hintText = document.querySelector<HTMLElement>('[data-cms-rail-hint-text]');
+  let hintShowing = false;
+  const dismissHint = () => {
+    if (!hintShowing) return;
+    hintShowing = false;
+    if (hintDot) hintDot.hidden = true;
+    if (hintText) hintText.hidden = true;
+    try {
+      localStorage.setItem(HINT_KEY, '1');
+    } catch {
+      /* Not remembered. It is one small marker, not a modal. */
+    }
+  };
+  try {
+    if (localStorage.getItem(PIN_KEY) === null && localStorage.getItem(HINT_KEY) === null) {
+      hintShowing = true;
+      if (hintDot) hintDot.hidden = false;
+      if (hintText) hintText.hidden = false;
+    }
+  } catch {
+    /* Storage refused: show nothing rather than show it on every page. */
+  }
+  rail?.addEventListener('pointerenter', dismissHint, { once: true });
+  rail?.addEventListener('focusin', dismissHint, { once: true });
+
   button?.addEventListener('click', () => {
+    dismissHint();
     pinned = !pinned;
     paint(pinned);
     // A tap that pinned the rail should not leave the touch state behind to

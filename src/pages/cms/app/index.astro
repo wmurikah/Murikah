@@ -63,6 +63,7 @@ import CmsMonthYearControl from '@/components/cms/CmsMonthYearControl.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
+import CmsMoreDetail from '@/components/cms/CmsMoreDetail.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
@@ -930,23 +931,34 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         )
       }
 
-      <CmsChart
-        title="Purchase order turnaround trend"
-        definition={TREND_DEFINITION}
-        chart={purchaseTrendChart}
-        unit="minutes"
-      />
+      {
+        /*
+          THE FIRST VIEW ANSWERS "WHERE IS TIME BEING LOST". The figures and the
+          function breakdown above answer it. The trend over months and the
+          people behind the figures are the next question, so they are one press
+          away rather than four panels of scrolling. Both are still computed and
+          still rendered; the disclosure remembers whoever opens it.
+        */
+      }
+      <CmsMoreDetail id="purchases">
+        <CmsChart
+          title="Purchase order turnaround trend"
+          definition={TREND_DEFINITION}
+          chart={purchaseTrendChart}
+          unit="minutes"
+        />
 
-      <CmsApprovalLeaderboard
-        caption="Purchase order approvers"
-        process="PURCHASE_ORDER"
-        board={purchases}
-        period={shown}
-        affiliateId={filter.affiliateId}
-        totalOutside={outsideFor(purchaseCalendar, purchases)}
-        widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
-        orderPath="/app/orders/purchases"
-      />
+        <CmsApprovalLeaderboard
+          caption="Purchase order approvers"
+          process="PURCHASE_ORDER"
+          board={purchases}
+          period={shown}
+          affiliateId={filter.affiliateId}
+          totalOutside={outsideFor(purchaseCalendar, purchases)}
+          widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
+          orderPath="/app/orders/purchases"
+        />
+      </CmsMoreDetail>
     </section>
 
     <section class="flex min-w-0 flex-col gap-4" aria-labelledby="panel-sales">
@@ -1020,23 +1032,25 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         )
       }
 
-      <CmsChart
-        title="Sales order turnaround trend"
-        definition={TREND_DEFINITION}
-        chart={salesTrendChart}
-        unit="minutes"
-      />
+      <CmsMoreDetail id="sales">
+        <CmsChart
+          title="Sales order turnaround trend"
+          definition={TREND_DEFINITION}
+          chart={salesTrendChart}
+          unit="minutes"
+        />
 
-      <CmsApprovalLeaderboard
-        caption="Sales order approvers"
-        process="SALES_ORDER"
-        board={sales}
-        period={shown}
-        affiliateId={filter.affiliateId}
-        totalOutside={outsideFor(salesCalendar, sales)}
-        widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
-        orderPath="/app/orders/sales"
-      />
+        <CmsApprovalLeaderboard
+          caption="Sales order approvers"
+          process="SALES_ORDER"
+          board={sales}
+          period={shown}
+          affiliateId={filter.affiliateId}
+          totalOutside={outsideFor(salesCalendar, sales)}
+          widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
+          orderPath="/app/orders/sales"
+        />
+      </CmsMoreDetail>
     </section>
   </div>
 

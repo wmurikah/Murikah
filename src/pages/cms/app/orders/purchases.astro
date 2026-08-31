@@ -13,6 +13,7 @@
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsOrdersNav from '@/components/cms/CmsOrdersNav.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
@@ -98,6 +99,8 @@ const NOT_AVAILABLE = 'Not available';
             Performance
           </CmsButton>
         </CmsPageHeader>
+
+        <CmsOrdersNav process="purchases" mode="operations" permissions={permissions} />
 
         <CmsOrderFilters
           filter={filter}
