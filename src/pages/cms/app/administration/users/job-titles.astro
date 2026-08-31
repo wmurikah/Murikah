@@ -23,24 +23,62 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsJobTitleScript from '@/components/cms/CmsJobTitleScript.astro';
+import CmsJobTitleMappings from '@/components/cms/CmsJobTitleMappings.astro';
 
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
-import { canManageUsers } from '@/lib/cms/permissions';
+import { canManageRoles, canManageUsers } from '@/lib/cms/permissions';
 import { listJobTitles, type JobTitleRow } from '@/lib/cms/repos/userAdmin';
 import { listDepartments, type DepartmentRow } from '@/lib/cms/repos/organisationAdmin';
+import { listMappings, type MappingRow } from '@/lib/cms/repos/jobTitleMappings';
+import { listRoles, rolePermissionMap, type RolePermissionMap } from '@/lib/cms/repos/rbacAdmin';
+import { listWorkflowRoles } from '@/lib/cms/repos/workflowAdmin';
 
 export const prerender = false;
 
-const mayManage = canManageUsers(Astro.locals.cms?.user.permissions ?? []);
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayManage = canManageUsers(permissions);
+/**
+ * MAPPINGS ARE ROLE ADMINISTRATION, NOT USER ADMINISTRATION.
+ *
+ * Deciding that a title should normally carry a role is deciding what access
+ * that title suggests, which belongs with the permission that governs access.
+ * A user administrator who does not hold it sees the titles and not the
+ * defaults — and the endpoints behind the defaults check the same code, so
+ * this is what the screen offers rather than what protects it.
+ */
+const mayMapRoles = canManageRoles(permissions);
 let titles: JobTitleRow[] = [];
 let departments: DepartmentRow[] = [];
+let accessMappings: MappingRow[] = [];
+let workflowMappings: MappingRow[] = [];
+let roleOptions: { value: string; label: string }[] = [];
+let workflowRoleOptions: { value: string; label: string }[] = [];
+let permissionMap: RolePermissionMap = { granted: {}, permissions: [] };
 let loadFailed = false;
 
 if (mayManage) {
   try {
     const db = await getDb(getCmsEnv());
     [titles, departments] = await Promise.all([listJobTitles(db), listDepartments(db)]);
+    if (mayMapRoles) {
+      const [access, workflow, roles, workflowRoles, map] = await Promise.all([
+        listMappings(db, 'ACCESS'),
+        listMappings(db, 'WORKFLOW'),
+        listRoles(db),
+        listWorkflowRoles(db),
+        rolePermissionMap(db),
+      ]);
+      accessMappings = access;
+      workflowMappings = workflow;
+      roleOptions = roles
+        .filter((r) => r.active)
+        .map((r) => ({ value: r.roleId, label: r.roleName }));
+      workflowRoleOptions = workflowRoles
+        .filter((r) => r.active)
+        .map((r) => ({ value: r.workflowRoleId, label: r.roleName }));
+      permissionMap = map;
+    }
   } catch (error) {
     console.error('[cms.jobTitles] load failed', error);
     loadFailed = true;
@@ -185,6 +223,16 @@ const departmentOptions = [
           </Fragment>
         </CmsDrawer>
         <CmsJobTitleScript />
+        {mayMapRoles && (
+          <CmsJobTitleMappings
+            titles={titles}
+            accessMappings={accessMappings}
+            workflowMappings={workflowMappings}
+            roleOptions={roleOptions}
+            workflowRoleOptions={workflowRoleOptions}
+            permissionMap={permissionMap}
+          />
+        )}
       </Fragment>
     )
   }
