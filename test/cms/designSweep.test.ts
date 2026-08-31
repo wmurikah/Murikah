@@ -18,6 +18,7 @@ import {
   LEADERBOARD_HEADERS,
   leaderboardColumns,
 } from '../../src/lib/cms/analytics/leaderboard.ts';
+import { SERIES_TOKENS } from '../../src/lib/cms/charts/svg.ts';
 import { join } from 'node:path';
 
 const TOKENS = 'src/styles/tokens.css';
@@ -175,8 +176,13 @@ test('measured contrast: every pair meets its WCAG 2.2 threshold', () => {
       [`${role} status edge on surface`, token(`cms-${role}-border`), surface, 3],
     );
   }
-  for (let n = 1; n <= 5; n++) {
+  // SEVEN, BECAUSE THE PURCHASE ORDER TEMPLATE ALLOWS SEVEN APPROVAL LEVELS and
+  // the bar chart takes one token per function. The loop follows the palette
+  // rather than a number written twice, so an eighth token cannot be added
+  // without a measurement.
+  for (let n = 1; n <= SERIES_TOKENS.length; n++) {
     pairs.push([`chart series ${n} on surface`, token(`cms-series-${n}`), surface, 4.5]);
+    pairs.push([`chart series ${n} on canvas`, token(`cms-series-${n}`), canvas, 4.5]);
   }
 
   const table: string[] = [];
@@ -630,6 +636,30 @@ test('every figure on Home carries a destination', () => {
       const before = source.slice(Math.max(0, at - 400), at);
       assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
     }
+  }
+  // THE KPI STRIP'S FIGURES ARE FIGURES TOO, and they are formatted in the
+  // frontmatter because the card renders its own anchor around them. The regex
+  // above cannot see inside a component, so the cards are asserted directly:
+  // every one of them carries a destination, which is the property the scan
+  // exists to protect rather than the string position it happens to check.
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  const cards = [...home.matchAll(/<CmsKpiCard[\s\S]*?\/>/g)].map((m) => m[0]);
+  assert.ok(cards.length > 0, 'Home renders no KPI card');
+  for (const card of cards) {
+    assert.match(card, /href=\{/, 'a KPI card carries no destination');
+    assert.match(card, /value=\{/, 'a KPI card carries no figure');
+  }
+  // And each card is built from a list whose every entry has an href, so a
+  // fifth card cannot be added without one.
+  for (const strip of ['purchaseKpis', 'salesKpis']) {
+    const start = home.indexOf(`const ${strip}: Kpi[] = [`);
+    assert.ok(start !== -1, `${strip} is not declared`);
+    const block = home.slice(start, home.indexOf('\n];', start));
+    const labels = [...block.matchAll(/label: '([^']+)'/g)].length;
+    const hrefs = [...block.matchAll(/\n {4}href:/g)].length;
+    assert.equal(labels, 4, `${strip} should carry four measures`);
+    assert.equal(hrefs, 4, `${strip} has a measure with no destination`);
+    counted += 4;
   }
   assert.ok(counted >= 6, `expected Home's counts, found ${counted}`);
 
