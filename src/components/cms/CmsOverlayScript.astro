@@ -148,7 +148,13 @@
       if (trigger) {
         const id = trigger.getAttribute('data-cms-modal-open');
         const dialog = id ? document.getElementById(id) : null;
-        if (dialog instanceof HTMLDialogElement && !dialog.open) open(dialog, opener);
+        // `trigger`, NOT `opener`. The #199 merge left this passing the global
+        // `window.opener` — the window that opened this tab, null in every
+        // normal one — which typechecks because lib.dom declares it `any` and
+        // silently broke focus return: `openedBy` remembered nothing, so
+        // closing a modal dropped keyboard focus to <body> instead of the
+        // control that opened it.
+        if (dialog instanceof HTMLDialogElement && !dialog.open) open(dialog, trigger);
         return;
       }
 
@@ -164,26 +170,6 @@
       // outside.
       if (target instanceof HTMLDialogElement && target.open) close(target);
     });
-
-    document.addEventListener(
-      'close',
-      (event) => {
-        if (!(event.target instanceof HTMLDialogElement)) return;
-        document.body.style.removeProperty('overflow');
-        opener?.focus();
-        opener = null;
-      },
-      true,
-    );
-
-    document.addEventListener(
-      'cancel',
-      (event) => {
-        if (!(event.target instanceof HTMLDialogElement) || mayClose(event.target)) return;
-        event.preventDefault();
-      },
-      true,
-    );
 
     // Following a link out of the drawer must not leave the dialog open behind
     // the new page in a browser that restores it from the back/forward cache.
