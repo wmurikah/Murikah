@@ -274,7 +274,9 @@ const linkClass =
                       {rank ?? ''}
                     </span>
                     {rank !== null && (
-                      <span class="sr-only">Position {rank} in {group.fn},</span>
+                      <span class="sr-only">
+                        Position {rank} in {group.fn},
+                      </span>
                     )}
                     {/* THE ROW DETAIL. Nothing in it sorts and nothing in it ranks. */}
                     <details class="cms-leader-detail">
@@ -338,8 +340,8 @@ const linkClass =
   {
     withoutActor.length > 0 && (
       <p class="text-cms-caption text-cms-muted">
-        {listOf(withoutActor)} {withoutActor.length === 1 ? 'is' : 'are'} in the chart above and
-        not in this table: the source extract records no actor for{' '}
+        {listOf(withoutActor)} {withoutActor.length === 1 ? 'is' : 'are'} in the chart above and not
+        in this table: the source extract records no actor for{' '}
         {withoutActor.length === 1 ? 'it' : 'them'}.
       </p>
     )

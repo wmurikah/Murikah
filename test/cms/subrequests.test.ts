@@ -245,8 +245,7 @@ test('/app stays inside its subrequest budget', async () => {
     const before = previousPeriod(shown);
     const active = withPeriod(filter, shown);
     const scope = { from: shown.from, to: shown.to, affiliateId: filter.affiliateId };
-    const priorScope =
-      before === null ? null : { ...scope, from: before.from, to: before.to };
+    const priorScope = before === null ? null : { ...scope, from: before.from, to: before.to };
 
     // EVERYTHING ELSE, IN ONE GO: the exceptions, four counts, four boards,
     // two trends, two end-to-end spans and the affiliate list.
@@ -273,7 +272,9 @@ test('/app stays inside its subrequest budget', async () => {
       runSection(b, 'home.purchases-trend', (db) =>
         approvalTrend(db, 'PURCHASE_ORDER', scope, shown.grain),
       ),
-      runSection(b, 'home.sales-trend', (db) => approvalTrend(db, 'SALES_ORDER', scope, shown.grain)),
+      runSection(b, 'home.sales-trend', (db) =>
+        approvalTrend(db, 'SALES_ORDER', scope, shown.grain),
+      ),
       runSection(b, 'home.purchases-cycle', (db) => approvalCycle(db, 'PURCHASE_ORDER', scope)),
       runSection(b, 'home.sales-cycle', (db) => approvalCycle(db, 'SALES_ORDER', scope)),
       runSection(b, 'home.affiliates', (db) =>
