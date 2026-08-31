@@ -54,7 +54,7 @@ export const CMS_NAV: readonly CmsNavItem[] = [
   },
   {
     label: 'Customers',
-    href: '/app/customers',
+    href: '/app/operations/customers',
     icon: 'customers',
     permission: 'CUSTOMERS.ACCOUNTS.VIEW',
   },

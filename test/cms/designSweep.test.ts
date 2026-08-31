@@ -709,6 +709,12 @@ test('Home leads with the two charts, then the two leaderboards', () => {
   // leaderboard follows its own chart inside the same column. Reading the
   // order out of the file is what proves the column reads downward: a grid
   // that placed them side by side would interleave these four markers.
+  //
+  // ASSERTED AGAINST MARKERS THE PAGE ACTUALLY RENDERS. The #199 merge changed
+  // this test to look for `peopleByFunction(...)`, a helper from a rewrite of
+  // the page that the same merge dropped, so the assertion searched for a
+  // string no file contained and failed on main itself — unseen, because the
+  // pipeline never reached the test step.
   const marks = [
     ...source.matchAll(
       /title="(Purchase order approval|Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
@@ -980,9 +986,10 @@ test('the brand panel is on the left and the form on the right', () => {
     'the form still comes first in the DOM',
   );
   // And the form side is the wider of the two.
-  const grid = /lg:grid-cols-\[minmax\(([\d.]+)rem,(\d)fr\)_minmax\(([\d.]+)rem,(\d)fr\)\]/.exec(
-    layout,
-  );
+  const grid =
+    /lg:grid-cols-\[minmax\(([\d.]+)rem,([\d.]+)fr\)_minmax\(([\d.]+)rem,([\d.]+)fr\)\]/.exec(
+      layout,
+    );
   assert.ok(grid, 'the two columns are declared as fractions');
   assert.ok(
     Number(grid![4]) > Number(grid![2]),
@@ -1020,7 +1027,9 @@ test('the brand panel collapses on a small screen and the form takes the width',
   assert.match(layout, /class="flex min-h-dvh flex-col lg:grid/);
   // And the panel's prose is desktop-only, so it cannot push the form off the
   // first screen on a phone.
-  assert.match(layout, /<div class="hidden max-w-md lg:block">/);
+  assert.match(layout, /<div class="hidden lg:block">/);
+  assert.match(layout, /min-h-40[\s\S]*lg:min-h-dvh/, 'the mobile brand panel is compact');
+  assert.match(layout, /<slot name="brand-character"/, 'the mascot follows the responsive panel');
 });
 
 // ---------------------------------------------------------------------------
@@ -1083,6 +1092,9 @@ test('an empty table does not claim that nothing exists', () => {
   const fallback = /emptyMessage = '([^']+)'/.exec(table);
   assert.ok(fallback, 'the table declares a default empty message');
   assert.notEqual(fallback![1], 'Nothing to show yet.', 'the old message is gone');
+  // The MESSAGE THE COMPONENT ACTUALLY DECLARES. The #199 merge changed this
+  // assertion to a wording CmsDataTable never received, so it failed on main
+  // itself.
   assert.match(fallback![1]!, /An empty result is not a claim that nothing exists/);
 });
 
