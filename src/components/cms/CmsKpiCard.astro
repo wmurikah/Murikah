@@ -4,10 +4,19 @@
  * rule along the top, a small capitalised label, one large figure, and a quiet
  * line of context beneath.
  *
- * THE TOP RULE CARRIES THE STATE, NOT DECORATION. Where the metric has a
- * semantic reading, the rule takes that ramp; where it has none, it takes the
- * neutral accent. It is never chosen for variety, which is what would turn a
- * row of these into a row of colours that mean nothing.
+ * THE LABEL IS SET IN SMALL CAPITALS, which is the one piece of that anatomy
+ * this component described and did not draw. Capitals at caption size read as a
+ * field name rather than as a sentence, which is what keeps the figure the
+ * loudest thing in the card at a glance.
+ *
+ * THE TOP RULE TIES THE CARD TO ITS BAR, AND IT IS NEVER A VERDICT. It takes
+ * the same non-semantic series token as the function this figure belongs to, so
+ * the eye carries a function from the KPI strip to its bar to its row in the
+ * table beneath without reading a label three times. It is deliberately NOT a
+ * status ramp: green, amber and red mean met, at risk and breached in this
+ * application and nothing else, and a card whose figure has no target has no
+ * such reading to carry. A card that is given no token draws no rule rather
+ * than reaching for a colour to fill the space.
  *
  * THE WHOLE CARD IS THE DRILL TARGET. Not the figure inside it: a four-pixel
  * number is a poor target and Fitts's law is not a suggestion. The card is one
@@ -32,8 +41,17 @@ interface Props {
   value: string;
   /** The target, the unit or the denominator. One quiet line, never a sentence. */
   context?: string;
-  /** The metric's semantic reading, which colours the top rule. */
+  /** The metric's semantic reading, which colours the label. */
   tone?: 'neutral' | 'positive' | 'caution' | 'negative' | 'info';
+  /**
+   * The chart series this figure belongs to, drawn as the rule along the top.
+   *
+   * A token name without the `--color-` prefix, and always one of the
+   * `cms-series-*` ramp. The design sweep asserts that nothing semantic reaches
+   * a series slot, which is what stops a status colour arriving here as
+   * decoration.
+   */
+  token?: string;
   /** Where the records behind this figure live, with the filter applied. */
   href?: string;
   definition?: string;
@@ -48,6 +66,7 @@ const {
   value,
   context,
   tone = 'neutral',
+  token,
   href,
   definition,
   denominator,
@@ -71,14 +90,36 @@ const states = {
 
 <div class:list={['relative overflow-hidden rounded-cms bg-cms-surface', className]}>
   {
-    hasDefinition && (
-      <CmsDefinition
-        label={label}
-        definition={definition}
-        denominator={denominator}
-        dateBasis={dateBasis}
-        class="absolute top-2 right-1.5 z-10"
+    token && (
+      <span
+        aria-hidden="true"
+        class="absolute inset-x-0 top-0 h-1"
+        style={`background-color: var(--color-${token})`}
       />
+    )
+  }
+  {
+    /*
+      THE CONTROL IS POSITIONED BY A WRAPPER, NOT BY A CLASS PASSED INTO IT.
+      CmsDefinition's own root is `relative`, because its panel is absolutely
+      positioned against it. Passing `absolute` in alongside that put two
+      position declarations on one element, and which of them won was decided by
+      the order Tailwind happened to emit them in rather than by anything here:
+      `relative` won, the control fell back into the document flow, and it
+      rendered at the top LEFT of every card, above the label. A wrapper carries
+      the placement and the component keeps its own.
+    */
+  }
+  {
+    hasDefinition && (
+      <span class="absolute top-2 right-1.5 z-10">
+        <CmsDefinition
+          label={label}
+          definition={definition}
+          denominator={denominator}
+          dateBasis={dateBasis}
+        />
+      </span>
     )
   }
 
@@ -86,9 +127,14 @@ const states = {
     drillable ? (
       <a
         href={href}
-        class="flex flex-col gap-1 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-focus [&:hover_[data-figure]]:underline"
+        class="flex flex-col gap-1 px-4 pt-4.5 pb-4 outline-none focus-visible:ring-2 focus-visible:ring-focus [&:hover_[data-figure]]:underline"
       >
-        <span class:list={['pr-6 text-cms-body-sm font-medium', states[tone] || 'text-cms-muted']}>
+        <span
+          class:list={[
+            'pr-6 text-cms-caption font-semibold tracking-wide uppercase',
+            states[tone] || 'text-cms-muted',
+          ]}
+        >
           {label}
         </span>
         <span
@@ -102,8 +148,13 @@ const states = {
         <span class="sr-only">Open the records behind this figure.</span>
       </a>
     ) : (
-      <div class="flex flex-col gap-1 px-4 py-4">
-        <span class:list={['pr-6 text-cms-body-sm font-medium', states[tone] || 'text-cms-muted']}>
+      <div class="flex flex-col gap-1 px-4 pt-4.5 pb-4">
+        <span
+          class:list={[
+            'pr-6 text-cms-caption font-semibold tracking-wide uppercase',
+            states[tone] || 'text-cms-muted',
+          ]}
+        >
           {label}
         </span>
         <span

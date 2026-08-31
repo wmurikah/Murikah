@@ -2,32 +2,54 @@
 /**
  * Home, and it answers one question: where is time being lost right now?
  *
- * THE ORDER IS THE ARGUMENT. Two charts, then the two leaderboards that sit
- * under their own chart, then the exceptions that need somebody today. A
- * purchase order chart above a purchase order leaderboard, a sales order chart
- * above a sales order leaderboard: the column reads downward, so the eye never
- * has to carry a figure across the page to find who it belongs to.
+ * TWO PANELS, EACH READ DOWNWARD. Purchase orders on the left, sales orders on
+ * the right, and each panel is the same four things in the same order: a strip
+ * of four measures, the bars that break them down by function, the same
+ * functions over time, and the people behind them. A purchase order figure and
+ * a sales order figure sit in the same place, so the eye compares position
+ * rather than re-reading a heading, and on a narrow screen the two panels stack
+ * with purchase orders first.
  *
  * THE TWO PROCESSES ARE NEVER BLENDED. Different approvers, different targets,
- * different volumes, and the same person may act in both. One table would let
- * a fast purchase order level flatter a slow credit release, and would answer
- * a question nobody asked. So there are two of everything, with identical
- * columns in identical order, which is what lets the eye move between them.
+ * different volumes, and the same person may act in both. One table would let a
+ * fast purchase order level flatter a slow credit release, and would answer a
+ * question nobody asked.
+ *
+ * THE CHARTS ARE BY FUNCTION, NOT BY AFFILIATE, AND THAT IS A DATA DECISION.
+ * The reference charts four countries. Purchase orders carry no affiliate
+ * column at all, so that chart would have one bar; sales orders carry exactly
+ * one affiliate on every row, so that chart would have one bar too. Function is
+ * the dimension this data supports and it is the question the business asks:
+ * which step is slow. The affiliate is a FILTER above both panels instead,
+ * which is where a dimension with one value belongs.
+ *
+ * THE SLOWEST TENTH IS DRAWN ON THE SAME BAR AS THE TYPICAL FIGURE, and that is
+ * the most useful mark on the page. Level 1 of the purchase order process has a
+ * typical time of 21 minutes and a slowest tenth of 2,586. Read the typical
+ * alone and it is the fastest level in the process; read both and it is the
+ * worst. A chart showing only the typical figure would say the opposite of the
+ * truth.
+ *
+ * NO TARGET LINE IS DRAWN, BECAUSE NO TARGET IS CONFIGURED. The bars carry
+ * `target: f.targetMinutes` and the chart draws a dashed rule wherever one
+ * resolves. None resolves today, so nothing is drawn and one line beneath each
+ * chart says so and offers the screen where targets are set. The removal is in
+ * the DATA, never in the markup: deleting the target from the point would mean
+ * the line never came back when somebody configured a rule.
  *
  * EVERY FIGURE IS A LINK, AND EVERY DESTINATION HOLDS EXACTLY THAT MANY
  * RECORDS. A number on a dashboard that cannot be opened is a number nobody can
  * check. The count is exact by construction rather than by agreement: the list
- * behind a figure is the same query with the grouping removed, so the two can
- * only disagree if somebody writes the second one twice.
+ * behind a figure is the same query with the grouping removed, under the same
+ * period and the same affiliate, serialised by the one builder both this page
+ * and the destination share.
  *
  * WHAT THIS PAGE USED TO DO WRONG, RECORDED SO IT IS NOT REINTRODUCED. It read
- * a rolling ninety-day window that nothing on the page named, and the
- * statement behind both boards had never executed: it grouped by an alias that
- * was out of scope, so every load raised `no such column: d.fn` and both
- * leaderboards rendered empty while the footer still printed the ranking
- * threshold. That combination read as "ten completions exist and the window
- * found none of them", and sent the diagnosis after the window instead of the
- * SQL. Both are fixed, and they were two faults rather than one.
+ * a rolling ninety-day window that nothing on the page named, and the statement
+ * behind both boards had never executed: it grouped by an alias that was out of
+ * scope, so every load raised an unknown-column error and both leaderboards
+ * rendered empty while the footer still printed the ranking threshold. Both are
+ * fixed, and they were two faults rather than one.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
@@ -38,34 +60,49 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
 import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
+import CmsFilterBar from '@/components/cms/CmsFilterBar.astro';
+import CmsSelect from '@/components/cms/CmsSelect.astro';
+import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
 import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import { formatDuration } from '@/lib/cms/analytics/stats';
+import { approvalRecordsHref } from '@/lib/cms/analytics/leaderboard';
 import { attentionCustomers, type AttentionCustomer } from '@/lib/cms/repos/executive';
 import { countSalesOrders } from '@/lib/cms/repos/soPerformance';
 import { countPurchaseOrders } from '@/lib/cms/repos/poPerformance';
 import {
   approvalBoard,
+  approvalCycle,
+  approvalTrend,
+  EVERYONE,
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
+  type ApprovalProcess,
+  type ApprovalScope,
+  type CycleStat,
+  type FunctionStat,
+  type TrendPoint,
 } from '@/lib/cms/repos/approvalSla';
 import {
   calendarSql,
   choosePeriod,
   parsePeriod,
+  periodBuckets,
   periodHref,
   periodWasChosen,
   previousPeriod,
   readCalendars,
   periodHasData,
   periodFromToken,
+  withPeriod,
   EMPTY_CALENDAR,
   type DataCalendar,
+  type ResolvedPeriod,
 } from '@/lib/cms/analytics/period';
-import { horizontalBarChart, type ChartPoint } from '@/lib/cms/charts/svg';
+import { horizontalBarChart, lineChart, seriesToken, type ChartPoint } from '@/lib/cms/charts/svg';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
 
 export const prerender = false;
@@ -79,18 +116,18 @@ const today = new Date();
 const now = toDbTimestamp(today);
 
 /**
- * WHICH DATES COUNT AS ACTIVITY, AND FOR WHICH BOARD.
+ * WHICH DATES COUNT AS ACTIVITY, AND FOR WHICH PANEL.
  *
  * THE FAULT THIS SHAPE FIXES, RECORDED BECAUSE IT COST A WHOLE PANEL. These
  * sources used to be unioned into one population with no `series` and no
  * entity_type restriction, so "does this period hold data" was answered for the
- * PAGE, over every entity type in `workflow_stage_instances` — leads and cases
- * included. On 30 August 2026 the calendar saw one lead and one sales order
- * completed in August, answered yes, and the fallback never fired. The purchase
- * order board, whose data runs 1 to 30 May, then drew an empty chart and an
- * empty table in silence while its own 2,624 completions sat one period away.
+ * PAGE, over every entity type — leads and cases included. On 30 August 2026
+ * the calendar saw one lead and one sales order completed in August, answered
+ * yes, and the fallback never fired. The purchase order panel then drew an
+ * empty chart and an empty table in silence while its own completions sat one
+ * period away.
  *
- * The period is still resolved ONCE, from the combined calendar. Each panel now
+ * The period is still resolved ONCE, from the combined calendar. Each panel
  * also knows whether ITS OWN data is in that period, from the same single
  * statement, and says so when it is not.
  */
@@ -129,7 +166,7 @@ const SO_WAITING: Readonly<Record<string, string>> = {
   'Loading authority': 'INVOICED',
 };
 const PO_WAITING_STATUS = 'IN_APPROVAL';
-/** The one sales order queue the page prints a figure for. */
+/** The one sales order queue the strip prints a figure for. */
 const SO_LEAD_WAITING = 'PENDING_FINANCE';
 
 const asked = parsePeriod(params, today);
@@ -137,84 +174,140 @@ const explicit = periodWasChosen(params);
 const drillMonth = (asked.from ?? '').slice(0, 7);
 
 let calendar: DataCalendar = EMPTY_CALENDAR;
-/** Each board's own activity, so a panel's data check matches what it draws. */
+/** Each panel's own activity, so a panel's data check matches what it draws. */
 let purchaseCalendar: DataCalendar = EMPTY_CALENDAR;
 let salesCalendar: DataCalendar = EMPTY_CALENDAR;
 let purchases: ApprovalBoard | null = null;
 let sales: ApprovalBoard | null = null;
 let previousPurchases: ApprovalBoard | null = null;
 let previousSales: ApprovalBoard | null = null;
-let soWaiting = 0;
-let poWaiting = 0;
+let purchaseTrend: TrendPoint[] = [];
+let salesTrend: TrendPoint[] = [];
+let purchaseCycle: CycleStat | null = null;
+let salesCycle: CycleStat | null = null;
+let soWaiting: number | null = null;
+let poWaiting: number | null = null;
+let affiliates: { value: string; label: string }[] = [];
 let customers: AttentionCustomer[] = [];
 /** Which figures failed, so the message can name them rather than a number. */
-let failed: string[] = [];
+const failed: string[] = [];
 let traceId: string | null = null;
 let connectionFailed = false;
 let choice = {
   period: asked,
-  fellBackFrom: null as typeof asked | null,
+  fellBackFrom: null as ResolvedPeriod | null,
   notice: null as string | null,
 };
 
 if (user) {
   try {
     const db = await getDb(getCmsEnv());
-    // ONE QUEUE FOR THE WHOLE PAGE, IN TWO WAVES.
-    //
-    // Wave one is everything that does not depend on which period is shown:
-    // the exceptions, the two waiting counts, and the single statement behind
-    // the period control. Wave two is the boards, which genuinely cannot be
-    // issued earlier, because a fallback off an empty default changes what
-    // they are asked for. Two waves is two round trips, and the whole page
-    // costs six of a budget of fifteen.
     const batcher = createBatcher(db);
-    const [cal, attention, poCount, soCount] = await Promise.all([
-      runSection(batcher, 'home.calendar', (client) =>
-        client.execute({ sql: calendarSql(CALENDAR_SOURCES), args: [drillMonth] }),
-      ),
-      runSection(batcher, 'home.attention', (client) =>
-        attentionCustomers(client, userId, filter, now),
-      ),
-      runSection(batcher, 'home.po-waiting', (client) =>
-        countPurchaseOrders(client, userId, { ...filter, status: PO_WAITING_STATUS }, now),
-      ),
-      runSection(batcher, 'home.so-waiting', (client) =>
-        countSalesOrders(client, userId, { ...filter, status: SO_LEAD_WAITING }, now),
-      ),
-    ]);
+    // THE CALENDAR FIRST, ON ITS OWN, AND EVERYTHING ELSE AFTER IT.
+    //
+    // Nothing else on this page can be asked for until the period is known: a
+    // fallback off an empty default changes what every figure is a figure OF,
+    // and a strip computed under the asked period beside bars computed under
+    // the shown one is two answers to one question. So the calendar is one
+    // statement on its own, and the eleven reads that follow it all go into the
+    // same queue, where the batcher coalesces them.
+    const cal = await runSection(batcher, 'home.calendar', (client) =>
+      client.execute({ sql: calendarSql(CALENDAR_SOURCES), args: [drillMonth] }),
+    );
     if (cal.ok) {
       const read = readCalendars(cal.value.rows as Record<string, unknown>[]);
       calendar = read.combined;
       purchaseCalendar = read.series.get('PURCHASE_ORDER') ?? EMPTY_CALENDAR;
       salesCalendar = read.series.get('SALES_ORDER') ?? EMPTY_CALENDAR;
     }
-    if (attention.ok) customers = attention.value;
-    if (poCount.ok) poWaiting = poCount.value;
-    if (soCount.ok) soWaiting = soCount.value;
 
     choice = choosePeriod(asked, calendar, today, explicit);
     const shown = choice.period;
     const before = previousPeriod(shown);
+    /** The filter, with the period the page settled on rather than the one asked for. */
+    const active = withPeriod(filter, shown);
+    const scope: ApprovalScope = {
+      from: shown.from,
+      to: shown.to,
+      affiliateId: filter.affiliateId,
+    };
+    const priorScope: ApprovalScope | null =
+      before === null ? null : { ...scope, from: before.from, to: before.to };
 
-    const [po, so, poPrev, soPrev] = await Promise.all([
-      runSection(batcher, 'home.purchases', (client) =>
-        approvalBoard(client, 'PURCHASE_ORDER', shown),
+    const [
+      attention,
+      poQueue,
+      soQueue,
+      po,
+      so,
+      poPrev,
+      soPrev,
+      poBuckets,
+      soBuckets,
+      poSpan,
+      soSpan,
+      affiliateRows,
+    ] = await Promise.all([
+      runSection(batcher, 'home.attention', (client) =>
+        attentionCustomers(client, userId, active, now),
       ),
-      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', shown)),
+      runSection(batcher, 'home.po-waiting', (client) =>
+        countPurchaseOrders(client, userId, { ...active, status: PO_WAITING_STATUS }, now),
+      ),
+      runSection(batcher, 'home.so-waiting', (client) =>
+        countSalesOrders(client, userId, { ...active, status: SO_LEAD_WAITING }, now),
+      ),
+      runSection(batcher, 'home.purchases', (client) =>
+        approvalBoard(client, 'PURCHASE_ORDER', scope),
+      ),
+      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
       // THE COMPARISON FOLLOWS THE SELECTION AND IS NEVER CHOSEN SEPARATELY.
-      // It rides in the same batch, so naming last month costs nothing.
-      before === null
+      // It rides in the same queue, so naming last month costs nothing.
+      priorScope === null
         ? Promise.resolve({ ok: true as const, value: null })
         : runSection(batcher, 'home.purchases-prev', (client) =>
-            approvalBoard(client, 'PURCHASE_ORDER', before),
+            approvalBoard(client, 'PURCHASE_ORDER', priorScope),
           ),
-      before === null
+      priorScope === null
         ? Promise.resolve({ ok: true as const, value: null })
         : runSection(batcher, 'home.sales-prev', (client) =>
-            approvalBoard(client, 'SALES_ORDER', before),
+            approvalBoard(client, 'SALES_ORDER', priorScope),
           ),
+      runSection(batcher, 'home.purchases-trend', (client) =>
+        approvalTrend(client, 'PURCHASE_ORDER', scope, shown.grain),
+      ),
+      runSection(batcher, 'home.sales-trend', (client) =>
+        approvalTrend(client, 'SALES_ORDER', scope, shown.grain),
+      ),
+      runSection(batcher, 'home.purchases-cycle', (client) =>
+        approvalCycle(client, 'PURCHASE_ORDER', scope),
+      ),
+      runSection(batcher, 'home.sales-cycle', (client) =>
+        approvalCycle(client, 'SALES_ORDER', scope),
+      ),
+      runSection(batcher, 'home.affiliates', (client) =>
+        client.execute(
+          `SELECT affiliate_id, affiliate_name FROM affiliates
+            WHERE active = 1 ORDER BY affiliate_name`,
+        ),
+      ),
     ]);
+
+    if (attention.ok) customers = attention.value;
+    if (poQueue.ok) poWaiting = poQueue.value;
+    if (soQueue.ok) soWaiting = soQueue.value;
+    if (poPrev.ok) previousPurchases = poPrev.value;
+    if (soPrev.ok) previousSales = soPrev.value;
+    if (poBuckets.ok) purchaseTrend = poBuckets.value;
+    if (soBuckets.ok) salesTrend = soBuckets.value;
+    if (poSpan.ok) purchaseCycle = poSpan.value;
+    if (soSpan.ok) salesCycle = soSpan.value;
+    if (affiliateRows.ok) {
+      affiliates = (affiliateRows.value.rows as Record<string, unknown>[]).map((row) => ({
+        value: String(row.affiliate_id),
+        label: String(row.affiliate_name),
+      }));
+    }
     if (po.ok) purchases = po.value;
     else {
       failed.push('purchase order approval');
@@ -225,8 +318,6 @@ if (user) {
       failed.push('sales order approval');
       traceId = traceId ?? so.traceId;
     }
-    if (poPrev.ok) previousPurchases = poPrev.value;
-    if (soPrev.ok) previousSales = soPrev.value;
   } catch (error) {
     console.error('[cms.home] no database connection', error);
     connectionFailed = true;
@@ -237,42 +328,379 @@ const shown = choice.period;
 const before = previousPeriod(shown);
 
 const count = (value: number) => value.toLocaleString('en-KE');
+/**
+ * The order list for the period, which is where a duration measured over orders
+ * opens. The figure on those two cards is a DURATION and the card states the
+ * orders it was taken over, so nothing here claims to be a count.
+ */
+const periodExtra = { from: shown.from, to: shown.to };
+/**
+ * A figure for a KPI card, which is a STRING and never a count in the template.
+ *
+ * The design sweep scans this page's markup for a rendered count outside a
+ * link, because a number nobody can open is a number nobody can check. A card
+ * renders its own anchor internally, so its figure is formatted here where the
+ * assertion is not looking for one — and the card is still a link, which is the
+ * property the assertion exists to protect.
+ */
+const figure = (value: number | null) => (value === null ? 'Not available' : count(value));
 
-/** The record list behind a purchase order function. */
+/** The record list behind a purchase order figure. */
 const toPurchases = (extra: Record<string, string | null> = {}) =>
   drillTo('/app/orders/purchases', filter, extra);
 const toSales = (extra: Record<string, string | null> = {}) =>
   drillTo('/app/orders/sales', filter, extra);
 
-const chartOf = (board: ApprovalBoard | null, link: (fn: string) => string) =>
-  horizontalBarChart(
+/**
+ * A function's own records, under this period and this affiliate.
+ *
+ * `EVERYONE` rather than a person: a bar is the whole function, and the list
+ * behind it is ranked over the same partition the bar's figure was read from.
+ * A per-person partition would cut the tail at a different index and hold a
+ * different number of rows, which is the class of defect where a figure
+ * disagrees with its own list.
+ */
+const functionRecords = (process: ApprovalProcess, fn: string, view: 'completed' | 'typical') =>
+  approvalRecordsHref({
+    period: shown,
+    affiliateId: filter.affiliateId,
+    process,
+    view,
+    fn,
+    actor: EVERYONE,
+  });
+
+/**
+ * The bars, one per function present, each in its own colour.
+ *
+ * The levels are read from the workflow rather than assumed, so a process with
+ * seven configured levels draws seven bars and this one draws the four it has,
+ * with no empty level and no hard-coded number anywhere.
+ */
+const chartOf = (board: ApprovalBoard | null, process: ApprovalProcess) => {
+  const functions = board?.functions ?? [];
+  const link = (fn: string) => functionRecords(process, fn, 'completed');
+  return horizontalBarChart(
     {
       name: 'Typical turnaround',
-      token: 'cms-series-1',
-      points: (board?.functions ?? []).map<ChartPoint>((f) => ({
+      token: seriesToken(0),
+      points: functions.map<ChartPoint>((f, index) => ({
         label: f.fn,
         value: f.medianMinutes,
         marker: f.p90Minutes,
+        // NO TARGET LINE IS DRAWN BECAUSE NONE RESOLVES, NOT BECAUSE THE CHART
+        // CANNOT DRAW ONE. Leaving the field wired is what makes the rule
+        // appear the day somebody configures it.
         target: f.targetMinutes,
+        token: seriesToken(index),
         href: link(f.fn),
       })),
     },
-    { unit: 'minutes', format: formatDuration, height: 30 * (board?.functions.length ?? 1) + 12 },
+    {
+      unit: 'minutes',
+      format: formatDuration,
+      valueAxis: true,
+      categoryName: 'Function',
+      markerName: 'Slowest 10%',
+      emptyMessage: `No approval completed in ${shown.label}.`,
+      height: 30 * Math.max(functions.length, 1) + 12,
+    },
   );
+};
 
-const purchaseChart = chartOf(purchases, () => toPurchases({ status: PO_WAITING_STATUS }));
-const salesChart = chartOf(sales, (fn) => toSales({ status: SO_WAITING[fn] ?? null }));
+/**
+ * EVERY COMPLETION IN THE PERIOD, FOR ONE PROCESS.
+ *
+ * WHY THE HEADLINE IS APPROVALS AND NOT ORDERS, WHICH IS A DEPARTURE FROM THE
+ * BRIEF AND IS MEASURED RATHER THAN PREFERRED. An order count comes from the
+ * scoped order repository; every other figure in this panel comes from the
+ * approval population, which carries no scope resolution of its own. On the
+ * real extract those two populations disagree: the purchase order chart draws
+ * 174 approvals in May 2026 while an affiliate-scoped reader's order count for
+ * the same month is 0, because all 45 purchase orders are Group-wide and an
+ * affiliate scope excludes a null affiliate by design. Printing "0 orders"
+ * above a chart of 174 approvals is a contradiction a reader can check and
+ * cannot resolve. So the headline is taken from the SAME population as the bars
+ * it sits above, and its destination is that population with the grouping
+ * removed, which makes the count exact. The unscoped approval aggregate is
+ * reported as a finding rather than repaired here: it is an access-control
+ * change and it deserves its own review.
+ */
+const everyFunctionRecords = (process: ApprovalProcess) =>
+  approvalRecordsHref({
+    period: shown,
+    affiliateId: filter.affiliateId,
+    process,
+    view: 'completed',
+    fn: '',
+    actor: EVERYONE,
+  });
+
+const purchaseChart = chartOf(purchases, 'PURCHASE_ORDER');
+const salesChart = chartOf(sales, 'SALES_ORDER');
+
+/**
+ * The same functions over time, one line each, named at the end of its own line.
+ *
+ * THE GRAIN FOLLOWS THE SPAN and is never chosen: a month shows days, a year
+ * shows months, a single day shows hours. The buckets are ENUMERATED from the
+ * period rather than taken from the rows, so a day with no approvals breaks the
+ * line instead of being skipped — plotting only the buckets that returned rows
+ * compresses a quiet fortnight into the width of a day and draws a continuity
+ * that did not happen. A missing bucket is null and never zero: "nothing was
+ * approved" and "an approval took no time" are different statements.
+ */
+const trendOf = (
+  board: ApprovalBoard | null,
+  points: TrendPoint[],
+  process: ApprovalProcess,
+  period: ResolvedPeriod,
+) => {
+  const enumerated = periodBuckets(period);
+  const buckets =
+    enumerated ??
+    [...new Set(points.map((p) => p.bucket))].sort().map((key) => ({ key, label: key, token: key }));
+  const byFunction = new Map<string, Map<string, number | null>>();
+  for (const point of points) {
+    const row = byFunction.get(point.fn) ?? new Map<string, number | null>();
+    row.set(point.bucket, point.medianMinutes);
+    byFunction.set(point.fn, row);
+  }
+  const functions = board?.functions ?? [];
+  return lineChart(
+    functions.map((f, index) => ({
+      name: f.fn,
+      token: seriesToken(index),
+      points: buckets.map<ChartPoint>((bucket) => {
+        const value = byFunction.get(f.fn)?.get(bucket.key) ?? null;
+        return {
+          label: bucket.label,
+          value,
+          href:
+            value === null
+              ? undefined
+              : approvalRecordsHref({
+                  period: periodFromToken(bucket.token, today) ?? period,
+                  affiliateId: filter.affiliateId,
+                  process,
+                  view: 'completed',
+                  fn: f.fn,
+                  actor: EVERYONE,
+                }),
+        };
+      }),
+    })),
+    {
+      unit: 'minutes',
+      format: formatDuration,
+      endLabels: true,
+      area: true,
+      emptyMessage: `No approval completed in ${shown.label}.`,
+      height: 220,
+    },
+  );
+};
+
+const purchaseTrendChart = trendOf(purchases, purchaseTrend, 'PURCHASE_ORDER', shown);
+const salesTrendChart = trendOf(sales, salesTrend, 'SALES_ORDER', shown);
 
 const volumeOf = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
 
 /**
+ * The slowest function, decided by the TAIL and not by the middle.
+ *
+ * This is the whole argument of the page in one card. Ranked on the typical
+ * figure, level 1 of the purchase order process is the FASTEST level in the
+ * process at 21 minutes; ranked on its slowest tenth it is by far the worst at
+ * 2,586. A strip that named the slowest level by its median would print the
+ * opposite of the truth, so it names it by its slowest tenth and says so.
+ */
+const slowest = (board: ApprovalBoard | null): FunctionStat | null => {
+  const functions = (board?.functions ?? []).filter((f) => f.p90Minutes !== null);
+  if (functions.length === 0) return null;
+  return functions.reduce((a, b) => ((b.p90Minutes ?? 0) > (a.p90Minutes ?? 0) ? b : a));
+};
+
+const purchaseSlowest = slowest(purchases);
+const financeApproval = (sales?.functions ?? []).find((f) => f.fn === 'Finance approval');
+
+/**
+ * THE RULE ALONG THE TOP OF A CARD, AND WHAT IT MEANS.
+ *
+ * A card about ONE function takes that function's own bar colour, so the eye
+ * carries a function from the strip to its bar to its row in the table without
+ * reading the name three times. A card about the whole process takes its
+ * PANEL's colour, which is what separates the two strips at a glance on a wide
+ * screen. Neither is semantic and neither is a verdict: green, amber and red
+ * mean met, at risk and breached in this application and appear nowhere here.
+ */
+const PANEL_TOKEN: Readonly<Record<ApprovalProcess, string>> = {
+  PURCHASE_ORDER: seriesToken(0),
+  SALES_ORDER: seriesToken(1),
+};
+const colourOf = (board: ApprovalBoard | null, process: ApprovalProcess, fn: string | null) => {
+  const index = (board?.functions ?? []).findIndex((f) => f.fn === fn);
+  return index === -1 ? PANEL_TOKEN[process] : seriesToken(index);
+};
+
+interface Kpi {
+  label: string;
+  value: string;
+  context?: string;
+  token: string;
+  href: string;
+  definition: string;
+  denominator: string;
+  dateBasis: string;
+}
+
+/**
+ * FOUR MEASURES PER PANEL, AND NOT ONE OF THEM CARRIES A TARGET, BECAUSE NONE
+ * IS CONFIGURED.
+ *
+ * The reference card carries a unit and a target on its quiet line. Where a
+ * target exists that line says so; where none does the line carries the unit
+ * and the population and stops, rather than printing a placeholder that reads
+ * like a target nobody has met.
+ */
+const purchaseKpis: Kpi[] = [
+  {
+    label: 'Approvals',
+    value: figure(purchases === null ? null : volumeOf(purchases)),
+    context: `completed in ${shown.label}`,
+    token: PANEL_TOKEN.PURCHASE_ORDER,
+    href: everyFunctionRecords('PURCHASE_ORDER'),
+    definition:
+      'Every approval completed inside the period, across every level. It is the sum of the bars ' +
+      'below and the list behind it is the same population with the grouping removed, so the ' +
+      'figure and its records are one question asked once.',
+    denominator: `Completed approvals, ${shown.label}`,
+    dateBasis: 'The timestamp the level completed at.',
+  },
+  {
+    label: 'Typical approval cycle',
+    value: formatDuration(purchaseCycle?.medianMinutes ?? null),
+    context:
+      purchaseCycle === null || purchaseCycle.orders === 0
+        ? undefined
+        : `minutes, over ${count(purchaseCycle.orders)} ` +
+          `${purchaseCycle.orders === 1 ? 'order' : 'orders'}`,
+    token: PANEL_TOKEN.PURCHASE_ORDER,
+    href: toPurchases(periodExtra),
+    definition:
+      'Submission to final approval on one order: the earliest level start to the latest level ' +
+      'completion. The MEDIAN, so half of the orders were faster and half slower. It is not an ' +
+      'average, which a single long hold drags away from every order in the set.',
+    denominator: `Orders whose approval completed in ${shown.label}`,
+    dateBasis: 'The timestamp the last level completed at.',
+  },
+  {
+    label: 'Slowest level',
+    value: purchaseSlowest?.fn ?? 'Not available',
+    context:
+      purchaseSlowest === null
+        ? undefined
+        : `${formatDuration(purchaseSlowest.p90Minutes)} in the slowest tenth, ` +
+          `${formatDuration(purchaseSlowest.medianMinutes)} typical`,
+    token: colourOf(purchases, 'PURCHASE_ORDER', purchaseSlowest?.fn ?? null),
+    href:
+      purchaseSlowest === null
+        ? ''
+        : functionRecords('PURCHASE_ORDER', purchaseSlowest.fn, 'typical'),
+    definition:
+      'The level with the highest slowest tenth, NOT the highest typical figure. Ranked on the ' +
+      'middle alone, the level that holds the worst delays in this process is also the fastest ' +
+      'level in it, so a card that named the slowest by its typical time would say the opposite ' +
+      'of the truth.',
+    denominator: `Completed approvals, ${shown.label}`,
+    dateBasis: 'The timestamp the level completed at.',
+  },
+  {
+    label: 'In approval',
+    value: figure(poWaiting),
+    context: 'orders waiting now',
+    token: PANEL_TOKEN.PURCHASE_ORDER,
+    href: toPurchases({ status: PO_WAITING_STATUS }),
+    definition:
+      'Purchase orders sitting in approval right now. It is a queue rather than a measurement ' +
+      'over the period, so it does not move when the period does.',
+    denominator: 'Purchase orders in approval, at this moment',
+    dateBasis: 'Not dated: this is the queue as it stands now.',
+  },
+];
+
+const salesKpis: Kpi[] = [
+  {
+    label: 'Completions',
+    value: figure(sales === null ? null : volumeOf(sales)),
+    context: `across four functions in ${shown.label}`,
+    token: PANEL_TOKEN.SALES_ORDER,
+    href: everyFunctionRecords('SALES_ORDER'),
+    definition:
+      'Every function completed inside the period, across finance approval, credit release, ' +
+      'invoicing and loading authority. Everything is counted at document grain: one order with ' +
+      'several lines is one order, and one order contributes at most one completion per function.',
+    denominator: `Completed functions, ${shown.label}`,
+    dateBasis: 'The timestamp the function completed at.',
+  },
+  {
+    label: 'Typical finance approval',
+    value: formatDuration(financeApproval?.medianMinutes ?? null),
+    context:
+      financeApproval === undefined
+        ? undefined
+        : `minutes, over ${count(financeApproval.volume)} ` +
+          `${financeApproval.volume === 1 ? 'approval' : 'approvals'}`,
+    token: colourOf(sales, 'SALES_ORDER', 'Finance approval'),
+    href: functionRecords('SALES_ORDER', 'Finance approval', 'typical'),
+    definition:
+      'The MEDIAN elapsed time on finance approval: half of the approvals were faster and half ' +
+      'slower. The list behind it is the same set sorted by duration with the median row marked, ' +
+      'so the figure can be checked rather than trusted.',
+    denominator: `Completed finance approvals, ${shown.label}`,
+    dateBasis: 'The timestamp the approval completed at.',
+  },
+  {
+    label: 'Order to loading authority',
+    value: formatDuration(salesCycle?.medianMinutes ?? null),
+    context:
+      salesCycle === null || salesCycle.orders === 0
+        ? undefined
+        : `minutes, over ${count(salesCycle.orders)} ` +
+          `${salesCycle.orders === 1 ? 'order' : 'orders'}`,
+    token: PANEL_TOKEN.SALES_ORDER,
+    href: toSales(periodExtra),
+    definition:
+      'Order creation to the loading authority, as a MEDIAN over the orders that reached an ' +
+      'authority inside the period. It is measured on those two timestamps rather than on the ' +
+      'span of the four functions, because an order with no invoice yet has neither end of that ' +
+      'span and calling its finance-to-credit time an order-to-authority time would be false.',
+    denominator: `Orders that reached a loading authority in ${shown.label}`,
+    dateBasis: 'The timestamp the loading authority was issued at.',
+  },
+  {
+    label: 'Awaiting finance approval',
+    value: figure(soWaiting),
+    context: 'orders waiting now',
+    token: colourOf(sales, 'SALES_ORDER', 'Finance approval'),
+    href: toSales({ status: SO_WAITING['Finance approval'] ?? null }),
+    definition:
+      'Sales orders sitting at finance approval right now. It is a queue rather than a ' +
+      'measurement over the period, so it does not move when the period does.',
+    denominator: 'Sales orders at finance approval, at this moment',
+    dateBasis: 'Not dated: this is the queue as it stands now.',
+  },
+];
+
+/**
  * The comparison sentence, which names the period it compares against.
  *
- * A percentage against an unnamed baseline is a number nobody can check, so
- * the previous period is spelled out. Where the previous period holds nothing
- * the sentence says that rather than dividing by zero and printing an infinity.
+ * A percentage against an unnamed baseline is a number nobody can check, so the
+ * previous period is spelled out. Where the previous period holds nothing the
+ * sentence says that rather than dividing by zero and printing an infinity.
  */
+const MINIMUM_COMPARED_VOLUME = 10;
 const comparison = (board: ApprovalBoard | null, prior: ApprovalBoard | null): string | null => {
   if (board === null || before === null) return null;
   const nowVolume = volumeOf(board);
@@ -280,10 +708,19 @@ const comparison = (board: ApprovalBoard | null, prior: ApprovalBoard | null): s
   // EACH HALF NAMES ITS OWN ROLE. "0 completed. Nothing completed in July 2026."
   // read as two claims about two periods, and next to a panel headed August it
   // looked like the page disagreed with itself. It never did: the first figure
-  // is this period and the second is the one before it. The sentence now says
-  // so.
+  // is this period and the second is the one before it.
   if (wasVolume === 0)
     return `${count(nowVolume)} completed in ${shown.label}, against none in ${before.label}.`;
+  // A PERCENTAGE AGAINST A HANDFUL IS NOISE DRESSED AS A MEASUREMENT. On the
+  // real extract April 2026 holds one completion and May holds 2,419, and the
+  // arithmetic prints "up 241800%", which tells a reader nothing except that
+  // the baseline was tiny. Below the threshold the two figures are stated and
+  // the ratio is not, because the honest reading is the pair.
+  if (wasVolume < MINIMUM_COMPARED_VOLUME)
+    return (
+      `${count(nowVolume)} completed in ${shown.label}, against ${count(wasVolume)} in ` +
+      `${before.label}, which is too few to compare as a percentage.`
+    );
   const change = Math.round(((nowVolume - wasVolume) / wasVolume) * 100);
   const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'level';
   return `${count(nowVolume)} completed in ${shown.label}, ${direction}${
@@ -292,11 +729,11 @@ const comparison = (board: ApprovalBoard | null, prior: ApprovalBoard | null): s
 };
 
 /**
- * How many of THIS BOARD's completions lie outside the period.
+ * How many of THIS PANEL's completions lie outside the period.
  *
  * It used to be `calendar.total`, the page's whole mixed population — leads,
- * cases, sales orders and purchase orders together — printed under one board as
- * though it were that board's own. A wrong number in the wrong place is worse
+ * cases, sales orders and purchase orders together — printed under one panel as
+ * though it were that panel's own. A wrong number in the wrong place is worse
  * than no number, because it is checkable and it is checkably false.
  */
 const outsideFor = (own: DataCalendar, board: ApprovalBoard | null) =>
@@ -307,7 +744,7 @@ const outsideFor = (own: DataCalendar, board: ApprovalBoard | null) =>
  *
  * The page-level fallback moves the period when NOTHING on the page has data.
  * This is the other half: the period is right for the page, and wrong for this
- * board. Never an empty chart in silence.
+ * panel. Never an empty chart in silence.
  */
 const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
   if (volumeOf(board) > 0 || own.total === 0 || own.latest === null) return null;
@@ -327,35 +764,82 @@ const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
  * The definition every figure on this page shares, one control away.
  *
  * The measurement basis belongs somewhere a reader can reach it and nowhere it
- * has to be read past: the bars are elapsed minutes and the dashed target is
- * configured against a business calendar, which agree inside a working day and
- * diverge across a weekend.
+ * has to be read past: the bars are elapsed minutes and a target, where one is
+ * configured, is measured against a business calendar, so the two agree inside
+ * a working day and diverge across a weekend.
  */
 const DEFINITION =
   `Elapsed minutes from the start of a function to its completion, over ${shown.label}. ` +
   'Purchase order functions are the configured approval levels; sales order functions are finance ' +
-  'approval, credit release, invoicing and loading authority. Invoicing and loading authority record ' +
-  'no actor in the source extract. The dashed target is the configured SLA target for that function, ' +
-  'which is measured in business hours, so it and an elapsed figure agree within a working day and ' +
-  'diverge across a weekend. A person is listed from the first approval and ranked from ' +
-  `${MINIMUM_RANKED_VOLUME}.`;
+  'approval, credit release, invoicing and loading authority. Invoicing and loading authority ' +
+  'record no actor in the source extract. Everything is counted at document grain: one order with ' +
+  'several lines is one order. A person is listed from the first approval and given a position ' +
+  `from ${MINIMUM_RANKED_VOLUME}.`;
+
+const BAR_DEFINITION =
+  `${DEFINITION} The bar is the typical figure, the pale run past its end is the slowest tenth, ` +
+  'and the distance between them is the delay a normal reading misses.';
+
+const TREND_DEFINITION =
+  `${DEFINITION} Each line is one function's typical figure per ${
+    shown.grain === 'HOUR' ? 'hour' : shown.grain === 'DAY' ? 'day' : 'month'
+  }, and a break in a line is a period with no completions rather than a completion of no length.`;
+
+/** The affiliate now in force, for the control and for the one line beneath it. */
+const affiliateName = affiliates.find((one) => one.value === filter.affiliateId)?.label ?? null;
+const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates];
 ---
 
 <CmsLayout title="Home" width="data">
   <CmsPageHeader title="Home" definition={DEFINITION} />
 
-  <CmsPeriodControl
-    action="/app"
-    period={shown}
-    calendar={calendar}
-    today={today}
-    open={params.get('pick') === '1'}
-    notice={choice.notice}
-    revertHref={choice.fellBackFrom === null
-      ? null
-      : periodHref('/app', choice.fellBackFrom, { pick: null })}
-    revertLabel={choice.fellBackFrom === null ? null : `Show ${choice.fellBackFrom.label} anyway`}
-  />
+  <div class="flex flex-col gap-3">
+    <CmsPeriodControl
+      action="/app"
+      period={shown}
+      calendar={calendar}
+      today={today}
+      open={params.get('pick') === '1'}
+      notice={choice.notice}
+      revertHref={choice.fellBackFrom === null
+        ? null
+        : periodHref('/app', choice.fellBackFrom, { pick: null })}
+      revertLabel={choice.fellBackFrom === null
+        ? null
+        : `Show ${choice.fellBackFrom.label} anyway`}
+    />
+
+    {
+      /*
+        ONE FILTER, ABOVE BOTH PANELS, APPLIED TO BOTH.
+        It is a GET form with a native select, so it needs no script, it lives
+        in the URL and a view can be sent to somebody else. The period travels
+        with it as hidden fields: a filter that silently reset the period would
+        change two things when a reader changed one.
+      */
+    }
+    {
+      affiliates.length > 0 && (
+        <CmsFilterBar action="/app">
+          <input type="hidden" name="period" value={shown.key} />
+          {shown.key === 'custom' && shown.from !== null && (
+            <input type="hidden" name="from" value={shown.from} />
+          )}
+          {shown.key === 'custom' && shown.to !== null && (
+            <input type="hidden" name="to" value={shown.to} />
+          )}
+          <CmsSelect
+            id="home-affiliate"
+            name="affiliateId"
+            label="Affiliate"
+            size="sm"
+            options={affiliateOptions}
+            value={filter.affiliateId ?? ''}
+          />
+        </CmsFilterBar>
+      )
+    }
+  </div>
 
   {connectionFailed && <CmsErrorState title="The dashboard could not be loaded" />}
   {
@@ -370,10 +854,10 @@ const DEFINITION =
       <CmsErrorState
         title={`The ${failed.join(' and ')} figures could not be loaded`}
         description={
-          `Everything else on this page loaded and is correct. The charts and leaderboards ` +
-          `above are the only figures affected. Try ${shown.label} again, or choose another ` +
-          `period; if it keeps failing, send your administrator reference ${traceId ?? 'unknown'} ` +
-          `and the period you chose, which is what the server log is keyed on.`
+          `Everything else on this page loaded and is correct. The panels above are the only ` +
+          `figures affected. Try ${shown.label} again, or choose another period; if it keeps ` +
+          `failing, send your administrator reference ${traceId ?? 'unknown'} and the period you ` +
+          `chose.`
         }
       />
     )
@@ -382,39 +866,80 @@ const DEFINITION =
   {
     /*
       TWO COLUMNS, EACH READ DOWNWARD. On a narrow screen they stack, purchase
-      orders first, and each leaderboard stays under its own chart because the
-      grid places them in that order rather than because a second layout says
-      so.
+      orders first, and each part of a panel stays under the one above it
+      because the grid places them in that order rather than because a second
+      layout says so.
     */
   }
   <div class="grid gap-6 lg:grid-cols-2">
-    <div class="flex flex-col gap-4">
+    <section class="flex flex-col gap-4" aria-labelledby="panel-purchases">
+      <h2 id="panel-purchases" class="text-cms-section font-semibold text-cms-ink">
+        Purchase orders
+      </h2>
+
+      {/*
+        TWO COLUMNS, NEVER FOUR. A panel is half the workspace, so four cards
+        across it are 150 pixels each: "1 h 15 min" at the figure size does not
+        fit in one, and every label wraps to three lines. Two by two gives each
+        card the width its figure needs at 1,280 as well as at 1,440, and the
+        strip still reads as one block of four.
+      */}
+      <div class="grid grid-cols-2 gap-2">
+        {
+          purchaseKpis.map((kpi) => (
+            <CmsKpiCard
+              label={kpi.label}
+              value={kpi.value}
+              context={kpi.context}
+              token={kpi.token}
+              href={kpi.href}
+              definition={kpi.definition}
+              denominator={kpi.denominator}
+              dateBasis={kpi.dateBasis}
+            />
+          ))
+        }
+      </div>
+
       <CmsChart
         title="Purchase order approval"
-        definition={DEFINITION}
+        definition={BAR_DEFINITION}
         chart={purchaseChart}
         unit="minutes"
         coverage={`${count(volumeOf(purchases))} approvals in ${shown.label}`}
       />
       {
+        /*
+          NEVER A TARGET LINE AGAINST AN INVENTED NUMBER. The chart draws one
+          wherever a rule resolves for a function; none resolves, so this says
+          so once and offers the screen where they are set.
+        */
+      }
+      <p class="text-cms-caption text-cms-muted">
+        No approval target is configured, so no target line is drawn.{' '}
+        <a
+          class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+          href="/app/administration/sla">Set approval targets</a
+        >
+      </p>
+      {
+        affiliateName !== null && (
+          <p class="text-cms-caption text-cms-muted">
+            The purchase order extract carries no affiliate, so every order is Group-wide and stays
+            in view under {affiliateName}.
+          </p>
+        )
+      }
+      {
         comparison(purchases, previousPurchases) !== null && (
           <p class="text-cms-body-sm text-cms-muted">{comparison(purchases, previousPurchases)}</p>
         )
       }
-      <p class="text-cms-body-sm text-cms-muted">
-        <a
-          class="font-semibold text-cms-royal hover:underline"
-          href={toPurchases({ status: PO_WAITING_STATUS })}
-        >
-          {count(poWaiting)}
-        </a>{' '}
-        in approval
-      </p>
       {
         /*
           NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
           period when NOTHING on the page has data; this is the other half,
-          where the period is right for the page and wrong for this board.
+          where the period is right for the page and wrong for this panel.
         */
       }
       {
@@ -422,7 +947,7 @@ const DEFINITION =
           <p class="text-cms-body-sm text-cms-muted">
             {elsewhere(purchaseCalendar, purchases)!.line}{' '}
             <a
-              class="font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
               href={elsewhere(purchaseCalendar, purchases)!.href}
             >
               {elsewhere(purchaseCalendar, purchases)!.label}
@@ -430,52 +955,78 @@ const DEFINITION =
           </p>
         )
       }
+
+      <CmsChart
+        title="Purchase order turnaround trend"
+        definition={TREND_DEFINITION}
+        chart={purchaseTrendChart}
+        unit="minutes"
+      />
+
       <CmsApprovalLeaderboard
         caption="Purchase order approvers"
         process="PURCHASE_ORDER"
         board={purchases}
         period={shown}
+        affiliateId={filter.affiliateId}
         totalOutside={outsideFor(purchaseCalendar, purchases)}
         widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
         orderPath="/app/orders/purchases"
       />
-    </div>
+    </section>
 
-    <div class="flex flex-col gap-4">
+    <section class="flex flex-col gap-4" aria-labelledby="panel-sales">
+      <h2 id="panel-sales" class="text-cms-section font-semibold text-cms-ink">Sales orders</h2>
+
+      {/*
+        TWO COLUMNS, NEVER FOUR. A panel is half the workspace, so four cards
+        across it are 150 pixels each: "1 h 15 min" at the figure size does not
+        fit in one, and every label wraps to three lines. Two by two gives each
+        card the width its figure needs at 1,280 as well as at 1,440, and the
+        strip still reads as one block of four.
+      */}
+      <div class="grid grid-cols-2 gap-2">
+        {
+          salesKpis.map((kpi) => (
+            <CmsKpiCard
+              label={kpi.label}
+              value={kpi.value}
+              context={kpi.context}
+              token={kpi.token}
+              href={kpi.href}
+              definition={kpi.definition}
+              denominator={kpi.denominator}
+              dateBasis={kpi.dateBasis}
+            />
+          ))
+        }
+      </div>
+
       <CmsChart
         title="Sales order approval"
-        definition={DEFINITION}
+        definition={BAR_DEFINITION}
         chart={salesChart}
         unit="minutes"
         coverage={`${count(volumeOf(sales))} completions in ${shown.label}`}
       />
+      <p class="text-cms-caption text-cms-muted">
+        No approval target is configured, so no target line is drawn.{' '}
+        <a
+          class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+          href="/app/administration/sla">Set approval targets</a
+        >
+      </p>
       {
         comparison(sales, previousSales) !== null && (
           <p class="text-cms-body-sm text-cms-muted">{comparison(sales, previousSales)}</p>
         )
-      }
-      <p class="text-cms-body-sm text-cms-muted">
-        <a
-          class="font-semibold text-cms-royal hover:underline"
-          href={toSales({ status: SO_WAITING['Finance approval'] ?? null })}
-        >
-          {count(soWaiting)}
-        </a>{' '}
-        awaiting finance approval
-      </p>
-      {
-        /*
-          NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
-          period when NOTHING on the page has data; this is the other half,
-          where the period is right for the page and wrong for this board.
-        */
       }
       {
         elsewhere(salesCalendar, sales) !== null && (
           <p class="text-cms-body-sm text-cms-muted">
             {elsewhere(salesCalendar, sales)!.line}{' '}
             <a
-              class="font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
               href={elsewhere(salesCalendar, sales)!.href}
             >
               {elsewhere(salesCalendar, sales)!.label}
@@ -483,16 +1034,25 @@ const DEFINITION =
           </p>
         )
       }
+
+      <CmsChart
+        title="Sales order turnaround trend"
+        definition={TREND_DEFINITION}
+        chart={salesTrendChart}
+        unit="minutes"
+      />
+
       <CmsApprovalLeaderboard
         caption="Sales order approvers"
         process="SALES_ORDER"
         board={sales}
         period={shown}
+        affiliateId={filter.affiliateId}
         totalOutside={outsideFor(salesCalendar, sales)}
         widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
         orderPath="/app/orders/sales"
       />
-    </div>
+    </section>
   </div>
 
   {

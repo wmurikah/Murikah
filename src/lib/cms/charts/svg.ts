@@ -30,6 +30,19 @@ export interface ChartPoint {
   /** Where clicking this point should lead, if anywhere. */
   href?: string;
   /**
+   * This point's own colour, overriding the series colour. A token name
+   * without the `--color-` prefix, and always one of SERIES_TOKENS.
+   *
+   * ONE COLOUR PER BAR, ON A CHART WHOSE BARS ARE CATEGORIES. A trend line is
+   * one measure over time and takes one colour; a bar chart of approval
+   * functions is several categories side by side, and giving each its own
+   * token is what lets the eye carry a function from the bar to the row in the
+   * table beneath it. It is not decoration and it is never semantic: the
+   * sequence is assigned by position, so nothing about the colour is a verdict
+   * on the figure.
+   */
+  token?: string;
+  /**
    * A second, lighter measure on the SAME row: the tail beside the middle.
    *
    * A median on its own flatters everybody. Drawing P90 as a marker on the bar
@@ -85,6 +98,55 @@ export interface ChartOptions {
    * it survives greyscale, which a colour key does not.
    */
   endLabels?: boolean;
+  /**
+   * A labelled value axis with light gridlines, on a horizontal bar chart.
+   *
+   * WHY THIS EXISTS ONLY HERE, AND WHY `frame()` IS UNCHANGED. The vertical
+   * charts deleted their gridlines deliberately (see `frame` below): the reader
+   * of a trend is reading a shape, and the exact number is one disclosure away
+   * in the data table. A horizontal bar chart of approval functions is a
+   * different reading. Each row now carries TWO marks — the typical figure and
+   * the slowest tenth — and the whole point of the chart is the DISTANCE
+   * between them. A distance cannot be judged against nothing, so this chart
+   * gets the scale the trend does not need. `frame()` still draws one baseline
+   * and the doctrine it records still holds for the charts it serves.
+   */
+  valueAxis?: boolean;
+  /**
+   * A light wash under each line, in the line's own colour.
+   *
+   * It is a reading aid, not a quantity: the fill is far too faint to be read
+   * as an area, which is what stops it claiming that the space under a median
+   * means something. Two overlapping washes stay legible because each is a
+   * tenth of an opacity.
+   */
+  area?: boolean;
+  /**
+   * What the category column is called in the data table.
+   *
+   * The default is `Period`, which is right for a trend and wrong for a set of
+   * named categories. A chart of approval functions says `Function`, so the
+   * table beneath it is readable on its own rather than only alongside the
+   * picture it duplicates.
+   */
+  categoryName?: string;
+  /**
+   * What the second measure on each row is called, where one is drawn.
+   *
+   * AN SVG IS NOT THE DATA, THE TABLE IS. A chart that draws two marks per row
+   * and tabulates one of them has not given a screen reader the same
+   * information, it has given it less. Naming the marker here is what puts it
+   * in the table.
+   */
+  markerName?: string;
+  /**
+   * What a chart with nothing to draw says in place of a plot.
+   *
+   * NEVER AN EMPTY FRAME IN SILENCE. A scale drawn over no data reads as a
+   * measurement that came out at zero, which is a different claim from "there
+   * were none", and only one of the two is usually true.
+   */
+  emptyMessage?: string;
 }
 
 /** Above this many points a line carries no markers. See lineChart. */
@@ -94,14 +156,35 @@ const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 240;
 const PADDING = { top: 16, right: 16, bottom: 34, left: 56 };
 
-/** The palette, in the order series are added. Tokens only, never a hex. */
+/**
+ * The palette, in the order series are added. Tokens only, never a hex.
+ *
+ * SEVEN, BECAUSE THE PURCHASE ORDER TEMPLATE ALLOWS SEVEN APPROVAL LEVELS and
+ * a chart of functions takes one colour per bar. Four levels are configured
+ * today; a seventh configured next month draws in its own colour rather than
+ * repeating one already on the same chart. Every value is measured against the
+ * surface plane in test/cms/designSweep.test.ts.
+ */
 export const SERIES_TOKENS = [
   'cms-series-1',
   'cms-series-2',
   'cms-series-3',
   'cms-series-4',
   'cms-series-5',
+  'cms-series-6',
+  'cms-series-7',
 ] as const;
+
+/**
+ * The colour for the nth category on a chart.
+ *
+ * It wraps rather than running out, so an eighth level draws SOMETHING rather
+ * than resolving to nothing and falling back to black, which is how a token
+ * that Tailwind had tree-shaken took out every chart in the application once
+ * already.
+ */
+export const seriesToken = (index: number): string =>
+  SERIES_TOKENS[index % SERIES_TOKENS.length]!;
 
 const escape = (value: string): string =>
   value
@@ -310,35 +393,102 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   // Room on the right for a name written at the end of its own line. Claimed
   // only when the caller asked for it, so a single-series chart keeps the
   // full plot width.
-  const labelGutter = options.endLabels === true && series.length > 0 ? 92 : 0;
+  // Wide enough for the LONGEST name actually on the chart, not for an average
+  // one. "Country Manager Approval" clipped at a fixed 92 pixels and read as
+  // "Country Manager Approva", which is a truncation the reader has to guess
+  // past. Roughly six pixels per character at 11px, floored so a short name
+  // does not give the plot away and capped so a long one does not eat it.
+  const longest = Math.max(0, ...series.map((one) => one.name.length));
+  const labelGutter =
+    options.endLabels === true && series.length > 0
+      ? Math.min(170, Math.max(92, longest * 6 + 14))
+      : 0;
   const innerWidth = width - PADDING.left - PADDING.right - labelGutter;
   const step = innerWidth / Math.max(count - 1, 1);
 
+  const baseY = PADDING.top + innerHeight;
   const paths = series
     .map((one) => {
       let path = '';
       let open = false;
       const marks: string[] = [];
+      // Each unbroken run of the line, so the wash under it stops where the
+      // line stops. A single fill spanning a gap would shade a stretch the
+      // series has no value for, which is the interpolation the line itself
+      // refuses to draw.
+      const runs: { x: number; y: number }[][] = [];
+      let run: { x: number; y: number }[] = [];
       one.points.forEach((point, index) => {
         const x = PADDING.left + step * index;
         if (point.value === null) {
           open = false;
+          if (run.length > 0) runs.push(run);
+          run = [];
           return;
         }
         const y = PADDING.top + innerHeight * (1 - point.value / ceiling);
         path += `${open ? 'L' : 'M'}${round(x)} ${round(y)} `;
         open = true;
+        run.push({ x, y });
         if (showMarkers) {
-          marks.push(
+          const dot =
             `<circle cx="${round(x)}" cy="${round(y)}" r="2.5" fill="var(--color-${one.token})">` +
-              `<title>${escape(`${one.name}, ${point.label}: ${format(point.value)}`)}</title></circle>`,
-          );
+            `<title>${escape(`${one.name}, ${point.label}: ${format(point.value)}`)}</title></circle>`;
+          // A POINT OPENS ITS OWN BUCKET. An SVG anchor is focusable and takes
+          // the page's focus ring, so the marker is a real target rather than a
+          // hover affordance. Markers are drawn only below MARKER_LIMIT, so the
+          // tab order can never grow past a readable number of them; above it
+          // the same destinations are in the data table underneath, which is
+          // where an exact value should be read anyway.
+          marks.push(point.href === undefined ? dot : `<a href="${escape(point.href)}">${dot}</a>`);
         }
       });
+      if (run.length > 0) runs.push(run);
+
+      // ONE POINT IS A VALUE, NOT AN EMPTY CHART. A path with a single moveto
+      // draws nothing, so a period that holds exactly one bucket would render
+      // as a blank frame with an axis. The marker is already drawn above; this
+      // prints the figure beside it, which is the honest rendering of "one
+      // observation" and is what a reader came for.
+      const measured = one.points.filter((point) => point.value !== null);
+      const alone = measured.length === 1 && runs.length === 1 ? runs[0]![0]! : null;
+      // A PATH WITH ONE MOVETO DRAWS NOTHING, so a period holding a single
+      // bucket would render as a blank frame with an axis. The dot is drawn
+      // whatever the marker limit says — one point is never a dense line — and
+      // the figure is printed ABOVE it, where it cannot collide with the series
+      // name written at the end of the same line.
+      const single =
+        alone === null
+          ? ''
+          : `<circle cx="${round(alone.x)}" cy="${round(alone.y)}" r="3" ` +
+            `fill="var(--color-${one.token})" />` +
+            `<text x="${round(alone.x)}" y="${round(alone.y - 7)}" text-anchor="middle" ` +
+            `font-size="11" fill="var(--color-cms-ink)">` +
+            `${escape(format(measured[0]!.value))}</text>`;
+
+      const wash =
+        options.area !== true
+          ? ''
+          : runs
+              .filter((points) => points.length > 1)
+              .map((points) => {
+                const first = points[0]!;
+                const last = points[points.length - 1]!;
+                const line = points.map((p) => `L${round(p.x)} ${round(p.y)}`).join(' ');
+                return (
+                  `<path d="M${round(first.x)} ${round(baseY)} ${line} ` +
+                  `L${round(last.x)} ${round(baseY)} Z" fill="var(--color-${one.token})" ` +
+                  `opacity="0.1" stroke="none" />`
+                );
+              })
+              .join('');
+
       return (
+        wash +
         `<path d="${path.trim()}" fill="none" stroke="var(--color-${one.token})" stroke-width="2" ` +
         `stroke-linejoin="round" stroke-linecap="round" />` +
-        marks.join('')
+        marks.join('') +
+        single
       );
     })
     .join('');
@@ -349,28 +499,59 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   // travels to the key, and travels back. At the end of the line the name is
   // already where the eye finishes, and it still reads in greyscale and in
   // print, which a colour key does not.
+  //
+  // AND THEY MUST NOT OVERPRINT EACH OTHER. Four approval functions whose
+  // medians are within a few minutes end their lines within a few pixels, and
+  // four names drawn at those four heights render as one illegible smear —
+  // which is exactly what a legend was supposed to avoid. So the labels are
+  // placed at their true heights, then pushed apart to a minimum spacing in
+  // order, which keeps every name beside its own line while guaranteeing each
+  // one is readable.
+  const placed = series
+    .map((one) => {
+      const last = [...one.points].reverse().find((point) => point.value !== null);
+      if (last === undefined || last.value === null) return null;
+      const index = one.points.lastIndexOf(last);
+      return {
+        name: one.name,
+        token: one.token,
+        x: PADDING.left + step * index,
+        y: PADDING.top + innerHeight * (1 - last.value / ceiling),
+      };
+    })
+    .filter((one): one is { name: string; token: string; x: number; y: number } => one !== null)
+    .sort((a, b) => a.y - b.y);
+  const MIN_GAP = 13;
+  for (let i = 1; i < placed.length; i += 1) {
+    const above = placed[i - 1]!;
+    const here = placed[i]!;
+    if (here.y - above.y < MIN_GAP) here.y = above.y + MIN_GAP;
+  }
+  // If the stack ran past the plot, slide the whole column back up rather than
+  // letting the last name fall off the bottom.
+  const overshoot = (placed[placed.length - 1]?.y ?? 0) - (PADDING.top + innerHeight);
+  if (overshoot > 0) for (const one of placed) one.y -= overshoot;
+
   const endLabels =
     labelGutter === 0
       ? ''
-      : series
-          .map((one) => {
-            const last = [...one.points].reverse().find((point) => point.value !== null);
-            if (last === undefined || last.value === null) return '';
-            const index = one.points.lastIndexOf(last);
-            const x = PADDING.left + step * index;
-            const y = PADDING.top + innerHeight * (1 - last.value / ceiling);
-            return (
-              `<text x="${round(x + 8)}" y="${round(y + 4)}" font-size="11" ` +
-              `fill="var(--color-${one.token})">${escape(one.name)}</text>`
-            );
-          })
+      : placed
+          .map(
+            (one) =>
+              `<text x="${round(one.x + 8)}" y="${round(one.y + 4)}" font-size="11" ` +
+              `fill="var(--color-${one.token})">${escape(one.name)}</text>`,
+          )
           .join('');
 
-  return {
-    svg:
-      `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
-      `aria-label="${escape(altOf(series, unit, format))}" preserveAspectRatio="xMidYMid meet">` +
-      frame(width, height, ceiling, format, labelGutter) +
+  // NEVER AN EMPTY FRAME IN SILENCE. A frame and an axis drawn over no series
+  // reads as a measurement that came out flat, which is a different claim from
+  // "nothing was completed" and only one of them is usually true.
+  const nothing = series.every((one) => one.points.every((point) => point.value === null));
+  const body = nothing
+    ? `<text x="${PADDING.left}" y="${round(PADDING.top + innerHeight / 2)}" font-size="12" ` +
+      `fill="var(--color-cms-muted)">` +
+      `${escape(options.emptyMessage ?? 'No values in this period.')}</text>`
+    : frame(width, height, ceiling, format, labelGutter) +
       paths +
       categoryLabels(
         (series[0]?.points ?? []).map((point) => point.label),
@@ -379,7 +560,12 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
         labelGutter,
       ) +
       referenceLine(options.reference, ceiling, width, height, labelGutter) +
-      endLabels +
+      endLabels;
+  return {
+    svg:
+      `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
+      `aria-label="${escape(altOf(series, unit, format))}" preserveAspectRatio="xMidYMid meet">` +
+      body +
       `</svg>`,
     alt: altOf(series, unit, format),
     table: tableOf(series, format),
@@ -522,8 +708,12 @@ export function funnelChart(steps: ChartPoint[], options: ChartOptions = {}): Ch
  * than as a truncation, and the value sits at the end of its own bar where the
  * eye finishes rather than on an axis it has to travel back to.
  *
- * There is no value axis and there are no gridlines: the number is printed at
- * the end of each bar, so an axis would be a second way of saying it.
+ * THE VALUE AXIS IS OPTIONAL AND OFF BY DEFAULT. Where a row carries one mark
+ * the number printed at its end says everything an axis would, and an axis
+ * would be a second way of saying it. Where a row carries the typical figure
+ * AND the slowest tenth, the reading is the DISTANCE between them, and a
+ * distance needs a scale: `valueAxis` turns on three labelled ticks and the two
+ * light rules that go with them.
  */
 export function horizontalBarChart(series: ChartSeries, options: ChartOptions = {}): Chart {
   const width = options.width ?? DEFAULT_WIDTH;
@@ -533,7 +723,12 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
   const valueWidth = 64;
   const rowHeight = 30;
   const barHeight = 14;
-  const height = options.height ?? series.points.length * rowHeight + 12;
+  const axis = options.valueAxis === true;
+  // Room under the last row for the tick labels, claimed only when there are
+  // tick labels to put there.
+  const axisHeight = axis ? 22 : 0;
+  const plotHeight = options.height ?? series.points.length * rowHeight + 12;
+  const height = plotHeight + axisHeight;
   const trackWidth = width - labelWidth - valueWidth - 16;
   // THE SCALE MUST HOLD EVERY MARK, not only the bars. A P90 marker or a
   // target sitting past the frame would be drawn outside the chart, which is
@@ -541,10 +736,39 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
   const ceiling = niceCeiling(
     Math.max(...series.points.map((p) => Math.max(p.value ?? 0, p.marker ?? 0, p.target ?? 0)), 0),
   );
+  const at = (v: number): number => labelWidth + 8 + (v / ceiling) * trackWidth;
+
+  /**
+   * The scale: three ticks, two light rules, drawn BEFORE the bars.
+   *
+   * Behind rather than in front, so a rule never crosses a bar it is there to
+   * help measure. The zero rule is the axis itself and is drawn in the divider
+   * tone; the two in between are the gridlines. The labels use the chart's own
+   * formatter, so the axis reads "2 d 23 h" rather than "4260".
+   */
+  const scale = !axis
+    ? ''
+    : [0, 0.5, 1]
+        .map((fraction) => {
+          const x = at(ceiling * fraction);
+          const rule =
+            `<line x1="${round(x)}" y1="0" x2="${round(x)}" y2="${round(plotHeight)}" ` +
+            `stroke="var(--color-cms-line)" stroke-width="1" />`;
+          const anchor = fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle';
+          const text =
+            `<text x="${round(x)}" y="${round(plotHeight + 14)}" text-anchor="${anchor}" ` +
+            `font-size="11" fill="var(--color-cms-muted)">` +
+            `${escape(format(ceiling * fraction))}</text>`;
+          return rule + text;
+        })
+        .join('');
 
   const rows = series.points
     .map((point, index) => {
       const y = 6 + index * rowHeight;
+      // ONE COLOUR PER BAR where the caller assigned one, the series colour
+      // where it did not, so a single-measure chart is unchanged.
+      const token = point.token ?? series.token;
       const label =
         `<text x="0" y="${round(y + barHeight)}" font-size="12" ` +
         `fill="var(--color-cms-ink)">${escape(point.label)}</text>`;
@@ -558,22 +782,38 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
       const barWidth = Math.max(1, (point.value / ceiling) * trackWidth);
       const bar =
         `<rect x="${labelWidth + 8}" y="${round(y + 3)}" width="${round(barWidth)}" ` +
-        `height="${barHeight}" rx="2" fill="var(--color-${series.token})">` +
+        `height="${barHeight}" rx="2" fill="var(--color-${token})">` +
         `<title>${escape(`${point.label}: ${format(point.value)}`)}</title></rect>`;
-      const at = (v: number): number => labelWidth + 8 + (v / ceiling) * trackWidth;
 
-      // THE TAIL, ON THE SAME ROW AS THE MIDDLE. A lighter, taller tick rather
-      // than a second bar: two bars per row read as two categories, and this
-      // is one category measured twice.
+      // THE TAIL, ON THE SAME ROW AS THE MIDDLE, AND THIS IS THE MOST USEFUL
+      // MARK ON THE PAGE.
+      //
+      // Level 1 of the purchase order process has a typical time of 21 minutes
+      // and a slowest tenth of 2,586. Read the typical alone and it is the
+      // fastest level in the process; read both and it is the worst. So the
+      // tail is drawn as a CONTINUATION of the same bar in the same colour at a
+      // tenth of the weight, closed by a solid tick — not as a second bar,
+      // because two bars on a row read as two categories and this is one
+      // category measured twice. The pale run between the two is the gap, and
+      // its length is the whole argument.
+      const tail =
+        point.marker === null || point.marker === undefined || point.marker <= point.value
+          ? ''
+          : `<rect x="${round(at(point.value))}" y="${round(y + 3)}" ` +
+            `width="${round(Math.max(1, at(point.marker) - at(point.value)))}" ` +
+            `height="${barHeight}" rx="2" fill="var(--color-${token})" opacity="0.22" />`;
       const marker =
         point.marker === null || point.marker === undefined
           ? ''
           : `<rect x="${round(at(point.marker) - 1)}" y="${round(y)}" width="2" ` +
-            `height="${barHeight + 6}" rx="1" fill="var(--color-${series.token})" ` +
-            `opacity="0.45"><title>${escape(`${point.label}, P90: ${format(point.marker)}`)}` +
-            `</title></rect>`;
+            `height="${barHeight + 6}" rx="1" fill="var(--color-${token})" ` +
+            `opacity="0.6"><title>${escape(
+              `${point.label}, slowest 10%: ${format(point.marker)}`,
+            )}</title></rect>`;
 
-      // The target, dashed, so it is never mistaken for a measurement.
+      // The target, dashed, so it is never mistaken for a measurement. Drawn
+      // only where a target is configured for THIS function: no target, no
+      // line, and never a line against an invented number.
       const target =
         point.target === null || point.target === undefined
           ? ''
@@ -587,18 +827,89 @@ export function horizontalBarChart(series: ChartSeries, options: ChartOptions = 
         `<text x="${round(at(furthest) + 8)}" y="${round(y + barHeight)}" ` +
         `font-size="11" fill="var(--color-cms-muted)">${escape(format(point.value))}</text>`;
       const drawn = point.href === undefined ? bar : `<a href="${escape(point.href)}">${bar}</a>`;
-      return label + drawn + marker + target + value;
+      return label + tail + drawn + marker + target + value;
     })
     .join('');
 
+  const alt = categoryAlt(series, unit, format, options.markerName);
+  // AN EMPTY CHART NEVER DRAWS A SCALE. With no categories the ceiling falls
+  // back to one and the axis prints "0, 1, 1" under an empty plot, which reads
+  // as a measurement of nothing rather than as an absence. The frame is dropped
+  // and the absence is stated instead.
+  const body =
+    series.points.length === 0
+      ? `<text x="0" y="${round(plotHeight / 2)}" font-size="12" ` +
+        `fill="var(--color-cms-muted)">` +
+        `${escape(options.emptyMessage ?? 'No values in this period.')}</text>`
+      : `${scale}${rows}`;
   return {
     svg:
       `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" ` +
-      `aria-label="${escape(`${series.name}. ${altOf([series], unit, format)}`)}" ` +
-      `preserveAspectRatio="xMinYMin meet">${rows}</svg>`,
-    alt: altOf([series], unit, format),
-    table: tableOf([series], format),
+      `aria-label="${escape(`${series.name}. ${alt}`)}" ` +
+      `preserveAspectRatio="xMinYMin meet">${body}</svg>`,
+    alt,
+    table: categoryTable(series, format, options),
   };
+}
+
+/**
+ * The horizontal bar chart's own table: every mark the picture draws.
+ *
+ * The marker and the target columns appear only where the chart drew them, so
+ * a table never carries a column of "Not available" for something the chart
+ * never claimed to show.
+ */
+function categoryTable(
+  series: ChartSeries,
+  format: (v: number | null) => string,
+  options: ChartOptions,
+): ChartTable {
+  const hasMarker = series.points.some((p) => p.marker !== null && p.marker !== undefined);
+  const hasTarget = series.points.some((p) => p.target !== null && p.target !== undefined);
+  const columns = [options.categoryName ?? 'Category', series.name];
+  if (hasMarker) columns.push(options.markerName ?? 'Second measure');
+  if (hasTarget) columns.push('Target');
+  return {
+    columns,
+    rows: series.points.map((point) => {
+      const cells = [point.label, format(point.value)];
+      if (hasMarker) cells.push(format(point.marker ?? null));
+      if (hasTarget) cells.push(format(point.target ?? null));
+      return cells;
+    }),
+  };
+}
+
+/**
+ * The sentence a screen reader hears in place of a chart of NAMED CATEGORIES.
+ *
+ * `altOf` describes a series as a journey — from the first point to the last,
+ * with a peak — which is the right reading of a trend and the wrong reading of
+ * four approval functions, where there is no order in time and "from finance
+ * approval to loading authority" states a progression that does not exist.
+ * This one reads the categories out with both of their marks, slowest first,
+ * because the ranking is the information.
+ */
+function categoryAlt(
+  series: ChartSeries,
+  unit: string,
+  format: (v: number | null) => string,
+  markerName: string | undefined,
+): string {
+  const measured = series.points.filter((point) => point.value !== null);
+  if (measured.length === 0) return `${series.name}: no values available.`;
+  const ranked = [...measured].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  const parts = ranked.map((point) => {
+    const marker =
+      point.marker === null || point.marker === undefined
+        ? ''
+        : `, ${(markerName ?? 'second measure').toLowerCase()} ${format(point.marker)}`;
+    return `${point.label} ${format(point.value)}${marker}`;
+  });
+  return (
+    `${series.name}, in ${unit}, ${measured.length} ` +
+    `${measured.length === 1 ? 'category' : 'categories'} highest first: ${parts.join('; ')}.`
+  );
 }
 
 /**

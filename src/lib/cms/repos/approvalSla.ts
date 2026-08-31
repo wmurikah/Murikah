@@ -66,6 +66,7 @@
  * guaranteed to be compiled in.
  */
 import type { Client } from '@libsql/client/web';
+import { bucketFor, type PeriodGrain } from '../analytics/period.ts';
 
 const text = (v: unknown): string => String(v ?? '');
 const num = (v: unknown): number => Number(v ?? 0);
@@ -74,6 +75,49 @@ const maybeText = (v: unknown): string | null => (v === null || v === undefined 
 
 /** Which process a function belongs to. They are never mixed. */
 export type ApprovalProcess = 'PURCHASE_ORDER' | 'SALES_ORDER';
+
+/**
+ * WHAT EVERY QUERY IN THIS MODULE IS SCOPED BY, AS ONE VALUE.
+ *
+ * The period and the affiliate arrive together or not at all. That is a shape
+ * decision rather than a tidiness one: the day an aggregate is narrowed by an
+ * affiliate and the list behind it is not, the figure and its records disagree
+ * with no error anywhere, and a reader has no way to tell which is right. A
+ * single required parameter means a call site cannot forget half of the scope,
+ * because there is no half to pass.
+ *
+ * `affiliateId` null is "every affiliate", not "the null affiliate". Purchase
+ * orders genuinely carry no affiliate — the extract has no such column and the
+ * schema records the fact — so a Group-wide purchase order is IN SCOPE for
+ * every affiliate rather than excluded from all of them. Excluding it would
+ * empty the whole purchase order panel the moment anybody used the control,
+ * which reads exactly like a period with no work in it and is the worst
+ * available answer.
+ */
+export interface ApprovalScope {
+  /** Inclusive floor, "YYYY-MM-DD". Null for all time. */
+  readonly from: string | null;
+  /** Inclusive ceiling, "YYYY-MM-DD". Null for all time. */
+  readonly to: string | null;
+  /** Null for every affiliate. */
+  readonly affiliateId: string | null;
+}
+
+/**
+ * Whose records a list is for.
+ *
+ * THREE STATES, NOT TWO, AND THE THIRD IS WHY THIS TYPE EXISTS. A bar on the
+ * chart is a whole function across everybody; a row in the table is one person;
+ * and invoicing and loading authority are a function whose actor is genuinely
+ * not recorded. `null` and "everybody" are different questions and a nullable
+ * string cannot ask both, which is how a function-level drill silently returned
+ * nothing at all.
+ */
+export type ApprovalActor =
+  | { readonly kind: 'EVERYONE' }
+  | { readonly kind: 'PERSON'; readonly userId: string | null };
+
+export const EVERYONE: ApprovalActor = { kind: 'EVERYONE' };
 
 export interface FunctionStat {
   /** The function performed, as a person reads it. */
@@ -237,8 +281,39 @@ function statsOver(source: string, groupByPerson: boolean): string {
      GROUP BY ${key}`;
 }
 
+/**
+ * Elapsed minutes, and NEVER A NEGATIVE ONE.
+ *
+ * A negative elapsed time is not a fast approval, it is two timestamps in the
+ * wrong order, and the real extract carries them: some sales orders record a
+ * loading authority BEFORE the invoice the authority is measured from. Left
+ * alone those rows drag a median below zero and the chart prints "-19 min",
+ * which is a figure no order took and a claim about the business that is simply
+ * false. So an out-of-order pair is UNMEASURABLE and yields NULL, exactly as a
+ * missing timestamp already does — the row stays in the population, it stays
+ * countable, and it contributes no duration it cannot support.
+ */
 const MINUTES = (from: string, to: string): string =>
-  `CAST(ROUND((julianday(${to}) - julianday(${from})) * 1440.0) AS INTEGER)`;
+  `CASE WHEN ${from} IS NULL OR ${to} IS NULL OR julianday(${to}) < julianday(${from})
+        THEN NULL
+        ELSE CAST(ROUND((julianday(${to}) - julianday(${from})) * 1440.0) AS INTEGER) END`;
+
+/**
+ * The affiliate narrowing, written once and pasted into every source.
+ *
+ * A GROUP-WIDE ROW IS IN SCOPE FOR EVERY AFFILIATE. `affiliate_id IS NULL` is
+ * not a missing value to be filtered out; on a purchase order it is the only
+ * value there is, because the extract carries no affiliate column and the
+ * schema declares the column nullable for exactly that reason. So the predicate
+ * admits three cases and states each: no affiliate chosen, this row is
+ * Group-wide, or this row belongs to the affiliate chosen.
+ *
+ * Named rather than positional, matching `:from` and `:to`, because every one
+ * of these sources is UNIONed with another and a positional parameter would
+ * have to be bound once per arm in the right order.
+ */
+const AFFILIATE = (column: string): string =>
+  `(:affiliate IS NULL OR ${column} IS NULL OR ${column} = :affiliate)`;
 
 /**
  * Purchase order approval: every configured level, with the person who acted.
@@ -275,6 +350,7 @@ const PO_SOURCE = `
    WHERE wi.entity_type = 'PURCHASE_ORDER'
      AND wsi.status IN ('APPROVED', 'COMPLETED')
      AND wsi.started_at IS NOT NULL AND wsi.completed_at IS NOT NULL
+     AND ${AFFILIATE('po.affiliate_id')}
      AND (:from IS NULL OR wsi.completed_at >= :from)
      AND (:to IS NULL OR wsi.completed_at <= :to)`;
 
@@ -310,6 +386,7 @@ const soStage = (fn: string, ord: number, stage: string): string => `
    WHERE wi.entity_type = 'SALES_ORDER' AND ws.stage_code = '${stage}'
      AND wsi.status IN ('APPROVED', 'COMPLETED')
      AND wsi.started_at IS NOT NULL AND wsi.completed_at IS NOT NULL
+     AND ${AFFILIATE('so.affiliate_id')}
      AND (:from IS NULL OR wsi.completed_at >= :from)
      AND (:to IS NULL OR wsi.completed_at <= :to)`;
 
@@ -324,6 +401,7 @@ const soOrder = (fn: string, ord: number, endColumn: string, startExpr: string):
          NULL AS target_minutes
     FROM sales_orders so
    WHERE so.${endColumn} IS NOT NULL
+     AND ${AFFILIATE('so.affiliate_id')}
      AND (:from IS NULL OR so.${endColumn} >= :from)
      AND (:to IS NULL OR so.${endColumn} <= :to)`;
 
@@ -359,7 +437,8 @@ const PO_PENDING_SOURCE = `
     JOIN workflow_stages ws ON ws.workflow_stage_id = wsi.workflow_stage_id
     LEFT JOIN users u ON u.user_id = wsi.assigned_user_id
     LEFT JOIN purchase_orders po ON po.purchase_order_id = wi.entity_id
-   WHERE wi.entity_type = 'PURCHASE_ORDER' AND wsi.status IN ('PENDING', 'ACTIVE')`;
+   WHERE wi.entity_type = 'PURCHASE_ORDER' AND wsi.status IN ('PENDING', 'ACTIVE')
+     AND ${AFFILIATE('po.affiliate_id')}`;
 
 const SO_PENDING_SOURCE = `
   SELECT CASE ws.stage_code WHEN 'FINANCE_APPROVAL' THEN 'Finance approval'
@@ -376,6 +455,7 @@ const SO_PENDING_SOURCE = `
     LEFT JOIN sales_orders so ON so.sales_order_id = wi.entity_id
    WHERE wi.entity_type = 'SALES_ORDER' AND wsi.status IN ('PENDING', 'ACTIVE')
      AND ws.stage_code IN ('FINANCE_APPROVAL', 'CREDIT_CHECK')
+     AND ${AFFILIATE('so.affiliate_id')}
 
   UNION ALL
 
@@ -385,6 +465,7 @@ const SO_PENDING_SOURCE = `
          so.order_created_at AS waiting_since
     FROM sales_orders so
    WHERE so.invoice_created_at IS NULL AND so.status <> 'CANCELLED'
+     AND ${AFFILIATE('so.affiliate_id')}
 
   UNION ALL
 
@@ -393,7 +474,8 @@ const SO_PENDING_SOURCE = `
          NULL AS user_id, NULL AS person,
          COALESCE(so.invoice_created_at, so.order_created_at) AS waiting_since
     FROM sales_orders so
-   WHERE so.loading_authority_at IS NULL AND so.status <> 'CANCELLED'`;
+   WHERE so.loading_authority_at IS NULL AND so.status <> 'CANCELLED'
+     AND ${AFFILIATE('so.affiliate_id')}`;
 
 /** The pending aggregate, over the very source the destination lists. */
 const pendingAggregate = (source: string): string => `
@@ -415,14 +497,21 @@ const rowsOf = (result: { rows: unknown[] }): Record<string, unknown>[] =>
   result.rows as Record<string, unknown>[];
 
 /** The window as bound arguments. Nulls mean all time, and bind as nulls. */
-export function windowArgs(period: {
-  from: string | null;
-  to: string | null;
-}): Record<string, string | null> {
+export function windowArgs(scope: ApprovalScope): Record<string, string | null> {
   return {
-    from: period.from === null ? null : `${period.from} 00:00:00`,
-    to: period.to === null ? null : `${period.to} 23:59:59`,
+    from: scope.from === null ? null : `${scope.from} 00:00:00`,
+    to: scope.to === null ? null : `${scope.to} 23:59:59`,
+    affiliate: scope.affiliateId,
   };
+}
+
+/**
+ * The pending sources carry no window, so they bind the affiliate and nothing
+ * else. Passing the whole of `windowArgs` here would send `:from` and `:to` to
+ * a statement that never mentions them.
+ */
+export function pendingArgs(scope: ApprovalScope): Record<string, string | null> {
+  return { affiliate: scope.affiliateId };
 }
 
 /**
@@ -436,15 +525,15 @@ export function windowArgs(period: {
 export async function approvalBoard(
   db: Client,
   process: ApprovalProcess,
-  period: { from: string | null; to: string | null },
+  scope: ApprovalScope,
 ): Promise<ApprovalBoard> {
   const source = sourceFor(process);
-  const args = windowArgs(period);
+  const args = windowArgs(scope);
 
   const [byFunction, byPerson, pending] = await Promise.all([
     db.execute({ sql: statsOver(source, false), args }),
     db.execute({ sql: statsOver(source, true), args }),
-    db.execute({ sql: pendingAggregate(pendingSourceFor(process)), args: {} }),
+    db.execute({ sql: pendingAggregate(pendingSourceFor(process)), args: pendingArgs(scope) }),
   ]);
 
   const waiting = new Map<
@@ -525,6 +614,166 @@ export async function approvalBoard(
 }
 
 /* -------------------------------------------------------------------------
+ * THE WHOLE PROCESS, END TO END
+ * ------------------------------------------------------------------------- */
+
+/** One process's end-to-end span over the period. */
+export interface CycleStat {
+  /** Orders the span could be measured on. This is the KPI's denominator. */
+  readonly orders: number;
+  readonly medianMinutes: number | null;
+  readonly p90Minutes: number | null;
+}
+
+/**
+ * The end-to-end span, and it is a DIFFERENT QUESTION PER PROCESS because the
+ * two processes end in different places.
+ *
+ * PURCHASE ORDERS: submission to final approval. The levels are the whole of
+ * the approval, so the span is the earliest level start to the latest level
+ * completion on the same order. Reading it off the levels rather than off
+ * `purchase_orders` is deliberate: it is then the same population the bars and
+ * the table are drawn from, so the strip cannot report a figure over orders the
+ * panel beneath it never saw.
+ *
+ * SALES ORDERS: order creation to loading authority. That one is NOT the span
+ * of the four functions, and the difference matters. An order with no invoice
+ * yet has a first start of "finance approval" and a last completion of "credit
+ * release", and calling that an order-to-authority time would be false on every
+ * such row. So it is measured on the two timestamps it actually names, over the
+ * orders that reached an authority, and the count of those orders is returned
+ * as the figure's denominator rather than left implied.
+ *
+ * A MEDIAN OF MEDIANS IS NOT A MEDIAN, which is why this exists at all: the
+ * strip cannot be assembled from `board.functions`. The arithmetic is the same
+ * nearest-rank pair used everywhere else in this module, so the strip and the
+ * bars agree by construction.
+ */
+export async function approvalCycle(
+  db: Client,
+  process: ApprovalProcess,
+  scope: ApprovalScope,
+): Promise<CycleStat> {
+  const spans =
+    process === 'PURCHASE_ORDER'
+      ? `WITH d AS (${PO_SOURCE}),
+         per AS (
+           SELECT d.entity_id AS entity_id,
+                  MIN(d.started_at) AS started_at,
+                  MAX(d.completed_at) AS completed_at
+             FROM d WHERE d.minutes IS NOT NULL
+            GROUP BY d.entity_id
+         ),
+         spans AS (
+           SELECT ${MINUTES('per.started_at', 'per.completed_at')} AS minutes FROM per
+         )`
+      : `WITH spans AS (
+           SELECT ${MINUTES('so.order_created_at', 'so.loading_authority_at')} AS minutes
+             FROM sales_orders so
+            WHERE so.loading_authority_at IS NOT NULL
+              AND so.order_created_at IS NOT NULL
+              AND ${AFFILIATE('so.affiliate_id')}
+              AND (:from IS NULL OR so.loading_authority_at >= :from)
+              AND (:to IS NULL OR so.loading_authority_at <= :to)
+         )`;
+  const found = await db.execute({
+    sql: `${spans},
+      ranked AS (
+        SELECT spans.minutes AS minutes,
+               ROW_NUMBER() OVER (ORDER BY spans.minutes) AS rn,
+               COUNT(*) OVER () AS n
+          FROM spans WHERE spans.minutes IS NOT NULL
+      )
+      SELECT COUNT(*) AS orders,
+             AVG(CASE WHEN ranked.rn IN ((ranked.n + 1) / 2, (ranked.n + 2) / 2)
+                      THEN ranked.minutes END) AS median_minutes,
+             MAX(CASE WHEN ranked.rn = (ranked.n * 9 + 9) / 10
+                      THEN ranked.minutes END) AS p90_minutes
+        FROM ranked`,
+    args: windowArgs(scope),
+  });
+  const row = (rowsOf(found)[0] ?? {}) as Record<string, unknown>;
+  return {
+    orders: num(row.orders),
+    medianMinutes: maybe(row.median_minutes),
+    p90Minutes: maybe(row.p90_minutes),
+  };
+}
+
+/* -------------------------------------------------------------------------
+ * THE SAME FUNCTIONS, OVER TIME
+ * ------------------------------------------------------------------------- */
+
+/** One function's typical turnaround in one bucket of the period. */
+export interface TrendPoint {
+  readonly fn: string;
+  readonly order: number;
+  /** Matches `bucketFor`'s output for the grain, so a bucket can be looked up. */
+  readonly bucket: string;
+  readonly volume: number;
+  readonly medianMinutes: number | null;
+}
+
+/**
+ * The typical turnaround per function per bucket, in ONE statement.
+ *
+ * THE MEDIAN HERE IS THE SAME ARITHMETIC AS THE BAR ABOVE IT, and that is not
+ * a coincidence to be maintained by hand: both mean the two middle values on an
+ * even count and the one middle value on an odd one. Two medians on one page
+ * computed two ways is how a trend and a bar quietly disagree about the same
+ * month, and neither can then be checked against the other. `poPerformance` and
+ * `soPerformance` both carry a nearest-rank median, which is a different
+ * figure, so neither is reused here.
+ *
+ * THE BUCKET IS MATERIALISED IN ITS OWN CTE. A `SELECT`-list alias cannot be
+ * referenced by a `PARTITION BY` in the same `SELECT`, and the outer statement
+ * reads FROM `ranked` rather than from `d` for the reason recorded against
+ * `statsOver`: `d` is out of scope by then, and grouping by it raises
+ * `no such column` on every execution.
+ *
+ * Buckets with no completions return no row rather than a zero. The caller
+ * enumerates the period with `periodBuckets` and fills the gaps with null, so
+ * a quiet day breaks the line instead of being drawn as an instant approval.
+ */
+export async function approvalTrend(
+  db: Client,
+  process: ApprovalProcess,
+  scope: ApprovalScope,
+  grain: PeriodGrain,
+): Promise<TrendPoint[]> {
+  const sql = `
+    WITH d AS (${sourceFor(process)}),
+    bucketed AS (
+      SELECT d.fn AS fn, d.ord AS ord, d.minutes AS minutes,
+             ${bucketFor('d.completed_at', grain)} AS bucket
+        FROM d WHERE d.minutes IS NOT NULL AND d.completed_at IS NOT NULL
+    ),
+    ranked AS (
+      SELECT bucketed.*,
+             ROW_NUMBER() OVER (PARTITION BY bucketed.fn, bucketed.bucket
+                                ORDER BY bucketed.minutes) AS rn,
+             COUNT(*) OVER (PARTITION BY bucketed.fn, bucketed.bucket) AS n
+        FROM bucketed
+    )
+    SELECT ranked.fn, ranked.ord, ranked.bucket,
+           COUNT(*) AS volume,
+           AVG(CASE WHEN ranked.rn IN ((ranked.n + 1) / 2, (ranked.n + 2) / 2)
+                    THEN ranked.minutes END) AS median_minutes
+      FROM ranked
+     GROUP BY ranked.fn, ranked.ord, ranked.bucket`;
+  const found = await db.execute({ sql, args: windowArgs(scope) });
+  return rowsOf(found)
+    .map((row) => ({
+      fn: text(row.fn),
+      order: num(row.ord),
+      bucket: text(row.bucket),
+      volume: num(row.volume),
+      medianMinutes: maybe(row.median_minutes),
+    }))
+    .sort((a, b) => (a.order !== b.order ? a.order - b.order : a.bucket.localeCompare(b.bucket)));
+}
+
+/* -------------------------------------------------------------------------
  * THE RECORDS BEHIND A FIGURE
  * ------------------------------------------------------------------------- */
 
@@ -568,10 +817,36 @@ export async function approvalRecords(
   process: ApprovalProcess,
   view: RecordView,
   fn: string,
-  userId: string | null,
-  period: { from: string | null; to: string | null },
+  actor: ApprovalActor,
+  scope: ApprovalScope,
 ): Promise<ApprovalRecord[]> {
-  const args = { ...windowArgs(period), fn, uid: userId };
+  const person = actor.kind === 'PERSON';
+  // AN EMPTY FUNCTION MEANS EVERY FUNCTION IN THE PROCESS, which is what the
+  // panel's own headline figure counts: every completion the chart's bars add
+  // up to. It is only ever paired with EVERYONE — "every function, for one
+  // person" is a question no figure on the page asks — and the parameter is
+  // dropped from the bind rather than left unused, because an argument a
+  // statement never mentions is refused by the driver.
+  const everyFunction = fn === '';
+  const args = {
+    ...windowArgs(scope),
+    ...(everyFunction ? {} : { fn }),
+    ...(person ? { uid: actor.userId } : {}),
+  };
+
+  // THE PARTITION MUST MATCH THE AGGREGATE THAT PRODUCED THE FIGURE, and this
+  // is the whole reason `ApprovalActor` has three states rather than two.
+  //
+  // A leaderboard row's figures come from `statsOver(source, true)`, which
+  // partitions by function AND person; a chart bar's come from
+  // `statsOver(source, false)`, which partitions by function alone. Those are
+  // different populations, so they have a different n, a different median row
+  // and a different tail index. Listing a bar's records with the per-person
+  // partition would cut the tail at the wrong index and count the wrong number
+  // of rows — the exact class of defect where a figure and its own list
+  // disagree.
+  const partition = person ? 'd.fn, d.user_id' : 'd.fn';
+  const who = person ? ' AND ranked.user_id IS :uid' : '';
 
   if (view === 'pending') {
     const found = await db.execute({
@@ -580,9 +855,15 @@ export async function approvalRecords(
                    w.waiting_since AS started_at, NULL AS completed_at,
                    NULL AS minutes, NULL AS target_minutes
               FROM w
-             WHERE w.fn = :fn AND w.user_id IS :uid
+             WHERE ${everyFunction ? '1 = 1' : 'w.fn = :fn'}${
+               person ? ' AND w.user_id IS :uid' : ''
+             }
              ORDER BY w.waiting_since IS NULL, w.waiting_since`,
-      args: { fn, uid: userId },
+      args: {
+        ...pendingArgs(scope),
+        ...(everyFunction ? {} : { fn }),
+        ...(person ? { uid: actor.userId } : {}),
+      },
     });
     return rowsOf(found).map((row) => toRecord(row, false));
   }
@@ -591,15 +872,15 @@ export async function approvalRecords(
     WITH d AS (${sourceFor(process)}),
     ranked AS (
       SELECT d.*,
-             ROW_NUMBER() OVER (PARTITION BY d.fn, d.user_id ORDER BY d.minutes) AS rn,
-             COUNT(*) OVER (PARTITION BY d.fn, d.user_id) AS n
+             ROW_NUMBER() OVER (PARTITION BY ${partition} ORDER BY d.minutes) AS rn,
+             COUNT(*) OVER (PARTITION BY ${partition}) AS n
         FROM d WHERE d.minutes IS NOT NULL
     )
     SELECT ranked.*,
            CASE WHEN ranked.rn IN ((ranked.n + 1) / 2, (ranked.n + 2) / 2) THEN 1 ELSE 0 END
              AS is_median
       FROM ranked
-     WHERE ranked.fn = :fn AND ranked.user_id IS :uid`;
+     WHERE ${everyFunction ? '1 = 1' : 'ranked.fn = :fn'}${who}`;
 
   const where =
     view === 'tail'
