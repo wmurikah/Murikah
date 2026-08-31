@@ -365,6 +365,155 @@ export function bucketFor(column: string, grain: PeriodGrain): string {
   return `strftime('%Y-%m', ${column})`;
 }
 
+/** The twelve months a Home trend covers, ending at the month on screen. */
+export const TREND_MONTHS = 12;
+
+/**
+ * A window of whole months ending at the month a period names.
+ *
+ * WHY A TREND HAS ITS OWN WINDOW. The panels answer "what happened in May";
+ * a trend answers "is May better or worse than the months before it", and that
+ * second question cannot be asked of May alone. So the bars and the table read
+ * the selected month while the line beside them reads the year ending at it —
+ * one plotted value per month, which is what makes it a trend rather than a
+ * scatter of the days inside one month.
+ *
+ * The window is whole months on both ends, so every bucket the line draws is a
+ * complete month except the one still running.
+ */
+export function trailingMonths(period: ResolvedPeriod, count = TREND_MONTHS): ResolvedPeriod {
+  if (count < 1) return period;
+  const anchor = period.to ?? period.from;
+  if (anchor === null) return period;
+  const { y, m } = partsOf(anchor);
+  const first = utc(y, m - (count - 1), 1);
+  const window = build(
+    'custom',
+    'RANGE',
+    ymd(first),
+    ymd(endOfMonth(y, m)),
+    null,
+    `${SHORT_MONTHS[first.getUTCMonth()]} ${first.getUTCFullYear()} to ${MONTH_NAMES[m]} ${y}`,
+  );
+  // THE GRAIN IS MONTHS BECAUSE THE BUCKETS ARE MONTHS, not because the span
+  // says so. `grainFor` reads a two-month window as sixty-one days and would
+  // have `periodBuckets` enumerate every one of them — sixty-one daily keys
+  // against a query that returned two monthly ones, so nothing matched and the
+  // whole trend rendered as "no data" while the rows sat in hand.
+  return { ...window, grain: 'MONTH' };
+}
+
+/**
+ * How many months a trend should span, given what the data actually covers.
+ *
+ * A FIXED YEAR OF BUCKETS IS A YEAR OF EMPTY ONES ON A YOUNG DATASET. This
+ * database holds one extract covering two months, so a twelve-month axis drew
+ * ten blank columns and squeezed the whole line into the last inch of the
+ * chart — which is exactly the clustered-dots reading a trend is supposed to
+ * replace. The window therefore starts at the earliest month that holds
+ * anything, never earlier, and never spans more than a year.
+ *
+ * Two is the floor rather than one: a single column is a bar, not a trend, and
+ * a second column is what makes the axis read as time.
+ */
+export function trendSpan(
+  period: ResolvedPeriod,
+  calendar: DataCalendar,
+  limit = TREND_MONTHS,
+): number {
+  const anchor = period.to ?? period.from;
+  const earliest = [...calendar.months].sort()[0];
+  if (anchor === undefined || anchor === null || earliest === undefined) return limit;
+  const end = partsOf(anchor);
+  const start = partsOf(`${earliest}-01`);
+  const months = (end.y - start.y) * 12 + (end.m - start.m) + 1;
+  return Math.min(limit, Math.max(2, months));
+}
+
+/**
+ * The month a Home period sits in, as the two values its control holds.
+ *
+ * A dashboard period is a MONTH and nothing else, so it is addressed the way a
+ * person says it: a month and a year. Anything the URL carries that is not a
+ * month — a quarter, a year, all time, a typed range — resolves to the month
+ * its window ends in, so a link from elsewhere in the application still lands
+ * somewhere the control can express.
+ */
+export function monthOf(period: ResolvedPeriod, today: Date): { month: number; year: number } {
+  const anchor = period.to ?? period.from;
+  if (anchor === null) return { month: today.getUTCMonth() + 1, year: today.getUTCFullYear() };
+  const { y, m } = partsOf(anchor);
+  return { month: m + 1, year: y };
+}
+
+/**
+ * The month a dashboard is showing, from either shape of URL.
+ *
+ * TWO SHAPES REACH THIS PAGE AND BOTH HAVE TO WORK. The control submits
+ * `?month=5&year=2026`, because that is what two dropdowns post; every drill
+ * destination and every link from elsewhere in the application carries
+ * `?period=2026-05`, because that is the one token the rest of the system
+ * speaks. Reading both here is what lets the dashboard use dropdowns without
+ * the rest of the application having to learn a second vocabulary.
+ *
+ * The answer is always a WHOLE MONTH. A link carrying a quarter, a year or all
+ * time resolves to the month its window ends in, so a period the control cannot
+ * express can still be arrived at and is shown as something it can.
+ */
+export function parseDashboardPeriod(
+  params: URLSearchParams,
+  today: Date,
+): { period: ResolvedPeriod; chosen: boolean } {
+  const month = Number(params.get('month'));
+  const year = Number(params.get('year'));
+  if (
+    Number.isInteger(month) &&
+    month >= 1 &&
+    month <= 12 &&
+    Number.isInteger(year) &&
+    year >= 1970 &&
+    year <= 9999
+  ) {
+    const named = periodFromToken(monthToken(month, year), today);
+    if (named !== null) return { period: named, chosen: true };
+  }
+  const asked = parsePeriod(params, today);
+  const chosen = periodWasChosen(params);
+  if (asked.level === 'MONTH') return { period: asked, chosen };
+  const at = monthOf(asked, today);
+  const normalised = periodFromToken(monthToken(at.month, at.year), today);
+  return { period: normalised ?? asked, chosen };
+}
+
+/** The period token a month and a year name: `YYYY-MM`. */
+export function monthToken(month: number, year: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+/** The twelve month names, for the control's own dropdown. */
+export const MONTH_OPTIONS: readonly { readonly value: string; readonly label: string }[] =
+  MONTH_NAMES.map((name, index) => ({ value: String(index + 1), label: name }));
+
+/**
+ * The years the year dropdown offers: every year the data touches, plus the
+ * current one, newest first.
+ *
+ * Read from the calendar rather than from a range somebody typed, so the
+ * control cannot offer a year that holds nothing and cannot hide one that does.
+ */
+export function yearOptions(
+  calendar: DataCalendar,
+  today: Date,
+  selected: number,
+): { value: string; label: string }[] {
+  const years = new Set<string>(calendar.years);
+  years.add(String(today.getUTCFullYear()));
+  years.add(String(selected));
+  return [...years]
+    .sort((a, b) => b.localeCompare(a))
+    .map((year) => ({ value: year, label: year }));
+}
+
 /** One bucket of a trend: its key in the data, its label, and where it drills. */
 export interface PeriodBucket {
   /** Matches `bucketFor`'s output exactly, so a row can be looked up by it. */
@@ -432,10 +581,18 @@ export function periodBuckets(period: ResolvedPeriod): PeriodBucket[] | null {
     }
     return out;
   }
-  const oneYear = start.y === end.y;
+  // A WINDOW OF A YEAR OR LESS NAMES THE MONTH ALONE. Inside twelve months no
+  // month repeats, so "Jan" is unambiguous, and twelve "Jan 2026"-style labels
+  // overprint each other on a half-width panel. Only a longer window, where a
+  // month can appear twice, has to carry its year.
+  const months = (end.y - start.y) * 12 + (end.m - start.m) + 1;
   for (let y = start.y, m = start.m; y < end.y || (y === end.y && m <= end.m); ) {
     const key = `${y}-${String(m + 1).padStart(2, '0')}`;
-    out.push({ key, label: oneYear ? SHORT_MONTHS[m]! : `${SHORT_MONTHS[m]} ${y}`, token: key });
+    out.push({
+      key,
+      label: months <= 12 ? SHORT_MONTHS[m]! : `${SHORT_MONTHS[m]} ${y}`,
+      token: key,
+    });
     m += 1;
     if (m > 11) {
       m = 0;

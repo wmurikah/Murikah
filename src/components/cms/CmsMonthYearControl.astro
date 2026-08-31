@@ -1,0 +1,93 @@
+---
+/**
+ * The period on a dashboard: a month and a year, and nothing else.
+ *
+ * WHY NOT THE PERIOD CONTROL THE ANALYTICS PAGES USE. That control offers
+ * presets, a year, a quarter, all time and a typed custom range, and it is the
+ * right control for an analyst comparing arbitrary windows. Home is not that
+ * screen. An operating dashboard is read one month at a time — "how did May
+ * go" — and every extra way of asking is a decision taken before the first
+ * figure is read. Two dropdowns are the whole question, and they are the two
+ * words a person uses to ask it.
+ *
+ * IT IS A GET FORM WITH NATIVE SELECTS. No script, no calendar, no popover:
+ * the period lives in the URL as `?period=YYYY-MM`, so a view can be sent to
+ * somebody else, the back button works, and the page is complete with
+ * JavaScript disabled. On a phone each select becomes the system picker.
+ *
+ * THE PERIOD MODULE STILL OWNS THE MEANING. This renders the choice; it does
+ * not decide what a month is, which token the URL carries, or which period the
+ * page falls back to. All of that stays in src/lib/cms/analytics/period.ts, so
+ * Home and the analytics pages cannot drift on what "May 2026" means.
+ */
+import CmsSelect from './CmsSelect.astro';
+import {
+  MONTH_OPTIONS,
+  monthOf,
+  yearOptions,
+  type DataCalendar,
+  type ResolvedPeriod,
+} from '@/lib/cms/analytics/period';
+
+interface Props {
+  /** Where the form submits, which is the page itself. */
+  action: string;
+  period: ResolvedPeriod;
+  /** Which years hold data, so the control cannot offer an empty one. */
+  calendar: DataCalendar;
+  today: Date;
+  /** Any other filter the page holds, carried so applying a month keeps it. */
+  hidden?: Readonly<Record<string, string | null>>;
+  /** Said in five words or fewer when the page moved the month itself. */
+  notice?: string | null;
+  class?: string;
+}
+const { action, period, calendar, today, hidden = {}, notice, class: className } = Astro.props;
+
+const { month, year } = monthOf(period, today);
+const years = yearOptions(calendar, today, year);
+---
+
+<form
+  method="get"
+  action={action}
+  class:list={['flex flex-wrap items-end gap-x-3 gap-y-2', className]}
+>
+  {
+    Object.entries(hidden).map(([name, value]) =>
+      value === null ? null : <input type="hidden" name={name} value={value} />,
+    )
+  }
+  <CmsSelect
+    id="home-month"
+    name="month"
+    label="Month"
+    size="sm"
+    options={[...MONTH_OPTIONS]}
+    value={String(month)}
+  />
+  <CmsSelect
+    id="home-year"
+    name="year"
+    label="Year"
+    size="sm"
+    options={years}
+    value={String(year)}
+  />
+  <slot />
+  <button
+    type="submit"
+    class="inline-flex h-9 items-center rounded-cms bg-cms-royal px-3.5 text-cms-caption font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus"
+  >
+    Apply
+  </button>
+  {
+    /*
+      THE PAGE MOVED THE MONTH AND SAYS SO IN FIVE WORDS. The fallback that
+      lands a reader on the most recent month holding data is silent otherwise,
+      and a dashboard that quietly shows a different month from the one asked
+      for is a dashboard nobody can trust.
+    */
+  }
+  {notice && <span class="text-cms-caption text-cms-muted">{notice}</span>}
+</form>

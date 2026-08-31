@@ -42,9 +42,10 @@ import {
 import {
   calendarSql,
   choosePeriod,
-  parsePeriod,
-  previousPeriod,
+  parseDashboardPeriod,
   readCalendar,
+  trailingMonths,
+  trendSpan,
   withPeriod,
 } from '../../src/lib/cms/analytics/period.ts';
 import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
@@ -240,15 +241,20 @@ test('/app stays inside its subrequest budget', async () => {
     const calendar = readCalendar(
       calendarRows.ok ? (calendarRows.value.rows as Record<string, unknown>[]) : [],
     );
-    const choice = choosePeriod(parsePeriod(params, today), calendar, today, false);
+    const choice = choosePeriod(parseDashboardPeriod(params, today).period, calendar, today, false);
     const shown = choice.period;
-    const before = previousPeriod(shown);
     const active = withPeriod(filter, shown);
     const scope = { from: shown.from, to: shown.to, affiliateId: filter.affiliateId };
-    const priorScope = before === null ? null : { ...scope, from: before.from, to: before.to };
+    // The trend reads the twelve months ending at the month on screen, so it
+    // carries its own window while every other figure reads the month itself.
+    const trendWindow = trailingMonths(shown, trendSpan(shown, calendar));
+    const trendScope = { ...scope, from: trendWindow.from, to: trendWindow.to };
 
-    // EVERYTHING ELSE, IN ONE GO: the exceptions, four counts, four boards,
-    // two trends, two end-to-end spans and the affiliate list.
+    // EVERYTHING ELSE, IN ONE GO: the exceptions, four counts, two boards, two
+    // monthly trends, two end-to-end spans and the affiliate list. The month
+    // before is no longer queried: the trend beside each panel already carries
+    // the twelve months ending at this one, so a second board for it was a
+    // figure the chart above it already draws.
     await Promise.all([
       runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, active, NOW)),
       runSection(b, 'home.po-total', (db) => countPurchaseOrders(db, USER, active, NOW)),
@@ -261,19 +267,11 @@ test('/app stays inside its subrequest budget', async () => {
       ),
       runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', scope)),
       runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', scope)),
-      priorScope === null
-        ? Promise.resolve(null)
-        : runSection(b, 'home.purchases-prev', (db) =>
-            approvalBoard(db, 'PURCHASE_ORDER', priorScope),
-          ),
-      priorScope === null
-        ? Promise.resolve(null)
-        : runSection(b, 'home.sales-prev', (db) => approvalBoard(db, 'SALES_ORDER', priorScope)),
       runSection(b, 'home.purchases-trend', (db) =>
-        approvalTrend(db, 'PURCHASE_ORDER', scope, shown.grain),
+        approvalTrend(db, 'PURCHASE_ORDER', trendScope, 'MONTH'),
       ),
       runSection(b, 'home.sales-trend', (db) =>
-        approvalTrend(db, 'SALES_ORDER', scope, shown.grain),
+        approvalTrend(db, 'SALES_ORDER', trendScope, 'MONTH'),
       ),
       runSection(b, 'home.purchases-cycle', (db) => approvalCycle(db, 'PURCHASE_ORDER', scope)),
       runSection(b, 'home.sales-cycle', (db) => approvalCycle(db, 'SALES_ORDER', scope)),
@@ -286,10 +284,9 @@ test('/app stays inside its subrequest budget', async () => {
     ]);
   });
   assertWithinBudget('/app', trips, statements);
-  // THE FIGURE THE BRIEF ASKS FOR, PRINTED RATHER THAN DESCRIBED. The panels
-  // this phase rebuilt added a KPI strip, two trends and two end-to-end spans
-  // to each side of the page, and the page must not have become more expensive
-  // for it. Sixteen statements were added; no round trip was.
+  // THE FIGURE THE BRIEF ASKS FOR, PRINTED RATHER THAN DESCRIBED. Each panel
+  // carries a KPI strip, a bar chart, a monthly trend and a leaderboard, and
+  // the page must not become more expensive for any of it.
   assert.ok(
     trips <= 6,
     `/app cost ${trips} round trips, up from the 6 it cost before the panels were rebuilt`,

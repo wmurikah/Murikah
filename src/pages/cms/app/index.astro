@@ -59,8 +59,7 @@ import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
-import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
-import CmsFilterBar from '@/components/cms/CmsFilterBar.astro';
+import CmsMonthYearControl from '@/components/cms/CmsMonthYearControl.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
@@ -90,14 +89,14 @@ import {
 import {
   calendarSql,
   choosePeriod,
-  parsePeriod,
+  parseDashboardPeriod,
   periodBuckets,
   periodHref,
-  periodWasChosen,
-  previousPeriod,
   readCalendars,
   periodHasData,
   periodFromToken,
+  trailingMonths,
+  trendSpan,
   withPeriod,
   EMPTY_CALENDAR,
   type DataCalendar,
@@ -182,8 +181,13 @@ const PO_WAITING_STATUS = 'IN_APPROVAL';
 /** The one sales order queue the strip prints a figure for. */
 const SO_LEAD_WAITING = 'PENDING_FINANCE';
 
-const asked = parsePeriod(params, today);
-const explicit = periodWasChosen(params);
+// THE DASHBOARD PERIOD IS A MONTH, and the control that sets it is two
+// dropdowns. Both shapes of URL resolve here: `?month=5&year=2026` from the
+// control, `?period=2026-05` from every drill destination and every link
+// elsewhere in the application.
+const chosenPeriod = parseDashboardPeriod(params, today);
+const asked = chosenPeriod.period;
+const explicit = chosenPeriod.chosen;
 const drillMonth = (asked.from ?? '').slice(0, 7);
 
 let calendar: DataCalendar = EMPTY_CALENDAR;
@@ -192,8 +196,6 @@ let purchaseCalendar: DataCalendar = EMPTY_CALENDAR;
 let salesCalendar: DataCalendar = EMPTY_CALENDAR;
 let purchases: ApprovalBoard | null = null;
 let sales: ApprovalBoard | null = null;
-let previousPurchases: ApprovalBoard | null = null;
-let previousSales: ApprovalBoard | null = null;
 let purchaseTrend: TrendPoint[] = [];
 let salesTrend: TrendPoint[] = [];
 let purchaseCycle: CycleStat | null = null;
@@ -236,7 +238,6 @@ if (user) {
 
     choice = choosePeriod(asked, calendar, today, explicit);
     const shown = choice.period;
-    const before = previousPeriod(shown);
     /** The filter, with the period the page settled on rather than the one asked for. */
     const active = withPeriod(filter, shown);
     const scope: ApprovalScope = {
@@ -244,8 +245,13 @@ if (user) {
       to: shown.to,
       affiliateId: filter.affiliateId,
     };
-    const priorScope: ApprovalScope | null =
-      before === null ? null : { ...scope, from: before.from, to: before.to };
+    // A TREND IS MONTH OVER MONTH, so it reads the year ending at the month on
+    // screen rather than the days inside it. Plotting one month's days put a
+    // mark wherever an approval happened to land and a gap everywhere else,
+    // which drew as scatter and answered a question nobody asked: a dashboard
+    // trend is "is this month better than the ones before it".
+    const trendWindow = trailingMonths(shown, trendSpan(shown, calendar));
+    const trendScope: ApprovalScope = { ...scope, from: trendWindow.from, to: trendWindow.to };
 
     const [
       attention,
@@ -253,8 +259,6 @@ if (user) {
       soQueue,
       po,
       so,
-      poPrev,
-      soPrev,
       poBuckets,
       soBuckets,
       poSpan,
@@ -274,23 +278,15 @@ if (user) {
         approvalBoard(client, 'PURCHASE_ORDER', scope),
       ),
       runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
-      // THE COMPARISON FOLLOWS THE SELECTION AND IS NEVER CHOSEN SEPARATELY.
-      // It rides in the same queue, so naming last month costs nothing.
-      priorScope === null
-        ? Promise.resolve({ ok: true as const, value: null })
-        : runSection(batcher, 'home.purchases-prev', (client) =>
-            approvalBoard(client, 'PURCHASE_ORDER', priorScope),
-          ),
-      priorScope === null
-        ? Promise.resolve({ ok: true as const, value: null })
-        : runSection(batcher, 'home.sales-prev', (client) =>
-            approvalBoard(client, 'SALES_ORDER', priorScope),
-          ),
+      // THE MONTH BEFORE IS NOT QUERIED SEPARATELY ANY MORE. The trend beside
+      // each panel already carries the twelve months ending at this one, so a
+      // second board for last month would be a figure the chart above it
+      // already draws — and two statements for it.
       runSection(batcher, 'home.purchases-trend', (client) =>
-        approvalTrend(client, 'PURCHASE_ORDER', scope, shown.grain),
+        approvalTrend(client, 'PURCHASE_ORDER', trendScope, 'MONTH'),
       ),
       runSection(batcher, 'home.sales-trend', (client) =>
-        approvalTrend(client, 'SALES_ORDER', scope, shown.grain),
+        approvalTrend(client, 'SALES_ORDER', trendScope, 'MONTH'),
       ),
       runSection(batcher, 'home.purchases-cycle', (client) =>
         approvalCycle(client, 'PURCHASE_ORDER', scope),
@@ -309,8 +305,6 @@ if (user) {
     if (attention.ok) customers = attention.value;
     if (poQueue.ok) poWaiting = poQueue.value;
     if (soQueue.ok) soWaiting = soQueue.value;
-    if (poPrev.ok) previousPurchases = poPrev.value;
-    if (soPrev.ok) previousSales = soPrev.value;
     if (poBuckets.ok) purchaseTrend = poBuckets.value;
     if (soBuckets.ok) salesTrend = soBuckets.value;
     if (poSpan.ok) purchaseCycle = poSpan.value;
@@ -338,7 +332,6 @@ if (user) {
 }
 
 const shown = choice.period;
-const before = previousPeriod(shown);
 
 const count = (value: number) => value.toLocaleString('en-KE');
 /**
@@ -415,7 +408,9 @@ const chartOf = (board: ApprovalBoard | null, process: ApprovalProcess) => {
       valueAxis: true,
       categoryName: 'Function',
       markerName: 'Slowest 10%',
-      emptyMessage: `No approval completed in ${shown.label}.`,
+      xAxisLabel: 'Minutes',
+      yAxisLabel: 'Function',
+      emptyMessage: 'No completions this month',
       height: 30 * Math.max(functions.length, 1) + 12,
     },
   );
@@ -481,13 +476,22 @@ const trendOf = (
     row.set(point.bucket, point.medianMinutes);
     byFunction.set(point.fn, row);
   }
-  const functions = board?.functions ?? [];
+
+  // THE LINES ARE THE FUNCTIONS WITH HISTORY, NOT THE ONES BUSY THIS MONTH. A
+  // level that completed nothing in the month on screen is absent from the
+  // board, and taking the series from the board alone would drop its whole
+  // year of history from the chart the moment it had a quiet month.
+  const order = new Map<string, number>();
+  for (const f of board?.functions ?? []) order.set(f.fn, f.order);
+  for (const point of points) if (!order.has(point.fn)) order.set(point.fn, point.order);
+  const functions = [...order.entries()].sort((a, b) => a[1] - b[1]).map(([fn]) => fn);
+
   return lineChart(
-    functions.map((f, index) => ({
-      name: f.fn,
+    functions.map((fn, index) => ({
+      name: fn,
       token: seriesToken(index),
       points: buckets.map<ChartPoint>((bucket) => {
-        const value = byFunction.get(f.fn)?.get(bucket.key) ?? null;
+        const value = byFunction.get(fn)?.get(bucket.key) ?? null;
         return {
           label: bucket.label,
           value,
@@ -499,7 +503,7 @@ const trendOf = (
                   affiliateId: filter.affiliateId,
                   process,
                   view: 'completed',
-                  fn: f.fn,
+                  fn,
                   actor: EVERYONE,
                 }),
         };
@@ -510,14 +514,23 @@ const trendOf = (
       format: formatDuration,
       endLabels: true,
       area: true,
-      emptyMessage: `No approval completed in ${shown.label}.`,
-      height: 220,
+      categoryName: 'Month',
+      xAxisLabel: 'Month',
+      yAxisLabel: 'Minutes',
+      emptyMessage: 'Need more history',
+      // A LINE OVER ONE MONTH IS A DOT. Two months is the least that can show a
+      // direction, so below it the panel says what it needs rather than drawing
+      // a row of isolated points that reads as a scatter.
+      minimumCategories: 2,
+      height: 240,
     },
   );
 };
 
-const purchaseTrendChart = trendOf(purchases, purchaseTrend, 'PURCHASE_ORDER', shown);
-const salesTrendChart = trendOf(sales, salesTrend, 'SALES_ORDER', shown);
+/** The months the two trend lines cover, ending at the month on screen. */
+const trendWindow = trailingMonths(shown, trendSpan(shown, calendar));
+const purchaseTrendChart = trendOf(purchases, purchaseTrend, 'PURCHASE_ORDER', trendWindow);
+const salesTrendChart = trendOf(sales, salesTrend, 'SALES_ORDER', trendWindow);
 
 const volumeOf = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
@@ -599,8 +612,7 @@ const purchaseKpis: Kpi[] = [
     context:
       purchaseCycle === null || purchaseCycle.orders === 0
         ? undefined
-        : `minutes, over ${count(purchaseCycle.orders)} ` +
-          `${purchaseCycle.orders === 1 ? 'order' : 'orders'}`,
+        : `over ${count(purchaseCycle.orders)} ${purchaseCycle.orders === 1 ? 'order' : 'orders'}`,
     token: PANEL_TOKEN.PURCHASE_ORDER,
     href: toPurchases(periodExtra),
     definition:
@@ -616,8 +628,7 @@ const purchaseKpis: Kpi[] = [
     context:
       purchaseSlowest === null
         ? undefined
-        : `${formatDuration(purchaseSlowest.p90Minutes)} in the slowest tenth, ` +
-          `${formatDuration(purchaseSlowest.medianMinutes)} typical`,
+        : `${formatDuration(purchaseSlowest.p90Minutes)} slowest tenth`,
     token: colourOf(purchases, 'PURCHASE_ORDER', purchaseSlowest?.fn ?? null),
     href:
       purchaseSlowest === null
@@ -649,7 +660,7 @@ const salesKpis: Kpi[] = [
   {
     label: 'Completions',
     value: figure(sales === null ? null : volumeOf(sales)),
-    context: `across four functions in ${shown.label}`,
+    context: `completed in ${shown.label}`,
     token: PANEL_TOKEN.SALES_ORDER,
     href: everyFunctionRecords('SALES_ORDER'),
     definition:
@@ -665,7 +676,7 @@ const salesKpis: Kpi[] = [
     context:
       financeApproval === undefined
         ? undefined
-        : `minutes, over ${count(financeApproval.volume)} ` +
+        : `over ${count(financeApproval.volume)} ` +
           `${financeApproval.volume === 1 ? 'approval' : 'approvals'}`,
     token: colourOf(sales, 'SALES_ORDER', 'Finance approval'),
     href: functionRecords('SALES_ORDER', 'Finance approval', 'typical'),
@@ -682,8 +693,7 @@ const salesKpis: Kpi[] = [
     context:
       salesCycle === null || salesCycle.orders === 0
         ? undefined
-        : `minutes, over ${count(salesCycle.orders)} ` +
-          `${salesCycle.orders === 1 ? 'order' : 'orders'}`,
+        : `over ${count(salesCycle.orders)} ${salesCycle.orders === 1 ? 'order' : 'orders'}`,
     token: PANEL_TOKEN.SALES_ORDER,
     href: toSales(periodExtra),
     definition:
@@ -709,41 +719,6 @@ const salesKpis: Kpi[] = [
 ];
 
 /**
- * The comparison sentence, which names the period it compares against.
- *
- * A percentage against an unnamed baseline is a number nobody can check, so the
- * previous period is spelled out. Where the previous period holds nothing the
- * sentence says that rather than dividing by zero and printing an infinity.
- */
-const MINIMUM_COMPARED_VOLUME = 10;
-const comparison = (board: ApprovalBoard | null, prior: ApprovalBoard | null): string | null => {
-  if (board === null || before === null) return null;
-  const nowVolume = volumeOf(board);
-  const wasVolume = volumeOf(prior);
-  // EACH HALF NAMES ITS OWN ROLE. "0 completed. Nothing completed in July 2026."
-  // read as two claims about two periods, and next to a panel headed August it
-  // looked like the page disagreed with itself. It never did: the first figure
-  // is this period and the second is the one before it.
-  if (wasVolume === 0)
-    return `${count(nowVolume)} completed in ${shown.label}, against none in ${before.label}.`;
-  // A PERCENTAGE AGAINST A HANDFUL IS NOISE DRESSED AS A MEASUREMENT. On the
-  // real extract April 2026 holds one completion and May holds 2,419, and the
-  // arithmetic prints "up 241800%", which tells a reader nothing except that
-  // the baseline was tiny. Below the threshold the two figures are stated and
-  // the ratio is not, because the honest reading is the pair.
-  if (wasVolume < MINIMUM_COMPARED_VOLUME)
-    return (
-      `${count(nowVolume)} completed in ${shown.label}, against ${count(wasVolume)} in ` +
-      `${before.label}, which is too few to compare as a percentage.`
-    );
-  const change = Math.round(((nowVolume - wasVolume) / wasVolume) * 100);
-  const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'level';
-  return `${count(nowVolume)} completed in ${shown.label}, ${direction}${
-    change === 0 ? '' : ` ${Math.abs(change)}%`
-  } on ${before.label} (${count(wasVolume)}).`;
-};
-
-/**
  * How many of THIS PANEL's completions lie outside the period.
  *
  * It used to be `calendar.total`, the page's whole mixed population — leads,
@@ -765,11 +740,12 @@ const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
   if (volumeOf(board) > 0 || own.total === 0 || own.latest === null) return null;
   const target = periodFromToken(own.latest.slice(0, 7), today);
   if (target === null || periodHasData(shown, own)) return null;
+  // THREE WORDS AND A WAY OUT. This used to be two sentences carrying a count,
+  // a comparison and a month; on a dashboard it is a state, and the state is
+  // "this month is empty and another one is not". The count it dropped is still
+  // one click away in the month it belongs to.
   return {
-    line:
-      `Nothing here in ${shown.label}. ${count(own.total)} ` +
-      `${own.total === 1 ? 'completion sits' : 'completions sit'} in other periods, the most ` +
-      `recent in ${target.label}.`,
+    line: `No ${shown.label.split(' ')[0]} data.`,
     href: periodHref('/app', target),
     label: `Show ${target.label}`,
   };
@@ -799,59 +775,42 @@ const TREND_DEFINITION = `${DEFINITION} Each line is one function's typical figu
   shown.grain === 'HOUR' ? 'hour' : shown.grain === 'DAY' ? 'day' : 'month'
 }, and a break in a line is a period with no completions rather than a completion of no length.`;
 
-/** The affiliate now in force, for the control and for the one line beneath it. */
-const affiliateName = affiliates.find((one) => one.value === filter.affiliateId)?.label ?? null;
 const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates];
 ---
 
 <CmsLayout title="Home" width="data">
   <CmsPageHeader title="Home" definition={DEFINITION} />
 
-  <div class="flex flex-col gap-3">
-    <CmsPeriodControl
-      action="/app"
-      period={shown}
-      calendar={calendar}
-      today={today}
-      open={params.get('pick') === '1'}
-      notice={choice.notice}
-      revertHref={choice.fellBackFrom === null
-        ? null
-        : periodHref('/app', choice.fellBackFrom, { pick: null })}
-      revertLabel={choice.fellBackFrom === null ? null : `Show ${choice.fellBackFrom.label} anyway`}
-    />
-
-    {
-      /*
-        ONE FILTER, ABOVE BOTH PANELS, APPLIED TO BOTH.
-        It is a GET form with a native select, so it needs no script, it lives
-        in the URL and a view can be sent to somebody else. The period travels
-        with it as hidden fields: a filter that silently reset the period would
-        change two things when a reader changed one.
-      */
-    }
+  {
+    /*
+      ONE CONTROL ROW: MONTH, YEAR, AFFILIATE, APPLY.
+      A dashboard period is a month, so it is asked for the way a person says
+      it. The affiliate rides in the same form rather than a second one beside
+      it: two forms meant two Apply buttons and two ways to lose the other's
+      choice, and a reader changing one thing should press one button.
+    */
+  }
+  <CmsMonthYearControl
+    action="/app"
+    period={shown}
+    calendar={calendar}
+    today={today}
+    hidden={{ affiliateId: affiliates.length === 0 ? filter.affiliateId : null }}
+    notice={choice.fellBackFrom === null ? null : `${choice.fellBackFrom.label} was empty`}
+  >
     {
       affiliates.length > 0 && (
-        <CmsFilterBar action="/app">
-          <input type="hidden" name="period" value={shown.key} />
-          {shown.key === 'custom' && shown.from !== null && (
-            <input type="hidden" name="from" value={shown.from} />
-          )}
-          {shown.key === 'custom' && shown.to !== null && (
-            <input type="hidden" name="to" value={shown.to} />
-          )}
-          <CmsSelect
-            id="home-affiliate"
-            name="affiliateId"
-            label="Affiliate"
-            size="sm"
-            options={affiliateOptions}
-            value={filter.affiliateId ?? ''}
-          />
-        </CmsFilterBar>
+        <CmsSelect
+          id="home-affiliate"
+          name="affiliateId"
+          label="Affiliate"
+          size="sm"
+          options={affiliateOptions}
+          value={filter.affiliateId ?? ''}
+        />
       )
     }
-  </div>
+  </CmsMonthYearControl>
 
   {connectionFailed && <CmsErrorState title="The dashboard could not be loaded" />}
   {
@@ -884,7 +843,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
     */
   }
   <div class="grid gap-6 lg:grid-cols-2">
-    <section class="flex flex-col gap-4" aria-labelledby="panel-purchases">
+    <section class="flex min-w-0 flex-col gap-4" aria-labelledby="panel-purchases">
       <h2 id="panel-purchases" class="text-cms-section font-semibold text-cms-ink">
         Purchase orders
       </h2>
@@ -898,7 +857,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         strip still reads as one block of four.
       */
       }
-      <div class="grid grid-cols-2 gap-2">
+      <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         {
           purchaseKpis.map((kpi) => (
             <CmsKpiCard
@@ -929,32 +888,27 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
           so once and offers the screen where they are set.
         */
       }
+      {
+        /*
+          FOUR WORDS AND A LINK. The reason no dashed rule is drawn used to be a
+          full sentence under every chart, twice on the page. The fact still has
+          to be said — a missing target line and a met target look identical —
+          but a dashboard says it in the space of a label.
+        */
+      }
       <p class="text-cms-caption text-cms-muted">
-        No approval target is configured, so no target line is drawn.{' '}
+        No target set.{' '}
         {
           maySetTargets && (
             <a
-              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
               href="/app/administration/sla"
             >
-              Set approval targets
+              Set targets
             </a>
           )
         }
       </p>
-      {
-        affiliateName !== null && (
-          <p class="text-cms-caption text-cms-muted">
-            The purchase order extract carries no affiliate, so every order is Group-wide and stays
-            in view under {affiliateName}.
-          </p>
-        )
-      }
-      {
-        comparison(purchases, previousPurchases) !== null && (
-          <p class="text-cms-body-sm text-cms-muted">{comparison(purchases, previousPurchases)}</p>
-        )
-      }
       {
         /*
           NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
@@ -964,10 +918,10 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       }
       {
         elsewhere(purchaseCalendar, purchases) !== null && (
-          <p class="text-cms-body-sm text-cms-muted">
+          <p class="text-cms-caption text-cms-muted">
             {elsewhere(purchaseCalendar, purchases)!.line}{' '}
             <a
-              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
               href={elsewhere(purchaseCalendar, purchases)!.href}
             >
               {elsewhere(purchaseCalendar, purchases)!.label}
@@ -995,7 +949,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       />
     </section>
 
-    <section class="flex flex-col gap-4" aria-labelledby="panel-sales">
+    <section class="flex min-w-0 flex-col gap-4" aria-labelledby="panel-sales">
       <h2 id="panel-sales" class="text-cms-section font-semibold text-cms-ink">Sales orders</h2>
 
       {
@@ -1007,7 +961,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         strip still reads as one block of four.
       */
       }
-      <div class="grid grid-cols-2 gap-2">
+      <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         {
           salesKpis.map((kpi) => (
             <CmsKpiCard
@@ -1031,30 +985,33 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         unit="minutes"
         coverage={`${count(volumeOf(sales))} completions in ${shown.label}`}
       />
+      {
+        /*
+          FOUR WORDS AND A LINK. The reason no dashed rule is drawn used to be a
+          full sentence under every chart, twice on the page. The fact still has
+          to be said — a missing target line and a met target look identical —
+          but a dashboard says it in the space of a label.
+        */
+      }
       <p class="text-cms-caption text-cms-muted">
-        No approval target is configured, so no target line is drawn.{' '}
+        No target set.{' '}
         {
           maySetTargets && (
             <a
-              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
               href="/app/administration/sla"
             >
-              Set approval targets
+              Set targets
             </a>
           )
         }
       </p>
       {
-        comparison(sales, previousSales) !== null && (
-          <p class="text-cms-body-sm text-cms-muted">{comparison(sales, previousSales)}</p>
-        )
-      }
-      {
         elsewhere(salesCalendar, sales) !== null && (
-          <p class="text-cms-body-sm text-cms-muted">
+          <p class="text-cms-caption text-cms-muted">
             {elsewhere(salesCalendar, sales)!.line}{' '}
             <a
-              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
               href={elsewhere(salesCalendar, sales)!.href}
             >
               {elsewhere(salesCalendar, sales)!.label}
