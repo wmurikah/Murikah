@@ -147,8 +147,7 @@ const person = records.find((record) => record.person !== null)?.person ?? null;
  * record nobody, so a list of them is honestly headed "not recorded" while a
  * function-wide list is headed "everybody".
  */
-const actorLabel =
-  actor.kind === 'EVERYONE' ? 'everybody' : (person ?? 'an unrecorded actor');
+const actorLabel = actor.kind === 'EVERYONE' ? 'everybody' : (person ?? 'an unrecorded actor');
 const count = (value: number) => value.toLocaleString('en-KE');
 const backToHome = `/app?${new URLSearchParams(periodParams(period)).toString()}`;
 
