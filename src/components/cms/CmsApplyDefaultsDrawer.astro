@@ -1,0 +1,447 @@
+---
+/**
+ * Applying what a job title maps to — one confirmation, one scope each.
+ *
+ * A JOB TITLE MAPPING IS A TEMPLATE, NOT A GRANT. Choosing "Finance Manager"
+ * in the dropdown writes an assignment and nothing else. This drawer is the
+ * separate, deliberate act that turns the title's defaults into real access,
+ * and it exists in this shape for one reason: a dropdown change must never be
+ * able to hand somebody the permissions of the title they were moved to.
+ *
+ * SO EVERY LINE IS OPT-IN AND EVERY LINE NEEDS A SCOPE. Each default arrives
+ * unticked with an empty scope, and Apply stays disabled until every ticked
+ * line has one. Nothing defaults to Group. Where the person's own assignment
+ * gives an obvious answer — an affiliate posting suggests that affiliate — the
+ * control is PRE-FILLED with it and still shown, so the administrator confirms
+ * a visible choice rather than discovering one afterwards. A Group-level
+ * assignment pre-fills nothing, because "they sit at Group" is not a reason to
+ * hand out Group-wide data access.
+ *
+ * THE SERVER DOES NOT TRUST ANY OF IT. It re-reads the title's mapping and
+ * refuses a role that is not in it, requires the scope again, checks
+ * ADMIN.ROLES.MANAGE for the access half and ADMIN.WORKFLOW_ROLES.MANAGE for
+ * the authority half separately, and refuses the whole request if the subject
+ * is the caller. This drawer is the convenience; none of it is the control.
+ */
+import CmsDrawer from './CmsDrawer.astro';
+import CmsButton from './CmsButton.astro';
+import CmsSelect from './CmsSelect.astro';
+import { SCOPE_TYPES } from '@/lib/cms/auth/rbac';
+import { WORKFLOW_SCOPE_TYPES } from '@/lib/cms/workflow/model';
+import type { MappingRow } from '@/lib/cms/repos/jobTitleMappings';
+import type { AssignmentRow } from '@/lib/cms/repos/userAdmin';
+
+interface Props {
+  userId: string;
+  suggested: { access: MappingRow[]; workflow: MappingRow[] };
+  /** The person's current primary assignment, which is where a suggestion comes from. */
+  primary: AssignmentRow | undefined;
+  heldRoleIds: readonly string[];
+  countries: { value: string; label: string }[];
+  affiliates: { value: string; label: string }[];
+  units: { value: string; label: string }[];
+  teams: { value: string; label: string }[];
+  mayManageRoles: boolean;
+  mayManageAuthority: boolean;
+}
+const {
+  userId,
+  suggested,
+  primary,
+  heldRoleIds,
+  countries,
+  affiliates,
+  units,
+  teams,
+  mayManageRoles,
+  mayManageAuthority,
+} = Astro.props;
+
+/**
+ * The scope this person's own posting suggests — and never GROUP.
+ *
+ * An affiliate posting suggests that affiliate; a country posting that
+ * country; a business unit that unit. A GROUP posting suggests nothing at all,
+ * so the control opens empty and the administrator has to decide. Widening is
+ * always a decision somebody makes on purpose.
+ */
+const suggestion =
+  primary === undefined || primary.level === 'GROUP'
+    ? { scopeType: '', targetId: '' }
+    : primary.level === 'AFFILIATE'
+      ? { scopeType: 'AFFILIATE', targetId: primary.affiliateId ?? '' }
+      : primary.level === 'COUNTRY'
+        ? { scopeType: 'COUNTRY', targetId: primary.countryId ?? '' }
+        : { scopeType: 'BUSINESS_UNIT', targetId: primary.businessUnitId ?? '' };
+
+const roleScopeOptions = [
+  { value: '', label: 'Choose a scope' },
+  ...SCOPE_TYPES.map((value) => ({
+    value,
+    label:
+      value === 'OWN'
+        ? 'Own records only'
+        : value === 'GROUP'
+          ? 'Group, every record'
+          : value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' '),
+  })),
+];
+const authorityScopeOptions = [
+  { value: '', label: 'Choose a scope' },
+  ...WORKFLOW_SCOPE_TYPES.map((value) => ({
+    value,
+    label:
+      value === 'GROUP'
+        ? 'Group, every affiliate'
+        : value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' '),
+  })),
+];
+/**
+ * EVERY TARGET LIST, RENDERED ONCE, READ BY THE BROWSER.
+ *
+ * The scope control can be changed after the drawer opens, and the list of
+ * things it applies to changes with it: countries for COUNTRY, affiliates for
+ * AFFILIATE. Rendering only the suggested scope's list would leave a control
+ * offering countries under an affiliate scope the moment somebody switched.
+ * One data island, four lists, repopulated on change — and no round trip.
+ */
+const targetsByScope = {
+  COUNTRY: countries,
+  AFFILIATE: affiliates,
+  BUSINESS_UNIT: units,
+  TEAM: teams,
+};
+const targetOptions = (kind: string) => [
+  { value: '', label: 'Choose one' },
+  ...(targetsByScope[kind as keyof typeof targetsByScope] ?? []),
+];
+const held = new Set(heldRoleIds);
+const applicableAccess = mayManageRoles ? suggested.access : [];
+const applicableWorkflow = mayManageAuthority ? suggested.workflow : [];
+---
+
+<CmsDrawer id="cms-applydefaults-drawer" tone="form" title="Apply mapped access">
+  <form
+    id="cms-applydefaults-form"
+    data-user-id={userId}
+    data-job-title-id={primary?.jobTitleId ?? ''}
+    novalidate
+    class="flex flex-col gap-4"
+  >
+    <p
+      id="cms-applydefaults-error"
+      role="alert"
+      hidden
+      class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+    >
+    </p>
+    <p class="text-cms-body-sm text-cms-muted">
+      Nothing is granted until you apply it. Each needs a scope.
+    </p>
+    <script
+      is:inline
+      type="application/json"
+      id="cms-scope-targets"
+      set:html={JSON.stringify(targetsByScope)}
+    />
+
+    {
+      applicableAccess.length > 0 && (
+        <Fragment>
+          <p class="text-cms-body-sm font-semibold text-cms-navy">Access roles</p>
+          {applicableAccess.map((mapping) => (
+            <div
+              class="flex flex-col gap-2 rounded-cms border border-cms-line p-3"
+              data-default-kind="ACCESS"
+              data-target-id={mapping.targetId}
+            >
+              <label class="flex items-center gap-2 text-cms-body-sm font-medium text-cms-ink">
+                <input
+                  type="checkbox"
+                  data-default-pick
+                  disabled={held.has(mapping.targetId)}
+                  class="h-4 w-4 rounded-sm border-cms-line text-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                />
+                {mapping.targetName}
+                {held.has(mapping.targetId) && (
+                  <span class="text-cms-caption font-normal text-cms-muted">Already held</span>
+                )}
+              </label>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <CmsSelect
+                  id={`ad-scope-${mapping.mappingId}`}
+                  name="scopeType"
+                  label="Scope"
+                  size="sm"
+                  options={roleScopeOptions}
+                  value={suggestion.scopeType}
+                />
+                <div data-default-target hidden={suggestion.scopeType === ''}>
+                  <CmsSelect
+                    id={`ad-target-${mapping.mappingId}`}
+                    name="targetId"
+                    label="Applies to"
+                    size="sm"
+                    options={targetOptions(suggestion.scopeType)}
+                    value={suggestion.targetId}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </Fragment>
+      )
+    }
+
+    {
+      applicableWorkflow.length > 0 && (
+        <Fragment>
+          <p class="text-cms-body-sm font-semibold text-cms-navy">Workflow authority</p>
+          {applicableWorkflow.map((mapping) => (
+            <div
+              class="flex flex-col gap-2 rounded-cms border border-cms-line p-3"
+              data-default-kind="WORKFLOW"
+              data-target-id={mapping.targetId}
+            >
+              <label class="flex items-center gap-2 text-cms-body-sm font-medium text-cms-ink">
+                <input
+                  type="checkbox"
+                  data-default-pick
+                  class="h-4 w-4 rounded-sm border-cms-line text-cms-royal focus-visible:ring-2 focus-visible:ring-focus"
+                />
+                {mapping.targetName}
+              </label>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <CmsSelect
+                  id={`ad-wscope-${mapping.mappingId}`}
+                  name="scopeType"
+                  label="Scope"
+                  size="sm"
+                  options={authorityScopeOptions}
+                  value={suggestion.scopeType === 'TEAM' ? '' : suggestion.scopeType}
+                />
+                <div data-default-target hidden={suggestion.scopeType === ''}>
+                  <CmsSelect
+                    id={`ad-wtarget-${mapping.mappingId}`}
+                    name="targetId"
+                    label="Applies to"
+                    size="sm"
+                    options={targetOptions(suggestion.scopeType)}
+                    value={suggestion.targetId}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </Fragment>
+      )
+    }
+  </form>
+
+  <Fragment slot="actions">
+    <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+    <button
+      type="submit"
+      id="cms-applydefaults-save"
+      form="cms-applydefaults-form"
+      disabled
+      class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white transition-colors duration-150 outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      Apply
+    </button>
+  </Fragment>
+</CmsDrawer>
+
+<script>
+  interface Line {
+    kind: string;
+    targetId: string;
+    scopeType: string;
+    target: string;
+  }
+
+  const drawer = document.getElementById('cms-applydefaults-drawer') as HTMLDialogElement | null;
+  const form = document.getElementById('cms-applydefaults-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('cms-applydefaults-error');
+  const save = document.getElementById('cms-applydefaults-save') as HTMLButtonElement | null;
+
+  if (drawer && form && save) {
+    // Which scopes carry a target of their own. OWN and GROUP carry none, and
+    // the two scope CHECKs in the schema say so.
+    const TARGETED = ['COUNTRY', 'AFFILIATE', 'BUSINESS_UNIT', 'TEAM'];
+
+    const island = document.getElementById('cms-scope-targets');
+    const targets = ((): Record<string, { value: string; label: string }[]> => {
+      try {
+        return JSON.parse(island?.textContent ?? '{}') as Record<
+          string,
+          { value: string; label: string }[]
+        >;
+      } catch {
+        return {};
+      }
+    })();
+
+    /**
+     * The one select in a row, narrowed by instance rather than by a generic.
+     *
+     * `querySelector<HTMLSelectElement>` does not typecheck against this DOM
+     * lib: `HTMLSelectElement.remove(index)` has a different signature from
+     * `Element.remove()`, so the type does not satisfy the generic's `Element`
+     * constraint. The instance check is exact and costs nothing.
+     */
+    const selectIn = (row: Element, name: string): HTMLSelectElement | null => {
+      const node = row.querySelector(`select[name="${name}"]`);
+      return node instanceof HTMLSelectElement ? node : null;
+    };
+
+    /** The list a scope applies to, rebuilt when the scope changes. */
+    const repopulate = (select: HTMLSelectElement, scope: string) => {
+      if (select.dataset.forScope === scope) return;
+      const keep = select.value;
+      select.replaceChildren();
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'Choose one';
+      select.appendChild(blank);
+      for (const option of targets[scope] ?? []) {
+        const node = document.createElement('option');
+        node.value = option.value;
+        node.textContent = option.label;
+        select.appendChild(node);
+      }
+      select.dataset.forScope = scope;
+      // Keep the administrator's choice where the new list still holds it, so
+      // flipping a scope back and forth does not silently clear the target.
+      if ((targets[scope] ?? []).some((option) => option.value === keep)) select.value = keep;
+    };
+
+    const rows = () => Array.from(form.querySelectorAll<HTMLElement>('[data-default-kind]'));
+    const read = (row: HTMLElement): Line => ({
+      kind: row.dataset.defaultKind ?? '',
+      targetId: row.dataset.targetId ?? '',
+      scopeType: selectIn(row, 'scopeType')?.value ?? '',
+      target: selectIn(row, 'targetId')?.value ?? '',
+    });
+    const picked = (row: HTMLElement) =>
+      row.querySelector<HTMLInputElement>('[data-default-pick]')?.checked === true;
+
+    /**
+     * APPLY IS DISABLED UNTIL EVERY TICKED LINE IS COMPLETE. A greyed button
+     * beside a half-filled row is a clearer statement than a request that
+     * reaches the server and comes back with a field error, and it makes
+     * "apply by accident" impossible rather than merely unlikely.
+     */
+    const reflect = () => {
+      let ready = false;
+      let blocked = false;
+      for (const row of rows()) {
+        const line = read(row);
+        const targeted = TARGETED.includes(line.scopeType);
+        const targetBox = row.querySelector<HTMLElement>('[data-default-target]');
+        if (targetBox) targetBox.hidden = !targeted;
+        const targetSelect = selectIn(row, 'targetId');
+        if (targetSelect && targeted) {
+          repopulate(targetSelect, line.scopeType);
+          line.target = targetSelect.value;
+        }
+        if (!picked(row)) continue;
+        ready = true;
+        if (line.scopeType === '' || (targeted && line.target === '')) blocked = true;
+      }
+      save.disabled = !ready || blocked;
+    };
+
+    form.addEventListener('change', reflect);
+    form.addEventListener('input', reflect);
+
+    document.addEventListener('click', (event) => {
+      if (!(event.target as HTMLElement | null)?.closest('[data-cms-apply-defaults]')) return;
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+      reflect();
+      drawer.showModal();
+      form.querySelector<HTMLElement>('[data-default-pick]')?.focus();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      save.disabled = true;
+      const roles: Record<string, unknown>[] = [];
+      const authorities: Record<string, unknown>[] = [];
+      for (const row of rows()) {
+        if (!picked(row)) continue;
+        const line = read(row);
+        const scoped = {
+          scopeType: line.scopeType,
+          countryId: line.scopeType === 'COUNTRY' ? line.target : null,
+          affiliateId: line.scopeType === 'AFFILIATE' ? line.target : null,
+          businessUnitId: line.scopeType === 'BUSINESS_UNIT' ? line.target : null,
+        };
+        if (line.kind === 'ACCESS') {
+          roles.push({
+            roleId: line.targetId,
+            ...scoped,
+            teamId: line.scopeType === 'TEAM' ? line.target : null,
+          });
+        } else {
+          authorities.push({ workflowRoleId: line.targetId, ...scoped });
+        }
+      }
+      try {
+        const response = await fetch(
+          `/api/admin/users/${encodeURIComponent(form.dataset.userId ?? '')}/apply-title-defaults`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              jobTitleId: form.dataset.jobTitleId ?? '',
+              roles,
+              authorities,
+            }),
+          },
+        );
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent =
+            payload?.error?.fields?.[0]?.message ??
+            payload?.error?.message ??
+            'That could not be applied. Please try again.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+        }
+      } finally {
+        reflect();
+      }
+    });
+
+    /**
+     * ARRIVING FROM THE CREATE DRAWER OPENS THIS, AND OPENS NOTHING ELSE.
+     *
+     * `?defaults=1` is a request to SHOW the panel, which is why it is safe to
+     * honour from a URL: a link cannot tick a line, cannot choose a scope and
+     * cannot submit. Everything that grants access is still the administrator
+     * pressing Apply on a form the server re-checks.
+     */
+    if (new URLSearchParams(window.location.search).get('defaults') === '1') {
+      reflect();
+      drawer.showModal();
+      form.querySelector<HTMLElement>('[data-default-pick]')?.focus();
+    }
+
+    reflect();
+  }
+</script>

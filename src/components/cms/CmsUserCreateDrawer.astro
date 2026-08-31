@@ -37,8 +37,26 @@ interface Props {
   businessUnits: BusinessUnitRow[];
   departments: DepartmentRow[];
   titles: JobTitleRow[];
+  /**
+   * The titles that carry configured defaults, so the drawer can say so.
+   *
+   * IT SAYS SO AND DOES NOT APPLY THEM. Creating a person writes the user and
+   * their assignment; access is a separate, confirmed act with a scope chosen
+   * per role. What this buys is that nobody has to go looking: the
+   * administrator lands on the new person's Edit tab with the defaults already
+   * offered, rather than creating a record and reopening it to find out there
+   * was anything to apply.
+   */
+  titlesWithDefaults?: readonly string[];
 }
-const { countries, affiliates, businessUnits, departments, titles } = Astro.props;
+const {
+  countries,
+  affiliates,
+  businessUnits,
+  departments,
+  titles,
+  titlesWithDefaults = [],
+} = Astro.props;
 
 const levelOptions = ASSIGNMENT_LEVELS.map((value) => ({
   value,
@@ -104,6 +122,14 @@ const unitOptions = businessUnits
       options={titleOptions}
       required
     />
+    <p
+      id="cms-create-mapped"
+      hidden
+      class="-mt-2 text-cms-caption text-cms-muted"
+      data-titles={titlesWithDefaults.join(',')}
+    >
+      Mapped access available. Offered after you create them.
+    </p>
     <CmsSelect
       id="u-departmentId"
       name="departmentId"
@@ -295,6 +321,20 @@ const unitOptions = businessUnits
             }),
           });
 
+          // STRAIGHT TO WHERE THE DEFAULTS ARE OFFERED. The Edit tab carries
+          // the Position & Access panel and the confirm-with-a-scope drawer,
+          // so a title with defaults hands the administrator the next step
+          // instead of leaving them to discover it. Nothing is applied by the
+          // navigation itself.
+          const mapped = document.getElementById('cms-create-mapped');
+          const withDefaults = (mapped?.dataset.titles ?? '').split(',').filter(Boolean);
+          if (withDefaults.includes(String(assignment.get('jobTitleId') ?? ''))) {
+            window.location.assign(
+              `/app/administration/users/${encodeURIComponent(payload.user.userId)}?tab=edit&defaults=1`,
+            );
+            return;
+          }
+
           drawer.close();
           if (result && resultTitle && resultBody) {
             result.hidden = false;
@@ -327,6 +367,18 @@ const unitOptions = businessUnits
       }
     });
 
+    /** The notice appears only for a title that actually has defaults. */
+    const reflectMapped = () => {
+      const mapped = document.getElementById('cms-create-mapped');
+      if (!mapped) return;
+      const withDefaults = (mapped.dataset.titles ?? '').split(',').filter(Boolean);
+      const chosen = form.elements.namedItem('jobTitleId');
+      const value = chosen instanceof HTMLSelectElement ? chosen.value : '';
+      mapped.hidden = !withDefaults.includes(value);
+    };
+    form.addEventListener('change', reflectMapped);
+
     applyLevel();
+    reflectMapped();
   }
 </script>
