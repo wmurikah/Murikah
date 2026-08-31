@@ -88,7 +88,7 @@ const states = {
 };
 ---
 
-<div class:list={['relative overflow-hidden rounded-cms bg-cms-surface', className]}>
+<div class:list={['relative min-w-0 overflow-hidden rounded-cms bg-cms-surface', className]}>
   {
     token && (
       <span
@@ -139,7 +139,7 @@ const states = {
         </span>
         <span
           data-figure
-          class="text-cms-kpi font-semibold text-cms-ink tabular-nums underline-offset-4"
+          class="text-cms-kpi font-semibold break-words text-cms-ink tabular-nums underline-offset-4"
         >
           {value}
         </span>
@@ -159,7 +159,7 @@ const states = {
         </span>
         <span
           class:list={[
-            'text-cms-kpi font-semibold tabular-nums',
+            'text-cms-kpi font-semibold break-words tabular-nums',
             absent ? 'text-cms-muted' : 'text-cms-ink',
           ]}
         >
