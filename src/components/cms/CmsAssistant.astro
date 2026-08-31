@@ -236,6 +236,7 @@ const { id } = Astro.props;
       body = null;
     }
 
+    transcript?.querySelector('[data-working="true"]')?.remove();
     if (send !== null) send.disabled = false;
     working.remove();
 
