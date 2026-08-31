@@ -56,6 +56,8 @@
  * were faster and one in ten was slower.
  */
 import type { CmsColumn } from '@/components/cms/CmsDataTable.astro';
+import type { ApprovalActor, ApprovalProcess, RecordView } from '../repos/approvalSla.ts';
+import { periodParams, type ResolvedPeriod } from './period.ts';
 
 /** The plain-English headers, in the one order both tables use. */
 export const LEADERBOARD_HEADERS = ['Person', 'Volume', 'Typical', 'Slowest 10%'] as const;
@@ -104,3 +106,39 @@ export const FIGURE_DESTINATIONS: Readonly<Record<string, string>> = {
   Typical: 'typical',
   'Slowest 10%': 'tail',
 };
+
+/**
+ * WHERE A FIGURE'S RECORDS LIVE, SERIALISED IN EXACTLY ONE PLACE.
+ *
+ * Every drillable figure in both panels comes through here: a bar, a point on a
+ * trend, and each of the three columns. That is what makes "the destination
+ * count equals the figure" a property of the code rather than an agreement
+ * between two files. The failure it removes is specific and was live: the page
+ * narrowed its aggregates by an affiliate while the leaderboard's own href
+ * builder did not carry one, so every figure opened a wider population than the
+ * number that was clicked, with nothing on either screen saying so.
+ *
+ * `person=none` is how the two sales order functions that record no actor are
+ * addressed, and `all=1` is how a whole function across everybody is. An absent
+ * `user` cannot mean both, which is why neither is expressed by absence.
+ */
+export function approvalRecordsHref(options: {
+  readonly period: ResolvedPeriod;
+  readonly affiliateId: string | null;
+  readonly process: ApprovalProcess;
+  readonly view: RecordView;
+  readonly fn: string;
+  readonly actor: ApprovalActor;
+}): string {
+  const params = new URLSearchParams({
+    ...periodParams(options.period),
+    process: options.process,
+    view: options.view,
+    fn: options.fn,
+  });
+  if (options.affiliateId !== null) params.set('affiliateId', options.affiliateId);
+  if (options.actor.kind === 'EVERYONE') params.set('all', '1');
+  else if (options.actor.userId === null) params.set('person', 'none');
+  else params.set('user', options.actor.userId);
+  return `/app/performance/approvals?${params.toString()}`;
+}
