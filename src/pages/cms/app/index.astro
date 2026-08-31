@@ -68,6 +68,7 @@ import { getCmsEnv } from '@/lib/cms/env';
 import { getDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
+import { canManageSlaRules } from '@/lib/cms/permissions';
 import { formatDuration } from '@/lib/cms/analytics/stats';
 import { approvalRecordsHref } from '@/lib/cms/analytics/leaderboard';
 import { attentionCustomers, type AttentionCustomer } from '@/lib/cms/repos/executive';
@@ -110,6 +111,18 @@ export const prerender = false;
 const principal = Astro.locals.cms;
 const user = principal?.user;
 const userId = user?.userId ?? '';
+/**
+ * Whether the reader may reach the screen where targets are set.
+ *
+ * THE LINK FOLLOWS THE PERMISSION, THE FACT DOES NOT. Everybody reading the
+ * chart deserves to know that no target line is drawn because none is
+ * configured; only somebody who can open the SLA rules screen gets the link to
+ * it, because navigation is filtered by permission everywhere else in this
+ * application and a dashboard must not be the page that leaks an
+ * administration path to people whose rail correctly hides it.
+ */
+const maySetTargets = canManageSlaRules(user?.permissions ?? []);
+
 const params = Astro.url.searchParams;
 const filter = parseFilter(params);
 const today = new Date();
@@ -918,10 +931,16 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       }
       <p class="text-cms-caption text-cms-muted">
         No approval target is configured, so no target line is drawn.{' '}
-        <a
-          class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-          href="/app/administration/sla">Set approval targets</a
-        >
+        {
+          maySetTargets && (
+            <a
+              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              href="/app/administration/sla"
+            >
+              Set approval targets
+            </a>
+          )
+        }
       </p>
       {
         affiliateName !== null && (
@@ -1014,10 +1033,16 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       />
       <p class="text-cms-caption text-cms-muted">
         No approval target is configured, so no target line is drawn.{' '}
-        <a
-          class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-          href="/app/administration/sla">Set approval targets</a
-        >
+        {
+          maySetTargets && (
+            <a
+              class="rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+              href="/app/administration/sla"
+            >
+              Set approval targets
+            </a>
+          )
+        }
       </p>
       {
         comparison(sales, previousSales) !== null && (
