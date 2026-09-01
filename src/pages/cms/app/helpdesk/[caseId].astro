@@ -150,12 +150,20 @@ const allowedMoves = found === null ? [] : [...(CASE_TRANSITIONS[found.status] ?
               label={titleCase(found.priority)}
             />
             {mayManage && allowedMoves.length > 0 && (
-              <CmsButton variant="primary" data-cms-case-status>
+              <CmsButton
+                variant="primary"
+                data-cms-case-status
+                data-cms-modal-open="cms-case-status-modal"
+              >
                 Change status
               </CmsButton>
             )}
             {mayReassign && (
-              <CmsButton variant="secondary" data-cms-case-assign>
+              <CmsButton
+                variant="secondary"
+                data-cms-case-assign
+                data-cms-modal-open="cms-case-assign-modal"
+              >
                 Assign
               </CmsButton>
             )}
@@ -271,7 +279,11 @@ const allowedMoves = found === null ? [] : [...(CASE_TRANSITIONS[found.status] ?
             )}
             {mayManage && (
               <div class="mt-3">
-                <CmsButton variant="secondary" data-cms-case-communicate>
+                <CmsButton
+                  variant="secondary"
+                  data-cms-case-communicate
+                  data-cms-modal-open="cms-case-comm-modal"
+                >
                   Record communication
                 </CmsButton>
               </div>
