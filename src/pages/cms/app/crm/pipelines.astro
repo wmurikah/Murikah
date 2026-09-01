@@ -353,10 +353,7 @@ if (mayManage) {
           ]),
         );
         const orderedStageIds = wanted.map((name) => byName.get(name) ?? '');
-        const restore = busy(
-          reorder.closest('button') as HTMLButtonElement | null,
-          'Reordering…',
-        );
+        const restore = busy(reorder.closest('button') as HTMLButtonElement | null, 'Reordering…');
         const response = await post(
           `/api/crm/pipelines/${encodeURIComponent(pipelineId)}/stage-order`,
           'POST',
@@ -388,7 +385,10 @@ if (mayManage) {
         stageTarget.mode === 'add'
           ? `/api/crm/pipelines/${encodeURIComponent(stageTarget.pipelineId)}/stages`
           : `/api/crm/pipeline-stages/${encodeURIComponent(stageTarget.stageId)}`;
-      const restore = busy(stageForm.querySelector<HTMLButtonElement>('[type="submit"]'), 'Saving…');
+      const restore = busy(
+        stageForm.querySelector<HTMLButtonElement>('[type="submit"]'),
+        'Saving…',
+      );
       const response = await post(
         url,
         stageTarget.mode === 'add' ? 'POST' : 'PATCH',

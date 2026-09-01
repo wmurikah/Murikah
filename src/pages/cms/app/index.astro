@@ -242,8 +242,7 @@ if (user) {
       affiliateId: filter.affiliateId,
     };
 
-    const [attention, poQueue, soQueue, po, so, poSpan, soSpan, affiliateRows] =
-      await Promise.all([
+    const [attention, poQueue, soQueue, po, so, poSpan, soSpan, affiliateRows] = await Promise.all([
       runSection(batcher, 'home.attention', (client) =>
         attentionCustomers(client, userId, active, now),
       ),
@@ -680,7 +679,6 @@ const DEFINITION =
 const BAR_DEFINITION =
   `${DEFINITION} The bar is the typical figure, the pale run past its end is the slowest tenth, ` +
   'and the distance between them is the delay a normal reading misses.';
-
 
 const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates];
 ---
