@@ -35,7 +35,13 @@ const pick = (list: Option[], empty: string) => [
 ---
 
 <div data-cms-case-id={caseId}>
-  <CmsModal id="cms-case-status-modal" title="Change status">
+  {
+    /* confirmOnDirty: a typed resolution summary or reopen reason should not
+      vanish to a stray Escape. Assign below stays prompt-free: two selects
+      and a short reason are cheap to re-enter, and prompting on every modal
+      teaches people to dismiss the prompt that matters. */
+  }
+  <CmsModal id="cms-case-status-modal" title="Change status" confirmOnDirty>
     <form id="cms-case-status-form" novalidate class="flex flex-col gap-4">
       <p
         id="cms-case-status-error"
@@ -122,7 +128,7 @@ const pick = (list: Option[], empty: string) => [
     </Fragment>
   </CmsModal>
 
-  <CmsModal id="cms-case-comm-modal" title="Record communication">
+  <CmsModal id="cms-case-comm-modal" title="Record communication" confirmOnDirty>
     <form id="cms-case-comm-form" novalidate class="flex flex-col gap-4">
       <p
         id="cms-case-comm-error"
@@ -185,6 +191,8 @@ const pick = (list: Option[], empty: string) => [
 </div>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
+
   interface FieldError {
     field: string;
     message: string;
@@ -194,8 +202,6 @@ const pick = (list: Option[], empty: string) => [
   const caseId = root?.dataset.cmsCaseId ?? '';
 
   if (caseId !== '') {
-    const open = (id: string) =>
-      (document.getElementById(id) as HTMLDialogElement | null)?.showModal();
     const statusField = document.getElementById('cs-toStatus') as HTMLSelectElement | null;
     statusField?.addEventListener('change', () => {
       document
@@ -203,10 +209,17 @@ const pick = (list: Option[], empty: string) => [
         ?.toggleAttribute('hidden', statusField.value !== 'RESOLVED');
     });
 
-    const submit = async (formId: string, url: string, errorId: string) => {
+    const submit = async (
+      formId: string,
+      url: string,
+      errorId: string,
+      button: Element | null,
+      busyLabel: string,
+    ) => {
       const form = document.getElementById(formId) as HTMLFormElement | null;
       const errorBox = document.getElementById(errorId);
       if (!form) return;
+      const restore = busy(button instanceof HTMLButtonElement ? button : null, busyLabel);
       const body: Record<string, unknown> = {};
       for (const [name, value] of new FormData(form).entries()) {
         if (typeof value === 'string' && value !== '') body[name] = value;
@@ -237,32 +250,66 @@ const pick = (list: Option[], empty: string) => [
           errorBox.hidden = false;
           errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
         }
+      } finally {
+        restore();
       }
     };
 
+    // NO showModal() HERE, AND NONE MAY RETURN. The visible triggers carry
+    // data-cms-modal-open, so CmsOverlayScript opens these dialogs under the
+    // one shared lifecycle — focus return, page lock, one dialog at a time.
+    // What remains on the trigger click is PREPARATION: a stale error from a
+    // failed earlier attempt must not greet the next open. Entered values are
+    // deliberately kept — closing a modal is not permission to discard what
+    // somebody typed.
     document.addEventListener('click', (event) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-cms-case-status]')) open('cms-case-status-modal');
-      else if (target?.closest('[data-cms-case-assign]')) open('cms-case-assign-modal');
-      else if (target?.closest('[data-cms-case-communicate]')) open('cms-case-comm-modal');
-      else if (target?.closest('[data-cms-case-status-save]'))
+      if (
+        target?.closest(
+          '[data-cms-case-status], [data-cms-case-assign], [data-cms-case-communicate]',
+        )
+      ) {
+        for (const id of [
+          'cms-case-status-error',
+          'cms-case-assign-error',
+          'cms-case-comm-error',
+        ]) {
+          document.getElementById(id)?.toggleAttribute('hidden', true);
+        }
+        return;
+      }
+      const statusSave = target?.closest('[data-cms-case-status-save]');
+      if (statusSave) {
         void submit(
           'cms-case-status-form',
           `/api/service/cases/${encodeURIComponent(caseId)}/status`,
           'cms-case-status-error',
+          statusSave,
+          'Updating…',
         );
-      else if (target?.closest('[data-cms-case-assign-save]'))
+        return;
+      }
+      const assignSave = target?.closest('[data-cms-case-assign-save]');
+      if (assignSave) {
         void submit(
           'cms-case-assign-form',
           `/api/service/cases/${encodeURIComponent(caseId)}/assignment`,
           'cms-case-assign-error',
+          assignSave,
+          'Assigning…',
         );
-      else if (target?.closest('[data-cms-case-comm-save]'))
+        return;
+      }
+      const commSave = target?.closest('[data-cms-case-comm-save]');
+      if (commSave) {
         void submit(
           'cms-case-comm-form',
           `/api/service/cases/${encodeURIComponent(caseId)}/communications`,
           'cms-case-comm-error',
+          commSave,
+          'Recording…',
         );
+      }
     });
   }
 </script>
