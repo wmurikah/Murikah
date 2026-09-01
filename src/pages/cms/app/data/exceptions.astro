@@ -221,7 +221,10 @@ if (mayView) {
     }
     // The success path stays on this page for 1.5s before reloading; the
     // drawer is closed by then, so restoring the button is safe on every path.
-    const restore = busy(form?.querySelector<HTMLButtonElement>('[type="submit"]') ?? null, 'Mapping…');
+    const restore = busy(
+      form?.querySelector<HTMLButtonElement>('[type="submit"]') ?? null,
+      'Mapping…',
+    );
     try {
       const response = await fetch(`/api/data/unresolved-actors/${actorId}/map`, {
         method: 'POST',
