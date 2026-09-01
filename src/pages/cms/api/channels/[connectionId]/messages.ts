@@ -36,7 +36,7 @@ export const POST: APIRoute = async (context) => {
   if (messages.length === 0)
     return invalid([{ field: 'messages', message: 'Send at least one message.' }]);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const ctx = writeContext(context.request, auth.principal);
 

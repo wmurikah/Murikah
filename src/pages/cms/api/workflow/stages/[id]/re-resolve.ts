@@ -46,7 +46,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validatePreview(await readJson(context.request), isoDay(ctx.now));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await reResolveStage(

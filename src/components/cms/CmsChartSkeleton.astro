@@ -1,0 +1,42 @@
+---
+/**
+ * A chart, before the chart: the same card, the same heights, no data.
+ *
+ * Mirrors CmsChart's geometry — the surface card, the title line where the
+ * figcaption sits, the plot block at the chart's own height, the disclosure
+ * line below — so when the real chart replaces this NOTHING MOVES. Layout
+ * shift is what makes a page feel slower than it is: the reader's eye has to
+ * re-find everything it had already found.
+ *
+ * The title is real text rather than a grey bar, because the reader already
+ * knows what is loading and telling them costs nothing. The block is the one
+ * existing skeleton primitive, so the 200ms appearance delay, the reduced-
+ * motion stillness and the aria-hidden rule are inherited, not re-invented.
+ * The accessible loading state is the owner's one status line, not this.
+ *
+ * The height is a literal class on purpose: a class built from a prop is
+ * invisible to the Tailwind compiler and silently generates nothing. Home's
+ * trend charts are 240px; a chart of another height gets its own literal via
+ * `plotClass`.
+ */
+import CmsSkeleton from './CmsSkeleton.astro';
+
+interface Props {
+  title: string;
+  unit?: string;
+  /** A LITERAL Tailwind height class matching the real chart's height. */
+  plotClass?: string;
+  class?: string;
+}
+const { title, unit, plotClass = 'h-[240px]', class: className } = Astro.props;
+---
+
+<figure class:list={['rounded-cms-lg bg-cms-surface p-4', className]}>
+  <figcaption class="mb-3 flex items-start justify-between gap-2">
+    <h3 class="text-cms-body font-semibold text-cms-ink">
+      {title}{unit && <span class="ml-1 font-normal text-cms-muted">({unit})</span>}
+    </h3>
+  </figcaption>
+  <CmsSkeleton variant="block" class:list={['w-full', plotClass]} />
+  <p class="mt-3 text-cms-body-sm text-cms-muted" aria-hidden="true">Loading…</p>
+</figure>

@@ -30,7 +30,7 @@ export const POST: APIRoute = async (context) => {
   if (userId === '') {
     return invalid([{ field: 'userId', message: 'Choose the person this name belongs to.' }]);
   }
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await mapUnresolvedActor(

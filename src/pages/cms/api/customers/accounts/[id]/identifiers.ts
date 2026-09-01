@@ -69,7 +69,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireAccountsView(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const id = context.params.id ?? '';
@@ -97,7 +97,7 @@ export const PATCH: APIRoute = async (context) => {
   );
   if (problems.length > 0) return invalid(problems);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const id = context.params.id ?? '';

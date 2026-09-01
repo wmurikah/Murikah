@@ -27,9 +27,15 @@ interface Props {
   /** The resolved principal from the middleware guard. Null when signed out. */
   principal?: { user: CmsIdentity } | null;
   notificationCount?: number;
-  notificationPreview?: { title: string; createdAt: string }[];
+  /** True when the server already knows the count (the notifications page). */
+  notificationCountKnown?: boolean;
 }
-const { drawerId, principal = null, notificationCount = 0, notificationPreview = [] } = Astro.props;
+const {
+  drawerId,
+  principal = null,
+  notificationCount = 0,
+  notificationCountKnown = false,
+} = Astro.props;
 const user = principal?.user ?? null;
 // Job title and organisational context come from the primary assignment, which
 // an EXTERNAL user does not have at all, so both are optional everywhere.
@@ -109,39 +115,42 @@ const context = user ? organisationLine(user.assignment) : null;
         <CmsIconButton icon="chat" label="Open the assistant" data-cms-modal-open="cms-assistant" />
       )
     }
+    {
+      /*
+        THE BELL IS INSTANT AND ITS NUMBERS ARRIVE AFTERWARDS. The badge and
+        the preview used to be resolved server-side on every page; both are now
+        deferred (see the script below), so the shell never waits on them. The
+        badge starts hidden unless the page already knew its count, and the
+        preview is fetched the first time the menu opens — not on the ninety
+        page views where nobody opens it.
+      */
+    }
     <CmsDropdown id="cms-notifications" label="Notifications">
       <span
         slot="trigger"
         class="relative inline-flex h-10 w-10 items-center justify-center text-cms-muted"
       >
         <CmsIcon name="bell" size={19} />
-        {
-          notificationCount > 0 && (
-            <span class="absolute top-1.5 right-1.5 min-w-4 rounded-full bg-cms-negative px-1 text-[0.625rem] leading-4 font-semibold text-white">
-              {notificationCount}
-            </span>
-          )
-        }
-        <span class="sr-only">
-          Notifications{notificationCount > 0 ? `, ${notificationCount} unread` : ''}
+        <span
+          data-cms-bell-badge
+          data-known={notificationCountKnown ? '1' : undefined}
+          hidden={!(notificationCountKnown && notificationCount > 0)}
+          class="absolute top-1.5 right-1.5 min-w-4 rounded-full bg-cms-negative px-1 text-[0.625rem] leading-4 font-semibold text-white"
+          aria-hidden="true"
+        >
+          {notificationCountKnown && notificationCount > 0 ? notificationCount : ''}
+        </span>
+        <span class="sr-only" data-cms-bell-label>
+          Notifications{
+            notificationCountKnown && notificationCount > 0 ? `, ${notificationCount} unread` : ''
+          }
         </span>
       </span>
-      {
-        notificationPreview.length === 0 ? (
-          <p class="px-2.5 py-4 text-center text-cms-body-sm text-cms-muted">
-            Nothing needs your attention right now.
-          </p>
-        ) : (
-          <ul class="flex flex-col">
-            {notificationPreview.map((item) => (
-              <li class="border-b border-cms-line px-2.5 py-2 last:border-0">
-                <p class="text-cms-body-sm text-cms-ink">{item.title}</p>
-                <p class="text-cms-caption text-cms-muted">{item.createdAt}</p>
-              </li>
-            ))}
-          </ul>
-        )
-      }
+      <div data-cms-bell-preview>
+        <p class="px-2.5 py-4 text-center text-cms-body-sm text-cms-muted">
+          Nothing needs your attention right now.
+        </p>
+      </div>
       <a
         href="/app/notifications"
         class="block border-t border-cms-line px-2.5 py-2 text-center text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
@@ -196,3 +205,114 @@ const context = user ? organisationLine(user.assignment) : null;
     }
   </div>
 </div>
+
+<script>
+  /**
+   * The bell's deferred lifecycle.
+   *
+   * COUNT: fetched once, shortly after first paint, in idle time — the page
+   * never waits on it, and a page that passed its own count (data-known) is
+   * left alone so "just marked read" is not overwritten by a racing fetch.
+   *
+   * PREVIEW: fetched the first time the menu opens, because that is the first
+   * moment anybody needs it. Reused for the rest of the page's life; the
+   * notifications page is one press away for anything longer.
+   *
+   * FAILURE IS SILENCE, NOT A BANNER, AND NEVER A PERMANENT LOADER. A failed
+   * count leaves the badge hidden; a failed preview replaces "Loading" with
+   * the quiet empty line. No retry loop — the next page view asks again.
+   */
+  const badge = document.querySelector<HTMLElement>('[data-cms-bell-badge]');
+  const label = document.querySelector<HTMLElement>('[data-cms-bell-label]');
+  const preview = document.querySelector<HTMLElement>('[data-cms-bell-preview]');
+  const menu = document.getElementById('cms-notifications');
+
+  const paintCount = (count: number) => {
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = String(count > 99 ? '99+' : count);
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+    if (label) label.textContent = count > 0 ? `Notifications, ${count} unread` : 'Notifications';
+  };
+
+  if (badge && badge.dataset.known !== '1') {
+    const fetchCount = () => {
+      fetch('/api/notifications/bell', { headers: { accept: 'application/json' } })
+        .then((response): Promise<unknown> | null => (response.ok ? response.json() : null))
+        .then((raw) => {
+          const data = raw as { count?: number } | null;
+          if (data && typeof data.count === 'number') paintCount(data.count);
+        })
+        .catch(() => {
+          /* The bell is a convenience. The badge stays hidden. */
+        });
+    };
+    // After first paint, in idle time where the browser offers it.
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number })
+      .requestIdleCallback;
+    if (idle) idle(fetchCount);
+    else window.setTimeout(fetchCount, 300);
+  }
+
+  if (menu instanceof HTMLDetailsElement && preview) {
+    let loaded = false;
+    menu.addEventListener('toggle', () => {
+      if (!menu.open || loaded) return;
+      loaded = true;
+      preview.replaceChildren();
+      const loading = document.createElement('p');
+      loading.className = 'px-2.5 py-4 text-center text-cms-body-sm text-cms-muted';
+      loading.textContent = 'Loading\u2026';
+      preview.appendChild(loading);
+
+      const quietLine = (text: string) => {
+        preview.replaceChildren();
+        const line = document.createElement('p');
+        line.className = 'px-2.5 py-4 text-center text-cms-body-sm text-cms-muted';
+        line.textContent = text;
+        preview.appendChild(line);
+      };
+
+      fetch('/api/notifications/bell?preview=1', { headers: { accept: 'application/json' } })
+        .then((response): Promise<unknown> | null => (response.ok ? response.json() : null))
+        .then((raw) => {
+          const data = raw as {
+            count?: number;
+            items?: { title: string; createdAt: string }[];
+          } | null;
+          if (data && typeof data.count === 'number') paintCount(data.count);
+          const items = data?.items ?? [];
+          if (items.length === 0) {
+            quietLine('Nothing needs your attention right now.');
+            return;
+          }
+          // Built with textContent, never markup: a notification title is data.
+          preview.replaceChildren();
+          const list = document.createElement('ul');
+          list.className = 'flex flex-col';
+          for (const item of items) {
+            const row = document.createElement('li');
+            row.className = 'border-b border-cms-line px-2.5 py-2 last:border-0';
+            const title = document.createElement('p');
+            title.className = 'text-cms-body-sm text-cms-ink';
+            title.textContent = item.title;
+            const at = document.createElement('p');
+            at.className = 'text-cms-caption text-cms-muted';
+            at.textContent = item.createdAt;
+            row.appendChild(title);
+            row.appendChild(at);
+            list.appendChild(row);
+          }
+          preview.appendChild(list);
+        })
+        .catch(() => {
+          // A loader must never become the permanent state.
+          quietLine('Nothing needs your attention right now.');
+          loaded = false;
+        });
+    });
+  }
+</script>

@@ -86,7 +86,7 @@ export const POST: APIRoute = async (context) => {
     ]);
   }
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const [allowedRoles, allowedAuthorities] = await Promise.all([

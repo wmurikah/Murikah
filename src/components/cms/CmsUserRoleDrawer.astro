@@ -16,8 +16,7 @@ import CmsDrawer from './CmsDrawer.astro';
 import CmsButton from './CmsButton.astro';
 import CmsInput from './CmsInput.astro';
 import CmsSelect from './CmsSelect.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { SCOPE_TYPES } from '@/lib/cms/auth/rbac';
 import { listRoles } from '@/lib/cms/repos/rbacAdmin';
 import {
@@ -39,7 +38,7 @@ let unitOptions: { value: string; label: string }[] = [];
 let teamOptions: { value: string; label: string }[] = [];
 
 try {
-  const db = await getDb(getCmsEnv());
+  const db = await requestDb(Astro.locals);
   const [roles, countries, affiliates, units, teams] = await Promise.all([
     listRoles(db),
     listCountries(db),

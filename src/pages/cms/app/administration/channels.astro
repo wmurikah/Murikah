@@ -25,8 +25,7 @@ import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageUsers } from '@/lib/cms/permissions';
 import {
   listConnections,
@@ -48,7 +47,7 @@ if (mayManage) {
   try {
     // TWO ROUND TRIPS, in one batch: the connections and the categories a
     // connection that opens cases has to choose from.
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const [rows, categoryRows] = await Promise.all([
       listConnections(db),
       db.execute(
@@ -263,28 +262,35 @@ const STATUS_TONE: Readonly<Record<string, 'success' | 'danger' | 'warning' | 'n
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
   const message = document.querySelector<HTMLElement>('#cms-channel-message');
   document
     .querySelector<HTMLFormElement>('#cms-channel-form')
     ?.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const data = new FormData(event.target as HTMLFormElement);
+      const form = event.target as HTMLFormElement;
+      const restore = busy(form.querySelector<HTMLButtonElement>('[type="submit"]'), 'Saving…');
+      const data = new FormData(form);
       const payload: Record<string, unknown> = {};
       for (const [key, value] of data.entries()) payload[key] = value;
       payload.autoCreateCase = data.get('autoCreateCase') !== null;
-      const response = await fetch('/api/admin/channels', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-      if (!response.ok) {
-        const errors = (body?.errors ?? []) as { message: string }[];
-        if (message)
-          message.textContent =
-            errors.map((e) => e.message).join(' ') || 'The connection could not be saved.';
-        return;
+      try {
+        const response = await fetch('/api/admin/channels', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!response.ok) {
+          const errors = (body?.errors ?? []) as { message: string }[];
+          if (message)
+            message.textContent =
+              errors.map((e) => e.message).join(' ') || 'The connection could not be saved.';
+          return;
+        }
+        location.reload();
+      } finally {
+        restore();
       }
-      location.reload();
     });
 </script>

@@ -13,8 +13,7 @@ import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canUploadImports, canViewImports } from '@/lib/cms/permissions';
 import {
   listBatches,
@@ -40,7 +39,7 @@ let batches: BatchSummaryRow[] = [];
 let loadFailed = false;
 if (mayView) {
   try {
-    batches = await listBatches(await getDb(getCmsEnv()));
+    batches = await listBatches(await requestDb(Astro.locals));
   } catch (error) {
     console.error('[cms.data.history] load failed', error);
     loadFailed = true;

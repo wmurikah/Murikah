@@ -23,8 +23,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
 import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canSeeCreditInformation, canViewSalesOrders } from '@/lib/cms/permissions';
 import { parseFilter, drillTo, filterToQuery } from '@/lib/cms/analytics/filters';
 import {
@@ -80,7 +79,7 @@ const today = new Date();
 const CALENDAR_SOURCES = [{ table: 'sales_orders', column: 'order_created_at' }];
 let calendarRows: Record<string, unknown>[] = [];
 try {
-  const calDb = await getDb(getCmsEnv());
+  const calDb = await requestDb(Astro.locals);
   const found = await calDb.execute({
     sql: calendarSql(CALENDAR_SOURCES),
     args: [drillMonthOf(params, today)],
@@ -104,7 +103,7 @@ let loadFailed = false;
 
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     // Six independent aggregations, run concurrently, all in SQL.
     const [s, a, p, cst, ag, tr, af] = await Promise.all([
       soSummary(db, userId, filter, now),

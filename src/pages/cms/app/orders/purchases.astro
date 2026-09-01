@@ -20,8 +20,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewPurchaseOrders } from '@/lib/cms/permissions';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import {
@@ -45,7 +44,7 @@ let affiliates: { value: string; label: string }[] = [];
 let loadFailed = false;
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const [listed, counted, affiliateRows] = await Promise.all([
       listPurchaseOrders(db, userId, filter, now, 200),
       countPurchaseOrders(db, userId, filter, now),

@@ -26,7 +26,7 @@ export const POST: APIRoute = async (context) => {
     raw !== null && typeof raw.outcome === 'string' && raw.outcome.trim() !== ''
       ? raw.outcome.trim()
       : null;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await completeActivity(

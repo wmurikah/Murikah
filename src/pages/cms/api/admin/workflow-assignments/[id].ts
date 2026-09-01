@@ -40,7 +40,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireWorkflowView(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const id = context.params.id ?? '';
@@ -59,7 +59,7 @@ export const PATCH: APIRoute = async (context) => {
   const parsed = validateSupersede(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await supersedeAssignment(

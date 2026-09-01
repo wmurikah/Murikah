@@ -40,7 +40,7 @@ export const PUT: APIRoute = async (context) => {
   const parsed = validateJobTitleChange(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await changePrimaryJobTitle(

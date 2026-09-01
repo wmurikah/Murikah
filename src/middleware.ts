@@ -60,6 +60,7 @@ import {
 import { getCmsEnv } from '@/lib/cms/env';
 import { renamedPath } from '@/lib/cms/routes';
 import { getDb as getCmsDb } from '@/lib/cms/db';
+import { startTrace, serverTimingValue, slowRequestLine, SLOW_REQUEST_MS } from '@/lib/cms/perf';
 import { readSessionCookie as readCmsSessionCookie } from '@/lib/cms/auth/cookie';
 import { resolveSession as resolveCmsSession } from '@/lib/cms/auth/loginFlow';
 import { clearSessionCookie as clearCmsCookie, isSecureRequest } from '@/lib/cms/auth/cookie';
@@ -323,9 +324,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     const isApi = isCmsApiPath(appPath);
     let anonymousReason: string = 'no_cookie';
+    // Where this request's time goes, phase by phase. Read by the layout and
+    // the pages through locals, reported as Server-Timing below.
+    const trace = startTrace();
+    context.locals.cmsPerf = trace;
 
     try {
       const env = getCmsEnv();
+      const endAuth = trace.begin('auth');
       const db = await getCmsDb(env);
       const resolution = await resolveCmsSession(
         db,
@@ -333,12 +339,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
         readCmsSessionCookie(context.request),
         new Date(),
       );
+      endAuth();
       if (resolution.kind === 'authenticated') {
         context.locals.cms = {
           sessionId: resolution.sessionId,
           user: resolution.identity,
           can: (code: string) => resolution.identity.permissions.includes(code),
         };
+        // THE CLIENT IS KEPT, NOT THROWN AWAY. Everything downstream in this
+        // request — layout, page, drawers — reads it via requestDb(), so an
+        // authenticated page costs ONE client and ONE foreign-keys pragma
+        // instead of one of each per rendering unit. Attached only on an
+        // authenticated request: an anonymous one renders the sign-in page,
+        // which has no business holding a database handle.
+        context.locals.cmsDb = db;
       } else {
         anonymousReason = resolution.reason;
       }
@@ -418,8 +432,26 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // empty 500. See writableResponse: this is why every provider sign-in
     // button returned 500, and it would have caught the successful sign-in
     // callback too.
+    const endPage = trace.begin('page');
     const response = writableResponse(await guarded());
-    if (principal) response.headers.set('cache-control', 'no-store');
+    endPage();
+    if (principal) {
+      response.headers.set('cache-control', 'no-store');
+      // Server-Timing on authenticated PAGE responses: names and durations
+      // only, never SQL, identifiers or secrets. Not on API responses — the
+      // JSON callers are our own scripts, and DevTools already times fetches.
+      // Headers are set before the body streams, so a streamed page reports
+      // the time to create its response, which is the part the server owns.
+      if (!isApi) {
+        const value = serverTimingValue(trace);
+        if (value !== '') response.headers.set('server-timing', value);
+      }
+      // One structured line for an unusually slow request, so Workers Logs
+      // can name the path and the phase without anyone attaching a debugger.
+      if (trace.total() >= SLOW_REQUEST_MS) {
+        console.warn(slowRequestLine(appPath, trace));
+      }
+    }
     // On every CMS response, signed in or not, including the sign-in page and
     // every redirect. A policy that applied only to authenticated pages would
     // leave the one page an unauthenticated attacker can reach unprotected.

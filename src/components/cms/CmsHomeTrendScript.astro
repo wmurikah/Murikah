@@ -1,0 +1,99 @@
+---
+/**
+ * Fetches the Home trend fragment the first time either More detail opens.
+ *
+ * ONE FETCH SERVES BOTH PANELS. The fragment renders both processes' charts —
+ * they travel in one authenticated request and one coalesced Turso round trip
+ * — so expanding the second panel costs nothing beyond moving markup into
+ * place. The disclosure that remembers being open (CmsMoreDetail restores it
+ * from localStorage) fires the same toggle event on restore, so a person who
+ * keeps detail expanded gets the fetch immediately after paint without a
+ * second mechanism.
+ *
+ * THE RESPONSE IS THIS APPLICATION'S OWN SERVER-RENDERED MARKUP, from an
+ * authenticated same-origin page under the same middleware guard as the page
+ * hosting it — the same trust as the HTML already on screen, which is why it
+ * may be inserted as markup. A login redirect (session expired mid-visit)
+ * arrives as a redirected response and is treated as a plain failure.
+ *
+ * A LOADER NEVER BECOMES THE PERMANENT STATE. Failure replaces the skeleton
+ * with one line and a retry control; retry re-arms the whole lifecycle. One
+ * announcement per outcome through a polite live region — the skeletons
+ * themselves are aria-hidden scenery.
+ */
+---
+
+<div data-cms-home-trend-status class="sr-only" role="status" aria-live="polite"></div>
+
+<script>
+  const slots = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-cms-home-trend]'),
+  );
+  const status = document.querySelector<HTMLElement>('[data-cms-home-trend-status]');
+  const src = slots[0]?.dataset.src ?? '';
+
+  let state: 'idle' | 'loading' | 'done' = 'idle';
+
+  const fail = () => {
+    state = 'idle';
+    if (status) status.textContent = 'The trend could not be loaded.';
+    for (const slot of slots) {
+      slot.replaceChildren();
+      const line = document.createElement('p');
+      line.className =
+        'rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted';
+      line.textContent = 'The trend could not be loaded. ';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className =
+        'rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus';
+      retry.textContent = 'Retry';
+      retry.addEventListener('click', load);
+      line.appendChild(retry);
+      slot.replaceChildren(line);
+    }
+  };
+
+  function load(): void {
+    if (state !== 'idle' || src === '' || slots.length === 0) return;
+    state = 'loading';
+    fetch(src, { headers: { accept: 'text/html' } })
+      .then((response) => {
+        // A redirect is the login page: a failure here, never content.
+        if (!response.ok || response.redirected) throw new Error(String(response.status));
+        return response.text();
+      })
+      .then((html) => {
+        const parsed = new DOMParser().parseFromString(html, 'text/html');
+        if (parsed.querySelector('[data-trend-error]') !== null) {
+          fail();
+          return;
+        }
+        let placed = 0;
+        for (const slot of slots) {
+          const mine = parsed.querySelector(`[data-trend-for="${slot.dataset.cmsHomeTrend}"]`);
+          if (mine) {
+            slot.replaceChildren(...Array.from(mine.childNodes));
+            placed += 1;
+          }
+        }
+        if (placed === 0) {
+          fail();
+          return;
+        }
+        state = 'done';
+        if (status) status.textContent = 'Trend loaded.';
+      })
+      .catch(fail);
+  }
+
+  // The first expansion of EITHER panel loads both. `toggle` also fires when
+  // CmsMoreDetail restores a remembered open state, which is what makes the
+  // preference work with no second code path.
+  for (const details of document.querySelectorAll<HTMLDetailsElement>('[data-cms-more-detail]')) {
+    details.addEventListener('toggle', () => {
+      if (details.open) load();
+    });
+    if (details.open) load();
+  }
+</script>

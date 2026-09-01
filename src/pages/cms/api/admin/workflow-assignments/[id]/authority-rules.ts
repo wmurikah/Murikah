@@ -45,7 +45,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireWorkflowView(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const id = context.params.id ?? '';
@@ -70,7 +70,7 @@ export const POST: APIRoute = async (context) => {
   );
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const assignment = await getAssignment(connection.db, assignmentId);

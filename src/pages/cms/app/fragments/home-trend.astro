@@ -1,0 +1,131 @@
+---
+/**
+ * The Home trend, as a fragment fetched on first expansion.
+ *
+ * WHY A FRAGMENT AND NOT PART OF THE PAGE. The two trend statements are
+ * twelve-month window aggregations over the fact tables — the heaviest reads
+ * Home ran — and they fed a chart behind a disclosure most people never open.
+ * Rendering Home no longer runs them; opening "More detail" fetches this once,
+ * and both panels are served by the one request so expanding the second panel
+ * costs nothing further.
+ *
+ * WHY NOT A SERVER ISLAND. `server:defer` renders unconditionally: the island
+ * request would fire on every Home view, which is exactly the work this
+ * exists to avoid — the disclosure state lives in the browser and only the
+ * browser can decide not to ask. Documented in
+ * docs/cms/PERFORMANCE_AND_LOADING.md.
+ *
+ * SECURITY IS THE PAGE'S, UNCHANGED. This lives under /app, so the middleware
+ * authenticates it like any page (an anonymous fetch gets the login redirect,
+ * which the client treats as a failure), and the belt-and-braces check below
+ * refuses without a principal. The period and month-span arrive as query
+ * parameters because the parent page already resolved them; both are parsed
+ * and clamped, and neither widens what the caller may read — the trend
+ * queries scope by the same ApprovalScope the page used.
+ *
+ * `partial` because this returns two <figure>s for an existing document, not
+ * a document of its own: no doctype, no layout, no shell.
+ */
+import CmsChart from '@/components/cms/CmsChart.astro';
+import { requestDb } from '@/lib/cms/db';
+import { createBatcher, runSection } from '@/lib/cms/batching';
+import { approvalTrend, type ApprovalScope, type TrendPoint } from '@/lib/cms/repos/approvalSla';
+import { periodFromToken, trailingMonths, TREND_MONTHS } from '@/lib/cms/analytics/period';
+import { buildHomeTrendChart } from '@/lib/cms/analytics/homeTrend';
+
+export const partial = true;
+export const prerender = false;
+
+const TREND_DEFINITION =
+  'Each line is one function’s typical figure per month, over the months ending at the month on screen. A break in a line is a month with no completions rather than a completion of no length.';
+
+if (!Astro.locals.cms || Astro.locals.cms.user.userType !== 'INTERNAL') {
+  return new Response(null, { status: 401 });
+}
+
+const today = new Date();
+const params = Astro.url.searchParams;
+// The month the page settled on. An unparseable token is the caller's error,
+// answered as one rather than guessed around.
+const shown = periodFromToken(params.get('period') ?? '', today);
+if (shown === null) {
+  return new Response(null, { status: 422 });
+}
+// The span the page computed from its calendar, clamped to the trend's own
+// bounds so no parameter can ask for a wider window than Home ever draws.
+const months = Math.min(TREND_MONTHS, Math.max(2, Number(params.get('months') ?? TREND_MONTHS)));
+const window = trailingMonths(shown, Number.isFinite(months) ? months : TREND_MONTHS);
+const affiliateId = params.get('affiliateId');
+const scope: ApprovalScope = {
+  from: window.from,
+  to: window.to,
+  affiliateId: affiliateId === null || affiliateId === '' ? null : affiliateId,
+};
+
+let purchaseTrend: TrendPoint[] = [];
+let salesTrend: TrendPoint[] = [];
+let loadFailed = false;
+try {
+  const db = await requestDb(Astro.locals);
+  const batcher = createBatcher(db);
+  // Both statements in one coalesced round trip, exactly as they travelled
+  // when the page ran them.
+  const [po, so] = await Promise.all([
+    runSection(batcher, 'home.purchases-trend', (client) =>
+      approvalTrend(client, 'PURCHASE_ORDER', scope, 'MONTH'),
+    ),
+    runSection(batcher, 'home.sales-trend', (client) =>
+      approvalTrend(client, 'SALES_ORDER', scope, 'MONTH'),
+    ),
+  ]);
+  if (po.ok) purchaseTrend = po.value;
+  else loadFailed = true;
+  if (so.ok) salesTrend = so.value;
+  else loadFailed = true;
+} catch (error) {
+  console.error('[cms.home.trend] load failed', error);
+  loadFailed = true;
+}
+
+const purchaseChart = buildHomeTrendChart({
+  points: purchaseTrend,
+  process: 'PURCHASE_ORDER',
+  period: window,
+  affiliateId: scope.affiliateId,
+  today,
+});
+const salesChart = buildHomeTrendChart({
+  points: salesTrend,
+  process: 'SALES_ORDER',
+  period: window,
+  affiliateId: scope.affiliateId,
+  today,
+});
+---
+
+{
+  loadFailed ? (
+    <p data-trend-error class="rounded-cms border border-cms-line bg-cms-canvas px-3 py-2 text-cms-body-sm text-cms-muted">
+      The trend could not be loaded.
+    </p>
+  ) : (
+    <Fragment>
+      <div data-trend-for="PURCHASE_ORDER">
+        <CmsChart
+          title="Purchase order turnaround trend"
+          definition={TREND_DEFINITION}
+          chart={purchaseChart}
+          unit="minutes"
+        />
+      </div>
+      <div data-trend-for="SALES_ORDER">
+        <CmsChart
+          title="Sales order turnaround trend"
+          definition={TREND_DEFINITION}
+          chart={salesChart}
+          unit="minutes"
+        />
+      </div>
+    </Fragment>
+  )
+}
