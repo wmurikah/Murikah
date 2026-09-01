@@ -39,7 +39,7 @@ export const POST: APIRoute = async (context) => {
   if (question.length > 2000)
     return invalid([{ field: 'question', message: 'That is too long to send.' }]);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const ctx = writeContext(context.request, principal);
 

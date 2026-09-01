@@ -27,8 +27,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { parseFilter, filterToQuery } from '@/lib/cms/analytics/filters';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
 import {
@@ -64,7 +63,7 @@ let loadFailed = false;
 
 if (report !== null) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     // The report and its filter options together. The options come from the
     // same connection and the same request, so a filter cannot offer an
     // affiliate the report was not run against.

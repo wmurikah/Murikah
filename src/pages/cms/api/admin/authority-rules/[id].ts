@@ -36,7 +36,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireWorkflowView(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const rule = await getRule(connection.db, context.params.id ?? '');
@@ -53,7 +53,7 @@ export const PATCH: APIRoute = async (context) => {
   const id = context.params.id ?? '';
   const ctx = writeContext(context.request, auth.principal);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const existing = await getRule(connection.db, id);

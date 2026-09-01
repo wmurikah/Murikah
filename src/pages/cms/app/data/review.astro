@@ -31,8 +31,7 @@ import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewImports } from '@/lib/cms/permissions';
 import { listCreatedFromImport, type ImportOrigin } from '@/lib/cms/import/masterData';
 
@@ -47,7 +46,7 @@ let mismatches: ImportOrigin[] = [];
 let loadFailed = false;
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const created = await listCreatedFromImport(db);
     accounts = created.accounts;
     products = created.products;

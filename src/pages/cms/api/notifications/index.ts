@@ -21,7 +21,7 @@ export const prerender = false;
 export const GET: APIRoute = async (context) => {
   const auth = requireSignedIn(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const now = new Date();
@@ -44,7 +44,7 @@ export const GET: APIRoute = async (context) => {
 export const POST: APIRoute = async (context) => {
   const auth = requireSignedIn(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     await markAllRead(connection.db, auth.principal.user.userId, new Date());

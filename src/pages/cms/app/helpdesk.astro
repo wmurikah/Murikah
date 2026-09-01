@@ -23,8 +23,7 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCaseCreateDrawer from '@/components/cms/CmsCaseCreateDrawer.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewCases, canCreateCases, canManageCaseCategories } from '@/lib/cms/permissions';
 import {
   listCases,
@@ -70,7 +69,7 @@ let loadFailed = false;
 const now = new Date();
 if (mayRead) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [page, indicators, options] = await Promise.all([
       listCases(db, userId, query),
       caseIndicators(db, userId, now),

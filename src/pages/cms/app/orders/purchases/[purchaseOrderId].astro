@@ -17,8 +17,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewPurchaseOrders } from '@/lib/cms/permissions';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import { formatDuration } from '@/lib/cms/analytics/stats';
@@ -38,7 +37,7 @@ let detail: PurchaseOrderDetail | null = null;
 let loadFailed = false;
 if (mayView) {
   try {
-    detail = await purchaseOrderDetail(await getDb(getCmsEnv()), userId, orderId, now);
+    detail = await purchaseOrderDetail(await requestDb(Astro.locals), userId, orderId, now);
   } catch (error) {
     console.error('[cms.orders.purchases.detail] load failed', error);
     loadFailed = true;

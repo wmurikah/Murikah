@@ -19,8 +19,7 @@ import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import {
   listNotifications,
   sweepNotifications,
@@ -43,7 +42,7 @@ let data: { items: NotificationRow[]; total: number; unread: number } = {
 };
 let loadFailed = false;
 try {
-  const db = await getDb(getCmsEnv());
+  const db = await requestDb(Astro.locals);
   const now = new Date();
   await sweepDueSlas(db, now);
   await sweepNotifications(db, now);

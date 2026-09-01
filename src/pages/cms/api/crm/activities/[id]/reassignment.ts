@@ -28,7 +28,7 @@ export const POST: APIRoute = async (context) => {
   if (ownerUserId === '') {
     return invalid([{ field: 'ownerUserId', message: 'Choose the new owner.' }]);
   }
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await reassignActivity(

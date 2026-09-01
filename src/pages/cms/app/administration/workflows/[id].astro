@@ -33,8 +33,7 @@ import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsWorkflowFormScript from '@/components/cms/CmsWorkflowFormScript.astro';
 import CmsStageOrderScript from '@/components/cms/CmsStageOrderScript.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageWorkflows, canViewWorkflows } from '@/lib/cms/permissions';
 import {
   getDefinition,
@@ -71,7 +70,7 @@ let loadFailed = false;
 
 if (mayRead) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     definition = await getDefinition(db, definitionId);
     if (definition !== null) {
       [stages, options] = await Promise.all([listStages(db, definitionId), workflowOptions(db)]);

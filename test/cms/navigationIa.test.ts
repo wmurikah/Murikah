@@ -502,13 +502,23 @@ test('Home discloses the deeper analysis and deletes none of it', () => {
   const page = read('src/pages/cms/app/index.astro');
   assert.match(page, /<CmsMoreDetail id="purchases">/);
   assert.match(page, /<CmsMoreDetail id="sales">/);
-  // Both trends and both leaderboards are still rendered, inside it.
+  // Both trends are still inside the disclosure — as geometry-matched
+  // skeleton slots the fragment fills on first expansion, so the queries no
+  // longer run for a panel nobody opened.
+  assert.match(page, /data-cms-home-trend="PURCHASE_ORDER"/);
+  assert.match(page, /data-cms-home-trend="SALES_ORDER"/);
   assert.match(page, /title="Purchase order turnaround trend"/);
   assert.match(page, /title="Sales order turnaround trend"/);
+  // Both leaderboards stay server-rendered: their data rides the board query
+  // the visible bars already pay for, so deferring them would save nothing.
   assert.equal((page.match(/<CmsApprovalLeaderboard/g) ?? []).length, 2);
-  // And still COMPUTED: a disclosure is not an excuse to stop measuring.
-  assert.match(page, /const purchaseTrendChart = trendOf\(/);
-  assert.match(page, /const salesTrendChart = trendOf\(/);
+  // And still COMPUTED: a disclosure is not an excuse to stop measuring. The
+  // fragment carries the same queries and the same chart titles.
+  const fragment = read('src/pages/cms/app/fragments/home-trend.astro');
+  assert.match(fragment, /approvalTrend\(client, 'PURCHASE_ORDER', scope, 'MONTH'\)/);
+  assert.match(fragment, /approvalTrend\(client, 'SALES_ORDER', scope, 'MONTH'\)/);
+  assert.match(fragment, /title="Purchase order turnaround trend"/);
+  assert.match(fragment, /title="Sales order turnaround trend"/);
   // The headline figures stay in the first view, outside the disclosure.
   const firstDetail = page.indexOf('<CmsMoreDetail');
   assert.ok(page.slice(0, firstDetail).includes('Purchase order approval'), 'the bars were hidden');

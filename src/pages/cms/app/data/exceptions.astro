@@ -21,8 +21,7 @@ import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageUsers, canViewImports } from '@/lib/cms/permissions';
 import { listUnresolvedActors, type UnresolvedActorRow } from '@/lib/cms/import/uploadCentre';
 
@@ -37,7 +36,7 @@ let people: { value: string; label: string }[] = [];
 let loadFailed = false;
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     actors = await listUnresolvedActors(db);
     if (mayMap) {
       const users = await db.execute(
@@ -188,6 +187,7 @@ if (mayView) {
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
   const drawer = document.getElementById('cms-actor-drawer') as HTMLDialogElement | null;
   const form = document.getElementById('cms-actor-form') as HTMLFormElement | null;
   const errorBox = document.getElementById('cms-actor-error');
@@ -219,28 +219,35 @@ if (mayView) {
       }
       return;
     }
-    const response = await fetch(`/api/data/unresolved-actors/${actorId}/map`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId, revalidate }),
-    });
-    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!response.ok) {
-      const errors = (payload?.errors ?? []) as { message: string }[];
-      if (errorBox) {
-        errorBox.textContent = errors[0]?.message ?? 'The mapping could not be made.';
-        errorBox.hidden = false;
+    // The success path stays on this page for 1.5s before reloading; the
+    // drawer is closed by then, so restoring the button is safe on every path.
+    const restore = busy(form?.querySelector<HTMLButtonElement>('[type="submit"]') ?? null, 'Mapping…');
+    try {
+      const response = await fetch(`/api/data/unresolved-actors/${actorId}/map`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId, revalidate }),
+      });
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok) {
+        const errors = (payload?.errors ?? []) as { message: string }[];
+        if (errorBox) {
+          errorBox.textContent = errors[0]?.message ?? 'The mapping could not be made.';
+          errorBox.hidden = false;
+        }
+        return;
       }
-      return;
+      drawer?.close();
+      const revalidated = payload?.revalidated as Record<string, unknown> | null;
+      if (message) {
+        message.textContent =
+          revalidated === null || revalidated === undefined
+            ? 'The name is mapped. Later uploads will recognise it.'
+            : `The name is mapped. ${String(revalidated.rowsExamined)} rows examined, ${String(revalidated.rowsResolved)} resolved.`;
+      }
+      window.setTimeout(() => window.location.reload(), 1500);
+    } finally {
+      restore();
     }
-    drawer?.close();
-    const revalidated = payload?.revalidated as Record<string, unknown> | null;
-    if (message) {
-      message.textContent =
-        revalidated === null || revalidated === undefined
-          ? 'The name is mapped. Later uploads will recognise it.'
-          : `The name is mapped. ${String(revalidated.rowsExamined)} rows examined, ${String(revalidated.rowsResolved)} resolved.`;
-    }
-    window.setTimeout(() => window.location.reload(), 1500);
   });
 </script>

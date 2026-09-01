@@ -36,7 +36,7 @@ async function authorise(
 
 /** What a delete would take and what it would leave. Nothing is written. */
 export const GET: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const batchId = context.params.batchId ?? '';
   try {
@@ -51,7 +51,7 @@ export const GET: APIRoute = async (context) => {
 };
 
 export const POST: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const batchId = context.params.batchId ?? '';
   try {

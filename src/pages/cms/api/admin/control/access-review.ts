@@ -17,7 +17,7 @@ export const prerender = false;
 export const GET: APIRoute = async (context) => {
   const auth = requireControlCentre(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const today = toDbTimestamp(new Date()).slice(0, 10);
