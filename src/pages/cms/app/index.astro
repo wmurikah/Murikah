@@ -64,8 +64,9 @@ import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
 import CmsMoreDetail from '@/components/cms/CmsMoreDetail.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import CmsChartSkeleton from '@/components/cms/CmsChartSkeleton.astro';
+import CmsHomeTrendScript from '@/components/cms/CmsHomeTrendScript.astro';
+import { requestDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import { canManageSlaRules } from '@/lib/cms/permissions';
@@ -77,7 +78,6 @@ import { countPurchaseOrders } from '@/lib/cms/repos/poPerformance';
 import {
   approvalBoard,
   approvalCycle,
-  approvalTrend,
   EVERYONE,
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
@@ -85,25 +85,22 @@ import {
   type ApprovalScope,
   type CycleStat,
   type FunctionStat,
-  type TrendPoint,
 } from '@/lib/cms/repos/approvalSla';
 import {
   calendarSql,
   choosePeriod,
   parseDashboardPeriod,
-  periodBuckets,
   periodHref,
   readCalendars,
   periodHasData,
   periodFromToken,
-  trailingMonths,
   trendSpan,
   withPeriod,
   EMPTY_CALENDAR,
   type DataCalendar,
   type ResolvedPeriod,
 } from '@/lib/cms/analytics/period';
-import { horizontalBarChart, lineChart, seriesToken, type ChartPoint } from '@/lib/cms/charts/svg';
+import { horizontalBarChart, seriesToken, type ChartPoint } from '@/lib/cms/charts/svg';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
 
 export const prerender = false;
@@ -197,8 +194,6 @@ let purchaseCalendar: DataCalendar = EMPTY_CALENDAR;
 let salesCalendar: DataCalendar = EMPTY_CALENDAR;
 let purchases: ApprovalBoard | null = null;
 let sales: ApprovalBoard | null = null;
-let purchaseTrend: TrendPoint[] = [];
-let salesTrend: TrendPoint[] = [];
 let purchaseCycle: CycleStat | null = null;
 let salesCycle: CycleStat | null = null;
 let soWaiting: number | null = null;
@@ -217,7 +212,7 @@ let choice = {
 
 if (user) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const batcher = createBatcher(db);
     // THE CALENDAR FIRST, ON ITS OWN, AND EVERYTHING ELSE AFTER IT.
     //
@@ -246,26 +241,9 @@ if (user) {
       to: shown.to,
       affiliateId: filter.affiliateId,
     };
-    // A TREND IS MONTH OVER MONTH, so it reads the year ending at the month on
-    // screen rather than the days inside it. Plotting one month's days put a
-    // mark wherever an approval happened to land and a gap everywhere else,
-    // which drew as scatter and answered a question nobody asked: a dashboard
-    // trend is "is this month better than the ones before it".
-    const trendWindow = trailingMonths(shown, trendSpan(shown, calendar));
-    const trendScope: ApprovalScope = { ...scope, from: trendWindow.from, to: trendWindow.to };
 
-    const [
-      attention,
-      poQueue,
-      soQueue,
-      po,
-      so,
-      poBuckets,
-      soBuckets,
-      poSpan,
-      soSpan,
-      affiliateRows,
-    ] = await Promise.all([
+    const [attention, poQueue, soQueue, po, so, poSpan, soSpan, affiliateRows] =
+      await Promise.all([
       runSection(batcher, 'home.attention', (client) =>
         attentionCustomers(client, userId, active, now),
       ),
@@ -279,16 +257,11 @@ if (user) {
         approvalBoard(client, 'PURCHASE_ORDER', scope),
       ),
       runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
-      // THE MONTH BEFORE IS NOT QUERIED SEPARATELY ANY MORE. The trend beside
-      // each panel already carries the twelve months ending at this one, so a
-      // second board for last month would be a figure the chart above it
-      // already draws — and two statements for it.
-      runSection(batcher, 'home.purchases-trend', (client) =>
-        approvalTrend(client, 'PURCHASE_ORDER', trendScope, 'MONTH'),
-      ),
-      runSection(batcher, 'home.sales-trend', (client) =>
-        approvalTrend(client, 'SALES_ORDER', trendScope, 'MONTH'),
-      ),
+      // THE TREND IS NOT HERE ANY MORE, AND THAT IS THE POINT. Its two
+      // twelve-month window aggregations were the heaviest statements on the
+      // page, feeding a chart behind a disclosure most visits never open.
+      // They now run in /app/fragments/home-trend, fetched once on the first
+      // expansion; see the More detail panels below.
       runSection(batcher, 'home.purchases-cycle', (client) =>
         approvalCycle(client, 'PURCHASE_ORDER', scope),
       ),
@@ -306,8 +279,6 @@ if (user) {
     if (attention.ok) customers = attention.value;
     if (poQueue.ok) poWaiting = poQueue.value;
     if (soQueue.ok) soWaiting = soQueue.value;
-    if (poBuckets.ok) purchaseTrend = poBuckets.value;
-    if (soBuckets.ok) salesTrend = soBuckets.value;
     if (poSpan.ok) purchaseCycle = poSpan.value;
     if (soSpan.ok) salesCycle = soSpan.value;
     if (affiliateRows.ok) {
@@ -449,89 +420,27 @@ const purchaseChart = chartOf(purchases, 'PURCHASE_ORDER');
 const salesChart = chartOf(sales, 'SALES_ORDER');
 
 /**
- * The same functions over time, one line each, named at the end of its own line.
+ * THE TREND LOADS WHEN SOMEBODY ASKS FOR IT, and this is its address.
  *
- * THE GRAIN FOLLOWS THE SPAN and is never chosen: a month shows days, a year
- * shows months, a single day shows hours. The buckets are ENUMERATED from the
- * period rather than taken from the rows, so a day with no approvals breaks the
- * line instead of being skipped — plotting only the buckets that returned rows
- * compresses a quiet fortnight into the width of a day and draws a continuity
- * that did not happen. A missing bucket is null and never zero: "nothing was
- * approved" and "an approval took no time" are different statements.
+ * The two twelve-month window aggregations behind the trend were the heaviest
+ * statements on this page, and they fed charts behind a disclosure most
+ * visits never open. They now run in /app/fragments/home-trend — same
+ * queries, same batching, same chart, built by the same
+ * buildHomeTrendChart — fetched ONCE the first time either panel's More
+ * detail opens, and shared by both panels. A visit that never expands pays
+ * nothing; a person whose remembered preference is expanded triggers the
+ * fetch as the disclosure restores, which is the closest the server can get
+ * to honouring a preference only the browser holds.
+ *
+ * The window's month count is computed HERE, where the calendar is already
+ * loaded, and travels as a clamped parameter — so the fragment does not
+ * re-read the calendar merely to learn a number this page knew.
  */
-const trendOf = (
-  board: ApprovalBoard | null,
-  points: TrendPoint[],
-  process: ApprovalProcess,
-  period: ResolvedPeriod,
-) => {
-  const enumerated = periodBuckets(period);
-  const buckets =
-    enumerated ??
-    [...new Set(points.map((p) => p.bucket))]
-      .sort()
-      .map((key) => ({ key, label: key, token: key }));
-  const byFunction = new Map<string, Map<string, number | null>>();
-  for (const point of points) {
-    const row = byFunction.get(point.fn) ?? new Map<string, number | null>();
-    row.set(point.bucket, point.medianMinutes);
-    byFunction.set(point.fn, row);
-  }
-
-  // THE LINES ARE THE FUNCTIONS WITH HISTORY, NOT THE ONES BUSY THIS MONTH. A
-  // level that completed nothing in the month on screen is absent from the
-  // board, and taking the series from the board alone would drop its whole
-  // year of history from the chart the moment it had a quiet month.
-  const order = new Map<string, number>();
-  for (const f of board?.functions ?? []) order.set(f.fn, f.order);
-  for (const point of points) if (!order.has(point.fn)) order.set(point.fn, point.order);
-  const functions = [...order.entries()].sort((a, b) => a[1] - b[1]).map(([fn]) => fn);
-
-  return lineChart(
-    functions.map((fn, index) => ({
-      name: fn,
-      token: seriesToken(index),
-      points: buckets.map<ChartPoint>((bucket) => {
-        const value = byFunction.get(fn)?.get(bucket.key) ?? null;
-        return {
-          label: bucket.label,
-          value,
-          href:
-            value === null
-              ? undefined
-              : approvalRecordsHref({
-                  period: periodFromToken(bucket.token, today) ?? period,
-                  affiliateId: filter.affiliateId,
-                  process,
-                  view: 'completed',
-                  fn,
-                  actor: EVERYONE,
-                }),
-        };
-      }),
-    })),
-    {
-      unit: 'minutes',
-      format: formatDuration,
-      endLabels: true,
-      area: true,
-      categoryName: 'Month',
-      xAxisLabel: 'Month',
-      yAxisLabel: 'Minutes',
-      emptyMessage: 'Need more history',
-      // A LINE OVER ONE MONTH IS A DOT. Two months is the least that can show a
-      // direction, so below it the panel says what it needs rather than drawing
-      // a row of isolated points that reads as a scatter.
-      minimumCategories: 2,
-      height: 240,
-    },
-  );
-};
-
-/** The months the two trend lines cover, ending at the month on screen. */
-const trendWindow = trailingMonths(shown, trendSpan(shown, calendar));
-const purchaseTrendChart = trendOf(purchases, purchaseTrend, 'PURCHASE_ORDER', trendWindow);
-const salesTrendChart = trendOf(sales, salesTrend, 'SALES_ORDER', trendWindow);
+const trendMonths = trendSpan(shown, calendar);
+const trendSrc =
+  `/app/fragments/home-trend?period=${encodeURIComponent(shown.key)}` +
+  `&months=${trendMonths}` +
+  (filter.affiliateId === null ? '' : `&affiliateId=${encodeURIComponent(filter.affiliateId)}`);
 
 const volumeOf = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
@@ -772,9 +681,6 @@ const BAR_DEFINITION =
   `${DEFINITION} The bar is the typical figure, the pale run past its end is the slowest tenth, ` +
   'and the distance between them is the delay a normal reading misses.';
 
-const TREND_DEFINITION = `${DEFINITION} Each line is one function's typical figure per ${
-  shown.grain === 'HOUR' ? 'hour' : shown.grain === 'DAY' ? 'day' : 'month'
-}, and a break in a line is a period with no completions rather than a completion of no length.`;
 
 const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates];
 ---
@@ -941,12 +847,18 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         */
       }
       <CmsMoreDetail id="purchases">
-        <CmsChart
-          title="Purchase order turnaround trend"
-          definition={TREND_DEFINITION}
-          chart={purchaseTrendChart}
-          unit="minutes"
-        />
+        {
+          /*
+            THE SKELETON IS THE CHART'S EXACT GEOMETRY, replaced in place when
+            the fragment arrives, so nothing below it moves. The leaderboard
+            underneath is server-rendered as before: its data rides on the
+            approval board the bars above already paid for, so deferring it
+            would save nothing and cost a request.
+          */
+        }
+        <div data-cms-home-trend="PURCHASE_ORDER" data-src={trendSrc}>
+          <CmsChartSkeleton title="Purchase order turnaround trend" unit="minutes" />
+        </div>
 
         <CmsApprovalLeaderboard
           caption="Purchase order approvers"
@@ -1033,12 +945,9 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       }
 
       <CmsMoreDetail id="sales">
-        <CmsChart
-          title="Sales order turnaround trend"
-          definition={TREND_DEFINITION}
-          chart={salesTrendChart}
-          unit="minutes"
-        />
+        <div data-cms-home-trend="SALES_ORDER" data-src={trendSrc}>
+          <CmsChartSkeleton title="Sales order turnaround trend" unit="minutes" />
+        </div>
 
         <CmsApprovalLeaderboard
           caption="Sales order approvers"
@@ -1053,6 +962,8 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       </CmsMoreDetail>
     </section>
   </div>
+
+  <CmsHomeTrendScript />
 
   {
     /*

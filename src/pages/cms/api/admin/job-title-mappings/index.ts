@@ -41,7 +41,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireRolesManage(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const kind = kindOf(context.url.searchParams.get('kind'));
@@ -64,7 +64,7 @@ export const POST: APIRoute = async (context) => {
       : '',
   );
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await createMapping(

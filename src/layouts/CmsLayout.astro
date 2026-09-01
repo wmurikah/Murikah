@@ -31,6 +31,7 @@ import CmsSidebar from '@/components/cms/CmsSidebar.astro';
 import CmsTopBar from '@/components/cms/CmsTopBar.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsRailScript from '@/components/cms/CmsRailScript.astro';
+import CmsNavigationProgress from '@/components/cms/CmsNavigationProgress.astro';
 
 interface Props {
   title: string;
@@ -45,38 +46,18 @@ const contentWidths = {
   data: 'max-w-[1600px]',
 };
 
-// The live unread count, fetched here so every page's bell is real without
-// per-page work. A page may still pass its own count (the notifications page
-// does, having just marked things read); the fetch is skipped then. A
-// database failure leaves the bell quiet rather than breaking the page.
-let bellCount = notificationCount ?? 0;
-let bellPreview: { title: string; createdAt: string }[] = [];
-if (Astro.locals.cms) {
-  try {
-    const [{ getCmsEnv }, { getDb }, { unreadCount, listNotifications }] = await Promise.all([
-      import('@/lib/cms/env'),
-      import('@/lib/cms/db'),
-      import('@/lib/cms/notify/notifications'),
-    ]);
-    const db = await getDb(getCmsEnv());
-    const userId = Astro.locals.cms.user.userId;
-    if (notificationCount === undefined) {
-      bellCount = await unreadCount(db, userId);
-    }
-    if (bellCount > 0) {
-      const recent = await listNotifications(db, userId, {
-        unreadOnly: true,
-        type: null,
-        page: 1,
-      });
-      bellPreview = recent.items
-        .slice(0, 5)
-        .map((n) => ({ title: n.title, createdAt: n.createdAt }));
-    }
-  } catch {
-    // The bell is a convenience. The page renders without it.
-  }
-}
+/*
+  THE BELL NO LONGER TAXES EVERY PAGE. This block used to create its own
+  database client and resolve the unread count — plus a five-row preview when
+  the count was non-zero — during EVERY page render, so opening the Helpdesk
+  paid notification latency before any Helpdesk byte was written. The bell now
+  renders immediately; the count arrives via /api/notifications/bell shortly
+  after first paint, and the preview is fetched only when the menu is opened.
+  A page that already knows its count (the notifications page, having just
+  marked things read) still passes it and the fetch is skipped for the count.
+*/
+const bellCount = notificationCount ?? 0;
+const bellCountKnown = notificationCount !== undefined;
 
 const pageTitle = `${title} - Hass Petroleum`;
 // The visitor-facing path, captured by the middleware before the /cms rewrite,
@@ -105,6 +86,14 @@ const ASSISTANT_ID = 'cms-assistant';
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body class="group/rail min-h-full bg-cms-canvas text-cms-ink antialiased">
+    {
+      /*
+      ONE GLOBAL NAVIGATION LIFECYCLE, AND THIS IS IT. The activity line is the
+      only shell-level "the next page is coming" affordance; individual pages
+      and components never add their own.
+    */
+    }
+    <CmsNavigationProgress />
     <a
       href="#cms-main"
       class="sr-only rounded-cms bg-cms-navy px-4 py-2 text-white focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50"
@@ -235,7 +224,7 @@ const ASSISTANT_ID = 'cms-assistant';
           drawerId={DRAWER_ID}
           principal={principal}
           notificationCount={bellCount}
-          notificationPreview={bellPreview}
+          notificationCountKnown={bellCountKnown}
         />
         <main id="cms-main" class="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div class:list={['mx-auto flex w-full flex-col gap-8', contentWidths[width]]}>

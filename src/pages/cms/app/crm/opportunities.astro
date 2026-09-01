@@ -25,8 +25,7 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsOpportunityCreateDrawer from '@/components/cms/CmsOpportunityCreateDrawer.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewOpportunities, canEditOpportunities } from '@/lib/cms/permissions';
 import {
   listOpportunities,
@@ -68,7 +67,7 @@ let loadFailed = false;
 
 if (mayRead) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [page, options, pipelines] = await Promise.all([
       listOpportunities(db, userId, query),
       opportunityOptions(db),

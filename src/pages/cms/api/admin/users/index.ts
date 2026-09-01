@@ -30,7 +30,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireUsersManage(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
 
   const q = context.url.searchParams;
@@ -61,7 +61,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validateCreateUser(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
 
   const ctx = writeContext(context.request, auth.principal);

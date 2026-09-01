@@ -1,0 +1,87 @@
+---
+/**
+ * The Quote Curtain: a full-screen navy interstitial shown ONCE, at the moment
+ * credentials are ACCEPTED, covering the wait we cannot remove — the
+ * navigation to the authenticated workspace.
+ *
+ * IT NEVER DELAYS ANYTHING. The login script reveals the curtain and calls
+ * `location.assign` in the same breath; there is no minimum display time, no
+ * timer holding navigation back, and nothing to await. On a fast connection
+ * the quote is a glimpse, and a glimpse is the correct behaviour — the curtain
+ * exists to dignify a wait, not to manufacture one.
+ *
+ * IT APPEARS ONLY AFTER REAL SUCCESS. It ships hidden, and the only code that
+ * unhides it runs inside the login page's `status === 'success'` branch. A
+ * wrong password, a locked account, a server error — every failure path leaves
+ * the form exactly where it was, with its error line. Celebrating before the
+ * server has said yes would be a lie with a gold rule under it.
+ *
+ * The quote figure is decorative and aria-hidden; what a screen reader hears
+ * is the one useful sentence — "Preparing your workspace" — through the
+ * status role, once. Under prefers-reduced-motion the global clamp turns the
+ * entrance fade into an instant appearance and the shimmer never moves.
+ *
+ * No script of its own: the login page owns the whole lifecycle (fill, show,
+ * and the back/forward-cache restore that hides it again), so there is exactly
+ * one place to read to understand the curtain.
+ */
+import CmsWordmark from './CmsWordmark.astro';
+---
+
+<div
+  data-cms-quote-curtain
+  hidden
+  class="cms-quote-curtain fixed inset-0 z-50 flex-col items-center justify-center gap-10 px-6 text-center"
+  role="status"
+>
+  <CmsWordmark tone="onNavy" size="md" />
+  <figure class="max-w-xl" aria-hidden="true">
+    <span class="mx-auto mb-8 block h-1 w-12 rounded-full bg-cms-gold"></span>
+    <blockquote>
+      <p
+        data-quote-text
+        class="text-[1.5rem] leading-snug font-semibold tracking-tight text-balance text-white sm:text-cms-display"
+      >
+      </p>
+    </blockquote>
+    <figcaption data-quote-author class="mt-5 text-cms-body text-cms-rail-text"></figcaption>
+  </figure>
+  <p class="text-cms-body-sm text-cms-rail-muted">Preparing your workspace…</p>
+</div>
+
+<style>
+  /* `display` lives here rather than in a `flex` utility because an author
+     `display: flex` would defeat the `hidden` attribute the lifecycle relies
+     on. Hidden by attribute, flex only when shown. */
+  .cms-quote-curtain:not([hidden]) {
+    display: flex;
+    animation: cms-curtain-in 200ms ease-out;
+  }
+  .cms-quote-curtain {
+    background-image:
+      radial-gradient(
+        circle at 18% 18%,
+        color-mix(in srgb, var(--color-cms-auth-sky) 32%, transparent) 0,
+        transparent 34%
+      ),
+      radial-gradient(
+        circle at 86% 76%,
+        color-mix(in srgb, var(--color-cms-auth-teal) 26%, transparent) 0,
+        transparent 38%
+      ),
+      linear-gradient(
+        145deg,
+        var(--color-cms-navy) 8%,
+        var(--color-cms-navy-soft) 56%,
+        var(--color-cms-navy-deep)
+      );
+  }
+  @keyframes cms-curtain-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+</style>

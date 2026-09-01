@@ -15,7 +15,7 @@ export const prerender = false;
 export const POST: APIRoute = async (context) => {
   const auth = requireSignedIn(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     await markRead(connection.db, auth.principal.user.userId, context.params.id ?? '', new Date());

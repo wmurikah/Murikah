@@ -1330,25 +1330,27 @@ test('the leaderboard states its caveats rather than explaining them', () => {
 });
 
 test('every Home chart names both of its axes', () => {
-  // A TICK SAYS "37 min"; A TITLE SAYS WHAT IS BEING MEASURED. Both charts on
-  // both panels carry the pair, and the trend's are the two the brief names:
-  // months across, minutes up.
+  // A TICK SAYS "37 min"; A TITLE SAYS WHAT IS BEING MEASURED. The bar chart
+  // stays on the page; the trend's options moved with the trend into
+  // analytics/homeTrend.ts, and the pair is the two the brief names: months
+  // across, minutes up.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
   assert.equal(
     (home.match(/xAxisLabel:/g) ?? []).length,
-    2,
-    'the bar chart and the trend each name their x axis',
+    1,
+    'the bar chart names its x axis on the page',
   );
-  assert.equal((home.match(/yAxisLabel:/g) ?? []).length, 2, 'and each names its y axis');
-  assert.match(
-    home,
-    /xAxisLabel: 'Month',\n\s*yAxisLabel: 'Minutes',/,
-    'the trend is months by minutes',
-  );
+  assert.equal((home.match(/yAxisLabel:/g) ?? []).length, 1, 'and its y axis');
   assert.match(
     home,
     /xAxisLabel: 'Minutes',\n\s*yAxisLabel: 'Function',/,
     'the bars are minutes by function',
+  );
+  const trendRules = readFileSync('src/lib/cms/analytics/homeTrend.ts', 'utf8');
+  assert.match(
+    trendRules,
+    /xAxisLabel: 'Month',\n\s*yAxisLabel: 'Minutes',/,
+    'the trend is months by minutes',
   );
 
   // The chart module draws them, rather than a page hand-placing text in SVG.
@@ -1357,18 +1359,26 @@ test('every Home chart names both of its axes', () => {
 });
 
 test('the Home trend is a line over months, not a scatter over days', () => {
-  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  // The trend moved out of the page and behind "More detail": the queries now
+  // live in the fragment fetched on first expansion, and the chart rules live
+  // in analytics/homeTrend.ts so the fragment and any future caller draw the
+  // same picture. The assertions follow the code; the rules are unchanged.
+  const fragment = readFileSync('src/pages/cms/app/fragments/home-trend.astro', 'utf8');
   // ONE VALUE PER MONTH, over the year ending at the month on screen. Bucketing
   // one month's DAYS is what produced the scatter: a mark wherever an approval
   // landed and a gap on every other day.
-  assert.match(home, /approvalTrend\(client, 'PURCHASE_ORDER', trendScope, 'MONTH'\)/);
-  assert.match(home, /approvalTrend\(client, 'SALES_ORDER', trendScope, 'MONTH'\)/);
+  assert.match(fragment, /approvalTrend\(client, 'PURCHASE_ORDER', scope, 'MONTH'\)/);
+  assert.match(fragment, /approvalTrend\(client, 'SALES_ORDER', scope, 'MONTH'\)/);
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
   assert.match(
     home,
-    /trailingMonths\(shown, trendSpan\(shown, calendar\)\)/,
-    'the window is the months ending at this one, sized to the data',
+    /trendSpan\(shown, calendar\)/,
+    'the window is the months ending at this one, sized to the data the page already read',
   );
-  assert.ok(!/approvalTrend\([^)]*shown\.grain/.test(home), 'the trend no longer follows the span');
+  assert.ok(
+    !/approvalTrend\(/.test(home),
+    'Home itself runs no trend query; the fragment carries both',
+  );
 
   // And the line is a line: a stroked path, with the markers as decoration on
   // it rather than the whole of it.
@@ -1378,7 +1388,8 @@ test('the Home trend is a line over months, not a scatter over days', () => {
   // ONE MONTH IS NOT A TREND. The purchase order extract covers a single month,
   // and a line chart over it drew one dot per function against a row of empty
   // months, which is the scatter the brief asked to be rid of.
-  assert.match(home, /minimumCategories: 2,/, 'a trend needs two months before it draws');
+  const chartRules = readFileSync('src/lib/cms/analytics/homeTrend.ts', 'utf8');
+  assert.match(chartRules, /minimumCategories: 2,/, 'a trend needs two months before it draws');
 });
 
 test('a chart never clips the units off its own axis', () => {

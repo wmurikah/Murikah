@@ -16,7 +16,7 @@ import { notFound } from '../../../../../../lib/cms/errors.ts';
 export const prerender = false;
 
 export const POST: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const batchId = context.params.batchId ?? '';
   try {

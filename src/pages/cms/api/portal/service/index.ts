@@ -27,7 +27,7 @@ import { throttle, PORTAL_THROTTLES } from '../../../../../lib/cms/portal/thrott
 export const prerender = false;
 
 export const GET: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const auth = await requirePortal(context, connection.db);
   if (!auth.ok) return auth.response;
@@ -39,7 +39,7 @@ export const GET: APIRoute = async (context) => {
 };
 
 export const POST: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const auth = await requirePortal(context, connection.db);
   if (!auth.ok) return auth.response;

@@ -306,5 +306,31 @@ declare namespace App {
       user: import('@/lib/cms/repos/identity').CmsIdentity;
       can: (permissionCode: string) => boolean;
     };
+
+    /**
+     * The request's own CMS database client, attached by the middleware when
+     * it resolves the session — the SAME client, handed on rather than thrown
+     * away. Before this, one authenticated page created three to five clients:
+     * middleware, layout, page, and a client per data-loading drawer, each one
+     * paying its own `PRAGMA foreign_keys = ON` round trip to Turso.
+     *
+     * SERVER-ONLY BY CONSTRUCTION. Locals never serialise into HTML — Astro
+     * keeps them on the server — and no template interpolates this value.
+     * Nothing browser-writable can put a client here: the middleware assigns
+     * it and nothing else does.
+     *
+     * Read through requestDb() in @/lib/cms/db rather than directly, so code
+     * that runs where the middleware has not (tests importing a page, the
+     * marketing host) still gets a working client instead of undefined.
+     */
+    cmsDb?: import('@libsql/client/web').Client;
+
+    /**
+     * This request's performance trace, begun by the middleware. Pages may add
+     * their own phases (cms.page work, section loads); the middleware turns
+     * the spans into a Server-Timing header and, past the slow threshold, one
+     * [cms.perf] log line. Durations and code-chosen names only.
+     */
+    cmsPerf?: import('@/lib/cms/perf').CmsTrace;
   }
 }

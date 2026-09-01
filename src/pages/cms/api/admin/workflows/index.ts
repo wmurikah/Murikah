@@ -34,7 +34,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireWorkflowView(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     return ok({ items: await listDefinitions(connection.db) });
@@ -51,7 +51,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validateDefinition(await readJson(context.request), isoDay(ctx.now));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await createDefinition(connection.db, parsed.value, ctx);

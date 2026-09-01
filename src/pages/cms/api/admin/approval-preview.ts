@@ -150,7 +150,7 @@ export const POST: APIRoute = async (context) => {
   if (!parsed.ok) return invalid(parsed.errors);
   const { context: transaction, workflowDefinitionId } = parsed.value;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const definition: WorkflowDefinitionRow | null =

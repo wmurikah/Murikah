@@ -20,8 +20,7 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageSlaRules } from '@/lib/cms/permissions';
 import {
   listCalendars,
@@ -43,7 +42,7 @@ let rules: RuleRow[] = [];
 let loadFailed = false;
 if (mayManage) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [calendars, profiles, rules] = await Promise.all([
       listCalendars(db),
       listProfiles(db),
@@ -320,6 +319,8 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
+
   interface FieldError {
     field: string;
     message: string;
@@ -354,6 +355,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const wire = (form: HTMLFormElement, url: string, errorBox: HTMLElement | null) => {
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        const restore = busy(form.querySelector<HTMLButtonElement>('[type="submit"]'), 'Saving…');
         const body: Record<string, unknown> = {};
         for (const [name, value] of new FormData(form).entries()) {
           if (typeof value === 'string') body[name] = value;
@@ -388,6 +390,8 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             errorBox.textContent =
               'There was a problem reaching the server. Check your connection.';
           }
+        } finally {
+          restore();
         }
       });
     };

@@ -34,7 +34,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireLeadsView(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const userId = auth.principal.user.userId;
@@ -56,7 +56,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validateLead(await readJson(context.request), isoDay(ctx.now));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await createLead(connection.db, parsed.value, ctx);

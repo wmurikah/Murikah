@@ -238,6 +238,7 @@ const titleOptions = [
 </section>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
   const drawer = document.getElementById('cms-mapping-drawer') as HTMLDialogElement | null;
   const form = document.getElementById('cms-mapping-form') as HTMLFormElement | null;
   const errorBox = document.getElementById('cms-mapping-error');
@@ -292,11 +293,22 @@ const titleOptions = [
       // A default removes nobody's access, so this asks once and plainly
       // rather than through a consequence dialogue that would overstate it.
       if (!window.confirm(`Remove ${remove.dataset.label ?? 'this default'}?`)) return;
-      const response = await fetch(
-        `/api/admin/job-title-mappings/${encodeURIComponent(mappingId)}?kind=${kind}`,
-        { method: 'DELETE', credentials: 'same-origin' },
-      );
-      if (response.ok) window.location.reload();
+      const restore = busy(remove.closest('button') as HTMLButtonElement | null, 'Removing…');
+      try {
+        const response = await fetch(
+          `/api/admin/job-title-mappings/${encodeURIComponent(mappingId)}?kind=${kind}`,
+          { method: 'DELETE', credentials: 'same-origin' },
+        );
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        say('The default could not be removed. Try again.');
+      } catch {
+        say('The default could not be removed. Check your connection.');
+      } finally {
+        restore();
+      }
     });
 
     form.addEventListener('submit', async (event) => {

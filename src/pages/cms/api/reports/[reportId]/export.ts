@@ -53,7 +53,7 @@ export const GET: APIRoute = async (context) => {
     return invalid([{ field: 'format', message: 'Choose csv or xlsx.' }]);
   }
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const ctx = writeContext(context.request, auth.principal);
 

@@ -39,7 +39,7 @@ function selectionOf(raw: unknown): { scope: ClearScope; before: string | null }
 }
 
 export const GET: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   // Both import types, because the history holds both and a clear spans it.
   const auth = requireImportUpload(context, 'SALES_ORDER');
@@ -58,7 +58,7 @@ export const GET: APIRoute = async (context) => {
 };
 
 export const POST: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const auth = requireImportUpload(context, 'SALES_ORDER');
   if (!auth.ok) return auth.response;
