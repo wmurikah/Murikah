@@ -21,8 +21,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
 import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewCases } from '@/lib/cms/permissions';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import {
@@ -85,7 +84,7 @@ const today = new Date();
 const CALENDAR_SOURCES = [{ table: 'service_cases', column: 'created_at' }];
 let calendarRows: Record<string, unknown>[] = [];
 try {
-  const calDb = await getDb(getCmsEnv());
+  const calDb = await requestDb(Astro.locals);
   const found = await calDb.execute({
     sql: calendarSql(CALENDAR_SOURCES),
     args: [drillMonthOf(params, today)],
@@ -125,7 +124,7 @@ let loadFailed = false;
 
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const [s, wb, ho, cat, rep, sl, att, sv, fc, cust, ent, tm, tr, ins, af] = await Promise.all([
       summary(db, userId, filter),
       waitingBreakdown(db, userId, filter),

@@ -43,9 +43,9 @@ import CmsUserAuthorityDrawer from '@/components/cms/CmsUserAuthorityDrawer.astr
 import CmsApplyDefaultsDrawer from '@/components/cms/CmsApplyDefaultsDrawer.astro';
 
 import { userActivity, type AuditRow as AuditTrailRow } from '@/lib/cms/repos/auditTrail';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageRoles, canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
+import { userSectionCounts, type UserSectionCounts } from '@/lib/cms/repos/userAdmin';
 import {
   resolveUserTab,
   userSectionHref,
@@ -140,62 +140,101 @@ let scopeTargets = {
 let audit: AuditTrailRow[] = [];
 let loadFailed = false;
 
+/*
+  PAY ONLY FOR THE OPEN SECTION. This loader used to run every section's
+  queries on every visit — audit history for somebody opening Overview, the
+  whole permission catalogue for somebody reading Teams — because any section
+  MIGHT be open. The URL says which one IS open, so that is what loads:
+
+    common        the user, their assignments (the header's organisational
+                  line reads them), and one scalar row of tab counts
+    overview      nothing further — it renders the user record alone
+    edit          the Position & Access editor's catalogue: titles, roles,
+                  authority, the permission map, the title's defaults and the
+                  scope choices its drawers offer
+    organisation  teams (assignments are already common)
+    access        roles, authority, the permission map and the title defaults
+                  that mark a role Mapped
+    security      source identities and the security view
+    history       the audit trail, through the audit repository's scope gate
+
+  The URL stays authoritative, every legacy deep link still resolves through
+  resolveUserTab, and no section renders less than it did — the sections that
+  are not open simply stop being paid for.
+*/
+let sectionCounts: UserSectionCounts = { teams: 0, roles: 0, authority: 0, identities: 0 };
 if (mayManage) {
   try {
-    const db = await getDb(getCmsEnv());
-    user = await getUser(db, userId);
+    const db = await requestDb(Astro.locals);
+    const trace = Astro.locals.cmsPerf;
+    const endCommon = trace?.begin('user.common');
+    [user, assignments, sectionCounts] = await Promise.all([
+      getUser(db, userId),
+      listAssignments(db, userId),
+      userSectionCounts(db, userId),
+    ]);
+    endCommon?.();
     if (user) {
-      [
-        assignments,
-        teams,
-        roles,
-        authority,
-        identities,
-        security,
-        audit,
-        jobTitles,
-        permissionMap,
-      ] = await Promise.all([
-        listAssignments(db, userId),
-        listUserTeams(db, userId),
-        listUserRoles(db, userId),
-        listWorkflowAuthority(db, userId),
-        listSourceIdentities(db, userId),
-        getSecurity(db, userId),
-        userActivity(db, viewerUserId, userId),
-        listJobTitles(db),
-        rolePermissionMap(db),
-      ]);
-      // Second round, because the title's defaults depend on which title the
-      // first round found. The scope lookups ride along with it rather than
-      // taking a third.
-      const currentTitle =
-        assignments.find((a) => a.current && a.isPrimary)?.jobTitleId ??
-        assignments.find((a) => a.current)?.jobTitleId ??
-        '';
-      const [titleDefaults, countries, affiliates, units, teamRows] = await Promise.all([
-        mappingsForTitle(db, currentTitle),
-        listCountries(db),
-        listAffiliates(db),
-        listBusinessUnits(db),
-        listTeams(db),
-      ]);
-      suggested = titleDefaults;
-      scopeTargets = {
-        countries: countries
-          .filter((c) => c.active)
-          .map((c) => ({ value: c.countryId, label: c.countryName })),
-        // `affiliate_name` is not unique in this schema; the code disambiguates.
-        affiliates: affiliates
-          .filter((a) => a.active)
-          .map((a) => ({ value: a.affiliateId, label: `${a.affiliateName} (${a.affiliateCode})` })),
-        units: units
-          .filter((b) => b.active)
-          .map((b) => ({ value: b.businessUnitId, label: b.businessUnitName })),
-        teams: teamRows
-          .filter((t) => t.active)
-          .map((t) => ({ value: t.teamId, label: t.teamName })),
-      };
+      const endSection = trace?.begin('user.section');
+      if (tab === 'organisation') {
+        teams = await listUserTeams(db, userId);
+      } else if (tab === 'access' || tab === 'edit') {
+        [roles, authority, permissionMap] = await Promise.all([
+          listUserRoles(db, userId),
+          listWorkflowAuthority(db, userId),
+          rolePermissionMap(db),
+        ]);
+        const currentTitle =
+          assignments.find((a) => a.current && a.isPrimary)?.jobTitleId ??
+          assignments.find((a) => a.current)?.jobTitleId ??
+          '';
+        if (tab === 'edit') {
+          // The editor's catalogue: what a title suggests, and the scope
+          // choices its drawers offer. Second round because the defaults
+          // depend on which title the first round found.
+          const [titles, titleDefaults, countries, affiliates, units, teamRows] =
+            await Promise.all([
+              listJobTitles(db),
+              mappingsForTitle(db, currentTitle),
+              listCountries(db),
+              listAffiliates(db),
+              listBusinessUnits(db),
+              listTeams(db),
+            ]);
+          jobTitles = titles;
+          suggested = titleDefaults;
+          scopeTargets = {
+            countries: countries
+              .filter((c) => c.active)
+              .map((c) => ({ value: c.countryId, label: c.countryName })),
+            // `affiliate_name` is not unique in this schema; the code disambiguates.
+            affiliates: affiliates
+              .filter((a) => a.active)
+              .map((a) => ({
+                value: a.affiliateId,
+                label: `${a.affiliateName} (${a.affiliateCode})`,
+              })),
+            units: units
+              .filter((b) => b.active)
+              .map((b) => ({ value: b.businessUnitId, label: b.businessUnitName })),
+            teams: teamRows
+              .filter((t) => t.active)
+              .map((t) => ({ value: t.teamId, label: t.teamName })),
+          };
+        } else {
+          // Access shows which held roles are the title's defaults, and
+          // needs nothing else from the editor's catalogue.
+          suggested = await mappingsForTitle(db, currentTitle);
+        }
+      } else if (tab === 'security') {
+        [identities, security] = await Promise.all([
+          listSourceIdentities(db, userId),
+          getSecurity(db, userId),
+        ]);
+      } else if (tab === 'history') {
+        audit = await userActivity(db, viewerUserId, userId);
+      }
+      endSection?.();
     }
   } catch (error) {
     console.error('[cms.users.detail] load failed', error);
@@ -220,28 +259,31 @@ const statusTone = (status: string) =>
   "Access 3" wants to know there are three things to look at, not which of two
   subsections they are in. The subsection chooser inside carries its own.
 */
-const sectionCounts: Readonly<Record<UserSection, number | undefined>> = {
+const tabCounts: Readonly<Record<UserSection, number | undefined>> = {
   overview: undefined,
   edit: undefined,
-  organisation: assignments.length + teams.length,
-  access: roles.length + authority.length,
-  security: identities.length,
-  history: audit.length,
+  organisation: assignments.length + sectionCounts.teams,
+  access: sectionCounts.roles + sectionCounts.authority,
+  security: sectionCounts.identities,
+  // Counted only when open: the audit list is read through its own scope
+  // gate, and a number computed outside that gate could overstate what the
+  // gate will show.
+  history: tab === 'history' ? audit.length : undefined,
 };
 const tabs = USER_SECTION_MODEL.map((entry) => ({
   label: entry.label,
   href: href(entry.section),
-  count: sectionCounts[entry.section],
+  count: tabCounts[entry.section],
 }));
 
 /** The local chooser inside a section, or nothing where it holds one thing. */
 const views = USER_SECTION_MODEL.find((entry) => entry.section === tab)?.views ?? [];
 const viewCounts: Readonly<Record<string, number>> = {
   assignments: assignments.length,
-  teams: teams.length,
-  roles: roles.length,
-  authority: authority.length,
-  identities: identities.length,
+  teams: sectionCounts.teams,
+  roles: sectionCounts.roles,
+  authority: sectionCounts.authority,
+  identities: sectionCounts.identities,
 };
 
 /**

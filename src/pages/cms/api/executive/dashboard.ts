@@ -31,7 +31,7 @@ export const GET: APIRoute = async (context) => {
   // decided by the caller's own permission codes, section by section.
   const auth = requireSignedIn(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const filter = parseFilter(context.url.searchParams);

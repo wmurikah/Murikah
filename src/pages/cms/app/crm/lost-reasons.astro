@@ -17,8 +17,7 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageLostReasons } from '@/lib/cms/permissions';
 import { listLostReasons, type LostReasonRow } from '@/lib/cms/repos/opportunityAdmin';
 
@@ -31,7 +30,7 @@ let reasons: LostReasonRow[] = [];
 let loadFailed = false;
 if (mayManage) {
   try {
-    reasons = await listLostReasons(await getDb(getCmsEnv()));
+    reasons = await listLostReasons(await requestDb(Astro.locals));
   } catch (error) {
     console.error('[cms.crm.lostReasons] load failed', error);
     loadFailed = true;
@@ -156,6 +155,8 @@ if (mayManage) {
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
+
   interface FieldError {
     field: string;
     message: string;
@@ -192,6 +193,7 @@ if (mayManage) {
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const restore = busy(form.querySelector<HTMLButtonElement>('[type="submit"]'), 'Saving…');
       const body = {
         reasonName: field('r-reasonName').value,
         category: field('r-category').value,
@@ -229,6 +231,8 @@ if (mayManage) {
           errorBox.hidden = false;
           errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
         }
+      } finally {
+        restore();
       }
     });
   }

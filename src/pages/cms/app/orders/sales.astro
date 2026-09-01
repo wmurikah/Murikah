@@ -20,8 +20,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewSalesOrders } from '@/lib/cms/permissions';
 import { parseFilter, filterToQuery, drillTo } from '@/lib/cms/analytics/filters';
 import {
@@ -48,7 +47,7 @@ let filterOptions = {
 };
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [rows, total] = await Promise.all([
       listSalesOrders(db, userId, filter, now, 200),
       countSalesOrders(db, userId, filter, now),

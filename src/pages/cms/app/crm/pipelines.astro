@@ -19,8 +19,7 @@ import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManagePipelines } from '@/lib/cms/permissions';
 import { listPipelines, type PipelineRow } from '@/lib/cms/repos/opportunityAdmin';
 import { fractionToPercentLabel } from '@/lib/cms/crm/probability';
@@ -34,7 +33,7 @@ let pipelines: PipelineRow[] = [];
 let loadFailed = false;
 if (mayManage) {
   try {
-    pipelines = await listPipelines(await getDb(getCmsEnv()));
+    pipelines = await listPipelines(await requestDb(Astro.locals));
   } catch (error) {
     console.error('[cms.crm.pipelines] load failed', error);
     loadFailed = true;
@@ -239,6 +238,8 @@ if (mayManage) {
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
+
   interface FieldError {
     field: string;
     message: string;
@@ -352,11 +353,15 @@ if (mayManage) {
           ]),
         );
         const orderedStageIds = wanted.map((name) => byName.get(name) ?? '');
+        const restore = busy(
+          reorder.closest('button') as HTMLButtonElement | null,
+          'Reordering…',
+        );
         const response = await post(
           `/api/crm/pipelines/${encodeURIComponent(pipelineId)}/stage-order`,
           'POST',
           { orderedStageIds },
-        );
+        ).finally(restore);
         if (response.ok) window.location.reload();
         else window.alert('The order was not accepted. Every stage must appear exactly once.');
         return;
@@ -365,7 +370,13 @@ if (mayManage) {
 
     pipelineForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const response = await post('/api/crm/pipelines', 'POST', payload(pipelineForm));
+      const restore = busy(
+        pipelineForm.querySelector<HTMLButtonElement>('[type="submit"]'),
+        'Saving…',
+      );
+      const response = await post('/api/crm/pipelines', 'POST', payload(pipelineForm)).finally(
+        restore,
+      );
       if (response.ok) window.location.reload();
       else showError(pipelineError, await response.json().catch(() => null));
     });
@@ -377,11 +388,12 @@ if (mayManage) {
         stageTarget.mode === 'add'
           ? `/api/crm/pipelines/${encodeURIComponent(stageTarget.pipelineId)}/stages`
           : `/api/crm/pipeline-stages/${encodeURIComponent(stageTarget.stageId)}`;
+      const restore = busy(stageForm.querySelector<HTMLButtonElement>('[type="submit"]'), 'Saving…');
       const response = await post(
         url,
         stageTarget.mode === 'add' ? 'POST' : 'PATCH',
         payload(stageForm),
-      );
+      ).finally(restore);
       if (response.ok) window.location.reload();
       else showError(stageError, await response.json().catch(() => null));
     });

@@ -34,7 +34,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireAccountsView(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const page = await listAccounts(
@@ -55,7 +55,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validateAccount(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await createAccount(

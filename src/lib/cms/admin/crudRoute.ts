@@ -65,7 +65,15 @@ export interface CollectionHandlers<TInput, TRow> {
  * An unconfigured or unreachable database is 503 and a trace id, never a stack
  * trace and never a 500 that suggests the caller did something wrong.
  */
-async function connect(): Promise<{ db: Client } | { response: Response }> {
+async function connect(locals?: {
+  cmsDb?: Client;
+}): Promise<{ db: Client } | { response: Response }> {
+  // THE REQUEST'S OWN CLIENT FIRST. The middleware authenticated this API
+  // request moments ago and left its client on locals; creating another here
+  // meant every mutation paid a second client and a second foreign-keys
+  // pragma. The fallback below is unchanged and still serves the tests that
+  // call endpoints with hand-built locals carrying no client.
+  if (locals?.cmsDb !== undefined) return { db: locals.cmsDb };
   try {
     // Imported here rather than at the top of the file. `../env.ts` reaches for
     // the `cloudflare:workers` module, which only resolves inside the worker
@@ -95,7 +103,7 @@ export function collectionRoute<TInput, TRow>(
       const auth = (handlers.read ?? requireOrganisationView)(context);
       if (!auth.ok) return auth.response;
 
-      const connection = await connect();
+      const connection = await connect(context.locals);
       if ('response' in connection) return connection.response;
 
       try {
@@ -113,7 +121,7 @@ export function collectionRoute<TInput, TRow>(
       const parsed = handlers.validate(body);
       if (!parsed.ok) return invalid(parsed.errors);
 
-      const connection = await connect();
+      const connection = await connect(context.locals);
       if ('response' in connection) return connection.response;
 
       try {
@@ -142,7 +150,7 @@ export function itemRoute<TInput, TRow>(
       if (!auth.ok) return auth.response;
 
       const id = context.params.id ?? '';
-      const connection = await connect();
+      const connection = await connect(context.locals);
       if ('response' in connection) return connection.response;
 
       try {
@@ -162,7 +170,7 @@ export function itemRoute<TInput, TRow>(
       const parsed = handlers.validate(body);
       if (!parsed.ok) return invalid(parsed.errors);
 
-      const connection = await connect();
+      const connection = await connect(context.locals);
       if ('response' in connection) return connection.response;
 
       try {

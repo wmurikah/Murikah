@@ -31,8 +31,7 @@ import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageUsers } from '@/lib/cms/permissions';
 import { listProviders, PROVIDER_TYPES, PURPOSES, type AiProvider } from '@/lib/cms/ai/providers';
 import { secretPresent } from '@/lib/cms/ai/model';
@@ -48,7 +47,7 @@ if (mayManage) {
   try {
     // ONE ROUND TRIP. The secret check is not a query: it reads this Worker's
     // own environment, which costs nothing and reaches no network.
-    providers = await listProviders(await getDb(getCmsEnv()));
+    providers = await listProviders(await requestDb(Astro.locals));
   } catch (error) {
     console.error('[cms.admin.ai] load failed', error);
     loadFailed = true;
@@ -257,6 +256,7 @@ const VERIFY_WORD: Readonly<Record<string, string>> = {
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
   const message = document.querySelector<HTMLElement>('#cms-ai-message');
   const say = (text: string) => {
     if (message) message.textContent = text;
@@ -267,31 +267,37 @@ const VERIFY_WORD: Readonly<Record<string, string>> = {
     ?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.target as HTMLFormElement;
+      const restore = busy(form.querySelector<HTMLButtonElement>('[type="submit"]'), 'Saving…');
       const data = new FormData(form);
       const payload: Record<string, unknown> = {};
       for (const [key, value] of data.entries()) payload[key] = value;
       payload.active = data.get('active') !== null;
-      const response = await fetch('/api/admin/ai', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-      if (!response.ok) {
-        const errors = (body?.errors ?? []) as { message: string }[];
-        say(errors.map((e) => e.message).join(' ') || 'The provider could not be saved.');
-        return;
+      try {
+        const response = await fetch('/api/admin/ai', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!response.ok) {
+          const errors = (body?.errors ?? []) as { message: string }[];
+          say(errors.map((e) => e.message).join(' ') || 'The provider could not be saved.');
+          return;
+        }
+        location.reload();
+      } finally {
+        restore();
       }
-      location.reload();
     });
 
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-cms-ai-verify]')) {
     button.addEventListener('click', async () => {
       const id = button.dataset.cmsAiVerify ?? '';
+      const restore = busy(button, 'Testing…');
       say('Testing.');
       const response = await fetch(`/api/admin/ai/${encodeURIComponent(id)}/verify`, {
         method: 'POST',
-      });
+      }).finally(restore);
       const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
       const status = String(body?.status ?? 'ERROR');
       // THE SECRET'S PRESENCE AND THE CALL'S RESULT ARE DIFFERENT FACTS. A

@@ -37,8 +37,7 @@ import CmsCatalogueTree from '@/components/cms/CmsCatalogueTree.astro';
 import CmsWorkflowFormScript from '@/components/cms/CmsWorkflowFormScript.astro';
 import CmsCatalogueScript from '@/components/cms/CmsCatalogueScript.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageCatalogue } from '@/lib/cms/permissions';
 import {
   categoryImpact,
@@ -81,7 +80,7 @@ let loadFailed = false;
 
 if (mayManage) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [tree, groups, categories, products, units] = await Promise.all([
       hierarchy(db),
       listGroups(db),

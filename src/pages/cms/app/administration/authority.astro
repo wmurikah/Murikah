@@ -25,8 +25,7 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
 import { authorityReview, type AuthorityReviewRow } from '@/lib/cms/repos/controlCentre';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
@@ -54,7 +53,7 @@ let loadFailed = false;
 
 if (mayRead) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const [reviewed, countryRows, affiliateRows, unitRows] = await Promise.all([
       authorityReview(db, {
         processType: processType === '' ? null : processType,

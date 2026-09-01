@@ -19,8 +19,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canSeeCreditInformation, canViewSalesOrders } from '@/lib/cms/permissions';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import { formatDuration } from '@/lib/cms/analytics/stats';
@@ -43,7 +42,7 @@ let engineMeasures: Record<string, { elapsedMinutes: number; accountableMinutes:
 let loadFailed = false;
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     detail = await orderDetail(db, userId, orderId);
     if (detail !== null) {
       // The engine's own figures, per stage: business-calendar adjusted and

@@ -1090,6 +1090,46 @@ export async function changePrimaryJobTitle(
   return created ? { ok: true, value: created } : { ok: false, kind: 'not_found' };
 }
 
+/**
+ * The section tab counts, in ONE statement.
+ *
+ * The record page stopped loading every section's rows on every visit — that
+ * is the point of section-specific loading — but the tab strip still wants to
+ * say "Access 3". Loading three lists to print three integers would give the
+ * saving straight back, so the integers are counted in one scalar row: four
+ * subselects, one round trip, whatever section is open.
+ *
+ * These COUNT the same populations the section lists SHOW — every row for the
+ * user, current and historical — so a count can never disagree with the list
+ * behind it. History is deliberately absent: the audit list is read through
+ * the audit repository's own scope gate, and a count computed outside that
+ * gate could say "12" to somebody the gate would show fewer.
+ */
+export interface UserSectionCounts {
+  teams: number;
+  roles: number;
+  authority: number;
+  identities: number;
+}
+
+export async function userSectionCounts(db: Client, userId: string): Promise<UserSectionCounts> {
+  const result = await db.execute({
+    sql: `SELECT
+            (SELECT COUNT(*) FROM team_members WHERE user_id = ?) AS teams,
+            (SELECT COUNT(*) FROM user_roles WHERE user_id = ?) AS roles,
+            (SELECT COUNT(*) FROM workflow_role_assignments WHERE user_id = ?) AS authority,
+            (SELECT COUNT(*) FROM source_identities WHERE user_id = ?) AS identities`,
+    args: [userId, userId, userId, userId],
+  });
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+  return {
+    teams: Number(row.teams ?? 0),
+    roles: Number(row.roles ?? 0),
+    authority: Number(row.authority ?? 0),
+    identities: Number(row.identities ?? 0),
+  };
+}
+
 // ---- job titles ------------------------------------------------------------
 
 export interface JobTitleRow {

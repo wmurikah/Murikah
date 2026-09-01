@@ -39,7 +39,7 @@ export const GET: APIRoute = async (context) => {
   if (!auth.ok) return auth.response;
 
   const id = context.params.id ?? '';
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
 
   try {
@@ -90,7 +90,7 @@ export const PATCH: APIRoute = async (context) => {
   const parsed = validateUpdateUser(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
 
   const ctx = writeContext(context.request, auth.principal);

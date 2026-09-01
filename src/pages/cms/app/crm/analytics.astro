@@ -18,8 +18,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
 import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewOpportunities } from '@/lib/cms/permissions';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import {
@@ -88,7 +87,7 @@ const CALENDAR_SOURCES = [
 ];
 let calendarRows: Record<string, unknown>[] = [];
 try {
-  const calDb = await getDb(getCmsEnv());
+  const calDb = await requestDb(Astro.locals);
   const found = await calDb.execute({
     sql: calendarSql(CALENDAR_SOURCES),
     args: [drillMonthOf(params, today)],
@@ -121,7 +120,7 @@ let loadFailed = false;
 
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const [f, w, p, occ, vel, fc, bt, src, prod, own, tm, ls, est, hl, tr, af] = await Promise.all([
       funnel(db, userId, filter),
       winRate(db, userId, filter),

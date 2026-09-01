@@ -17,8 +17,7 @@ import CmsDrawer from '@/components/cms/CmsDrawer.astro';
 import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canUploadImportType, canViewImports } from '@/lib/cms/permissions';
 import {
   exceptionQueues,
@@ -62,7 +61,7 @@ let deletion: BatchDeletePlan | null = null;
 let loadFailed = false;
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     batch = (await listBatches(db, 200)).find((candidate) => candidate.batchId === batchId);
     if (batch !== undefined) {
       progress = await importProgress(db, batchId);

@@ -19,7 +19,7 @@ export const PATCH: APIRoute = async (context) => {
   const id = String(context.params.connectionId ?? '');
   const body = (await context.request.json().catch(() => null)) as Record<string, unknown> | null;
   if (body === null) return invalid([{ field: 'body', message: 'Send JSON.' }]);
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await updateConnection(
