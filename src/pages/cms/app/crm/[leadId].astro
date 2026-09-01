@@ -173,22 +173,38 @@ const facts =
           <Fragment slot="actions">
             <CmsBadge tone={statusTone(lead.status)} label={titleCase(lead.status)} />
             {mayManage && lead.firstContactAt === null && (
-              <CmsButton variant="secondary" data-cms-lead-first-contact>
+              <CmsButton
+                variant="secondary"
+                data-cms-lead-first-contact
+                data-cms-modal-open="cms-lead-first-contact"
+              >
                 Record first contact
               </CmsButton>
             )}
             {mayManage && lead.status !== 'CONVERTED' && (
-              <CmsButton variant="secondary" data-cms-lead-qualify>
+              <CmsButton
+                variant="secondary"
+                data-cms-lead-qualify
+                data-cms-modal-open="cms-lead-qualify"
+              >
                 {qualification === null ? 'Score this lead' : 'Update the score'}
               </CmsButton>
             )}
             {mayManage && lead.status !== 'CONVERTED' && lead.status !== 'DISQUALIFIED' && (
-              <CmsButton variant="danger" data-cms-lead-disqualify>
+              <CmsButton
+                variant="danger"
+                data-cms-lead-disqualify
+                data-cms-modal-open="cms-lead-disqualify"
+              >
                 Disqualify
               </CmsButton>
             )}
             {mayConvert && lead.opportunityId === null && lead.status !== 'DISQUALIFIED' && (
-              <CmsButton variant="primary" data-cms-lead-convert>
+              <CmsButton
+                variant="primary"
+                data-cms-lead-convert
+                data-cms-modal-open="cms-lead-convert"
+              >
                 Convert to opportunity
               </CmsButton>
             )}

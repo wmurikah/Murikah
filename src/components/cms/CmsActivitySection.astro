@@ -97,7 +97,24 @@ const titleCase = (value: string) =>
       Activity
       <span class="ms-1 text-cms-caption font-normal text-cms-muted">{total}</span>
     </h2>
-    <CmsButton variant="secondary" icon="plus" data-cms-activity-add> Add activity </CmsButton>
+    {
+      /*
+        THE TRIGGER OPENS NOTHING ITSELF. data-cms-modal-open hands the open to
+        CmsOverlayScript — the one modal lifecycle, with its focus return, page
+        lock and one-dialog-at-a-time invariant — while data-cms-activity-add
+        stays so this component's script can PREPARE the form (reset, default
+        the Done box, clear stale errors, sync the progressive fields) on the
+        same click. Preparing is this component's job; opening is not.
+      */
+    }
+    <CmsButton
+      variant="secondary"
+      icon="plus"
+      data-cms-activity-add
+      data-cms-modal-open="cms-activity-modal"
+    >
+      Add activity
+    </CmsButton>
   </div>
   {
     isAccountTimeline && (
@@ -127,7 +144,11 @@ const titleCase = (value: string) =>
     )
   }
 
-  <CmsModal id="cms-activity-modal" title="Add activity">
+  {
+    /* confirmOnDirty: a half-written summary or note is work worth a question
+      before Escape or a backdrop click discards it. */
+  }
+  <CmsModal id="cms-activity-modal" title="Add activity" confirmOnDirty>
     <form id="cms-activity-form" novalidate class="flex flex-col gap-4">
       <p
         id="cms-activity-error"
@@ -224,6 +245,8 @@ const titleCase = (value: string) =>
 </section>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
+
   interface FieldError {
     field: string;
     message: string;
@@ -231,12 +254,11 @@ const titleCase = (value: string) =>
 
   const section = document.querySelector<HTMLElement>('[data-cms-activity-entity-type]');
   const form = document.getElementById('cms-activity-form') as HTMLFormElement | null;
-  const modal = document.getElementById('cms-activity-modal') as HTMLDialogElement | null;
   const errorBox = document.getElementById('cms-activity-error');
   const typeField = document.getElementById('act-activityType') as HTMLSelectElement | null;
   const doneBox = document.getElementById('act-done') as HTMLInputElement | null;
 
-  if (section && form && modal && typeField) {
+  if (section && form && typeField) {
     const entityType = section.dataset.cmsActivityEntityType ?? '';
     const entityId = section.dataset.cmsActivityEntityId ?? '';
 
@@ -307,14 +329,23 @@ const titleCase = (value: string) =>
     document.addEventListener('click', async (event) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-cms-activity-add]')) {
+        // PREPARE ONLY. Every open starts clean: fresh values, Done back to
+        // its default, no stale error, progressive fields in step. The OPEN
+        // itself belongs to CmsOverlayScript via data-cms-modal-open on this
+        // same button — calling showModal() here made this component a second
+        // modal lifecycle, which is how dialogs end up stacked.
         form.reset();
         if (doneBox) doneBox.checked = true;
         sync();
         if (errorBox) errorBox.hidden = true;
-        modal.showModal();
         return;
       }
-      if (!target?.closest('[data-cms-activity-save]')) return;
+      const saveButton = target?.closest('[data-cms-activity-save]');
+      if (!saveButton) return;
+      const restore = busy(
+        saveButton instanceof HTMLButtonElement ? saveButton : null,
+        'Recording…',
+      );
 
       const body: Record<string, unknown> = { entityType, entityId };
       for (const [name, value] of new FormData(form).entries()) {
@@ -356,6 +387,8 @@ const titleCase = (value: string) =>
           errorBox.hidden = false;
           errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
         }
+      } finally {
+        restore();
       }
     });
   }

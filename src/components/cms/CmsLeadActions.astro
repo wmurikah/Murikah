@@ -267,13 +267,11 @@ const scores = [0, 1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(
   const errorBox = document.getElementById('cms-lead-action-error');
 
   if (leadId !== '') {
-    // Which trigger opens which modal, and which form each submit posts.
-    const OPENERS: readonly { trigger: string; modal: string }[] = [
-      { trigger: '[data-cms-lead-first-contact]', modal: 'cms-lead-first-contact' },
-      { trigger: '[data-cms-lead-qualify]', modal: 'cms-lead-qualify' },
-      { trigger: '[data-cms-lead-disqualify]', modal: 'cms-lead-disqualify' },
-      { trigger: '[data-cms-lead-convert]', modal: 'cms-lead-convert' },
-    ];
+    // The visible triggers carry data-cms-modal-open, so CmsOverlayScript
+    // owns the open under the one shared lifecycle. A trigger click here only
+    // PREPARES: stale errors from an earlier failed attempt are cleared.
+    const TRIGGERS =
+      '[data-cms-lead-first-contact], [data-cms-lead-qualify], [data-cms-lead-disqualify], [data-cms-lead-convert]';
     const FORMS: Record<string, string> = {
       'first-contact': 'cms-lead-first-contact-form',
       qualification: 'cms-lead-qualify-form',
@@ -305,15 +303,10 @@ const scores = [0, 1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(
       return painted;
     };
 
-    for (const opener of OPENERS) {
-      document.addEventListener('click', (event) => {
-        const target = event.target as HTMLElement | null;
-        if (!target?.closest(opener.trigger)) return;
-        clear();
-        const modal = document.getElementById(opener.modal) as HTMLDialogElement | null;
-        modal?.showModal();
-      });
-    }
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(TRIGGERS)) clear();
+    });
 
     // The running total, for the person filling the form in. Nothing reads it.
     const total = document.getElementById('cms-lead-qualify-total');
