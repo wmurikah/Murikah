@@ -2769,7 +2769,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const location = String(released.headers.location ?? '');
       assert.ok(!/[?&]error=/.test(location), `the batch bounced with an error: ${location}`);
       assert.ok(
-        decodeURIComponent(location).includes('3 findings submitted for review'),
+        decodeURIComponent(location).includes('3 observations submitted for review'),
         `the batch must report what it did, got: ${location}`,
       );
 
@@ -4300,7 +4300,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
         assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
         assert.ok(
-          batchAt.includes('2 findings submitted for review'),
+          batchAt.includes('2 observations submitted for review'),
           `the batch must report what it did, got ${batchAt}`,
         );
         for (const id of together) {
@@ -4440,7 +4440,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const batchAt = decodeURIComponent(String(batch.headers.location ?? ''));
       assert.ok(!/[?&]error=/.test(batchAt), `the batch submit must succeed, got ${batchAt}`);
       assert.ok(
-        batchAt.includes('2 findings submitted for review'),
+        batchAt.includes('2 observations submitted for review'),
         `the batch must report what it did, got ${batchAt}`,
       );
       for (const id of together) {
