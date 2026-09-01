@@ -48,7 +48,7 @@ export const GET: APIRoute = async (context) => {
   if (!auth.ok) return auth.response;
 
   const roleId = context.params.id ?? '';
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const role = await getWorkflowRole(connection.db, roleId);
@@ -76,7 +76,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validateAssignment(await readJson(context.request), roleId, isoDay(ctx.now));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const role = await getWorkflowRole(connection.db, roleId);

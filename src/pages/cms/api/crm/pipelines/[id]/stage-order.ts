@@ -28,7 +28,7 @@ export const POST: APIRoute = async (context) => {
   if (!auth.ok) return auth.response;
   const parsed = validateStageOrder(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await reorderStages(

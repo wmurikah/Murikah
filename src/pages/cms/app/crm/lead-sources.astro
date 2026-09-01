@@ -31,8 +31,7 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageLeadSources } from '@/lib/cms/permissions';
 import { listLeadSources, type LeadSourceRow } from '@/lib/cms/repos/leadAdmin';
 
@@ -46,7 +45,7 @@ let loadFailed = false;
 
 if (mayManage) {
   try {
-    sources = await listLeadSources(await getDb(getCmsEnv()));
+    sources = await listLeadSources(await requestDb(Astro.locals));
   } catch (error) {
     console.error('[cms.crm.leadSources] load failed', error);
     loadFailed = true;

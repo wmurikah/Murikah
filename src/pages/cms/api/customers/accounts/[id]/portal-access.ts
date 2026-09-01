@@ -50,7 +50,7 @@ type Action = (typeof ACTIONS)[number];
 export const GET: APIRoute = async (context) => {
   const auth = requirePortalAccessView(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const accountId = context.params.id ?? '';
   try {
@@ -70,7 +70,7 @@ export const GET: APIRoute = async (context) => {
 export const POST: APIRoute = async (context) => {
   const auth = requirePortalAccessManage(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const accountId = context.params.id ?? '';
   const body = ((await readJson(context.request)) ?? {}) as Record<string, unknown>;

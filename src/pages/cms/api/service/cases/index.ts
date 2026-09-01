@@ -35,7 +35,7 @@ export const prerender = false;
 export const GET: APIRoute = async (context) => {
   const auth = requireCasesView(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const userId = auth.principal.user.userId;
@@ -54,7 +54,7 @@ export const POST: APIRoute = async (context) => {
   const today = new Date().toISOString().slice(0, 10);
   const parsed = validateCase(await readJson(context.request), today);
   if (!parsed.ok) return invalid(parsed.errors);
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await createCase(

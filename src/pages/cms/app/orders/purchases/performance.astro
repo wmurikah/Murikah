@@ -20,8 +20,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsOrderFilters from '@/components/cms/CmsOrderFilters.astro';
 import CmsPeriodControl from '@/components/cms/CmsPeriodControl.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewPurchaseOrders } from '@/lib/cms/permissions';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import {
@@ -81,7 +80,7 @@ const today = new Date();
 const CALENDAR_SOURCES = [{ table: 'purchase_orders', column: 'po_created_at' }];
 let calendarRows: Record<string, unknown>[] = [];
 try {
-  const calDb = await getDb(getCmsEnv());
+  const calDb = await requestDb(Astro.locals);
   const found = await calDb.execute({
     sql: calendarSql(CALENDAR_SOURCES),
     args: [drillMonthOf(params, today)],
@@ -108,7 +107,7 @@ let loadFailed = false;
 
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const [c, d, b, s, sh, a, m, t, st, af] = await Promise.all([
       coverage(db, userId, filter, now),
       durations(db, userId, filter, now),

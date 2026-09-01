@@ -25,7 +25,7 @@ export const prerender = false;
 export const GET: APIRoute = async (context) => {
   const auth = requireAuditView(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const userId = auth.principal.user.userId;
   try {

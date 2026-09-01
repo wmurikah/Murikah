@@ -22,8 +22,7 @@ import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canViewCases, canCreateCases } from '@/lib/cms/permissions';
 import { reviewQueue, AUTO_CASE_CONFIDENCE, type QueueRow } from '@/lib/cms/ai/inbox';
 import { activeProvider } from '@/lib/cms/ai/providers';
@@ -42,7 +41,7 @@ if (mayView) {
     // TWO ROUND TRIPS: the queue, and whether a classifier exists at all. The
     // second is what lets the page tell "nothing has arrived" apart from
     // "nothing can be classified", which are different problems.
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     const [rows, provider] = await Promise.all([
       reviewQueue(db),
       activeProvider(db, 'CLASSIFICATION'),

@@ -31,7 +31,7 @@ export const POST: APIRoute = async (context) => {
   if (!(ACTIONS as readonly string[]).includes(action))
     return invalid([{ field: 'action', message: 'Accept, correct or reject it.' }]);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const nullable = (v: unknown): string | null =>

@@ -32,7 +32,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireLeadsManage(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     return ok({ qualification: await getQualification(connection.db, context.params.id ?? '') });
@@ -48,7 +48,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validateQualification(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await qualifyLead(

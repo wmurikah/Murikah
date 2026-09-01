@@ -26,7 +26,7 @@ export const GET: APIRoute = async (context) => {
   if (pipelineId === '') {
     return invalid([{ field: 'pipeline', message: 'Name the pipeline to summarise.' }]);
   }
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     return ok(await pipelineSummary(connection.db, auth.principal.user.userId, pipelineId));

@@ -37,7 +37,7 @@ export const GET: APIRoute = async (context) => {
       `Exporting audit evidence needs ${AUDIT_EXPORT}, which is not granted to you. If nobody holds it, the operator has not yet run docs/cms/audit/09_add_audit_permissions.sql.`,
     );
   }
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const ctx = writeContext(context.request, auth.principal);
   try {

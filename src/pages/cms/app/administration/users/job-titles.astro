@@ -25,8 +25,7 @@ import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsJobTitleScript from '@/components/cms/CmsJobTitleScript.astro';
 import CmsJobTitleMappings from '@/components/cms/CmsJobTitleMappings.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageRoles, canManageUsers } from '@/lib/cms/permissions';
 import { listJobTitles, type JobTitleRow } from '@/lib/cms/repos/userAdmin';
 import { listDepartments, type DepartmentRow } from '@/lib/cms/repos/organisationAdmin';
@@ -59,7 +58,7 @@ let loadFailed = false;
 
 if (mayManage) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [titles, departments] = await Promise.all([listJobTitles(db), listDepartments(db)]);
     if (mayMapRoles) {
       const [access, workflow, roles, workflowRoles, map] = await Promise.all([

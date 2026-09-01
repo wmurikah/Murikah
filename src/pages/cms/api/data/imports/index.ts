@@ -36,7 +36,7 @@ export const prerender = false;
 export const GET: APIRoute = async (context) => {
   const auth = requireImportsView(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     return ok({ batches: await listBatches(connection.db) });
@@ -96,7 +96,7 @@ export const POST: APIRoute = async (context) => {
   // extract dates its documents by.
   const sourceSystemId = SOURCE_SYSTEM_FOR_IMPORT[importType as ImportType];
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const outcome = await receiveUpload(

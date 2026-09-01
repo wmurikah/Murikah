@@ -33,7 +33,7 @@ export const PATCH: APIRoute = async (context) => {
   const parsed = validateTeamMemberEnd(await readJson(context.request), isoDate(ctx.now));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
 
   try {

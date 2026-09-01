@@ -21,8 +21,7 @@ import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsCrmNav from '@/components/cms/CmsCrmNav.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { myWork, type MyWork, type ActivityRow } from '@/lib/cms/repos/activityAdmin';
 
 export const prerender = false;
@@ -33,7 +32,7 @@ const permissions = Astro.locals.cms?.user.permissions ?? [];
 let work: MyWork = { overdue: [], upcoming: [], recentlyCompleted: [], completedTotal: 0 };
 let loadFailed = false;
 try {
-  work = await myWork(await getDb(getCmsEnv()), userId, new Date());
+  work = await myWork(await requestDb(Astro.locals), userId, new Date());
 } catch (error) {
   console.error('[cms.crm.myWork] load failed', error);
   loadFailed = true;

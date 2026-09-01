@@ -33,8 +33,7 @@ import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsWorkflowFormScript from '@/components/cms/CmsWorkflowFormScript.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageWorkflowRoles, canViewWorkflows } from '@/lib/cms/permissions';
 import {
   getWorkflowRole,
@@ -77,7 +76,7 @@ let loadFailed = false;
 
 if (mayRead) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     role = await getWorkflowRole(db, roleId);
     if (role !== null) {
       const rows = await listAssignmentsForRole(db, roleId);

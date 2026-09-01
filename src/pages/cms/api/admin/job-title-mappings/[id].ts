@@ -37,7 +37,7 @@ export const PATCH: APIRoute = async (context) => {
   const parsed = validateMappingUpdate(await readJson(context.request));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await updateMapping(
@@ -57,7 +57,7 @@ export const DELETE: APIRoute = async (context) => {
   const auth = requireRolesManage(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await deleteMapping(

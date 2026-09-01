@@ -40,7 +40,7 @@ export const GET: APIRoute = async (context) => {
   if (!auth.ok) return auth.response;
 
   const teamId = context.params.id ?? '';
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
 
   try {
@@ -64,7 +64,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = validateTeamMember(await readJson(context.request), isoDate(ctx.now));
   if (!parsed.ok) return invalid(parsed.errors);
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
 
   try {

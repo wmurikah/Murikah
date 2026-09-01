@@ -24,3 +24,30 @@ export async function getDb(env: CmsEnv): Promise<Client> {
   await client.execute('PRAGMA foreign_keys = ON;');
   return client;
 }
+
+/**
+ * The request's client, or a fresh one where no request carried it.
+ *
+ * ONE CLIENT PER AUTHENTICATED REQUEST IS THE POINT. The middleware already
+ * creates a client to resolve the session; before this, that client was
+ * discarded and the layout, the page and every data-loading component made
+ * their own — three to five creations per page, each paying the
+ * `PRAGMA foreign_keys = ON` round trip to Turso before its first real query.
+ * The middleware now leaves its client on `locals.cmsDb` and everything
+ * downstream asks here first.
+ *
+ * THE FALLBACK IS NOT DEAD CODE. Tests import pages and endpoints directly
+ * with hand-built locals, and a rare code path can run where the CMS
+ * middleware has not (the marketing host importing a shared module). Those
+ * get exactly the client they always got. The fallback preserves the pragma,
+ * so referential safety never depends on which path constructed the client.
+ *
+ * The parameter is the LOCALS OBJECT and not the client, so no call site can
+ * accidentally thread a browser-supplied value into the database layer: the
+ * only writer of `locals.cmsDb` is the middleware.
+ */
+export async function requestDb(locals: { cmsDb?: Client }): Promise<Client> {
+  if (locals.cmsDb !== undefined) return locals.cmsDb;
+  const { getCmsEnv } = await import('./env.ts');
+  return getDb(getCmsEnv());
+}
