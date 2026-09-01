@@ -1,25 +1,37 @@
 ---
 /**
  * The reusable activity section: one timeline, one composer, one behaviour,
- * rendered on the lead, the opportunity and the account. Build one timeline
- * component and reuse it, rather than three private ones drifting apart.
+ * rendered on the lead, the opportunity, the account and the case. Build one
+ * timeline component and reuse it, rather than four private ones drifting
+ * apart.
  *
- * THE COMPOSER IS PROGRESSIVE.
- * A call asks for contact, summary, outcome and next action. A task asks for
- * owner, due date and summary. A note asks for summary and notes. The type
- * decides which fields show; nothing shows every field for every type.
+ * THE COMPOSER IS INLINE, NOT A MODAL. Recording a call is a note in the
+ * margin of the record, not a task that deserves a backdrop, a focus trap and
+ * a full page reload. "Add activity" expands a composer between the heading
+ * and the timeline — the record stays visible, the rest of the page stays
+ * reachable — and a successful save inserts the SERVER-CONFIRMED entry at the
+ * top of the timeline, bumps the count, and collapses the composer. No
+ * dialog, no overlay lifecycle, no reload.
  *
- * HONESTY ABOUT CHANNELS.
- * The heading on an EMAIL entry reads "Recorded email interaction". Nothing
- * here sends anything, and nothing implies it did.
+ * THE COMPOSER IS PROGRESSIVE. A call is not a task. The common types are
+ * chips a person recognises; the rest sit behind More. The type decides which
+ * fields show, through the one SHOW mapping; nothing shows every field for
+ * every type. "When" is an explicit Happened/Scheduled choice — never a
+ * negative checkbox — and a thing that just happened defaults to Now with the
+ * date picker one deliberate "Change" away.
+ *
+ * HONESTY ABOUT CHANNELS. The heading on an EMAIL entry reads "Recorded
+ * email interaction". Nothing here sends anything, and nothing implies it
+ * did — the timeline's own verbs carry that, so the composer needs no
+ * explanatory paragraph.
  */
-import CmsTimeline, { type CmsTimelineEntry } from './CmsTimeline.astro';
+import CmsTimeline from './CmsTimeline.astro';
 import CmsButton from './CmsButton.astro';
-import CmsModal from './CmsModal.astro';
 import CmsInput from './CmsInput.astro';
 import CmsSelect from './CmsSelect.astro';
 import CmsEmptyState from './CmsEmptyState.astro';
-import { ACTIVITY_TYPES, type ActivityRow } from '@/lib/cms/repos/activityAdmin';
+import { ACTIVITY_TYPES, PAGE_SIZE, type ActivityRow } from '@/lib/cms/repos/activityAdmin';
+import { activityTimelineEntry, activityTypeLabel } from '@/lib/cms/activityTimeline';
 
 interface Option {
   id: string;
@@ -47,74 +59,75 @@ const {
   currentUserId,
 } = Astro.props;
 
-/** The verbs the timeline uses. Recorded, never sent: nothing here sends. */
-const VERB: Record<string, string> = {
-  CALL: 'Recorded call',
-  EMAIL: 'Recorded email interaction',
-  WHATSAPP: 'Recorded WhatsApp interaction',
-  MEETING: 'Meeting',
-  VISIT: 'Site visit',
-  QUOTATION: 'Quotation recorded',
-  PROPOSAL: 'Proposal recorded',
-  FOLLOW_UP: 'Follow-up',
-  NOTE: 'Note',
-  TASK: 'Task',
-  OTHER: 'Activity',
-};
+const entries = activities.map((a) => activityTimelineEntry(a, isAccountTimeline));
 
-const entries: CmsTimelineEntry[] = activities.map((a) => ({
-  title: `${VERB[a.activityType] ?? a.activityType}: ${a.summary}`,
-  detail: [
-    a.contactName === null ? null : `With ${a.contactName}`,
-    a.outcome === null ? null : `Outcome: ${a.outcome}`,
-    a.nextAction === null
-      ? null
-      : `Next: ${a.nextAction}${a.nextActionDue === null ? '' : ` by ${a.nextActionDue}`}`,
-    a.completedAt === null && a.dueAt !== null ? `Due ${a.dueAt}` : null,
-    isAccountTimeline && a.entityType !== 'ACCOUNT'
-      ? `On ${a.entityType.toLowerCase().replace('_', ' ')} ${a.entityId}`
-      : null,
-  ]
-    .filter((line): line is string => line !== null)
-    .join(' · '),
-  actor: a.ownerName,
-  timestamp: (a.completedAt ?? a.scheduledAt ?? a.createdAt).replace(' ', 'T'),
-  timeLabel: a.completedAt ?? a.scheduledAt ?? a.createdAt,
-  tone: a.completedAt !== null ? 'default' : 'warning',
-}));
+/*
+  RECOGNITION OVER RECALL: the five everyday types are visible chips; the rest
+  are one "More" away. Both halves are DERIVED from the canonical catalogue —
+  a common name that leaves ACTIVITY_TYPES drops out here by construction, and
+  every remaining canonical type lands in More, so no second catalogue exists
+  to drift.
+*/
+const COMMON_TYPES = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'TASK'].filter((t) =>
+  (ACTIVITY_TYPES as readonly string[]).includes(t),
+);
+const MORE_TYPES = (ACTIVITY_TYPES as readonly string[]).filter((t) => !COMMON_TYPES.includes(t));
+const DEFAULT_TYPE = COMMON_TYPES[0] ?? ACTIVITY_TYPES[0];
 
-const titleCase = (value: string) =>
-  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+/*
+  The selected chip is bolder, bordered in royal, and carries a check glyph —
+  never colour alone. The radio itself is sr-only; the label styles from its
+  state via has-[:checked], and the glyph shows via group-has-[:checked].
+*/
+const chipClass =
+  'group inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-cms border ' +
+  'border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink select-none ' +
+  'hover:bg-cms-canvas has-[:checked]:border-cms-royal has-[:checked]:bg-cms-royal-tint ' +
+  'has-[:checked]:font-semibold has-[:checked]:text-cms-royal has-[:focus-visible]:ring-2 ' +
+  'has-[:focus-visible]:ring-focus';
+
+/*
+  The templates the browser clones when it inserts a confirmed entry: one per
+  tone, rendered by CmsTimeline ITSELF so the client never re-invents the
+  markup. Text lands via textContent (never markup), so a summary is a string
+  wherever it came from.
+*/
+const templateEntry = (tone: 'default' | 'warning') => ({
+  title: 'placeholder',
+  detail: 'placeholder',
+  actor: 'placeholder',
+  timestamp: '1970-01-01T00:00:00',
+  timeLabel: 'placeholder',
+  tone,
+});
 ---
 
 <section
   class="flex flex-col gap-3"
   data-cms-activity-entity-type={entityType}
   data-cms-activity-entity-id={entityId}
+  data-cms-activity-cap={PAGE_SIZE}
+  data-cms-activity-account-timeline={isAccountTimeline ? '1' : undefined}
 >
-  <div class="flex items-center justify-between">
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <h2 class="text-cms-body font-semibold text-cms-ink">
       Activity
-      <span class="ms-1 text-cms-caption font-normal text-cms-muted">{total}</span>
+      <span data-cms-activity-count class="ms-1 text-cms-caption font-normal text-cms-muted"
+        >{total}</span
+      >
     </h2>
-    {
-      /*
-        THE TRIGGER OPENS NOTHING ITSELF. data-cms-modal-open hands the open to
-        CmsOverlayScript — the one modal lifecycle, with its focus return, page
-        lock and one-dialog-at-a-time invariant — while data-cms-activity-add
-        stays so this component's script can PREPARE the form (reset, default
-        the Done box, clear stale errors, sync the progressive fields) on the
-        same click. Preparing is this component's job; opening is not.
-      */
-    }
-    <CmsButton
-      variant="secondary"
-      icon="plus"
-      data-cms-activity-add
-      data-cms-modal-open="cms-activity-modal"
-    >
-      Add activity
-    </CmsButton>
+    <div class="flex items-center gap-3">
+      {/* The one save acknowledgement: brief, polite, and never a dialog. */}
+      <p data-cms-activity-ack role="status" hidden class="text-cms-body-sm text-cms-positive"></p>
+      <CmsButton
+        variant="secondary"
+        data-cms-activity-toggle
+        aria-expanded="false"
+        aria-controls="cms-activity-composer"
+      >
+        <span data-cms-activity-toggle-label>Add activity</span>
+      </CmsButton>
+    </div>
   </div>
   {
     isAccountTimeline && (
@@ -125,30 +138,14 @@ const titleCase = (value: string) =>
       </p>
     )
   }
-  {
-    entries.length === 0 ? (
-      <CmsEmptyState
-        icon="clock"
-        title="Nothing recorded yet"
-        description="Calls, meetings, notes and tasks recorded here become the record of the relationship."
-      />
-    ) : (
-      <CmsTimeline entries={entries} label="Activity timeline" />
-    )
-  }
-  {
-    total > activities.length && (
-      <p class="text-cms-caption text-cms-muted">
-        Showing the most recent {activities.length} of {total}.
-      </p>
-    )
-  }
 
-  {
-    /* confirmOnDirty: a half-written summary or note is work worth a question
-      before Escape or a backdrop click discards it. */
-  }
-  <CmsModal id="cms-activity-modal" title="Add activity" confirmOnDirty>
+  {/* THE INLINE COMPOSER: between the heading and the history, in page flow. */}
+  <div
+    id="cms-activity-composer"
+    data-cms-activity-composer
+    hidden
+    class="rounded-cms-lg border border-cms-line bg-cms-surface p-4"
+  >
     <form id="cms-activity-form" novalidate class="flex flex-col gap-4">
       <p
         id="cms-activity-error"
@@ -157,14 +154,57 @@ const titleCase = (value: string) =>
         class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
       >
       </p>
-      <CmsSelect
-        id="act-activityType"
-        name="activityType"
-        label="Type"
-        required
-        options={ACTIVITY_TYPES.map((t) => ({ value: t, label: titleCase(t) }))}
-      />
+
+      <fieldset>
+        <legend class="mb-2 text-cms-label font-medium text-cms-ink">Type</legend>
+        <div class="flex flex-wrap gap-2">
+          {
+            COMMON_TYPES.map((t) => (
+              <label class={chipClass}>
+                <input
+                  type="radio"
+                  name="activityType"
+                  value={t}
+                  checked={t === DEFAULT_TYPE}
+                  class="sr-only"
+                />
+                <span class="hidden group-has-[:checked]:inline" aria-hidden="true">
+                  ✓
+                </span>
+                {activityTypeLabel(t)}
+              </label>
+            ))
+          }
+          <button
+            type="button"
+            data-cms-activity-more
+            aria-expanded="false"
+            class="inline-flex min-h-10 items-center gap-1 rounded-cms px-3 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-royal-tint focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            More <span aria-hidden="true">▾</span>
+          </button>
+        </div>
+        {
+          /* The rest of the canonical catalogue, revealed by More and kept
+            visible while one of its types is the selection. */
+        }
+        <div data-cms-activity-more-types hidden class="mt-2 flex flex-wrap gap-2">
+          {
+            MORE_TYPES.map((t) => (
+              <label class={chipClass}>
+                <input type="radio" name="activityType" value={t} class="sr-only" />
+                <span class="hidden group-has-[:checked]:inline" aria-hidden="true">
+                  ✓
+                </span>
+                {activityTypeLabel(t)}
+              </label>
+            ))
+          }
+        </div>
+      </fieldset>
+
       <CmsInput id="act-summary" name="summary" label="Summary" required />
+
       {
         contacts.length > 0 && (
           <div data-act-field="contact">
@@ -180,72 +220,160 @@ const titleCase = (value: string) =>
           </div>
         )
       }
-      <div data-act-field="owner">
-        <CmsSelect
-          id="act-ownerUserId"
-          name="ownerUserId"
-          label="Owner"
-          value={currentUserId}
-          options={owners.map((o) => ({ value: o.id, label: o.label }))}
-        />
-      </div>
-      <div data-act-field="completed">
-        <label class="flex items-start gap-2 text-cms-body-sm text-cms-ink">
-          <input type="checkbox" id="act-done" checked class="mt-0.5" />
-          <span>Already happened. Untick to schedule it instead.</span>
-        </label>
-      </div>
-      <div data-act-field="completedAt">
-        <CmsInput
-          id="act-completedAt"
-          name="completedAt"
-          label="When it happened"
-          type="datetime-local"
-        />
-      </div>
-      <div data-act-field="scheduledAt" hidden>
-        <CmsInput
-          id="act-scheduledAt"
-          name="scheduledAt"
-          label="Scheduled for"
-          type="datetime-local"
-        />
-      </div>
+
+      {
+        /* Owner surfaces here for assignment-shaped types (task, follow-up);
+          for everything else it waits under More details. */
+      }
+      <div data-act-slot="owner" class="contents"></div>
+
+      <fieldset data-act-field="when" class="flex flex-col gap-2">
+        <legend class="mb-2 text-cms-label font-medium text-cms-ink">When</legend>
+        <div data-act-when-toggle class="flex flex-wrap gap-2">
+          <label class={chipClass}>
+            <input type="radio" name="act-when-mode" value="happened" checked class="sr-only" />
+            <span class="hidden group-has-[:checked]:inline" aria-hidden="true">✓</span>
+            Happened
+          </label>
+          <label class={chipClass}>
+            <input type="radio" name="act-when-mode" value="scheduled" class="sr-only" />
+            <span class="hidden group-has-[:checked]:inline" aria-hidden="true">✓</span>
+            Scheduled
+          </label>
+        </div>
+        <div data-act-when-happened class="flex flex-col gap-2">
+          <p data-act-when-now class="text-cms-body-sm text-cms-ink">
+            <span class="font-medium">Now</span>
+            <button
+              type="button"
+              data-act-when-change
+              class="ms-2 rounded-cms font-semibold text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Change
+            </button>
+          </p>
+          <div data-act-completed-wrap hidden>
+            <CmsInput
+              id="act-completedAt"
+              name="completedAt"
+              label="When it happened"
+              type="datetime-local"
+            />
+          </div>
+        </div>
+        <div data-act-when-scheduled hidden>
+          <CmsInput
+            id="act-scheduledAt"
+            name="scheduledAt"
+            label="Scheduled for"
+            type="datetime-local"
+          />
+        </div>
+      </fieldset>
+
       <div data-act-field="outcome">
         <CmsInput id="act-outcome" name="outcome" label="Outcome" />
       </div>
-      <div data-act-field="next">
+      {
+        /* Next action and its due date travel together, on one row where the
+          width allows, so nobody hunts for the due date elsewhere. */
+      }
+      <div data-act-field="next" class="grid gap-4 sm:grid-cols-2">
         <CmsInput id="act-nextAction" name="nextAction" label="Next action" />
-        <CmsInput
-          id="act-nextActionDue"
-          name="nextActionDue"
-          label="Next action due"
-          type="datetime-local"
+        <CmsInput id="act-nextActionDue" name="nextActionDue" label="Due" type="datetime-local" />
+      </div>
+
+      {
+        /* Notes surface here for a NOTE, where they are the point; for other
+          types they wait under More details. */
+      }
+      <div data-act-slot="notes" class="contents"></div>
+
+      <details data-act-more-details class="rounded-cms border border-cms-line">
+        <summary
+          class="cursor-pointer rounded-cms px-3 py-2 text-cms-body-sm font-medium text-cms-ink outline-none select-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          More details
+        </summary>
+        <div data-act-more-body class="flex flex-col gap-4 px-3 pt-1 pb-3">
+          <div data-act-field="owner">
+            <CmsSelect
+              id="act-ownerUserId"
+              name="ownerUserId"
+              label="Owner"
+              value={currentUserId}
+              options={owners.map((o) => ({ value: o.id, label: o.label }))}
+            />
+          </div>
+          <div data-act-field="notes" class="flex flex-col gap-1.5">
+            <label for="act-notes" class="text-cms-body-sm font-medium text-cms-ink">Notes</label>
+            <textarea
+              id="act-notes"
+              name="notes"
+              rows="3"
+              class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            ></textarea>
+          </div>
+        </div>
+      </details>
+
+      {
+        /* The INLINE discard confirmation: no dialog, no alert(), and typed
+          work is never lost silently. Shown in place of the actions. */
+      }
+      <div
+        data-cms-activity-discard
+        hidden
+        class="flex flex-wrap items-center justify-between gap-3 rounded-cms border border-cms-caution-border bg-cms-caution-tint px-3 py-2"
+      >
+        <p class="text-cms-body-sm font-medium text-cms-ink">Discard this activity?</p>
+        <div class="flex gap-2">
+          <CmsButton variant="secondary" data-cms-activity-keep>Keep editing</CmsButton>
+          <CmsButton variant="ghost" data-cms-activity-discard-confirm>Discard</CmsButton>
+        </div>
+      </div>
+
+      <div data-cms-activity-actions class="flex flex-row-reverse justify-start gap-2">
+        <CmsButton variant="primary" data-cms-activity-save>Record</CmsButton>
+        <CmsButton variant="ghost" data-cms-activity-cancel>Cancel</CmsButton>
+      </div>
+    </form>
+  </div>
+
+  {
+    entries.length === 0 && (
+      <div data-cms-activity-empty>
+        <CmsEmptyState
+          icon="clock"
+          title="Nothing recorded yet"
+          description="Calls, meetings, notes and tasks recorded here become the record of the relationship."
         />
       </div>
-      <div data-act-field="notes">
-        <label for="act-notes" class="text-cms-body-sm font-medium text-cms-ink">Notes</label>
-        <textarea
-          id="act-notes"
-          name="notes"
-          rows="3"
-          class="mt-1.5 w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        ></textarea>
-      </div>
-      <p class="text-cms-caption text-cms-muted">
-        This records that the interaction happened. Nothing is sent from here: there is no email or
-        messaging integration, and the timeline says "recorded", never "sent".
-      </p>
-    </form>
-    <Fragment slot="actions">
-      <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
-      <CmsButton variant="primary" data-cms-activity-save>Record it</CmsButton>
-    </Fragment>
-  </CmsModal>
+    )
+  }
+  <div data-cms-activity-list hidden={entries.length === 0}>
+    <CmsTimeline entries={entries} label="Activity timeline" />
+  </div>
+  <p
+    data-cms-activity-note
+    hidden={total <= activities.length}
+    class="text-cms-caption text-cms-muted"
+  >
+    Showing the most recent {activities.length} of {total}.
+  </p>
+
+  <template data-cms-activity-template="default">
+    <CmsTimeline entries={[templateEntry('default')]} label="Template" />
+  </template>
+  <template data-cms-activity-template="warning">
+    <CmsTimeline entries={[templateEntry('warning')]} label="Template" />
+  </template>
 </section>
 
 <script>
   import { busy } from '@/lib/cms/ui/busy';
+  import { activityTimelineEntry } from '@/lib/cms/activityTimeline';
+  import type { ActivityRow } from '@/lib/cms/repos/activityAdmin';
 
   interface FieldError {
     field: string;
@@ -254,16 +382,44 @@ const titleCase = (value: string) =>
 
   const section = document.querySelector<HTMLElement>('[data-cms-activity-entity-type]');
   const form = document.getElementById('cms-activity-form') as HTMLFormElement | null;
-  const errorBox = document.getElementById('cms-activity-error');
-  const typeField = document.getElementById('act-activityType') as HTMLSelectElement | null;
-  const doneBox = document.getElementById('act-done') as HTMLInputElement | null;
 
-  if (section && form && typeField) {
+  if (section && form) {
+    const q = <T extends HTMLElement>(selector: string): T | null =>
+      section.querySelector<T>(selector);
     const entityType = section.dataset.cmsActivityEntityType ?? '';
     const entityId = section.dataset.cmsActivityEntityId ?? '';
+    const cap = Number(section.dataset.cmsActivityCap ?? '25');
+    const accountTimeline = section.dataset.cmsActivityAccountTimeline === '1';
+
+    const composer = q<HTMLElement>('[data-cms-activity-composer]');
+    const toggle = q<HTMLButtonElement>('[data-cms-activity-toggle]');
+    const toggleLabel = q<HTMLElement>('[data-cms-activity-toggle-label]');
+    const errorBox = document.getElementById('cms-activity-error');
+    const ack = q<HTMLElement>('[data-cms-activity-ack]');
+    const countEl = q<HTMLElement>('[data-cms-activity-count]');
+    const note = q<HTMLElement>('[data-cms-activity-note]');
+    const listWrap = q<HTMLElement>('[data-cms-activity-list]');
+    const moreButton = q<HTMLButtonElement>('[data-cms-activity-more]');
+    const moreTypes = q<HTMLElement>('[data-cms-activity-more-types]');
+    const discard = q<HTMLElement>('[data-cms-activity-discard]');
+    const actions = q<HTMLElement>('[data-cms-activity-actions]');
+    const moreDetails = q<HTMLElement>('[data-act-more-details]');
+    const moreBody = q<HTMLElement>('[data-act-more-body]');
+    const ownerSlot = q<HTMLElement>('[data-act-slot="owner"]');
+    const notesSlot = q<HTMLElement>('[data-act-slot="notes"]');
+    const summaryField = document.getElementById('act-summary') as HTMLInputElement | null;
+
+    // The one count of what the timeline shows and what exists, kept in step
+    // with every confirmed insert. `cap` is the server page size: the list
+    // never grows past what a fresh load would show.
+    let shown = listWrap ? listWrap.querySelectorAll('li').length : 0;
+    let total = Number(countEl?.textContent ?? '0');
+    let dirty = false;
+    let ackTimer = 0;
 
     // Which optional fields each type shows. The progressive composer: a call
-    // is not a task and the form should not pretend otherwise.
+    // is not a task and the form should not pretend otherwise. 'completed'
+    // marks the types where Happened/Scheduled is a genuine choice.
     const SHOW: Record<string, string[]> = {
       CALL: ['contact', 'owner', 'completed', 'completedAt', 'outcome', 'next'],
       EMAIL: ['contact', 'owner', 'completed', 'completedAt', 'outcome', 'next'],
@@ -305,61 +461,203 @@ const titleCase = (value: string) =>
       ],
     };
 
+    const checkedType = (): string =>
+      form.querySelector<HTMLInputElement>('input[name="activityType"]:checked')?.value ?? 'CALL';
+    const checkedMode = (): string =>
+      form.querySelector<HTMLInputElement>('input[name="act-when-mode"]:checked')?.value ??
+      'happened';
+
+    /**
+     * Happened, scheduled, or neither, for the selected type — derived from
+     * the SHOW mapping so no second type catalogue exists. A type with the
+     * toggle asks the person; a completed-only type (quotation) is always
+     * Happened; a scheduled-only type (task, follow-up) is always Scheduled
+     * and never stamps a completion it does not have. The old hidden
+     * "already happened" checkbox stamped completedAt onto every new task,
+     * which marked it done at birth and kept it out of My Work's open lists.
+     */
+    const timeMode = (type: string): 'happened' | 'scheduled' | 'none' => {
+      const visible = SHOW[type] ?? [];
+      const hasToggle = visible.includes('completed');
+      const canHappen = visible.includes('completedAt');
+      const canSchedule = hasToggle || visible.includes('scheduledAt');
+      if (!canHappen && !canSchedule) return 'none';
+      if (!canSchedule) return 'happened';
+      if (!canHappen) return 'scheduled';
+      return checkedMode() === 'scheduled' ? 'scheduled' : 'happened';
+    };
+
     const sync = () => {
-      const visible = SHOW[typeField.value] ?? [];
-      for (const node of document.querySelectorAll<HTMLElement>('[data-act-field]')) {
-        const key = node.dataset.actField ?? '';
-        let show = visible.includes(key);
-        if (key === 'completedAt' && doneBox && !doneBox.checked) show = false;
-        if (key === 'scheduledAt' && doneBox?.checked && visible.includes('completedAt')) {
-          show = visible.includes('scheduledAt') && !visible.includes('completed');
-        }
-        node.toggleAttribute('hidden', !show);
+      const type = checkedType();
+      const visible = SHOW[type] ?? [];
+      for (const key of ['contact', 'owner', 'outcome', 'next', 'notes']) {
+        section
+          .querySelector<HTMLElement>(`[data-act-field="${key}"]`)
+          ?.toggleAttribute('hidden', !visible.includes(key));
       }
-      // A pure future item: scheduling shows when "already happened" is off.
-      if (doneBox && !doneBox.checked) {
-        document
-          .querySelector<HTMLElement>('[data-act-field="scheduledAt"]')
-          ?.toggleAttribute('hidden', false);
+      const mode = timeMode(type);
+      q<HTMLElement>('[data-act-field="when"]')?.toggleAttribute('hidden', mode === 'none');
+      q<HTMLElement>('[data-act-when-toggle]')?.toggleAttribute(
+        'hidden',
+        !visible.includes('completed'),
+      );
+      q<HTMLElement>('[data-act-when-happened]')?.toggleAttribute('hidden', mode !== 'happened');
+      q<HTMLElement>('[data-act-when-scheduled]')?.toggleAttribute('hidden', mode !== 'scheduled');
+      // A task's time is a deadline; a meeting's is an appointment.
+      const scheduledLabel = section.querySelector<HTMLElement>('label[for="act-scheduledAt"]');
+      if (scheduledLabel) {
+        scheduledLabel.textContent =
+          type === 'TASK' || type === 'FOLLOW_UP' ? 'Due' : 'Scheduled for';
+      }
+      // Placement: owner is primary for assignment-shaped types, notes are
+      // primary for a note; otherwise both wait under More details. The
+      // nodes MOVE (values survive), always owner before notes.
+      const ownerGroup = section.querySelector<HTMLElement>('[data-act-field="owner"]');
+      const notesGroup = section.querySelector<HTMLElement>('[data-act-field="notes"]');
+      const assignment = type === 'TASK' || type === 'FOLLOW_UP';
+      if (ownerGroup) (assignment ? ownerSlot : moreBody)?.appendChild(ownerGroup);
+      if (notesGroup) {
+        if (type === 'NOTE') notesSlot?.appendChild(notesGroup);
+        else moreBody?.appendChild(notesGroup);
+      }
+      // No More details when nothing waits inside it for this type.
+      const hasMore = [...(moreBody?.children ?? [])].some((c) => !c.hasAttribute('hidden'));
+      moreDetails?.toggleAttribute('hidden', !hasMore);
+      // A selected type must never hide with its chips.
+      if (moreTypes && moreTypes.querySelector('input:checked') !== null) {
+        moreTypes.hidden = false;
+        moreButton?.setAttribute('aria-expanded', 'true');
       }
     };
-    typeField.addEventListener('change', sync);
-    doneBox?.addEventListener('change', sync);
 
-    document.addEventListener('click', async (event) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-cms-activity-add]')) {
-        // PREPARE ONLY. Every open starts clean: fresh values, Done back to
-        // its default, no stale error, progressive fields in step. The OPEN
-        // itself belongs to CmsOverlayScript via data-cms-modal-open on this
-        // same button — calling showModal() here made this component a second
-        // modal lifecycle, which is how dialogs end up stacked.
-        form.reset();
-        if (doneBox) doneBox.checked = true;
-        sync();
-        if (errorBox) errorBox.hidden = true;
-        return;
+    const showDiscard = (show: boolean) => {
+      if (discard) discard.hidden = !show;
+      if (actions) actions.hidden = show;
+      if (show) q<HTMLElement>('[data-cms-activity-keep]')?.focus();
+    };
+
+    const prepare = () => {
+      form.reset();
+      dirty = false;
+      if (errorBox) errorBox.hidden = true;
+      showDiscard(false);
+      const wrap = q<HTMLElement>('[data-act-completed-wrap]');
+      if (wrap) wrap.hidden = true;
+      q<HTMLElement>('[data-act-when-now]')?.toggleAttribute('hidden', false);
+      if (moreTypes) moreTypes.hidden = true;
+      moreButton?.setAttribute('aria-expanded', 'false');
+      const details = moreDetails as HTMLDetailsElement | null;
+      if (details) details.open = false;
+      sync();
+    };
+
+    const setOpen = (open: boolean) => {
+      if (!composer) return;
+      composer.hidden = !open;
+      toggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (toggleLabel) toggleLabel.textContent = open ? 'Close' : 'Add activity';
+      if (open) {
+        prepare();
+        summaryField?.focus();
+      } else {
+        toggle?.focus();
       }
-      const saveButton = target?.closest('[data-cms-activity-save]');
-      if (!saveButton) return;
+    };
+
+    // Clean close closes; a dirty one asks INLINE — no dialog, no alert().
+    const requestClose = () => {
+      if (dirty) showDiscard(true);
+      else setOpen(false);
+    };
+
+    const showAck = () => {
+      if (!ack) return;
+      window.clearTimeout(ackTimer);
+      ack.hidden = false;
+      ack.textContent = '✓ Activity recorded';
+      ackTimer = window.setTimeout(() => {
+        ack.hidden = true;
+        ack.textContent = '';
+      }, 3000);
+    };
+
+    /**
+     * Insert the SERVER-CONFIRMED row at the top of the timeline: same
+     * mapping as the server render, markup cloned from a CmsTimeline-rendered
+     * template, every string set through textContent. The list stays at the
+     * page size and the count and "showing" note keep telling the truth.
+     */
+    const insertActivity = (row: ActivityRow) => {
+      const entry = activityTimelineEntry(row, accountTimeline);
+      const template = section.querySelector<HTMLTemplateElement>(
+        `template[data-cms-activity-template="${entry.tone}"]`,
+      );
+      const item = template?.content.querySelector('li')?.cloneNode(true) as HTMLElement | null;
+      const list = listWrap?.querySelector<HTMLOListElement>('ol');
+      if (!item || !list) return;
+      const title = item.querySelector<HTMLElement>('[data-timeline-title]');
+      if (title) title.textContent = entry.title;
+      const detail = item.querySelector<HTMLElement>('[data-timeline-detail]');
+      if (detail) {
+        if (entry.detail === '') detail.remove();
+        else detail.textContent = entry.detail;
+      }
+      const actor = item.querySelector<HTMLElement>('[data-timeline-actor]');
+      if (actor) actor.textContent = entry.actor;
+      const time = item.querySelector<HTMLTimeElement>('[data-timeline-time]');
+      if (time) {
+        time.dateTime = entry.timestamp;
+        time.textContent = entry.timeLabel;
+      }
+      q<HTMLElement>('[data-cms-activity-empty]')?.remove();
+      if (listWrap) listWrap.hidden = false;
+      // insertBefore, not prepend: the Workers runtime types shadow DOM
+      // Element.prepend with HTMLRewriter's, and Node.insertBefore is the
+      // same operation with no such collision.
+      list.insertBefore(item, list.firstChild);
+      shown += 1;
+      total += 1;
+      if (shown > cap) {
+        list.lastElementChild?.remove();
+        shown = cap;
+      }
+      if (countEl) countEl.textContent = String(total);
+      if (note) {
+        if (total > shown) {
+          note.textContent = `Showing the most recent ${shown} of ${total}.`;
+          note.hidden = false;
+        } else {
+          note.hidden = true;
+        }
+      }
+    };
+
+    const save = async (saveButton: Element) => {
       const restore = busy(
         saveButton instanceof HTMLButtonElement ? saveButton : null,
         'Recording…',
       );
-
       const body: Record<string, unknown> = { entityType, entityId };
       for (const [name, value] of new FormData(form).entries()) {
         if (typeof value === 'string' && value !== '') body[name] = value;
       }
-      // Recorded as already done with no explicit time: the server stamps now
-      // on completion through the completedAt the payload omits? No: the rule
-      // is explicit. Done and no time given sends the current local time.
-      if (doneBox?.checked && !('completedAt' in body)) {
-        const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        body.completedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+      delete body['act-when-mode'];
+      const mode = timeMode(checkedType());
+      if (mode === 'happened') {
+        delete body.scheduledAt;
+        // Happened with the time left on "Now": stamp the current local time,
+        // exactly as the modal did.
+        if (!('completedAt' in body)) {
+          const now = new Date();
+          const pad = (n: number) => String(n).padStart(2, '0');
+          body.completedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+        }
+      } else if (mode === 'scheduled') {
+        delete body.completedAt;
+      } else {
+        delete body.completedAt;
+        delete body.scheduledAt;
       }
-      if (!doneBox?.checked) delete body.completedAt;
 
       try {
         const response = await fetch('/api/crm/activities', {
@@ -369,7 +667,11 @@ const titleCase = (value: string) =>
           body: JSON.stringify(body),
         });
         if (response.ok) {
-          window.location.reload();
+          // Confirmed by the server, inserted from the server's own row.
+          const created = (await response.json()) as ActivityRow;
+          insertActivity(created);
+          setOpen(false);
+          showAck();
           return;
         }
         const answer = (await response.json().catch(() => null)) as {
@@ -385,11 +687,75 @@ const titleCase = (value: string) =>
       } catch {
         if (errorBox) {
           errorBox.hidden = false;
-          errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
+          errorBox.textContent =
+            'Couldn’t record activity. Check your connection, then press Record again — nothing you typed was lost.';
         }
       } finally {
         restore();
       }
+    };
+
+    // Listeners live on the section, not the document: this component owns
+    // exactly its own clicks and nothing else's.
+    section.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('[data-cms-activity-toggle]')) {
+        if (composer?.hidden) setOpen(true);
+        else requestClose();
+        return;
+      }
+      if (target.closest('[data-cms-activity-cancel]')) {
+        requestClose();
+        return;
+      }
+      if (target.closest('[data-cms-activity-keep]')) {
+        showDiscard(false);
+        return;
+      }
+      if (target.closest('[data-cms-activity-discard-confirm]')) {
+        dirty = false;
+        setOpen(false);
+        return;
+      }
+      if (target.closest('[data-cms-activity-more]')) {
+        if (moreTypes) {
+          moreTypes.hidden = !moreTypes.hidden;
+          moreButton?.setAttribute('aria-expanded', moreTypes.hidden ? 'false' : 'true');
+        }
+        return;
+      }
+      if (target.closest('[data-act-when-change]')) {
+        q<HTMLElement>('[data-act-when-now]')?.toggleAttribute('hidden', true);
+        const wrap = q<HTMLElement>('[data-act-completed-wrap]');
+        if (wrap) wrap.hidden = false;
+        (document.getElementById('act-completedAt') as HTMLInputElement | null)?.focus();
+        return;
+      }
+      const saveButton = target.closest('[data-cms-activity-save]');
+      if (saveButton) void save(saveButton);
     });
+
+    // The type chips and the Happened/Scheduled choice drive the fields.
+    form.addEventListener('change', (event) => {
+      const target = event.target as HTMLInputElement | null;
+      if (target?.name === 'activityType' || target?.name === 'act-when-mode') sync();
+    });
+
+    // Typed content marks the form dirty; picking a chip loses nothing and
+    // does not. Dirty is what gates the inline discard confirmation.
+    form.addEventListener('input', (event) => {
+      const target = event.target as HTMLInputElement | null;
+      if (target?.name === 'activityType' || target?.name === 'act-when-mode') return;
+      dirty = true;
+    });
+
+    // Escape asks the same question Cancel does. No trap: the listener sits
+    // on the composer, so the rest of the page never hears it.
+    composer?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !composer.hidden) requestClose();
+    });
+
+    sync();
   }
 </script>
