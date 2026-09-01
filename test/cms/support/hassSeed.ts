@@ -61,14 +61,25 @@ INSERT OR IGNORE INTO countries VALUES
 ('CTR-UG','UG','Uganda','Africa/Kampala','UGX',1,CURRENT_TIMESTAMP),
 ('CTR-TZ','TZ','Tanzania','Africa/Dar_es_Salaam','TZS',1,CURRENT_TIMESTAMP),
 ('CTR-RW','RW','Rwanda','Africa/Kigali','RWF',1,CURRENT_TIMESTAMP),
-('CTR-ZM','ZM','Zambia','Africa/Lusaka','ZMW',1,CURRENT_TIMESTAMP);
+('CTR-ZM','ZM','Zambia','Africa/Lusaka','ZMW',1,CURRENT_TIMESTAMP),
+('CTR-CD','CD','DR Congo','Africa/Lubumbashi','USD',1,CURRENT_TIMESTAMP),
+('CTR-SS','SS','South Sudan','Africa/Juba','SSP',1,CURRENT_TIMESTAMP);
 
-INSERT OR IGNORE INTO affiliates VALUES
-('AFF-KE','HPK','Hass Petroleum Kenya','CTR-KE',1,CURRENT_TIMESTAMP),
-('AFF-UG','HPU','Hass Petroleum Uganda','CTR-UG',1,CURRENT_TIMESTAMP),
-('AFF-TZ','HPT','Hass Petroleum Tanzania','CTR-TZ',1,CURRENT_TIMESTAMP),
-('AFF-RW','HPR','Hass Petroleum Rwanda','CTR-RW',1,CURRENT_TIMESTAMP),
-('AFF-ZM','HPZ','Hass Petroleum Zambia','CTR-ZM',1,CURRENT_TIMESTAMP);
+-- THE EIGHT ENTITIES OF THE OPERATOR'S ALIGNMENT SCRIPT, mirrored. The
+-- script added extract_code (the token the monthly extract filenames carry)
+-- and three entities: DRC as HPD, South Sudan as HPS and the terminal as
+-- HTW. Named columns, because the live table now has one more column than
+-- a positional VALUES list was written for.
+INSERT OR IGNORE INTO affiliates
+(affiliate_id, affiliate_code, affiliate_name, country_id, active, created_at, extract_code) VALUES
+('AFF-KE','HPK','Hass Petroleum Kenya','CTR-KE',1,CURRENT_TIMESTAMP,'KE'),
+('AFF-UG','HPU','Hass Petroleum Uganda','CTR-UG',1,CURRENT_TIMESTAMP,'UG'),
+('AFF-TZ','HPT','Hass Petroleum Tanzania','CTR-TZ',1,CURRENT_TIMESTAMP,'TZ'),
+('AFF-RW','HPR','Hass Petroleum Rwanda','CTR-RW',1,CURRENT_TIMESTAMP,'RW'),
+('AFF-ZM','HPZ','Hass Petroleum Zambia','CTR-ZM',1,CURRENT_TIMESTAMP,'ZM'),
+('AFF-CD','HPD','Hass Petroleum DRC','CTR-CD',1,CURRENT_TIMESTAMP,'DRC'),
+('AFF-SS','HPS','Hass Petroleum South Sudan','CTR-SS',1,CURRENT_TIMESTAMP,'SSD'),
+('AFF-TW','HTW','Hass Terminal','CTR-KE',1,CURRENT_TIMESTAMP,'TERMINAL');
 
 INSERT OR IGNORE INTO business_units VALUES
 ('BU-RET','RETAIL','Retail','Retail station and forecourt business',1,CURRENT_TIMESTAMP),
