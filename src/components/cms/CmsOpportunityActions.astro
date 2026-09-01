@@ -215,8 +215,6 @@ const destinations = stages.filter((s) => s.id !== currentStageId);
   const opportunityId = root?.dataset.cmsOppId ?? '';
 
   if (opportunityId !== '') {
-    const moveModal = document.getElementById('cms-opp-move-modal') as HTMLDialogElement | null;
-    const lineModal = document.getElementById('cms-opp-line-modal') as HTMLDialogElement | null;
     const moveForm = document.getElementById('cms-opp-move-form') as HTMLFormElement | null;
     const lineForm = document.getElementById('cms-opp-line-form') as HTMLFormElement | null;
     const moveError = document.getElementById('cms-opp-move-error');
@@ -281,18 +279,20 @@ const destinations = stages.filter((s) => s.id !== currentStageId);
       }
     };
 
+    // The triggers carry data-cms-modal-open, so CmsOverlayScript owns the
+    // open under the one shared lifecycle; a trigger click here only PREPARES
+    // its form — stale errors cleared, the line form reset, the stage fields
+    // synced.
     document.addEventListener('click', (event) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-cms-opp-move]')) {
         if (moveError) moveError.hidden = true;
         sync();
-        moveModal?.showModal();
         return;
       }
       if (target?.closest('[data-cms-opp-line-add]')) {
         if (lineError) lineError.hidden = true;
         lineForm?.reset();
-        lineModal?.showModal();
         return;
       }
       if (target?.closest('[data-cms-opp-move-save]') && moveForm) {
