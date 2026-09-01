@@ -34,9 +34,17 @@ import {
   validateSoWorkbook,
   commitSoBatch,
   revalidateSoRows,
+  SO_AFFILIATE_MAP,
   type SoValidation,
 } from './soImport.ts';
 import { validatePoWorkbook, commitPoBatch, revalidatePoRows } from './poImport.ts';
+import {
+  parseExtractFilename,
+  checkClaimedPeriod,
+  EXTRACT_PROCESS_FOR_IMPORT,
+  type ExtractNameClaim,
+} from './extractName.ts';
+import { hashFile } from './workbook.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 const text = (v: unknown): string => String(v ?? '');
@@ -182,28 +190,141 @@ export interface DerivationNote {
 export interface UploadRequest {
   importType: ImportType;
   sourceSystemId: string;
+  /**
+   * The OPERATOR'S choice, where they made one — the fallback and the
+   * override of the three-source resolution, never the default. Null means
+   * "resolve it": the file's own column first, the filename token second.
+   */
   affiliateId: string | null;
   filename: string;
   reportingPeriodFrom: string | null;
   reportingPeriodTo: string | null;
   bytes: Uint8Array;
+  /**
+   * Set when the operator overrides the entity of a batch already previewed:
+   * the SAME file is re-sent with the chosen affiliate, and this names the
+   * batch to rebuild in place. The bytes must hash-match that batch — an
+   * override is a second reading of one file, never a door past the
+   * duplicate rule for a different one.
+   */
+  overrideBatchId?: string | null;
 }
+
+// ---- The entity, resolved from three sources in order ------------------------
+
+/** An affiliate as the upload screen needs it: id, name, and its token. */
+export interface UploadAffiliate {
+  affiliateId: string;
+  affiliateName: string;
+  /** The filename token from affiliates.extract_code, or null. */
+  extractCode: string | null;
+}
+
+/** Every active affiliate, one read, serving lookup and error message alike. */
+export async function listUploadAffiliates(db: Client): Promise<UploadAffiliate[]> {
+  const result = await db.execute(
+    `SELECT affiliate_id, affiliate_name, extract_code FROM affiliates
+      WHERE active = 1 ORDER BY affiliate_name`,
+  );
+  return result.rows.map((raw) => {
+    const row = raw as unknown as Record<string, unknown>;
+    return {
+      affiliateId: text(row.affiliate_id),
+      affiliateName: text(row.affiliate_name),
+      extractCode: nullableText(row.extract_code),
+    };
+  });
+}
+
+/**
+ * Where the batch's entity came from, in words the preview can show.
+ *
+ * The three sources, in order of authority:
+ *   column    the file's own AFFILIATE column — it wins, always;
+ *   filename  the name's entity token, matched against extract_code — the
+ *             purchase order path, and the point of this phase;
+ *   operator  the selector, as fallback or as deliberate override.
+ * 'none' is the honest fourth state: nothing resolved, Group-wide as before.
+ */
+export interface EntityResolution {
+  affiliateId: string | null;
+  affiliateName: string | null;
+  source: 'column' | 'filename' | 'operator' | 'none';
+  /** One plain sentence for the preview: what was resolved, and from where. */
+  statement: string;
+  /** What the filename claimed, where it parsed at all. */
+  claim: ExtractNameClaim | null;
+  warnings: string[];
+  /** Set when the token matched nothing: the tokens that DO exist. */
+  knownExtracts: { extractCode: string; affiliateName: string }[] | null;
+}
+
+/** The period cross-check: the filename's dates against the data's. */
+export interface PeriodCheck {
+  status: 'agrees' | 'differs' | 'unchecked' | 'unnamed';
+  detail: string;
+  claimFrom: string | null;
+  claimTo: string | null;
+  dataFrom: string | null;
+  dataTo: string | null;
+}
+
+function periodCheckOf(
+  claim: ExtractNameClaim | null,
+  dataFrom: string | null,
+  dataTo: string | null,
+): PeriodCheck {
+  if (claim === null) {
+    return {
+      status: 'unnamed',
+      detail: 'The filename carries no period to check against.',
+      claimFrom: null,
+      claimTo: null,
+      dataFrom,
+      dataTo,
+    };
+  }
+  const check = checkClaimedPeriod(claim, dataFrom, dataTo);
+  return {
+    status: check.status,
+    detail: check.detail,
+    claimFrom: claim.periodFrom,
+    claimTo: claim.periodTo,
+    dataFrom,
+    dataTo,
+  };
+}
+
+const knownTokens = (affiliates: UploadAffiliate[]) =>
+  affiliates
+    .filter((a): a is UploadAffiliate & { extractCode: string } => a.extractCode !== null)
+    .map((a) => ({ extractCode: a.extractCode, affiliateName: a.affiliateName }));
 
 /**
  * THREE WAYS AN UPLOAD CAN END, AND THE MIDDLE ONE IS NEW.
  *
- *   DUPLICATE  The same bytes. This file has been uploaded before.
- *   RESAVED    Different bytes, identical data. Excel re-saved the workbook
- *              and every cell still says what it said. This is the case that
- *              got through the byte check and imported a second time.
- *   READY      New data, validated, nothing written yet.
- *   REJECTED   The file could not be read or the batch could not validate.
+ *   DUPLICATE     The same bytes. This file has been uploaded before.
+ *   RESAVED       Different bytes, identical data. Excel re-saved the workbook
+ *                 and every cell still says what it said. This is the case that
+ *                 got through the byte check and imported a second time.
+ *   READY         New data, validated, nothing written yet.
+ *   REJECTED      The file could not be read or the batch could not validate.
+ *   NEEDS_ENTITY  The filename names an entity this system does not know.
+ *                 NOTHING was written — no batch, no rows — because importing
+ *                 it Group-wide would silently lose the country, which is
+ *                 worse than refusing. The outcome names the tokens that do
+ *                 exist; the operator chooses, and the upload is sent again
+ *                 with their choice.
  */
-export type UploadStage = 'REJECTED' | 'DUPLICATE' | 'RESAVED' | 'READY';
+export type UploadStage = 'REJECTED' | 'DUPLICATE' | 'RESAVED' | 'READY' | 'NEEDS_ENTITY';
 
 export interface UploadOutcome {
   /** What the file itself said, and which column said it. */
   derivation: DerivationNote | null;
+  /** The entity, resolved column-first, filename second, operator third. */
+  entity: EntityResolution | null;
+  /** The filename's period against the data's — a cross-check, not a source. */
+  periodCheck: PeriodCheck | null;
   stage: UploadStage;
   batchId: string | null;
   fileSha256: string | null;
@@ -322,6 +443,8 @@ export async function receiveUpload(
 ): Promise<UploadOutcome> {
   const empty: UploadOutcome = {
     derivation: null,
+    entity: null,
+    periodCheck: null,
     stage: 'REJECTED',
     batchId: null,
     fileSha256: null,
@@ -353,6 +476,58 @@ export async function receiveUpload(
     return { ...empty, rejectedReason: 'The source system is unknown or inactive.' };
   }
 
+  // THE FILENAME, READ AS A CLAIM. Parsed strictly or not at all: a name off
+  // the PROCESS-ENTITY-FROMDATE-TODATE shape yields nothing and the upload
+  // proceeds as it always did, with the operator choosing. Nothing the name
+  // says is trusted on its own — the file's column outranks it, and the
+  // operator confirms before commit.
+  const claim = parseExtractFilename(filename);
+  const operatorAffiliateId =
+    input.affiliateId === null ? null : input.affiliateId.trim() === '' ? null : input.affiliateId;
+  // One read serves the token lookup, the operator's name and the "these are
+  // the eight that exist" message alike — and only runs when something needs
+  // it, so an unnamed sales upload keeps its old cost.
+  const affiliates =
+    claim !== null || operatorAffiliateId !== null ? await listUploadAffiliates(db) : [];
+  const nameOf = (affiliateId: string | null): string | null =>
+    affiliateId === null
+      ? null
+      : (affiliates.find((a) => a.affiliateId === affiliateId)?.affiliateName ?? affiliateId);
+  const byToken = (token: string): UploadAffiliate | null =>
+    affiliates.find((a) => a.extractCode === token) ?? null;
+
+  // THE OVERRIDE IS THE SAME FILE, PROVEN. Re-reading a previewed batch with
+  // a different entity must not become a door past the duplicate rule, so the
+  // bytes are hashed and must match the batch being overridden.
+  const overrideBatchId = input.overrideBatchId ?? null;
+  if (overrideBatchId !== null) {
+    const target = await db.execute({
+      sql: `SELECT import_type, file_sha256, status FROM import_batches
+            WHERE import_batch_id = ? LIMIT 1`,
+      args: [overrideBatchId],
+    });
+    const batch = target.rows[0] as Record<string, unknown> | undefined;
+    if (batch === undefined) {
+      return { ...empty, rejectedReason: 'The batch to override does not exist.' };
+    }
+    if (text(batch.import_type) !== input.importType) {
+      return { ...empty, rejectedReason: 'The batch to override is a different data type.' };
+    }
+    if (text(batch.status) === 'IMPORTED') {
+      return {
+        ...empty,
+        rejectedReason: 'That batch has already been imported; its entity cannot be changed here.',
+      };
+    }
+    if ((await hashFile(input.bytes)) !== text(batch.file_sha256)) {
+      return {
+        ...empty,
+        rejectedReason:
+          'The file does not match the batch being overridden. Validate it as a new upload instead.',
+      };
+    }
+  }
+
   const uploadInput = {
     filename,
     uploadedBy: ctx.actorUserId,
@@ -360,10 +535,109 @@ export async function receiveUpload(
   };
 
   if (input.importType === 'PURCHASE_ORDER') {
+    // RESOLVE BEFORE VALIDATING, because validation bakes the affiliate into
+    // every row's source key and the commit writes what the key carries.
+    const warnings: string[] = [];
+    let entity: EntityResolution;
+    if (operatorAffiliateId !== null) {
+      // The operator's word: the fallback where nothing resolved, the
+      // override where something did. Where the filename disagrees, that is
+      // worth a line, not a refusal — a person outranks a name.
+      if (claim !== null && claim.process === 'PURCHASE') {
+        const named = byToken(claim.entityToken);
+        if (named !== null && named.affiliateId !== operatorAffiliateId) {
+          warnings.push(
+            `The filename names ${claim.entityToken} (${named.affiliateName}); the operator chose ${nameOf(operatorAffiliateId)}.`,
+          );
+        }
+      }
+      entity = {
+        affiliateId: operatorAffiliateId,
+        affiliateName: nameOf(operatorAffiliateId),
+        source: 'operator',
+        statement: `Entity chosen by the operator: ${nameOf(operatorAffiliateId)}.`,
+        claim,
+        warnings,
+        knownExtracts: null,
+      };
+    } else if (claim !== null && claim.process !== EXTRACT_PROCESS_FOR_IMPORT[input.importType]) {
+      // A parsed name that claims the OTHER process is a mistake worth a
+      // person's eye, not a token worth half-trusting: nothing was written,
+      // and the operator decides what this file actually is.
+      return {
+        ...empty,
+        stage: 'NEEDS_ENTITY',
+        entity: {
+          affiliateId: null,
+          affiliateName: null,
+          source: 'none',
+          statement: 'No entity was resolved. The filename was not used.',
+          claim,
+          warnings: [
+            `The file is named ${claim.process} but was uploaded as a ${IMPORT_TYPE_LABELS[input.importType].toLowerCase()}. ` +
+              `Confirm what the file is, then choose its entity — or upload it under the other data type.`,
+          ],
+          knownExtracts: knownTokens(affiliates),
+        },
+        periodCheck: null,
+      };
+    } else if (claim !== null) {
+      const named = byToken(claim.entityToken);
+      if (named === null) {
+        // AN UNKNOWN TOKEN IS AN EXCEPTION, NEVER A GUESS. Falling back to
+        // Group-wide here would silently lose the country, which is worse
+        // than refusing: nothing is written, the tokens that exist are
+        // named, and the operator maps the file by choosing one.
+        const tokens = knownTokens(affiliates);
+        return {
+          ...empty,
+          stage: 'NEEDS_ENTITY',
+          entity: {
+            affiliateId: null,
+            affiliateName: null,
+            source: 'none',
+            statement: `The filename names ${claim.entityToken}, which matches no affiliate.`,
+            claim,
+            warnings: [
+              `${claim.entityToken} matches no affiliate. The ${tokens.length} that exist are ` +
+                `${tokens.map((t) => t.extractCode).join(', ')}. Choose the entity this file belongs to; ` +
+                `it will not be imported Group-wide by default.`,
+            ],
+            knownExtracts: tokens,
+          },
+          periodCheck: null,
+        };
+      }
+      entity = {
+        affiliateId: named.affiliateId,
+        affiliateName: named.affiliateName,
+        source: 'filename',
+        statement: `Entity taken from the filename: ${claim.entityToken}, ${named.affiliateName}.`,
+        claim,
+        warnings,
+        knownExtracts: null,
+      };
+    } else {
+      entity = {
+        affiliateId: null,
+        affiliateName: null,
+        source: 'none',
+        statement:
+          'Group-wide: the filename does not follow PROCESS-ENTITY-FROMDATE-TODATE and the file carries no affiliate column. The operator can choose an entity before committing.',
+        claim: null,
+        warnings,
+        knownExtracts: null,
+      };
+    }
+
     const validation = await validatePoWorkbook(
       db,
       input.bytes,
-      { ...uploadInput, affiliateId: input.affiliateId },
+      {
+        ...uploadInput,
+        affiliateId: entity.affiliateId,
+        reprocessBatchId: overrideBatchId,
+      },
       ctx,
     );
     if (validation.rejectedReason !== null) {
@@ -389,17 +663,29 @@ export async function receiveUpload(
     }
     const batchId = validation.batchId ?? '';
     await recordPeriod(db, batchId, input, validation.dateRange);
-    await writeAudit(db, ctx, 'IMPORT_UPLOADED', batchId, 'UPLOAD', {
-      importType: input.importType,
-      filename,
-      sha256: validation.fileSha256,
-      // THE CONTENT FINGERPRINT LIVES HERE. There is no column for it and no
-      // schema change in this phase; this event is the batch's own metadata
-      // and is written exactly once per upload. See ./contentHash.ts.
-      contentSha256: validation.contentSha256,
-      affiliateId: validation.affiliateId,
-      rowsReceived: validation.rowsReceived,
-    });
+    if (overrideBatchId === null) {
+      await writeAudit(db, ctx, 'IMPORT_UPLOADED', batchId, 'UPLOAD', {
+        importType: input.importType,
+        filename,
+        sha256: validation.fileSha256,
+        // THE CONTENT FINGERPRINT LIVES HERE. There is no column for it and no
+        // schema change in this phase; this event is the batch's own metadata
+        // and is written exactly once per upload. See ./contentHash.ts.
+        contentSha256: validation.contentSha256,
+        affiliateId: validation.affiliateId,
+        affiliateSource: entity.source,
+        rowsReceived: validation.rowsReceived,
+      });
+    } else {
+      // An entity override is the same batch read again, not a second upload:
+      // one IMPORT_UPLOADED per file stays true, and the override is its own
+      // named event with the choice that was made.
+      await writeAudit(db, ctx, 'IMPORT_REPROCESSED', batchId, 'VALIDATE', {
+        reason: 'entity_override',
+        affiliateId: validation.affiliateId,
+        affiliateSource: entity.source,
+      });
+    }
     await writeAudit(db, ctx, 'IMPORT_VALIDATED', batchId, 'VALIDATE', {
       rowsReceived: validation.rowsReceived,
       uniqueDocuments: validation.uniqueOrders,
@@ -413,9 +699,10 @@ export async function receiveUpload(
     return {
       derivation: {
         // The purchase order extract has no affiliate column: 29 headers and
-        // not one of them names an entity. A file that names no entity
-        // measures across all of them.
-        affiliateLabel: validation.affiliateId === null ? null : validation.affiliateId,
+        // not one of them names an entity. The entity, where there is one,
+        // came from the resolution above — the filename token or the
+        // operator — and `entity` says which in as many words.
+        affiliateLabel: entity.affiliateName,
         affiliateColumn: null,
         periodFrom: validation.dateRange.from,
         periodTo: validation.dateRange.to,
@@ -423,6 +710,8 @@ export async function receiveUpload(
         affiliates: [],
         unmappedColumns: validation.unmappedColumns,
       },
+      entity,
+      periodCheck: periodCheckOf(claim, validation.dateRange.from, validation.dateRange.to),
       stage: 'READY',
       batchId,
       fileSha256: validation.fileSha256,
@@ -520,6 +809,58 @@ export async function receiveUpload(
     validation.unresolvedProducts.length +
     validation.unresolvedCustomers.length;
   await notifyExceptions(db, ctx, batchId, exceptions);
+
+  // THE COLUMN WINS, AND THE FILENAME IS A CROSS-CHECK. The sales extract
+  // names its affiliate on every row, so the file's own word is the entity
+  // whatever the name claims. Where the two disagree, the file is named for
+  // one entity and contains another — a genuine mistake worth a warning
+  // before commit, and exactly the case a filename alone would import
+  // wrongly.
+  const soEntity: EntityResolution = (() => {
+    const warnings: string[] = [];
+    let knownExtracts: EntityResolution['knownExtracts'] = null;
+    const columnIds = new Set(
+      validation.affiliates
+        .map((label) => SO_AFFILIATE_MAP[label])
+        .filter((id): id is string => id !== undefined),
+    );
+    if (claim !== null && claim.process !== 'SALES') {
+      warnings.push(
+        `The file is named ${claim.process} but was uploaded as a sales order extract. The name was not used; the AFFILIATE column decides.`,
+      );
+    } else if (claim !== null) {
+      const named = byToken(claim.entityToken);
+      if (named === null) {
+        const tokens = knownTokens(affiliates);
+        knownExtracts = tokens;
+        warnings.push(
+          `The filename names ${claim.entityToken}, which matches no affiliate. The ${tokens.length} that exist are ` +
+            `${tokens.map((t) => t.extractCode).join(', ')}. The file's own AFFILIATE column decides for a sales extract, so the upload continues.`,
+        );
+      } else if (columnIds.size > 0 && !columnIds.has(named.affiliateId)) {
+        warnings.push(
+          `The file is named for ${named.affiliateName} (${claim.entityToken}), but its AFFILIATE column names ` +
+            `${validation.affiliates.join(', ')}. The column is right and the name is the warning: check which file this is before committing.`,
+        );
+      }
+    }
+    const single = validation.affiliates.length === 1 ? (validation.affiliates[0] ?? null) : null;
+    return {
+      affiliateId: single === null ? null : (SO_AFFILIATE_MAP[single] ?? null),
+      affiliateName: single,
+      source: validation.affiliates.length > 0 ? 'column' : 'none',
+      statement:
+        validation.affiliates.length === 0
+          ? 'No entity: the AFFILIATE column carried no readable values.'
+          : validation.affiliates.length === 1
+            ? `Entity taken from the file's own AFFILIATE column: ${single}. The filename was not needed.`
+            : `Entities taken from the file's own AFFILIATE column: ${validation.affiliates.join(', ')}.`,
+      claim,
+      warnings,
+      knownExtracts,
+    };
+  })();
+
   return {
     derivation: {
       affiliateLabel:
@@ -531,6 +872,8 @@ export async function receiveUpload(
       affiliates: validation.affiliates,
       unmappedColumns: validation.unmappedColumns,
     },
+    entity: soEntity,
+    periodCheck: periodCheckOf(claim, validation.dateRange.from, validation.dateRange.to),
     stage: 'READY',
     batchId,
     fileSha256: validation.fileSha256,

@@ -45,6 +45,12 @@ CREATE TABLE IF NOT EXISTS affiliates (
     country_id TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- The filename token the monthly extracts use for this entity
+    -- (SALES-KE-..., PURCHASE-DRC-...). Added in production by the operator's
+    -- alignment script as a nullable ALTER TABLE ADD COLUMN, which is why it
+    -- is nullable here too: this file mirrors the live schema, it does not
+    -- lead it.
+    extract_code TEXT,
     FOREIGN KEY (country_id) REFERENCES countries(country_id) ON DELETE RESTRICT
 );
 

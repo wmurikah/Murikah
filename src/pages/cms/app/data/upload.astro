@@ -1,21 +1,23 @@
 ---
 /**
- * Data → Upload Centre → Upload a file.
+ * Data → Upload Centre → Upload files.
  *
- * Three controls: the data type, the workbook, and Validate.
+ * SIXTEEN FILES A MONTH, ONE JOURNEY. Eight entities across two processes
+ * arrive as one selection: each file becomes its own batch with its own hash,
+ * its own entity and its own rows — a batch IS a file and that stays true —
+ * but the operator selects once, reads one table with one row per file, and
+ * commits the set. A failure in one file never stops the others.
  *
- * THE FILE ANSWERS THE REST. This form used to ask for the affiliate, the
- * reporting period and the source system as well. The extracts carry all
- * three: the sales order file names its affiliate in its first column on
- * every row, both files date their own documents, and both are Oracle EBS
- * reports. Asking an operator to retype what the workbook already states is
- * an invitation to state it differently, and the source system in particular
- * defaulted to CRM Web Form, which was wrong for every upload it applied to
- * and which quietly broke the username mapping that reads it.
+ * THE FILENAME IS A CLAIM, NOT EVIDENCE. SALES-KE-01AUG2026-24AUG2026.xls
+ * proposes a process, an entity and a period. The process routes the file to
+ * the right importer; the entity resolves column-first, filename second,
+ * operator third; the period only cross-checks what the data derived. Every
+ * proposal is on the screen with its source named, and the operator can
+ * override the entity before anything is committed.
  *
- * VALIDATION IS NOT A COMMIT: this screen reports what the file contains and
- * what would happen. Nothing reaches a canonical table until somebody presses
- * Import valid records.
+ * VALIDATION IS NOT A COMMIT: this screen reports what each file contains
+ * and what would happen. Nothing reaches a canonical table until somebody
+ * presses Import.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
@@ -23,19 +25,34 @@ import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { requestDb } from '@/lib/cms/db';
 import { canUploadImports } from '@/lib/cms/permissions';
-import { IMPORT_TYPES, IMPORT_TYPE_LABELS, MAX_UPLOAD_BYTES } from '@/lib/cms/import/uploadCentre';
+import {
+  IMPORT_TYPES,
+  IMPORT_TYPE_LABELS,
+  MAX_UPLOAD_BYTES,
+  listUploadAffiliates,
+  type UploadAffiliate,
+} from '@/lib/cms/import/uploadCentre';
 
 export const prerender = false;
 
 const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayUpload = canUploadImports(permissions);
-// The page reads nothing from the database: the only list it offers is the
-// two import types, which are a constant. That is why it costs no
-// subrequests at all.
+
+// ONE subrequest: the affiliates, for the operator-fallback selector and the
+// override control. The page previously read nothing; the budget is 15.
+let affiliates: UploadAffiliate[] = [];
+if (mayUpload) {
+  try {
+    affiliates = await listUploadAffiliates(await requestDb(Astro.locals));
+  } catch (error) {
+    console.error('[cms.data.upload] affiliates unavailable', error);
+  }
+}
 ---
 
-<CmsLayout title="Upload a file">
+<CmsLayout title="Upload files">
   {
     !mayUpload ? (
       <CmsErrorState
@@ -45,8 +62,8 @@ const mayUpload = canUploadImports(permissions);
     ) : (
       <Fragment>
         <CmsPageHeader
-          title="Upload a file"
-          definition="Validating tells you what the file contains and what would change. Nothing is imported until you commit."
+          title="Upload files"
+          definition="Select the month's extracts together. Validating reports what each file contains and what would change; nothing is imported until you commit."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Upload Centre', href: '/app/data' },
@@ -54,8 +71,8 @@ const mayUpload = canUploadImports(permissions);
           ]}
         />
 
-        <div class="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
-          <CmsCard title="The file">
+        <div class="flex flex-col gap-4">
+          <CmsCard title="The files">
             <form id="cms-upload-form" novalidate class="flex flex-col gap-4">
               <p
                 id="cms-upload-error"
@@ -63,34 +80,41 @@ const mayUpload = canUploadImports(permissions);
                 hidden
                 class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
               />
-              <CmsSelect
-                id="up-importType"
-                name="importType"
-                label="Data type"
-                required
-                options={IMPORT_TYPES.map((type) => ({
-                  value: type,
-                  label: IMPORT_TYPE_LABELS[type],
-                }))}
-              />
-              <div class="flex flex-col gap-1.5">
-                <label for="up-file" class="text-cms-body-sm font-medium text-cms-ink">
-                  Workbook
-                </label>
-                <input
-                  id="up-file"
-                  name="file"
-                  type="file"
-                  accept=".xls,.xlsx"
-                  required
-                  data-max-bytes={String(MAX_UPLOAD_BYTES)}
-                  class="rounded-cms border border-cms-line bg-white px-3 py-2 text-cms-body-sm text-cms-ink outline-none file:mr-3 file:rounded-cms file:border-0 file:bg-cms-canvas file:px-3 file:py-1.5 file:text-cms-body-sm file:font-medium file:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="flex flex-col gap-1.5">
+                  <label for="up-file" class="text-cms-body-sm font-medium text-cms-ink">
+                    Workbooks
+                  </label>
+                  <input
+                    id="up-file"
+                    name="file"
+                    type="file"
+                    accept=".xls,.xlsx"
+                    multiple
+                    required
+                    data-max-bytes={String(MAX_UPLOAD_BYTES)}
+                    class="rounded-cms border border-cms-line bg-white px-3 py-2 text-cms-body-sm text-cms-ink outline-none file:mr-3 file:rounded-cms file:border-0 file:bg-cms-canvas file:px-3 file:py-1.5 file:text-cms-body-sm file:font-medium file:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+                  />
+                  <p class="text-cms-caption text-cms-muted">
+                    A name like SALES-KE-01AUG2026-24AUG2026.xls says which importer the file needs;
+                    select the whole month at once.
+                  </p>
+                </div>
+                <CmsSelect
+                  id="up-importType"
+                  name="importType"
+                  label="Data type, for files whose name does not say"
+                  options={IMPORT_TYPES.map((type) => ({
+                    value: type,
+                    label: IMPORT_TYPE_LABELS[type],
+                  }))}
+                  hint="Used only where a filename does not follow the extract shape."
                 />
               </div>
             </form>
             <div class="mt-4 flex items-center gap-2">
               <CmsButton id="cms-upload-validate" variant="primary" icon="data">
-                Validate file
+                Validate files
               </CmsButton>
               <span
                 id="cms-upload-progress"
@@ -100,50 +124,167 @@ const mayUpload = canUploadImports(permissions);
             </div>
           </CmsCard>
 
-          <CmsCard title="What the file contains">
-            <div id="cms-upload-summary" class="text-cms-body-sm text-cms-muted">
+          <CmsCard title="What the files contain">
+            <p id="cms-upload-none" class="text-cms-body-sm text-cms-muted">
               Not validated yet.
+            </p>
+            {/* ONE TABLE, ONE ROW PER FILE: a glance says whether all sixteen
+                are right. Entity carries its source in words; the period is
+                the data's, with the filename's dates as the cross-check. */}
+            <div id="cms-upload-tablewrap" hidden class="overflow-x-auto">
+              <table class="w-full text-cms-body-sm">
+                <caption class="sr-only">Files validated in this upload</caption>
+                <thead>
+                  <tr class="border-b border-cms-line text-left text-cms-caption text-cms-muted">
+                    <th scope="col" class="py-2 pr-3 font-medium">
+                      File
+                    </th>
+                    <th scope="col" class="py-2 pr-3 font-medium">
+                      Process
+                    </th>
+                    <th scope="col" class="py-2 pr-3 font-medium">
+                      Entity
+                    </th>
+                    <th scope="col" class="py-2 pr-3 font-medium">
+                      Period, from the data
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-right font-medium">
+                      Rows
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-right font-medium">
+                      Documents
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-right font-medium">
+                      New
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-right font-medium">
+                      Changed
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-right font-medium">
+                      Repeat
+                    </th>
+                    <th scope="col" class="py-2 pr-3 text-right font-medium">
+                      Unresolved
+                    </th>
+                    <th scope="col" class="py-2 font-medium">
+                      Outcome
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="cms-upload-rows" />
+              </table>
             </div>
+            <p
+              id="cms-upload-setsummary"
+              role="status"
+              aria-live="polite"
+              hidden
+              class="mt-3 text-cms-body-sm font-medium text-cms-ink"
+            />
             <div id="cms-upload-actions" hidden class="mt-4 flex items-center gap-2">
               <CmsButton id="cms-upload-commit" variant="primary" icon="check">
                 Import valid records
               </CmsButton>
-              <CmsButton id="cms-upload-review" variant="ghost">
-                Review exceptions
-              </CmsButton>
+            </div>
+            <div id="cms-upload-detail" class="mt-4 border-t border-cms-line pt-3" hidden>
+              <h3
+                id="cms-upload-detail-title"
+                class="text-cms-body-sm font-semibold text-cms-ink"
+              />
+              <div id="cms-upload-detail-body" class="mt-2 text-cms-body-sm text-cms-muted" />
             </div>
           </CmsCard>
         </div>
+
+        {/* The affiliates, for the fallback/override selector, rendered once
+            and cloned per row. Value '' is the explicit Group-wide choice. */}
+        <template id="cms-upload-affiliates">
+          <select class="rounded-cms border border-cms-border bg-cms-surface px-2 py-1 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus">
+            <option value="">Group-wide</option>
+            {affiliates.map((a) => (
+              <option value={a.affiliateId}>
+                {a.affiliateName}
+                {a.extractCode === null ? '' : ` (${a.extractCode})`}
+              </option>
+            ))}
+          </select>
+        </template>
       </Fragment>
     )
   }
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
+  import { parseExtractFilename, EXTRACT_PROCESS_FOR_IMPORT } from '@/lib/cms/import/extractName';
+
+  interface Summary {
+    rowsReceived?: number;
+    uniqueDocuments?: number;
+    orderLines?: number;
+    additionalLoadingEvents?: number;
+    rowsNew?: number;
+    rowsChanged?: number;
+    rowsDuplicate?: number;
+    rowsUnresolved?: number;
+    rowsRejected?: number;
+  }
+  interface Entity {
+    affiliateId: string | null;
+    affiliateName: string | null;
+    source: 'column' | 'filename' | 'operator' | 'none';
+    statement: string;
+    warnings: string[];
+    knownExtracts: { extractCode: string; affiliateName: string }[] | null;
+  }
+  interface PeriodCheck {
+    status: 'agrees' | 'differs' | 'unchecked' | 'unnamed';
+    detail: string;
+    dataFrom: string | null;
+    dataTo: string | null;
+  }
+  interface Outcome {
+    stage: string;
+    batchId: string | null;
+    rejectedReason: string | null;
+    duplicate: { batchId: string; filename: string; uploadedAt: string; uploadedBy: string } | null;
+    summary: Summary | null;
+    entity: Entity | null;
+    periodCheck: PeriodCheck | null;
+    documentsAlreadyImported?: number;
+    unresolvedUsers?: string[];
+    derivation?: { unmappedColumns?: string[] } | null;
+  }
+  interface FileState {
+    file: File;
+    importType: string;
+    fromName: boolean;
+    outcome: Outcome | null;
+    /** A transport or permission failure, when even validation had no answer. */
+    failure: string | null;
+    committed: { status: string } | null;
+    commitFailure: string | null;
+  }
+
   const form = document.getElementById('cms-upload-form') as HTMLFormElement | null;
-  const validate = document.getElementById('cms-upload-validate');
-  const commit = document.getElementById('cms-upload-commit');
-  const review = document.getElementById('cms-upload-review');
+  const validateButton = document.getElementById('cms-upload-validate');
+  const commitButton = document.getElementById('cms-upload-commit');
   const errorBox = document.getElementById('cms-upload-error');
   const progress = document.getElementById('cms-upload-progress');
-  const summary = document.getElementById('cms-upload-summary');
+  const noneNote = document.getElementById('cms-upload-none');
+  const tableWrap = document.getElementById('cms-upload-tablewrap');
+  const rowsBody = document.getElementById('cms-upload-rows');
   const actions = document.getElementById('cms-upload-actions');
+  const setSummary = document.getElementById('cms-upload-setsummary');
+  const detail = document.getElementById('cms-upload-detail');
+  const detailTitle = document.getElementById('cms-upload-detail-title');
+  const detailBody = document.getElementById('cms-upload-detail-body');
+  const affiliateTemplate = document.getElementById(
+    'cms-upload-affiliates',
+  ) as HTMLTemplateElement | null;
 
-  if (form && validate && summary) {
-    let batchId = '';
-
-    /**
-     * The trace id an error response carries, from `{ error: { traceId } }`.
-     *
-     * Null where the server did not issue one, which is every refusal it
-     * could describe in words. Only an unexpected throw gets an id, and that
-     * is exactly the case where the sentence on screen cannot say enough.
-     */
-    const traceOf = (body: unknown): string | null => {
-      const error = (body as { error?: { traceId?: unknown } } | null)?.error;
-      const traceId = error?.traceId;
-      return typeof traceId === 'string' && traceId !== '' ? traceId : null;
-    };
+  if (form && validateButton && rowsBody) {
+    let files: FileState[] = [];
 
     const showError = (message: string) => {
       if (!errorBox) return;
@@ -151,214 +292,405 @@ const mayUpload = canUploadImports(permissions);
       errorBox.hidden = false;
     };
 
-    const line = (label: string, value: string) =>
-      `<div class="flex items-center justify-between gap-3 border-b border-cms-line py-1.5 last:border-0"><span>${label}</span><span class="font-medium text-cms-ink tabular-nums">${value}</span></div>`;
+    const cell = (row: HTMLTableRowElement, className: string): HTMLTableCellElement => {
+      const td = document.createElement('td');
+      td.className = className;
+      row.appendChild(td);
+      return td;
+    };
 
-    validate.addEventListener('click', async () => {
-      if (errorBox) errorBox.hidden = true;
-      const data = new FormData(form);
-      const file = data.get('file');
-      if (!(file instanceof File) || file.size === 0) {
-        showError('Choose a file to upload.');
-        return;
-      }
-      // The size limit lives on the input and in this message, which is the
-      // only place a person needs it: when they have exceeded it.
-      const input = document.getElementById('up-file') as HTMLInputElement | null;
-      const maxBytes = Number(input?.dataset.maxBytes ?? '0');
-      if (maxBytes > 0 && file.size > maxBytes) {
-        showError(
-          `That workbook is ${(file.size / 1048576).toFixed(1)} MB. The limit is ${Math.round(maxBytes / 1048576)} MB, so split the extract and upload it in parts.`,
-        );
-        return;
-      }
-      // Honest progress: uploading, then validating, then a stage word that
-      // says what actually happened.
-      if (progress) progress.textContent = 'Uploading';
-      let response: Response;
+    /**
+     * Send one file for validation. affiliateId carries the operator's
+     * choice; overrideBatchId re-reads an already-previewed batch with it.
+     */
+    const validateOne = async (
+      state: FileState,
+      affiliateId: string | null,
+      overrideBatchId: string | null,
+    ): Promise<void> => {
+      const data = new FormData();
+      data.set('importType', state.importType);
+      data.set('file', state.file);
+      if (affiliateId !== null) data.set('affiliateId', affiliateId);
+      if (overrideBatchId !== null) data.set('overrideBatchId', overrideBatchId);
       try {
-        if (progress) progress.textContent = 'Validating';
-        response = await fetch('/api/data/imports', { method: 'POST', body: data });
-      } catch {
-        if (progress) progress.textContent = '';
-        showError('The upload could not be sent.');
-        return;
-      }
-      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-      if (progress) progress.textContent = '';
-      if (!response.ok && body === null) {
-        showError('The upload was refused.');
-        return;
-      }
-      const outcome = (body ?? {}) as Record<string, unknown>;
-      const stage = String(outcome?.stage ?? '');
-      if (stage === 'REJECTED') {
-        showError(String(outcome?.rejectedReason ?? 'The file was refused.'));
-        summary.textContent = 'Nothing was imported.';
-        if (actions) actions.hidden = true;
-        return;
-      }
-      // TWO REFUSALS, AND THEY DO NOT SAY THE SAME THING. The bytes matching is
-      // one fact; the bytes differing while every cell agrees is another, and
-      // an operator who re-saved the workbook needs to be told that is what
-      // happened rather than left to argue that this is a different file.
-      if (stage === 'DUPLICATE' || stage === 'RESAVED') {
-        const duplicate = outcome?.duplicate as Record<string, unknown> | null;
-        const named = duplicate
-          ? `${String(duplicate.filename)}, uploaded on ${String(duplicate.uploadedAt)} by ${String(duplicate.uploadedBy)}`
-          : null;
-        showError(
-          stage === 'DUPLICATE'
-            ? named
-              ? `This is the same file. It was uploaded as ${named}. Nothing was re-imported.`
-              : 'This is the same file. It has been uploaded before.'
-            : named
-              ? `This workbook was saved again, but the data is identical to ${named}. Nothing was re-imported.`
-              : 'This workbook was saved again, but the data is identical to a file already uploaded.',
-        );
-        if (duplicate) {
-          summary.innerHTML = `<a class="text-cms-royal hover:underline" href="/app/data/history/${String(duplicate.batchId)}">Open the previous batch</a>`;
+        const response = await fetch('/api/data/imports', { method: 'POST', body: data });
+        const body = (await response.json().catch(() => null)) as Outcome | null;
+        if (body === null) {
+          state.failure = 'The upload was refused.';
+          state.outcome = null;
+          return;
         }
-        if (actions) actions.hidden = true;
+        state.outcome = body;
+        state.failure = null;
+      } catch {
+        state.failure = 'The upload could not be sent. Check your connection.';
+        state.outcome = null;
+      }
+    };
+
+    const describeStage = (state: FileState): string => {
+      if (state.commitFailure !== null) return 'Import failed';
+      if (state.committed !== null)
+        return state.committed.status === 'PARTIAL' ? 'Imported, partial' : 'Imported';
+      if (state.failure !== null) return 'Failed';
+      const stage = state.outcome?.stage ?? '';
+      if (stage === 'READY') return 'Ready';
+      if (stage === 'NEEDS_ENTITY') return 'Needs an entity';
+      if (stage === 'DUPLICATE') return 'Already uploaded';
+      if (stage === 'RESAVED') return 'Re-saved copy';
+      if (stage === 'REJECTED') return 'Refused';
+      return stage;
+    };
+
+    const sourceWord = (entity: Entity): string =>
+      entity.source === 'column'
+        ? 'from the file’s own column'
+        : entity.source === 'filename'
+          ? 'from the filename'
+          : entity.source === 'operator'
+            ? 'chosen by the operator'
+            : '';
+
+    /** The one preview table: rebuilt from state, every string via textContent. */
+    const render = () => {
+      rowsBody.textContent = '';
+      if (noneNote) noneNote.hidden = files.length > 0;
+      if (tableWrap) tableWrap.hidden = files.length === 0;
+      let ready = 0;
+      for (const state of files) {
+        const row = document.createElement('tr');
+        row.className = 'border-b border-cms-line align-top last:border-0';
+        const numeric = 'py-2 pr-3 text-right tabular-nums';
+
+        const name = cell(row, 'py-2 pr-3 font-medium text-cms-ink');
+        name.textContent = state.file.name;
+
+        const process = cell(row, 'py-2 pr-3');
+        process.textContent =
+          (state.importType === 'SALES_ORDER' ? 'Sales' : 'Purchase') +
+          (state.fromName ? '' : ' (selected)');
+
+        const entityCell = cell(row, 'py-2 pr-3');
+        const entity = state.outcome?.entity ?? null;
+        if (entity !== null) {
+          const label = document.createElement('span');
+          label.textContent =
+            entity.affiliateName === null
+              ? entity.source === 'none' && state.outcome?.stage === 'READY'
+                ? 'Group-wide'
+                : '—'
+              : entity.affiliateName;
+          entityCell.appendChild(label);
+          const source = sourceWord(entity);
+          if (source !== '') {
+            const sub = document.createElement('span');
+            sub.className = 'block text-cms-caption text-cms-muted';
+            sub.textContent = source;
+            entityCell.appendChild(sub);
+          }
+          // The override: for a purchase file the entity is a proposal until
+          // committed, so the selector sits right here on the row.
+          if (
+            state.importType === 'PURCHASE_ORDER' &&
+            (state.outcome?.stage === 'READY' || state.outcome?.stage === 'NEEDS_ENTITY') &&
+            state.committed === null &&
+            affiliateTemplate
+          ) {
+            const select = affiliateTemplate.content
+              .querySelector('select')
+              ?.cloneNode(true) as HTMLSelectElement | null;
+            if (select) {
+              if (state.outcome?.stage === 'NEEDS_ENTITY') {
+                // An unknown token is mapped to a REAL entity, never waved
+                // through as Group-wide: that option goes, and a placeholder
+                // asks the one question the file raised.
+                select.querySelector('option[value=""]')?.remove();
+                const ask = document.createElement('option');
+                ask.value = '';
+                ask.disabled = true;
+                ask.selected = true;
+                ask.textContent = 'Choose the entity';
+                select.insertBefore(ask, select.firstChild);
+              }
+              select.value = entity.affiliateId ?? '';
+              select.setAttribute('aria-label', `Entity for ${state.file.name}`);
+              select.addEventListener('change', () => {
+                void overrideEntity(state, select.value === '' ? null : select.value);
+              });
+              const holder = document.createElement('div');
+              holder.className = 'mt-1';
+              holder.appendChild(select);
+              entityCell.appendChild(holder);
+            }
+          }
+          for (const warning of entity.warnings) {
+            const note = document.createElement('p');
+            note.className = 'mt-1 max-w-[26rem] text-cms-caption text-cms-caution';
+            note.textContent = warning;
+            entityCell.appendChild(note);
+          }
+        } else {
+          entityCell.textContent = '—';
+        }
+
+        const period = cell(row, 'py-2 pr-3');
+        const check = state.outcome?.periodCheck ?? null;
+        if (check !== null && (check.dataFrom !== null || check.dataTo !== null)) {
+          const span = document.createElement('span');
+          span.textContent = `${check.dataFrom ?? 'not dated'} to ${check.dataTo ?? 'not dated'}`;
+          period.appendChild(span);
+          const sub = document.createElement('span');
+          if (check.status === 'agrees') {
+            sub.className = 'block text-cms-caption text-cms-muted';
+            sub.textContent = 'matches the filename';
+          } else if (check.status === 'differs') {
+            sub.className = 'block max-w-[22rem] text-cms-caption text-cms-caution';
+            sub.textContent = check.detail;
+          } else {
+            sub.className = 'block text-cms-caption text-cms-muted';
+            sub.textContent = '';
+          }
+          if (sub.textContent !== '') period.appendChild(sub);
+        } else {
+          period.textContent = '—';
+        }
+
+        const s = state.outcome?.summary ?? null;
+        cell(row, numeric).textContent = s === null ? '—' : String(s.rowsReceived ?? 0);
+        cell(row, numeric).textContent = s === null ? '—' : String(s.uniqueDocuments ?? 0);
+        cell(row, numeric).textContent = s === null ? '—' : String(s.rowsNew ?? 0);
+        cell(row, numeric).textContent = s === null ? '—' : String(s.rowsChanged ?? 0);
+        cell(row, numeric).textContent = s === null ? '—' : String(s.rowsDuplicate ?? 0);
+        cell(row, numeric).textContent =
+          s === null ? '—' : String((s.rowsUnresolved ?? 0) + (s.rowsRejected ?? 0));
+
+        const outcomeCell = cell(row, 'py-2');
+        const stageWord = document.createElement('span');
+        const stage = state.outcome?.stage ?? '';
+        stageWord.className =
+          state.failure !== null || state.commitFailure !== null || stage === 'REJECTED'
+            ? 'font-medium text-cms-negative'
+            : stage === 'READY' || state.committed !== null
+              ? 'font-medium text-cms-ink'
+              : 'font-medium text-cms-caution';
+        stageWord.textContent = describeStage(state);
+        outcomeCell.appendChild(stageWord);
+        const reason =
+          state.commitFailure ??
+          state.failure ??
+          state.outcome?.rejectedReason ??
+          (stage === 'DUPLICATE' || stage === 'RESAVED'
+            ? `Same data as ${state.outcome?.duplicate?.filename ?? 'an earlier batch'}; nothing to re-import.`
+            : null);
+        if (reason !== null) {
+          const sub = document.createElement('p');
+          sub.className = 'mt-0.5 max-w-[20rem] text-cms-caption text-cms-muted';
+          sub.textContent = reason;
+          outcomeCell.appendChild(sub);
+        }
+        if (state.outcome?.stage === 'READY' && state.committed === null) ready += 1;
+
+        row.addEventListener('click', (event) => {
+          if ((event.target as HTMLElement | null)?.closest('select') !== null) return;
+          showDetail(state);
+        });
+        rowsBody.appendChild(row);
+      }
+      if (actions) actions.hidden = ready === 0;
+    };
+
+    const line = (label: string, value: string): HTMLElement => {
+      const wrapper = document.createElement('div');
+      wrapper.className =
+        'flex items-center justify-between gap-3 border-b border-cms-line py-1.5 last:border-0';
+      const left = document.createElement('span');
+      left.textContent = label;
+      const right = document.createElement('span');
+      right.className = 'font-medium text-cms-ink tabular-nums';
+      right.textContent = value;
+      wrapper.appendChild(left);
+      wrapper.appendChild(right);
+      return wrapper;
+    };
+
+    /** The per-file detail, the same facts the single-file screen showed. */
+    const showDetail = (state: FileState) => {
+      if (!detail || !detailTitle || !detailBody) return;
+      detail.hidden = false;
+      detailTitle.textContent = state.file.name;
+      detailBody.textContent = '';
+      const outcome = state.outcome;
+      if (outcome === null) {
+        detailBody.textContent = state.failure ?? 'Not validated.';
         return;
       }
-      batchId = String(outcome?.batchId ?? '');
-      const counts = (outcome?.summary ?? {}) as Record<string, number>;
-      const unresolvedUsers = (outcome?.unresolvedUsers ?? []) as string[];
-      const unresolvedProducts = (outcome?.unresolvedProducts ?? []) as unknown[];
-      const unresolvedCustomers = (outcome?.unresolvedCustomers ?? []) as unknown[];
-      const derived = (outcome?.derivation ?? null) as Record<string, unknown> | null;
+      if (outcome.entity !== null) {
+        const statement = document.createElement('p');
+        statement.className = 'mb-2 text-cms-body-sm text-cms-ink';
+        statement.textContent = outcome.entity.statement;
+        detailBody.appendChild(statement);
+      }
+      if (outcome.periodCheck !== null && outcome.periodCheck.status !== 'unnamed') {
+        const period = document.createElement('p');
+        period.className =
+          outcome.periodCheck.status === 'differs'
+            ? 'mb-2 text-cms-body-sm text-cms-caution'
+            : 'mb-2 text-cms-body-sm text-cms-muted';
+        period.textContent = outcome.periodCheck.detail;
+        detailBody.appendChild(period);
+      }
+      const s = outcome.summary;
+      if (s !== null) {
+        for (const fact of [
+          line('Rows received', String(s.rowsReceived ?? 0)),
+          line('Documents', String(s.uniqueDocuments ?? 0)),
+          line(
+            'Already imported',
+            `${String(outcome.documentsAlreadyImported ?? 0)} of these documents are in the system`,
+          ),
+          line('Order lines', String(s.orderLines ?? 0)),
+          line('New rows', String(s.rowsNew ?? 0)),
+          line('Changed rows', String(s.rowsChanged ?? 0)),
+          line('Repeat rows', String(s.rowsDuplicate ?? 0)),
+          line('Rows needing a mapping', String(s.rowsUnresolved ?? 0)),
+          line('Rejected rows', String(s.rowsRejected ?? 0)),
+          line('Unresolved users', String((outcome.unresolvedUsers ?? []).length)),
+        ]) {
+          detailBody.appendChild(fact);
+        }
+      }
+      if (outcome.batchId !== null) {
+        const link = document.createElement('a');
+        link.className = 'mt-2 inline-block text-cms-royal hover:underline';
+        link.href = `/app/data/history/${outcome.batchId}`;
+        link.textContent = 'Open the batch';
+        detailBody.appendChild(link);
+      }
+    };
 
-      // A count that can be acted on is a link to the queue that holds it.
-      const queue = (label: string, count: number, anchor: string) =>
-        count === 0
-          ? line(label, '0')
-          : `<div class="flex items-center justify-between gap-3 border-b border-cms-line py-1.5 last:border-0"><span>${label}</span><a class="font-medium text-cms-royal tabular-nums hover:underline" href="/app/data/history/${batchId}#${anchor}">${count}</a></div>`;
-
-      const scope =
-        derived === null
-          ? ''
-          : derived.affiliateLabel === null
-            ? line(
-                'Scope',
-                derived.affiliateColumn === null
-                  ? 'Group-wide, the file carries no affiliate column'
-                  : 'Group-wide',
-              )
-            : line(
-                `Affiliate, from ${String(derived.affiliateColumn)}`,
-                String(derived.affiliateLabel),
-              );
-      const affiliatesSeen =
-        derived === null || (derived.affiliates as string[]).length <= 1
-          ? ''
-          : line('Affiliates detected', (derived.affiliates as string[]).join(', '));
-      const period =
-        derived === null
-          ? ''
-          : line(
-              `Period, from ${String(derived.periodColumn)}`,
-              `${String(derived.periodFrom ?? 'not dated')} to ${String(derived.periodTo ?? 'not dated')}`,
-            );
-
-      // A column the landing table cannot hold is named, not swallowed. Its
-      // values are in extra_json either way.
-      const unmapped = ((derived?.unmappedColumns ?? []) as string[]).length
-        ? `<p class="mt-3 text-cms-body-sm text-cms-muted">Unmapped columns, kept in extra_json: ${(derived?.unmappedColumns as string[]).join(', ')}</p>`
-        : '';
-
-      summary.innerHTML =
-        scope +
-        affiliatesSeen +
-        period +
-        // THE FOUR FIGURES, SIDE BY SIDE. A row is not a document, a document
-        // is not an order line, and a repeated line is not a repeated loading.
-        // Showing only the first two is what let a commit write one order line
-        // 134 times with whichever row arrived last winning.
-        line('Rows received', String(counts.rowsReceived ?? 0)) +
-        line('Documents', String(counts.uniqueDocuments ?? 0)) +
-        // HOW MUCH OF THIS IS ALREADY IN. An extract re-run a week later
-        // repeats every order that has not closed, which is not a fault and
-        // not a surprise once it is on the screen before the import runs.
-        line(
-          'Already imported',
-          `${String(Number(outcome?.documentsAlreadyImported ?? 0))} of these documents are in the system`,
-        ) +
-        line('Order lines', String(counts.orderLines ?? 0)) +
-        line(
-          'Additional loading events',
-          `${String(counts.additionalLoadingEvents ?? 0)} beyond one per order`,
-        ) +
-        line('New rows', String(counts.rowsNew ?? 0)) +
-        line('Changed rows', String(counts.rowsChanged ?? 0)) +
-        line(
-          'Repeat rows',
-          `${String(counts.rowsDuplicate ?? 0)} (a further event for a line already described)`,
-        ) +
-        line('Rows needing a mapping', String(counts.rowsUnresolved ?? 0)) +
-        line('Rejected rows', String(counts.rowsRejected ?? 0)) +
-        queue('Unresolved users', unresolvedUsers.length, 'users') +
-        queue('Unresolved customers', unresolvedCustomers.length, 'customers') +
-        queue('Unresolved products', unresolvedProducts.length, 'products') +
-        unmapped;
-      if (actions) actions.hidden = false;
-    });
-
-    commit?.addEventListener('click', async () => {
-      if (batchId === '') return;
-      if (progress) progress.textContent = 'Importing';
-      const response = await fetch(`/api/data/imports/${batchId}/commit`, { method: 'POST' });
-      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    /** Re-read one previewed file with the operator's entity. */
+    const overrideEntity = async (state: FileState, affiliateId: string | null) => {
+      if (progress) progress.textContent = `Re-reading ${state.file.name}`;
+      const overrideBatchId = state.outcome?.stage === 'READY' ? state.outcome.batchId : null;
+      await validateOne(state, affiliateId ?? '', overrideBatchId);
       if (progress) progress.textContent = '';
-      if (!response.ok) {
-        // THE TRACE ID TRAVELS. The sentence stays general because a database
-        // error can name a customer or an Oracle code, but the id is what a
-        // person quotes to get the table, the constraint and the values out
-        // of the log. "The import could not be completed." on its own is what
-        // cost a day, three times.
+      render();
+    };
+
+    validateButton.addEventListener('click', async () => {
+      if (errorBox) errorBox.hidden = true;
+      if (detail) detail.hidden = true;
+      if (setSummary) setSummary.hidden = true;
+      const input = document.getElementById('up-file') as HTMLInputElement | null;
+      const chosen = [...(input?.files ?? [])];
+      if (chosen.length === 0) {
+        showError('Choose at least one file to upload.');
+        return;
+      }
+      const maxBytes = Number(input?.dataset.maxBytes ?? '0');
+      const oversized = chosen.find((f) => maxBytes > 0 && f.size > maxBytes);
+      if (oversized) {
         showError(
-          traceOf(body) === null
-            ? 'The import could not be completed. Nothing was changed.'
-            : `The import could not be completed. Quote reference ${traceOf(body)} to your administrator.`,
+          `${oversized.name} is ${(oversized.size / 1048576).toFixed(1)} MB. The limit is ${Math.round(maxBytes / 1048576)} MB per file, so split that extract.`,
         );
         return;
       }
-      const result = (body ?? {}) as Record<string, unknown>;
-      const skipped = (result?.skippedReasons ?? []) as { reason: string; rows: number }[];
-      const notes = (result?.notes ?? []) as { note: string; count: number }[];
-      const status = String(result?.status ?? '');
-      summary.innerHTML =
-        line('Outcome', status === 'PARTIAL' ? 'Partial' : 'Complete') +
-        line('Documents created', String(result?.documentsCreated ?? 0)) +
-        line('Documents updated', String(result?.documentsUpdated ?? 0)) +
-        line('Documents unchanged', String(result?.documentsUnchanged ?? 0)) +
-        line('Documents not imported', String(result?.documentsSkipped ?? 0)) +
-        line('Lines written', String(result?.linesWritten ?? 0)) +
-        line('Workflow events appended', String(result?.workflowEventsAppended ?? 0)) +
-        // The reference records this commit created. Shown beside the document
-        // counts rather than tucked away, because an upload that writes 228
-        // accounts should say so on the screen that ran it.
-        line('Customers created', String(result?.accountsCreated ?? 0)) +
-        line('Products created', String(result?.productsCreated ?? 0)) +
-        line(
-          'Additional loading events recorded',
-          `${String(result?.additionalLoadingEvents ?? 0)} (the earliest reached the order; every one is on its page)`,
-        ) +
-        (notes.length === 0
-          ? ''
-          : `<p class="mt-3 text-cms-body-sm text-cms-muted">Imported, with a note:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${notes
-              .map((entry) => `<li>${entry.count}: ${entry.note}</li>`)
-              .join('')}</ul>`) +
-        (skipped.length === 0
-          ? ''
-          : `<p class="mt-3 text-cms-body-sm text-cms-muted">Not imported, and why:</p><ul class="mt-1 list-disc pl-5 text-cms-body-sm text-cms-muted">${skipped
-              .map((entry) => `<li>${entry.rows} rows: ${entry.reason}</li>`)
-              .join('')}</ul>`) +
-        `<p class="mt-3"><a class="text-cms-royal hover:underline" href="/app/data/history/${batchId}">Open the batch</a></p>`;
+      const fallbackType = String(new FormData(form).get('importType') ?? 'SALES_ORDER');
+      // THE NAME ROUTES THE FILE. A parsed SALES- name goes to the sales
+      // importer and a PURCHASE- name to the purchase importer, so one
+      // selection can carry both processes; only a file whose name says
+      // nothing uses the form's data type.
+      files = chosen.map((file) => {
+        const claim = parseExtractFilename(file.name);
+        const fromName =
+          claim !== null &&
+          Object.entries(EXTRACT_PROCESS_FOR_IMPORT).some(([, p]) => p === claim.process);
+        const importType =
+          claim === null
+            ? fallbackType
+            : (Object.entries(EXTRACT_PROCESS_FOR_IMPORT).find(
+                ([, p]) => p === claim.process,
+              )?.[0] ?? fallbackType);
+        return {
+          file,
+          importType,
+          fromName,
+          outcome: null,
+          failure: null,
+          committed: null,
+          commitFailure: null,
+        };
+      });
+      render();
+      const restore = busy(validateButton as HTMLButtonElement, 'Validating…');
+      // ONE FILE AT A TIME, DELIBERATELY. Each file is its own request with
+      // its own subrequest budget at the server, and a sequential loop keeps
+      // sixteen — or fifty — from racing each other for the same duplicate
+      // checks. A failure marks its row and the loop continues.
+      try {
+        for (let index = 0; index < files.length; index++) {
+          const state = files[index]!;
+          if (progress)
+            progress.textContent = `Validating ${index + 1} of ${files.length}: ${state.file.name}`;
+          await validateOne(state, null, null);
+          render();
+        }
+      } finally {
+        restore();
+        if (progress) progress.textContent = '';
+      }
+      if (files.length === 1 && files[0]!.outcome !== null) showDetail(files[0]!);
     });
 
-    review?.addEventListener('click', () => {
-      if (batchId !== '') window.location.href = `/app/data/history/${batchId}`;
+    commitButton?.addEventListener('click', async () => {
+      const restore = busy(commitButton as HTMLButtonElement, 'Importing…');
+      let imported = 0;
+      let partial = 0;
+      let failed = 0;
+      try {
+        for (const state of files) {
+          if (state.outcome?.stage !== 'READY' || state.committed !== null) continue;
+          const batchId = state.outcome.batchId;
+          if (batchId === null) continue;
+          if (progress) progress.textContent = `Importing ${state.file.name}`;
+          try {
+            const response = await fetch(`/api/data/imports/${batchId}/commit`, {
+              method: 'POST',
+            });
+            const body = (await response.json().catch(() => null)) as Record<
+              string,
+              unknown
+            > | null;
+            if (!response.ok) {
+              state.commitFailure = 'The import could not be completed. Nothing was changed.';
+              failed += 1;
+            } else {
+              const status = String(body?.status ?? 'IMPORTED');
+              state.committed = { status };
+              if (status === 'PARTIAL') partial += 1;
+              else imported += 1;
+            }
+          } catch {
+            state.commitFailure = 'The import could not be sent.';
+            failed += 1;
+          }
+          // EACH FILE REACHES ITS OWN TERMINAL STATE. A failure here marks
+          // this row and the loop carries on to the next file.
+          render();
+        }
+      } finally {
+        restore();
+        if (progress) progress.textContent = '';
+      }
+      if (setSummary) {
+        setSummary.hidden = false;
+        setSummary.textContent =
+          `${imported} imported` +
+          (partial > 0 ? `, ${partial} partial` : '') +
+          (failed > 0 ? `, ${failed} failed` : '') +
+          ` of ${imported + partial + failed} committed.`;
+      }
     });
   }
 </script>
