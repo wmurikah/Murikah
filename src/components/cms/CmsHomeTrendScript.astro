@@ -26,9 +26,7 @@
 <div data-cms-home-trend-status class="sr-only" role="status" aria-live="polite"></div>
 
 <script>
-  const slots = Array.from(
-    document.querySelectorAll<HTMLElement>('[data-cms-home-trend]'),
-  );
+  const slots = Array.from(document.querySelectorAll<HTMLElement>('[data-cms-home-trend]'));
   const status = document.querySelector<HTMLElement>('[data-cms-home-trend-status]');
   const src = slots[0]?.dataset.src ?? '';
 
