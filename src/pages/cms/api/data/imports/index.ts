@@ -82,19 +82,27 @@ export const POST: APIRoute = async (context) => {
       },
     ]);
   }
-  // THREE THINGS THE FORM NO LONGER ASKS FOR, BECAUSE THE FILE ANSWERS THEM.
+  // TWO THINGS THE FORM STILL DOES NOT ASK FOR, BECAUSE THE FILE ANSWERS THEM.
   //
   // The source system follows from the data type: both extracts are Oracle
   // EBS reports, and the form's old default of CRM Web Form was wrong for
   // every upload it was applied to.
   //
-  // The affiliate is read from the extract. The sales order file names it on
-  // every row in its first column; the purchase order file has no such column,
-  // which makes the batch Group scope rather than an incomplete form.
-  //
   // The period is derived from the rows, in the importer, from the column each
-  // extract dates its documents by.
+  // extract dates its documents by; the filename's dates only cross-check it.
+  //
+  // The ENTITY is resolved in order of authority: the file's own AFFILIATE
+  // column, then the filename token against affiliates.extract_code, then —
+  // and only then — the operator. The optional affiliateId field below is
+  // that third source: the fallback where nothing resolved, or a deliberate
+  // override of what did. overrideBatchId re-reads a previewed batch with the
+  // chosen entity; the importer proves the bytes match that batch first.
   const sourceSystemId = SOURCE_SYSTEM_FOR_IMPORT[importType as ImportType];
+  const chosenAffiliate = String(form.get('affiliateId') ?? '').trim();
+  const overrideBatch = String(form.get('overrideBatchId') ?? '').trim();
+  if (overrideBatch !== '' && !/^IMP-[A-Za-z0-9-]+$/.test(overrideBatch)) {
+    return invalid([{ field: 'overrideBatchId', message: 'That is not a batch id.' }]);
+  }
 
   const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
@@ -104,11 +112,12 @@ export const POST: APIRoute = async (context) => {
       {
         importType: importType as ImportType,
         sourceSystemId,
-        affiliateId: null,
+        affiliateId: chosenAffiliate === '' ? null : chosenAffiliate,
         filename: file.name,
         reportingPeriodFrom: null,
         reportingPeriodTo: null,
         bytes: new Uint8Array(await file.arrayBuffer()),
+        overrideBatchId: overrideBatch === '' ? null : overrideBatch,
       },
       writeContext(context.request, auth.principal),
     );
