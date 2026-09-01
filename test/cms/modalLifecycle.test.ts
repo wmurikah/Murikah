@@ -53,41 +53,30 @@ test('closing hands focus back to the exact control that opened the dialog', () 
   const script = read('src/components/cms/CmsOverlayScript.astro');
   assert.match(script, /openedBy\.set\(dialog, opener\)/);
   assert.match(script, /opener\.isConnected\) opener\.focus\(\)/);
-  // And no component re-implements a private focus return.
-  for (const path of [
-    'src/components/cms/CmsActivitySection.astro',
-    'src/components/cms/CmsCaseActions.astro',
-  ]) {
-    assert.ok(!/openedBy|\.focus\(\)/.test(read(path)), `${path} runs its own focus lifecycle`);
-  }
-});
-
-// ---- Add activity ----------------------------------------------------------
-
-test('Add activity is a real button whose form lives in a modal, not inline', () => {
-  const section = read('src/components/cms/CmsActivitySection.astro');
-  // A button, carrying both the shared open and its own prepare hook.
-  const trigger = section.indexOf('data-cms-activity-add');
-  assert.ok(trigger !== -1);
-  assert.match(section, /data-cms-activity-add\s+data-cms-modal-open="cms-activity-modal"/);
-  // The form renders inside the modal, after the trigger — never inline
-  // between the heading and the timeline.
-  const modal = section.indexOf('<CmsModal id="cms-activity-modal"');
-  const form = section.indexOf('<form id="cms-activity-form"');
-  assert.ok(modal !== -1 && form > modal, 'the activity form must live inside the modal');
-  assert.ok(trigger < modal, 'the trigger is on the page, the form is not');
-});
-
-test('opening Add activity prepares a clean form every time', () => {
-  const section = read('src/components/cms/CmsActivitySection.astro');
-  const prepare = section.slice(
-    section.indexOf("closest('[data-cms-activity-add]')"),
-    section.indexOf("closest('[data-cms-activity-save]')"),
+  // And no DIALOG component re-implements a private focus return. (The
+  // activity composer is inline, not a dialog: its own focus handling is the
+  // point, not a bypass.)
+  assert.ok(
+    !/openedBy|\.focus\(\)/.test(read('src/components/cms/CmsCaseActions.astro')),
+    'CmsCaseActions runs its own focus lifecycle',
   );
-  assert.match(prepare, /form\.reset\(\)/);
-  assert.match(prepare, /doneBox\.checked = true/, 'Already happened returns to its default');
-  assert.match(prepare, /sync\(\)/, 'progressive fields are brought back in step');
-  assert.match(prepare, /errorBox\.hidden = true/, 'a stale error must not greet the next open');
+});
+
+// ---- Add activity: deliberately NOT a modal any more -----------------------
+
+test('Add activity is an inline composer, outside the modal lifecycle entirely', () => {
+  // The activity composer was redesigned inline: no dialog, no backdrop, no
+  // overlay lifecycle, and therefore nothing here that could ever stack. The
+  // deeper behavioural coverage lives in test/cms/activityComposer.test.ts;
+  // this suite only pins that the modal system is genuinely out of the loop.
+  const section = read('src/components/cms/CmsActivitySection.astro');
+  assert.ok(!section.includes('CmsModal'), 'the composer must not use CmsModal');
+  assert.ok(!section.includes('cms-activity-modal'), 'no activity modal id may remain');
+  assert.ok(!section.includes('data-cms-modal-open'), 'no activity trigger may open a dialog');
+  assert.match(section, /data-cms-activity-composer/, 'the inline composer must exist');
+  // Dirty close is handled INLINE — never by the shared dialog confirmation.
+  assert.match(section, /Discard this activity\?/);
+  assert.ok(!section.includes('confirmOnDirty'), 'inline dirty handling, not the modal kind');
 });
 
 // ---- The case actions ------------------------------------------------------
@@ -101,7 +90,7 @@ test('every case action trigger opens its modal through the shared system', () =
   // merged with Add activity, which records a different business fact.
   const actions = read('src/components/cms/CmsCaseActions.astro');
   assert.match(actions, /<CmsModal id="cms-case-comm-modal" title="Record communication"/);
-  assert.match(read('src/components/cms/CmsActivitySection.astro'), /title="Add activity"/);
+  assert.match(read('src/components/cms/CmsActivitySection.astro'), />Add activity</);
 });
 
 test('the lead and opportunity triggers use the same safe lifecycle', () => {
@@ -162,13 +151,10 @@ test('saving disables the button and says what it is doing', () => {
 });
 
 test('the typing-heavy forms confirm before a stray close discards them', () => {
-  // Add activity, Change status and Record communication carry free-text
-  // worth protecting; Assign is two selects and stays prompt-free so the
-  // prompt keeps its meaning.
-  assert.match(
-    read('src/components/cms/CmsActivitySection.astro'),
-    /id="cms-activity-modal" title="Add activity" confirmOnDirty/,
-  );
+  // Change status and Record communication carry free-text worth protecting;
+  // Assign is two selects and stays prompt-free so the prompt keeps its
+  // meaning. (Add activity protects its typing INLINE — see
+  // activityComposer.test.ts — since it is no longer a dialog.)
   const actions = read('src/components/cms/CmsCaseActions.astro');
   assert.match(actions, /id="cms-case-status-modal" title="Change status" confirmOnDirty/);
   assert.match(actions, /id="cms-case-comm-modal" title="Record communication" confirmOnDirty/);
