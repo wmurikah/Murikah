@@ -244,6 +244,12 @@ test('every page renders exactly one page header, so there is exactly one h1', (
     if (/return Astro\.redirect\(/.test(source) && !source.includes('<CmsLayout')) continue;
     const headers = (source.match(/<CmsPageHeader\b/g) ?? []).length;
     const rawH1 = (source.match(/<h1\b/g) ?? []).length;
+    // A partial renders INTO a page that already has its h1; a title of its
+    // own would give the host document two. The rule inverts for fragments.
+    if (/export const partial = true/.test(source)) {
+      if (headers > 0 || rawH1 > 0) offenders.push(`${path}: a fragment must not carry a title`);
+      continue;
+    }
     // A page uses the header component, or renders its own single h1. The
     // portal and the login page do the latter, deliberately: their shells
     // are not the application shell.

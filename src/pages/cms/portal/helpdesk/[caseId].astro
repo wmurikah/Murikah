@@ -17,8 +17,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsPortalCaseScript from '@/components/cms/CmsPortalCaseScript.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { portalPageScope } from '@/lib/cms/portal/guard';
 import { portalCase, type PortalCaseDetail } from '@/lib/cms/repos/portalData';
 import type { PortalScope } from '@/lib/cms/portal/tenant';
@@ -31,7 +30,7 @@ let record: PortalCaseDetail | null = null;
 let loadFailed = false;
 
 try {
-  const db = await getDb(getCmsEnv());
+  const db = await requestDb(Astro.locals);
   scope = await portalPageScope(Astro.locals, Astro.url, db);
   if (scope) record = await portalCase(db, scope, Astro.params.caseId ?? '');
 } catch (error) {

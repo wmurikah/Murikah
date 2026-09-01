@@ -1,0 +1,159 @@
+---
+/**
+ * The navigation activity line: a 2.5px indeterminate sweep across the very
+ * top of the viewport, shown the moment a same-origin navigation begins, so a
+ * click on a slow connection is never followed by a second of apparently
+ * ignored input.
+ *
+ * IT IS HONEST. Indeterminate only — no fake percentages, no easing that
+ * pretends to know how long the server will take. It appears when navigation
+ * genuinely starts and the page it belongs to is unloaded by the navigation
+ * finishing; the sessionStorage marker lets the ARRIVING page complete the
+ * story with a full bar that fades, so the line reads as one gesture across
+ * the two documents of an MPA. No client router is involved anywhere.
+ *
+ * IT NEVER STEALS A CLICK. The listener only observes: modified clicks
+ * (ctrl/cmd/shift/alt, non-primary buttons), links that open elsewhere
+ * (target, download), external origins (which covers mailto: and tel:, whose
+ * origin never matches), same-document hash jumps, and events something else
+ * already cancelled all pass through untouched and start no line.
+ *
+ * A LOADER NEVER BECOMES THE PERMANENT STATE. A navigation the browser
+ * cancels (a beforeunload dialog declined, for instance) would otherwise
+ * leave the line sweeping forever, so a generous failsafe fades it after 20
+ * seconds; a back/forward-cache restore hides it immediately. Reduced motion
+ * gets a static quiet line instead of the sweep, via an explicit media query
+ * rather than trusting the global clamp to land the keyframes somewhere
+ * visible.
+ *
+ * The line is scenery: aria-hidden, pointer-events none. The navigation
+ * announces itself the way page loads always have.
+ */
+---
+
+<div
+  data-cms-nav-progress
+  hidden
+  aria-hidden="true"
+  class="cms-nav-progress pointer-events-none fixed inset-x-0 top-0 z-50"
+>
+  <span class="cms-nav-progress-bar block h-[2.5px] w-1/3 rounded-r-full bg-cms-royal"></span>
+</div>
+
+<style>
+  .cms-nav-progress-bar {
+    animation: cms-nav-progress-sweep 1.1s ease-in-out infinite;
+    will-change: transform;
+  }
+  /* The arriving page's completion pass: full width, brief fade. */
+  [data-state='done'] .cms-nav-progress-bar {
+    width: 100%;
+    animation: cms-nav-progress-fade 250ms ease-out forwards;
+  }
+  @keyframes cms-nav-progress-sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      /* The bar is a third of the viewport, so 300% of itself is one full
+         viewport width: off the left edge to off the right edge. */
+      transform: translateX(300%);
+    }
+  }
+  @keyframes cms-nav-progress-fade {
+    to {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cms-nav-progress-bar {
+      animation: none;
+      width: 100%;
+      opacity: 0.35;
+    }
+  }
+</style>
+
+<script>
+  // Written by the departing page, read once by the arriving one. It marks "a
+  // navigation with the line up just happened", nothing more.
+  const NAV_PROGRESS_KEY = 'cms.nav.progress';
+  const line = document.querySelector<HTMLElement>('[data-cms-nav-progress]');
+  let failsafe = 0;
+  let doneTimer = 0;
+
+  const hide = () => {
+    if (line) {
+      line.hidden = true;
+      delete line.dataset.state;
+    }
+    window.clearTimeout(failsafe);
+    // A marker nobody consumed (a cancelled navigation, a detour off the CMS
+    // and back through the cache) would flash a stale completion later.
+    try {
+      window.sessionStorage.removeItem(NAV_PROGRESS_KEY);
+    } catch {
+      /* nothing held, nothing to clear */
+    }
+  };
+
+  // Completion pass: if the previous page departed under the line, finish it
+  // here — full bar, quick fade — then get out of the way.
+  try {
+    if (window.sessionStorage.getItem(NAV_PROGRESS_KEY) === '1') {
+      window.sessionStorage.removeItem(NAV_PROGRESS_KEY);
+      if (line) {
+        line.hidden = false;
+        line.dataset.state = 'done';
+        doneTimer = window.setTimeout(hide, 300);
+      }
+    }
+  } catch {
+    /* No storage: no completion pass. The next line still works. */
+  }
+
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    // A modified click is "open differently" — new tab, new window, save —
+    // and the current page is staying. No line, and no interference.
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest('a[href]');
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    if (anchor.target !== '' && anchor.target !== '_self') return;
+    if (anchor.hasAttribute('download')) return;
+    // mailto:, tel: and every external site fail the origin comparison.
+    if (anchor.origin !== window.location.origin) return;
+    // A same-document fragment jump navigates nothing.
+    if (
+      anchor.hash !== '' &&
+      anchor.pathname === window.location.pathname &&
+      anchor.search === window.location.search
+    )
+      return;
+
+    if (line) {
+      // A click during the arrival fade must win over the pending hide, or
+      // the fresh sweep would be put away 300ms in.
+      window.clearTimeout(doneTimer);
+      delete line.dataset.state;
+      line.hidden = false;
+      // If the browser cancels the navigation the line must not sweep forever.
+      window.clearTimeout(failsafe);
+      failsafe = window.setTimeout(hide, 20000);
+    }
+    try {
+      window.sessionStorage.setItem(NAV_PROGRESS_KEY, '1');
+    } catch {
+      /* No storage: the departing line still shows; only the arrival pass is lost. */
+    }
+  });
+
+  // A back/forward-cache restore brings the page back exactly as it left —
+  // including a running line. Put it away.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) hide();
+  });
+</script>

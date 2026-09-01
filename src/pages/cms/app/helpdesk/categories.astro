@@ -18,8 +18,7 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageCaseCategories } from '@/lib/cms/permissions';
 import {
   listCaseCategories,
@@ -36,7 +35,7 @@ let categories: CaseCategoryRow[] = [];
 let loadFailed = false;
 if (mayManage) {
   try {
-    categories = await listCaseCategories(await getDb(getCmsEnv()));
+    categories = await listCaseCategories(await requestDb(Astro.locals));
   } catch (error) {
     console.error('[cms.service.categories] load failed', error);
     loadFailed = true;
@@ -176,6 +175,8 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
 </CmsLayout>
 
 <script>
+  import { busy } from '@/lib/cms/ui/busy';
+
   interface FieldError {
     field: string;
     message: string;
@@ -213,6 +214,7 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const restore = busy(form.querySelector<HTMLButtonElement>('[type="submit"]'), 'Saving…');
       const body = {
         categoryName: field('cat-categoryName').value,
         subcategoryName: field('cat-subcategoryName').value,
@@ -252,6 +254,8 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
           errorBox.hidden = false;
           errorBox.textContent = 'There was a problem reaching the server. Check your connection.';
         }
+      } finally {
+        restore();
       }
     });
   }

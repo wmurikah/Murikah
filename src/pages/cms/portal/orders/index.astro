@@ -17,8 +17,7 @@ import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { portalPageScope } from '@/lib/cms/portal/guard';
 import { portalOrders, type PortalOrderRow } from '@/lib/cms/repos/portalData';
 import type { PortalScope } from '@/lib/cms/portal/tenant';
@@ -31,7 +30,7 @@ let orders: PortalOrderRow[] = [];
 let loadFailed = false;
 
 try {
-  const db = await getDb(getCmsEnv());
+  const db = await requestDb(Astro.locals);
   scope = await portalPageScope(Astro.locals, Astro.url, db);
   if (scope) orders = await portalOrders(db, scope);
 } catch (error) {

@@ -211,6 +211,10 @@ const filter = parseFilter(new URLSearchParams());
 test('/app stays inside its subrequest budget', async () => {
   const today = new Date(NOW.replace(' ', 'T') + 'Z');
   const params = new URLSearchParams();
+  // Captured for the fragment simulation below: the page passes these to the
+  // trend fragment in its URL rather than running the trend itself.
+  let shown!: ReturnType<typeof choosePeriod>['period'];
+  let trendMonths = 0;
   const { trips, statements } = await cost(async (b) => {
     // THE CALENDAR, ALONE. One statement for the whole period control.
     const calendarRows = await runSection(b, 'home.calendar', (db) =>
@@ -242,19 +246,20 @@ test('/app stays inside its subrequest budget', async () => {
       calendarRows.ok ? (calendarRows.value.rows as Record<string, unknown>[]) : [],
     );
     const choice = choosePeriod(parseDashboardPeriod(params, today).period, calendar, today, false);
-    const shown = choice.period;
+    shown = choice.period;
     const active = withPeriod(filter, shown);
     const scope = { from: shown.from, to: shown.to, affiliateId: filter.affiliateId };
-    // The trend reads the twelve months ending at the month on screen, so it
-    // carries its own window while every other figure reads the month itself.
-    const trendWindow = trailingMonths(shown, trendSpan(shown, calendar));
-    const trendScope = { ...scope, from: trendWindow.from, to: trendWindow.to };
+    // THE TREND NO LONGER RUNS HERE. It sits behind "More detail" and its two
+    // twelve-month window statements — the heaviest reads this page had —
+    // moved to /app/fragments/home-trend, fetched on first expansion. What
+    // the page still does for the trend is arithmetic: the month-span its
+    // fragment URL carries, from the calendar it already read.
+    trendMonths = trendSpan(shown, calendar);
 
-    // EVERYTHING ELSE, IN ONE GO: the exceptions, four counts, two boards, two
-    // monthly trends, two end-to-end spans and the affiliate list. The month
-    // before is no longer queried: the trend beside each panel already carries
-    // the twelve months ending at this one, so a second board for it was a
-    // figure the chart above it already draws.
+    // EVERYTHING ELSE, IN ONE GO: the exceptions, four counts, two boards,
+    // two end-to-end spans and the affiliate list. The month before is no
+    // longer queried: the trend fragment already carries the months ending at
+    // this one, so a second board for it was a figure the chart draws anyway.
     await Promise.all([
       runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, active, NOW)),
       runSection(b, 'home.po-total', (db) => countPurchaseOrders(db, USER, active, NOW)),
@@ -267,12 +272,6 @@ test('/app stays inside its subrequest budget', async () => {
       ),
       runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', scope)),
       runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', scope)),
-      runSection(b, 'home.purchases-trend', (db) =>
-        approvalTrend(db, 'PURCHASE_ORDER', trendScope, 'MONTH'),
-      ),
-      runSection(b, 'home.sales-trend', (db) =>
-        approvalTrend(db, 'SALES_ORDER', trendScope, 'MONTH'),
-      ),
       runSection(b, 'home.purchases-cycle', (db) => approvalCycle(db, 'PURCHASE_ORDER', scope)),
       runSection(b, 'home.sales-cycle', (db) => approvalCycle(db, 'SALES_ORDER', scope)),
       runSection(b, 'home.affiliates', (db) =>
@@ -285,11 +284,38 @@ test('/app stays inside its subrequest budget', async () => {
   });
   assertWithinBudget('/app', trips, statements);
   // THE FIGURE THE BRIEF ASKS FOR, PRINTED RATHER THAN DESCRIBED. Each panel
-  // carries a KPI strip, a bar chart, a monthly trend and a leaderboard, and
-  // the page must not become more expensive for any of it.
+  // carries a KPI strip, a bar chart and a leaderboard, and the page must not
+  // become more expensive for any of it.
   assert.ok(
     trips <= 6,
     `/app cost ${trips} round trips, up from the 6 it cost before the panels were rebuilt`,
+  );
+
+  // THE FRAGMENT, COSTED AS THE SEPARATE REQUEST IT IS. First expansion of
+  // "More detail" fetches /app/fragments/home-trend once for BOTH panels; its
+  // two statements must coalesce into one batch exactly as they did when the
+  // page ran them, or the deferral has traded page weight for chattiness.
+  const fragment = await cost(async (b) => {
+    const window = trailingMonths(shown, trendMonths);
+    const trendScope = {
+      from: window.from,
+      to: window.to,
+      affiliateId: filter.affiliateId,
+    };
+    await Promise.all([
+      runSection(b, 'home.purchases-trend', (db) =>
+        approvalTrend(db, 'PURCHASE_ORDER', trendScope, 'MONTH'),
+      ),
+      runSection(b, 'home.sales-trend', (db) =>
+        approvalTrend(db, 'SALES_ORDER', trendScope, 'MONTH'),
+      ),
+    ]);
+  });
+  assertWithinBudget('/app/fragments/home-trend', fragment.trips, fragment.statements);
+  assert.equal(
+    fragment.trips,
+    1,
+    `the trend fragment cost ${fragment.trips} round trips; both statements must ride one batch`,
   );
 });
 

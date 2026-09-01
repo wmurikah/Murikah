@@ -24,8 +24,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageUsers, canManageWorkflowRoles } from '@/lib/cms/permissions';
 import { accessReview, type AccessReviewRow } from '@/lib/cms/repos/controlCentre';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
@@ -42,7 +41,7 @@ let loadFailed = false;
 
 if (mayRead) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     rows = await accessReview(db, today, { search });
   } catch (error) {
     console.error('[cms.control.accessReview] load failed', error);

@@ -23,8 +23,7 @@ import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsMatrixScript from '@/components/cms/CmsMatrixScript.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageRoles } from '@/lib/cms/permissions';
 import {
   getRole,
@@ -46,7 +45,7 @@ let loadFailed = false;
 
 if (mayManage) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     role = await getRole(db, roleId);
     if (role) {
       [modules, holders] = await Promise.all([

@@ -4,6 +4,7 @@ import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsLoginCharacter from '@/components/cms/CmsLoginCharacter.astro';
 import CmsAuthProviders from '@/components/cms/CmsAuthProviders.astro';
+import CmsQuoteCurtain from '@/components/cms/CmsQuoteCurtain.astro';
 import { EXPIRED_FLAG, EXPIRED_MESSAGE } from '@/lib/cms/routes';
 export const prerender = false;
 const notice =
@@ -98,9 +99,11 @@ const notice =
       >
     </div>
   </div>
+  <CmsQuoteCurtain />
 </CmsAuthLayout>
 <script>
   import { submitCredentials, authResultMessage } from '@/lib/cms/auth/client';
+  import { pickQuote, LAST_QUOTE_KEY } from '@/lib/cms/auth/quotes';
   const form = document.querySelector<HTMLFormElement>('#cms-login-form'),
     email = document.querySelector<HTMLInputElement>('#cms-email'),
     password = document.querySelector<HTMLInputElement>('#cms-password'),
@@ -109,6 +112,46 @@ const notice =
     errorBox = document.querySelector<HTMLElement>('#cms-login-error'),
     error = errorBox?.querySelector<HTMLElement>('[data-error-text]');
   const character = document.querySelector<HTMLElement>('[data-cms-login-character]');
+  const curtain = document.querySelector<HTMLElement>('[data-cms-quote-curtain]');
+  // The Quote Curtain fills and shows ONLY from the success branch below, and
+  // navigation starts in the same tick — the curtain covers the wait for the
+  // authenticated page, it never creates one. One quote per sign-in: the
+  // previous pick is remembered in sessionStorage so two sign-ins in a row
+  // read differently. Storage may be unavailable (private mode); a repeated
+  // quote is an acceptable failure, a thrown error on sign-in is not.
+  const showQuoteCurtain = () => {
+    if (!curtain) return;
+    let last: number | null = null;
+    try {
+      const raw = window.sessionStorage.getItem(LAST_QUOTE_KEY);
+      if (raw !== null && Number.isInteger(Number(raw))) last = Number(raw);
+    } catch {
+      /* no storage: any quote will do */
+    }
+    const { quote, index } = pickQuote(last);
+    try {
+      window.sessionStorage.setItem(LAST_QUOTE_KEY, String(index));
+    } catch {
+      /* no storage: nothing to remember */
+    }
+    const text = curtain.querySelector<HTMLElement>('[data-quote-text]');
+    const author = curtain.querySelector<HTMLElement>('[data-quote-author]');
+    if (text) text.textContent = `“${quote.text}”`;
+    if (author) author.textContent = `— ${quote.author}`;
+    curtain.hidden = false;
+  };
+  // Back/forward cache can restore this page with the curtain still up and the
+  // button still disabled: put both back. A fresh load ships the curtain
+  // hidden, so refresh never traps anyone behind an overlay.
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    if (curtain) curtain.hidden = true;
+    const submit = document.querySelector<HTMLButtonElement>('#cms-login-submit');
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Sign in';
+    }
+  });
   let settle = 0;
   const pose = (state: string) => {
     if (character) character.dataset.state = state;
@@ -165,15 +208,21 @@ const notice =
     }
     pose('loading');
     const result = await submitCredentials({ email: email.value.trim(), password: password.value });
-    if (result.status === 'success') {
-      pose('success');
-      window.setTimeout(() => location.assign(result.landing), 140);
-    } else {
-      pose('retry');
-      setError(authResultMessage(result) ?? 'Sign-in could not be completed. Try again.');
-      window.setTimeout(() => pose('password'), 260);
-    }
     password.value = '';
+    if (result.status === 'success') {
+      // Curtain up and navigation started in the same tick: the old 140ms
+      // pause before location.assign was manufactured latency and is gone.
+      // The button stays disabled — the curtain owns the screen from here,
+      // and pageshow restores the form if the reader comes Back.
+      pose('success');
+      showQuoteCurtain();
+      location.assign(result.landing);
+      return;
+    }
+    // Every failure keeps the form: error line, retry pose, NO curtain.
+    pose('retry');
+    setError(authResultMessage(result) ?? 'Sign-in could not be completed. Try again.');
+    window.setTimeout(() => pose('password'), 260);
     if (submit) {
       submit.disabled = false;
       submit.textContent = 'Sign in';

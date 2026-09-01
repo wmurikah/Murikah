@@ -17,7 +17,7 @@ import { notFound } from '../../../../../lib/cms/errors.ts';
 export const prerender = false;
 
 export const GET: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const auth = await requirePortal(context, connection.db);
   if (!auth.ok) return auth.response;

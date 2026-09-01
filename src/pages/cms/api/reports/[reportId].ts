@@ -28,7 +28,7 @@ export const GET: APIRoute = async (context) => {
   if (!auth.principal.user.permissions.includes(report.permission)) {
     return forbidden(`This report needs ${report.permission}.`);
   }
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const now = toDbTimestamp(new Date());

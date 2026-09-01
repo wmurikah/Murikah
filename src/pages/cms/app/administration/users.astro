@@ -23,8 +23,7 @@ import CmsInput from '@/components/cms/CmsInput.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsUserCreateDrawer from '@/components/cms/CmsUserCreateDrawer.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageUsers } from '@/lib/cms/permissions';
 import { listMappings } from '@/lib/cms/repos/jobTitleMappings';
 import { USER_STATUSES, USER_TYPES } from '@/lib/cms/admin/userInput';
@@ -82,7 +81,7 @@ let loadFailed = false;
 
 if (mayManage) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [page, countries, affiliates, businessUnits, departments, titles, teams] = await Promise.all([
       listUsers(db, filters),
       listCountries(db),

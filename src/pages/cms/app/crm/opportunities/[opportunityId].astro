@@ -21,8 +21,7 @@ import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsOpportunityActions from '@/components/cms/CmsOpportunityActions.astro';
 import CmsActivitySection from '@/components/cms/CmsActivitySection.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import {
   canViewOpportunities,
   canEditOpportunities,
@@ -72,7 +71,7 @@ let loadFailed = false;
 
 if (mayRead) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     opportunity = await getOpportunity(db, userId, opportunityId);
     if (opportunity !== null) {
       [products, history, pipeline, options, activities] = await Promise.all([

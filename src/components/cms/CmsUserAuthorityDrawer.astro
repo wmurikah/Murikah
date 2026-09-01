@@ -23,8 +23,7 @@ import CmsDrawer from './CmsDrawer.astro';
 import CmsButton from './CmsButton.astro';
 import CmsInput from './CmsInput.astro';
 import CmsSelect from './CmsSelect.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { WORKFLOW_SCOPE_TYPES } from '@/lib/cms/workflow/model';
 import { listWorkflowRoles } from '@/lib/cms/repos/workflowAdmin';
 import {
@@ -44,7 +43,7 @@ let affiliateOptions: { value: string; label: string }[] = [];
 let unitOptions: { value: string; label: string }[] = [];
 
 try {
-  const db = await getDb(getCmsEnv());
+  const db = await requestDb(Astro.locals);
   const [workflowRoles, countries, affiliates, units] = await Promise.all([
     listWorkflowRoles(db),
     listCountries(db),

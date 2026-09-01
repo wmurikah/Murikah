@@ -36,7 +36,7 @@ export const PATCH: APIRoute = async (context) => {
   }
   const truthy = (v: unknown) => v === true || v === 1 || v === '1' || v === 'true' || v === 'on';
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await updateAssignment(

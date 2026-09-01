@@ -51,7 +51,7 @@ export const GET: APIRoute = async (context) => {
   const auth = requireCatalogueManage(context);
   if (!auth.ok) return auth.response;
 
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     return ok(await hierarchy(connection.db));

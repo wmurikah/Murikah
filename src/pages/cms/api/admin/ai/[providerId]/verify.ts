@@ -21,7 +21,7 @@ export const POST: APIRoute = async (context) => {
   const auth = requireUsersManage(context);
   if (!auth.ok) return auth.response;
   const id = String(context.params.providerId ?? '');
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const provider = await getProvider(connection.db, id);

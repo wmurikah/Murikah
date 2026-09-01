@@ -38,7 +38,7 @@ async function authorise(
 
 /** The figures, and nothing written. */
 export const GET: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const batchId = context.params.batchId ?? '';
   try {
@@ -53,7 +53,7 @@ export const GET: APIRoute = async (context) => {
 };
 
 export const POST: APIRoute = async (context) => {
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const batchId = context.params.batchId ?? '';
   try {

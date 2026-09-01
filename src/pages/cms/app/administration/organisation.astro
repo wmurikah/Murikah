@@ -33,8 +33,7 @@ import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsOrganisationFormScript from '@/components/cms/CmsOrganisationFormScript.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageOrganisation, canViewOrganisation } from '@/lib/cms/permissions';
 import { TEAM_TYPES } from '@/lib/cms/admin/organisationInput';
 import {
@@ -86,7 +85,7 @@ let loadFailed = false;
 
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     // The affiliate and country lists are loaded whatever the tab is, because
     // the team and affiliate drawers need them as options. Five small reads of
     // master data, not a page of transactions.

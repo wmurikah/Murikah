@@ -14,8 +14,7 @@ import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canUploadImports, canViewImports } from '@/lib/cms/permissions';
 import {
   dataQuality,
@@ -35,7 +34,7 @@ let recent: BatchSummaryRow[] = [];
 let loadFailed = false;
 if (mayView) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     quality = await dataQuality(db);
     recent = (await listBatches(db, 5)).slice(0, 5);
   } catch (error) {

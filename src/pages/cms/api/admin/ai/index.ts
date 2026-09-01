@@ -20,7 +20,7 @@ export const prerender = false;
 export const GET: APIRoute = async (context) => {
   const auth = requireUsersManage(context);
   if (!auth.ok) return auth.response;
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     return ok({ providers: await listProviders(connection.db) });
@@ -57,7 +57,7 @@ export const POST: APIRoute = async (context) => {
   if (!auth.ok) return auth.response;
   const body = (await context.request.json().catch(() => null)) as Record<string, unknown> | null;
   if (body === null) return invalid([{ field: 'body', message: 'Send JSON.' }]);
-  const connection = await connect();
+  const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   try {
     const result = await createProvider(

@@ -24,8 +24,7 @@ import CmsCheckbox from '@/components/cms/CmsCheckbox.astro';
 import CmsIcon from '@/components/cms/CmsIcon.astro';
 import CmsRoleScript from '@/components/cms/CmsRoleScript.astro';
 
-import { getCmsEnv } from '@/lib/cms/env';
-import { getDb } from '@/lib/cms/db';
+import { requestDb } from '@/lib/cms/db';
 import { canManageRoles } from '@/lib/cms/permissions';
 import { countAdministrators, listRoles, type RoleRow } from '@/lib/cms/repos/rbacAdmin';
 
@@ -38,7 +37,7 @@ let loadFailed = false;
 
 if (mayManage) {
   try {
-    const db = await getDb(getCmsEnv());
+    const db = await requestDb(Astro.locals);
     [roles, administrators] = await Promise.all([listRoles(db), countAdministrators(db)]);
   } catch (error) {
     console.error('[cms.roles] load failed', error);
