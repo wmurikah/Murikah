@@ -159,7 +159,11 @@ const stageOptions =
           <Fragment slot="actions">
             <CmsBadge tone={statusTone(opportunity.status)} label={titleCase(opportunity.status)} />
             {mayEdit && opportunity.status === 'OPEN' && (
-              <CmsButton variant="primary" data-cms-opp-move>
+              <CmsButton
+                variant="primary"
+                data-cms-opp-move
+                data-cms-modal-open="cms-opp-move-modal"
+              >
                 Move stage
               </CmsButton>
             )}
@@ -326,7 +330,11 @@ const stageOptions =
             )}
             {mayEdit && opportunity.status === 'OPEN' && (
               <div class="mt-3">
-                <CmsButton variant="secondary" data-cms-opp-line-add>
+                <CmsButton
+                  variant="secondary"
+                  data-cms-opp-line-add
+                  data-cms-modal-open="cms-opp-line-modal"
+                >
                   Add product
                 </CmsButton>
               </div>

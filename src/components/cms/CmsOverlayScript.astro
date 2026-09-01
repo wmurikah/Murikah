@@ -64,6 +64,16 @@
     };
 
     const open = (dialog: HTMLDialogElement, opener: HTMLElement) => {
+      // ONE DIALOG AT A TIME, GLOBALLY. Two stacked content modals are two
+      // backdrops and half-covered forms — never a design, always a defect.
+      // With a dialog open the page behind is inert, so a person cannot
+      // normally reach a second trigger; this guard is for the paths people
+      // do not take: a duplicate handler, a programmatic open, a component
+      // regression. Refusing quietly is the safe answer — it never discards
+      // anything, and the open dialog keeps its state. The navigation drawer
+      // lives under the same rule: a flow that genuinely wants to move
+      // dialog-to-dialog must close the first, then open the second.
+      if (document.querySelector('dialog[open]') !== null) return;
       openedBy.set(dialog, opener);
       dirty.delete(dialog);
       dialog.showModal();
