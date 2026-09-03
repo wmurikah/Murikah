@@ -129,6 +129,8 @@ export function approvalRecordsHref(options: {
   readonly view: RecordView;
   readonly fn: string;
   readonly actor: ApprovalActor;
+  /** The purchase order chart's product group, where the figure carries one. */
+  readonly productGroup?: string | null;
 }): string {
   const params = new URLSearchParams({
     ...periodParams(options.period),
@@ -140,5 +142,8 @@ export function approvalRecordsHref(options: {
   if (options.actor.kind === 'EVERYONE') params.set('all', '1');
   else if (options.actor.userId === null) params.set('person', 'none');
   else params.set('user', options.actor.userId);
+  if (options.productGroup !== undefined && options.productGroup !== null) {
+    params.set('group', options.productGroup);
+  }
   return `/app/performance/approvals?${params.toString()}`;
 }
