@@ -342,7 +342,13 @@ INSERT OR IGNORE INTO sla_rules VALUES
 ('SLAR-002','SLAP-001','Lead first contact','LEAD','FIRST_CONTACT',NULL,120,90,'CAL-KE',1,0,120,1),
 ('SLAR-003','SLAP-004','SO finance approval','SALES_ORDER','FINANCE_APPROVAL',NULL,60,45,'CAL-KE',1,0,60,1),
 ('SLAR-004','SLAP-004','SO credit approval','SALES_ORDER','CREDIT_APPROVAL',NULL,120,90,'CAL-KE',1,0,120,1),
-('SLAR-005','SLAP-004','PO approval stage','PURCHASE_ORDER','PO_APPROVAL',NULL,180,150,'CAL-KE',1,0,180,1),
+-- THE OPERATOR'S SLA SCRIPT, MIRRORED (Build Prompt 43 prerequisite): the old
+-- 180-minute stage rule is deactivated and the one active PURCHASE_ORDER rule
+-- is SLAR-PO-30 — 30-minute target, 25-minute warning, business hours only,
+-- against the Kenya calendar's 08:00–17:00 day. The row stays because
+-- workflow_stages references it; only its active flag changed.
+('SLAR-005','SLAP-004','PO approval stage','PURCHASE_ORDER','PO_APPROVAL',NULL,180,150,'CAL-KE',1,0,180,0),
+('SLAR-PO-30','SLAP-004','PO approval target','PURCHASE_ORDER',NULL,NULL,30,25,'CAL-KE',1,0,30,1),
 ('SLAR-006','SLAP-005','BluePeak complaint response','CASE','FIRST_RESPONSE','HIGH',30,20,'CAL-KE',1,0,30,1);
 
 INSERT OR IGNORE INTO workflow_roles VALUES

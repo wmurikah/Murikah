@@ -728,12 +728,14 @@ test('Home leads with the two charts, then the two leaderboards', () => {
   // this test to look for `peopleByFunction(...)`, a helper from a rewrite of
   // the page that the same merge dropped, so the assertion searched for a
   // string no file contained and failed on main itself — unseen, because the
-  // pipeline never reached the test step.
+  // pipeline never reached the test step. The purchase order chart is now
+  // CmsApproverGroupChart — by approver and product group, its title its own —
+  // so its marker is the component, not a title prop.
   const marks = [
     ...source.matchAll(
-      /title="(Purchase order approval|Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
+      /<CmsApproverGroupChart|title="(Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
     ),
-  ].map((m) => m[1] ?? m[2]!);
+  ].map((m) => m[1] ?? m[2] ?? 'Purchase order approval');
   assert.deepEqual(marks, [
     'Purchase order approval',
     'Purchase order approvers',
