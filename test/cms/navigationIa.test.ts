@@ -519,9 +519,11 @@ test('Home discloses the deeper analysis and deletes none of it', () => {
   assert.match(fragment, /approvalTrend\(client, 'SALES_ORDER', scope, 'MONTH'\)/);
   assert.match(fragment, /title="Purchase order turnaround trend"/);
   assert.match(fragment, /title="Sales order turnaround trend"/);
-  // The headline figures stay in the first view, outside the disclosure.
+  // The headline figures stay in the first view, outside the disclosure. The
+  // purchase order bars are the approver-and-product chart now, and it sits
+  // above the first More detail, not inside it.
   const firstDetail = page.indexOf('<CmsMoreDetail');
-  assert.ok(page.slice(0, firstDetail).includes('Purchase order approval'), 'the bars were hidden');
+  assert.ok(page.slice(0, firstDetail).includes('<CmsApproverGroupChart'), 'the bars were hidden');
 });
 
 test('the Home disclosure remembers per browser and adds no schema', () => {
