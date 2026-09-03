@@ -63,6 +63,7 @@ import CmsMonthYearControl from '@/components/cms/CmsMonthYearControl.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
+import CmsApproverGroupChart from '@/components/cms/CmsApproverGroupChart.astro';
 import CmsMoreDetail from '@/components/cms/CmsMoreDetail.astro';
 import CmsChartSkeleton from '@/components/cms/CmsChartSkeleton.astro';
 import CmsHomeTrendScript from '@/components/cms/CmsHomeTrendScript.astro';
@@ -78,13 +79,17 @@ import { countPurchaseOrders } from '@/lib/cms/repos/poPerformance';
 import {
   approvalBoard,
   approvalCycle,
+  approverGroupBoard,
+  poApprovalRule,
   EVERYONE,
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
   type ApprovalProcess,
   type ApprovalScope,
+  type ApproverGroupStat,
   type CycleStat,
   type FunctionStat,
+  type PoApprovalRule,
 } from '@/lib/cms/repos/approvalSla';
 import {
   calendarSql,
@@ -196,6 +201,10 @@ let purchases: ApprovalBoard | null = null;
 let sales: ApprovalBoard | null = null;
 let purchaseCycle: CycleStat | null = null;
 let salesCycle: CycleStat | null = null;
+/** The purchase order chart's rule and rows: person, then product group. */
+let poRule: PoApprovalRule | null = null;
+let poApproverRows: ApproverGroupStat[] = [];
+let poApproverLevels: ReadonlyMap<string, ApproverGroupStat[]> = new Map();
 let soWaiting: number | null = null;
 let poWaiting: number | null = null;
 let affiliates: { value: string; label: string }[] = [];
@@ -242,7 +251,18 @@ if (user) {
       affiliateId: filter.affiliateId,
     };
 
-    const [attention, poQueue, soQueue, po, so, poSpan, soSpan, affiliateRows] = await Promise.all([
+    const [
+      attention,
+      poQueue,
+      soQueue,
+      po,
+      so,
+      poSpan,
+      soSpan,
+      affiliateRows,
+      poRuleRead,
+      poGroups,
+    ] = await Promise.all([
       runSection(batcher, 'home.attention', (client) =>
         attentionCustomers(client, userId, active, now),
       ),
@@ -273,6 +293,13 @@ if (user) {
             WHERE active = 1 ORDER BY affiliate_name`,
         ),
       ),
+      // THE CHART'S TARGET IS READ, NEVER HARD-CODED, and the chart's rows
+      // arrive with both grains — person-and-group and the levels behind each
+      // — in one statement, so expanding a row costs no request. Both ride
+      // the same wave as everything above, so the page's round trips do not
+      // move.
+      runSection(batcher, 'home.po-rule', (client) => poApprovalRule(client)),
+      runSection(batcher, 'home.po-approvers', (client) => approverGroupBoard(client, scope)),
     ]);
 
     if (attention.ok) customers = attention.value;
@@ -290,6 +317,14 @@ if (user) {
     else {
       failed.push('purchase order approval');
       traceId = po.traceId;
+    }
+    if (poRuleRead.ok) poRule = poRuleRead.value;
+    if (poGroups.ok) {
+      poApproverRows = poGroups.value.rows;
+      poApproverLevels = poGroups.value.levels;
+    } else {
+      failed.push('purchase order approver');
+      traceId = traceId ?? poGroups.traceId;
     }
     if (so.ok) sales = so.value;
     else {
@@ -415,8 +450,19 @@ const everyFunctionRecords = (process: ApprovalProcess) =>
     actor: EVERYONE,
   });
 
-const purchaseChart = chartOf(purchases, 'PURCHASE_ORDER');
+// The purchase order panel no longer draws by function: its chart is by
+// approver and product group, rendered by CmsApproverGroupChart below, with
+// the levels behind each row. `chartOf` remains the sales panel's shape.
 const salesChart = chartOf(sales, 'SALES_ORDER');
+
+/**
+ * The one line under the purchase order chart, in the space of a label. The
+ * figure is READ from the active rule, never a constant; the chart itself
+ * carries the sentence explaining which clock the target judges, and says so
+ * when no rule resolves and no line is drawn.
+ */
+const poTargetNote =
+  poRule === null ? 'No target set.' : `Target ${formatDuration(poRule.targetMinutes)}.`;
 
 /**
  * THE TREND LOADS WHEN SOMEBODY ASKS FOR IT, and this is its address.
@@ -779,30 +825,25 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         }
       </div>
 
-      <CmsChart
-        title="Purchase order approval"
-        definition={BAR_DEFINITION}
-        chart={purchaseChart}
-        unit="minutes"
+      <CmsApproverGroupChart
+        rows={poApproverRows}
+        levels={poApproverLevels}
+        rule={poRule}
+        period={shown}
+        affiliateId={filter.affiliateId}
         coverage={`${count(volumeOf(purchases))} approvals in ${shown.label}`}
       />
       {
         /*
-          NEVER A TARGET LINE AGAINST AN INVENTED NUMBER. The chart draws one
-          wherever a rule resolves for a function; none resolves, so this says
-          so once and offers the screen where they are set.
-        */
-      }
-      {
-        /*
-          FOUR WORDS AND A LINK. The reason no dashed rule is drawn used to be a
-          full sentence under every chart, twice on the page. The fact still has
-          to be said — a missing target line and a met target look identical —
-          but a dashboard says it in the space of a label.
+          NEVER A TARGET LINE AGAINST AN INVENTED NUMBER. The dashed rule on
+          the chart above is READ from the active PURCHASE_ORDER SLA rule.
+          This line states the figure in the space of a label; the sentence
+          naming the clock it judges — and the one saying no line is drawn
+          when no rule resolves — is the chart's own, beneath its axis.
         */
       }
       <p class="text-cms-caption text-cms-muted">
-        No target set.{' '}
+        {poTargetNote}{' '}
         {
           maySetTargets && (
             <a
