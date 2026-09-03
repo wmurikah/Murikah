@@ -99,21 +99,21 @@ administrator maps them), and asserts all thirteen rows in order — person,
 group, volume, elapsed median, over-target count — plus the accountable
 median, over-target and at-risk counts for every row:
 
-| # | Approver | Group | n | Elapsed med | Over (elapsed) | Accountable med | Over (acc.) |
-|---|----------|-------|---|-------------|----------------|-----------------|-------------|
-| 1 | Omar Saad | LPG | 21 | 451 | 16 / 21 | 446 | 16 / 21 |
-| 2 | Sulekha Abdi | Fuel | 11 | 63 | 8 / 11 | 62 | 8 / 11 |
-| 3 | Gabriel Musembi | Fuel | 11 | 38 | 7 / 11 | 39 | 7 / 11 |
-| 4 | Liban Abdimalik | Lubricants | 13 | 37 | 7 / 13 | 26 | 6 / 13 |
-| 5 | Paul Otieno | LPG | 5 | 36 | 5 / 5 | 36 | 5 / 5 |
-| 6 | Sulekha Abdi | LPG | 21 | 30 | 10 / 21 | 29 | 8 / 21 |
-| 7 | Gabriel Musembi | LPG | 16 | 26 | 8 / 16 | 27 | 8 / 16 |
-| 8 | Sulekha Abdi | Lubricants | 13 | 23 | 4 / 13 | 23 | 4 / 13 |
-| 9 | Liban Abdimalik | LPG | 21 | 22 | 9 / 21 | 22 | 9 / 21 |
-| 10 | Gabriel Musembi | Lubricants | 13 | 18 | 5 / 13 | 18 | 5 / 13 |
-| 11 | Michael Obingo | Lubricants | 13 | 18 | 3 / 13 | 18 | 3 / 13 |
-| 12 | Edmond Kiplangat | Fuel | 11 | 9 | 0 / 11 | 8 | 0 / 11 |
-| 13 | Liban Abdimalik | Fuel | 11 | 5 | 3 / 11 | 4 | 3 / 11 |
+| #   | Approver         | Group      | n   | Elapsed med | Over (elapsed) | Accountable med | Over (acc.) |
+| --- | ---------------- | ---------- | --- | ----------- | -------------- | --------------- | ----------- |
+| 1   | Omar Saad        | LPG        | 21  | 451         | 16 / 21        | 446             | 16 / 21     |
+| 2   | Sulekha Abdi     | Fuel       | 11  | 63          | 8 / 11         | 62              | 8 / 11      |
+| 3   | Gabriel Musembi  | Fuel       | 11  | 38          | 7 / 11         | 39              | 7 / 11      |
+| 4   | Liban Abdimalik  | Lubricants | 13  | 37          | 7 / 13         | 26              | 6 / 13      |
+| 5   | Paul Otieno      | LPG        | 5   | 36          | 5 / 5          | 36              | 5 / 5       |
+| 6   | Sulekha Abdi     | LPG        | 21  | 30          | 10 / 21        | 29              | 8 / 21      |
+| 7   | Gabriel Musembi  | LPG        | 16  | 26          | 8 / 16         | 27              | 8 / 16      |
+| 8   | Sulekha Abdi     | Lubricants | 13  | 23          | 4 / 13         | 23              | 4 / 13      |
+| 9   | Liban Abdimalik  | LPG        | 21  | 22          | 9 / 21         | 22              | 9 / 21      |
+| 10  | Gabriel Musembi  | Lubricants | 13  | 18          | 5 / 13         | 18              | 5 / 13      |
+| 11  | Michael Obingo   | Lubricants | 13  | 18          | 3 / 13         | 18              | 3 / 13      |
+| 12  | Edmond Kiplangat | Fuel       | 11  | 9           | 0 / 11         | 8               | 0 / 11      |
+| 13  | Liban Abdimalik  | Fuel       | 11  | 5           | 3 / 11         | 4               | 3 / 11      |
 
 The elapsed columns are the section 1 table exactly, thirteen rows, Omar Saad
 at the top and Liban Abdimalik on fuel at the bottom, with the 18-minute tie
@@ -125,10 +125,10 @@ Measured by `test/cms/subrequests.test.ts`, which renders Home's exact read
 shape against the mirrored DDL and counts round trips to Turso (the page's
 subrequests) and statements:
 
-| | Round trips | Statements |
-| ------------------------- | ----- | ------ |
-| `/app` before this prompt | **6** | 19 |
-| `/app` after this prompt | **6** | 21 |
+|                           | Round trips | Statements |
+| ------------------------- | ----------- | ---------- |
+| `/app` before this prompt | **6**       | 19         |
+| `/app` after this prompt  | **6**       | 21         |
 
 The two new reads — the rule (`poApprovalRule`) and the board
 (`approverGroupBoard`, **both grains in one statement**) — ride the same
@@ -149,8 +149,8 @@ over ALL durations at each grain (never a median of medians) and both clocks'
 over-target counts.
 
 - **Target line** (`poApprovalRule`, `PO_RULE_SQL`): the 30 is `SELECT
-  r.target_minutes … FROM sla_rules … WHERE entity_type='PURCHASE_ORDER' AND
-  active=1` joined to its business calendar. No constant anywhere; the axis
+r.target_minutes … FROM sla_rules … WHERE entity_type='PURCHASE_ORDER' AND
+active=1` joined to its business calendar. No constant anywhere; the axis
   caption names it (`dashed line: 30-minute target`) and a sentence beneath
   the chart states the source rule by ID. Deactivate the rule and
   `poApprovalRule` returns null: no line is drawn, the sentence beneath the
@@ -182,16 +182,16 @@ over-target counts.
 
 Computed from the token values (`src/styles/tokens.css`), WCAG 2.1 ratios:
 
-| Element | Pair | Ratio |
-| --- | --- | --- |
-| Bar labels: figures and names (`cms-ink` on `cms-surface`) | `#0b1733` / `#fefdfb` | **17.44:1** |
-| Axis and clock labels (`cms-muted` on `cms-surface`) | `#606b85` / `#fefdfb` | **5.24:1** |
-| Target line (`cms-ink-500` on the `cms-sunken` track) | `#606b85` / `#f1ede7` | **4.57:1** |
-| State word, over target (`cms-negative` on surface) | `#972119` / `#fefdfb` | **8.11:1** |
-| State word, at risk (`cms-caution` on surface) | `#824e0b` / `#fefdfb` | **6.79:1** |
-| State word, within target (`cms-positive` on surface) | `#13653f` / `#fefdfb` | **6.98:1** |
-| Bar fills on the track (negative / caution / positive) | on `#f1ede7` | **7.07 / 5.92 / 6.08:1** |
-| Drill links (`cms-royal` on surface) | `#1e4fa3` / `#fefdfb` | **7.64:1** |
+| Element                                                    | Pair                  | Ratio                    |
+| ---------------------------------------------------------- | --------------------- | ------------------------ |
+| Bar labels: figures and names (`cms-ink` on `cms-surface`) | `#0b1733` / `#fefdfb` | **17.44:1**              |
+| Axis and clock labels (`cms-muted` on `cms-surface`)       | `#606b85` / `#fefdfb` | **5.24:1**               |
+| Target line (`cms-ink-500` on the `cms-sunken` track)      | `#606b85` / `#f1ede7` | **4.57:1**               |
+| State word, over target (`cms-negative` on surface)        | `#972119` / `#fefdfb` | **8.11:1**               |
+| State word, at risk (`cms-caution` on surface)             | `#824e0b` / `#fefdfb` | **6.79:1**               |
+| State word, within target (`cms-positive` on surface)      | `#13653f` / `#fefdfb` | **6.98:1**               |
+| Bar fills on the track (negative / caution / positive)     | on `#f1ede7`          | **7.07 / 5.92 / 6.08:1** |
+| Drill links (`cms-royal` on surface)                       | `#1e4fa3` / `#fefdfb` | **7.64:1**               |
 
 Every text pair clears the 4.5:1 AA text threshold; the target line and bar
 fills clear the 3:1 non-text threshold with room.
@@ -215,7 +215,7 @@ table above:
 ## Acceptance
 
 1. **No dependency, no schema, no SQL, no hex** — `git diff main --
-   package.json pnpm-lock.yaml` is empty; no charting library; no `.sql` in
+package.json pnpm-lock.yaml` is empty; no charting library; no `.sql` in
    the diff; no hex outside `src/styles/tokens.css`. ✓
 2. **`/app` subrequest count** — 6 round trips before, 6 after (statements
    19 → 21 inside the same batches). Did not increase. ✓
@@ -255,7 +255,7 @@ table above:
     and "View as a table" with both clocks labelled. ✓
 17. **Measured contrast** — table above; all pairs clear AA. ✓
 18. **`pnpm build` / `pnpm lint` / `pnpm format:check` as on main; `pnpm
-    test` adds no new failure and covers criteria 4 and 9** — build clean,
+test` adds no new failure and covers criteria 4 and 9** — build clean,
     lint 0 errors (15 pre-existing warnings), format clean; 1,526 tests pass
     (1,520 on main + 6 new, of which criterion 4 and criterion 9 are pinned
     by name). ✓
