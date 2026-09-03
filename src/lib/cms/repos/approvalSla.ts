@@ -67,6 +67,7 @@
  */
 import type { Client } from '@libsql/client/web';
 import { bucketFor, type PeriodGrain } from '../analytics/period.ts';
+import { natureGroupSql, UNGROUPED } from '../analytics/productGroups.ts';
 
 const text = (v: unknown): string => String(v ?? '');
 const num = (v: unknown): number => Number(v ?? 0);
@@ -343,11 +344,21 @@ function statsOver(source: string, groupByPerson: boolean): string {
  * false. So an out-of-order pair is UNMEASURABLE and yields NULL, exactly as a
  * missing timestamp already does — the row stays in the population, it stays
  * countable, and it contributes no duration it cannot support.
+ *
+ * COUNTED IN WHOLE SECONDS, NOT JULIAN DAYS. A span of exactly 29 minutes 30
+ * seconds is 29.5 minutes and rounds to 30 — the figure the importer recorded
+ * from the same two timestamps. Through julianday arithmetic the same span
+ * comes out as 29.49999… and rounds to 29, so the chart disagreed with the
+ * source extract by a minute on every half-minute boundary. `strftime('%s')`
+ * is integer seconds, the subtraction is exact, and halves are representable,
+ * so ROUND lands where the importer's own arithmetic does.
  */
 const MINUTES = (from: string, to: string): string =>
-  `CASE WHEN ${from} IS NULL OR ${to} IS NULL OR julianday(${to}) < julianday(${from})
+  `CASE WHEN ${from} IS NULL OR ${to} IS NULL
+             OR CAST(strftime('%s', ${to}) AS INTEGER) < CAST(strftime('%s', ${from}) AS INTEGER)
         THEN NULL
-        ELSE CAST(ROUND((julianday(${to}) - julianday(${from})) * 1440.0) AS INTEGER) END`;
+        ELSE CAST(ROUND((CAST(strftime('%s', ${to}) AS INTEGER)
+                         - CAST(strftime('%s', ${from}) AS INTEGER)) / 60.0) AS INTEGER) END`;
 
 /**
  * The affiliate narrowing, written once and pasted into every source.
@@ -377,11 +388,30 @@ const AFFILIATE = (column: string): string =>
  * opened. A dashboard number that cannot be traced to its records is a number
  * nobody can check.
  */
+/**
+ * The product group of a purchase order, read from the extract's own NATURE.
+ *
+ * NATURE never reached a canonical column — Build Prompt 33 established that
+ * mapping it onto the catalogue would file pastries under LPG — so it lives on
+ * the landing rows, keyed by purchase number. One order can land in several
+ * batches; MAX() makes the read deterministic when it does, and on the real
+ * extract every batch agrees with itself. The CASE is built in
+ * ../analytics/productGroups.ts, the ONE place the mapping exists.
+ */
+const PO_GROUP_JOIN = `
+    LEFT JOIN (SELECT per.purchase_number,
+                      ${natureGroupSql('MAX(per.nature)')} AS grp
+                 FROM po_extract_rows per
+                WHERE per.purchase_number IS NOT NULL
+                GROUP BY per.purchase_number) nat
+      ON nat.purchase_number = po.document_number`;
+
 const PO_SOURCE = `
   SELECT ws.stage_name AS fn,
          ws.sequence_no AS ord,
          wi.entity_id AS entity_id,
          po.document_number AS document_number,
+         COALESCE(nat.grp, '${UNGROUPED}') AS grp,
          wsi.assigned_user_id AS user_id,
          COALESCE(u.display_name, u.email) AS person,
          wsi.started_at AS started_at,
@@ -397,7 +427,7 @@ const PO_SOURCE = `
     JOIN workflow_instances wi ON wi.workflow_instance_id = wsi.workflow_instance_id
     JOIN workflow_stages ws ON ws.workflow_stage_id = wsi.workflow_stage_id
     LEFT JOIN users u ON u.user_id = wsi.assigned_user_id
-    LEFT JOIN purchase_orders po ON po.purchase_order_id = wi.entity_id
+    LEFT JOIN purchase_orders po ON po.purchase_order_id = wi.entity_id${PO_GROUP_JOIN}
    WHERE wi.entity_type = 'PURCHASE_ORDER'
      AND wsi.status IN ('APPROVED', 'COMPLETED')
      AND wsi.started_at IS NOT NULL AND wsi.completed_at IS NOT NULL
@@ -870,6 +900,12 @@ export async function approvalRecords(
   fn: string,
   actor: ApprovalActor,
   scope: ApprovalScope,
+  /**
+   * The product group of the purchase order chart, where a figure carries
+   * one. Purchase orders only: the sales source has no NATURE and the group
+   * chart never links here with one for it.
+   */
+  productGroup: string | null = null,
 ): Promise<ApprovalRecord[]> {
   const person = actor.kind === 'PERSON';
   // AN EMPTY FUNCTION MEANS EVERY FUNCTION IN THE PROCESS, which is what the
@@ -879,10 +915,12 @@ export async function approvalRecords(
   // dropped from the bind rather than left unused, because an argument a
   // statement never mentions is refused by the driver.
   const everyFunction = fn === '';
+  const group = process === 'PURCHASE_ORDER' ? productGroup : null;
   const args = {
     ...windowArgs(scope),
     ...(everyFunction ? {} : { fn }),
     ...(person ? { uid: actor.userId } : {}),
+    ...(group === null ? {} : { grp: group }),
   };
 
   // THE PARTITION MUST MATCH THE AGGREGATE THAT PRODUCED THE FIGURE, and this
@@ -895,9 +933,18 @@ export async function approvalRecords(
   // and a different tail index. Listing a bar's records with the per-person
   // partition would cut the tail at the wrong index and count the wrong number
   // of rows — the exact class of defect where a figure and its own list
-  // disagree.
-  const partition = person ? 'd.fn, d.user_id' : 'd.fn';
+  // disagree. A group-chart figure's partition is person and group (and level
+  // where expanded), so a group filter joins the partition too.
+  const partition =
+    group !== null && person
+      ? everyFunction
+        ? 'd.user_id, d.grp'
+        : 'd.user_id, d.grp, d.fn'
+      : person
+        ? 'd.fn, d.user_id'
+        : 'd.fn';
   const who = person ? ' AND ranked.user_id IS :uid' : '';
+  const inGroup = group === null ? '' : ' AND ranked.grp = :grp';
 
   if (view === 'pending') {
     const found = await db.execute({
@@ -931,7 +978,7 @@ export async function approvalRecords(
            CASE WHEN ranked.rn IN ((ranked.n + 1) / 2, (ranked.n + 2) / 2) THEN 1 ELSE 0 END
              AS is_median
       FROM ranked
-     WHERE ${everyFunction ? '1 = 1' : 'ranked.fn = :fn'}${who}`;
+     WHERE ${everyFunction ? '1 = 1' : 'ranked.fn = :fn'}${who}${inGroup}`;
 
   const where =
     view === 'tail'
@@ -964,6 +1011,234 @@ function toRecord(row: Record<string, unknown>, isMedian: boolean): ApprovalReco
     withinTarget: target === null || minutes === null ? null : minutes <= target,
     isMedian,
   };
+}
+
+/* -------------------------------------------------------------------------
+ * THE PURCHASE ORDER CHART: PERSON, THEN PRODUCT GROUP
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The one purchase order approval target, as the operator's SLA script set
+ * it: the active PURCHASE_ORDER rule, with the calendar window it counts.
+ *
+ * READ, NEVER HARD-CODED. Where no active rule exists this returns null, the
+ * chart draws no target line, and the page says so in one line — a missing
+ * target and a met target must not look alike.
+ */
+export interface PoApprovalRule {
+  readonly ruleId: string;
+  readonly targetMinutes: number;
+  readonly warningMinutes: number | null;
+  readonly businessHoursOnly: boolean;
+  /** "08:00" / "17:00", from the rule's own business calendar. */
+  readonly workdayStart: string;
+  readonly workdayEnd: string;
+}
+
+const PO_RULE_SQL = `
+  SELECT r.sla_rule_id, r.target_minutes, r.warning_minutes, r.business_hours_only,
+         c.workday_start, c.workday_end
+    FROM sla_rules r
+    JOIN business_calendars c ON c.business_calendar_id = r.business_calendar_id
+   WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
+   ORDER BY r.sla_rule_id LIMIT 1`;
+
+export async function poApprovalRule(db: Client): Promise<PoApprovalRule | null> {
+  const found = await db.execute(PO_RULE_SQL);
+  const row = found.rows[0] as Record<string, unknown> | undefined;
+  if (row === undefined) return null;
+  return {
+    ruleId: text(row.sla_rule_id),
+    targetMinutes: num(row.target_minutes),
+    warningMinutes: maybe(row.warning_minutes),
+    businessHoursOnly: num(row.business_hours_only) === 1,
+    workdayStart: text(row.workday_start),
+    workdayEnd: text(row.workday_end),
+  };
+}
+
+/**
+ * One row of the person-and-product chart, at either grain.
+ *
+ * TWO CLOCKS, NEVER MIXED. `elapsed*` is wall clock, start to finish — what
+ * the business experienced. `accountable*` counts only the rule's business
+ * window (08:00–17:00 on the configured calendar), each calendar day, because
+ * the rule sets business_hours_only and that is what the target judges. Every
+ * figure names its clock on the page; nothing here averages the two.
+ *
+ * The over-target counts are absolute — `16 / 21`, not a percentage — because
+ * 5 of 5 and 16 of 21 are different claims a rate would blur.
+ */
+export interface ApproverGroupStat {
+  readonly userId: string | null;
+  /** Null where the extract's approver was never mapped to a person. */
+  readonly person: string | null;
+  readonly group: string;
+  /** Null on the person-and-group grain; the level on the expanded grain. */
+  readonly levelOrder: number | null;
+  readonly levelName: string | null;
+  readonly volume: number;
+  readonly elapsedMedianMinutes: number | null;
+  readonly accountableMedianMinutes: number | null;
+  /** How many exceeded the target, on each clock. Zero when no rule resolves. */
+  readonly elapsedOverTarget: number;
+  readonly accountableOverTarget: number;
+  /** Accountable minutes past the warning but within the target: at risk. */
+  readonly accountableAtRisk: number;
+}
+
+export interface ApproverGroupBoard {
+  readonly rule: PoApprovalRule | null;
+  /** Person-and-group rows, ordered by elapsed median, slowest first. */
+  readonly rows: ApproverGroupStat[];
+  /** The levels behind each row, keyed `${userId ?? ''}|${group}`. */
+  readonly levels: ReadonlyMap<string, ApproverGroupStat[]>;
+}
+
+/**
+ * The accountable clock, in SQL: minutes inside the business window between
+ * two stamps. Each stamp is clamped into [start, end] of its own day; whole
+ * days between contribute one window each. The window arrives from the active
+ * rule's calendar as the `cal` CTE, so a change to the calendar reaches this
+ * figure with no code change — and with NO rule, the window is null and so is
+ * every accountable figure, which is the honest answer.
+ */
+const clampSql = (stamp: string): string =>
+  `MIN(MAX(CAST(strftime('%H', ${stamp}) AS INTEGER) * 60
+           + CAST(strftime('%M', ${stamp}) AS INTEGER) - cal.s, 0), cal.w)`;
+
+const ACCOUNTABLE = `
+  CASE WHEN cal.s IS NULL THEN NULL
+       ELSE CAST(ROUND(julianday(date(src.completed_at)) - julianday(date(src.started_at)))
+                 AS INTEGER) * cal.w
+            + ${clampSql('src.completed_at')} - ${clampSql('src.started_at')} END`;
+
+const APPROVER_GROUP_SQL = `
+  WITH cal AS (
+    SELECT (SELECT CAST(substr(c.workday_start, 1, 2) AS INTEGER) * 60
+                   + CAST(substr(c.workday_start, 4, 2) AS INTEGER)
+              FROM sla_rules r
+              JOIN business_calendars c ON c.business_calendar_id = r.business_calendar_id
+             WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
+             ORDER BY r.sla_rule_id LIMIT 1) AS s,
+           (SELECT (CAST(substr(c.workday_end, 1, 2) AS INTEGER) * 60
+                    + CAST(substr(c.workday_end, 4, 2) AS INTEGER))
+                   - (CAST(substr(c.workday_start, 1, 2) AS INTEGER) * 60
+                      + CAST(substr(c.workday_start, 4, 2) AS INTEGER))
+              FROM sla_rules r
+              JOIN business_calendars c ON c.business_calendar_id = r.business_calendar_id
+             WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
+             ORDER BY r.sla_rule_id LIMIT 1) AS w,
+           (SELECT r.target_minutes FROM sla_rules r
+             WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
+             ORDER BY r.sla_rule_id LIMIT 1) AS target,
+           (SELECT r.warning_minutes FROM sla_rules r
+             WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
+             ORDER BY r.sla_rule_id LIMIT 1) AS warning
+  ),
+  d AS (
+    SELECT src.*, cal.target AS rule_target, cal.warning AS rule_warning,
+           ${ACCOUNTABLE} AS acc
+      FROM (${PO_SOURCE}) src CROSS JOIN cal
+     WHERE src.minutes IS NOT NULL
+  ),
+  ranked AS (
+    SELECT d.*,
+           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp ORDER BY d.minutes) AS e2,
+           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp ORDER BY d.acc) AS a2,
+           COUNT(*) OVER (PARTITION BY d.user_id, d.grp) AS n2,
+           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp, d.ord ORDER BY d.minutes) AS e3,
+           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp, d.ord ORDER BY d.acc) AS a3,
+           COUNT(*) OVER (PARTITION BY d.user_id, d.grp, d.ord) AS n3
+      FROM d
+  )
+  SELECT 0 AS is_level, ranked.user_id, MAX(ranked.person) AS person, ranked.grp,
+         NULL AS level_order, NULL AS level_name,
+         COUNT(*) AS volume,
+         AVG(CASE WHEN ranked.e2 IN ((ranked.n2 + 1) / 2, (ranked.n2 + 2) / 2)
+                  THEN ranked.minutes END) AS elapsed_median,
+         AVG(CASE WHEN ranked.a2 IN ((ranked.n2 + 1) / 2, (ranked.n2 + 2) / 2)
+                  THEN ranked.acc END) AS accountable_median,
+         SUM(CASE WHEN ranked.rule_target IS NOT NULL
+                   AND ranked.minutes > ranked.rule_target THEN 1 ELSE 0 END) AS elapsed_over,
+         SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.acc IS NOT NULL
+                   AND ranked.acc > ranked.rule_target THEN 1 ELSE 0 END) AS accountable_over,
+         SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.rule_warning IS NOT NULL
+                   AND ranked.acc IS NOT NULL
+                   AND ranked.acc > ranked.rule_warning
+                   AND ranked.acc <= ranked.rule_target THEN 1 ELSE 0 END) AS accountable_risk
+    FROM ranked
+   GROUP BY ranked.user_id, ranked.grp
+
+  UNION ALL
+
+  SELECT 1 AS is_level, ranked.user_id, MAX(ranked.person) AS person, ranked.grp,
+         ranked.ord AS level_order, ranked.fn AS level_name,
+         COUNT(*) AS volume,
+         AVG(CASE WHEN ranked.e3 IN ((ranked.n3 + 1) / 2, (ranked.n3 + 2) / 2)
+                  THEN ranked.minutes END) AS elapsed_median,
+         AVG(CASE WHEN ranked.a3 IN ((ranked.n3 + 1) / 2, (ranked.n3 + 2) / 2)
+                  THEN ranked.acc END) AS accountable_median,
+         SUM(CASE WHEN ranked.rule_target IS NOT NULL
+                   AND ranked.minutes > ranked.rule_target THEN 1 ELSE 0 END) AS elapsed_over,
+         SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.acc IS NOT NULL
+                   AND ranked.acc > ranked.rule_target THEN 1 ELSE 0 END) AS accountable_over,
+         SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.rule_warning IS NOT NULL
+                   AND ranked.acc IS NOT NULL
+                   AND ranked.acc > ranked.rule_warning
+                   AND ranked.acc <= ranked.rule_target THEN 1 ELSE 0 END) AS accountable_risk
+    FROM ranked
+   GROUP BY ranked.user_id, ranked.grp, ranked.ord, ranked.fn`;
+
+/**
+ * The purchase order chart's data: one bar per approver per product group,
+ * with each bar's levels behind it — BOTH GRAINS IN ONE STATEMENT, because
+ * Home's budget is measured in round trips and the drill-down must not cost
+ * one. The group grain is computed over ALL of a person's durations in the
+ * group, never as a median of level medians, which is a different and wrong
+ * number.
+ *
+ * Rows come back ordered by elapsed median, slowest first — the reader wants
+ * the problem at the top — with the over-target count and the person's name
+ * breaking ties so the order is stable.
+ */
+export async function approverGroupBoard(
+  db: Client,
+  scope: ApprovalScope,
+): Promise<Omit<ApproverGroupBoard, 'rule'>> {
+  const found = await db.execute({ sql: APPROVER_GROUP_SQL, args: windowArgs(scope) });
+  const toStat = (row: Record<string, unknown>): ApproverGroupStat => ({
+    userId: maybeText(row.user_id),
+    person: maybeText(row.person),
+    group: text(row.grp),
+    levelOrder: maybe(row.level_order),
+    levelName: maybeText(row.level_name),
+    volume: num(row.volume),
+    elapsedMedianMinutes: maybe(row.elapsed_median),
+    accountableMedianMinutes: maybe(row.accountable_median),
+    elapsedOverTarget: num(row.elapsed_over),
+    accountableOverTarget: num(row.accountable_over),
+    accountableAtRisk: num(row.accountable_risk),
+  });
+  const all = rowsOf(found).map(toStat);
+  const rows = all
+    .filter((row) => row.levelOrder === null)
+    .sort(
+      (a, b) =>
+        (b.elapsedMedianMinutes ?? -1) - (a.elapsedMedianMinutes ?? -1) ||
+        b.elapsedOverTarget - a.elapsedOverTarget ||
+        (a.person ?? '~').localeCompare(b.person ?? '~'),
+    );
+  const levels = new Map<string, ApproverGroupStat[]>();
+  for (const row of all) {
+    if (row.levelOrder === null) continue;
+    const key = `${row.userId ?? ''}|${row.group}`;
+    levels.set(
+      key,
+      [...(levels.get(key) ?? []), row].sort((a, b) => (a.levelOrder ?? 0) - (b.levelOrder ?? 0)),
+    );
+  }
+  return { rows, levels };
 }
 
 export { TARGET_SQL };

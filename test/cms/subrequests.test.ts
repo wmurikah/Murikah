@@ -38,6 +38,8 @@ import {
   approvalBoard,
   approvalCycle,
   approvalTrend,
+  approverGroupBoard,
+  poApprovalRule,
 } from '../../src/lib/cms/repos/approvalSla.ts';
 import {
   calendarSql,
@@ -274,6 +276,11 @@ test('/app stays inside its subrequest budget', async () => {
       runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', scope)),
       runSection(b, 'home.purchases-cycle', (db) => approvalCycle(db, 'PURCHASE_ORDER', scope)),
       runSection(b, 'home.sales-cycle', (db) => approvalCycle(db, 'SALES_ORDER', scope)),
+      // The purchase order chart's rule and its approver-and-product rows —
+      // BOTH GRAINS IN ONE STATEMENT — ride the same wave, so the chart's
+      // rebuild adds two statements to this batch and zero round trips.
+      runSection(b, 'home.po-rule', (db) => poApprovalRule(db)),
+      runSection(b, 'home.po-approvers', (db) => approverGroupBoard(db, scope)),
       runSection(b, 'home.affiliates', (db) =>
         db.execute(
           `SELECT affiliate_id, affiliate_name FROM affiliates
