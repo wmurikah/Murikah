@@ -48,6 +48,7 @@ import {
 } from '@/lib/cms/repos/approvalSla';
 import { parseFilter } from '@/lib/cms/analytics/filters';
 import { parsePeriod, periodParams } from '@/lib/cms/analytics/period';
+import { PRODUCT_GROUP_LABELS, UNGROUPED } from '@/lib/cms/analytics/productGroups';
 
 export const prerender = false;
 
@@ -85,6 +86,14 @@ const viewRaw = params.get('view') ?? 'completed';
 const view: RecordView = (RECORD_VIEWS as readonly string[]).includes(viewRaw)
   ? (viewRaw as RecordView)
   : 'completed';
+// The purchase order chart's product group, where the figure carried one.
+// Only the three configured labels are meaningful; anything else is ignored
+// rather than filtering the list down to nothing on a typo.
+const groupRaw = (params.get('group') ?? '').slice(0, 40);
+const productGroup =
+  process === 'PURCHASE_ORDER' && [...PRODUCT_GROUP_LABELS, UNGROUPED].includes(groupRaw)
+    ? groupRaw
+    : null;
 
 /** What each view is, said in the words the column that opened it used. */
 const TITLES: Readonly<Record<RecordView, string>> = {
@@ -109,7 +118,8 @@ const EXPLANATIONS: Readonly<Record<RecordView, string>> = {
   pending: 'What is still waiting, oldest first. These have no duration yet, which is the point.',
 };
 
-const functionLabel = fn === '' ? 'every function' : fn;
+const functionLabel =
+  (fn === '' ? 'every function' : fn) + (productGroup === null ? '' : `, ${productGroup}`);
 const orderPath = process === 'SALES_ORDER' ? '/app/orders/sales' : '/app/orders/purchases';
 const processLabel = process === 'SALES_ORDER' ? 'Sales order' : 'Purchase order';
 
@@ -127,7 +137,7 @@ if (Astro.locals.cms?.user && addressable) {
     const db = await requestDb(Astro.locals);
     const batcher = createBatcher(db);
     const found = await runSection(batcher, 'approvals.records', (client) =>
-      approvalRecords(client, process, view, fn, actor, scope),
+      approvalRecords(client, process, view, fn, actor, scope, productGroup),
     );
     if (found.ok) records = found.value;
     else traceId = found.traceId;
