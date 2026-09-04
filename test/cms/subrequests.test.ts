@@ -39,6 +39,7 @@ import {
   approvalCycle,
   approvalTrend,
   approverBoard,
+  loadingAuthorityBoard,
   poApprovalRule,
 } from '../../src/lib/cms/repos/approvalSla.ts';
 import {
@@ -281,6 +282,12 @@ test('/app stays inside its subrequest budget', async () => {
       // rebuild adds two statements to this batch and zero round trips.
       runSection(b, 'home.po-rule', (db) => poApprovalRule(db)),
       runSection(b, 'home.po-approvers', (db) => approverBoard(db, scope)),
+      // The Loading Authority panel: three functions, their approvers and
+      // every country's tab, all from ONE statement in the same wave. A panel
+      // is not allowed to cost a round trip the chart it replaced did not.
+      runSection(b, 'home.loading-authority', (db) =>
+        loadingAuthorityBoard(db, { ...scope, affiliateId: null }),
+      ),
       runSection(b, 'home.affiliates', (db) =>
         db.execute(
           `SELECT affiliate_id, affiliate_name FROM affiliates

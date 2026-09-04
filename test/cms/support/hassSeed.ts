@@ -340,8 +340,15 @@ INSERT OR IGNORE INTO sla_profiles VALUES
 INSERT OR IGNORE INTO sla_rules VALUES
 ('SLAR-001','SLAP-002','Customer case first response','CASE','FIRST_RESPONSE','HIGH',60,45,'CAL-KE',1,0,60,1),
 ('SLAR-002','SLAP-001','Lead first contact','LEAD','FIRST_CONTACT',NULL,120,90,'CAL-KE',1,0,120,1),
-('SLAR-003','SLAP-004','SO finance approval','SALES_ORDER','FINANCE_APPROVAL',NULL,60,45,'CAL-KE',1,0,60,1),
-('SLAR-004','SLAP-004','SO credit approval','SALES_ORDER','CREDIT_APPROVAL',NULL,120,90,'CAL-KE',1,0,120,1),
+-- THE OPERATOR'S TARGETS SCRIPT, MIRRORED (Build Prompt 44 prerequisite): the
+-- three active SALES_ORDER rules are finance and credit at 30 minutes with a
+-- 25-minute warning, and loading authority at 90 with a warning of 75, all
+-- business hours only against the Kenya calendar's 08:00-17:00 day. Finance
+-- and credit share a value today; that is a coincidence of configuration and
+-- each is read separately, so changing one never moves the other.
+('SLAR-003','SLAP-004','SO finance approval','SALES_ORDER','FINANCE_APPROVAL',NULL,30,25,'CAL-KE',1,0,30,1),
+('SLAR-004','SLAP-004','SO credit approval','SALES_ORDER','CREDIT_APPROVAL',NULL,30,25,'CAL-KE',1,0,30,1),
+('SLAR-SO-LA','SLAP-004','SO loading authority','SALES_ORDER','LOADING_AUTHORITY',NULL,90,75,'CAL-KE',1,0,90,1),
 -- THE OPERATOR'S SLA SCRIPT, MIRRORED (Build Prompt 43 prerequisite): the old
 -- 180-minute stage rule is deactivated and the one active PURCHASE_ORDER rule
 -- is SLAR-PO-30 — 30-minute target, 25-minute warning, business hours only,
