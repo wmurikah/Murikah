@@ -38,7 +38,7 @@ import {
   approvalBoard,
   approvalCycle,
   approvalTrend,
-  approverGroupBoard,
+  approverBoard,
   poApprovalRule,
 } from '../../src/lib/cms/repos/approvalSla.ts';
 import {
@@ -280,7 +280,7 @@ test('/app stays inside its subrequest budget', async () => {
       // BOTH GRAINS IN ONE STATEMENT — ride the same wave, so the chart's
       // rebuild adds two statements to this batch and zero round trips.
       runSection(b, 'home.po-rule', (db) => poApprovalRule(db)),
-      runSection(b, 'home.po-approvers', (db) => approverGroupBoard(db, scope)),
+      runSection(b, 'home.po-approvers', (db) => approverBoard(db, scope)),
       runSection(b, 'home.affiliates', (db) =>
         db.execute(
           `SELECT affiliate_id, affiliate_name FROM affiliates

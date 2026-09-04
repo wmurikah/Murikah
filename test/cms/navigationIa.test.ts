@@ -523,7 +523,7 @@ test('Home discloses the deeper analysis and deletes none of it', () => {
   // purchase order bars are the approver-and-product chart now, and it sits
   // above the first More detail, not inside it.
   const firstDetail = page.indexOf('<CmsMoreDetail');
-  assert.ok(page.slice(0, firstDetail).includes('<CmsApproverGroupChart'), 'the bars were hidden');
+  assert.ok(page.slice(0, firstDetail).includes('<CmsApproverChart'), 'the bars were hidden');
 });
 
 test('the Home disclosure remembers per browser and adds no schema', () => {

@@ -733,7 +733,7 @@ test('Home leads with the two charts, then the two leaderboards', () => {
   // so its marker is the component, not a title prop.
   const marks = [
     ...source.matchAll(
-      /<CmsApproverGroupChart|title="(Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
+      /<CmsApproverChart|title="(Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
     ),
   ].map((m) => m[1] ?? m[2] ?? 'Purchase order approval');
   assert.deepEqual(marks, [
