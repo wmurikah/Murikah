@@ -1,0 +1,396 @@
+---
+/**
+ * Loading Authority: three functions, their approvers, one country at a time.
+ *
+ * COUNTRY IS A ROW OF TABS AND THE SELECTION IS IN THE URL, so a view can be
+ * shared and reloaded. A country with nothing this period is greyed rather
+ * than removed: that Uganda exists and had no orders in May is information,
+ * and a missing tab is not.
+ *
+ * THREE FUNCTIONS, ALWAYS OPEN, with their approvers indented beneath. Two
+ * levels, not three. Each row — function and person alike — carries four
+ * things and nothing else: name, bar, time, count past target. The bar
+ * crossing its own line already says what a state word would.
+ *
+ * EACH FUNCTION HAS ITS OWN TARGET AND ITS OWN LINE, read from its own rule.
+ * Finance and credit share a value today; that is configuration, not a rule
+ * of this code. The three lines sit at different places on ONE shared scale,
+ * because normalising each row would hide the thing worth seeing: loading
+ * authority genuinely takes longer than the approvals before it.
+ *
+ * A FUNCTION WITH NO ACTIVE RULE IS GREY AND UNJUDGED — no line, no colour,
+ * an em dash where the fraction would be. Calling a duration late when no
+ * target exists is an accusation with no evidence.
+ *
+ * ONE CLOCK HERE, and it is the working day the rules are set against. The
+ * wall clock lives in the drill-down beside it, labelled.
+ */
+import CmsDefinition from './CmsDefinition.astro';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import { approvalRecordsHref } from '@/lib/cms/analytics/leaderboard';
+import { EVERYONE, LOADING_AUTHORITY_FUNCTIONS } from '@/lib/cms/repos/approvalSla';
+import type { LaCountry, LaCountryBoard, LaStat } from '@/lib/cms/repos/approvalSla';
+import type { ResolvedPeriod } from '@/lib/cms/analytics/period';
+
+interface Props {
+  board: LaCountryBoard | null;
+  countries: LaCountry[];
+  /** The affiliate whose figures are shown, and the tab that is current. */
+  selected: string | null;
+  /** Where a country's tab goes, built by the page so the filter survives. */
+  tabHref: (affiliateId: string) => string;
+  /** True where the page's own affiliate filter already fixes the country. */
+  lockedBy: string | null;
+  period: ResolvedPeriod;
+  coverage: string;
+  /** False where no rule resolves at all: the panel is then on the wall clock. */
+  judged: boolean;
+  /** Functions with no active rule, named so the offer can name them. */
+  missingTargets: string[];
+  /** Whether this reader may reach the screen where targets are set. */
+  maySetTargets: boolean;
+}
+const {
+  board,
+  countries,
+  selected,
+  tabHref,
+  lockedBy,
+  period,
+  coverage,
+  judged,
+  missingTargets,
+  maySetTargets,
+} = Astro.props;
+
+const functions = board?.functions ?? [];
+const labelOf = (fn: string): string =>
+  LOADING_AUTHORITY_FUNCTIONS.find((f) => f.key === fn)?.label ?? fn;
+
+/**
+ * ONE SCALE ACROSS ALL THREE FUNCTIONS. The loading authority line sits three
+ * times further along than the other two, and that distance is the point.
+ */
+const rows = [...functions, ...[...(board?.people.values() ?? [])].flat()];
+const most = Math.max(
+  ...functions.map((f) => f.targetMinutes ?? 0),
+  ...rows.map((row) => row.medianMinutes ?? 0),
+  1,
+);
+const scale = most * 1.08;
+const pct = (minutes: number | null): number =>
+  minutes === null ? 0 : Math.max(Math.min((minutes / scale) * 100, 100), 0.5);
+const linePct = (target: number | null): number | null =>
+  target === null ? null : (target / scale) * 100;
+
+const fillOf = (row: LaStat): string => {
+  const minutes = row.medianMinutes;
+  if (row.targetMinutes === null || minutes === null) return 'bg-cms-ink-400';
+  if (minutes > row.targetMinutes) return 'bg-cms-negative';
+  if (row.warningMinutes !== null && minutes > row.warningMinutes) return 'bg-cms-caution';
+  return 'bg-cms-positive';
+};
+
+const href = (row: LaStat, view: 'completed' | 'typical' | 'breaches'): string =>
+  approvalRecordsHref({
+    period,
+    affiliateId: selected,
+    process: 'SALES_ORDER',
+    view,
+    fn: row.fn,
+    actor: row.isPerson ? { kind: 'PERSON', userId: row.userId } : EVERYONE,
+    clock: judged ? 'WORKING' : 'WALL',
+  });
+
+/** A person the extract never named. The work is attributed to nobody. */
+const named = (row: LaStat): string =>
+  row.isPerson ? (row.person ?? 'Not recorded') : labelOf(row.fn);
+const timeOf = (row: LaStat): string =>
+  row.medianMinutes === null ? 'No completions' : formatDuration(row.medianMinutes);
+const countOf = (row: LaStat): string =>
+  row.targetMinutes === null ? '—' : `${row.overTarget}/${row.volume}`;
+const says = (row: LaStat, what: string): string =>
+  `${what} for ${named(row)}${row.isPerson ? `, ${labelOf(row.fn)}` : ''}`;
+
+const LINK =
+  'rounded-cms underline-offset-2 outline-none hover:underline focus-visible:ring-2 ' +
+  'focus-visible:ring-focus';
+const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_4rem] items-center gap-3';
+const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])]);
+---
+
+{
+  /*
+    h-full and mt-auto are what match this panel's height to the purchase
+    order panel beside it: the two sections are grid items and already stretch
+    to the taller of the two, so the figure fills its section and pins its
+    axis to the foot rather than a pixel height that breaks the moment a
+    country has one more approver.
+  */
+}
+<figure class="flex flex-1 flex-col rounded-cms-lg bg-cms-surface p-4" data-cms-la-chart>
+  <figcaption class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+    <h3 class="flex items-center gap-1 text-cms-body font-semibold text-cms-ink">
+      Loading Authority
+      <span class="font-normal text-cms-muted">(minutes)</span>
+      <CmsDefinition
+        label="Loading Authority turnaround"
+        definition={`The median time each function takes, counted inside the working day, with each ` +
+          `function judged against its own configured target: finance and credit at ` +
+          `${functions[0]?.targetMinutes ?? 'no'} and ${functions[1]?.targetMinutes ?? 'no'} ` +
+          `minutes, loading authority at ${functions[2]?.targetMinutes ?? 'no'}. The whole span, ` +
+          `whatever the hour, is in the records behind every figure.`}
+        denominator={coverage}
+        dateBasis="The timestamp the function completed at."
+      />
+    </h3>
+    <span class="text-cms-caption text-cms-muted">{coverage}</span>
+  </figcaption>
+
+  {
+    /*
+      THE COUNTRY TABS. Links rather than scripted tabs: the selection is a
+      URL, so it survives a reload, a share and a browser with no JavaScript.
+    */
+  }
+  <nav aria-label="Country" class="mb-3 flex flex-wrap gap-1 border-b border-cms-line pb-2">
+    {
+      countries.map((country) => {
+        const current = country.affiliateId === selected;
+        const open = country.volume > 0 && (lockedBy === null || country.affiliateId === lockedBy);
+        if (!open && !current) {
+          return (
+            <span
+              class="cursor-not-allowed rounded-cms px-2 py-1 text-cms-caption text-cms-muted"
+              aria-disabled="true"
+            >
+              {country.name}
+              <span class="sr-only">, nothing in this period</span>
+            </span>
+          );
+        }
+        return (
+          <a
+            href={tabHref(country.affiliateId)}
+            aria-current={current ? 'true' : undefined}
+            class:list={[
+              'rounded-cms px-2 py-1 text-cms-caption outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              current
+                ? 'bg-cms-royal-tint font-semibold text-cms-royal'
+                : 'text-cms-ink hover:bg-cms-ink-100',
+            ]}
+          >
+            {country.name}
+          </a>
+        );
+      })
+    }
+  </nav>
+
+  <p class="sr-only">
+    Median minutes for each function of the loading authority journey in {coverage}, with the
+    approvers beneath each. Finance, credit and loading authority are each judged against their own
+    target, and each carries its own line on one shared scale.
+  </p>
+
+  {
+    everyRow.length === 0 ? (
+      <p class="py-6 text-center text-cms-body-sm text-cms-muted">No completions this month</p>
+    ) : (
+      <ol class="flex flex-col">
+        {functions.map((row) => (
+          <li class="border-b border-cms-line py-1 last:border-0">
+            {[row, ...(board?.people.get(row.fn) ?? [])].map((entry) => (
+              <div class={`${ROW} py-0.5`}>
+                {entry.isPerson ? (
+                  entry.userId === null ? (
+                    <span class="truncate ps-4 text-cms-caption text-cms-muted">
+                      {named(entry)}
+                    </span>
+                  ) : (
+                    <a
+                      href={href(entry, 'completed')}
+                      class:list={['truncate ps-4 text-cms-caption text-cms-muted', LINK]}
+                      aria-label={says(entry, 'Orders')}
+                    >
+                      {named(entry)}
+                    </a>
+                  )
+                ) : (
+                  <a
+                    href={href(entry, 'completed')}
+                    class:list={['truncate text-cms-body-sm font-semibold text-cms-ink', LINK]}
+                    aria-label={says(entry, 'Orders')}
+                  >
+                    {named(entry)}
+                  </a>
+                )}
+
+                <div
+                  class:list={[
+                    'relative min-w-0 rounded-sm bg-cms-sunken',
+                    entry.isPerson ? 'h-4' : 'h-6',
+                  ]}
+                >
+                  {linePct(entry.targetMinutes) !== null && (
+                    <span
+                      aria-hidden="true"
+                      class="absolute inset-y-0 border-l-2 border-dashed border-cms-ink-700"
+                      style={`left:${linePct(entry.targetMinutes)}%`}
+                    />
+                  )}
+                  <span
+                    aria-hidden="true"
+                    class:list={[
+                      'absolute left-0 rounded-e-sm',
+                      entry.isPerson ? 'top-0.5 bottom-0.5' : 'top-1 bottom-1',
+                      fillOf(entry),
+                    ]}
+                    style={`width:${pct(entry.medianMinutes)}%`}
+                  />
+                </div>
+
+                <a
+                  href={href(entry, 'typical')}
+                  class:list={[
+                    'text-right tabular-nums',
+                    entry.isPerson
+                      ? 'text-cms-caption text-cms-ink'
+                      : 'text-cms-body-sm font-semibold text-cms-ink',
+                    LINK,
+                  ]}
+                  aria-label={says(entry, timeOf(entry))}
+                >
+                  {timeOf(entry)}
+                </a>
+
+                {entry.targetMinutes === null ? (
+                  <span
+                    class:list={[
+                      'text-right text-cms-muted tabular-nums',
+                      entry.isPerson ? 'text-cms-caption' : 'text-cms-body-sm',
+                    ]}
+                  >
+                    —<span class="sr-only">no target configured</span>
+                  </span>
+                ) : (
+                  <a
+                    href={href(entry, 'breaches')}
+                    class:list={[
+                      'text-right text-cms-ink tabular-nums',
+                      entry.isPerson ? 'text-cms-caption' : 'text-cms-body-sm',
+                      LINK,
+                    ]}
+                    aria-label={says(entry, `${entry.overTarget} of ${entry.volume} past target`)}
+                  >
+                    {countOf(entry)}
+                  </a>
+                )}
+              </div>
+            ))}
+          </li>
+        ))}
+      </ol>
+    )
+  }
+
+  {
+    /*
+      THE AXIS, PINNED TO THE FOOT so the two panels' baselines line up. It
+      names "target per function" rather than a number, because the three
+      lines sit at three different places.
+    */
+  }
+  <div class={`${ROW} mt-auto pt-2`}>
+    <span></span>
+    <div class="min-w-0 text-cms-caption text-cms-muted">
+      <div class="flex items-baseline justify-between tabular-nums">
+        <span>0</span>
+        <span>{formatDuration(Math.round(scale))}</span>
+      </div>
+      <p class="text-center">target per function</p>
+    </div>
+    <span></span>
+    <span></span>
+  </div>
+
+  {
+    /*
+      THE ONE SENTENCE THIS PANEL IS ALLOWED, and it appears only where a
+      function has no rule to be judged by — the case a reader cannot see,
+      because unjudged and met look identical once the colour is gone. It sits
+      inside the card rather than under it so both panels stay the same height
+      whether or not it is showing.
+    */
+  }
+  {
+    missingTargets.length > 0 && (
+      <p class="mt-2 text-cms-caption text-cms-muted">
+        No target for {missingTargets.map((fn) => labelOf(fn).toLowerCase()).join(' and ')}.{' '}
+        {maySetTargets && (
+          <a
+            class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+            href="/app/administration/sla"
+          >
+            Set targets
+          </a>
+        )}
+      </p>
+    )
+  }
+
+  <details class="mt-3 border-t border-cms-line pt-2">
+    <summary
+      class="cursor-pointer rounded-cms text-cms-body-sm font-medium text-cms-royal outline-none select-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      View as a table
+    </summary>
+    <div class="mt-2 overflow-x-auto">
+      <table class="w-full text-cms-body-sm">
+        <caption class="sr-only">Loading Authority medians by function, then by approver</caption>
+        <thead>
+          <tr class="border-b border-cms-line text-left text-cms-caption text-cms-muted">
+            <th scope="col" class="py-1.5 pr-3 font-medium">Function</th>
+            <th scope="col" class="py-1.5 pr-3 font-medium">Approver</th>
+            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Orders</th>
+            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Median</th>
+            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Target</th>
+            <th scope="col" class="py-1.5 text-right font-medium">Past target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            functions.map((row) => (
+              <>
+                <tr class="border-b border-cms-line">
+                  <th scope="row" class="py-1.5 pr-3 text-left font-medium text-cms-ink">
+                    {labelOf(row.fn)}
+                  </th>
+                  <td class="py-1.5 pr-3 text-cms-muted">All approvers</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{row.volume}</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(row)}</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">
+                    {row.targetMinutes === null ? '—' : formatDuration(row.targetMinutes)}
+                  </td>
+                  <td class="py-1.5 text-right tabular-nums">{countOf(row)}</td>
+                </tr>
+                {(board?.people.get(row.fn) ?? []).map((entry) => (
+                  <tr class="border-b border-cms-line last:border-0">
+                    <td class="py-1.5 ps-3 pr-3 text-cms-muted">{labelOf(row.fn)}</td>
+                    <td class="py-1.5 pr-3 text-cms-ink">{named(entry)}</td>
+                    <td class="py-1.5 pr-3 text-right tabular-nums">{entry.volume}</td>
+                    <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(entry)}</td>
+                    <td class="py-1.5 pr-3 text-right tabular-nums">
+                      {entry.targetMinutes === null ? '—' : formatDuration(entry.targetMinutes)}
+                    </td>
+                    <td class="py-1.5 text-right tabular-nums">{countOf(entry)}</td>
+                  </tr>
+                ))}
+              </>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </details>
+</figure>

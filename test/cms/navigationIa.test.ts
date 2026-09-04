@@ -508,7 +508,7 @@ test('Home discloses the deeper analysis and deletes none of it', () => {
   assert.match(page, /data-cms-home-trend="PURCHASE_ORDER"/);
   assert.match(page, /data-cms-home-trend="SALES_ORDER"/);
   assert.match(page, /title="Purchase order turnaround trend"/);
-  assert.match(page, /title="Sales order turnaround trend"/);
+  assert.match(page, /title="Loading Authority turnaround trend"/);
   // Both leaderboards stay server-rendered: their data rides the board query
   // the visible bars already pay for, so deferring them would save nothing.
   assert.equal((page.match(/<CmsApprovalLeaderboard/g) ?? []).length, 2);
@@ -518,7 +518,7 @@ test('Home discloses the deeper analysis and deletes none of it', () => {
   assert.match(fragment, /approvalTrend\(client, 'PURCHASE_ORDER', scope, 'MONTH'\)/);
   assert.match(fragment, /approvalTrend\(client, 'SALES_ORDER', scope, 'MONTH'\)/);
   assert.match(fragment, /title="Purchase order turnaround trend"/);
-  assert.match(fragment, /title="Sales order turnaround trend"/);
+  assert.match(fragment, /title="Loading Authority turnaround trend"/);
   // The headline figures stay in the first view, outside the disclosure. The
   // purchase order bars are the approver-and-product chart now, and it sits
   // above the first More detail, not inside it.

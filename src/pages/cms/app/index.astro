@@ -2,13 +2,18 @@
 /**
  * Home, and it answers one question: where is time being lost right now?
  *
- * TWO PANELS, EACH READ DOWNWARD. Purchase orders on the left, sales orders on
- * the right, and each panel is the same four things in the same order: a strip
- * of four measures, the bars that break them down by function, the same
- * functions over time, and the people behind them. A purchase order figure and
- * a sales order figure sit in the same place, so the eye compares position
- * rather than re-reading a heading, and on a narrow screen the two panels stack
- * with purchase orders first.
+ * TWO PANELS, EACH READ DOWNWARD. Purchase orders on the left, Loading
+ * Authority on the right, and each panel is the same four things in the same
+ * order: a strip of four measures, the bars that break the work down, the same
+ * work over time, and the people behind it. A figure on the left and a figure
+ * on the right sit in the same place, so the eye compares position rather than
+ * re-reading a heading, and on a narrow screen the two panels stack with
+ * purchase orders first.
+ *
+ * THE RIGHT-HAND PANEL IS PRESENTATION ONLY. It is named for the journey it
+ * measures — an order reaching its loading authority — and nothing in the
+ * database was renamed with it: the tables are still sales_orders and the
+ * queries still say SALES_ORDER.
  *
  * THE TWO PROCESSES ARE NEVER BLENDED. Different approvers, different targets,
  * different volumes, and the same person may act in both. One table would let a
@@ -54,7 +59,6 @@
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
-import CmsChart from '@/components/cms/CmsChart.astro';
 import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
@@ -64,6 +68,7 @@ import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
 import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
 import CmsApproverChart from '@/components/cms/CmsApproverChart.astro';
+import CmsLoadingAuthorityChart from '@/components/cms/CmsLoadingAuthorityChart.astro';
 import CmsMoreDetail from '@/components/cms/CmsMoreDetail.astro';
 import CmsChartSkeleton from '@/components/cms/CmsChartSkeleton.astro';
 import CmsHomeTrendScript from '@/components/cms/CmsHomeTrendScript.astro';
@@ -80,6 +85,7 @@ import {
   approvalBoard,
   approvalCycle,
   approverBoard,
+  loadingAuthorityBoard,
   poApprovalRule,
   EVERYONE,
   MINIMUM_RANKED_VOLUME,
@@ -88,6 +94,8 @@ import {
   type ApprovalScope,
   type ApproverStat,
   type CycleStat,
+  type LaCountry,
+  type LaCountryBoard,
   type FunctionStat,
   type PoApprovalRule,
 } from '@/lib/cms/repos/approvalSla';
@@ -96,6 +104,7 @@ import {
   choosePeriod,
   parseDashboardPeriod,
   periodHref,
+  periodParams,
   readCalendars,
   periodHasData,
   periodFromToken,
@@ -105,7 +114,7 @@ import {
   type DataCalendar,
   type ResolvedPeriod,
 } from '@/lib/cms/analytics/period';
-import { horizontalBarChart, seriesToken, type ChartPoint } from '@/lib/cms/charts/svg';
+import { seriesToken } from '@/lib/cms/charts/svg';
 import { toDbTimestamp } from '@/lib/cms/auth/session';
 
 export const prerender = false;
@@ -205,6 +214,10 @@ let salesCycle: CycleStat | null = null;
 let poRule: PoApprovalRule | null = null;
 let poPeople: ApproverStat[] = [];
 let poGroups: ReadonlyMap<string, ApproverStat[]> = new Map();
+/** The Loading Authority panel: one board per country, and the tabs. */
+let laBoards: ReadonlyMap<string, LaCountryBoard> = new Map();
+let laCountries: LaCountry[] = [];
+let laMissingTargets: string[] = [];
 let soWaiting: number | null = null;
 let poWaiting: number | null = null;
 let affiliates: { value: string; label: string }[] = [];
@@ -262,6 +275,7 @@ if (user) {
       affiliateRows,
       poRuleRead,
       poBoard,
+      laRead,
     ] = await Promise.all([
       runSection(batcher, 'home.attention', (client) =>
         attentionCustomers(client, userId, active, now),
@@ -300,6 +314,12 @@ if (user) {
       // move.
       runSection(batcher, 'home.po-rule', (client) => poApprovalRule(client)),
       runSection(batcher, 'home.po-approvers', (client) => approverBoard(client, scope)),
+      // THE WHOLE PANEL IN ONE STATEMENT, every country included: which tab
+      // to select depends on which countries have data, so the query answers
+      // for all of them and this page picks. Switching country is a link.
+      runSection(batcher, 'home.loading-authority', (client) =>
+        loadingAuthorityBoard(client, { ...scope, affiliateId: null }),
+      ),
     ]);
 
     if (attention.ok) customers = attention.value;
@@ -326,9 +346,17 @@ if (user) {
       failed.push('purchase order approver');
       traceId = traceId ?? poBoard.traceId;
     }
+    if (laRead.ok) {
+      laBoards = laRead.value.byCountry;
+      laCountries = laRead.value.countries;
+      laMissingTargets = laRead.value.missingTargets;
+    } else {
+      failed.push('loading authority');
+      traceId = traceId ?? laRead.traceId;
+    }
     if (so.ok) sales = so.value;
     else {
-      failed.push('sales order approval');
+      failed.push('Loading Authority');
       traceId = traceId ?? so.traceId;
     }
   } catch (error) {
@@ -383,46 +411,6 @@ const functionRecords = (process: ApprovalProcess, fn: string, view: 'completed'
   });
 
 /**
- * The bars, one per function present, each in its own colour.
- *
- * The levels are read from the workflow rather than assumed, so a process with
- * seven configured levels draws seven bars and this one draws the four it has,
- * with no empty level and no hard-coded number anywhere.
- */
-const chartOf = (board: ApprovalBoard | null, process: ApprovalProcess) => {
-  const functions = board?.functions ?? [];
-  const link = (fn: string) => functionRecords(process, fn, 'completed');
-  return horizontalBarChart(
-    {
-      name: 'Typical turnaround',
-      token: seriesToken(0),
-      points: functions.map<ChartPoint>((f, index) => ({
-        label: f.fn,
-        value: f.medianMinutes,
-        marker: f.p90Minutes,
-        // NO TARGET LINE IS DRAWN BECAUSE NONE RESOLVES, NOT BECAUSE THE CHART
-        // CANNOT DRAW ONE. Leaving the field wired is what makes the rule
-        // appear the day somebody configures it.
-        target: f.targetMinutes,
-        token: seriesToken(index),
-        href: link(f.fn),
-      })),
-    },
-    {
-      unit: 'minutes',
-      format: formatDuration,
-      valueAxis: true,
-      categoryName: 'Function',
-      markerName: 'Slowest 10%',
-      xAxisLabel: 'Minutes',
-      yAxisLabel: 'Function',
-      emptyMessage: 'No completions this month',
-      height: 30 * Math.max(functions.length, 1) + 12,
-    },
-  );
-};
-
-/**
  * EVERY COMPLETION IN THE PERIOD, FOR ONE PROCESS.
  *
  * WHY THE HEADLINE IS APPROVALS AND NOT ORDERS, WHICH IS A DEPARTURE FROM THE
@@ -450,11 +438,6 @@ const everyFunctionRecords = (process: ApprovalProcess) =>
     actor: EVERYONE,
   });
 
-// The purchase order panel no longer draws by function: its chart is by
-// approver and product group, rendered by CmsApproverGroupChart below, with
-// the levels behind each row. `chartOf` remains the sales panel's shape.
-const salesChart = chartOf(sales, 'SALES_ORDER');
-
 /**
  * NOTHING IS SAID BENEATH THE CHART WHEN THERE IS A TARGET. The line is drawn
  * on the chart where a reader can see it, and what it means is one press away
@@ -463,6 +446,39 @@ const salesChart = chartOf(sales, 'SALES_ORDER');
  * would otherwise be indistinguishable from a panel where everybody met it.
  */
 const poTargetMissing = poRule === null;
+
+/**
+ * WHICH COUNTRY THE LOADING AUTHORITY PANEL SHOWS, AND WHY IT IS IN THE URL.
+ *
+ * The tab selection is a link, not a script: it survives a reload, a share
+ * and a browser with no JavaScript, and it costs no request because the query
+ * already answered for every country.
+ *
+ * The page's own affiliate filter still wins where it is set — it is the
+ * page's scope, and a panel showing Uganda inside a page filtered to Kenya
+ * would be two answers to one question. Where it is not set, the panel
+ * defaults to the first country with data so the panel opens on something
+ * rather than on an empty tab.
+ */
+const laLocked = filter.affiliateId;
+const laAsked = params.get('laCountry');
+const laSelectable = laCountries.filter(
+  (country) => country.volume > 0 && (laLocked === null || country.affiliateId === laLocked),
+);
+const laSelected =
+  laLocked ??
+  (laAsked !== null && laSelectable.some((country) => country.affiliateId === laAsked)
+    ? laAsked
+    : (laSelectable[0]?.affiliateId ?? laCountries[0]?.affiliateId ?? null));
+const laBoard = laSelected === null ? null : (laBoards.get(laSelected) ?? null);
+const laVolume = (laBoard?.functions ?? []).reduce((n, f) => n + f.volume, 0);
+/** A tab's destination: this page, this period, that country. */
+const laTabHref = (affiliateId: string) => {
+  const next = new URLSearchParams(periodParams(shown));
+  if (filter.affiliateId !== null) next.set('affiliateId', filter.affiliateId);
+  next.set('laCountry', affiliateId);
+  return `/app?${next.toString()}`;
+};
 
 /**
  * THE TREND LOADS WHEN SOMEBODY ASKS FOR IT, and this is its address.
@@ -722,10 +738,6 @@ const DEFINITION =
   'several lines is one order. A person is listed from the first approval and given a position ' +
   `from ${MINIMUM_RANKED_VOLUME}.`;
 
-const BAR_DEFINITION =
-  `${DEFINITION} The bar is the typical figure, the pale run past its end is the slowest tenth, ` +
-  'and the distance between them is the delay a normal reading misses.';
-
 const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates];
 ---
 
@@ -915,7 +927,9 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
     </section>
 
     <section class="flex min-w-0 flex-col gap-4" aria-labelledby="panel-sales">
-      <h2 id="panel-sales" class="text-cms-section font-semibold text-cms-ink">Sales orders</h2>
+      <h2 id="panel-sales" class="text-cms-section font-semibold text-cms-ink">
+        Loading Authority
+      </h2>
 
       {
         /*
@@ -943,34 +957,18 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         }
       </div>
 
-      <CmsChart
-        title="Sales order approval"
-        definition={BAR_DEFINITION}
-        chart={salesChart}
-        unit="minutes"
-        coverage={`${count(volumeOf(sales))} completions in ${shown.label}`}
+      <CmsLoadingAuthorityChart
+        board={laBoard}
+        countries={laCountries}
+        selected={laSelected}
+        tabHref={laTabHref}
+        lockedBy={laLocked}
+        period={shown}
+        coverage={`${count(laVolume)} completions in ${shown.label}`}
+        judged={laMissingTargets.length < 3}
+        missingTargets={laMissingTargets}
+        maySetTargets={maySetTargets}
       />
-      {
-        /*
-          FOUR WORDS AND A LINK. The reason no dashed rule is drawn used to be a
-          full sentence under every chart, twice on the page. The fact still has
-          to be said — a missing target line and a met target look identical —
-          but a dashboard says it in the space of a label.
-        */
-      }
-      <p class="text-cms-caption text-cms-muted">
-        No target set.{' '}
-        {
-          maySetTargets && (
-            <a
-              class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-              href="/app/administration/sla"
-            >
-              Set targets
-            </a>
-          )
-        }
-      </p>
       {
         elsewhere(salesCalendar, sales) !== null && (
           <p class="text-cms-caption text-cms-muted">
@@ -987,11 +985,11 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
 
       <CmsMoreDetail id="sales">
         <div data-cms-home-trend="SALES_ORDER" data-src={trendSrc}>
-          <CmsChartSkeleton title="Sales order turnaround trend" unit="minutes" />
+          <CmsChartSkeleton title="Loading Authority turnaround trend" unit="minutes" />
         </div>
 
         <CmsApprovalLeaderboard
-          caption="Sales order approvers"
+          caption="Loading Authority approvers"
           process="SALES_ORDER"
           board={sales}
           period={shown}
