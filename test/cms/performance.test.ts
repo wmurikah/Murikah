@@ -164,18 +164,18 @@ test('the user detail page loads only the open section', () => {
 
 // ---- The Home trend, genuinely deferred ------------------------------------
 
-test('a collapsed More detail runs no trend query', () => {
+test('Home runs no trend query, and no longer fetches one either', () => {
   const home = read('src/pages/cms/app/index.astro');
   assert.ok(!home.includes('approvalTrend'), 'Home runs the trend it was meant to defer');
-  // The deferral is real deferral, not CSS hiding: the panel holds a skeleton
-  // slot with the fragment URL, and the fetch happens on first expansion.
-  assert.match(home, /data-cms-home-trend="PURCHASE_ORDER" data-src=\{trendSrc\}/);
+  // BUILD PROMPT 47 WENT FURTHER THAN DEFERRAL: the disclosure that fetched
+  // the fragment is gone from both panels, so Home neither runs the trend nor
+  // asks another route to. The fragment still answers for any caller that
+  // wants it; nothing on this page is one.
+  assert.ok(!home.includes('home-trend'), 'Home still fetches the trend fragment');
+  assert.ok(!home.includes('CmsHomeTrendScript'), 'the fetching script is back on Home');
+  // A session that expired mid-visit still gets a failure state from that
+  // script rather than the login page parsed as a chart, wherever it is used.
   const script = read('src/components/cms/CmsHomeTrendScript.astro');
-  assert.match(script, /details\.addEventListener\('toggle'/);
-  // The remembered-open preference still loads immediately after paint.
-  assert.match(script, /if \(details\.open\) load\(\)/);
-  // A session that expired mid-visit gets a failure state, never the login
-  // page parsed as a chart.
   assert.match(script, /response\.redirected/);
 });
 

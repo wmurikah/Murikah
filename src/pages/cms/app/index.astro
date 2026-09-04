@@ -66,12 +66,8 @@ import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
 import CmsMonthYearControl from '@/components/cms/CmsMonthYearControl.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
-import CmsApprovalLeaderboard from '@/components/cms/CmsApprovalLeaderboard.astro';
 import CmsApproverChart from '@/components/cms/CmsApproverChart.astro';
 import CmsLoadingAuthorityChart from '@/components/cms/CmsLoadingAuthorityChart.astro';
-import CmsMoreDetail from '@/components/cms/CmsMoreDetail.astro';
-import CmsChartSkeleton from '@/components/cms/CmsChartSkeleton.astro';
-import CmsHomeTrendScript from '@/components/cms/CmsHomeTrendScript.astro';
 import { requestDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
@@ -108,7 +104,6 @@ import {
   readCalendars,
   periodHasData,
   periodFromToken,
-  trendSpan,
   withPeriod,
   EMPTY_CALENDAR,
   type DataCalendar,
@@ -290,11 +285,10 @@ if (user) {
         approvalBoard(client, 'PURCHASE_ORDER', scope),
       ),
       runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
-      // THE TREND IS NOT HERE ANY MORE, AND THAT IS THE POINT. Its two
-      // twelve-month window aggregations were the heaviest statements on the
-      // page, feeding a chart behind a disclosure most visits never open.
-      // They now run in /app/fragments/home-trend, fetched once on the first
-      // expansion; see the More detail panels below.
+      // THE TREND IS NOT ON THIS PAGE AT ALL ANY MORE. Its two twelve-month
+      // window aggregations were the heaviest statements here, feeding a
+      // chart behind a disclosure most visits never opened; the disclosure
+      // itself is gone now and nothing was moved in its place.
       runSection(batcher, 'home.purchases-cycle', (client) =>
         approvalCycle(client, 'PURCHASE_ORDER', scope),
       ),
@@ -479,29 +473,6 @@ const laTabHref = (affiliateId: string) => {
   next.set('laCountry', affiliateId);
   return `/app?${next.toString()}`;
 };
-
-/**
- * THE TREND LOADS WHEN SOMEBODY ASKS FOR IT, and this is its address.
- *
- * The two twelve-month window aggregations behind the trend were the heaviest
- * statements on this page, and they fed charts behind a disclosure most
- * visits never open. They now run in /app/fragments/home-trend — same
- * queries, same batching, same chart, built by the same
- * buildHomeTrendChart — fetched ONCE the first time either panel's More
- * detail opens, and shared by both panels. A visit that never expands pays
- * nothing; a person whose remembered preference is expanded triggers the
- * fetch as the disclosure restores, which is the closest the server can get
- * to honouring a preference only the browser holds.
- *
- * The window's month count is computed HERE, where the calendar is already
- * loaded, and travels as a clamped parameter — so the fragment does not
- * re-read the calendar merely to learn a number this page knew.
- */
-const trendMonths = trendSpan(shown, calendar);
-const trendSrc =
-  `/app/fragments/home-trend?period=${encodeURIComponent(shown.key)}` +
-  `&months=${trendMonths}` +
-  (filter.affiliateId === null ? '' : `&affiliateId=${encodeURIComponent(filter.affiliateId)}`);
 
 const volumeOf = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
@@ -690,17 +661,6 @@ const salesKpis: Kpi[] = [
 ];
 
 /**
- * How many of THIS PANEL's completions lie outside the period.
- *
- * It used to be `calendar.total`, the page's whole mixed population — leads,
- * cases, sales orders and purchase orders together — printed under one panel as
- * though it were that panel's own. A wrong number in the wrong place is worse
- * than no number, because it is checkable and it is checkably false.
- */
-const outsideFor = (own: DataCalendar, board: ApprovalBoard | null) =>
-  Math.max(0, own.total - volumeOf(board));
-
-/**
  * The one line a panel says when it is empty and its own data is elsewhere.
  *
  * The page-level fallback moves the period when NOTHING on the page has data.
@@ -844,86 +804,54 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         period={shown}
         affiliateId={filter.affiliateId}
         coverage={`${count(volumeOf(purchases))} approvals in ${shown.label}`}
-      />
-      {
-        /*
-          NEVER A TARGET LINE AGAINST AN INVENTED NUMBER, and never silence
-          where there is no target. The rule is read; where none resolves the
-          chart draws no line and colours no bar, and this says so once,
-          because a panel with nothing to be over must not look like a panel
-          where everybody met it.
-        */
-      }
-      {
-        poTargetMissing && (
-          <p class="text-cms-caption text-cms-muted">
-            No target configured.{' '}
-            {maySetTargets && (
-              <a
-                class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-                href="/app/administration/sla"
-              >
-                Set targets
-              </a>
-            )}
-          </p>
-        )
-      }
-      {
-        /*
-          NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
-          period when NOTHING on the page has data; this is the other half,
-          where the period is right for the page and wrong for this panel.
-        */
-      }
-      {
-        elsewhere(purchaseCalendar, purchases) !== null && (
-          <p class="text-cms-caption text-cms-muted">
-            {elsewhere(purchaseCalendar, purchases)!.line}{' '}
-            <a
-              class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-              href={elsewhere(purchaseCalendar, purchases)!.href}
-            >
-              {elsewhere(purchaseCalendar, purchases)!.label}
-            </a>
-          </p>
-        )
-      }
-
-      {
-        /*
-          THE FIRST VIEW ANSWERS "WHERE IS TIME BEING LOST". The figures and the
-          function breakdown above answer it. The trend over months and the
-          people behind the figures are the next question, so they are one press
-          away rather than four panels of scrolling. Both are still computed and
-          still rendered; the disclosure remembers whoever opens it.
-        */
-      }
-      <CmsMoreDetail id="purchases">
-        {
-          /*
-            THE SKELETON IS THE CHART'S EXACT GEOMETRY, replaced in place when
-            the fragment arrives, so nothing below it moves. The leaderboard
-            underneath is server-rendered as before: its data rides on the
-            approval board the bars above already paid for, so deferring it
-            would save nothing and cost a request.
-          */
-        }
-        <div data-cms-home-trend="PURCHASE_ORDER" data-src={trendSrc}>
-          <CmsChartSkeleton title="Purchase order turnaround trend" unit="minutes" />
-        </div>
-
-        <CmsApprovalLeaderboard
-          caption="Purchase order approvers"
-          process="PURCHASE_ORDER"
-          board={purchases}
-          period={shown}
-          affiliateId={filter.affiliateId}
-          totalOutside={outsideFor(purchaseCalendar, purchases)}
-          widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
-          orderPath="/app/orders/purchases"
-        />
-      </CmsMoreDetail>
+      >
+        <Fragment slot="foot">
+          {
+            /*
+              NEVER A TARGET LINE AGAINST AN INVENTED NUMBER, and never silence
+              where there is no target. The rule is read; where none resolves
+              the chart draws no line and colours no bar, and this says so
+              once, because a panel with nothing to be over must not look like
+              a panel where everybody met it.
+            */
+          }
+          {
+            poTargetMissing && (
+              <p class="mt-2 text-cms-caption text-cms-muted">
+                No target configured.{' '}
+                {maySetTargets && (
+                  <a
+                    class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    href="/app/administration/sla"
+                  >
+                    Set targets
+                  </a>
+                )}
+              </p>
+            )
+          }
+          {
+            /*
+              NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
+              period when NOTHING on the page has data; this is the other half,
+              where the period is right for the page and wrong for this panel.
+            */
+          }
+          {
+            elsewhere(purchaseCalendar, purchases) !== null && (
+              <p class="mt-2 text-cms-caption text-cms-muted">
+                {elsewhere(purchaseCalendar, purchases)!.line}{' '}
+                <a
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  href={elsewhere(purchaseCalendar, purchases)!.href}
+                >
+                  {elsewhere(purchaseCalendar, purchases)!.label}
+                </a>
+              </p>
+            )
+          }
+        </Fragment>
+      </CmsApproverChart>
     </section>
 
     <section class="flex min-w-0 flex-col gap-4" aria-labelledby="panel-sales">
@@ -968,41 +896,25 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         judged={laMissingTargets.length < 3}
         missingTargets={laMissingTargets}
         maySetTargets={maySetTargets}
-      />
-      {
-        elsewhere(salesCalendar, sales) !== null && (
-          <p class="text-cms-caption text-cms-muted">
-            {elsewhere(salesCalendar, sales)!.line}{' '}
-            <a
-              class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-              href={elsewhere(salesCalendar, sales)!.href}
-            >
-              {elsewhere(salesCalendar, sales)!.label}
-            </a>
-          </p>
-        )
-      }
-
-      <CmsMoreDetail id="sales">
-        <div data-cms-home-trend="SALES_ORDER" data-src={trendSrc}>
-          <CmsChartSkeleton title="Loading Authority turnaround trend" unit="minutes" />
-        </div>
-
-        <CmsApprovalLeaderboard
-          caption="Loading Authority approvers"
-          process="SALES_ORDER"
-          board={sales}
-          period={shown}
-          affiliateId={filter.affiliateId}
-          totalOutside={outsideFor(salesCalendar, sales)}
-          widenHref={periodHref('/app', { ...shown, key: 'all', from: null, to: null })}
-          orderPath="/app/orders/sales"
-        />
-      </CmsMoreDetail>
+      >
+        <Fragment slot="foot">
+          {
+            elsewhere(salesCalendar, sales) !== null && (
+              <p class="mt-2 text-cms-caption text-cms-muted">
+                {elsewhere(salesCalendar, sales)!.line}{' '}
+                <a
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                  href={elsewhere(salesCalendar, sales)!.href}
+                >
+                  {elsewhere(salesCalendar, sales)!.label}
+                </a>
+              </p>
+            )
+          }
+        </Fragment>
+      </CmsLoadingAuthorityChart>
     </section>
   </div>
-
-  <CmsHomeTrendScript />
 
   {
     /*

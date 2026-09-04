@@ -725,44 +725,31 @@ test('every Home destination carries the filter and the scope', () => {
   assert.match(source, /drillTo\('\/app\/orders\/sales', filter/);
 });
 
-test('Home leads with the two charts, then the two leaderboards', () => {
+test('Home leads with its two charts and nothing between them', () => {
   const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
 
-  // The charts come first, purchase orders then sales orders, and each
-  // leaderboard follows its own chart inside the same column. Reading the
-  // order out of the file is what proves the column reads downward: a grid
-  // that placed them side by side would interleave these four markers.
+  // TWO CHARTS, PURCHASE ORDERS FIRST. Reading the order out of the file is
+  // what proves the column reads downward: a grid that placed them side by
+  // side would interleave these markers.
   //
-  // ASSERTED AGAINST MARKERS THE PAGE ACTUALLY RENDERS. The #199 merge changed
-  // this test to look for `peopleByFunction(...)`, a helper from a rewrite of
-  // the page that the same merge dropped, so the assertion searched for a
-  // string no file contained and failed on main itself — unseen, because the
-  // pipeline never reached the test step. The purchase order chart is now
-  // CmsApproverGroupChart — by approver and product group, its title its own —
-  // so its marker is the component, not a title prop.
-  const marks = [
-    ...source.matchAll(
-      /<CmsApproverChart|<CmsLoadingAuthorityChart|caption="(Purchase order approvers|Loading Authority approvers)"/g,
-    ),
-  ].map(
-    (m) => m[1] ?? (m[0].includes('Approver') ? 'Purchase order chart' : 'Loading Authority chart'),
+  // The leaderboards that used to follow each chart are gone with the
+  // "More details" disclosure that held them — Build Prompt 47 removed the
+  // control and did not relocate its contents.
+  const marks = [...source.matchAll(/<CmsApproverChart|<CmsLoadingAuthorityChart/g)].map((m) =>
+    m[0].includes('Approver') ? 'Purchase order chart' : 'Loading Authority chart',
   );
-  assert.deepEqual(marks, [
-    'Purchase order chart',
-    'Purchase order approvers',
-    'Loading Authority chart',
-    'Loading Authority approvers',
-  ]);
+  assert.deepEqual(marks, ['Purchase order chart', 'Loading Authority chart']);
+  assert.ok(!/<CmsMoreDetail/.test(source), 'the disclosure is back on Home');
+  assert.ok(!/<CmsApprovalLeaderboard/.test(source), 'a leaderboard is back on Home');
 
-  // Everything that used to sit between them is gone; the one section left is
-  // the exception list, and it is below all four.
+  // The one section left is the exception list, and it is below both charts.
   const order = [...source.matchAll(/<CmsSectionHeader\s+id="([a-z]+)"\s+title="([^"]+)"/g)].map(
     (m) => m[2]!,
   );
   assert.deepEqual(order, ['Needs attention']);
   assert.ok(
-    source.indexOf('Needs attention') > source.indexOf('Sales order approvers'),
-    'the exceptions sit below the leaderboards',
+    source.indexOf('Needs attention') > source.indexOf('<CmsLoadingAuthorityChart'),
+    'the exceptions sit below both charts',
   );
 
   // Two columns that stack on a narrow screen, purchase orders first. The
@@ -771,15 +758,10 @@ test('Home leads with the two charts, then the two leaderboards', () => {
 });
 
 test('the two leaderboards carry identical columns in identical order', () => {
-  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  // ONE component, rendered twice, taking its columns from ONE module. Two
-  // column literals could drift; one cannot, and the eye moving between the
-  // tables depends on it.
-  assert.equal(
-    (home.match(/<CmsApprovalLeaderboard/g) ?? []).length,
-    2,
-    'both leaderboards come from the same component',
-  );
+  // ONE component taking its columns from ONE module. Two column literals
+  // could drift; one cannot. The component is no longer rendered on Home —
+  // Build Prompt 47 removed the disclosure that held it — so what is asserted
+  // is the module both any caller and the component share.
   // FOUR, NOT EIGHT. Eight did not fit at a laptop width and both tables
   // scrolled sideways; a table you have to scroll to read is a table nobody
   // reads. Function became a section heading, Within SLA went because no
@@ -845,9 +827,8 @@ test('nothing in the row detail sorts or ranks', () => {
 test('a minimum volume before a rank is stated on the screen', () => {
   const board = readFileSync('src/components/cms/CmsApprovalLeaderboard.astro', 'utf8');
   assert.match(board, /Ranked from \{MINIMUM_RANKED_VOLUME\}/, 'the table states the threshold');
-  // Rendered twice because the component is, so both tables state it.
-  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.equal((home.match(/<CmsApprovalLeaderboard/g) ?? []).length, 2);
+  // The threshold travels with the component rather than with a page, so it
+  // is stated wherever the component is rendered. Home no longer renders it.
 });
 
 test('a section header cannot carry a description', () => {
@@ -1386,16 +1367,13 @@ test('the Home trend is a line over months, not a scatter over days', () => {
   // landed and a gap on every other day.
   assert.match(fragment, /approvalTrend\(client, 'PURCHASE_ORDER', scope, 'MONTH'\)/);
   assert.match(fragment, /approvalTrend\(client, 'SALES_ORDER', scope, 'MONTH'\)/);
+  // HOME NO LONGER SHOWS THE TREND AT ALL. Build Prompt 47 removed the
+  // "More details" disclosure it lived in and did not relocate it, so the
+  // fragment is intact and unreferenced from this page. It still runs no
+  // trend query of its own, which is what this ever asserted.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.match(
-    home,
-    /trendSpan\(shown, calendar\)/,
-    'the window is the months ending at this one, sized to the data the page already read',
-  );
-  assert.ok(
-    !/approvalTrend\(/.test(home),
-    'Home itself runs no trend query; the fragment carries both',
-  );
+  assert.ok(!/approvalTrend\(/.test(home), 'Home itself runs no trend query');
+  assert.ok(!/home-trend/.test(home), 'Home still fetches the trend fragment');
 
   // And the line is a line: a stroked path, with the markers as decoration on
   // it rather than the whole of it.
@@ -1548,11 +1526,18 @@ test('a panel never renders empty in silence while its own data is elsewhere', (
     true,
     'both panels carry the check',
   );
-  // The count under each table is that board's own, never the page's mixed
-  // total across every entity type.
-  assert.match(home, /totalOutside=\{outsideFor\(purchaseCalendar, purchases\)\}/);
-  assert.match(home, /totalOutside=\{outsideFor\(salesCalendar, sales\)\}/);
-  assert.ok(!/totalOutside=\{outside\}/.test(home), 'the mixed page total is gone');
+  // AND THE NOTE IS INSIDE THE CARD, which is what keeps the two panels the
+  // same height: a note beside one panel and not the other took 33 pixels out
+  // of that card while the other kept them.
+  assert.match(home, /<Fragment slot="foot">/, 'the notes are not in the card');
+  assert.equal(
+    (home.match(/<Fragment slot="foot">/g) ?? []).length,
+    2,
+    'both panels carry their notes inside the card',
+  );
+  // The mixed page total never comes back: the count each panel reports is
+  // its own board's, and the leaderboard that carried the other one is gone.
+  assert.ok(!/totalOutside=\{outside\}/.test(home), 'the mixed page total is back');
 
   // The period is still resolved ONCE for the page.
   assert.equal(
