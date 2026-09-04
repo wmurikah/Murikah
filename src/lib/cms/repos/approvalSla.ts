@@ -444,10 +444,11 @@ const PO_SOURCE = `
  * that as "Not recorded" rather than attributing the work to whoever last
  * touched the order.
  */
-const soStage = (fn: string, ord: number, stage: string): string => `
+const soStage = (fn: string, ord: number, stage: string, scoped = true): string => `
   SELECT '${fn}' AS fn, ${ord} AS ord,
          wi.entity_id AS entity_id,
          so.document_number AS document_number,
+         so.affiliate_id AS affiliate_id,
          wsi.assigned_user_id AS user_id,
          COALESCE(u.display_name, u.email) AS person,
          wsi.started_at AS started_at,
@@ -467,14 +468,21 @@ const soStage = (fn: string, ord: number, stage: string): string => `
    WHERE wi.entity_type = 'SALES_ORDER' AND ws.stage_code = '${stage}'
      AND wsi.status IN ('APPROVED', 'COMPLETED')
      AND wsi.started_at IS NOT NULL AND wsi.completed_at IS NOT NULL
-     AND ${AFFILIATE('so.affiliate_id')}
+     AND ${scoped ? AFFILIATE('so.affiliate_id') : '1 = 1'}
      AND (:from IS NULL OR wsi.completed_at >= :from)
      AND (:to IS NULL OR wsi.completed_at <= :to)`;
 
-const soOrder = (fn: string, ord: number, endColumn: string, startExpr: string): string => `
+const soOrder = (
+  fn: string,
+  ord: number,
+  endColumn: string,
+  startExpr: string,
+  scoped = true,
+): string => `
   SELECT '${fn}' AS fn, ${ord} AS ord,
          so.sales_order_id AS entity_id,
          so.document_number AS document_number,
+         so.affiliate_id AS affiliate_id,
          NULL AS user_id, NULL AS person,
          ${startExpr} AS started_at,
          so.${endColumn} AS completed_at,
@@ -482,7 +490,7 @@ const soOrder = (fn: string, ord: number, endColumn: string, startExpr: string):
          NULL AS target_minutes
     FROM sales_orders so
    WHERE so.${endColumn} IS NOT NULL
-     AND ${AFFILIATE('so.affiliate_id')}
+     AND ${scoped ? AFFILIATE('so.affiliate_id') : '1 = 1'}
      AND (:from IS NULL OR so.${endColumn} >= :from)
      AND (:to IS NULL OR so.${endColumn} <= :to)`;
 
@@ -871,7 +879,10 @@ export type RecordView = (typeof RECORD_VIEWS)[number];
  * the figure that opened it or the count stops matching, so the clock travels
  * in the URL rather than being inferred from the process.
  */
-export const RECORD_CLOCKS = ['ELAPSED', 'WORKING'] as const;
+export const RECORD_CLOCKS = ['WALL', 'WORKING'] as const;
+// Named for the columns the destination prints — "Wall clock" and "Working
+// hours" — so the URL, the code and the page a reader lands on all use one
+// vocabulary for the same two measurements.
 export type RecordClock = (typeof RECORD_CLOCKS)[number];
 
 export interface ApprovalRecord {
@@ -932,7 +943,7 @@ export async function approvalRecords(
    */
   productGroup: string | null = null,
   /** The clock the figure was read on. Purchase orders only. */
-  clock: RecordClock = 'ELAPSED',
+  clock: RecordClock = 'WALL',
 ): Promise<ApprovalRecord[]> {
   const person = actor.kind === 'PERSON';
   // AN EMPTY FUNCTION MEANS EVERY FUNCTION IN THE PROCESS, which is what the
@@ -1004,16 +1015,28 @@ export async function approvalRecords(
   // THE SAME EXPRESSIONS THE BOARD USES, so a figure and its list cannot
   // judge against different windows. Sales orders have no rule and no
   // working-day clock, so their statement is exactly what it has always been.
+  // THE SAME EXPRESSIONS THE PANELS USE, so a figure and the list behind it
+  // cannot judge against different windows or different targets.
+  //
+  // A purchase order is judged by the one active process rule; a sales order
+  // by its own function's rule, which is why the target arrives through a
+  // join rather than as a single scalar. Both read their working day from the
+  // calendar their own rules are configured against.
   const isPo = process === 'PURCHASE_ORDER';
   const withClock = isPo
     ? `WITH ${PO_CAL_CTE},
     d AS (SELECT src.*, cal.target AS rule_target, ${WORKING_MINUTES} AS acc
             FROM (${sourceFor(process)}) src CROSS JOIN cal),`
-    : `WITH d AS (${sourceFor(process)}),`;
+    : `WITH ${SO_CAL_CTE},
+    ${SO_RULES_CTE},
+    d AS (SELECT src.*, ru.target AS rule_target, ${WORKING_MINUTES} AS acc
+            FROM (${sourceFor(process)}) src
+            CROSS JOIN cal
+            LEFT JOIN rules ru ON ru.stage = ${LA_STAGE_OF}),`;
   // The measure is the clock the figure was read on. Everything downstream —
   // the rank, the median marker, the tail index, the breach test and the
   // order — reads this one expression, so they cannot disagree with it.
-  const measure = isPo && clock === 'WORKING' ? 'd.acc' : 'd.minutes';
+  const measure = clock === 'WORKING' ? 'd.acc' : 'd.minutes';
 
   const ranked = `
     ${withClock}
@@ -1034,7 +1057,7 @@ export async function approvalRecords(
   // counts; every other function keeps its own stage target. Written as one
   // expression so the list and the count cannot pick different rules.
   const ranks = measure.replace('d.', 'ranked.');
-  const breachTarget = isPo ? 'ranked.rule_target' : 'ranked.target_minutes';
+  const breachTarget = 'ranked.rule_target';
   const where =
     view === 'tail'
       ? ' AND ranked.rn >= (ranked.n * 9 + 9) / 10'
@@ -1170,9 +1193,9 @@ export interface ApproverBoard {
  * reaches this figure with no code change — and with NO rule the window is
  * null and so is every figure computed from it, which is the honest answer.
  */
-const clampSql = (stamp: string): string =>
+const clampSql = (stamp: string, cal = 'cal'): string =>
   `MIN(MAX(CAST(strftime('%H', ${stamp}) AS INTEGER) * 60
-           + CAST(strftime('%M', ${stamp}) AS INTEGER) - cal.s, 0), cal.w)`;
+           + CAST(strftime('%M', ${stamp}) AS INTEGER) - ${cal}.s, 0), ${cal}.w)`;
 
 /** The working-day duration of one row of a source aliased `src`. */
 const WORKING_CALC = `
@@ -1311,3 +1334,332 @@ export async function approverBoard(db: Client, scope: ApprovalScope): Promise<A
 }
 
 export { TARGET_SQL };
+
+/* -------------------------------------------------------------------------
+ * THE LOADING AUTHORITY PANEL: THREE FUNCTIONS, EACH WITH ITS OWN TARGET
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The three functions on the panel, and the rule each is judged by.
+ *
+ * THE MAPPING LIVES HERE AND NOWHERE ELSE. A function's workflow stage and
+ * its SLA rule's stage code are NOT the same string — credit release runs on
+ * the CREDIT_CHECK stage and is judged by the CREDIT_APPROVAL rule — and the
+ * existing per-stage lookup, which joins the two on equality, therefore
+ * resolves no target for credit at all. Written out, the pairing is a fact
+ * anyone can check rather than a coincidence of naming.
+ *
+ * `key` is the function as the source expression names it, so it is what
+ * travels in a drill-down URL; `label` is what the panel prints.
+ */
+export const LOADING_AUTHORITY_FUNCTIONS = [
+  { key: 'Finance approval', label: 'Finance', stage: 'FINANCE_APPROVAL' },
+  { key: 'Credit release', label: 'Credit', stage: 'CREDIT_APPROVAL' },
+  { key: 'Loading authority', label: 'Loading authority', stage: 'LOADING_AUTHORITY' },
+] as const;
+
+export type LoadingAuthorityFunction = (typeof LOADING_AUTHORITY_FUNCTIONS)[number];
+
+/** One row of the panel, at either grain. */
+export interface LaStat {
+  /** The function as the source names it, which is what a drill-down carries. */
+  readonly fn: string;
+  /** Null on a function row; the approver on a person row. */
+  readonly userId: string | null;
+  /** Null where the extract records no actor — loading authority, today. */
+  readonly person: string | null;
+  /** True on a person row, so a null person is "Not recorded" and not a total. */
+  readonly isPerson: boolean;
+  readonly volume: number;
+  /** The median inside the working day. */
+  readonly medianMinutes: number | null;
+  /** This function's own target, read from its own rule. Null where none. */
+  readonly targetMinutes: number | null;
+  readonly warningMinutes: number | null;
+  /** How many exceeded that target. Meaningless, and zero, without one. */
+  readonly overTarget: number;
+  readonly atRisk: number;
+}
+
+/** One country's tab, and whether it can be selected. */
+export interface LaCountry {
+  readonly affiliateId: string;
+  readonly name: string;
+  /** Completions in the active period. A country with none is greyed, not hidden. */
+  readonly volume: number;
+}
+
+/** One country's panel: the three functions and the approvers behind them. */
+export interface LaCountryBoard {
+  readonly functions: LaStat[];
+  /** The approvers behind each function, keyed by the function's own name. */
+  readonly people: ReadonlyMap<string, LaStat[]>;
+}
+
+export interface LoadingAuthorityBoard {
+  /**
+   * EVERY COUNTRY'S PANEL, FROM ONE STATEMENT. The tabs cannot be chosen
+   * before the query runs — which country to select depends on which have
+   * data — so the query answers for all of them and the page picks. Eight
+   * countries times three functions is a handful of rows, and it costs the
+   * page nothing: switching tabs is a link, not a request for more data.
+   */
+  readonly byCountry: ReadonlyMap<string, LaCountryBoard>;
+  readonly countries: LaCountry[];
+  /** Functions with no active rule, so the page can offer to set one. */
+  readonly missingTargets: string[];
+  /** Each function's target, whether or not any country ran it this period. */
+  readonly targets: ReadonlyMap<string, { target: number | null; warning: number | null }>;
+}
+
+/** The three functions, unscoped by affiliate: the tabs need every country. */
+const LA_SOURCE = [
+  soStage('Finance approval', 1, 'FINANCE_APPROVAL', false),
+  soStage('Credit release', 2, 'CREDIT_CHECK', false),
+  soOrder(
+    'Loading authority',
+    4,
+    'loading_authority_at',
+    'COALESCE(so.invoice_created_at, so.order_created_at)',
+    false,
+  ),
+].join('\n\n  UNION ALL\n');
+
+/** Which rule judges which function, as a CASE over the source's own names. */
+const LA_STAGE_OF = `CASE src.fn ${LOADING_AUTHORITY_FUNCTIONS.map(
+  (f) => `WHEN '${f.key}' THEN '${f.stage}'`,
+).join(' ')} END`;
+
+/**
+ * The sales order working day, from the calendar its active rules are set
+ * against — ONE window for the whole process, so three functions can be read
+ * on one scale. Null where no rule is active at all, which makes every
+ * working-day figure null and sends the panel to the wall clock wholesale
+ * rather than mixing two clocks on one axis.
+ */
+const SO_CAL_CTE = `
+  cal AS (
+    SELECT (SELECT CAST(substr(c.workday_start, 1, 2) AS INTEGER) * 60
+                   + CAST(substr(c.workday_start, 4, 2) AS INTEGER)
+              FROM sla_rules r
+              JOIN business_calendars c ON c.business_calendar_id = r.business_calendar_id
+             WHERE r.entity_type = 'SALES_ORDER' AND r.active = 1
+             ORDER BY r.sla_rule_id LIMIT 1) AS s,
+           (SELECT (CAST(substr(c.workday_end, 1, 2) AS INTEGER) * 60
+                    + CAST(substr(c.workday_end, 4, 2) AS INTEGER))
+                   - (CAST(substr(c.workday_start, 1, 2) AS INTEGER) * 60
+                      + CAST(substr(c.workday_start, 4, 2) AS INTEGER))
+              FROM sla_rules r
+              JOIN business_calendars c ON c.business_calendar_id = r.business_calendar_id
+             WHERE r.entity_type = 'SALES_ORDER' AND r.active = 1
+             ORDER BY r.sla_rule_id LIMIT 1) AS w
+  )`;
+
+/**
+ * EACH FUNCTION'S OWN TARGET, one row per stage code. Finance and credit
+ * share a value today and that is a coincidence of configuration: they are
+ * read separately, so changing one never moves the other.
+ */
+const SO_RULES_CTE = `
+  rules AS (
+    SELECT r.stage_code AS stage, MIN(r.target_minutes) AS target,
+           MIN(r.warning_minutes) AS warning
+      FROM sla_rules r
+     WHERE r.entity_type = 'SALES_ORDER' AND r.active = 1 AND r.stage_code IS NOT NULL
+     GROUP BY r.stage_code
+  )`;
+
+/**
+ * ONE WINDOW FOR THE PANEL, ONE TARGET PER FUNCTION, AND THEY ARE DIFFERENT
+ * THINGS.
+ *
+ * The working day comes from the CALENDAR the active rules are configured
+ * against, so every figure on the panel is measured the same way and the
+ * three functions can be read on one scale. The TARGET comes from each
+ * function's own rule, so finance and credit sharing 30 minutes today is a
+ * coincidence of configuration rather than a rule of the code: change one and
+ * the other does not move.
+ *
+ * Where a function has no active rule it keeps its duration and loses its
+ * verdict — grey, unjudged, no count. Where NO rule is active at all there is
+ * no calendar to read a working day from, so the panel measures the wall
+ * clock wholesale, exactly as the purchase order panel does, rather than
+ * mixing two clocks on one axis.
+ */
+const LA_BOARD_SQL = `
+  WITH ${SO_CAL_CTE},
+  ${SO_RULES_CTE},
+  d AS (
+    SELECT src.*, ru.target AS target, ru.warning AS warning,
+           CASE WHEN cal.s IS NULL THEN src.minutes
+                ELSE CAST(ROUND(julianday(date(src.completed_at))
+                                - julianday(date(src.started_at))) AS INTEGER) * cal.w
+                     + ${clampSql('src.completed_at')} - ${clampSql('src.started_at')} END AS acc
+      FROM (${LA_SOURCE}) src
+      CROSS JOIN cal
+      LEFT JOIN rules ru ON ru.stage = ${LA_STAGE_OF}
+     WHERE src.minutes IS NOT NULL
+  ),
+  ranked AS (
+    SELECT d.*,
+           ROW_NUMBER() OVER (PARTITION BY d.affiliate_id, d.fn ORDER BY d.acc) AS f1,
+           COUNT(*) OVER (PARTITION BY d.affiliate_id, d.fn) AS n1,
+           ROW_NUMBER() OVER (
+             PARTITION BY d.affiliate_id, d.fn, d.user_id ORDER BY d.acc) AS p2,
+           COUNT(*) OVER (PARTITION BY d.affiliate_id, d.fn, d.user_id) AS n2
+      FROM d
+  )
+  SELECT 0 AS grain, ranked.fn, NULL AS user_id, NULL AS person,
+         ranked.affiliate_id AS affiliate_id, NULL AS affiliate_name,
+         COUNT(*) AS volume,
+         AVG(CASE WHEN ranked.f1 IN ((ranked.n1 + 1) / 2, (ranked.n1 + 2) / 2)
+                  THEN ranked.acc END) AS median_minutes,
+         MIN(ranked.target) AS target, MIN(ranked.warning) AS warning,
+         SUM(CASE WHEN ranked.target IS NOT NULL AND ranked.acc IS NOT NULL
+                   AND ranked.acc > ranked.target THEN 1 ELSE 0 END) AS over_target,
+         SUM(CASE WHEN ranked.target IS NOT NULL AND ranked.warning IS NOT NULL
+                   AND ranked.acc IS NOT NULL AND ranked.acc > ranked.warning
+                   AND ranked.acc <= ranked.target THEN 1 ELSE 0 END) AS at_risk
+    FROM ranked GROUP BY ranked.affiliate_id, ranked.fn
+
+  UNION ALL
+
+  SELECT 1 AS grain, ranked.fn, ranked.user_id, MAX(ranked.person) AS person,
+         ranked.affiliate_id AS affiliate_id, NULL AS affiliate_name,
+         COUNT(*) AS volume,
+         AVG(CASE WHEN ranked.p2 IN ((ranked.n2 + 1) / 2, (ranked.n2 + 2) / 2)
+                  THEN ranked.acc END) AS median_minutes,
+         MIN(ranked.target) AS target, MIN(ranked.warning) AS warning,
+         SUM(CASE WHEN ranked.target IS NOT NULL AND ranked.acc IS NOT NULL
+                   AND ranked.acc > ranked.target THEN 1 ELSE 0 END) AS over_target,
+         SUM(CASE WHEN ranked.target IS NOT NULL AND ranked.warning IS NOT NULL
+                   AND ranked.acc IS NOT NULL AND ranked.acc > ranked.warning
+                   AND ranked.acc <= ranked.target THEN 1 ELSE 0 END) AS at_risk
+    FROM ranked GROUP BY ranked.affiliate_id, ranked.fn, ranked.user_id
+
+  UNION ALL
+
+  -- EVERY COUNTRY, WHETHER OR NOT IT HAS ANYTHING. A tab that is missing
+  -- tells a reader nothing; a tab that is present and greyed tells them the
+  -- country exists and this month is empty, which is the information.
+  SELECT 2 AS grain, NULL AS fn, NULL AS user_id, NULL AS person,
+         a.affiliate_id AS affiliate_id, a.affiliate_name AS affiliate_name,
+         (SELECT COUNT(*) FROM d WHERE d.affiliate_id = a.affiliate_id) AS volume,
+         NULL AS median_minutes, NULL AS target, NULL AS warning,
+         0 AS over_target, 0 AS at_risk
+    FROM affiliates a
+   WHERE a.active = 1`;
+
+/**
+ * The panel's data: three functions, their approvers, and every country's tab,
+ * in ONE statement — because Home's budget is counted in round trips and a
+ * panel is not allowed to cost more of them than the chart it replaced.
+ */
+export async function loadingAuthorityBoard(
+  db: Client,
+  scope: ApprovalScope,
+): Promise<LoadingAuthorityBoard> {
+  // THE PERIOD ONLY. The affiliate is not bound here and that is deliberate:
+  // the tabs need every country's figures from one statement, so the country
+  // is chosen from the result rather than pushed into the query. A parameter
+  // a statement never mentions is refused by the driver, so it is not sent.
+  const found = await db.execute({
+    sql: LA_BOARD_SQL,
+    args: { from: scope.from, to: scope.to },
+  });
+  const rows = rowsOf(found);
+  const toStat = (row: Record<string, unknown>, isPerson: boolean): LaStat => ({
+    fn: text(row.fn),
+    userId: maybeText(row.user_id),
+    person: maybeText(row.person),
+    isPerson,
+    volume: num(row.volume),
+    medianMinutes: maybe(row.median_minutes),
+    targetMinutes: maybe(row.target),
+    warningMinutes: maybe(row.warning),
+    overTarget: num(row.over_target),
+    atRisk: num(row.at_risk),
+  });
+
+  // EVERY FUNCTION'S TARGET, WHETHER OR NOT IT RAN. A function with no
+  // completions this month still has a rule and still draws its line; a
+  // target that appeared only where there was data would vanish exactly when
+  // a reader wanted to know what the empty month was measured against.
+  const targets = new Map<string, { target: number | null; warning: number | null }>();
+  for (const f of LOADING_AUTHORITY_FUNCTIONS) targets.set(f.key, { target: null, warning: null });
+  for (const row of rows) {
+    if (num(row.grain) !== 0) continue;
+    targets.set(text(row.fn), { target: maybe(row.target), warning: maybe(row.warning) });
+  }
+
+  const slowestFirst = (a: LaStat, b: LaStat) =>
+    (b.medianMinutes ?? -1) - (a.medianMinutes ?? -1) ||
+    b.overTarget - a.overTarget ||
+    (a.person ?? '~').localeCompare(b.person ?? '~');
+
+  const functionRows = new Map<string, Map<string, LaStat>>();
+  const peopleRows = new Map<string, Map<string, LaStat[]>>();
+  for (const row of rows) {
+    const grain = num(row.grain);
+    if (grain === 2) continue;
+    const country = text(row.affiliate_id);
+    if (grain === 0) {
+      const forCountry = functionRows.get(country) ?? new Map<string, LaStat>();
+      forCountry.set(text(row.fn), toStat(row, false));
+      functionRows.set(country, forCountry);
+      continue;
+    }
+    const forCountry = peopleRows.get(country) ?? new Map<string, LaStat[]>();
+    const key = text(row.fn);
+    forCountry.set(key, [...(forCountry.get(key) ?? []), toStat(row, true)]);
+    peopleRows.set(country, forCountry);
+  }
+
+  const countries = rows
+    .filter((row) => num(row.grain) === 2)
+    .map(
+      (row): LaCountry => ({
+        affiliateId: text(row.affiliate_id),
+        name: text(row.affiliate_name),
+        volume: num(row.volume),
+      }),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const byCountry = new Map<string, LaCountryBoard>();
+  for (const country of countries) {
+    const found0 = functionRows.get(country.affiliateId) ?? new Map<string, LaStat>();
+    const people = new Map<string, LaStat[]>();
+    for (const [key, list] of peopleRows.get(country.affiliateId) ?? []) {
+      people.set(key, [...list].sort(slowestFirst));
+    }
+    // EVERY CONFIGURED FUNCTION APPEARS, WHETHER OR NOT IT RAN. A function
+    // that did nothing this month is a fact a reader can act on; a function
+    // missing from the panel reads as one that does not exist.
+    const functions = LOADING_AUTHORITY_FUNCTIONS.map(
+      (f): LaStat =>
+        found0.get(f.key) ?? {
+          fn: f.key,
+          userId: null,
+          person: null,
+          isPerson: false,
+          volume: 0,
+          medianMinutes: null,
+          targetMinutes: targets.get(f.key)?.target ?? null,
+          warningMinutes: targets.get(f.key)?.warning ?? null,
+          overTarget: 0,
+          atRisk: 0,
+        },
+    );
+    byCountry.set(country.affiliateId, { functions, people });
+  }
+
+  return {
+    byCountry,
+    countries,
+    targets,
+    missingTargets: LOADING_AUTHORITY_FUNCTIONS.filter(
+      (f) => (targets.get(f.key)?.target ?? null) === null,
+    ).map((f) => f.key),
+  };
+}
