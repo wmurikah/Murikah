@@ -39,11 +39,13 @@ import { formatDuration } from '@/lib/cms/analytics/stats';
 import {
   approvalRecords,
   EVERYONE,
+  RECORD_CLOCKS,
   RECORD_VIEWS,
   type ApprovalActor,
   type ApprovalProcess,
   type ApprovalRecord,
   type ApprovalScope,
+  type RecordClock,
   type RecordView,
 } from '@/lib/cms/repos/approvalSla';
 import { parseFilter } from '@/lib/cms/analytics/filters';
@@ -89,6 +91,14 @@ const view: RecordView = (RECORD_VIEWS as readonly string[]).includes(viewRaw)
 // The purchase order chart's product group, where the figure carried one.
 // Only the three configured labels are meaningful; anything else is ignored
 // rather than filtering the list down to nothing on a typo.
+// WHICH CLOCK THE FIGURE THAT OPENED THIS LIST WAS READ ON. The approver
+// chart's figures are working-day minutes, so its lists rank, cut and judge
+// on that clock; everything else keeps the wall clock it has always used. It
+// arrives in the URL because only the figure knows which one it was.
+const clockRaw = (params.get('clock') ?? '').toUpperCase();
+const clock: RecordClock = (RECORD_CLOCKS as readonly string[]).includes(clockRaw)
+  ? (clockRaw as RecordClock)
+  : 'ELAPSED';
 const groupRaw = (params.get('group') ?? '').slice(0, 40);
 const productGroup =
   process === 'PURCHASE_ORDER' && [...PRODUCT_GROUP_LABELS, UNGROUPED].includes(groupRaw)
@@ -127,17 +137,25 @@ let records: ApprovalRecord[] = [];
 let traceId: string | null = null;
 let connectionFailed = false;
 
-// AN EMPTY FUNCTION IS A REAL QUESTION when the actor is everybody: it is the
-// panel's own headline figure, every completion in the period across every
-// function. It is only a mistake when a person was named without one.
-const addressable = fn !== '' || actor.kind === 'EVERYONE';
+// AN EMPTY FUNCTION IS A REAL QUESTION, and it is two of them.
+//
+// For everybody it is the panel's headline figure: every completion in the
+// period across every function. For one person it is what the approver chart
+// asks — this approver, every level they touched — which is the figure its
+// name, its time and its count over target all open.
+//
+// THERE USED TO BE A GUARD HERE REFUSING THE SECOND, on the reasoning that a
+// person named without a function was a mistake. It is not one any more, and
+// while it stood every destination on the new panel answered with an empty
+// list and a header reading "an unrecorded actor". Nothing is unaddressable
+// now, so nothing is refused.
 
-if (Astro.locals.cms?.user && addressable) {
+if (Astro.locals.cms?.user) {
   try {
     const db = await requestDb(Astro.locals);
     const batcher = createBatcher(db);
     const found = await runSection(batcher, 'approvals.records', (client) =>
-      approvalRecords(client, process, view, fn, actor, scope, productGroup),
+      approvalRecords(client, process, view, fn, actor, scope, productGroup, clock),
     );
     if (found.ok) records = found.value;
     else traceId = found.traceId;
@@ -160,6 +178,15 @@ const actorLabel = actor.kind === 'EVERYONE' ? 'everybody' : (person ?? 'an unre
 const count = (value: number) => value.toLocaleString('en-KE');
 const backToHome = `/app?${new URLSearchParams(periodParams(period)).toString()}`;
 
+/**
+ * TWO DURATIONS, TWO COLUMNS, TWO HEADINGS. The same span measured two ways:
+ * the working day is what the rule judges, the wall clock is what the
+ * business waited. Neither is presented as the other and nothing here adds
+ * them together. The working-day column appears only where a rule configures
+ * a working day to count.
+ */
+const hasWorking = records.some((record) => record.workingMinutes !== null);
+
 const COLUMNS = [
   { key: 'document', label: 'Order' },
   {
@@ -172,14 +199,27 @@ const COLUMNS = [
     label: 'Completed',
     definition: 'The timestamp the duration was measured to.',
   },
+  ...(hasWorking
+    ? [
+        {
+          key: 'working',
+          label: 'Working hours',
+          numeric: true,
+          definition:
+            'The span on this row counted inside the working day the rule configures, 08:00 to ' +
+            '17:00. This is the figure the target judges and the figure the approver chart ' +
+            'plots. It is never added to the wall clock beside it.',
+        },
+      ]
+    : []),
   {
     key: 'duration',
-    label: 'Duration',
+    label: 'Wall clock',
     numeric: true,
     definition:
-      'Elapsed minutes between the two timestamps on this row. Every figure on the leaderboard ' +
-      'is computed from these and nothing else, so a figure can be checked here rather than ' +
-      'trusted.',
+      'The whole span between the two timestamps on this row, whatever the hour: what the ' +
+      'business actually waited. It is the measure the leaderboard is computed from, so a ' +
+      'figure there can be checked here rather than trusted.',
   },
   { key: 'target', label: 'Target', numeric: true, secondary: true },
   { key: 'outcome', label: 'Against target' },
@@ -256,6 +296,13 @@ const COLUMNS = [
             </td>
             <td class="px-3 py-2 tabular-nums">{record.startedAt ?? 'Not recorded'}</td>
             <td class="px-3 py-2 tabular-nums">{record.completedAt ?? 'Still waiting'}</td>
+            {hasWorking && (
+              <td class="px-3 py-2 text-right tabular-nums">
+                {record.workingMinutes === null
+                  ? 'Not measured'
+                  : formatDuration(record.workingMinutes)}
+              </td>
+            )}
             <td class="px-3 py-2 text-right tabular-nums">
               {record.minutes === null ? 'Still waiting' : formatDuration(record.minutes)}
             </td>
