@@ -56,7 +56,12 @@
  * were faster and one in ten was slower.
  */
 import type { CmsColumn } from '@/components/cms/CmsDataTable.astro';
-import type { ApprovalActor, ApprovalProcess, RecordView } from '../repos/approvalSla.ts';
+import type {
+  ApprovalActor,
+  ApprovalProcess,
+  RecordClock,
+  RecordView,
+} from '../repos/approvalSla.ts';
 import { periodParams, type ResolvedPeriod } from './period.ts';
 
 /** The plain-English headers, in the one order both tables use. */
@@ -131,6 +136,15 @@ export function approvalRecordsHref(options: {
   readonly actor: ApprovalActor;
   /** The purchase order chart's product group, where the figure carries one. */
   readonly productGroup?: string | null;
+  /**
+   * The clock the figure was read on, where it is not the wall clock.
+   *
+   * The approver chart's figures are working-day minutes, so its
+   * destinations must rank and cut on the same clock or the count stops
+   * matching the figure. It travels here rather than being inferred at the
+   * far end, because only the caller knows which figure was clicked.
+   */
+  readonly clock?: RecordClock;
 }): string {
   const params = new URLSearchParams({
     ...periodParams(options.period),
@@ -145,5 +159,7 @@ export function approvalRecordsHref(options: {
   if (options.productGroup !== undefined && options.productGroup !== null) {
     params.set('group', options.productGroup);
   }
+  if (options.clock !== undefined && options.clock !== 'ELAPSED')
+    params.set('clock', options.clock);
   return `/app/performance/approvals?${params.toString()}`;
 }
