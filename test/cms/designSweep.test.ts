@@ -641,6 +641,11 @@ test('every figure on Home carries a destination', () => {
       // A count inside the sentence that explains an empty period is prose,
       // not a figure: it has nothing to open because there is nothing there.
       if (/outside this period/.test(source.slice(at, at + 200))) continue;
+      // A CHART'S COVERAGE LINE IS THE POPULATION, NOT A FIGURE. "1,114
+      // completions in May 2026" states what the bars were taken over, the
+      // way a table states its denominator; the figures a reader clicks are
+      // the ones ON the bars, and every one of those is a link.
+      if (/coverage=\{`[^`]*$/.test(source.slice(Math.max(0, at - 200), at))) continue;
       // The row detail's own figures are a distribution readout, not dashboard
       // figures: fastest, slowest and count describe the rows already listed,
       // and the slowest is the one of the three that opens anything.
@@ -687,12 +692,16 @@ test('every figure on Home carries a destination', () => {
     assert.ok(board.includes(`records(row, '${view}')`), `${view} has no destination`);
   }
 
-  // And the chart points, which carry their own href into the SVG.
-  assert.match(
-    readFileSync('src/pages/cms/app/index.astro', 'utf8'),
-    /href: link\(f\.fn\)/,
-    'every chart bar is a drill target',
-  );
+  // AND THE BARS THEMSELVES, which are markup now rather than SVG points: the
+  // figure beside each bar is the link, in both panels, and every one of them
+  // is built by the shared href builder rather than by a hand-written path.
+  for (const panel of ['CmsApproverChart', 'CmsLoadingAuthorityChart']) {
+    const source = readFileSync(`src/components/cms/${panel}.astro`, 'utf8');
+    assert.match(source, /approvalRecordsHref\(/, `${panel} builds no destinations`);
+    for (const view of ['completed', 'typical', 'breaches']) {
+      assert.ok(source.includes(`'${view}'`), `${panel} has no ${view} destination`);
+    }
+  }
   console.log(`[drill] ${counted} linked figures on Home`);
 });
 
@@ -733,14 +742,16 @@ test('Home leads with the two charts, then the two leaderboards', () => {
   // so its marker is the component, not a title prop.
   const marks = [
     ...source.matchAll(
-      /<CmsApproverChart|title="(Sales order approval)"|caption="(Purchase order approvers|Sales order approvers)"/g,
+      /<CmsApproverChart|<CmsLoadingAuthorityChart|caption="(Purchase order approvers|Loading Authority approvers)"/g,
     ),
-  ].map((m) => m[1] ?? m[2] ?? 'Purchase order approval');
+  ].map(
+    (m) => m[1] ?? (m[0].includes('Approver') ? 'Purchase order chart' : 'Loading Authority chart'),
+  );
   assert.deepEqual(marks, [
-    'Purchase order approval',
+    'Purchase order chart',
     'Purchase order approvers',
-    'Sales order approval',
-    'Sales order approvers',
+    'Loading Authority chart',
+    'Loading Authority approvers',
   ]);
 
   // Everything that used to sit between them is gone; the one section left is
@@ -1332,22 +1343,26 @@ test('the leaderboard states its caveats rather than explaining them', () => {
 });
 
 test('every Home chart names both of its axes', () => {
-  // A TICK SAYS "37 min"; A TITLE SAYS WHAT IS BEING MEASURED. The bar chart
-  // stays on the page; the trend's options moved with the trend into
-  // analytics/homeTrend.ts, and the pair is the two the brief names: months
-  // across, minutes up.
+  // A TICK SAYS "37 min"; A TITLE SAYS WHAT IS BEING MEASURED.
+  //
+  // BOTH PANELS ARE MARKUP NOW, not SVG, so neither takes an axis label from
+  // this page. What each must still do is name its own scale: the row labels
+  // are the category axis, and the value axis is the pair of numbers under
+  // the bars — with the purchase order panel's target marked once on its line
+  // and the loading authority panel's naming the target per function, because
+  // its three lines sit at three different places.
+  for (const [panel, middle] of [
+    ['CmsApproverChart', null],
+    ['CmsLoadingAuthorityChart', 'target per function'],
+  ] as const) {
+    const source = readFileSync(`src/components/cms/${panel}.astro`, 'utf8');
+    assert.match(source, /A BARE AXIS|THE AXIS/, `${panel} draws no axis`);
+    assert.match(source, />0</, `${panel} does not say where its scale starts`);
+    assert.match(source, /formatDuration\(Math\.round\(scale\)\)/, `${panel} has no maximum`);
+    if (middle !== null) assert.ok(source.includes(middle), `${panel} does not name its targets`);
+  }
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.equal(
-    (home.match(/xAxisLabel:/g) ?? []).length,
-    1,
-    'the bar chart names its x axis on the page',
-  );
-  assert.equal((home.match(/yAxisLabel:/g) ?? []).length, 1, 'and its y axis');
-  assert.match(
-    home,
-    /xAxisLabel: 'Minutes',\n\s*yAxisLabel: 'Function',/,
-    'the bars are minutes by function',
-  );
+  assert.equal((home.match(/xAxisLabel:/g) ?? []).length, 0, 'no SVG chart is left on the page');
   const trendRules = readFileSync('src/lib/cms/analytics/homeTrend.ts', 'utf8');
   assert.match(
     trendRules,
