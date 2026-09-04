@@ -143,11 +143,13 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
 
 {
   /*
-    h-full and mt-auto are what match this panel's height to the purchase
-    order panel beside it: the two sections are grid items and already stretch
-    to the taller of the two, so the figure fills its section and pins its
-    axis to the foot rather than a pixel height that breaks the moment a
-    country has one more approver.
+    flex-1 and mt-auto are what match this panel's height to the purchase
+    order panel beside it, and nothing else does. The two sections are grid
+    items, so they already stretch to the taller of the two; `flex-1` makes
+    each card fill its own section and `mt-auto` pins the axis to the foot
+    with the spare space above it. No pixel height, no minimum, and no script
+    measuring one panel to size the other — any of which would break the
+    moment a country has one more approver.
   */
 }
 <figure
@@ -155,7 +157,7 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
   data-cms-la-chart
   aria-describedby={tableId}
 >
-  <figcaption class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+  <figcaption class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
     <h3 class="flex items-center gap-1 text-cms-body font-semibold text-cms-ink">
       Loading Authority
       <span class="font-normal text-cms-muted">(minutes)</span>
@@ -410,6 +412,12 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
       </p>
     )
   }
+
+  {
+    /* The panel's own notes, inside the card and pinned to the foot with the
+       axis — see the purchase order panel for why they are not beside it. */
+  }
+  <slot name="foot" />
 
   {
     /*

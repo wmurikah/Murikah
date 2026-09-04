@@ -103,7 +103,7 @@ const LINK =
   'rounded-cms underline-offset-2 outline-none hover:underline focus-visible:ring-2 ' +
   'focus-visible:ring-focus';
 /** Four columns, identical at both grains, so the eye reads straight down. */
-const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] items-center gap-3';
+const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_4rem] items-center gap-3';
 ---
 
 <figure
@@ -321,6 +321,20 @@ const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] ite
     <span></span>
     <span></span>
   </div>
+
+  {
+    /*
+      THE PANEL'S OWN NOTES, INSIDE THE CARD.
+
+      They used to sit beside it, in the page, and that is what kept the two
+      panels unequal: a note under one column and not the other took 33 pixels
+      out of that card's height while the other kept them. Inside the card,
+      pinned to the foot with the axis, the figure is the only child of its
+      section whose height varies — so two equal sections give two equal
+      cards, in every state rather than in the states somebody checked.
+    */
+  }
+  <slot name="foot" />
 
   {
     /*
