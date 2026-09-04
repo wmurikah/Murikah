@@ -350,7 +350,7 @@ test('the tabs draw the affiliate code and name the country', async () => {
   c.close();
 });
 
-test('the two strings are gone, and the tables are where they belong', () => {
+test('the two strings are gone, and both tables are where they belong', () => {
   const panel = readFileSync(
     join(here, '..', '..', 'src/components/cms/CmsLoadingAuthorityChart.astro'),
     'utf8',
@@ -362,18 +362,26 @@ test('the two strings are gone, and the tables are where they belong', () => {
   // A greyed tab already says it, seven times over.
   assert.ok(!/nothing in this period/i.test(panel), 'the panel still repeats the empty phrase');
   assert.ok(!/No completions/i.test(panel), 'the panel still renders a sentence for a figure');
-  // THE VISIBLE TABLE TOGGLE IS GONE FROM THE PURCHASE ORDER PANEL, because
-  // every bar on it is already drillable.
-  const poTemplate = po.slice(po.indexOf('---', 3) + 3);
-  assert.ok(!/<summary/.test(poTemplate), 'the purchase order toggle is still there');
-  assert.ok(!/<details/.test(poTemplate), 'the purchase order table is still a disclosure');
-  // AND THE ACCESSIBLE EQUIVALENT IS NOT. A screen reader cannot read a bar,
-  // so the same figures stay in a real table, visually hidden and pointed at
-  // by the figure itself.
-  assert.match(po, /<table>/, 'the purchase order data table was removed');
-  assert.match(po, /aria-describedby=\{tableId\}/, 'the table is not exposed to the figure');
-  assert.match(po, /id=\{tableId\} class="sr-only"/, 'the table is not visually hidden');
-  assert.match(po, /<caption>/, 'the table has no name');
+  // THE VISIBLE TABLE TOGGLE IS GONE FROM BOTH PANELS, because every figure
+  // on both is already drillable, so it was a second route to the same
+  // records — AND THE ACCESSIBLE EQUIVALENT IS NOT. A screen reader cannot
+  // read a bar, so the same figures stay in a real table, visually hidden,
+  // named by its own caption and pointed at by the figure itself.
+  //
+  // Asserted for the pair rather than one of them, so the two panels cannot
+  // drift apart on this again.
+  for (const [name, source] of [
+    ['purchase order', po],
+    ['loading authority', panel],
+  ] as const) {
+    const template = source.slice(source.indexOf('---', 3) + 3);
+    assert.ok(!/<summary/.test(template), `the ${name} toggle is still there`);
+    assert.ok(!/<details/.test(template), `the ${name} table is still a disclosure`);
+    assert.match(source, /<table>/, `the ${name} data table was removed`);
+    assert.match(source, /aria-describedby=\{tableId\}/, `the ${name} table is not exposed`);
+    assert.match(source, /id=\{tableId\} class="sr-only"/, `the ${name} table is not hidden`);
+    assert.match(source, /<caption>/, `the ${name} table has no name`);
+  }
 });
 
 test('criterion 14: the count over target opens exactly those orders', async () => {
