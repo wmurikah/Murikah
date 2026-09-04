@@ -110,8 +110,11 @@ test('the eight affiliates carry their extract codes, none null', async () => {
     'no affiliate may lack its extract code',
   );
   const byCode = new Map(result.rows.map((row) => [String(row.extract_code), row]));
-  assert.equal(String(byCode.get('DRC')?.affiliate_code), 'HPD');
-  assert.equal(String(byCode.get('SSD')?.affiliate_code), 'HPS');
+  // CORRECTED BY THE OPERATOR (Build Prompt 45): DRC was HPD and South Sudan
+  // was HPS. The codes are what the Loading Authority tabs draw, so they are
+  // asserted here against the database rather than assumed anywhere.
+  assert.equal(String(byCode.get('DRC')?.affiliate_code), 'HPC');
+  assert.equal(String(byCode.get('SSD')?.affiliate_code), 'HSS');
   assert.equal(String(byCode.get('TERMINAL')?.affiliate_code), 'HTW');
   assert.equal(String(byCode.get('TERMINAL')?.affiliate_name), 'Hass Terminal');
 });
