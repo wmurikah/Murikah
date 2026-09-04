@@ -62,8 +62,23 @@ const period = parsePeriod(params, today);
 // different rules and the count stops matching the figure that opened it.
 const filter = parseFilter(params);
 
+/**
+ * WHICH PROCESS, AND WHY TWO NAMES REACH IT.
+ *
+ * The panel is called Loading Authority; the database is not, and was not
+ * renamed with it. `process=SALES_ORDER` is the schema's own name and every
+ * link written before the rename carries it, so it keeps working exactly as
+ * it did. `process=LOADING_AUTHORITY` is the name a person now sees on the
+ * panel, accepted so a link written from the screen is never a broken link.
+ * Both resolve to the one process the tables call SALES_ORDER.
+ */
+const PROCESS_ALIASES: Readonly<Record<string, ApprovalProcess>> = {
+  SALES_ORDER: 'SALES_ORDER',
+  LOADING_AUTHORITY: 'SALES_ORDER',
+  PURCHASE_ORDER: 'PURCHASE_ORDER',
+};
 const process: ApprovalProcess =
-  params.get('process') === 'SALES_ORDER' ? 'SALES_ORDER' : 'PURCHASE_ORDER';
+  PROCESS_ALIASES[(params.get('process') ?? '').toUpperCase()] ?? 'PURCHASE_ORDER';
 const fn = (params.get('fn') ?? '').slice(0, 120);
 // THREE STATES IN THE URL, BECAUSE THERE ARE THREE QUESTIONS.
 //
@@ -98,7 +113,7 @@ const view: RecordView = (RECORD_VIEWS as readonly string[]).includes(viewRaw)
 const clockRaw = (params.get('clock') ?? '').toUpperCase();
 const clock: RecordClock = (RECORD_CLOCKS as readonly string[]).includes(clockRaw)
   ? (clockRaw as RecordClock)
-  : 'ELAPSED';
+  : 'WALL';
 const groupRaw = (params.get('group') ?? '').slice(0, 40);
 const productGroup =
   process === 'PURCHASE_ORDER' && [...PRODUCT_GROUP_LABELS, UNGROUPED].includes(groupRaw)
@@ -131,7 +146,8 @@ const EXPLANATIONS: Readonly<Record<RecordView, string>> = {
 const functionLabel =
   (fn === '' ? 'every function' : fn) + (productGroup === null ? '' : `, ${productGroup}`);
 const orderPath = process === 'SALES_ORDER' ? '/app/orders/sales' : '/app/orders/purchases';
-const processLabel = process === 'SALES_ORDER' ? 'Sales order' : 'Purchase order';
+// The name a person sees. The identifier above is the name the tables use.
+const processLabel = process === 'SALES_ORDER' ? 'Loading Authority' : 'Purchase order';
 
 let records: ApprovalRecord[] = [];
 let traceId: string | null = null;

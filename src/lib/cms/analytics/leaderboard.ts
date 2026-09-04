@@ -159,7 +159,6 @@ export function approvalRecordsHref(options: {
   if (options.productGroup !== undefined && options.productGroup !== null) {
     params.set('group', options.productGroup);
   }
-  if (options.clock !== undefined && options.clock !== 'ELAPSED')
-    params.set('clock', options.clock);
+  if (options.clock !== undefined && options.clock !== 'WALL') params.set('clock', options.clock);
   return `/app/performance/approvals?${params.toString()}`;
 }
