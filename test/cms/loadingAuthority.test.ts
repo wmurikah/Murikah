@@ -108,7 +108,7 @@ const fnOf = (rows: LaStat[], key: string): LaStat => {
 
 // ---------------------------------------------------------------------------
 
-test('the prerequisite: three active sales order rules, 30, 30 and 90', async () => {
+test('the prerequisite: three active sales order rules, all at 30', async () => {
   const c = createTestDb();
   await seedHass(c);
   const rows = (
@@ -122,8 +122,15 @@ test('the prerequisite: three active sales order rules, 30, 30 and 90', async ()
     [
       ['SLAR-004', 'CREDIT_APPROVAL', 30, 25],
       ['SLAR-003', 'FINANCE_APPROVAL', 30, 25],
-      ['SLAR-SO-LA', 'LOADING_AUTHORITY', 90, 75],
+      ['SLAR-SO-LA', 'LOADING_AUTHORITY', 30, 25],
     ],
+  );
+  // AND THE EIGHT AFFILIATE CODES, which are what the country tabs draw.
+  const codes = (await c.execute(`SELECT affiliate_code FROM affiliates ORDER BY affiliate_code`))
+    .rows as Record<string, unknown>[];
+  assert.deepEqual(
+    codes.map((row) => String(row.affiliate_code)),
+    ['HPC', 'HPK', 'HPR', 'HPT', 'HPU', 'HPZ', 'HSS', 'HTW'],
   );
   c.close();
 });
@@ -149,8 +156,8 @@ test('criterion 9: each function carries its own target, and its people with it'
   // one target standing in for the other.
   assert.equal(finance.targetMinutes, 30);
   assert.equal(credit.targetMinutes, 30);
-  assert.equal(loading.targetMinutes, 90);
-  assert.equal(loading.warningMinutes, 75);
+  assert.equal(loading.targetMinutes, 30);
+  assert.equal(loading.warningMinutes, 25);
 
   // A person is judged against THEIR function's target, not the panel's
   // loudest one: every approver row carries the target of the function it
@@ -213,8 +220,160 @@ test('criteria 10 and 11: no rule means grey, unjudged, and only that function',
   // which is the whole reason each is read separately.
   assert.equal(credit.targetMinutes, 30);
   assert.equal(credit.overTarget, creditBefore.overTarget);
-  assert.equal(loading.targetMinutes, 90);
+  assert.equal(loading.targetMinutes, 30);
   c.close();
+});
+
+/**
+ * THE ONE THING THREE EQUAL NUMBERS MAKE INVISIBLE.
+ *
+ * Every function now sits at 30, so code that reads ONE target and draws it
+ * three times renders exactly the same panel as code that reads three. The
+ * only way to tell them apart is to move one rule and watch which lines
+ * follow. Finance and credit must not move; loading authority must.
+ */
+test('the three targets are read separately, not one read three times', async () => {
+  const c = await imported();
+  const at30 = kenya(await loadingAuthorityBoard(asClient(c), allTime));
+  assert.deepEqual(
+    at30.functions.map((f) => f.targetMinutes),
+    [30, 30, 30],
+    'the panel does not open with one target everywhere',
+  );
+
+  await c.execute(
+    `UPDATE sla_rules SET target_minutes = 90, warning_minutes = 75
+      WHERE sla_rule_id = 'SLAR-SO-LA'`,
+  );
+  const moved = kenya(await loadingAuthorityBoard(asClient(c), allTime));
+  assert.deepEqual(
+    moved.functions.map((f) => f.targetMinutes),
+    [30, 30, 90],
+    'moving the loading rule moved a line it should not have',
+  );
+  assert.deepEqual(
+    moved.functions.map((f) => f.warningMinutes),
+    [25, 25, 75],
+    'the warning levels did not follow their own rules',
+  );
+  // The approvers under each function follow their own function, not the
+  // panel's loudest target.
+  for (const f of moved.functions) {
+    for (const person of moved.people.get(f.fn) ?? []) {
+      assert.equal(
+        person.targetMinutes,
+        f.targetMinutes,
+        `${person.person} follows the wrong rule`,
+      );
+    }
+  }
+  // Finance and credit are judged identically before and after, which is what
+  // "only the loading line moved" means for the figures rather than the lines.
+  for (const key of ['Finance approval', 'Credit release']) {
+    assert.equal(fnOf(moved.functions, key).overTarget, fnOf(at30.functions, key).overTarget);
+  }
+  assert.notEqual(
+    fnOf(moved.functions, 'Loading authority').overTarget,
+    fnOf(at30.functions, 'Loading authority').overTarget,
+    'a 30 and a 90 target should not count the same breaches',
+  );
+
+  await c.execute(
+    `UPDATE sla_rules SET target_minutes = 30, warning_minutes = 25
+      WHERE sla_rule_id = 'SLAR-SO-LA'`,
+  );
+  const back = kenya(await loadingAuthorityBoard(asClient(c), allTime));
+  assert.deepEqual(
+    back.functions.map((f) => f.targetMinutes),
+    [30, 30, 30],
+  );
+  c.close();
+});
+
+/**
+ * ZERO AND UNKNOWN ARE DIFFERENT FACTS.
+ *
+ * A month in which a function ran nothing has a count of ZERO — a number,
+ * rendered plainly, opening nothing, because a link to an empty list is worse
+ * than the number. A target nobody configured is UNKNOWN, and renders an em
+ * dash. The bug this holds shut: reading a function's target off its
+ * completions made an empty month look like an unconfigured one.
+ */
+test('a function that ran nothing keeps its target and counts zero', async () => {
+  const c = await imported();
+  await c.execute(`UPDATE sales_orders SET loading_authority_at = NULL`);
+  const board = await loadingAuthorityBoard(asClient(c), allTime);
+  const loading = fnOf(kenya(board).functions, 'Loading authority');
+  assert.equal(loading.volume, 0, 'the function still has completions');
+  assert.equal(loading.overTarget, 0);
+  assert.equal(loading.medianMinutes, null, 'a median over nothing is not a number');
+  // ZERO, NOT UNKNOWN: the rule is still active, so the target is still known
+  // and the panel still draws its line.
+  assert.equal(loading.targetMinutes, 30, 'an empty month lost its configured target');
+  assert.deepEqual(board.missingTargets, [], 'an empty month was reported as unconfigured');
+
+  // UNKNOWN: deactivate the rule and the target really is missing.
+  await c.execute(`UPDATE sla_rules SET active = 0 WHERE sla_rule_id = 'SLAR-SO-LA'`);
+  const without = await loadingAuthorityBoard(asClient(c), allTime);
+  assert.equal(fnOf(kenya(without).functions, 'Loading authority').targetMinutes, null);
+  assert.deepEqual(without.missingTargets, ['Loading authority']);
+  c.close();
+});
+
+test('the tabs draw the affiliate code and name the country', async () => {
+  const c = await imported();
+  const board = await loadingAuthorityBoard(asClient(c), allTime);
+  // READ FROM `affiliates.affiliate_code`, never compiled in: the two the
+  // operator corrected are the two this would catch.
+  assert.deepEqual(
+    board.countries.map((country) => country.code),
+    ['HPC', 'HPK', 'HPR', 'HPT', 'HPU', 'HPZ', 'HSS', 'HTW'],
+  );
+  assert.equal(
+    board.countries.find((country) => country.code === 'HPK')?.name,
+    'Hass Petroleum Kenya',
+  );
+  assert.equal(
+    board.countries.find((country) => country.code === 'HPC')?.name,
+    'Hass Petroleum DRC',
+  );
+  // The panel draws the code and carries the name as the title and the
+  // accessible name, so a hover or a screen reader still gets the country.
+  const panel = readFileSync(
+    join(here, '..', '..', 'src/components/cms/CmsLoadingAuthorityChart.astro'),
+    'utf8',
+  );
+  assert.match(panel, /\{country\.code\}/, 'the tab does not draw the code');
+  assert.match(panel, /title=\{country\.name\}/, 'the tab has no title');
+  assert.match(panel, /aria-label=\{country\.name\}/, 'the tab has no accessible name');
+  assert.ok(!/'HP[A-Z]'|"HP[A-Z]"/.test(panel), 'a country code is compiled into the panel');
+  c.close();
+});
+
+test('the two strings are gone, and the tables are where they belong', () => {
+  const panel = readFileSync(
+    join(here, '..', '..', 'src/components/cms/CmsLoadingAuthorityChart.astro'),
+    'utf8',
+  );
+  const po = readFileSync(
+    join(here, '..', '..', 'src/components/cms/CmsApproverChart.astro'),
+    'utf8',
+  );
+  // A greyed tab already says it, seven times over.
+  assert.ok(!/nothing in this period/i.test(panel), 'the panel still repeats the empty phrase');
+  assert.ok(!/No completions/i.test(panel), 'the panel still renders a sentence for a figure');
+  // THE VISIBLE TABLE TOGGLE IS GONE FROM THE PURCHASE ORDER PANEL, because
+  // every bar on it is already drillable.
+  const poTemplate = po.slice(po.indexOf('---', 3) + 3);
+  assert.ok(!/<summary/.test(poTemplate), 'the purchase order toggle is still there');
+  assert.ok(!/<details/.test(poTemplate), 'the purchase order table is still a disclosure');
+  // AND THE ACCESSIBLE EQUIVALENT IS NOT. A screen reader cannot read a bar,
+  // so the same figures stay in a real table, visually hidden and pointed at
+  // by the figure itself.
+  assert.match(po, /<table>/, 'the purchase order data table was removed');
+  assert.match(po, /aria-describedby=\{tableId\}/, 'the table is not exposed to the figure');
+  assert.match(po, /id=\{tableId\} class="sr-only"/, 'the table is not visually hidden');
+  assert.match(po, /<caption>/, 'the table has no name');
 });
 
 test('criterion 14: the count over target opens exactly those orders', async () => {
@@ -381,7 +540,7 @@ test('loading authority records no person, and still carries its target', async 
   assert.equal(rows[0]!.userId, null);
   // The duration is real even though the person is not, so the row keeps its
   // own target and its own colour.
-  assert.equal(rows[0]!.targetMinutes, 90);
+  assert.equal(rows[0]!.targetMinutes, 30);
   assert.ok((rows[0]!.medianMinutes ?? 0) > 0);
   assert.equal(rows[0]!.volume, loading.volume);
   // And the panel prints it as "Not recorded" rather than as a blank.
@@ -426,7 +585,7 @@ test('the rename is presentation only, and the panel carries no narration', () =
   // renders only when a function has no rule.
   const allowed = [
     /class="sr-only"/,
-    /No completions this month/,
+    /No countries are configured/,
     /target per function/,
     /No target for \{missingTargets/,
   ];

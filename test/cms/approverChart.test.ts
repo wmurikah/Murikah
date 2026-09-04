@@ -394,7 +394,7 @@ test('the panel carries none of the narration it replaced', () => {
   // The definition control carries the measure, on demand.
   assert.match(panel, /<CmsDefinition/, 'the panel has no definition control');
   // The axis is bare: two values and nothing between them.
-  const axis = panel.slice(panel.indexOf('A BARE AXIS'), panel.indexOf('table equivalent'));
+  const axis = panel.slice(panel.indexOf('A BARE AXIS'), panel.indexOf('THE TABLE EQUIVALENT'));
   assert.match(axis, />0</, 'the axis has no left value');
   assert.match(axis, /formatDuration\(Math\.round\(scale\)\)/, 'the axis has no right value');
   // The class names are stripped first: `text-cms-caption` is a utility, not
