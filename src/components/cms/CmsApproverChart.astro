@@ -87,7 +87,7 @@ const href = (row: ApproverStat, view: 'completed' | 'typical' | 'breaches'): st
     fn: '',
     actor: { kind: 'PERSON', userId: row.userId },
     productGroup: row.group,
-    clock: rule === null ? 'ELAPSED' : 'WORKING',
+    clock: rule === null ? 'WALL' : 'WORKING',
   });
 
 const named = (row: ApproverStat): string => row.person ?? 'Not recorded';
@@ -104,7 +104,7 @@ const LINK =
 const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] items-center gap-3';
 ---
 
-<figure class="rounded-cms-lg bg-cms-surface p-4" data-cms-po-chart>
+<figure class="flex flex-1 flex-col rounded-cms-lg bg-cms-surface p-4" data-cms-po-chart>
   <figcaption class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
     <h3 class="flex items-center gap-1 text-cms-body font-semibold text-cms-ink">
       Purchase order approval
@@ -304,7 +304,7 @@ const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] ite
   }
 
   {/* A BARE AXIS: where the scale starts and where it ends. Nothing else. */}
-  <div class={`${ROW} mt-1`}>
+  <div class={`${ROW} mt-auto pt-1`}>
     <span></span>
     <div class="relative h-4 min-w-0 text-cms-caption text-cms-muted tabular-nums">
       <span class="absolute start-0 top-0">0</span>
