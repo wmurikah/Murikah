@@ -494,16 +494,32 @@ const soOrder = (
      AND (:from IS NULL OR so.${endColumn} >= :from)
      AND (:to IS NULL OR so.${endColumn} <= :to)`;
 
+/**
+ * WHERE THE LOADING AUTHORITY CLOCK STARTS, AND WHY IT IS NOT THE INVOICE.
+ *
+ * It used to be the invoice, falling back to the order — the chain every other
+ * sales order function uses, on the reasoning that each function should be
+ * charged for its own stretch rather than for the delay before it.
+ *
+ * THE DATA REFUTES THAT ORDER OF EVENTS. On the real extract the loading
+ * authority is issued BEFORE the invoice on 659 of the 664 orders that have
+ * one — minutes before, consistently: authority 12:30, invoice 12:35. So the
+ * duration came out negative, `MINUTES()` correctly refused to call a negative
+ * span a fast one, and the panel reported loading authority over FIVE orders
+ * while the business had 664. A figure computed from a milestone that happens
+ * afterwards is not a conservative figure; it is a silently empty one.
+ *
+ * The order's creation always precedes the authority, and it is what the
+ * "Order to loading authority" card above the panel already measures, so the
+ * panel and that card now answer the same question the same way.
+ */
+const LOADING_AUTHORITY_START = 'so.order_created_at';
+
 const SO_SOURCE = [
   soStage('Finance approval', 1, 'FINANCE_APPROVAL'),
   soStage('Credit release', 2, 'CREDIT_CHECK'),
   soOrder('Invoicing', 3, 'invoice_created_at', 'so.order_created_at'),
-  soOrder(
-    'Loading authority',
-    4,
-    'loading_authority_at',
-    'COALESCE(so.invoice_created_at, so.order_created_at)',
-  ),
+  soOrder('Loading authority', 4, 'loading_authority_at', LOADING_AUTHORITY_START),
 ].join('\n\n  UNION ALL\n');
 
 /**
@@ -1384,6 +1400,13 @@ export interface LaStat {
 /** One country's tab, and whether it can be selected. */
 export interface LaCountry {
   readonly affiliateId: string;
+  /**
+   * THE ABBREVIATION THE TAB DRAWS, read from `affiliates.affiliate_code`.
+   * Eight full names do not fit on a panel and repeat the same two words
+   * eight times; the code is three characters and the name is still one
+   * hover or one screen reader away.
+   */
+  readonly code: string;
   readonly name: string;
   /** Completions in the active period. A country with none is greyed, not hidden. */
   readonly volume: number;
@@ -1416,13 +1439,7 @@ export interface LoadingAuthorityBoard {
 const LA_SOURCE = [
   soStage('Finance approval', 1, 'FINANCE_APPROVAL', false),
   soStage('Credit release', 2, 'CREDIT_CHECK', false),
-  soOrder(
-    'Loading authority',
-    4,
-    'loading_authority_at',
-    'COALESCE(so.invoice_created_at, so.order_created_at)',
-    false,
-  ),
+  soOrder('Loading authority', 4, 'loading_authority_at', LOADING_AUTHORITY_START, false),
 ].join('\n\n  UNION ALL\n');
 
 /** Which rule judges which function, as a CASE over the source's own names. */
@@ -1542,13 +1559,25 @@ const LA_BOARD_SQL = `
   -- EVERY COUNTRY, WHETHER OR NOT IT HAS ANYTHING. A tab that is missing
   -- tells a reader nothing; a tab that is present and greyed tells them the
   -- country exists and this month is empty, which is the information.
-  SELECT 2 AS grain, NULL AS fn, NULL AS user_id, NULL AS person,
+  SELECT 2 AS grain, NULL AS fn, a.affiliate_code AS user_id, NULL AS person,
          a.affiliate_id AS affiliate_id, a.affiliate_name AS affiliate_name,
          (SELECT COUNT(*) FROM d WHERE d.affiliate_id = a.affiliate_id) AS volume,
          NULL AS median_minutes, NULL AS target, NULL AS warning,
          0 AS over_target, 0 AS at_risk
     FROM affiliates a
-   WHERE a.active = 1`;
+   WHERE a.active = 1
+
+  UNION ALL
+
+  -- THE TARGETS THEMSELVES, INDEPENDENT OF THE DATA. A function's target is
+  -- a property of its rule; reading it off the completions made a month with
+  -- no orders look like a month with no target, which is the confusion
+  -- between zero and unknown this panel exists to keep apart.
+  SELECT 3 AS grain, ru.stage AS fn, NULL AS user_id, NULL AS person,
+         NULL AS affiliate_id, NULL AS affiliate_name, 0 AS volume,
+         NULL AS median_minutes, ru.target AS target, ru.warning AS warning,
+         0 AS over_target, 0 AS at_risk
+    FROM rules ru`;
 
 /**
  * The panel's data: three functions, their approvers, and every country's tab,
@@ -1587,9 +1616,13 @@ export async function loadingAuthorityBoard(
   // a reader wanted to know what the empty month was measured against.
   const targets = new Map<string, { target: number | null; warning: number | null }>();
   for (const f of LOADING_AUTHORITY_FUNCTIONS) targets.set(f.key, { target: null, warning: null });
-  for (const row of rows) {
-    if (num(row.grain) !== 0) continue;
-    targets.set(text(row.fn), { target: maybe(row.target), warning: maybe(row.warning) });
+  const byStage = new Map(
+    rows.filter((row) => num(row.grain) === 3).map((row) => [text(row.fn), row] as const),
+  );
+  for (const f of LOADING_AUTHORITY_FUNCTIONS) {
+    const rule = byStage.get(f.stage);
+    if (rule === undefined) continue;
+    targets.set(f.key, { target: maybe(rule.target), warning: maybe(rule.warning) });
   }
 
   const slowestFirst = (a: LaStat, b: LaStat) =>
@@ -1601,7 +1634,7 @@ export async function loadingAuthorityBoard(
   const peopleRows = new Map<string, Map<string, LaStat[]>>();
   for (const row of rows) {
     const grain = num(row.grain);
-    if (grain === 2) continue;
+    if (grain === 2 || grain === 3) continue;
     const country = text(row.affiliate_id);
     if (grain === 0) {
       const forCountry = functionRows.get(country) ?? new Map<string, LaStat>();
@@ -1620,11 +1653,14 @@ export async function loadingAuthorityBoard(
     .map(
       (row): LaCountry => ({
         affiliateId: text(row.affiliate_id),
+        // Carried in the user_id column because every arm of a UNION must
+        // agree on its columns, and this arm has no person to name.
+        code: text(row.user_id),
         name: text(row.affiliate_name),
         volume: num(row.volume),
       }),
     )
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => a.code.localeCompare(b.code));
 
   const byCountry = new Map<string, LaCountryBoard>();
   for (const country of countries) {
@@ -1636,21 +1672,34 @@ export async function loadingAuthorityBoard(
     // EVERY CONFIGURED FUNCTION APPEARS, WHETHER OR NOT IT RAN. A function
     // that did nothing this month is a fact a reader can act on; a function
     // missing from the panel reads as one that does not exist.
-    const functions = LOADING_AUTHORITY_FUNCTIONS.map(
-      (f): LaStat =>
-        found0.get(f.key) ?? {
-          fn: f.key,
-          userId: null,
-          person: null,
-          isPerson: false,
-          volume: 0,
-          medianMinutes: null,
-          targetMinutes: targets.get(f.key)?.target ?? null,
-          warningMinutes: targets.get(f.key)?.warning ?? null,
-          overTarget: 0,
-          atRisk: 0,
-        },
-    );
+    const withTarget = (row: LaStat, key: string): LaStat => ({
+      ...row,
+      targetMinutes: targets.get(key)?.target ?? null,
+      warningMinutes: targets.get(key)?.warning ?? null,
+    });
+    const functions = LOADING_AUTHORITY_FUNCTIONS.map((f): LaStat => {
+      const found = found0.get(f.key);
+      return found === undefined
+        ? {
+            fn: f.key,
+            userId: null,
+            person: null,
+            isPerson: false,
+            volume: 0,
+            medianMinutes: null,
+            targetMinutes: targets.get(f.key)?.target ?? null,
+            warningMinutes: targets.get(f.key)?.warning ?? null,
+            overTarget: 0,
+            atRisk: 0,
+          }
+        : withTarget(found, f.key);
+    });
+    for (const [key, list] of people) {
+      people.set(
+        key,
+        list.map((row) => withTarget(row, key)),
+      );
+    }
     byCountry.set(country.affiliateId, { functions, people });
   }
 
