@@ -47,6 +47,8 @@ const { people, groups, rule, period, affiliateId, coverage } = Astro.props;
 
 const keyOf = (row: ApproverStat): string => row.userId ?? 'none';
 const expanded = new Set(Astro.url.searchParams.getAll('poRow'));
+/** The visually hidden data table this chart is described by. */
+const tableId = 'po-chart-table';
 
 /**
  * The scale ends past the slowest bar and past the target, so the dashed rule
@@ -104,7 +106,11 @@ const LINK =
 const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] items-center gap-3';
 ---
 
-<figure class="flex flex-1 flex-col rounded-cms-lg bg-cms-surface p-4" data-cms-po-chart>
+<figure
+  class="flex flex-1 flex-col rounded-cms-lg bg-cms-surface p-4"
+  data-cms-po-chart
+  aria-describedby={tableId}
+>
   <figcaption class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
     <h3 class="flex items-center gap-1 text-cms-body font-semibold text-cms-ink">
       Purchase order approval
@@ -169,7 +175,9 @@ const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] ite
 
   {
     people.length === 0 ? (
-      <p class="py-6 text-center text-cms-body-sm text-cms-muted">No completions this month</p>
+      <p class="py-6 text-center text-cms-body-sm text-cms-muted">
+        Nobody approved anything this month.
+      </p>
     ) : (
       <ol class="flex flex-col">
         {people.map((row) => {
@@ -314,60 +322,67 @@ const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] ite
     <span></span>
   </div>
 
-  {/* The table equivalent: every figure, at both grains, without the bars. */}
-  <details class="mt-3 border-t border-cms-line pt-2">
-    <summary
-      class="cursor-pointer rounded-cms text-cms-body-sm font-medium text-cms-royal outline-none select-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-    >
-      View as a table
-    </summary>
-    <div class="mt-2 overflow-x-auto">
-      <table class="w-full text-cms-body-sm">
-        <caption class="sr-only">
-          Purchase order approval medians by approver, then by product group
-        </caption>
-        <thead>
-          <tr class="border-b border-cms-line text-left text-cms-caption text-cms-muted">
-            <th scope="col" class="py-1.5 pr-3 font-medium">Approver</th>
-            <th scope="col" class="py-1.5 pr-3 font-medium">Product</th>
-            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Approvals</th>
-            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Median</th>
-            <th scope="col" class="py-1.5 text-right font-medium">Past target</th>
-          </tr>
-        </thead>
-        <tbody>
-          {
-            people.map((row) => (
-              <>
-                <tr class="border-b border-cms-line">
-                  <th scope="row" class="py-1.5 pr-3 text-left font-medium text-cms-ink">
-                    {named(row)}
-                  </th>
-                  <td class="py-1.5 pr-3 text-cms-muted">All products</td>
-                  <td class="py-1.5 pr-3 text-right tabular-nums">{row.volume}</td>
-                  <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(row)}</td>
+  {
+    /*
+      THE TABLE EQUIVALENT, AND IT IS NOT A CONTROL.
+      
+      The visible toggle that used to open this table is gone: every bar on
+      the chart is already drillable, so it was a second route to the same
+      records and one more thing to decide about.
+      
+      WHAT IT IS NOT IS THE ACCESSIBILITY EQUIVALENT, and that stays. A screen
+      reader cannot read a bar, so the same figures are here in a real
+      <table>, visually hidden and named by the figure's own caption. It is
+      exposed by `aria-describedby` on the figure — reachable and readable in
+      the reading order, and never announced twice, because everything above
+      it that carries the same number is either a link with its own
+      accessible name or `aria-hidden` scenery.
+    */
+  }
+  <div id={tableId} class="sr-only">
+    <table>
+      <caption>Purchase order approval medians by approver, then by product group</caption>
+      <thead>
+        <tr class="border-b border-cms-line text-left text-cms-caption text-cms-muted">
+          <th scope="col" class="py-1.5 pr-3 font-medium">Approver</th>
+          <th scope="col" class="py-1.5 pr-3 font-medium">Product</th>
+          <th scope="col" class="py-1.5 pr-3 text-right font-medium">Approvals</th>
+          <th scope="col" class="py-1.5 pr-3 text-right font-medium">Median</th>
+          <th scope="col" class="py-1.5 text-right font-medium">Past target</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          people.map((row) => (
+            <>
+              <tr class="border-b border-cms-line">
+                <th scope="row" class="py-1.5 pr-3 text-left font-medium text-cms-ink">
+                  {named(row)}
+                </th>
+                <td class="py-1.5 pr-3 text-cms-muted">All products</td>
+                <td class="py-1.5 pr-3 text-right tabular-nums">{row.volume}</td>
+                <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(row)}</td>
+                <td class="py-1.5 text-right tabular-nums">
+                  {row.overTarget}/{row.volume}
+                </td>
+              </tr>
+              {(groups.get(row.userId ?? '') ?? []).map((product) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="py-1.5 ps-3 pr-3 text-cms-muted">{named(row)}</td>
+                  <td class="py-1.5 pr-3 text-cms-ink">{product.group}</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{product.volume}</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(product)}</td>
                   <td class="py-1.5 text-right tabular-nums">
-                    {row.overTarget}/{row.volume}
+                    {product.overTarget}/{product.volume}
                   </td>
                 </tr>
-                {(groups.get(row.userId ?? '') ?? []).map((product) => (
-                  <tr class="border-b border-cms-line last:border-0">
-                    <td class="py-1.5 ps-3 pr-3 text-cms-muted">{named(row)}</td>
-                    <td class="py-1.5 pr-3 text-cms-ink">{product.group}</td>
-                    <td class="py-1.5 pr-3 text-right tabular-nums">{product.volume}</td>
-                    <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(product)}</td>
-                    <td class="py-1.5 text-right tabular-nums">
-                      {product.overTarget}/{product.volume}
-                    </td>
-                  </tr>
-                ))}
-              </>
-            ))
-          }
-        </tbody>
-      </table>
-    </div>
-  </details>
+              ))}
+            </>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
 </figure>
 
 <script>

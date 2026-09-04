@@ -70,6 +70,10 @@ INSERT OR IGNORE INTO countries VALUES
 -- and three entities: DRC as HPD, South Sudan as HPS and the terminal as
 -- HTW. Named columns, because the live table now has one more column than
 -- a positional VALUES list was written for.
+-- THE OPERATOR'S AFFILIATE SCRIPT, MIRRORED (Build Prompt 45 prerequisite):
+-- DRC was HPD and South Sudan was HPS; the script corrects them to HPC and
+-- HSS. The codes are what the country tabs draw, so they are read from here
+-- rather than compiled into a component.
 INSERT OR IGNORE INTO affiliates
 (affiliate_id, affiliate_code, affiliate_name, country_id, active, created_at, extract_code) VALUES
 ('AFF-KE','HPK','Hass Petroleum Kenya','CTR-KE',1,CURRENT_TIMESTAMP,'KE'),
@@ -77,8 +81,8 @@ INSERT OR IGNORE INTO affiliates
 ('AFF-TZ','HPT','Hass Petroleum Tanzania','CTR-TZ',1,CURRENT_TIMESTAMP,'TZ'),
 ('AFF-RW','HPR','Hass Petroleum Rwanda','CTR-RW',1,CURRENT_TIMESTAMP,'RW'),
 ('AFF-ZM','HPZ','Hass Petroleum Zambia','CTR-ZM',1,CURRENT_TIMESTAMP,'ZM'),
-('AFF-CD','HPD','Hass Petroleum DRC','CTR-CD',1,CURRENT_TIMESTAMP,'DRC'),
-('AFF-SS','HPS','Hass Petroleum South Sudan','CTR-SS',1,CURRENT_TIMESTAMP,'SSD'),
+('AFF-CD','HPC','Hass Petroleum DRC','CTR-CD',1,CURRENT_TIMESTAMP,'DRC'),
+('AFF-SS','HSS','Hass Petroleum South Sudan','CTR-SS',1,CURRENT_TIMESTAMP,'SSD'),
 ('AFF-TW','HTW','Hass Terminal','CTR-KE',1,CURRENT_TIMESTAMP,'TERMINAL');
 
 INSERT OR IGNORE INTO business_units VALUES
@@ -340,15 +344,19 @@ INSERT OR IGNORE INTO sla_profiles VALUES
 INSERT OR IGNORE INTO sla_rules VALUES
 ('SLAR-001','SLAP-002','Customer case first response','CASE','FIRST_RESPONSE','HIGH',60,45,'CAL-KE',1,0,60,1),
 ('SLAR-002','SLAP-001','Lead first contact','LEAD','FIRST_CONTACT',NULL,120,90,'CAL-KE',1,0,120,1),
--- THE OPERATOR'S TARGETS SCRIPT, MIRRORED (Build Prompt 44 prerequisite): the
--- three active SALES_ORDER rules are finance and credit at 30 minutes with a
--- 25-minute warning, and loading authority at 90 with a warning of 75, all
--- business hours only against the Kenya calendar's 08:00-17:00 day. Finance
--- and credit share a value today; that is a coincidence of configuration and
--- each is read separately, so changing one never moves the other.
+-- THE OPERATOR'S TARGETS SCRIPT, MIRRORED (Build Prompt 45 prerequisite): all
+-- three active SALES_ORDER rules now sit at 30 minutes with a 25-minute
+-- warning, business hours only against the Kenya calendar's 08:00-17:00 day.
+-- Loading authority came down from 90 in Build Prompt 45, so every approval
+-- function in the system carries the same number.
+--
+-- THEY SHARE A VALUE AND ARE STILL READ SEPARATELY, which is the one thing
+-- three equal numbers make impossible to see: code that reads one target and
+-- draws it three times looks identical to code that reads three. Moving one
+-- rule must move one line, and a test holds that.
 ('SLAR-003','SLAP-004','SO finance approval','SALES_ORDER','FINANCE_APPROVAL',NULL,30,25,'CAL-KE',1,0,30,1),
 ('SLAR-004','SLAP-004','SO credit approval','SALES_ORDER','CREDIT_APPROVAL',NULL,30,25,'CAL-KE',1,0,30,1),
-('SLAR-SO-LA','SLAP-004','SO loading authority','SALES_ORDER','LOADING_AUTHORITY',NULL,90,75,'CAL-KE',1,0,90,1),
+('SLAR-SO-LA','SLAP-004','SO loading authority','SALES_ORDER','LOADING_AUTHORITY',NULL,30,25,'CAL-KE',1,0,30,1),
 -- THE OPERATOR'S SLA SCRIPT, MIRRORED (Build Prompt 43 prerequisite): the old
 -- 180-minute stage rule is deactivated and the one active PURCHASE_ORDER rule
 -- is SLAR-PO-30 — 30-minute target, 25-minute warning, business hours only,

@@ -64,6 +64,16 @@ const {
 } = Astro.props;
 
 const functions = board?.functions ?? [];
+/**
+ * COLLAPSED ON LOAD, LIKE THE PANEL BESIDE IT. Three function rows open the
+ * panel rather than eight, which is what makes both panels a short list of
+ * headers and lets their heights fall out of the layout instead of a pixel
+ * value. The approvers are in this markup already — the board returns both
+ * grains from one statement — so opening one fetches nothing, and the open
+ * set rides in the URL so a view can be shared.
+ */
+const expanded = new Set(Astro.url.searchParams.getAll('laRow'));
+const keyOf = (fn: string): string => fn.replace(/[^A-Za-z0-9_-]/g, '-');
 const labelOf = (fn: string): string =>
   LOADING_AUTHORITY_FUNCTIONS.find((f) => f.key === fn)?.label ?? fn;
 
@@ -105,10 +115,20 @@ const href = (row: LaStat, view: 'completed' | 'typical' | 'breaches'): string =
 /** A person the extract never named. The work is attributed to nobody. */
 const named = (row: LaStat): string =>
   row.isPerson ? (row.person ?? 'Not recorded') : labelOf(row.fn);
+/**
+ * ZERO AND UNKNOWN ARE DIFFERENT FACTS AND MUST NOT SHARE A RENDERING.
+ *
+ * A function that completed nothing this period has a count of ZERO, and zero
+ * is a number: it renders `0`, plain, and opens nothing, because a link to an
+ * empty list is worse than the number it replaced. A value nobody has told us
+ * — a target that is not configured — is UNKNOWN, and renders an em dash.
+ * The one thing neither may be is a sentence pretending to be a figure.
+ */
+const empty = (row: LaStat): boolean => row.volume === 0;
 const timeOf = (row: LaStat): string =>
-  row.medianMinutes === null ? 'No completions' : formatDuration(row.medianMinutes);
+  empty(row) ? '0' : row.medianMinutes === null ? '—' : formatDuration(row.medianMinutes);
 const countOf = (row: LaStat): string =>
-  row.targetMinutes === null ? '—' : `${row.overTarget}/${row.volume}`;
+  row.targetMinutes === null ? '—' : empty(row) ? '0' : `${row.overTarget}/${row.volume}`;
 const says = (row: LaStat, what: string): string =>
   `${what} for ${named(row)}${row.isPerson ? `, ${labelOf(row.fn)}` : ''}`;
 
@@ -159,13 +179,18 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
         const current = country.affiliateId === selected;
         const open = country.volume > 0 && (lockedBy === null || country.affiliateId === lockedBy);
         if (!open && !current) {
+          // GREYED AND UNSELECTABLE SAYS IT. A phrase repeating "nothing in
+          // this period" beside all seven empty tabs is the same fact said
+          // seven times; the state carries it, and the full name still
+          // reaches a screen reader through the accessible name.
           return (
             <span
               class="cursor-not-allowed rounded-cms px-2 py-1 text-cms-caption text-cms-muted"
               aria-disabled="true"
+              title={country.name}
+              aria-label={country.name}
             >
-              {country.name}
-              <span class="sr-only">, nothing in this period</span>
+              {country.code}
             </span>
           );
         }
@@ -173,6 +198,8 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
           <a
             href={tabHref(country.affiliateId)}
             aria-current={current ? 'true' : undefined}
+            title={country.name}
+            aria-label={country.name}
             class:list={[
               'rounded-cms px-2 py-1 text-cms-caption outline-none focus-visible:ring-2 focus-visible:ring-focus',
               current
@@ -180,7 +207,7 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
                 : 'text-cms-ink hover:bg-cms-ink-100',
             ]}
           >
-            {country.name}
+            {country.code}
           </a>
         );
       })
@@ -195,13 +222,18 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
 
   {
     everyRow.length === 0 ? (
-      <p class="py-6 text-center text-cms-body-sm text-cms-muted">No completions this month</p>
+      <p class="py-6 text-center text-cms-body-sm text-cms-muted">No countries are configured.</p>
     ) : (
       <ol class="flex flex-col">
         {functions.map((row) => (
           <li class="border-b border-cms-line py-1 last:border-0">
-            {[row, ...(board?.people.get(row.fn) ?? [])].map((entry) => (
-              <div class={`${ROW} py-0.5`}>
+            {[row, ...(board?.people.get(row.fn) ?? [])].map((entry, index) => (
+              <div
+                class={`${ROW} py-0.5`}
+                id={index === 0 ? undefined : `la-${keyOf(row.fn)}-${index}`}
+                hidden={index > 0 && !expanded.has(row.fn)}
+                data-la-panel={index === 0 ? undefined : keyOf(row.fn)}
+              >
                 {entry.isPerson ? (
                   entry.userId === null ? (
                     <span class="truncate ps-4 text-cms-caption text-cms-muted">
@@ -217,13 +249,36 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
                     </a>
                   )
                 ) : (
-                  <a
-                    href={href(entry, 'completed')}
-                    class:list={['truncate text-cms-body-sm font-semibold text-cms-ink', LINK]}
-                    aria-label={says(entry, 'Orders')}
-                  >
-                    {named(entry)}
-                  </a>
+                  <div class="flex min-w-0 items-center gap-1">
+                    <button
+                      type="button"
+                      data-la-toggle={keyOf(entry.fn)}
+                      data-la-fn={entry.fn}
+                      aria-expanded={expanded.has(entry.fn) ? 'true' : 'false'}
+                      aria-controls={(board?.people.get(entry.fn) ?? [])
+                        .map((_, at) => `la-${keyOf(entry.fn)}-${at + 1}`)
+                        .join(' ')}
+                      aria-label={`${labelOf(entry.fn)}, approvers`}
+                      class="flex h-5 w-4 shrink-0 items-center justify-center rounded-cms text-cms-muted outline-none hover:bg-cms-ink-100 hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      <span data-la-caret aria-hidden="true" class="text-[0.6rem] select-none">
+                        {expanded.has(entry.fn) ? '▼' : '▶'}
+                      </span>
+                    </button>
+                    {empty(entry) ? (
+                      <span class="truncate text-cms-body-sm font-semibold text-cms-ink">
+                        {named(entry)}
+                      </span>
+                    ) : (
+                      <a
+                        href={href(entry, 'completed')}
+                        class:list={['truncate text-cms-body-sm font-semibold text-cms-ink', LINK]}
+                        aria-label={says(entry, 'Orders')}
+                      >
+                        {named(entry)}
+                      </a>
+                    )}
+                  </div>
                 )}
 
                 <div
@@ -250,19 +305,30 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
                   />
                 </div>
 
-                <a
-                  href={href(entry, 'typical')}
-                  class:list={[
-                    'text-right tabular-nums',
-                    entry.isPerson
-                      ? 'text-cms-caption text-cms-ink'
-                      : 'text-cms-body-sm font-semibold text-cms-ink',
-                    LINK,
-                  ]}
-                  aria-label={says(entry, timeOf(entry))}
-                >
-                  {timeOf(entry)}
-                </a>
+                {empty(entry) ? (
+                  <span
+                    class:list={[
+                      'text-right text-cms-muted tabular-nums',
+                      entry.isPerson ? 'text-cms-caption' : 'text-cms-body-sm font-semibold',
+                    ]}
+                  >
+                    {timeOf(entry)}
+                  </span>
+                ) : (
+                  <a
+                    href={href(entry, 'typical')}
+                    class:list={[
+                      'text-right tabular-nums',
+                      entry.isPerson
+                        ? 'text-cms-caption text-cms-ink'
+                        : 'text-cms-body-sm font-semibold text-cms-ink',
+                      LINK,
+                    ]}
+                    aria-label={says(entry, timeOf(entry))}
+                  >
+                    {timeOf(entry)}
+                  </a>
+                )}
 
                 {entry.targetMinutes === null ? (
                   <span
@@ -394,3 +460,36 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
     </div>
   </details>
 </figure>
+
+<script>
+  /**
+   * The caret's lifecycle: flip the approver rows, mirror the URL.
+   *
+   * The rows are already on the page — nothing is fetched — and the flip is a
+   * `hidden` toggle, instant by construction, so reduced motion needs no
+   * special case. replaceState keeps an expanded view shareable without
+   * growing history one entry per press.
+   */
+  const chart = document.querySelector<HTMLElement>('[data-cms-la-chart]');
+  chart?.addEventListener('click', (event) => {
+    const toggle = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-la-toggle]');
+    if (!toggle) return;
+    const key = toggle.dataset.laToggle ?? '';
+    const rows = chart.querySelectorAll<HTMLElement>(`[data-la-panel="${key}"]`);
+    if (rows.length === 0) return;
+    const open = rows[0]!.hidden;
+    for (const row of rows) row.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const caret = toggle.querySelector('[data-la-caret]');
+    if (caret) caret.textContent = open ? '\u25bc' : '\u25b6';
+    const url = new URL(window.location.href);
+    const keys = new Set(url.searchParams.getAll('laRow'));
+    // The function's own name, as the server reads it back out of ?laRow=.
+    const name = toggle.dataset.laFn ?? '';
+    if (open) keys.add(name);
+    else keys.delete(name);
+    url.searchParams.delete('laRow');
+    for (const entry of keys) url.searchParams.append('laRow', entry);
+    window.history.replaceState(window.history.state, '', url);
+  });
+</script>
