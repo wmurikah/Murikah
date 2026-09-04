@@ -862,6 +862,18 @@ export async function approvalTrend(
 export const RECORD_VIEWS = ['completed', 'typical', 'tail', 'breaches', 'pending'] as const;
 export type RecordView = (typeof RECORD_VIEWS)[number];
 
+/**
+ * WHICH CLOCK THE FIGURE THAT OPENED THIS LIST WAS READ ON.
+ *
+ * The approver chart's figures are working-day minutes, because that is what
+ * the rule measures; the leaderboard's are wall clock, because that is what
+ * it has always shown. A list must rank, cut and judge on the SAME clock as
+ * the figure that opened it or the count stops matching, so the clock travels
+ * in the URL rather than being inferred from the process.
+ */
+export const RECORD_CLOCKS = ['ELAPSED', 'WORKING'] as const;
+export type RecordClock = (typeof RECORD_CLOCKS)[number];
+
 export interface ApprovalRecord {
   readonly entityId: string | null;
   readonly documentNumber: string | null;
@@ -871,8 +883,21 @@ export interface ApprovalRecord {
   /** The two timestamps the duration was computed from, so it can be checked. */
   readonly startedAt: string | null;
   readonly completedAt: string | null;
+  /** The wall clock: start to finish, whatever the hour. */
   readonly minutes: number | null;
+  /**
+   * The same span counted inside the working day, where a purchase order rule
+   * configures one. Null on sales orders and wherever no rule resolves.
+   *
+   * BOTH ARE CARRIED, NEITHER IS BLENDED. They are different measurements of
+   * the same span and the page prints them in separate columns under separate
+   * headings, because a figure that silently switches clock is a figure
+   * nobody can check.
+   */
+  readonly workingMinutes: number | null;
   readonly targetMinutes: number | null;
+  /** The process-wide target from the active rule, where one resolves. */
+  readonly ruleTargetMinutes: number | null;
   /** True, false, or null where the function has no configured target. */
   readonly withinTarget: boolean | null;
   /** Marked on the `typical` view: the row the median was read at. */
@@ -906,6 +931,8 @@ export async function approvalRecords(
    * chart never links here with one for it.
    */
   productGroup: string | null = null,
+  /** The clock the figure was read on. Purchase orders only. */
+  clock: RecordClock = 'ELAPSED',
 ): Promise<ApprovalRecord[]> {
   const person = actor.kind === 'PERSON';
   // AN EMPTY FUNCTION MEANS EVERY FUNCTION IN THE PROCESS, which is what the
@@ -914,6 +941,11 @@ export async function approvalRecords(
   // person" is a question no figure on the page asks — and the parameter is
   // dropped from the bind rather than left unused, because an argument a
   // statement never mentions is refused by the driver.
+  // An empty function is every function: the approver chart's figures are a
+  // person across every level they touched, and the panel's headline figure is
+  // everybody across every function. The parameter is dropped from the bind
+  // rather than left unused, because an argument a statement never mentions is
+  // refused by the driver.
   const everyFunction = fn === '';
   const group = process === 'PURCHASE_ORDER' ? productGroup : null;
   const args = {
@@ -935,14 +967,17 @@ export async function approvalRecords(
   // of rows — the exact class of defect where a figure and its own list
   // disagree. A group-chart figure's partition is person and group (and level
   // where expanded), so a group filter joins the partition too.
-  const partition =
-    group !== null && person
-      ? everyFunction
-        ? 'd.user_id, d.grp'
-        : 'd.user_id, d.grp, d.fn'
-      : person
-        ? 'd.fn, d.user_id'
-        : 'd.fn';
+  const partition = person
+    ? [
+        'd.user_id',
+        ...(group === null ? [] : ['d.grp']),
+        // AND NOT BY FUNCTION WHERE THE FIGURE WAS NOT. An approver's figure
+        // on the chart is a median over every level they touched, so a
+        // partition that still split by level would mark the wrong median row
+        // and cut the tail at the wrong index.
+        ...(everyFunction ? [] : ['d.fn']),
+      ].join(', ')
+    : 'd.fn';
   const who = person ? ' AND ranked.user_id IS :uid' : '';
   const inGroup = group === null ? '' : ' AND ranked.grp = :grp';
 
@@ -966,13 +1001,27 @@ export async function approvalRecords(
     return rowsOf(found).map((row) => toRecord(row, false));
   }
 
+  // THE SAME EXPRESSIONS THE BOARD USES, so a figure and its list cannot
+  // judge against different windows. Sales orders have no rule and no
+  // working-day clock, so their statement is exactly what it has always been.
+  const isPo = process === 'PURCHASE_ORDER';
+  const withClock = isPo
+    ? `WITH ${PO_CAL_CTE},
+    d AS (SELECT src.*, cal.target AS rule_target, ${WORKING_MINUTES} AS acc
+            FROM (${sourceFor(process)}) src CROSS JOIN cal),`
+    : `WITH d AS (${sourceFor(process)}),`;
+  // The measure is the clock the figure was read on. Everything downstream —
+  // the rank, the median marker, the tail index, the breach test and the
+  // order — reads this one expression, so they cannot disagree with it.
+  const measure = isPo && clock === 'WORKING' ? 'd.acc' : 'd.minutes';
+
   const ranked = `
-    WITH d AS (${sourceFor(process)}),
+    ${withClock}
     ranked AS (
       SELECT d.*,
-             ROW_NUMBER() OVER (PARTITION BY ${partition} ORDER BY d.minutes) AS rn,
+             ROW_NUMBER() OVER (PARTITION BY ${partition} ORDER BY ${measure}) AS rn,
              COUNT(*) OVER (PARTITION BY ${partition}) AS n
-        FROM d WHERE d.minutes IS NOT NULL
+        FROM d WHERE ${measure} IS NOT NULL
     )
     SELECT ranked.*,
            CASE WHEN ranked.rn IN ((ranked.n + 1) / 2, (ranked.n + 2) / 2) THEN 1 ELSE 0 END
@@ -980,16 +1029,23 @@ export async function approvalRecords(
       FROM ranked
      WHERE ${everyFunction ? '1 = 1' : 'ranked.fn = :fn'}${who}${inGroup}`;
 
+  // WHICH TARGET A BREACH IS A BREACH OF. A purchase order is judged by the
+  // one active process rule, which is what the chart's count over target
+  // counts; every other function keeps its own stage target. Written as one
+  // expression so the list and the count cannot pick different rules.
+  const ranks = measure.replace('d.', 'ranked.');
+  const breachTarget = isPo ? 'ranked.rule_target' : 'ranked.target_minutes';
   const where =
     view === 'tail'
       ? ' AND ranked.rn >= (ranked.n * 9 + 9) / 10'
       : view === 'breaches'
-        ? ' AND ranked.target_minutes IS NOT NULL AND ranked.minutes > ranked.target_minutes'
+        ? ` AND ${breachTarget} IS NOT NULL AND ${ranks} > ${breachTarget}`
         : '';
-  // The tail reads slowest first, because the question it answers is which
-  // orders made the tail. Everything else reads fastest first, so the median
-  // marker sits where a reader expects to find it.
-  const order = view === 'tail' ? ' ORDER BY ranked.minutes DESC' : ' ORDER BY ranked.minutes';
+  // The tail and the breaches read slowest first, because the question each
+  // answers is which orders they are. Everything else reads fastest first, so
+  // the median marker sits where a reader expects to find it.
+  const order =
+    view === 'tail' || view === 'breaches' ? ` ORDER BY ${ranks} DESC` : ` ORDER BY ${ranks}`;
 
   const found = await db.execute({ sql: `${ranked}${where}${order}`, args });
   return rowsOf(found).map((row) => toRecord(row, num(row.is_median) === 1));
@@ -997,7 +1053,14 @@ export async function approvalRecords(
 
 function toRecord(row: Record<string, unknown>, isMedian: boolean): ApprovalRecord {
   const minutes = maybe(row.minutes);
-  const target = maybe(row.target_minutes);
+  const working = maybe(row.acc);
+  const ruleTarget = maybe(row.rule_target);
+  // A RULE JUDGES ITS OWN CLOCK. Where the purchase order rule resolves, the
+  // verdict is the working-day duration against the rule's target, because
+  // that is what the rule measures. Everything else keeps the stage target
+  // against the wall clock, which is what it has always measured.
+  const target = ruleTarget ?? maybe(row.target_minutes);
+  const judged = ruleTarget === null ? minutes : working;
   return {
     entityId: maybeText(row.entity_id),
     documentNumber: maybeText(row.document_number),
@@ -1007,14 +1070,16 @@ function toRecord(row: Record<string, unknown>, isMedian: boolean): ApprovalReco
     startedAt: maybeText(row.started_at),
     completedAt: maybeText(row.completed_at),
     minutes,
+    workingMinutes: working,
     targetMinutes: target,
-    withinTarget: target === null || minutes === null ? null : minutes <= target,
+    ruleTargetMinutes: ruleTarget,
+    withinTarget: target === null || judged === null ? null : judged <= target,
     isMedian,
   };
 }
 
 /* -------------------------------------------------------------------------
- * THE PURCHASE ORDER CHART: PERSON, THEN PRODUCT GROUP
+ * THE PURCHASE ORDER CHART: ONE ROW PER APPROVER, PRODUCTS BENEATH
  * ------------------------------------------------------------------------- */
 
 /**
@@ -1022,18 +1087,24 @@ function toRecord(row: Record<string, unknown>, isMedian: boolean): ApprovalReco
  * it: the active PURCHASE_ORDER rule, with the calendar window it counts.
  *
  * READ, NEVER HARD-CODED. Where no active rule exists this returns null, the
- * chart draws no target line, and the page says so in one line — a missing
- * target and a met target must not look alike.
+ * chart draws no line and colours no bar, and the page says so in one line —
+ * there is nothing to be over, and a missing target must not be able to look
+ * like a met one.
  */
 export interface PoApprovalRule {
   readonly ruleId: string;
   readonly targetMinutes: number;
   readonly warningMinutes: number | null;
   readonly businessHoursOnly: boolean;
-  /** "08:00" / "17:00", from the rule's own business calendar. */
+  /** "08:00" / "17:00", from the rule's own calendar. */
   readonly workdayStart: string;
   readonly workdayEnd: string;
 }
+
+/** The one active rule, chosen once and reused by every expression below. */
+const PO_RULE_PICK = `FROM sla_rules r
+   WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
+   ORDER BY r.sla_rule_id LIMIT 1`;
 
 const PO_RULE_SQL = `
   SELECT r.sla_rule_id, r.target_minutes, r.warning_minutes, r.business_hours_only,
@@ -1058,63 +1129,80 @@ export async function poApprovalRule(db: Client): Promise<PoApprovalRule | null>
 }
 
 /**
- * One row of the person-and-product chart, at either grain.
+ * One row of the chart, at either grain.
  *
- * TWO CLOCKS, NEVER MIXED. `elapsed*` is wall clock, start to finish — what
- * the business experienced. `accountable*` counts only the rule's business
- * window (08:00–17:00 on the configured calendar), each calendar day, because
- * the rule sets business_hours_only and that is what the target judges. Every
- * figure names its clock on the page; nothing here averages the two.
+ * ONE CLOCK ON THE PANEL, AND IT IS THE ONE THE RULE MEASURES. The rule sets
+ * business_hours_only on an 08:00–17:00 calendar, so `minutes` here counts
+ * only time inside the working day. The wall clock is not carried to the
+ * panel at all: it lives in the drill-down, beside this one and labelled,
+ * where a reader who wants it has asked for it.
  *
- * The over-target counts are absolute — `16 / 21`, not a percentage — because
- * 5 of 5 and 16 of 21 are different claims a rate would blur.
+ * `overTarget` is an absolute count against `volume` — `13 / 16`, never a
+ * percentage, because 5 of 5 and 13 of 16 are different claims a rate blurs.
  */
-export interface ApproverGroupStat {
+export interface ApproverStat {
   readonly userId: string | null;
   /** Null where the extract's approver was never mapped to a person. */
   readonly person: string | null;
-  readonly group: string;
-  /** Null on the person-and-group grain; the level on the expanded grain. */
-  readonly levelOrder: number | null;
-  readonly levelName: string | null;
+  /** Null on a person row; the product group on a product row. */
+  readonly group: string | null;
   readonly volume: number;
-  readonly elapsedMedianMinutes: number | null;
-  readonly accountableMedianMinutes: number | null;
-  /** How many exceeded the target, on each clock. Zero when no rule resolves. */
-  readonly elapsedOverTarget: number;
-  readonly accountableOverTarget: number;
-  /** Accountable minutes past the warning but within the target: at risk. */
-  readonly accountableAtRisk: number;
+  /** The median inside the working day. Null where no rule resolves. */
+  readonly medianMinutes: number | null;
+  /** How many exceeded the target. Zero where no rule resolves. */
+  readonly overTarget: number;
+  /** Past the warning but inside the target: the third bar state. */
+  readonly atRisk: number;
 }
 
-export interface ApproverGroupBoard {
-  readonly rule: PoApprovalRule | null;
-  /** Person-and-group rows, ordered by elapsed median, slowest first. */
-  readonly rows: ApproverGroupStat[];
-  /** The levels behind each row, keyed `${userId ?? ''}|${group}`. */
-  readonly levels: ReadonlyMap<string, ApproverGroupStat[]>;
+export interface ApproverBoard {
+  /** One row per approver, slowest first. */
+  readonly people: ApproverStat[];
+  /** The product groups behind each person, keyed by user id, slowest first. */
+  readonly groups: ReadonlyMap<string, ApproverStat[]>;
 }
 
 /**
- * The accountable clock, in SQL: minutes inside the business window between
- * two stamps. Each stamp is clamped into [start, end] of its own day; whole
- * days between contribute one window each. The window arrives from the active
- * rule's calendar as the `cal` CTE, so a change to the calendar reaches this
- * figure with no code change — and with NO rule, the window is null and so is
- * every accountable figure, which is the honest answer.
+ * The clock inside the working day, in SQL: minutes between two stamps that
+ * fall within the rule's window. Each stamp is clamped into [start, end] of
+ * its own day; whole days between contribute one window each. The window
+ * arrives from the active rule's calendar, so a change to the calendar
+ * reaches this figure with no code change — and with NO rule the window is
+ * null and so is every figure computed from it, which is the honest answer.
  */
 const clampSql = (stamp: string): string =>
   `MIN(MAX(CAST(strftime('%H', ${stamp}) AS INTEGER) * 60
            + CAST(strftime('%M', ${stamp}) AS INTEGER) - cal.s, 0), cal.w)`;
 
-const ACCOUNTABLE = `
-  CASE WHEN cal.s IS NULL THEN NULL
-       ELSE CAST(ROUND(julianday(date(src.completed_at)) - julianday(date(src.started_at)))
-                 AS INTEGER) * cal.w
-            + ${clampSql('src.completed_at')} - ${clampSql('src.started_at')} END`;
+/** The working-day duration of one row of a source aliased `src`. */
+const WORKING_CALC = `
+  CAST(ROUND(julianday(date(src.completed_at)) - julianday(date(src.started_at)))
+       AS INTEGER) * cal.w
+  + ${clampSql('src.completed_at')} - ${clampSql('src.started_at')}`;
 
-const APPROVER_GROUP_SQL = `
-  WITH cal AS (
+/** Null where no rule configures a window, because there is none to count. */
+const WORKING_MINUTES = `CASE WHEN cal.s IS NULL THEN NULL ELSE ${WORKING_CALC} END`;
+
+/**
+ * THE CLOCK THE PANEL PLOTS, WHICH IS ONE CLOCK OR THE OTHER AND NEVER A
+ * BLEND OF THEM. Where the rule configures a working day, every figure on
+ * the panel is minutes inside it, because that is what the target judges.
+ * Where no rule resolves there is no window to count inside and nothing to
+ * be over, so the panel falls back to the wall clock WHOLESALE — every
+ * figure, the axis and the drill-downs together — and its definition control
+ * says which clock it is showing. What must never happen is one figure on
+ * one clock beside another figure on the other.
+ */
+const PANEL_MINUTES = `CASE WHEN cal.s IS NULL THEN src.minutes ELSE ${WORKING_CALC} END`;
+
+/**
+ * The active rule as four scalars, for any statement that needs them.
+ *
+ * Written once and used by both the board and the record lists, so a figure
+ * and the list behind it cannot end up judging against different windows.
+ */
+const PO_CAL_CTE = `
+  cal AS (
     SELECT (SELECT CAST(substr(c.workday_start, 1, 2) AS INTEGER) * 60
                    + CAST(substr(c.workday_start, 4, 2) AS INTEGER)
               FROM sla_rules r
@@ -1129,116 +1217,97 @@ const APPROVER_GROUP_SQL = `
               JOIN business_calendars c ON c.business_calendar_id = r.business_calendar_id
              WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
              ORDER BY r.sla_rule_id LIMIT 1) AS w,
-           (SELECT r.target_minutes FROM sla_rules r
-             WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
-             ORDER BY r.sla_rule_id LIMIT 1) AS target,
-           (SELECT r.warning_minutes FROM sla_rules r
-             WHERE r.entity_type = 'PURCHASE_ORDER' AND r.active = 1
-             ORDER BY r.sla_rule_id LIMIT 1) AS warning
-  ),
+           (SELECT r.target_minutes ${PO_RULE_PICK}) AS target,
+           (SELECT r.warning_minutes ${PO_RULE_PICK}) AS warning
+  )`;
+
+/**
+ * BOTH GRAINS IN ONE STATEMENT, because Home's budget is measured in round
+ * trips and expanding a person must not cost one. The person grain is
+ * computed over ALL of that person's approvals — never as a median of the
+ * three product medians, which is a different and wrong number.
+ */
+const APPROVER_BOARD_SQL = `
+  WITH ${PO_CAL_CTE},
   d AS (
     SELECT src.*, cal.target AS rule_target, cal.warning AS rule_warning,
-           ${ACCOUNTABLE} AS acc
+           ${PANEL_MINUTES} AS acc
       FROM (${PO_SOURCE}) src CROSS JOIN cal
      WHERE src.minutes IS NOT NULL
   ),
   ranked AS (
     SELECT d.*,
-           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp ORDER BY d.minutes) AS e2,
-           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp ORDER BY d.acc) AS a2,
-           COUNT(*) OVER (PARTITION BY d.user_id, d.grp) AS n2,
-           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp, d.ord ORDER BY d.minutes) AS e3,
-           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp, d.ord ORDER BY d.acc) AS a3,
-           COUNT(*) OVER (PARTITION BY d.user_id, d.grp, d.ord) AS n3
+           ROW_NUMBER() OVER (PARTITION BY d.user_id ORDER BY d.acc) AS p1,
+           COUNT(*) OVER (PARTITION BY d.user_id) AS n1,
+           ROW_NUMBER() OVER (PARTITION BY d.user_id, d.grp ORDER BY d.acc) AS p2,
+           COUNT(*) OVER (PARTITION BY d.user_id, d.grp) AS n2
       FROM d
   )
-  SELECT 0 AS is_level, ranked.user_id, MAX(ranked.person) AS person, ranked.grp,
-         NULL AS level_order, NULL AS level_name,
+  SELECT 0 AS is_group, ranked.user_id, MAX(ranked.person) AS person, NULL AS grp,
          COUNT(*) AS volume,
-         AVG(CASE WHEN ranked.e2 IN ((ranked.n2 + 1) / 2, (ranked.n2 + 2) / 2)
-                  THEN ranked.minutes END) AS elapsed_median,
-         AVG(CASE WHEN ranked.a2 IN ((ranked.n2 + 1) / 2, (ranked.n2 + 2) / 2)
-                  THEN ranked.acc END) AS accountable_median,
-         SUM(CASE WHEN ranked.rule_target IS NOT NULL
-                   AND ranked.minutes > ranked.rule_target THEN 1 ELSE 0 END) AS elapsed_over,
+         AVG(CASE WHEN ranked.p1 IN ((ranked.n1 + 1) / 2, (ranked.n1 + 2) / 2)
+                  THEN ranked.acc END) AS median_minutes,
          SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.acc IS NOT NULL
-                   AND ranked.acc > ranked.rule_target THEN 1 ELSE 0 END) AS accountable_over,
+                   AND ranked.acc > ranked.rule_target THEN 1 ELSE 0 END) AS over_target,
          SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.rule_warning IS NOT NULL
-                   AND ranked.acc IS NOT NULL
-                   AND ranked.acc > ranked.rule_warning
-                   AND ranked.acc <= ranked.rule_target THEN 1 ELSE 0 END) AS accountable_risk
+                   AND ranked.acc IS NOT NULL AND ranked.acc > ranked.rule_warning
+                   AND ranked.acc <= ranked.rule_target THEN 1 ELSE 0 END) AS at_risk
     FROM ranked
-   GROUP BY ranked.user_id, ranked.grp
+   GROUP BY ranked.user_id
 
   UNION ALL
 
-  SELECT 1 AS is_level, ranked.user_id, MAX(ranked.person) AS person, ranked.grp,
-         ranked.ord AS level_order, ranked.fn AS level_name,
+  SELECT 1 AS is_group, ranked.user_id, MAX(ranked.person) AS person, ranked.grp,
          COUNT(*) AS volume,
-         AVG(CASE WHEN ranked.e3 IN ((ranked.n3 + 1) / 2, (ranked.n3 + 2) / 2)
-                  THEN ranked.minutes END) AS elapsed_median,
-         AVG(CASE WHEN ranked.a3 IN ((ranked.n3 + 1) / 2, (ranked.n3 + 2) / 2)
-                  THEN ranked.acc END) AS accountable_median,
-         SUM(CASE WHEN ranked.rule_target IS NOT NULL
-                   AND ranked.minutes > ranked.rule_target THEN 1 ELSE 0 END) AS elapsed_over,
+         AVG(CASE WHEN ranked.p2 IN ((ranked.n2 + 1) / 2, (ranked.n2 + 2) / 2)
+                  THEN ranked.acc END) AS median_minutes,
          SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.acc IS NOT NULL
-                   AND ranked.acc > ranked.rule_target THEN 1 ELSE 0 END) AS accountable_over,
+                   AND ranked.acc > ranked.rule_target THEN 1 ELSE 0 END) AS over_target,
          SUM(CASE WHEN ranked.rule_target IS NOT NULL AND ranked.rule_warning IS NOT NULL
-                   AND ranked.acc IS NOT NULL
-                   AND ranked.acc > ranked.rule_warning
-                   AND ranked.acc <= ranked.rule_target THEN 1 ELSE 0 END) AS accountable_risk
+                   AND ranked.acc IS NOT NULL AND ranked.acc > ranked.rule_warning
+                   AND ranked.acc <= ranked.rule_target THEN 1 ELSE 0 END) AS at_risk
     FROM ranked
-   GROUP BY ranked.user_id, ranked.grp, ranked.ord, ranked.fn`;
+   GROUP BY ranked.user_id, ranked.grp`;
 
 /**
- * The purchase order chart's data: one bar per approver per product group,
- * with each bar's levels behind it — BOTH GRAINS IN ONE STATEMENT, because
- * Home's budget is measured in round trips and the drill-down must not cost
- * one. The group grain is computed over ALL of a person's durations in the
- * group, never as a median of level medians, which is a different and wrong
- * number.
+ * The chart's data: one row per approver, with their product groups behind
+ * them, both ordered slowest first because the reader wants the problem at
+ * the top.
  *
- * Rows come back ordered by elapsed median, slowest first — the reader wants
- * the problem at the top — with the over-target count and the person's name
- * breaking ties so the order is stable.
+ * THE PERSON'S FIGURE IS A TRUE MEDIAN OVER ALL THEIR APPROVALS, not a
+ * volume-weighted mean of their product medians. Both are defensible; this
+ * one is the same KIND of number as the rows beneath it, and — the deciding
+ * argument — it is a number that exists in the list the figure opens. The
+ * `typical` destination marks the row the median was read at, so a reader who
+ * clicks 29 min finds the 29-minute record marked. A weighted mean of medians
+ * lands between records and would mark none of them.
  */
-export async function approverGroupBoard(
-  db: Client,
-  scope: ApprovalScope,
-): Promise<Omit<ApproverGroupBoard, 'rule'>> {
-  const found = await db.execute({ sql: APPROVER_GROUP_SQL, args: windowArgs(scope) });
-  const toStat = (row: Record<string, unknown>): ApproverGroupStat => ({
+export async function approverBoard(db: Client, scope: ApprovalScope): Promise<ApproverBoard> {
+  const found = await db.execute({ sql: APPROVER_BOARD_SQL, args: windowArgs(scope) });
+  const toStat = (row: Record<string, unknown>): ApproverStat => ({
     userId: maybeText(row.user_id),
     person: maybeText(row.person),
-    group: text(row.grp),
-    levelOrder: maybe(row.level_order),
-    levelName: maybeText(row.level_name),
+    group: maybeText(row.grp),
     volume: num(row.volume),
-    elapsedMedianMinutes: maybe(row.elapsed_median),
-    accountableMedianMinutes: maybe(row.accountable_median),
-    elapsedOverTarget: num(row.elapsed_over),
-    accountableOverTarget: num(row.accountable_over),
-    accountableAtRisk: num(row.accountable_risk),
+    medianMinutes: maybe(row.median_minutes),
+    overTarget: num(row.over_target),
+    atRisk: num(row.at_risk),
   });
   const all = rowsOf(found).map(toStat);
-  const rows = all
-    .filter((row) => row.levelOrder === null)
-    .sort(
-      (a, b) =>
-        (b.elapsedMedianMinutes ?? -1) - (a.elapsedMedianMinutes ?? -1) ||
-        b.elapsedOverTarget - a.elapsedOverTarget ||
-        (a.person ?? '~').localeCompare(b.person ?? '~'),
-    );
-  const levels = new Map<string, ApproverGroupStat[]>();
+  // Slowest first, with the breach count and then the name breaking ties, so
+  // the order is stable rather than incidental.
+  const slowestFirst = (a: ApproverStat, b: ApproverStat) =>
+    (b.medianMinutes ?? -1) - (a.medianMinutes ?? -1) ||
+    b.overTarget - a.overTarget ||
+    (a.person ?? '~').localeCompare(b.person ?? '~');
+  const people = all.filter((row) => row.group === null).sort(slowestFirst);
+  const groups = new Map<string, ApproverStat[]>();
   for (const row of all) {
-    if (row.levelOrder === null) continue;
-    const key = `${row.userId ?? ''}|${row.group}`;
-    levels.set(
-      key,
-      [...(levels.get(key) ?? []), row].sort((a, b) => (a.levelOrder ?? 0) - (b.levelOrder ?? 0)),
-    );
+    if (row.group === null) continue;
+    const key = row.userId ?? '';
+    groups.set(key, [...(groups.get(key) ?? []), row].sort(slowestFirst));
   }
-  return { rows, levels };
+  return { people, groups };
 }
 
 export { TARGET_SQL };

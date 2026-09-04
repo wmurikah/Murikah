@@ -1,0 +1,402 @@
+---
+/**
+ * The purchase order approval panel: one row per approver, products beneath.
+ *
+ * WHY THIS SHAPE. Four bars by level answered which step is slow and averaged
+ * the best approver in the business into the worst. One row per person ranks
+ * the people; the products behind a person say whether a slow person is slow
+ * everywhere or slow at one thing — the same approver can run fast on fuel
+ * and slowly on lubricants, which is a product problem rather than a person
+ * problem. Seven people open the panel, not fifteen rows.
+ *
+ * FOUR THINGS ACROSS, AND NOTHING ELSE: name, bar, time, and how many of
+ * that approver's approvals ran past the target. The state words are gone
+ * deliberately. The bar crosses a marked line or it does not, and a word
+ * repeating that beside every bar tells a reader what they are looking at. The measure, its
+ * window and the rule it comes from are one press away in the definition
+ * control rather than printed under every chart.
+ *
+ * ONE CLOCK HERE. Every figure on this panel is minutes inside the working
+ * day, because that is what the rule judges. The wall clock is not on the
+ * panel at all: it sits in the drill-down beside this one, labelled, where a
+ * reader who wants it has asked for it.
+ *
+ * EVERY FIGURE OPENS ITS OWN RECORDS, the count included — `13 / 16` raises
+ * exactly one question, which is which thirteen, and the click answers it.
+ *
+ * EXPANSION IS SERVER-RENDERED AND IN THE URL. The product rows are in this
+ * markup already, so expanding fetches nothing; the caret flips `hidden`,
+ * which has no animation to suppress under prefers-reduced-motion, and
+ * mirrors itself into `?poRow=` so an expanded view can be shared.
+ */
+import CmsDefinition from './CmsDefinition.astro';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import { approvalRecordsHref } from '@/lib/cms/analytics/leaderboard';
+import type { ApproverStat, PoApprovalRule } from '@/lib/cms/repos/approvalSla';
+import type { ResolvedPeriod } from '@/lib/cms/analytics/period';
+
+interface Props {
+  people: ApproverStat[];
+  groups: ReadonlyMap<string, ApproverStat[]>;
+  rule: PoApprovalRule | null;
+  period: ResolvedPeriod;
+  affiliateId: string | null;
+  coverage: string;
+}
+const { people, groups, rule, period, affiliateId, coverage } = Astro.props;
+
+const keyOf = (row: ApproverStat): string => row.userId ?? 'none';
+const expanded = new Set(Astro.url.searchParams.getAll('poRow'));
+
+/**
+ * The scale ends past the slowest bar and past the target, so the dashed rule
+ * is always on the chart even when every approver is inside it.
+ */
+const most = Math.max(
+  rule?.targetMinutes ?? 0,
+  ...people.map((row) => row.medianMinutes ?? 0),
+  ...[...groups.values()].flat().map((row) => row.medianMinutes ?? 0),
+  1,
+);
+const scale = most * 1.08;
+const pct = (minutes: number | null): number =>
+  minutes === null ? 0 : Math.max(Math.min((minutes / scale) * 100, 100), 0.5);
+const targetPct = rule === null ? null : (rule.targetMinutes / scale) * 100;
+
+/**
+ * The bar's colour, which is the SECOND carrier and never the only one. The
+ * primary signal is where the bar ends against the dashed rule, and that
+ * survives greyscale, a colour-blind reader and a printed page. With no rule
+ * there is no line, so nothing is coloured: there is nothing to be over.
+ */
+const fillOf = (row: ApproverStat): string => {
+  const minutes = row.medianMinutes;
+  if (rule === null || minutes === null) return 'bg-cms-ink-400';
+  if (minutes > rule.targetMinutes) return 'bg-cms-negative';
+  if (rule.warningMinutes !== null && minutes > rule.warningMinutes) return 'bg-cms-caution';
+  return 'bg-cms-positive';
+};
+
+/** The three destinations behind a row's three figures. */
+const href = (row: ApproverStat, view: 'completed' | 'typical' | 'breaches'): string =>
+  approvalRecordsHref({
+    period,
+    affiliateId,
+    process: 'PURCHASE_ORDER',
+    view,
+    fn: '',
+    actor: { kind: 'PERSON', userId: row.userId },
+    productGroup: row.group,
+    clock: rule === null ? 'ELAPSED' : 'WORKING',
+  });
+
+const named = (row: ApproverStat): string => row.person ?? 'Not recorded';
+const timeOf = (row: ApproverStat): string =>
+  row.medianMinutes === null ? 'Not measured' : formatDuration(row.medianMinutes);
+/** What a figure opens, said once for the reader who cannot see the bar. */
+const says = (row: ApproverStat, what: string): string =>
+  `${what} for ${named(row)}${row.group === null ? '' : `, ${row.group}`}`;
+
+const LINK =
+  'rounded-cms underline-offset-2 outline-none hover:underline focus-visible:ring-2 ' +
+  'focus-visible:ring-focus';
+/** Four columns, identical at both grains, so the eye reads straight down. */
+const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_3.5rem] items-center gap-3';
+---
+
+<figure class="rounded-cms-lg bg-cms-surface p-4" data-cms-po-chart>
+  <figcaption class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+    <h3 class="flex items-center gap-1 text-cms-body font-semibold text-cms-ink">
+      Purchase order approval
+      <span class="font-normal text-cms-muted">(minutes)</span>
+      <CmsDefinition
+        label="purchase order approval turnaround"
+        definition={rule === null
+          ? 'The median time an approver takes, over the period shown. No approval target is ' +
+            'configured, so no line is drawn and no bar is judged.'
+          : `The median time an approver takes, counted inside the working day (` +
+            `${rule.workdayStart} to ${rule.workdayEnd}) because that is the window the target ` +
+            `is set against. The target is ${rule.targetMinutes} minutes and the warning level ` +
+            `${rule.warningMinutes ?? 'is not set'}, from rule ${rule.ruleId}. The whole span, ` +
+            `whatever the hour, is in the records behind every figure.`}
+        denominator={coverage}
+        dateBasis="The timestamp the approval completed at."
+      />
+    </h3>
+    <span class="text-cms-caption text-cms-muted">{coverage}</span>
+  </figcaption>
+
+  {
+    /*
+      The text alternative: what the chart says, for a reader who cannot see
+      where a bar ends.
+    */
+  }
+  <p class="sr-only">
+    Median approval minutes per approver, slowest first, over {coverage}. Each approver expands to
+    their product groups.
+    {
+      rule === null
+        ? 'No approval target is configured.'
+        : `The target is ${rule.targetMinutes} minutes; a count beside each row is how many of that approver's approvals took longer.`
+    }
+  </p>
+
+  {
+    /*
+      THE TARGET, MARKED ONCE. The dashed rule runs down every row; its value
+      is written at the head of it rather than beside each bar, which is the
+      repetition this panel exists to be rid of.
+    */
+  }
+  {
+    rule !== null && people.length > 0 && (
+      <div class={ROW}>
+        <span />
+        <div class="relative h-4 min-w-0">
+          <span
+            class="absolute top-0 -translate-x-1/2 rounded-cms bg-cms-surface px-1 text-cms-caption font-medium text-cms-ink-700 tabular-nums"
+            style={`left:${targetPct}%`}
+          >
+            {formatDuration(rule.targetMinutes)}
+          </span>
+        </div>
+        <span />
+        <span />
+      </div>
+    )
+  }
+
+  {
+    people.length === 0 ? (
+      <p class="py-6 text-center text-cms-body-sm text-cms-muted">No completions this month</p>
+    ) : (
+      <ol class="flex flex-col">
+        {people.map((row) => {
+          const key = keyOf(row);
+          const open = expanded.has(key);
+          const panelId = `po-row-${key.replace(/[^A-Za-z0-9_-]/g, '-')}`;
+          const mine = groups.get(row.userId ?? '') ?? [];
+          return (
+            <li class="border-b border-cms-line py-1.5 last:border-0">
+              <div class={ROW}>
+                <div class="flex min-w-0 items-center gap-1">
+                  <button
+                    type="button"
+                    data-po-toggle={key}
+                    aria-expanded={open ? 'true' : 'false'}
+                    aria-controls={panelId}
+                    aria-label={`${named(row)}, product groups`}
+                    class="flex h-6 w-5 shrink-0 items-center justify-center rounded-cms text-cms-muted outline-none hover:bg-cms-ink-100 hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    <span data-po-caret aria-hidden="true" class="text-[0.6rem] select-none">
+                      {open ? '▼' : '▶'}
+                    </span>
+                  </button>
+                  <a
+                    href={href(row, 'completed')}
+                    class:list={['truncate text-cms-body-sm font-medium text-cms-ink', LINK]}
+                    aria-label={says(row, 'Approvals')}
+                  >
+                    {named(row)}
+                  </a>
+                </div>
+
+                <div class="relative h-6 min-w-0 rounded-sm bg-cms-sunken">
+                  {targetPct !== null && (
+                    <span
+                      aria-hidden="true"
+                      class="absolute inset-y-0 border-l-2 border-dashed border-cms-ink-700"
+                      style={`left:${targetPct}%`}
+                    />
+                  )}
+                  <span
+                    aria-hidden="true"
+                    class:list={['absolute top-1 bottom-1 left-0 rounded-e-sm', fillOf(row)]}
+                    style={`width:${pct(row.medianMinutes)}%`}
+                  />
+                </div>
+
+                <a
+                  href={href(row, 'typical')}
+                  class:list={[
+                    'text-right text-cms-body-sm font-semibold text-cms-ink tabular-nums',
+                    LINK,
+                  ]}
+                  aria-label={says(row, timeOf(row))}
+                >
+                  {timeOf(row)}
+                </a>
+
+                <a
+                  href={href(row, 'breaches')}
+                  class:list={['text-right text-cms-body-sm text-cms-ink tabular-nums', LINK]}
+                  aria-label={says(
+                    row,
+                    rule === null
+                      ? `${row.volume} approvals`
+                      : `${row.overTarget} of ${row.volume} past the target`,
+                  )}
+                >
+                  {rule === null ? row.volume : `${row.overTarget}/${row.volume}`}
+                </a>
+              </div>
+
+              {/*
+                  THE PRODUCTS, ALREADY HERE. Server-rendered from the same
+                  statement as the row above, hidden until the caret is
+                  pressed, never fetched.
+                */}
+              <ol id={panelId} hidden={!open} class="mt-1 mb-1 flex flex-col">
+                {mine.map((product) => (
+                  <li class={`${ROW} py-1`}>
+                    <a
+                      href={href(product, 'completed')}
+                      class:list={['truncate ps-6 text-cms-caption text-cms-muted', LINK]}
+                      aria-label={says(product, 'Approvals')}
+                    >
+                      {product.group}
+                    </a>
+                    <div class="relative h-4 min-w-0 rounded-sm bg-cms-sunken">
+                      {targetPct !== null && (
+                        <span
+                          aria-hidden="true"
+                          class="absolute inset-y-0 border-l-2 border-dashed border-cms-ink-700"
+                          style={`left:${targetPct}%`}
+                        />
+                      )}
+                      <span
+                        aria-hidden="true"
+                        class:list={[
+                          'absolute top-0.5 bottom-0.5 left-0 rounded-e-sm',
+                          fillOf(product),
+                        ]}
+                        style={`width:${pct(product.medianMinutes)}%`}
+                      />
+                    </div>
+                    <a
+                      href={href(product, 'typical')}
+                      class:list={['text-right text-cms-caption text-cms-ink tabular-nums', LINK]}
+                      aria-label={says(product, timeOf(product))}
+                    >
+                      {timeOf(product)}
+                    </a>
+                    <a
+                      href={href(product, 'breaches')}
+                      class:list={['text-right text-cms-caption text-cms-ink tabular-nums', LINK]}
+                      aria-label={says(
+                        product,
+                        rule === null
+                          ? `${product.volume} approvals`
+                          : `${product.overTarget} of ${product.volume} past the target`,
+                      )}
+                    >
+                      {rule === null ? product.volume : `${product.overTarget}/${product.volume}`}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </li>
+          );
+        })}
+      </ol>
+    )
+  }
+
+  {/* A BARE AXIS: where the scale starts and where it ends. Nothing else. */}
+  <div class={`${ROW} mt-1`}>
+    <span></span>
+    <div class="relative h-4 min-w-0 text-cms-caption text-cms-muted tabular-nums">
+      <span class="absolute start-0 top-0">0</span>
+      <span class="absolute end-0 top-0">{formatDuration(Math.round(scale))}</span>
+    </div>
+    <span></span>
+    <span></span>
+  </div>
+
+  {/* The table equivalent: every figure, at both grains, without the bars. */}
+  <details class="mt-3 border-t border-cms-line pt-2">
+    <summary
+      class="cursor-pointer rounded-cms text-cms-body-sm font-medium text-cms-royal outline-none select-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      View as a table
+    </summary>
+    <div class="mt-2 overflow-x-auto">
+      <table class="w-full text-cms-body-sm">
+        <caption class="sr-only">
+          Purchase order approval medians by approver, then by product group
+        </caption>
+        <thead>
+          <tr class="border-b border-cms-line text-left text-cms-caption text-cms-muted">
+            <th scope="col" class="py-1.5 pr-3 font-medium">Approver</th>
+            <th scope="col" class="py-1.5 pr-3 font-medium">Product</th>
+            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Approvals</th>
+            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Median</th>
+            <th scope="col" class="py-1.5 text-right font-medium">Past target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            people.map((row) => (
+              <>
+                <tr class="border-b border-cms-line">
+                  <th scope="row" class="py-1.5 pr-3 text-left font-medium text-cms-ink">
+                    {named(row)}
+                  </th>
+                  <td class="py-1.5 pr-3 text-cms-muted">All products</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{row.volume}</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(row)}</td>
+                  <td class="py-1.5 text-right tabular-nums">
+                    {row.overTarget}/{row.volume}
+                  </td>
+                </tr>
+                {(groups.get(row.userId ?? '') ?? []).map((product) => (
+                  <tr class="border-b border-cms-line last:border-0">
+                    <td class="py-1.5 ps-3 pr-3 text-cms-muted">{named(row)}</td>
+                    <td class="py-1.5 pr-3 text-cms-ink">{product.group}</td>
+                    <td class="py-1.5 pr-3 text-right tabular-nums">{product.volume}</td>
+                    <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(product)}</td>
+                    <td class="py-1.5 text-right tabular-nums">
+                      {product.overTarget}/{product.volume}
+                    </td>
+                  </tr>
+                ))}
+              </>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </details>
+</figure>
+
+<script>
+  /**
+   * The caret's lifecycle: flip the panel, mirror the URL.
+   *
+   * The product rows are already on the page — nothing is fetched — and the
+   * flip is a `hidden` toggle, which is instant by construction, so reduced
+   * motion needs no special case. replaceState keeps an expanded view
+   * shareable without growing history one entry per press.
+   */
+  const chart = document.querySelector<HTMLElement>('[data-cms-po-chart]');
+  chart?.addEventListener('click', (event) => {
+    const toggle = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-po-toggle]');
+    if (!toggle) return;
+    const key = toggle.dataset.poToggle ?? '';
+    const panel = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    if (!panel) return;
+    const open = panel.hidden;
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const caret = toggle.querySelector('[data-po-caret]');
+    if (caret) caret.textContent = open ? '▼' : '▶';
+    const url = new URL(window.location.href);
+    const keys = new Set(url.searchParams.getAll('poRow'));
+    if (open) keys.add(key);
+    else keys.delete(key);
+    url.searchParams.delete('poRow');
+    for (const entry of keys) url.searchParams.append('poRow', entry);
+    window.history.replaceState(window.history.state, '', url);
+  });
+</script>
