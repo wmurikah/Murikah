@@ -73,6 +73,8 @@ const functions = board?.functions ?? [];
  * set rides in the URL so a view can be shared.
  */
 const expanded = new Set(Astro.url.searchParams.getAll('laRow'));
+/** The visually hidden data table this chart is described by. */
+const tableId = 'la-chart-table';
 const keyOf = (fn: string): string => fn.replace(/[^A-Za-z0-9_-]/g, '-');
 const labelOf = (fn: string): string =>
   LOADING_AUTHORITY_FUNCTIONS.find((f) => f.key === fn)?.label ?? fn;
@@ -148,7 +150,11 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
     country has one more approver.
   */
 }
-<figure class="flex flex-1 flex-col rounded-cms-lg bg-cms-surface p-4" data-cms-la-chart>
+<figure
+  class="flex flex-1 flex-col rounded-cms-lg bg-cms-surface p-4"
+  data-cms-la-chart
+  aria-describedby={tableId}
+>
   <figcaption class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
     <h3 class="flex items-center gap-1 text-cms-body font-semibold text-cms-ink">
       Loading Authority
@@ -405,60 +411,71 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
     )
   }
 
-  <details class="mt-3 border-t border-cms-line pt-2">
-    <summary
-      class="cursor-pointer rounded-cms text-cms-body-sm font-medium text-cms-royal outline-none select-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-    >
-      View as a table
-    </summary>
-    <div class="mt-2 overflow-x-auto">
-      <table class="w-full text-cms-body-sm">
-        <caption class="sr-only">Loading Authority medians by function, then by approver</caption>
-        <thead>
-          <tr class="border-b border-cms-line text-left text-cms-caption text-cms-muted">
-            <th scope="col" class="py-1.5 pr-3 font-medium">Function</th>
-            <th scope="col" class="py-1.5 pr-3 font-medium">Approver</th>
-            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Orders</th>
-            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Median</th>
-            <th scope="col" class="py-1.5 pr-3 text-right font-medium">Target</th>
-            <th scope="col" class="py-1.5 text-right font-medium">Past target</th>
-          </tr>
-        </thead>
-        <tbody>
-          {
-            functions.map((row) => (
-              <>
-                <tr class="border-b border-cms-line">
-                  <th scope="row" class="py-1.5 pr-3 text-left font-medium text-cms-ink">
-                    {labelOf(row.fn)}
-                  </th>
-                  <td class="py-1.5 pr-3 text-cms-muted">All approvers</td>
-                  <td class="py-1.5 pr-3 text-right tabular-nums">{row.volume}</td>
-                  <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(row)}</td>
+  {
+    /*
+      THE TABLE EQUIVALENT, AND IT IS NOT A CONTROL.
+
+      The visible toggle that used to open this table is gone, exactly as it
+      went from the purchase order panel: every figure on this chart is
+      already drillable, so it was a second route to the same records and one
+      more thing to decide about.
+
+      WHAT IT IS NOT IS THE ACCESSIBILITY EQUIVALENT, and that stays. A screen
+      reader cannot read a bar, so the same figures are here in a real
+      <table>, visually hidden and named by its own caption. It is exposed by
+      `aria-describedby` on the figure — reachable and readable in the reading
+      order, and never announced twice, because everything above it that
+      carries the same number is either a link with its own accessible name or
+      `aria-hidden` scenery.
+    */
+  }
+  <div id={tableId} class="sr-only">
+    <table>
+      <caption>Loading Authority medians by function, then by approver</caption>
+      <thead>
+        <tr class="border-b border-cms-line text-left text-cms-caption text-cms-muted">
+          <th scope="col" class="py-1.5 pr-3 font-medium">Function</th>
+          <th scope="col" class="py-1.5 pr-3 font-medium">Approver</th>
+          <th scope="col" class="py-1.5 pr-3 text-right font-medium">Orders</th>
+          <th scope="col" class="py-1.5 pr-3 text-right font-medium">Median</th>
+          <th scope="col" class="py-1.5 pr-3 text-right font-medium">Target</th>
+          <th scope="col" class="py-1.5 text-right font-medium">Past target</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          functions.map((row) => (
+            <>
+              <tr class="border-b border-cms-line">
+                <th scope="row" class="py-1.5 pr-3 text-left font-medium text-cms-ink">
+                  {labelOf(row.fn)}
+                </th>
+                <td class="py-1.5 pr-3 text-cms-muted">All approvers</td>
+                <td class="py-1.5 pr-3 text-right tabular-nums">{row.volume}</td>
+                <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(row)}</td>
+                <td class="py-1.5 pr-3 text-right tabular-nums">
+                  {row.targetMinutes === null ? '—' : formatDuration(row.targetMinutes)}
+                </td>
+                <td class="py-1.5 text-right tabular-nums">{countOf(row)}</td>
+              </tr>
+              {(board?.people.get(row.fn) ?? []).map((entry) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="py-1.5 ps-3 pr-3 text-cms-muted">{labelOf(row.fn)}</td>
+                  <td class="py-1.5 pr-3 text-cms-ink">{named(entry)}</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{entry.volume}</td>
+                  <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(entry)}</td>
                   <td class="py-1.5 pr-3 text-right tabular-nums">
-                    {row.targetMinutes === null ? '—' : formatDuration(row.targetMinutes)}
+                    {entry.targetMinutes === null ? '—' : formatDuration(entry.targetMinutes)}
                   </td>
-                  <td class="py-1.5 text-right tabular-nums">{countOf(row)}</td>
+                  <td class="py-1.5 text-right tabular-nums">{countOf(entry)}</td>
                 </tr>
-                {(board?.people.get(row.fn) ?? []).map((entry) => (
-                  <tr class="border-b border-cms-line last:border-0">
-                    <td class="py-1.5 ps-3 pr-3 text-cms-muted">{labelOf(row.fn)}</td>
-                    <td class="py-1.5 pr-3 text-cms-ink">{named(entry)}</td>
-                    <td class="py-1.5 pr-3 text-right tabular-nums">{entry.volume}</td>
-                    <td class="py-1.5 pr-3 text-right tabular-nums">{timeOf(entry)}</td>
-                    <td class="py-1.5 pr-3 text-right tabular-nums">
-                      {entry.targetMinutes === null ? '—' : formatDuration(entry.targetMinutes)}
-                    </td>
-                    <td class="py-1.5 text-right tabular-nums">{countOf(entry)}</td>
-                  </tr>
-                ))}
-              </>
-            ))
-          }
-        </tbody>
-      </table>
-    </div>
-  </details>
+              ))}
+            </>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
 </figure>
 
 <script>
