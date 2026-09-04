@@ -498,32 +498,37 @@ test('a KPI links to a queue only where the two count the same thing', () => {
 
 // ---- Home ------------------------------------------------------------------
 
-test('Home discloses the deeper analysis and deletes none of it', () => {
+test('Home is two charts, and what it dropped is named rather than moved', () => {
   const page = read('src/pages/cms/app/index.astro');
-  assert.match(page, /<CmsMoreDetail id="purchases">/);
-  assert.match(page, /<CmsMoreDetail id="sales">/);
-  // Both trends are still inside the disclosure — as geometry-matched
-  // skeleton slots the fragment fills on first expansion, so the queries no
-  // longer run for a panel nobody opened.
-  assert.match(page, /data-cms-home-trend="PURCHASE_ORDER"/);
-  assert.match(page, /data-cms-home-trend="SALES_ORDER"/);
-  assert.match(page, /title="Purchase order turnaround trend"/);
-  assert.match(page, /title="Loading Authority turnaround trend"/);
-  // Both leaderboards stay server-rendered: their data rides the board query
-  // the visible bars already pay for, so deferring them would save nothing.
-  assert.equal((page.match(/<CmsApprovalLeaderboard/g) ?? []).length, 2);
-  // And still COMPUTED: a disclosure is not an excuse to stop measuring. The
-  // fragment carries the same queries and the same chart titles.
+  // BUILD PROMPT 47 REMOVED THE "MORE DETAILS" DISCLOSURE FROM BOTH PANELS.
+  // Every figure on both charts is already a link to the records behind it,
+  // so the dropdown was a second route to the same place — and a control a
+  // reader had to open before knowing whether it was worth opening.
+  assert.ok(!/<CmsMoreDetail/.test(page), 'the disclosure is back on Home');
+  assert.ok(!/data-cms-home-trend/.test(page), 'the trend is back on Home');
+  assert.ok(!/<CmsApprovalLeaderboard/.test(page), 'a leaderboard is back on Home');
+
+  // NOTHING WAS RELOCATED, which was the instruction. What was inside it —
+  // the twelve-month turnaround trend and the approvers leaderboard — is now
+  // on no page at all, and both are named in the report for a decision about
+  // where they belong. The components and the fragment behind them are
+  // untouched, so putting either back is a render rather than a rebuild.
   const fragment = read('src/pages/cms/app/fragments/home-trend.astro');
   assert.match(fragment, /approvalTrend\(client, 'PURCHASE_ORDER', scope, 'MONTH'\)/);
   assert.match(fragment, /approvalTrend\(client, 'SALES_ORDER', scope, 'MONTH'\)/);
   assert.match(fragment, /title="Purchase order turnaround trend"/);
   assert.match(fragment, /title="Loading Authority turnaround trend"/);
-  // The headline figures stay in the first view, outside the disclosure. The
-  // purchase order bars are the approver-and-product chart now, and it sits
-  // above the first More detail, not inside it.
-  const firstDetail = page.indexOf('<CmsMoreDetail');
-  assert.ok(page.slice(0, firstDetail).includes('<CmsApproverChart'), 'the bars were hidden');
+  assert.match(
+    read('src/components/cms/CmsApprovalLeaderboard.astro'),
+    /Ranked from \{MINIMUM_RANKED_VOLUME\}/,
+    'the leaderboard component was deleted rather than unrendered',
+  );
+
+  // The charts themselves stay in the first view, purchase orders first.
+  assert.ok(
+    page.indexOf('<CmsApproverChart') < page.indexOf('<CmsLoadingAuthorityChart'),
+    'the panels swapped places',
+  );
 });
 
 test('the Home disclosure remembers per browser and adds no schema', () => {
