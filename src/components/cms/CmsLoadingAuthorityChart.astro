@@ -370,26 +370,6 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
 
   {
     /*
-      THE AXIS, PINNED TO THE FOOT so the two panels' baselines line up. It
-      names "target per function" rather than a number, because the three
-      lines sit at three different places.
-    */
-  }
-  <div class={`${ROW} mt-auto pt-2`}>
-    <span></span>
-    <div class="min-w-0 text-cms-caption text-cms-muted">
-      <div class="flex items-baseline justify-between tabular-nums">
-        <span>0</span>
-        <span>{formatDuration(Math.round(scale))}</span>
-      </div>
-      <p class="text-center">target per function</p>
-    </div>
-    <span></span>
-    <span></span>
-  </div>
-
-  {
-    /*
       THE ONE SENTENCE THIS PANEL IS ALLOWED, and it appears only where a
       function has no rule to be judged by — the case a reader cannot see,
       because unjudged and met look identical once the colour is gone. It sits
