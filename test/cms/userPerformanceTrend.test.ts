@@ -55,10 +55,13 @@ test('a user trend reuses the configured target and existing series palette', ()
   assert.equal(chart.table.rows[0]![1], '1 h 4 min · 1 completion');
 });
 
-test('Loading Authority trend is one entity series with null months and completion context', () => {
+test('Loading Authority trend renders affiliate series with null months and completion context', () => {
   const chart = buildLoadingAuthorityTrend({
     year: 2026,
-    entity: 'HPK',
+    entities: [
+      { affiliateId: 'AFF-KE', code: 'HPK' },
+      { affiliateId: 'AFF-UG', code: 'HPU' },
+    ],
     targetMinutes: 30,
     points: [
       {
@@ -70,7 +73,10 @@ test('Loading Authority trend is one entity series with null months and completi
       },
     ],
   });
-  assert.deepEqual(chart.legend, [{ name: 'HPK Loading Authority', token: 'cms-series-1' }]);
+  assert.deepEqual(chart.legend, [
+    { name: 'HPK', token: 'cms-series-1' },
+    { name: 'HPU', token: 'cms-series-2' },
+  ]);
   assert.equal(chart.table.rows[0]![1], 'Not available');
   assert.equal(chart.table.rows[7]![1], '1 h 15 min · 2 completions');
   assert.match(chart.svg, /HPK\nAugust 2026\nAverage: 1 h 15 min\nCompletions: 2/);
