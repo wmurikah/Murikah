@@ -411,6 +411,7 @@ const PO_SOURCE = `
          ws.sequence_no AS ord,
          wi.entity_id AS entity_id,
          po.document_number AS document_number,
+         po.affiliate_id AS affiliate_id,
          COALESCE(nat.grp, '${UNGROUPED}') AS grp,
          wsi.assigned_user_id AS user_id,
          COALESCE(u.display_name, u.email) AS person,
@@ -876,6 +877,64 @@ export async function approvalTrend(
       medianMinutes: maybe(row.median_minutes),
     }))
     .sort((a, b) => (a.order !== b.order ? a.order - b.order : a.bucket.localeCompare(b.bucket)));
+}
+
+/** One user's transaction-weighted average in one calendar month. */
+export interface UserTrendPoint {
+  readonly affiliateId: string | null;
+  readonly userId: string;
+  readonly person: string;
+  readonly bucket: string;
+  readonly volume: number;
+  readonly averageMinutes: number;
+}
+
+/**
+ * Monthly user performance from the same transaction rows as the Home bars.
+ *
+ * AVG is applied directly to individual durations after grouping by user and
+ * month. Product is deliberately absent from the grouping, so a product with
+ * two transactions never receives the same weight as one with twenty. Sales
+ * order milestones that record no actor are excluded: the Loading Authority
+ * workflow can attribute finance and credit approvals to people, but the
+ * imported invoice and authority timestamps cannot honestly be assigned to a
+ * user.
+ */
+export async function userApprovalTrend(
+  db: Client,
+  process: ApprovalProcess,
+  scope: ApprovalScope,
+): Promise<UserTrendPoint[]> {
+  const purchase = process === 'PURCHASE_ORDER';
+  const sql = purchase
+    ? `WITH ${PO_CAL_CTE}, source AS (${PO_SOURCE}),
+         d AS (
+           SELECT source.*, ${PANEL_MINUTES.replaceAll('src.', 'source.')} AS measured_minutes
+             FROM source CROSS JOIN cal
+         )
+       SELECT d.affiliate_id, d.user_id, MAX(d.person) AS person,
+              substr(d.completed_at, 1, 7) AS bucket,
+              COUNT(d.measured_minutes) AS volume,
+              AVG(d.measured_minutes) AS average_minutes
+         FROM d
+        WHERE d.user_id IS NOT NULL AND d.measured_minutes IS NOT NULL
+        GROUP BY d.affiliate_id, d.user_id, substr(d.completed_at, 1, 7)`
+    : `WITH d AS (${SO_SOURCE})
+       SELECT d.affiliate_id, d.user_id, MAX(d.person) AS person,
+              substr(d.completed_at, 1, 7) AS bucket,
+              COUNT(d.minutes) AS volume, AVG(d.minutes) AS average_minutes
+         FROM d
+        WHERE d.user_id IS NOT NULL AND d.minutes IS NOT NULL
+        GROUP BY d.affiliate_id, d.user_id, substr(d.completed_at, 1, 7)`;
+  const found = await db.execute({ sql, args: windowArgs(scope) });
+  return rowsOf(found).map((row) => ({
+    affiliateId: maybeText(row.affiliate_id),
+    userId: text(row.user_id),
+    person: text(row.person),
+    bucket: text(row.bucket),
+    volume: num(row.volume),
+    averageMinutes: num(row.average_minutes),
+  }));
 }
 
 /* -------------------------------------------------------------------------

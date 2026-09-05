@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  buildUserPerformanceTrend,
+  USER_TREND_MONTHS,
+} from '../../src/lib/cms/analytics/userPerformanceTrend.ts';
+
+test('a user trend always spans Jan to Dec and preserves missing months as null', () => {
+  const chart = buildUserPerformanceTrend({
+    year: 2026,
+    noun: 'approvals',
+    emptyMessage: 'No approval history available for this period.',
+    points: [
+      {
+        affiliateId: null,
+        userId: 'USR-1',
+        person: 'Test Approver',
+        bucket: '2026-04',
+        volume: 18,
+        averageMinutes: 42,
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    chart.table.rows.map((row) => row[0]),
+    USER_TREND_MONTHS,
+  );
+  assert.equal(chart.table.rows[0]![1], 'Not available');
+  assert.equal(chart.table.rows[3]![1], '42 min · 18 approvals');
+  assert.match(chart.svg, /Test Approver\nApril 2026\nAverage: 42 min\nApprovals: 18/);
+});
+
+test('a user trend reuses the configured target and existing series palette', () => {
+  const chart = buildUserPerformanceTrend({
+    year: 2026,
+    noun: 'completions',
+    targetMinutes: 30,
+    emptyMessage: 'No completion history available for this period.',
+    points: [
+      {
+        affiliateId: 'AFF-KE',
+        userId: 'USR-1',
+        person: 'Test User',
+        bucket: '2026-01',
+        volume: 1,
+        averageMinutes: 64,
+      },
+    ],
+  });
+
+  assert.match(chart.svg, /Target · 30 min/);
+  assert.deepEqual(chart.legend, [{ name: 'Test User', token: 'cms-series-1' }]);
+  assert.equal(chart.table.rows[0]![1], '1 h 4 min · 1 completion');
+});
