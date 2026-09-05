@@ -44,6 +44,20 @@ function niceCeiling(maximum: number): number {
 }
 
 /**
+ * Home trend value axes use one duration convention: minutes below one hour,
+ * then total hours and minutes. Do not switch Loading Authority into days;
+ * keeping both cards in the same visual language makes their scales directly
+ * comparable while still letting each chart size itself to its own data.
+ */
+function formatTrendAxisDuration(value: number): string {
+  const minutes = Math.max(0, Math.round(value));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder === 0 ? `${hours} h` : `${hours} h ${remainder} min`;
+}
+
+/**
  * Home trends need a slightly more readable value scale than the shared
  * three-label line-chart frame. Replace only that frame's three value labels
  * with five evenly spaced labels; the shared chart geometry and all plotted
@@ -65,7 +79,7 @@ function withFiveValueTicks(chart: Chart, values: readonly number[]): Chart {
     const y = bottomY + (topY - bottomY) * fraction;
     return (
       `<text x="${x}" y="${Math.round(y * 100) / 100}" text-anchor="end" font-size="11" ` +
-      `fill="var(--color-cms-muted)">${formatDuration(ceiling * fraction)}</text>`
+      `fill="var(--color-cms-muted)">${formatTrendAxisDuration(ceiling * fraction)}</text>`
     );
   }).join('');
 
@@ -124,7 +138,6 @@ export function buildUserPerformanceTrend(options: {
     height: 300,
     categoryName: 'Month',
     xAxisLabel: 'Month',
-    yAxisLabel: 'Minutes',
     endLabels: false,
     emptyMessage: options.emptyMessage,
   });
@@ -178,7 +191,6 @@ export function buildLoadingAuthorityTrend(options: {
     height: 300,
     categoryName: 'Month',
     xAxisLabel: 'Month',
-    yAxisLabel: 'Minutes',
     endLabels: false,
     emptyMessage: 'No Loading Authority history available for this period.',
   });
