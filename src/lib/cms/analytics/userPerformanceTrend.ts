@@ -1,4 +1,10 @@
-import { lineChart, seriesToken, type Chart, type ChartPoint } from '../charts/svg.ts';
+import {
+  lineChart,
+  seriesToken,
+  type Chart,
+  type ChartPoint,
+  type ChartSeries,
+} from '../charts/svg.ts';
 import { formatDuration } from './stats.ts';
 import type { LoadingAuthorityTrendPoint, UserTrendPoint } from '../repos/approvalSla.ts';
 
@@ -17,7 +23,17 @@ const MONTH_NAMES = [
   'November',
   'December',
 ];
-const FIVE_TICKS = [0, 0.25, 0.5, 0.75, 1] as const;
+
+/** Both Home duration trends deliberately share one visual comparison scale. */
+const HOME_AXIS_MAX_MINUTES = 10 * 60;
+/**
+ * The shared SVG renderer chooses pleasant ceilings at 1/2/5/10 steps. Mapping
+ * ten hours to 1000 gives us a stable exact ceiling without changing any other
+ * chart in the application.
+ */
+const HOME_AXIS_INTERNAL_MAX = 1000;
+const HOME_AXIS_SCALE_REFERENCE = '__HOME_10_HOUR_SCALE__';
+const HOUR_TICKS = Array.from({ length: 10 }, (_unused, index) => index + 1);
 const VALUE_TICK =
   /<text x="([^"]+)" y="([^"]+)" text-anchor="end" font-size="11" fill="var\(--color-cms-muted\)">[^<]*<\/text>/g;
 
@@ -34,63 +50,118 @@ function compactUserName(name: string, allNames: readonly string[]): string {
   return `${first} ${last.slice(0, 1)}.`;
 }
 
-/** Keep the same pleasant rounded ceiling as the shared SVG chart renderer. */
-function niceCeiling(maximum: number): number {
-  if (!Number.isFinite(maximum) || maximum <= 0) return 1;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(maximum)));
-  const scaled = maximum / magnitude;
-  const step = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
-  return step * magnitude;
+function axisValue(minutes: number | null): number | null {
+  if (minutes === null) return null;
+  const clipped = Math.min(Math.max(minutes, 0), HOME_AXIS_MAX_MINUTES);
+  return (clipped / HOME_AXIS_MAX_MINUTES) * HOME_AXIS_INTERNAL_MAX;
 }
 
 /**
- * Home trend value axes use one duration convention: minutes below one hour,
- * then total hours and minutes. Do not switch Loading Authority into days;
- * keeping both cards in the same visual language makes their scales directly
- * comparable while still letting each chart size itself to its own data.
+ * Only the plotted position is capped at ten hours. Exact underlying durations
+ * remain in the tooltip, data table and accessible description. An over-scale
+ * isolated point is therefore labelled `10 h+`, never falsely reported as ten
+ * hours exactly.
  */
-function formatTrendAxisDuration(value: number): string {
-  const minutes = Math.max(0, Math.round(value));
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return remainder === 0 ? `${hours} h` : `${hours} h ${remainder} min`;
+function formatAxisPlotValue(value: number | null): string {
+  if (value === null) return 'Not available';
+  if (value >= HOME_AXIS_INTERNAL_MAX) return '10 h+';
+  return formatDuration((value / HOME_AXIS_INTERNAL_MAX) * HOME_AXIS_MAX_MINUTES);
 }
 
+function scaledSeries(series: readonly ChartSeries[]): ChartSeries[] {
+  return series.map((one) => ({
+    ...one,
+    points: one.points.map((point) => ({ ...point, value: axisValue(point.value) })),
+  }));
+}
+
+const escapeAttribute = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
 /**
- * Home trends need a slightly more readable value scale than the shared
- * three-label line-chart frame. Replace only that frame's three value labels
- * with five evenly spaced labels; the shared chart geometry and all plotted
- * coordinates remain untouched.
+ * Replace the generic three-label frame with the one Home comparison axis:
+ * a visible y-axis rule and hourly labels from 1 hr through 10 hrs. The x-axis
+ * baseline remains untouched. No `MINUTES` heading is drawn.
  */
-function withFiveValueTicks(chart: Chart, values: readonly number[]): Chart {
+function withUniformHourAxis(chart: Chart): Chart {
   const matches = [...chart.svg.matchAll(VALUE_TICK)];
   if (matches.length < 3) return chart;
 
   const bottom = matches[0];
   const top = matches[2];
-  const x = bottom?.[1];
-  const bottomY = Number(bottom?.[2]);
-  const topY = Number(top?.[2]);
-  if (x === undefined || !Number.isFinite(bottomY) || !Number.isFinite(topY)) return chart;
+  const labelX = Number(bottom?.[1]);
+  const bottomLabelY = Number(bottom?.[2]);
+  const topLabelY = Number(top?.[2]);
+  if (![labelX, bottomLabelY, topLabelY].every(Number.isFinite)) return chart;
 
-  const ceiling = niceCeiling(Math.max(0, ...values));
-  const replacement = FIVE_TICKS.map((fraction) => {
-    const y = bottomY + (topY - bottomY) * fraction;
+  const axisX = labelX + 8;
+  const bottomY = bottomLabelY - 4;
+  const topY = topLabelY - 4;
+  const axis =
+    `<line data-home-y-axis="true" x1="${axisX}" y1="${topY}" x2="${axisX}" y2="${bottomY}" ` +
+    `stroke="var(--color-cms-line)" stroke-width="1" />`;
+
+  const ticks = HOUR_TICKS.map((hour) => {
+    const fraction = hour / 10;
+    const lineY = bottomY + (topY - bottomY) * fraction;
+    const textY = lineY + 4;
+    const label = hour === 1 ? '1 hr' : `${hour} hrs`;
     return (
-      `<text x="${x}" y="${Math.round(y * 100) / 100}" text-anchor="end" font-size="11" ` +
-      `fill="var(--color-cms-muted)">${formatTrendAxisDuration(ceiling * fraction)}</text>`
+      `<line data-home-y-tick="${hour}" x1="${axisX - 4}" y1="${Math.round(lineY * 100) / 100}" ` +
+      `x2="${axisX}" y2="${Math.round(lineY * 100) / 100}" stroke="var(--color-cms-line)" stroke-width="1" />` +
+      `<text x="${labelX}" y="${Math.round(textY * 100) / 100}" text-anchor="end" font-size="11" ` +
+      `fill="var(--color-cms-muted)">${label}</text>`
     );
   }).join('');
 
   let seen = 0;
-  const svg = chart.svg.replace(VALUE_TICK, (match) => {
+  let svg = chart.svg.replace(VALUE_TICK, (match) => {
     seen += 1;
-    if (seen === 1) return replacement;
+    if (seen === 1) return axis + ticks;
     if (seen <= 3) return '';
     return match;
   });
+
+  // The sentinel reference exists only to force the shared renderer's ceiling
+  // to exactly 1000 internal units. It must never be visible to the reader.
+  svg = svg.replace(/<line [^>]*stroke-dasharray="4 3" \/>/g, '');
+  svg = svg.replace(
+    new RegExp(`<text[^>]*>${HOME_AXIS_SCALE_REFERENCE}<\\/text>`, 'g'),
+    '',
+  );
+
   return { ...chart, svg };
+}
+
+function buildHomeTrendChart(series: ChartSeries[], emptyMessage: string): Chart {
+  const common = {
+    unit: 'minutes',
+    height: 300,
+    categoryName: 'Month',
+    xAxisLabel: 'Month',
+    endLabels: false,
+    emptyMessage,
+  } as const;
+
+  // Build once with exact values for the table/alt text and once with the
+  // presentation scale. This keeps the visual comparison fixed at 10 hours
+  // without changing or truncating the underlying reported durations.
+  const exact = lineChart(series, { ...common, format: formatDuration });
+  const display = lineChart(scaledSeries(series), {
+    ...common,
+    format: formatAxisPlotValue,
+    reference: { value: HOME_AXIS_INTERNAL_MAX, label: HOME_AXIS_SCALE_REFERENCE },
+  });
+  const clean = withUniformHourAxis(display);
+  const svg = clean.svg.replace(
+    /aria-label="[^"]*"/,
+    `aria-label="${escapeAttribute(exact.alt)}"`,
+  );
+  return { ...clean, svg, alt: exact.alt, table: exact.table };
 }
 
 /** Build twelve chronological months; absent transactions remain null points. */
@@ -109,7 +180,7 @@ export function buildUserPerformanceTrend(options: {
   }
 
   const allNames = [...byUser.values()].map((user) => user.name);
-  const series = [...byUser.entries()]
+  const series: ChartSeries[] = [...byUser.entries()]
     .sort(([, a], [, b]) => a.name.localeCompare(b.name))
     .map(([, user], index) => ({
       name: compactUserName(user.name, allNames),
@@ -132,19 +203,7 @@ export function buildUserPerformanceTrend(options: {
       }),
     }));
 
-  const chart = lineChart(series, {
-    unit: 'minutes',
-    format: formatDuration,
-    height: 300,
-    categoryName: 'Month',
-    xAxisLabel: 'Month',
-    endLabels: false,
-    emptyMessage: options.emptyMessage,
-  });
-  return withFiveValueTicks(
-    chart,
-    options.points.map((point) => point.averageMinutes),
-  );
+  return buildHomeTrendChart(series, options.emptyMessage);
 }
 
 export function buildLoadingAuthorityTrend(options: {
@@ -160,7 +219,7 @@ export function buildLoadingAuthorityTrend(options: {
     pointMap.set(point.affiliateId, months);
   }
 
-  const series = [...options.entities]
+  const series: ChartSeries[] = [...options.entities]
     .sort((a, b) => a.code.localeCompare(b.code))
     .map((entity, index) => {
       const byMonth = pointMap.get(entity.affiliateId) ?? new Map<string, LoadingAuthorityTrendPoint>();
@@ -185,19 +244,7 @@ export function buildLoadingAuthorityTrend(options: {
       };
     });
 
-  const chart = lineChart(series, {
-    unit: 'minutes',
-    format: formatDuration,
-    height: 300,
-    categoryName: 'Month',
-    xAxisLabel: 'Month',
-    endLabels: false,
-    emptyMessage: 'No Loading Authority history available for this period.',
-  });
-  return withFiveValueTicks(
-    chart,
-    options.points.map((point) => point.averageMinutes),
-  );
+  return buildHomeTrendChart(series, 'No Loading Authority history available for this period.');
 }
 
 export { MONTHS as USER_TREND_MONTHS };
