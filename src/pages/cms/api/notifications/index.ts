@@ -1,9 +1,8 @@
 /**
  * GET /api/notifications on cms.murikah.com. POST marks all read.
  *
- * Reading your notifications is also an entry into the engine: the SLA
- * sweep and the notification sweep run first, so the list is current the
- * moment it is read rather than waiting for some other trigger.
+ * The list remains available even when the best-effort SLA/reminder refresh
+ * fails. Reading existing notifications must not depend on a separate sweep.
  */
 import type { APIRoute } from 'astro';
 import { requireSignedIn } from '../../../../lib/cms/admin/guard.ts';
@@ -25,8 +24,12 @@ export const GET: APIRoute = async (context) => {
   if ('response' in connection) return connection.response;
   try {
     const now = new Date();
-    await sweepDueSlas(connection.db, now);
-    await sweepNotifications(connection.db, now);
+    try {
+      await sweepDueSlas(connection.db, now);
+      await sweepNotifications(connection.db, now);
+    } catch (refreshError) {
+      console.warn('[cms.notifications.api] refresh skipped', refreshError);
+    }
     const params = context.url.searchParams;
     const page = Number(params.get('page') ?? '1');
     return ok(
