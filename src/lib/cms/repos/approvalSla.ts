@@ -1494,6 +1494,14 @@ export interface LoadingAuthorityBoard {
   readonly targets: ReadonlyMap<string, { target: number | null; warning: number | null }>;
 }
 
+export interface LoadingAuthorityTrendPoint {
+  readonly affiliateId: string;
+  readonly bucket: string;
+  readonly volume: number;
+  readonly averageMinutes: number;
+  readonly targetMinutes: number | null;
+}
+
 /** The three functions, unscoped by affiliate: the tabs need every country. */
 const LA_SOURCE = [
   soStage('Finance approval', 1, 'FINANCE_APPROVAL', false),
@@ -1637,6 +1645,43 @@ const LA_BOARD_SQL = `
          NULL AS median_minutes, ru.target AS target, ru.warning AS warning,
          0 AS over_target, 0 AS at_risk
     FROM rules ru`;
+
+/**
+ * One monthly Loading Authority series per entity, from the exact order-level
+ * source and business-time expression used by the existing panel. There is no
+ * actor in the historical extract, so no person is selected or inferred.
+ */
+export async function loadingAuthorityTrend(
+  db: Client,
+  scope: ApprovalScope,
+): Promise<LoadingAuthorityTrendPoint[]> {
+  const sql = `WITH ${SO_CAL_CTE}, ${SO_RULES_CTE},
+    d AS (
+      SELECT src.*, ru.target AS target,
+             CASE WHEN cal.s IS NULL THEN src.minutes
+                  ELSE CAST(ROUND(julianday(date(src.completed_at))
+                                  - julianday(date(src.started_at))) AS INTEGER) * cal.w
+                       + ${clampSql('src.completed_at')} - ${clampSql('src.started_at')} END AS acc
+        FROM (${LA_SOURCE}) src
+        CROSS JOIN cal
+        LEFT JOIN rules ru ON ru.stage = ${LA_STAGE_OF}
+       WHERE src.fn = 'Loading authority' AND src.minutes IS NOT NULL
+    )
+    SELECT d.affiliate_id, substr(d.completed_at, 1, 7) AS bucket,
+           COUNT(d.acc) AS volume, AVG(d.acc) AS average_minutes,
+           MIN(d.target) AS target_minutes
+      FROM d
+     WHERE d.affiliate_id IS NOT NULL AND d.acc IS NOT NULL
+     GROUP BY d.affiliate_id, substr(d.completed_at, 1, 7)`;
+  const found = await db.execute({ sql, args: { from: scope.from, to: scope.to } });
+  return rowsOf(found).map((row) => ({
+    affiliateId: text(row.affiliate_id),
+    bucket: text(row.bucket),
+    volume: num(row.volume),
+    averageMinutes: num(row.average_minutes),
+    targetMinutes: maybe(row.target_minutes),
+  }));
+}
 
 /**
  * The panel's data: three functions, their approvers, and every country's tab,

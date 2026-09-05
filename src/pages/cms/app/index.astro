@@ -73,6 +73,7 @@ import {
   approvalBoard,
   approverBoard,
   loadingAuthorityBoard,
+  loadingAuthorityTrend,
   poApprovalRule,
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
@@ -84,6 +85,10 @@ import {
   type UserTrendPoint,
 } from '@/lib/cms/repos/approvalSla';
 import { buildUserPerformanceTrend } from '@/lib/cms/analytics/userPerformanceTrend';
+import {
+  buildLoadingAuthorityTrend,
+  buildUserPerformanceTrend,
+} from '@/lib/cms/analytics/userPerformanceTrend';
 import {
   calendarSql,
   choosePeriod,
