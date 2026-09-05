@@ -1,111 +1,57 @@
 ---
-/**
- * The navigation rail, rendered from the navigation model.
- *
- * One component renders every entry in CMS_NAV, filtered by the caller's own
- * permission codes. Access comes from resolved codes and nothing else: no
- * email, no display name, no job title, no department, no employee number, no
- * hard-coded user or role id.
- *
- * IT RENDERS THE SAME MARKUP COLLAPSED AND EXPANDED. The label is always in
- * the DOM; when the rail is 64 pixels wide the panel's `overflow-hidden` clips
- * it out of sight. Clipped text is still in the accessibility tree, so a
- * screen reader reads "Customers" whether or not a sighted user can see the
- * word, and there is no second collapsed variant to drift from this one.
- *
- * THE CURRENT ITEM IS MARKED BY MORE THAN COLOUR: `aria-current="page"`, a
- * filled background, a gold marker down its leading edge, and the label in
- * full white against the rail's muted text. Any one of those alone would fail
- * somebody.
- *
- * THE GROUPS OPEN AND CLOSE, AND THEY DO IT WITHOUT JAVASCRIPT. Each group is
- * a native `<details>`, so the disclosure works from the keyboard, is
- * announced as one, and survives a page with no scripting at all. The `open`
- * attribute is decided on the SERVER from the current path, which is what
- * makes "only the group containing the current page is open by default" true
- * on first paint rather than after a script runs. A small script then
- * remembers a person's own choice; see CmsRailScript.
- *
- * A CLOSED GROUP MUST NOT EMPTY THE NARROW RAIL. At 64 pixels there are no
- * group headings to see and no disclosure to press, so hiding a closed group's
- * items would delete icons with nothing on screen explaining why. The style
- * block below therefore re-shows every group's items while the rail is narrow,
- * and lets the disclosure take effect only once the rail is wide enough to
- * show what closed it. The drawer is always wide, so it always obeys.
- *
- * Used twice per page, from one data model: as the rail from lg upwards, and
- * inside the mobile drawer below it. Both render this, so they cannot drift.
- */
 import CmsIcon from './CmsIcon.astro';
 import { visibleNav } from '@/lib/cms/nav';
+import { CMS_DESTINATIONS, destinationAllowed } from '@/lib/cms/destinations';
 
 interface Props {
   currentPath: string;
   idPrefix?: string;
-  /** The principal's resolved permission codes. Empty renders only the open entries. */
   permissions?: readonly string[];
 }
-const { currentPath, idPrefix = 'rail', permissions = [] } = Astro.props;
 
-const entries = visibleNav(permissions);
+const { currentPath, idPrefix = 'rail', permissions = [] } = Astro.props;
+const railEntries = visibleNav(permissions);
+const reportsDestination = CMS_DESTINATIONS.find((item) => item.label === 'Reports');
+const reportsEntry =
+  reportsDestination !== undefined && destinationAllowed(reportsDestination, permissions)
+    ? {
+        label: 'Reports',
+        href: reportsDestination.href,
+        icon: 'performance' as const,
+        permission: reportsDestination.permission,
+      }
+    : null;
+const entries = reportsEntry === null ? railEntries : [...railEntries, reportsEntry];
 
 const isActive = (href: string) =>
   href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(href + '/');
 
-/**
- * CRM is the one module whose rail destination is a workspace overview rather
- * than the first record list. `/app/crm` remains the Leads route for existing
- * links and bookmarks; clicking CRM itself opens `/app/crm/home`.
- */
 const navigationHref = (label: string, href: string) =>
   label === 'CRM' ? '/app/crm/home' : href;
-const navigationActive = (label: string, href: string) =>
-  label === 'CRM'
-    ? currentPath === '/app/crm' || currentPath.startsWith('/app/crm/')
-    : isActive(href);
 
-/**
- * THE FIRST GROUP HAS NO HEADING, AND THAT IS THE POINT.
- *
- * It used to say WORK above Home, Customers, CRM, Helpdesk and Orders. Those
- * five are the default view of the application; a label saying they are work
- * told nobody anything, and it was worse than useless because it rendered like
- * a heading and did nothing when pressed. A false affordance.
- *
- * It is also not collapsible, deliberately. Collapsing the thing you arrived
- * at is a control nobody wants, and the group a person uses fifty times a day
- * should not be one accidental click from empty.
- *
- * The three below keep their headings and each is a real disclosure. That
- * separation is the whole rule: a label either does something when pressed or
- * does not look as though it might.
- */
+const navigationLabel = (label: string) => (label === 'SLA Monitor' ? 'Exceptions' : label);
+
+const navigationActive = (label: string, href: string) => {
+  if (label === 'CRM') return currentPath === '/app/crm' || currentPath.startsWith('/app/crm/');
+  if (label === 'SLA Monitor') {
+    return (
+      currentPath === '/app/performance' ||
+      (currentPath.startsWith('/app/performance/') && !currentPath.startsWith('/app/performance/reports'))
+    );
+  }
+  return isActive(href);
+};
+
 const groups = [
   { label: null, items: ['Home', 'CRM', 'Helpdesk', 'Orders'] },
-  { label: 'Insights', items: ['SLA Monitor'] },
-  /*
-   * CUSTOMERS SITS WITH DATA, IMMEDIATELY BEFORE IT.
-   *
-   * It was in the landing group, which is the set of things somebody opens
-   * fifty times a day without thinking. A customer master record is not that:
-   * it is maintained, not consulted, and it belongs beside the other thing this
-   * organisation maintains. Being in a collapsible group is the point rather
-   * than a side effect — it follows Operations' collapse state, and it is
-   * hidden entirely from anybody without the customer permission, which
-   * `visibleNav` already decides from the resolved codes.
-   */
+  { label: 'Insights', items: ['SLA Monitor', 'Reports'] },
   { label: 'Operations', items: ['Customers', 'Upload Centre'] },
   { label: 'System', items: ['Administration'] },
 ] as const;
 
-/** The groups this caller may actually see, with an empty one dropped whole. */
 const rendered = groups
   .map((group) => ({
     label: group.label,
-    // ORDERED BY THE GROUP, NOT BY THE NAVIGATION MODEL. Filtering `entries`
-    // would leave the order to CMS_NAV, so moving an item between groups would
-    // silently reorder it. The group lists its items in the order it wants
-    // them, and that is the order they render in.
     entries: group.items
       .map((label) => entries.find((item) => item.label === label))
       .filter((item): item is (typeof entries)[number] => item !== undefined),
@@ -116,7 +62,6 @@ const rendered = groups
 <nav aria-label="Main" class="flex flex-col gap-0.5">
   {
     rendered.map((group) => {
-      // OPEN BECAUSE THE READER IS IN IT, decided here rather than in a script.
       const holdsCurrent = group.entries.some((item) => navigationActive(item.label, item.href));
       const items = (
         <ul class="flex flex-col gap-0.5">
@@ -137,12 +82,6 @@ const rendered = groups
                       : 'text-cms-rail-text hover:bg-cms-navy-soft hover:text-white',
                   ]}
                 >
-                  {/*
-                    The active marker is absolute at the leading edge so it is
-                    visible whether the rail is 64px or 256px, and the icon box
-                    is exactly the collapsed width so the label starts at the
-                    clip.
-                  */}
                   <span
                     class:list={[
                       'absolute inset-y-2 start-1 w-0.5 rounded-full',
@@ -153,7 +92,7 @@ const rendered = groups
                   <span class="flex w-16 shrink-0 items-center justify-center">
                     <CmsIcon name={item.icon} size={18} />
                   </span>
-                  <span class="whitespace-nowrap">{item.label}</span>
+                  <span class="whitespace-nowrap">{navigationLabel(item.label)}</span>
                 </a>
               </li>
             );
@@ -161,12 +100,7 @@ const rendered = groups
         </ul>
       );
 
-      // NO HEADING, NO DISCLOSURE, NOTHING IN THE TAB ORDER BEFORE HOME. The
-      // landing group is a plain list, so the first Tab from the rail's start
-      // lands on Home rather than on a control nobody asked for.
-      if (group.label === null) {
-        return <div class="mb-3 last:mb-0">{items}</div>;
-      }
+      if (group.label === null) return <div class="mb-3 last:mb-0">{items}</div>;
 
       return (
         <details
@@ -178,13 +112,6 @@ const rendered = groups
             class="flex h-7 cursor-pointer list-none items-center rounded-cms text-[0.6875rem] font-semibold tracking-[0.12em] text-cms-rail-muted uppercase outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
             id={`${idPrefix}-${group.label}`}
           >
-            {/*
-              The chevron sits in the same 64px icon column every row uses, so
-              the heading text begins exactly at the clip and the control is
-              never half-visible. It is also what tells a reader this label
-              does something: the three headings that remain are all real
-              disclosures, and the one that was not has been deleted.
-            */}
             <span class="flex w-16 shrink-0 items-center justify-center">
               <span class="cms-nav-chevron inline-flex" aria-hidden="true">
                 <CmsIcon name="chevronRight" size={14} />
@@ -200,14 +127,9 @@ const rendered = groups
 </nav>
 
 <style>
-  /* The default disclosure triangle, removed in both spellings. */
   .cms-nav-group > summary::-webkit-details-marker {
     display: none;
   }
-
-  /* The chevron is the disclosure state, and it is not the only carrier: the
-     summary also reports `aria-expanded` to assistive technology by being a
-     native `<details>`. */
   .cms-nav-group > summary .cms-nav-chevron {
     transform: rotate(0deg);
     transition: transform 150ms ease;
@@ -215,12 +137,6 @@ const rendered = groups
   .cms-nav-group[open] > summary .cms-nav-chevron {
     transform: rotate(90deg);
   }
-
-  /* A CLOSED GROUP KEEPS ITS ICONS WHILE THE RAIL IS NARROW.
-     This overrides the user-agent rule that hides a closed `<details>`
-     content, and it is scoped to the rail: the drawer and any expanded state
-     fall straight back to the native behaviour. Author styles beat UA styles,
-     which is the whole mechanism. */
   :global(aside[data-cms-rail]) .cms-nav-group:not([open]) > ul {
     display: flex;
   }
@@ -230,7 +146,6 @@ const rendered = groups
   :global(body[data-rail-touch='true'] aside[data-cms-rail]) .cms-nav-group:not([open]) > ul {
     display: none;
   }
-
   @media (prefers-reduced-motion: reduce) {
     .cms-nav-group > summary .cms-nav-chevron {
       transition: none;
