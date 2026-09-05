@@ -726,11 +726,6 @@ test('Home removes all eight KPI cards without replacement and keeps both charts
   );
   assert.match(purchases, /<\/h2>\s*<CmsApproverChart/);
   assert.match(loading, /<\/h2>\s*<CmsLoadingAuthorityChart/);
-  const trendAt = source.indexOf('title="Purchase Order Approval Trend"');
-  const loadingTrendAt = source.indexOf('title="Loading Authority Trend"');
-  const attentionAt = source.indexOf('title="Needs attention"');
-  assert.ok(trendAt > 0 && loadingTrendAt > trendAt && attentionAt > loadingTrendAt);
-  assert.match(source, /salesUserTrend\.filter\(\(point\) => point\.affiliateId === laSelected\)/);
 });
 
 test('Home leads with its two charts and nothing between them', () => {

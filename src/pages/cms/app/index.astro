@@ -74,7 +74,6 @@ import {
   approverBoard,
   loadingAuthorityBoard,
   poApprovalRule,
-  userApprovalTrend,
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
   type ApprovalScope,
@@ -181,8 +180,6 @@ let poGroups: ReadonlyMap<string, ApproverStat[]> = new Map();
 let laBoards: ReadonlyMap<string, LaCountryBoard> = new Map();
 let laCountries: LaCountry[] = [];
 let laMissingTargets: string[] = [];
-let purchaseUserTrend: UserTrendPoint[] = [];
-let salesUserTrend: UserTrendPoint[] = [];
 let affiliates: { value: string; label: string }[] = [];
 let customers: AttentionCustomer[] = [];
 /** Which figures failed, so the message can name them rather than a number. */
@@ -225,24 +222,21 @@ if (user) {
       affiliateId: filter.affiliateId,
     };
 
-    const year = Number((shown.from ?? toDbTimestamp(today)).slice(0, 4));
-    const trendScope: ApprovalScope = {
-      from: `${year}-01-01`,
-      to: `${year}-12-31`,
-      affiliateId: filter.affiliateId,
-    };
-    const [attention, po, so, affiliateRows, poRuleRead, poBoard, laRead, poTrend, soTrend] =
-      await Promise.all([
-        runSection(batcher, 'home.attention', (client) =>
-          attentionCustomers(client, userId, active, now),
-        ),
-        runSection(batcher, 'home.purchases', (client) =>
-          approvalBoard(client, 'PURCHASE_ORDER', scope),
-        ),
-        runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
-        runSection(batcher, 'home.affiliates', (client) =>
-          client.execute(
-            `SELECT affiliate_id, affiliate_name FROM affiliates
+    const [attention, po, so, affiliateRows, poRuleRead, poBoard, laRead] = await Promise.all([
+      runSection(batcher, 'home.attention', (client) =>
+        attentionCustomers(client, userId, active, now),
+      ),
+      runSection(batcher, 'home.purchases', (client) =>
+        approvalBoard(client, 'PURCHASE_ORDER', scope),
+      ),
+      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
+      // THE TREND IS NOT ON THIS PAGE AT ALL ANY MORE. Its two twelve-month
+      // window aggregations were the heaviest statements here, feeding a
+      // chart behind a disclosure most visits never opened; the disclosure
+      // itself is gone now and nothing was moved in its place.
+      runSection(batcher, 'home.affiliates', (client) =>
+        client.execute(
+          `SELECT affiliate_id, affiliate_name FROM affiliates
             WHERE active = 1 ORDER BY affiliate_name`,
           ),
         ),
