@@ -29,10 +29,6 @@ export interface ChartPoint {
   value: number | null;
   /** Where clicking this point should lead, if anywhere. */
   href?: string;
-  /** Extra context included in the point tooltip and accessible data table. */
-  detail?: string;
-  /** Complete, human-readable tooltip where the axis label is intentionally short. */
-  tooltip?: string;
   /**
    * This point's own colour, overriding the series colour. A token name
    * without the `--color-` prefix, and always one of SERIES_TOKENS.
@@ -83,8 +79,6 @@ export interface Chart {
   alt: string;
   /** The same numbers, for the disclosure beneath the chart. */
   table: ChartTable;
-  /** Series key, using the same design-token colours as the plotted lines. */
-  legend?: { name: string; token: string }[];
 }
 
 export interface ChartOptions {
@@ -383,11 +377,7 @@ function tableOf(
     columns: [categoryName, ...series.map((one) => one.name)],
     rows: labels.map((label, index) => [
       label,
-      ...series.map((one) => {
-        const point = one.points[index];
-        const value = format(point?.value ?? null);
-        return point?.detail === undefined ? value : `${value} · ${point.detail}`;
-      }),
+      ...series.map((one) => format(one.points[index]?.value ?? null)),
     ]),
   };
 }
@@ -477,7 +467,7 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
   const format = options.format ?? defaultFormat;
   const unit = options.unit ?? 'units';
   const all = series.flatMap((one) => one.points.map((point) => point.value ?? 0));
-  const ceiling = niceCeiling(Math.max(...all, options.reference?.value ?? 0, 0));
+  const ceiling = niceCeiling(Math.max(...all, 0));
   const left = valueGutter(ceiling, format);
   // The plot stops short of the x-axis title, so the two never overlap.
   const titleRoom = options.xAxisLabel === undefined ? 0 : X_TITLE_ROOM;
@@ -533,11 +523,7 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
         if (showMarkers) {
           const dot =
             `<circle cx="${round(x)}" cy="${round(y)}" r="2.5" fill="var(--color-${one.token})">` +
-            `<title>${escape(
-              point.tooltip ??
-                `${one.name}, ${point.label}: ${format(point.value)}` +
-                  (point.detail === undefined ? '' : `, ${point.detail}`),
-            )}</title></circle>`;
+            `<title>${escape(`${one.name}, ${point.label}: ${format(point.value)}`)}</title></circle>`;
           // A POINT OPENS ITS OWN BUCKET. An SVG anchor is focusable and takes
           // the page's focus ring, so the marker is a real target rather than a
           // hover affordance. Markers are drawn only below MARKER_LIMIT, so the
@@ -722,7 +708,6 @@ export function lineChart(series: ChartSeries[], options: ChartOptions = {}): Ch
       `</svg>`,
     alt: described,
     table: tableOf(series, format, options.categoryName),
-    legend: series.map(({ name, token }) => ({ name, token })),
   };
 }
 
