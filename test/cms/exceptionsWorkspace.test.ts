@@ -25,17 +25,14 @@ test('Exceptions table is action-oriented', () => {
   assert.match(page, />Open</);
 });
 
-test('sidebar presents Exceptions and Reports as separate Insights destinations', () => {
+test('sidebar presents SLA monitor destination to users as Exceptions', () => {
   const sidebar = read('src/components/cms/CmsSidebar.astro');
-  assert.match(sidebar, /items: \['Exceptions', 'Reports'\]/);
-  assert.match(sidebar, /label === 'Exceptions'/);
-  assert.match(sidebar, /!currentPath\.startsWith\('\/app\/performance\/reports'\)/);
+  assert.match(sidebar, /items: \['SLA Monitor'\]/);
+  assert.match(sidebar, /label === 'SLA Monitor' \? 'Exceptions'/);
 });
 
-test('navigation and page search expose Exceptions terminology', () => {
-  const nav = read('src/lib/cms/nav.ts');
+test('page search presents Exceptions terminology and keeps reports in Insights context', () => {
   const search = read('src/lib/cms/search/pageSearch.ts');
-  assert.match(nav, /label === 'SLA Monitor' \? 'Exceptions'/);
   assert.match(search, /destination\.label === 'SLA Monitor' \? 'Exceptions'/);
   assert.match(search, /destination\.area === 'SLA Monitor'\) return 'Insights'/);
 });
