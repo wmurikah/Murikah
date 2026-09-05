@@ -33,7 +33,7 @@ const HOME_AXIS_MAX_MINUTES = 10 * 60;
  */
 const HOME_AXIS_INTERNAL_MAX = 1000;
 const HOME_AXIS_SCALE_REFERENCE = '__HOME_10_HOUR_SCALE__';
-const HOUR_TICKS = Array.from({ length: 10 }, (_unused, index) => index + 1);
+const HOUR_TICKS = Array.from({ length: 11 }, (_unused, index) => index);
 const VALUE_TICK =
   /<text x="([^"]+)" y="([^"]+)" text-anchor="end" font-size="11" fill="var\(--color-cms-muted\)">[^<]*<\/text>/g;
 
@@ -84,7 +84,7 @@ const escapeAttribute = (value: string): string =>
 
 /**
  * Replace the generic three-label frame with the one Home comparison axis:
- * a visible y-axis rule and hourly labels from 1 hr through 10 hrs. The x-axis
+ * a visible y-axis rule and labels from 0 through 10 hours. The x-axis
  * baseline remains untouched. No `MINUTES` heading is drawn.
  */
 function withUniformHourAxis(chart: Chart): Chart {
@@ -109,7 +109,7 @@ function withUniformHourAxis(chart: Chart): Chart {
     const fraction = hour / 10;
     const lineY = bottomY + (topY - bottomY) * fraction;
     const textY = lineY + 4;
-    const label = hour === 1 ? '1 hr' : `${hour} hrs`;
+    const label = hour === 0 ? '0' : hour === 1 ? '1 hr' : `${hour} hrs`;
     return (
       `<line data-home-y-tick="${hour}" x1="${axisX - 4}" y1="${Math.round(lineY * 100) / 100}" ` +
       `x2="${axisX}" y2="${Math.round(lineY * 100) / 100}" stroke="var(--color-cms-line)" stroke-width="1" />` +
