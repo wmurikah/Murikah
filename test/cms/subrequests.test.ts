@@ -39,6 +39,7 @@ import {
   approvalTrend,
   approverBoard,
   loadingAuthorityBoard,
+  loadingAuthorityTrend,
   poApprovalRule,
   userApprovalTrend,
 } from '../../src/lib/cms/repos/approvalSla.ts';
