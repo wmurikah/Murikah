@@ -74,7 +74,6 @@ import {
   approverBoard,
   loadingAuthorityBoard,
   poApprovalRule,
-  userApprovalTrend,
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
   type ApprovalScope,
@@ -181,7 +180,6 @@ let poGroups: ReadonlyMap<string, ApproverStat[]> = new Map();
 let laBoards: ReadonlyMap<string, LaCountryBoard> = new Map();
 let laCountries: LaCountry[] = [];
 let laMissingTargets: string[] = [];
-let purchaseUserTrend: UserTrendPoint[] = [];
 let affiliates: { value: string; label: string }[] = [];
 let customers: AttentionCustomer[] = [];
 /** Which figures failed, so the message can name them rather than a number. */
@@ -224,24 +222,21 @@ if (user) {
       affiliateId: filter.affiliateId,
     };
 
-    const year = Number((shown.from ?? toDbTimestamp(today)).slice(0, 4));
-    const trendScope: ApprovalScope = {
-      from: `${year}-01-01`,
-      to: `${year}-12-31`,
-      affiliateId: filter.affiliateId,
-    };
-    const [attention, po, so, affiliateRows, poRuleRead, poBoard, laRead, poTrend] =
-      await Promise.all([
-        runSection(batcher, 'home.attention', (client) =>
-          attentionCustomers(client, userId, active, now),
-        ),
-        runSection(batcher, 'home.purchases', (client) =>
-          approvalBoard(client, 'PURCHASE_ORDER', scope),
-        ),
-        runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
-        runSection(batcher, 'home.affiliates', (client) =>
-          client.execute(
-            `SELECT affiliate_id, affiliate_name FROM affiliates
+    const [attention, po, so, affiliateRows, poRuleRead, poBoard, laRead] = await Promise.all([
+      runSection(batcher, 'home.attention', (client) =>
+        attentionCustomers(client, userId, active, now),
+      ),
+      runSection(batcher, 'home.purchases', (client) =>
+        approvalBoard(client, 'PURCHASE_ORDER', scope),
+      ),
+      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
+      // THE TREND IS NOT ON THIS PAGE AT ALL ANY MORE. Its two twelve-month
+      // window aggregations were the heaviest statements here, feeding a
+      // chart behind a disclosure most visits never opened; the disclosure
+      // itself is gone now and nothing was moved in its place.
+      runSection(batcher, 'home.affiliates', (client) =>
+        client.execute(
+          `SELECT affiliate_id, affiliate_name FROM affiliates
             WHERE active = 1 ORDER BY affiliate_name`,
           ),
         ),
@@ -260,6 +255,11 @@ if (user) {
         ),
         runSection(batcher, 'home.po-user-trend', (client) =>
           userApprovalTrend(client, 'PURCHASE_ORDER', trendScope),
+        ),
+        // Read all entities in one grouped statement. The selected Loading
+        // Authority tab is resolved from laRead below and filters these rows.
+        runSection(batcher, 'home.so-user-trend', (client) =>
+          userApprovalTrend(client, 'SALES_ORDER', { ...trendScope, affiliateId: null }),
         ),
       ]);
 
@@ -300,6 +300,11 @@ if (user) {
     else {
       failed.push('purchase order trend');
       traceId = traceId ?? poTrend.traceId;
+    }
+    if (soTrend.ok) salesUserTrend = soTrend.value;
+    else {
+      failed.push('Loading Authority trend');
+      traceId = traceId ?? soTrend.traceId;
     }
   } catch (error) {
     console.error('[cms.home] no database connection', error);
@@ -365,15 +370,13 @@ const purchaseTrendChart = buildUserPerformanceTrend({
   emptyMessage: 'No approval history available for this period.',
 });
 const loadingTrendChart = buildUserPerformanceTrend({
-  // There is deliberately no series: the source records Finance and Credit
-  // actors, but no actor for the Loading Authority milestone itself.
-  points: [],
+  points: salesUserTrend.filter((point) => point.affiliateId === laSelected),
   year: trendYear,
   noun: 'completions',
   // Loading Authority functions have independent targets. A single line here
   // would misstate at least one function, so their existing bar markers remain
   // the sole target source of truth.
-  emptyMessage: 'Loading Authority user is not recorded in the current source extract.',
+  emptyMessage: 'No completion history available for this period.',
 });
 
 const volumeOf = (board: ApprovalBoard | null) =>
@@ -593,7 +596,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
     <CmsUserPerformanceTrend
       title="Loading Authority Trend"
       subtitle="Average completion time by user"
-      definition={`No user trend can be calculated for ${trendYear} because the current source extract does not record the person who issued each Loading Authority.`}
+      definition={`The transaction-weighted average of attributable finance and credit approvals for each user in each month of ${trendYear}. Invoice and loading-authority milestones are excluded because the source records no user for them. Missing months have no point.`}
       chart={loadingTrendChart}
     />
   </div>
