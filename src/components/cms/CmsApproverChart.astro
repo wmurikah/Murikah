@@ -311,6 +311,17 @@ const ROW = 'grid grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)_5.5rem_4rem] items
     )
   }
 
+  {/* A BARE AXIS: where the scale starts and where it ends. Nothing else. */}
+  <div class={`${ROW} mt-auto pt-1`}>
+    <span></span>
+    <div class="relative h-4 min-w-0 text-cms-caption text-cms-muted tabular-nums">
+      <span class="absolute start-0 top-0">0</span>
+      <span class="absolute end-0 top-0">{formatDuration(Math.round(scale))}</span>
+    </div>
+    <span></span>
+    <span></span>
+  </div>
+
   {
     /*
       THE PANEL'S OWN NOTES, INSIDE THE CARD.
