@@ -656,31 +656,13 @@ test('every figure on Home carries a destination', () => {
       assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
     }
   }
-  // THE KPI STRIP'S FIGURES ARE FIGURES TOO, and they are formatted in the
-  // frontmatter because the card renders its own anchor around them. The regex
-  // above cannot see inside a component, so the cards are asserted directly:
-  // every one of them carries a destination, which is the property the scan
-  // exists to protect rather than the string position it happens to check.
+  // HOME HAS NO SUMMARY LAYER. The two former four-card strips were removed
+  // rather than hidden or replaced, so only chart and exception figures count.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  const cards = [...home.matchAll(/<CmsKpiCard[\s\S]*?\/>/g)].map((m) => m[0]);
-  assert.ok(cards.length > 0, 'Home renders no KPI card');
-  for (const card of cards) {
-    assert.match(card, /href=\{/, 'a KPI card carries no destination');
-    assert.match(card, /value=\{/, 'a KPI card carries no figure');
-  }
-  // And each card is built from a list whose every entry has an href, so a
-  // fifth card cannot be added without one.
-  for (const strip of ['purchaseKpis', 'salesKpis']) {
-    const start = home.indexOf(`const ${strip}: Kpi[] = [`);
-    assert.ok(start !== -1, `${strip} is not declared`);
-    const block = home.slice(start, home.indexOf('\n];', start));
-    const labels = [...block.matchAll(/label: '([^']+)'/g)].length;
-    const hrefs = [...block.matchAll(/\n {4}href:/g)].length;
-    assert.equal(labels, 4, `${strip} should carry four measures`);
-    assert.equal(hrefs, 4, `${strip} has a measure with no destination`);
-    counted += 4;
-  }
-  assert.ok(counted >= 6, `expected Home's counts, found ${counted}`);
+  assert.ok(!home.includes('CmsKpiCard'), 'Home still renders a KPI card');
+  assert.ok(!home.includes('purchaseKpis'), 'the purchase summary model remains');
+  assert.ok(!home.includes('salesKpis'), 'the Loading Authority summary model remains');
+  assert.ok(counted >= 2, `expected Home's chart and exception counts, found ${counted}`);
 
   // The two duration columns are links too, and they are the ones this phase
   // added: Typical and Slowest 10% each open the records behind them.
@@ -714,15 +696,36 @@ test('every Home destination carries the filter and the scope', () => {
   assert.ok(hrefs.length >= 6, `expected the destinations, found ${hrefs.length}`);
   const bare = hrefs.filter((h) => h.startsWith("'/") || h.startsWith('"/'));
   assert.deepEqual(bare, [], `destinations that lose the filter: ${bare.join(', ')}`);
-  for (const name of ['toSales', 'toPurchases']) {
-    assert.match(
-      source,
-      new RegExp(`const ${name} = \\(extra`),
-      `the ${name} destination is built from drillTo`,
-    );
-  }
-  assert.match(source, /drillTo\('\/app\/orders\/purchases', filter/);
+  assert.match(source, /const toSales = \(extra/);
   assert.match(source, /drillTo\('\/app\/orders\/sales', filter/);
+});
+
+test('Home removes all eight KPI cards without replacement and keeps both charts first', () => {
+  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  for (const label of [
+    'Approvals',
+    'Typical approval cycle',
+    'Slowest level',
+    'In approval',
+    'Completions',
+    'Typical finance approval',
+    'Order to loading authority',
+    'Awaiting finance approval',
+  ]) {
+    assert.ok(!source.includes(`label: '${label}'`), `${label} remains as a Home summary`);
+  }
+  assert.ok(!/<CmsKpiCard|purchaseKpis|salesKpis/.test(source));
+
+  const purchases = source.slice(
+    source.indexOf('id="panel-purchases"'),
+    source.indexOf('</section>', source.indexOf('id="panel-purchases"')),
+  );
+  const loading = source.slice(
+    source.indexOf('id="panel-sales"'),
+    source.indexOf('</section>', source.indexOf('id="panel-sales"')),
+  );
+  assert.match(purchases, /<\/h2>\s*<CmsApproverChart/);
+  assert.match(loading, /<\/h2>\s*<CmsLoadingAuthorityChart/);
 });
 
 test('Home leads with its two charts and nothing between them', () => {
