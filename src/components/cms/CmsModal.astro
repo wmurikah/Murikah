@@ -61,6 +61,14 @@ const descId = description ? `${id}-desc` : undefined;
   data-cms-confirm-dirty={confirmOnDirty ? 'true' : undefined}
   class:list={[
     /*
+      CLOSED MUST MEAN INVISIBLE. The old unconditional `flex` utility overrode
+      the browser's native dialog:not([open]) { display:none }, so every modal
+      could render visibly on page load even though showModal() was never
+      called. Keep it explicitly hidden until the native `open` attribute is
+      present, then make it the flex column the layout needs.
+    */
+    'hidden [&[open]]:flex flex-col overflow-hidden',
+    /*
       A FULL-SCREEN SHEET ON A PHONE, A CENTRED BOX FROM `sm` UP. A 32rem box
       squeezed into a 360px viewport is a form with no room to breathe and a
       keyboard covering half of it. The sheet is the same markup at a different
@@ -72,10 +80,6 @@ const descId = description ? `${id}-desc` : undefined;
     // THE SURFACE. Light, ink text, and the one elevation level the design
     // sweep reserved for something that genuinely floats.
     'bg-cms-surface text-cms-ink shadow-cms-overlay backdrop:bg-cms-navy/45',
-    // The dialog is a column so the body can scroll while the head and the
-    // actions stay put. A long form scrolls INSIDE the modal; the page behind
-    // it does not scroll at all, which CmsOverlayScript enforces.
-    'flex flex-col overflow-hidden',
     className,
   ]}
 >
@@ -90,7 +94,13 @@ const descId = description ? `${id}-desc` : undefined;
         )
       }
     </div>
-    <CmsIconButton icon="close" label="Close dialogue" data-testid={`${id}-close`} class="-mr-2" />
+    <CmsIconButton
+      icon="close"
+      label="Close dialogue"
+      data-testid={`${id}-close`}
+      data-cms-modal-close
+      class="-mr-2"
+    />
   </div>
 
   {/* THE ONLY SCROLLING REGION. */}
