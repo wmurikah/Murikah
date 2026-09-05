@@ -37,8 +37,10 @@ test('CRM local navigation promotes Overview and Analytics while settings stay c
 test('the main CRM rail opens Overview but remains active across CRM child routes', () => {
   const sidebar = read('src/components/cms/CmsSidebar.astro');
 
-  assert.match(sidebar, /label === 'CRM' \? '\/app\/crm\/home' : href/);
-  assert.match(sidebar, /currentPath === '\/app\/crm' \|\| currentPath\.startsWith\('\/app\/crm\/'\)/);
+  assert.match(sidebar, /label === 'CRM'/);
+  assert.match(sidebar, /'\/app\/crm\/home'/);
+  assert.match(sidebar, /currentPath === '\/app\/crm'/);
+  assert.match(sidebar, /currentPath\.startsWith\('\/app\/crm\/'\)/);
 });
 
 test('CRM overview reuses scoped repositories and does not introduce schema or write logic', () => {
