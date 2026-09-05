@@ -1,10 +1,7 @@
 /**
  * GET /api/notifications/{id}/target on cms.murikah.com.
  *
- * Where the notification leads, decided by re-running access control NOW. A
- * notification is not an access grant: rights revoked since it was created
- * produce a null destination and the interface shows a safe message rather
- * than the record.
+ * Where the notification leads, decided by re-running access control now.
  */
 import type { APIRoute } from 'astro';
 import { requireSignedIn } from '../../../../../lib/cms/admin/guard.ts';
@@ -12,6 +9,7 @@ import { connect } from '../../../../../lib/cms/admin/crudRoute.ts';
 import {
   listNotifications,
   resolveNotificationTarget,
+  type NotificationRow,
 } from '../../../../../lib/cms/notify/notifications.ts';
 import { methodNotAllowed, ok, serverError } from '../../../../../lib/cms/admin/respond.ts';
 import { notFound } from '../../../../../lib/cms/errors.ts';
@@ -25,6 +23,19 @@ export const GET: APIRoute = async (context) => {
   if ('response' in connection) return connection.response;
   try {
     const userId = auth.principal.user.userId;
+
+    const targetOf = async (notification: NotificationRow): Promise<string | null> => {
+      if (notification.entityType === 'IMPORT_BATCH' && notification.entityId !== null) {
+        const batch = await connection.db.execute({
+          sql: `SELECT import_batch_id FROM import_batches
+                WHERE import_batch_id = ? AND uploaded_by_user_id = ? LIMIT 1`,
+          args: [notification.entityId, userId],
+        });
+        return batch.rows[0] === undefined ? null : '/app/data/history';
+      }
+      return resolveNotificationTarget(connection.db, userId, notification);
+    };
+
     const mine = await listNotifications(connection.db, userId, {
       unreadOnly: false,
       type: null,
@@ -40,7 +51,7 @@ export const GET: APIRoute = async (context) => {
       });
       const row = deeper.rows[0] as Record<string, unknown> | undefined;
       if (row === undefined) return notFound('That notification could not be found.');
-      const target = await resolveNotificationTarget(connection.db, userId, {
+      const target = await targetOf({
         notificationId: String(row.notification_id),
         notificationType: String(row.notification_type) as never,
         title: String(row.title),
@@ -52,8 +63,7 @@ export const GET: APIRoute = async (context) => {
       });
       return ok({ target });
     }
-    const target = await resolveNotificationTarget(connection.db, userId, notification);
-    return ok({ target });
+    return ok({ target: await targetOf(notification) });
   } catch (error) {
     return serverError('notifications.target', error);
   }
