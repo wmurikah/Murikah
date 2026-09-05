@@ -7,11 +7,19 @@ interface Props {
   purchase: UserResponseLeaderboardRow[];
   loading: UserResponseLeaderboardRow[];
   periodLabel: string;
+  purchaseDrillBase: string;
+  loadingDrillBase: string;
 }
 
-const { purchase, loading, periodLabel } = Astro.props;
+const { purchase, loading, periodLabel, purchaseDrillBase, loadingDrillBase } = Astro.props;
 const TOP = 5;
 const count = (value: number) => value.toLocaleString('en-KE');
+const metricHref = (base: string, userId: string, metric: 'responses' | 'average' | 'fastest' | 'slowest') => {
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}userId=${encodeURIComponent(userId)}&metric=${metric}`;
+};
+const metricClass =
+  'rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus';
 
 const sections = [
   {
@@ -19,12 +27,14 @@ const sections = [
     title: 'Purchase orders',
     note: 'Approval responses',
     rows: purchase.slice(0, TOP),
+    drillBase: purchaseDrillBase,
   },
   {
     id: 'loading-response-leaderboard',
     title: 'Loading Authority',
     note: 'Recorded user steps',
     rows: loading.slice(0, TOP),
+    drillBase: loadingDrillBase,
   },
 ];
 ---
@@ -89,17 +99,41 @@ const sections = [
                         {index + 1}
                       </td>
                       <td class="px-3 py-2.5 font-medium text-cms-ink">{row.person}</td>
-                      <td class="px-3 py-2.5 text-right text-cms-ink tabular-nums">
-                        {count(row.responses)}
+                      <td class="px-3 py-2.5 text-right tabular-nums">
+                        <a
+                          class={metricClass}
+                          href={metricHref(section.drillBase, row.userId, 'responses')}
+                          aria-label={`Open ${row.person} response details`}
+                        >
+                          {count(row.responses)}
+                        </a>
                       </td>
-                      <td class="px-3 py-2.5 text-right font-medium text-cms-ink tabular-nums">
-                        {formatDuration(row.averageMinutes)}
+                      <td class="px-3 py-2.5 text-right tabular-nums">
+                        <a
+                          class={metricClass}
+                          href={metricHref(section.drillBase, row.userId, 'average')}
+                          aria-label={`Open ${row.person} average response details`}
+                        >
+                          {formatDuration(row.averageMinutes)}
+                        </a>
                       </td>
-                      <td class="px-3 py-2.5 text-right text-cms-muted tabular-nums">
-                        {formatDuration(row.fastestMinutes)}
+                      <td class="px-3 py-2.5 text-right tabular-nums">
+                        <a
+                          class={metricClass}
+                          href={metricHref(section.drillBase, row.userId, 'fastest')}
+                          aria-label={`Open ${row.person} fastest response details`}
+                        >
+                          {formatDuration(row.fastestMinutes)}
+                        </a>
                       </td>
-                      <td class="px-3 py-2.5 text-right text-cms-muted tabular-nums">
-                        {formatDuration(row.slowestMinutes)}
+                      <td class="px-3 py-2.5 text-right tabular-nums">
+                        <a
+                          class={metricClass}
+                          href={metricHref(section.drillBase, row.userId, 'slowest')}
+                          aria-label={`Open ${row.person} slowest response details`}
+                        >
+                          {formatDuration(row.slowestMinutes)}
+                        </a>
                       </td>
                     </tr>
                   ))}
