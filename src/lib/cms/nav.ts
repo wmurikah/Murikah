@@ -66,7 +66,7 @@ export function navItemAllowed(item: CmsNavItem, permissions: readonly string[])
 /**
  * The entries this principal may see.
  *
- * Presentation, not access control: hiding a link stops nobody from typing its
+ * Presentation, not access control: hiding a link stops nobody from typing the
  * URL. The endpoints and the pages behind them authorise for themselves, in
  * @/lib/cms/admin/guard, and would refuse the same caller whether or not this
  * filter had hidden anything.
