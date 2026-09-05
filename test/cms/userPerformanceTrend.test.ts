@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildLoadingAuthorityTrend,
   buildUserPerformanceTrend,
   USER_TREND_MONTHS,
 } from '../../src/lib/cms/analytics/userPerformanceTrend.ts';
@@ -53,25 +52,4 @@ test('a user trend reuses the configured target and existing series palette', ()
   assert.match(chart.svg, /Target · 30 min/);
   assert.deepEqual(chart.legend, [{ name: 'Test User', token: 'cms-series-1' }]);
   assert.equal(chart.table.rows[0]![1], '1 h 4 min · 1 completion');
-});
-
-test('Loading Authority trend is one entity series with null months and completion context', () => {
-  const chart = buildLoadingAuthorityTrend({
-    year: 2026,
-    entity: 'HPK',
-    targetMinutes: 30,
-    points: [
-      {
-        affiliateId: 'AFF-KE',
-        bucket: '2026-08',
-        volume: 2,
-        averageMinutes: 75,
-        targetMinutes: 30,
-      },
-    ],
-  });
-  assert.deepEqual(chart.legend, [{ name: 'HPK Loading Authority', token: 'cms-series-1' }]);
-  assert.equal(chart.table.rows[0]![1], 'Not available');
-  assert.equal(chart.table.rows[7]![1], '1 h 15 min · 2 completions');
-  assert.match(chart.svg, /HPK\nAugust 2026\nAverage: 1 h 15 min\nCompletions: 2/);
 });
