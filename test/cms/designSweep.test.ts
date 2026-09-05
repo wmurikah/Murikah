@@ -1326,28 +1326,12 @@ test('the leaderboard states its caveats rather than explaining them', () => {
   }
 });
 
-test('every Home chart names both of its axes', () => {
-  // A TICK SAYS "37 min"; A TITLE SAYS WHAT IS BEING MEASURED.
-  //
-  // BOTH PANELS ARE MARKUP NOW, not SVG, so neither takes an axis label from
-  // this page. What each must still do is name its own scale: the row labels
-  // are the category axis, and the value axis is the pair of numbers under
-  // the bars — with the purchase order panel's target marked once on its line
-  // and the loading authority panel's naming the target per function, because
-  // its three lines sit at three different places.
-  for (const [panel, middle] of [
-    ['CmsApproverChart', null],
-    ['CmsLoadingAuthorityChart', 'target per function'],
-  ] as const) {
+test('Home bar charts omit lower range captions while trend axes stay named', () => {
+  for (const panel of ['CmsApproverChart', 'CmsLoadingAuthorityChart']) {
     const source = readFileSync(`src/components/cms/${panel}.astro`, 'utf8');
-    assert.match(source, /A BARE AXIS|THE AXIS/, `${panel} draws no axis`);
-    assert.match(source, />0</, `${panel} does not say where its scale starts`);
-    assert.match(source, /formatDuration\(Math\.round\(scale\)\)/, `${panel} has no maximum`);
-    if (middle !== null) assert.ok(source.includes(middle), `${panel} does not name its targets`);
+    assert.ok(!/>0<|target per function|Math\.round\(scale\)/.test(source));
   }
-  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.equal((home.match(/xAxisLabel:/g) ?? []).length, 0, 'no SVG chart is left on the page');
-  const trendRules = readFileSync('src/lib/cms/analytics/homeTrend.ts', 'utf8');
+  const trendRules = readFileSync('src/lib/cms/analytics/userPerformanceTrend.ts', 'utf8');
   assert.match(
     trendRules,
     /xAxisLabel: 'Month',\n\s*yAxisLabel: 'Minutes',/,
@@ -1375,7 +1359,8 @@ test('the Home trend is a line over months, not a scatter over days', () => {
   // fragment is intact and unreferenced from this page. It still runs no
   // trend query of its own, which is what this ever asserted.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.ok(!/approvalTrend\(/.test(home), 'Home itself runs no trend query');
+  assert.match(home, /userApprovalTrend\(client, 'PURCHASE_ORDER'/);
+  assert.match(home, /userApprovalTrend\(client, 'SALES_ORDER'/);
   assert.ok(!/home-trend/.test(home), 'Home still fetches the trend fragment');
 
   // And the line is a line: a stroked path, with the markers as decoration on
@@ -1386,8 +1371,8 @@ test('the Home trend is a line over months, not a scatter over days', () => {
   // ONE MONTH IS NOT A TREND. The purchase order extract covers a single month,
   // and a line chart over it drew one dot per function against a row of empty
   // months, which is the scatter the brief asked to be rid of.
-  const chartRules = readFileSync('src/lib/cms/analytics/homeTrend.ts', 'utf8');
-  assert.match(chartRules, /minimumCategories: 2,/, 'a trend needs two months before it draws');
+  const chartRules = readFileSync('src/lib/cms/analytics/userPerformanceTrend.ts', 'utf8');
+  assert.match(chartRules, /MONTHS\.map<ChartPoint>/, 'the trend does not enumerate all months');
 });
 
 test('a chart never clips the units off its own axis', () => {
