@@ -1,11 +1,4 @@
 ---
-/**
- * CRM workspace home.
- *
- * Action-first signals stay primary. Commercial context is read from the
- * existing account, product and activity model so the overview helps the user
- * decide what to do next without creating a second CRM data model.
- */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCrmNav from '@/components/cms/CmsCrmNav.astro';
@@ -94,11 +87,10 @@ if (mayUseCrm) {
     ]);
 
     if (mayViewOpportunities) {
-      const ids = [
+      opportunityContext = await opportunityWorkspaceContext(db, userId, [
         ...openOpportunities.items.map((item) => item.opportunityId),
         ...closingSoon.items.map((item) => item.opportunityId),
-      ];
-      opportunityContext = await opportunityWorkspaceContext(db, userId, ids);
+      ]);
     }
   } catch (error) {
     console.error('[cms.crm.home] load failed', error);
@@ -130,9 +122,7 @@ function accountContext(context: OpportunityWorkspaceContext | undefined): strin
 function productContext(context: OpportunityWorkspaceContext | undefined): string | null {
   if (context === undefined || context.products.length === 0) return null;
   const shown = context.products.slice(0, 2).map((product) => {
-    const quantity = product.expectedQuantity.toLocaleString('en-KE', {
-      maximumFractionDigits: 2,
-    });
+    const quantity = product.expectedQuantity.toLocaleString('en-KE', { maximumFractionDigits: 2 });
     return `${product.productName}: ${quantity}${product.unitOfMeasure === null ? '' : ` ${product.unitOfMeasure}`}`;
   });
   if (context.products.length > 2) shown.push(`+${context.products.length - 2} more`);
@@ -143,7 +133,7 @@ function nextActionContext(context: OpportunityWorkspaceContext | undefined): st
   if (context === undefined) return null;
   const action = context.nextAction ?? context.nextActivitySummary;
   if (action === null) return null;
-  return context.nextActivityDue === null ? action : `${action} · due ${context.nextActivityDue}`;
+  return context.nextActivityDue === null ? action : `${action} · ${context.nextActivityDue}`;
 }
 
 const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURIComponent(today)}&closeTo=${encodeURIComponent(closeTo)}`;
@@ -152,29 +142,21 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
 <CmsLayout title="CRM">
   {
     !mayUseCrm ? (
-      <CmsErrorState
-        title="You do not have access to CRM"
-        description="Contact your administrator if you think this is a mistake."
-      />
+      <CmsErrorState title="You do not have access to CRM" description="Contact your administrator." />
     ) : loadFailed ? (
-      <CmsErrorState title="CRM could not be loaded" description="Please try again in a moment." />
+      <CmsErrorState title="CRM could not be loaded" description="Please try again." />
     ) : (
       <Fragment>
         <CmsPageHeader
           title="CRM"
-          description="Your commercial workspace: what needs attention, what is moving and what is closing next."
           crumbs={[{ label: 'Home', href: '/app' }, { label: 'CRM' }]}
         >
           <Fragment slot="actions">
             {mayViewLeads && (
-              <CmsButton href="/app/crm" variant="primary" icon="plus">
-                Leads
-              </CmsButton>
+              <CmsButton href="/app/crm" variant="primary" icon="plus">Leads</CmsButton>
             )}
             {mayViewOpportunities && (
-              <CmsButton href="/app/crm/opportunities" variant="secondary">
-                Opportunities
-              </CmsButton>
+              <CmsButton href="/app/crm/opportunities" variant="secondary">Opportunities</CmsButton>
             )}
           </Fragment>
         </CmsPageHeader>
@@ -182,21 +164,15 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
         <CmsCrmNav current="/app/crm/home" permissions={permissions} />
 
         <section aria-labelledby="crm-attention-heading">
-          <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 id="crm-attention-heading" class="text-cms-body font-semibold text-cms-ink">
-                Needs your attention
-              </h2>
-              <p class="text-cms-body-sm text-cms-muted">Each figure opens the records behind it.</p>
-            </div>
-          </div>
+          <h2 id="crm-attention-heading" class="mb-3 text-cms-body font-semibold text-cms-ink">
+            Attention
+          </h2>
           <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {mayViewLeads && leads !== null && (
+            {mayViewLeads && (
               <CmsKpiCard
                 label="Awaiting first contact"
-                value={String(leads.needsFirstContact)}
+                value={String(leads?.needsFirstContact ?? 0)}
                 href="/app/crm?contact=pending"
-                definition="Leads where no first customer contact has been recorded and the lead has not been disqualified or converted."
                 token="cms-series-1"
               />
             )}
@@ -204,7 +180,6 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
               label="Overdue activities"
               value={String(work.overdue.length)}
               href="/app/crm/activities"
-              context="Owned by you"
               tone={work.overdue.length > 0 ? 'negative' : 'neutral'}
               token="cms-series-2"
             />
@@ -221,7 +196,6 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
                 label="Closing in 30 days"
                 value={String(closingSoon.total)}
                 href={closingHref}
-                context={`${today} to ${closeTo}`}
                 token="cms-series-4"
               />
             )}
@@ -229,10 +203,7 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
         </section>
 
         <div class="grid gap-4 xl:grid-cols-2">
-          <CmsCard
-            title={`Overdue follow-ups (${work.overdue.length})`}
-            description="The first items to clear before moving on to new work."
-          >
+          <CmsCard title={`Overdue follow-ups (${work.overdue.length})`}>
             {work.overdue.length === 0 ? (
               <CmsEmptyState icon="statusOk" title="Nothing overdue" />
             ) : (
@@ -244,19 +215,15 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
                         {titleCase(activity.activityType)} · {activity.summary}
                       </p>
                       <p class="mt-1 text-cms-caption text-cms-muted">
-                        Due {activity.dueAt ?? 'time not set'}
+                        {activity.dueAt ?? 'No due time'}
                         {activity.accountName !== null && ` · ${activity.accountName}`}
                       </p>
                       {activity.nextAction !== null && (
-                        <p class="mt-1 text-cms-caption font-medium text-cms-ink">
-                          Next: {activity.nextAction}
-                        </p>
+                        <p class="mt-1 text-cms-caption font-medium text-cms-ink">{activity.nextAction}</p>
                       )}
                     </div>
                     {activityHref(activity) !== null && (
-                      <CmsButton href={activityHref(activity)!} variant="ghost" size="md">
-                        Open
-                      </CmsButton>
+                      <CmsButton href={activityHref(activity)!} variant="ghost" size="md">Open</CmsButton>
                     )}
                   </li>
                 ))}
@@ -264,20 +231,14 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
             )}
             {work.overdue.length > 6 && (
               <div class="mt-4 border-t border-cms-line pt-3">
-                <a
-                  href="/app/crm/activities"
-                  class="text-cms-body-sm font-medium text-cms-royal hover:underline"
-                >
-                  View all overdue activities
+                <a href="/app/crm/activities" class="text-cms-body-sm font-medium text-cms-royal hover:underline">
+                  View all
                 </a>
               </div>
             )}
           </CmsCard>
 
-          <CmsCard
-            title={`Upcoming activities (${work.upcoming.length})`}
-            description="Your next scheduled calls, meetings, visits and follow-ups."
-          >
+          <CmsCard title={`Upcoming activities (${work.upcoming.length})`}>
             {work.upcoming.length === 0 ? (
               <CmsEmptyState icon="clock" title="Nothing scheduled" />
             ) : (
@@ -289,19 +250,15 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
                         {titleCase(activity.activityType)} · {activity.summary}
                       </p>
                       <p class="mt-1 text-cms-caption text-cms-muted">
-                        {activity.dueAt === null ? 'No due time set' : `Due ${activity.dueAt}`}
+                        {activity.dueAt ?? 'No due time'}
                         {activity.accountName !== null && ` · ${activity.accountName}`}
                       </p>
                       {activity.nextAction !== null && (
-                        <p class="mt-1 text-cms-caption font-medium text-cms-ink">
-                          Next: {activity.nextAction}
-                        </p>
+                        <p class="mt-1 text-cms-caption font-medium text-cms-ink">{activity.nextAction}</p>
                       )}
                     </div>
                     {activityHref(activity) !== null && (
-                      <CmsButton href={activityHref(activity)!} variant="ghost" size="md">
-                        Open
-                      </CmsButton>
+                      <CmsButton href={activityHref(activity)!} variant="ghost" size="md">Open</CmsButton>
                     )}
                   </li>
                 ))}
@@ -311,13 +268,10 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
         </div>
 
         {mayViewOpportunities && (
-          <section aria-labelledby="crm-opportunities-heading" class="grid gap-4 xl:grid-cols-2">
-            <CmsCard
-              title={`Closing in the next 30 days (${closingSoon.total})`}
-              description="Close date, customer context, expected product demand and the next recorded action."
-            >
+          <div class="grid gap-4 xl:grid-cols-2">
+            <CmsCard title={`Closing in 30 days (${closingSoon.total})`}>
               {closingSoon.items.length === 0 ? (
-                <CmsEmptyState icon="crm" title="Nothing is due to close in this window" />
+                <CmsEmptyState icon="crm" title="Nothing closing" />
               ) : (
                 <ul class="flex flex-col divide-y divide-cms-line">
                   {closingSoon.items.slice(0, 6).map((opportunity) => {
@@ -327,15 +281,10 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
                     const next = nextActionContext(context);
                     return (
                       <li class="py-3 first:pt-0 last:pb-0">
-                        <a
-                          href={`/app/crm/opportunities/${opportunity.opportunityId}`}
-                          class="block rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                        >
+                        <a href={`/app/crm/opportunities/${opportunity.opportunityId}`} class="block rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus">
                           <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
-                              <p class="truncate text-cms-body-sm font-medium text-cms-ink">
-                                {opportunity.title}
-                              </p>
+                              <p class="truncate text-cms-body-sm font-medium text-cms-ink">{opportunity.title}</p>
                               <p class="mt-1 text-cms-caption text-cms-muted">
                                 {opportunity.accountName} · {opportunity.currentStageName} · {opportunity.ownerName}
                               </p>
@@ -343,19 +292,11 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
                             <CmsBadge tone="info" label={opportunity.estimatedCloseDate ?? 'No date'} />
                           </div>
                           <p class="mt-2 text-cms-caption text-cms-muted tabular-nums">
-                            {money(opportunity.estimatedValue, opportunity.currencyCode)} · {fractionToPercentLabel(opportunity.probability)} probability
+                            {money(opportunity.estimatedValue, opportunity.currencyCode)} · {fractionToPercentLabel(opportunity.probability)}
                           </p>
-                          {customer !== null && (
-                            <p class="mt-1 text-cms-caption text-cms-muted">{customer}</p>
-                          )}
-                          {products !== null && (
-                            <p class="mt-1 text-cms-caption text-cms-muted">
-                              Expected demand · {products}
-                            </p>
-                          )}
-                          {next !== null && (
-                            <p class="mt-1 text-cms-caption font-medium text-cms-ink">Next: {next}</p>
-                          )}
+                          {customer !== null && <p class="mt-1 text-cms-caption text-cms-muted">{customer}</p>}
+                          {products !== null && <p class="mt-1 text-cms-caption text-cms-muted">{products}</p>}
+                          {next !== null && <p class="mt-1 text-cms-caption font-medium text-cms-ink">{next}</p>}
                         </a>
                       </li>
                     );
@@ -364,10 +305,7 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
               )}
             </CmsCard>
 
-            <CmsCard
-              title={`Recently active open opportunities (${openOpportunities.total})`}
-              description="Most recently updated open opportunities with customer and follow-up context."
-            >
+            <CmsCard title={`Open opportunities (${openOpportunities.total})`}>
               {openOpportunities.items.length === 0 ? (
                 <CmsEmptyState icon="crm" title="No open opportunities" />
               ) : (
@@ -379,38 +317,19 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
                     const next = nextActionContext(context);
                     return (
                       <li class="py-3 first:pt-0 last:pb-0">
-                        <a
-                          href={`/app/crm/opportunities/${opportunity.opportunityId}`}
-                          class="block rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                        >
+                        <a href={`/app/crm/opportunities/${opportunity.opportunityId}`} class="block rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus">
                           <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
-                              <p class="truncate text-cms-body-sm font-medium text-cms-ink">
-                                {opportunity.title}
-                              </p>
-                              <p class="mt-1 text-cms-caption text-cms-muted">
-                                {opportunity.accountName} · {opportunity.currentStageName}
-                              </p>
+                              <p class="truncate text-cms-body-sm font-medium text-cms-ink">{opportunity.title}</p>
+                              <p class="mt-1 text-cms-caption text-cms-muted">{opportunity.accountName} · {opportunity.currentStageName}</p>
                             </div>
                             <span class="shrink-0 text-cms-caption text-cms-muted tabular-nums">
                               {money(opportunity.estimatedValue, opportunity.currencyCode)}
                             </span>
                           </div>
-                          <p class="mt-2 text-cms-caption text-cms-muted">
-                            {opportunity.ownerName}
-                            {opportunity.estimatedCloseDate !== null && ` · Close ${opportunity.estimatedCloseDate}`}
-                          </p>
-                          {customer !== null && (
-                            <p class="mt-1 text-cms-caption text-cms-muted">{customer}</p>
-                          )}
-                          {products !== null && (
-                            <p class="mt-1 text-cms-caption text-cms-muted">
-                              Expected demand · {products}
-                            </p>
-                          )}
-                          {next !== null && (
-                            <p class="mt-1 text-cms-caption font-medium text-cms-ink">Next: {next}</p>
-                          )}
+                          {customer !== null && <p class="mt-1 text-cms-caption text-cms-muted">{customer}</p>}
+                          {products !== null && <p class="mt-1 text-cms-caption text-cms-muted">{products}</p>}
+                          {next !== null && <p class="mt-1 text-cms-caption font-medium text-cms-ink">{next}</p>}
                         </a>
                       </li>
                     );
@@ -418,21 +337,15 @@ const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURICom
                 </ul>
               )}
             </CmsCard>
-          </section>
+          </div>
         )}
 
-        <CmsCard title="Quick access" description="Go straight to the workspace for the job you are doing.">
+        <CmsCard title="Quick access">
           <div class="flex flex-wrap gap-3">
-            {mayViewLeads && (
-              <CmsButton href="/app/crm" variant="secondary">Leads</CmsButton>
-            )}
-            {mayViewOpportunities && (
-              <CmsButton href="/app/crm/opportunities" variant="secondary">Opportunities</CmsButton>
-            )}
+            {mayViewLeads && <CmsButton href="/app/crm" variant="secondary">Leads</CmsButton>}
+            {mayViewOpportunities && <CmsButton href="/app/crm/opportunities" variant="secondary">Opportunities</CmsButton>}
             <CmsButton href="/app/crm/activities" variant="secondary">Activities</CmsButton>
-            {mayViewOpportunities && (
-              <CmsButton href="/app/crm/analytics" variant="secondary">Analytics</CmsButton>
-            )}
+            {mayViewOpportunities && <CmsButton href="/app/crm/analytics" variant="secondary">Analytics</CmsButton>}
           </div>
         </CmsCard>
       </Fragment>
