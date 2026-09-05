@@ -1,0 +1,114 @@
+---
+import CmsCard from './CmsCard.astro';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import type { UserResponseLeaderboardRow } from '@/lib/cms/repos/homeUserLeaderboards';
+
+interface Props {
+  purchase: UserResponseLeaderboardRow[];
+  loading: UserResponseLeaderboardRow[];
+  periodLabel: string;
+}
+
+const { purchase, loading, periodLabel } = Astro.props;
+const TOP = 5;
+const count = (value: number) => value.toLocaleString('en-KE');
+
+const sections = [
+  {
+    id: 'purchase-response-leaderboard',
+    title: 'Purchase orders',
+    note: 'Approval responses',
+    rows: purchase.slice(0, TOP),
+  },
+  {
+    id: 'loading-response-leaderboard',
+    title: 'Loading Authority',
+    note: 'Recorded user steps',
+    rows: loading.slice(0, TOP),
+  },
+];
+---
+
+<CmsCard
+  title="Response time leaderboard"
+  description={`Average user response · ${periodLabel}`}
+  class="overflow-hidden"
+>
+  <div class="flex flex-col gap-6">
+    {
+      sections.map((section) => (
+        <section aria-labelledby={section.id}>
+          <div class="mb-2 flex items-end justify-between gap-3">
+            <div>
+              <h3 id={section.id} class="text-cms-body font-semibold text-cms-ink">
+                {section.title}
+              </h3>
+              <p class="text-cms-caption text-cms-muted">{section.note}</p>
+            </div>
+            <span class="text-cms-caption text-cms-muted">Top {TOP}</span>
+          </div>
+
+          {section.rows.length === 0 ? (
+            <div class="rounded-cms bg-cms-sunken px-4 py-5 text-cms-body-sm text-cms-muted">
+              No actor-attributed responses.
+            </div>
+          ) : (
+            <div class="overflow-x-auto rounded-cms border border-cms-line">
+              <table class="w-full min-w-[720px] border-collapse text-cms-body-sm">
+                <thead class="bg-cms-sunken">
+                  <tr>
+                    <th class="w-14 px-3 py-2 text-left text-cms-caption font-medium text-cms-muted">
+                      Rank
+                    </th>
+                    <th class="px-3 py-2 text-left text-cms-caption font-medium text-cms-muted">
+                      User
+                    </th>
+                    <th class="px-3 py-2 text-right text-cms-caption font-medium text-cms-muted">
+                      Responses
+                    </th>
+                    <th class="px-3 py-2 text-right text-cms-caption font-medium text-cms-muted">
+                      Avg response
+                    </th>
+                    <th class="px-3 py-2 text-right text-cms-caption font-medium text-cms-muted">
+                      Fastest
+                    </th>
+                    <th class="px-3 py-2 text-right text-cms-caption font-medium text-cms-muted">
+                      Slowest
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {section.rows.map((row, index) => (
+                    <tr
+                      class:list={[
+                        'border-t border-cms-line',
+                        index === 0 ? 'bg-cms-sunken/50' : undefined,
+                      ]}
+                    >
+                      <td class="px-3 py-2.5 font-semibold text-cms-royal tabular-nums">
+                        {index + 1}
+                      </td>
+                      <td class="px-3 py-2.5 font-medium text-cms-ink">{row.person}</td>
+                      <td class="px-3 py-2.5 text-right text-cms-ink tabular-nums">
+                        {count(row.responses)}
+                      </td>
+                      <td class="px-3 py-2.5 text-right font-medium text-cms-ink tabular-nums">
+                        {formatDuration(row.averageMinutes)}
+                      </td>
+                      <td class="px-3 py-2.5 text-right text-cms-muted tabular-nums">
+                        {formatDuration(row.fastestMinutes)}
+                      </td>
+                      <td class="px-3 py-2.5 text-right text-cms-muted tabular-nums">
+                        {formatDuration(row.slowestMinutes)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ))
+    }
+  </div>
+</CmsCard>
