@@ -6,8 +6,12 @@ import {
   USER_TREND_MONTHS,
 } from '../../src/lib/cms/analytics/userPerformanceTrend.ts';
 
-const valueTickCount = (svg: string): number =>
-  (svg.match(/text-anchor="end" font-size="11"/g) ?? []).length;
+const valueTickLabels = (svg: string): string[] =>
+  [...svg.matchAll(/text-anchor="end" font-size="11" fill="var\(--color-cms-muted\)">([^<]+)<\/text>/g)].map(
+    (match) => match[1] ?? '',
+  );
+
+const valueTickCount = (svg: string): number => valueTickLabels(svg).length;
 
 test('a user trend always spans Jan to Dec and preserves missing months as null', () => {
   const chart = buildUserPerformanceTrend({
@@ -35,7 +39,7 @@ test('a user trend always spans Jan to Dec and preserves missing months as null'
   assert.match(chart.svg, /Test Approver\nApril 2026\nAverage: 42 min\nApprovals: 18/);
 });
 
-test('Home user trend has five value levels and no target reference line', () => {
+test('Home user trend has five value levels, no y-axis title and no target reference line', () => {
   const chart = buildUserPerformanceTrend({
     year: 2026,
     noun: 'completions',
@@ -54,6 +58,7 @@ test('Home user trend has five value levels and no target reference line', () =>
   });
 
   assert.equal(valueTickCount(chart.svg), 5);
+  assert.doesNotMatch(chart.svg, />MINUTES<\/text>/);
   assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.deepEqual(chart.legend, [{ name: 'Test User', token: 'cms-series-1' }]);
   assert.equal(chart.table.rows[0]![1], '1 h 4 min · 1 completion');
@@ -82,8 +87,33 @@ test('Loading Authority trend renders affiliate series with clean five-level sca
     { name: 'HPU', token: 'cms-series-2' },
   ]);
   assert.equal(valueTickCount(chart.svg), 5);
+  assert.doesNotMatch(chart.svg, />MINUTES<\/text>/);
   assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.equal(chart.table.rows[0]![1], 'Not available');
   assert.equal(chart.table.rows[7]![1], '1 h 15 min · 2 completions');
   assert.match(chart.svg, /HPK\nAugust 2026\nAverage: 1 h 15 min\nCompletions: 2/);
+});
+
+test('Loading Authority y-axis uses the same total-hours label convention as Purchase Order', () => {
+  const chart = buildLoadingAuthorityTrend({
+    year: 2026,
+    entities: [{ affiliateId: 'AFF-KE', code: 'HPK' }],
+    points: [
+      {
+        affiliateId: 'AFF-KE',
+        bucket: '2026-08',
+        volume: 1,
+        averageMinutes: 10_000,
+        targetMinutes: 30,
+      },
+    ],
+  });
+
+  assert.deepEqual(valueTickLabels(chart.svg), [
+    '0 min',
+    '41 h 40 min',
+    '83 h 20 min',
+    '125 h',
+    '166 h 40 min',
+  ]);
 });
