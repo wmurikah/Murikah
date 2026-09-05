@@ -19,18 +19,26 @@ interface Props {
 }
 const { current, permissions, class: className } = Astro.props;
 
-const OPERATIONAL = ['Leads', 'Opportunities', 'Activities', 'CRM analytics'];
+/** Keep the three long-standing workspaces explicit; Analytics is promoted beside them below. */
+const OPERATIONAL = ['Leads', 'Opportunities', 'Activities'];
 const crm = CMS_DESTINATIONS.filter((d) => d.area === 'CRM');
-const operational = crm
+const workspaces = crm
   .filter((d) => OPERATIONAL.includes(d.label) && destinationAllowed(d, permissions))
   .sort((a, b) => OPERATIONAL.indexOf(a.label) - OPERATIONAL.indexOf(b.label))
-  .map((d) => ({
-    label: d.label === 'CRM analytics' ? 'Analytics' : d.label,
-    href: d.href,
-  }));
-const tabs = [{ label: 'Overview', href: '/app/crm/home' }, ...operational];
+  .map((d) => ({ label: d.label, href: d.href }));
+const analytics = crm.find(
+  (d) => d.label === 'CRM analytics' && destinationAllowed(d, permissions),
+);
+const tabs = [
+  { label: 'Overview', href: '/app/crm/home' },
+  ...workspaces,
+  ...(analytics === undefined ? [] : [{ label: 'Analytics', href: analytics.href }]),
+];
 const settings = crm.filter(
-  (d) => !OPERATIONAL.includes(d.label) && destinationAllowed(d, permissions),
+  (d) =>
+    !OPERATIONAL.includes(d.label) &&
+    d.label !== 'CRM analytics' &&
+    destinationAllowed(d, permissions),
 );
 ---
 
