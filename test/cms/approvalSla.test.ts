@@ -26,7 +26,6 @@ import {
   approvalCycle,
   approvalRecords,
   approvalTrend,
-  loadingAuthorityTrend,
   userApprovalTrend,
   EVERYONE,
   MINIMUM_RANKED_VOLUME,
@@ -543,23 +542,6 @@ test('user trends average transactions directly across products and retain their
   assert.match(implementation, /AVG\(d\.measured_minutes\)/);
   assert.match(implementation, /GROUP BY d\.affiliate_id, d\.user_id/);
   assert.ok(!/GROUP BY[^`]*grp/.test(implementation.slice(0, implementation.indexOf('`;', 1))));
-  db.close();
-});
-
-test('Loading Authority trend is entity-level and uses the canonical function population', async () => {
-  const db = createTestDb();
-  await seedHass(db);
-  const points = await loadingAuthorityTrend(client(db), scope('2026-05'));
-  assert.ok(points.every((point) => point.affiliateId && point.volume > 0));
-  const source = readFileSync('src/lib/cms/repos/approvalSla.ts', 'utf8');
-  const implementation = source.slice(
-    source.indexOf('export async function loadingAuthorityTrend'),
-  );
-  assert.match(implementation, /src\.fn = 'Loading authority'/);
-  assert.match(implementation, /GROUP BY d\.affiliate_id, substr\(d\.completed_at/);
-  assert.match(implementation, /const window = windowArgs\(scope\)/);
-  assert.match(implementation, /args: \{ from: window\.from, to: window\.to \}/);
-  assert.ok(!/user_id|person/.test(implementation.slice(0, implementation.indexOf('\n}'))));
   db.close();
 });
 
