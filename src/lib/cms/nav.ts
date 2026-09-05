@@ -1,7 +1,11 @@
 /**
  * The CMS navigation rail.
  *
- * The rail has to become permission-driven, so the navigation is data rather than markup: one typed array, one component (CmsSidebar.astro) that renders it, and one place to change when a module arrives. Markup that hard-codes destinations cannot be filtered later without being rewritten, which is the mistake this avoids.
+ * The rail has to become permission-driven, so the navigation is data rather
+ * than markup: one typed array, one component (CmsSidebar.astro) that renders
+ * it, and one place to change when a module arrives. Markup that hard-codes
+ * destinations cannot be filtered later without being rewritten, which is the
+ * mistake this avoids.
  *
  * IT IS NOW DERIVED RATHER THAN WRITTEN. The rail is the subset of
  * ./destinations.ts that carries an icon, because that catalogue also feeds
