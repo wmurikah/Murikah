@@ -11,6 +11,9 @@ const valueTickLabels = (svg: string): string[] =>
     (match) => match[1] ?? '',
   );
 
+const gridHours = (svg: string): number[] =>
+  [...svg.matchAll(/data-home-y-grid="(\d+)"/g)].map((match) => Number(match[1]));
+
 const UNIFORM_HOUR_LABELS = [
   '0',
   '1 hr',
@@ -24,6 +27,21 @@ const UNIFORM_HOUR_LABELS = [
   '9 hrs',
   '10 hrs',
 ];
+
+const HOURLY_GRID_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+function assertUniformGrid(svg: string): void {
+  assert.deepEqual(gridHours(svg), HOURLY_GRID_LEVELS);
+  assert.doesNotMatch(svg, /data-home-y-grid="0"/);
+  assert.match(
+    svg,
+    /data-home-y-grid="1"[^>]*stroke="var\(--color-cms-line\)"[^>]*stroke-width="1"[^>]*opacity="0\.28"/,
+  );
+  assert.match(
+    svg,
+    /data-home-y-grid="10"[^>]*stroke="var\(--color-cms-line\)"[^>]*stroke-width="1"[^>]*opacity="0\.28"/,
+  );
+}
 
 test('a user trend always spans Jan to Dec and preserves missing months as null', () => {
   const chart = buildUserPerformanceTrend({
@@ -51,7 +69,7 @@ test('a user trend always spans Jan to Dec and preserves missing months as null'
   assert.match(chart.svg, /Test Approver\nApril 2026\nAverage: 42 min\nApprovals: 18/);
 });
 
-test('Purchase Order Home trend uses the fixed 0-to-10-hour y-axis with the axis line retained', () => {
+test('Purchase Order Home trend uses the fixed 0-to-10-hour y-axis with faint hourly grids', () => {
   const chart = buildUserPerformanceTrend({
     year: 2026,
     noun: 'completions',
@@ -72,6 +90,7 @@ test('Purchase Order Home trend uses the fixed 0-to-10-hour y-axis with the axis
   assert.deepEqual(valueTickLabels(chart.svg), UNIFORM_HOUR_LABELS);
   assert.match(chart.svg, /data-home-y-axis="true"/);
   assert.equal((chart.svg.match(/data-home-y-tick="/g) ?? []).length, 11);
+  assertUniformGrid(chart.svg);
   assert.doesNotMatch(chart.svg, />MINUTES<\/text>/);
   assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.doesNotMatch(chart.svg, /__HOME_10_HOUR_SCALE__/);
@@ -79,7 +98,7 @@ test('Purchase Order Home trend uses the fixed 0-to-10-hour y-axis with the axis
   assert.equal(chart.table.rows[0]![1], '1 h 4 min · 1 completion');
 });
 
-test('Loading Authority uses the exact same 0-to-10-hour y-axis as Purchase Order', () => {
+test('Loading Authority uses the exact same 0-to-10-hour y-axis and hourly grids as Purchase Order', () => {
   const chart = buildLoadingAuthorityTrend({
     year: 2026,
     entities: [
@@ -105,6 +124,7 @@ test('Loading Authority uses the exact same 0-to-10-hour y-axis as Purchase Orde
   assert.deepEqual(valueTickLabels(chart.svg), UNIFORM_HOUR_LABELS);
   assert.match(chart.svg, /data-home-y-axis="true"/);
   assert.equal((chart.svg.match(/data-home-y-tick="/g) ?? []).length, 11);
+  assertUniformGrid(chart.svg);
   assert.doesNotMatch(chart.svg, />MINUTES<\/text>/);
   assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.equal(chart.table.rows[0]![1], 'Not available');
@@ -128,6 +148,7 @@ test('durations above ten hours are capped visually but exact data remains in th
   });
 
   assert.deepEqual(valueTickLabels(chart.svg), UNIFORM_HOUR_LABELS);
+  assertUniformGrid(chart.svg);
   assert.match(chart.svg, />10 h\+<\/text>/);
   assert.equal(chart.table.rows[7]![1], '15 h · 1 completion');
   assert.match(chart.svg, /Average: 15 h/);
