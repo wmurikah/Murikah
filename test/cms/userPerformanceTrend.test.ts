@@ -12,6 +12,7 @@ const valueTickLabels = (svg: string): string[] =>
   );
 
 const UNIFORM_HOUR_LABELS = [
+  '0',
   '1 hr',
   '2 hrs',
   '3 hrs',
@@ -50,7 +51,7 @@ test('a user trend always spans Jan to Dec and preserves missing months as null'
   assert.match(chart.svg, /Test Approver\nApril 2026\nAverage: 42 min\nApprovals: 18/);
 });
 
-test('Purchase Order Home trend uses the fixed 1-to-10-hour y-axis with the axis line retained', () => {
+test('Purchase Order Home trend uses the fixed 0-to-10-hour y-axis with the axis line retained', () => {
   const chart = buildUserPerformanceTrend({
     year: 2026,
     noun: 'completions',
@@ -70,7 +71,7 @@ test('Purchase Order Home trend uses the fixed 1-to-10-hour y-axis with the axis
 
   assert.deepEqual(valueTickLabels(chart.svg), UNIFORM_HOUR_LABELS);
   assert.match(chart.svg, /data-home-y-axis="true"/);
-  assert.equal((chart.svg.match(/data-home-y-tick="/g) ?? []).length, 10);
+  assert.equal((chart.svg.match(/data-home-y-tick="/g) ?? []).length, 11);
   assert.doesNotMatch(chart.svg, />MINUTES<\/text>/);
   assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.doesNotMatch(chart.svg, /__HOME_10_HOUR_SCALE__/);
@@ -78,7 +79,7 @@ test('Purchase Order Home trend uses the fixed 1-to-10-hour y-axis with the axis
   assert.equal(chart.table.rows[0]![1], '1 h 4 min · 1 completion');
 });
 
-test('Loading Authority uses the exact same 1-to-10-hour y-axis as Purchase Order', () => {
+test('Loading Authority uses the exact same 0-to-10-hour y-axis as Purchase Order', () => {
   const chart = buildLoadingAuthorityTrend({
     year: 2026,
     entities: [
@@ -103,7 +104,7 @@ test('Loading Authority uses the exact same 1-to-10-hour y-axis as Purchase Orde
   ]);
   assert.deepEqual(valueTickLabels(chart.svg), UNIFORM_HOUR_LABELS);
   assert.match(chart.svg, /data-home-y-axis="true"/);
-  assert.equal((chart.svg.match(/data-home-y-tick="/g) ?? []).length, 10);
+  assert.equal((chart.svg.match(/data-home-y-tick="/g) ?? []).length, 11);
   assert.doesNotMatch(chart.svg, />MINUTES<\/text>/);
   assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.equal(chart.table.rows[0]![1], 'Not available');
