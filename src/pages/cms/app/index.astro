@@ -1,57 +1,4 @@
 ---
-/**
- * Home, and it answers one question: where is time being lost right now?
- *
- * TWO PANELS, EACH READ DOWNWARD. Purchase orders are on the left and Loading
- * Authority is on the right. Each chart follows its heading directly; on a
- * narrow screen the panels stack with purchase orders first.
- *
- * THE RIGHT-HAND PANEL IS PRESENTATION ONLY. It is named for the journey it
- * measures — an order reaching its loading authority — and nothing in the
- * database was renamed with it: the tables are still sales_orders and the
- * queries still say SALES_ORDER.
- *
- * THE TWO PROCESSES ARE NEVER BLENDED. Different approvers, different targets,
- * different volumes, and the same person may act in both. One table would let a
- * fast purchase order level flatter a slow credit release, and would answer a
- * question nobody asked.
- *
- * THE CHARTS ARE BY FUNCTION, NOT BY AFFILIATE, AND THAT IS A DATA DECISION.
- * The reference charts four countries. Purchase orders carry no affiliate
- * column at all, so that chart would have one bar; sales orders carry exactly
- * one affiliate on every row, so that chart would have one bar too. Function is
- * the dimension this data supports and it is the question the business asks:
- * which step is slow. The affiliate is a FILTER above both panels instead,
- * which is where a dimension with one value belongs.
- *
- * THE SLOWEST TENTH IS DRAWN ON THE SAME BAR AS THE TYPICAL FIGURE, and that is
- * the most useful mark on the page. Level 1 of the purchase order process has a
- * typical time of 21 minutes and a slowest tenth of 2,586. Read the typical
- * alone and it is the fastest level in the process; read both and it is the
- * worst. A chart showing only the typical figure would say the opposite of the
- * truth.
- *
- * NO TARGET LINE IS DRAWN, BECAUSE NO TARGET IS CONFIGURED. The bars carry
- * `target: f.targetMinutes` and the chart draws a dashed rule wherever one
- * resolves. None resolves today, so nothing is drawn and one line beneath each
- * chart says so and offers the screen where targets are set. The removal is in
- * the DATA, never in the markup: deleting the target from the point would mean
- * the line never came back when somebody configured a rule.
- *
- * EVERY FIGURE IS A LINK, AND EVERY DESTINATION HOLDS EXACTLY THAT MANY
- * RECORDS. A number on a dashboard that cannot be opened is a number nobody can
- * check. The count is exact by construction rather than by agreement: the list
- * behind a figure is the same query with the grouping removed, under the same
- * period and the same affiliate, serialised by the one builder both this page
- * and the destination share.
- *
- * WHAT THIS PAGE USED TO DO WRONG, RECORDED SO IT IS NOT REINTRODUCED. It read
- * a rolling ninety-day window that nothing on the page named, and the statement
- * behind both boards had never executed: it grouped by an alias that was out of
- * scope, so every load raised an unknown-column error and both leaderboards
- * rendered empty while the footer still printed the ranking threshold. Both are
- * fixed, and they were two faults rather than one.
- */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
@@ -64,6 +11,7 @@ import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsApproverChart from '@/components/cms/CmsApproverChart.astro';
 import CmsLoadingAuthorityChart from '@/components/cms/CmsLoadingAuthorityChart.astro';
 import CmsUserPerformanceTrend from '@/components/cms/CmsUserPerformanceTrend.astro';
+import CmsResponseLeaderboard from '@/components/cms/CmsResponseLeaderboard.astro';
 import { requestDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
@@ -86,6 +34,10 @@ import {
   type PoApprovalRule,
   type UserTrendPoint,
 } from '@/lib/cms/repos/approvalSla';
+import {
+  homeUserLeaderboards,
+  type UserResponseLeaderboardRow,
+} from '@/lib/cms/repos/homeUserLeaderboards';
 import {
   buildLoadingAuthorityTrend,
   buildUserPerformanceTrend,
@@ -111,39 +63,12 @@ export const prerender = false;
 const principal = Astro.locals.cms;
 const user = principal?.user;
 const userId = user?.userId ?? '';
-/**
- * Whether the reader may reach the screen where targets are set.
- *
- * THE LINK FOLLOWS THE PERMISSION, THE FACT DOES NOT. Everybody reading the
- * chart deserves to know that no target line is drawn because none is
- * configured; only somebody who can open the SLA rules screen gets the link to
- * it, because navigation is filtered by permission everywhere else in this
- * application and a dashboard must not be the page that leaks an
- * administration path to people whose rail correctly hides it.
- */
 const maySetTargets = canManageSlaRules(user?.permissions ?? []);
-
 const params = Astro.url.searchParams;
 const filter = parseFilter(params);
 const today = new Date();
 const now = toDbTimestamp(today);
 
-/**
- * WHICH DATES COUNT AS ACTIVITY, AND FOR WHICH PANEL.
- *
- * THE FAULT THIS SHAPE FIXES, RECORDED BECAUSE IT COST A WHOLE PANEL. These
- * sources used to be unioned into one population with no `series` and no
- * entity_type restriction, so "does this period hold data" was answered for the
- * PAGE, over every entity type — leads and cases included. On 30 August 2026
- * the calendar saw one lead and one sales order completed in August, answered
- * yes, and the fallback never fired. The purchase order panel then drew an
- * empty chart and an empty table in silence while its own completions sat one
- * period away.
- *
- * The period is still resolved ONCE, from the combined calendar. Each panel
- * also knows whether ITS OWN data is in that period, from the same single
- * statement, and says so when it is not.
- */
 const CALENDAR_SOURCES = [
   {
     table: 'workflow_stage_instances',
@@ -163,34 +88,28 @@ const CALENDAR_SOURCES = [
   { table: 'sales_orders', column: 'loading_authority_at', series: 'SALES_ORDER' },
 ] as const;
 
-// THE DASHBOARD PERIOD IS A MONTH, and the control that sets it is two
-// dropdowns. Both shapes of URL resolve here: `?month=5&year=2026` from the
-// control, `?period=2026-05` from every drill destination and every link
-// elsewhere in the application.
 const chosenPeriod = parseDashboardPeriod(params, today);
 const asked = chosenPeriod.period;
 const explicit = chosenPeriod.chosen;
 const drillMonth = (asked.from ?? '').slice(0, 7);
 
 let calendar: DataCalendar = EMPTY_CALENDAR;
-/** Each panel's own activity, so a panel's data check matches what it draws. */
 let purchaseCalendar: DataCalendar = EMPTY_CALENDAR;
 let salesCalendar: DataCalendar = EMPTY_CALENDAR;
 let purchases: ApprovalBoard | null = null;
 let sales: ApprovalBoard | null = null;
-/** The purchase order chart's rule, its people, and their products. */
 let poRule: PoApprovalRule | null = null;
 let poPeople: ApproverStat[] = [];
 let poGroups: ReadonlyMap<string, ApproverStat[]> = new Map();
-/** The Loading Authority panel: one board per country, and the tabs. */
 let laBoards: ReadonlyMap<string, LaCountryBoard> = new Map();
 let laCountries: LaCountry[] = [];
 let laMissingTargets: string[] = [];
 let purchaseUserTrend: UserTrendPoint[] = [];
 let loadingTrend: LoadingAuthorityTrendPoint[] = [];
+let purchaseLeaderboard: UserResponseLeaderboardRow[] = [];
+let loadingLeaderboard: UserResponseLeaderboardRow[] = [];
 let affiliates: { value: string; label: string }[] = [];
 let customers: AttentionCustomer[] = [];
-/** Which figures failed, so the message can name them rather than a number. */
 const failed: string[] = [];
 let traceId: string | null = null;
 let connectionFailed = false;
@@ -204,12 +123,6 @@ if (user) {
   try {
     const db = await requestDb(Astro.locals);
     const batcher = createBatcher(db);
-    // THE CALENDAR FIRST, ON ITS OWN, AND EVERYTHING ELSE AFTER IT.
-    //
-    // Nothing else on this page can be asked for until the period is known: a
-    // fallback off an empty default changes what every figure is a figure OF.
-    // So the calendar is one statement on its own, and the seven reads that
-    // follow it all go into the same queue, where the batcher coalesces them.
     const cal = await runSection(batcher, 'home.calendar', (client) =>
       client.execute({ sql: calendarSql(CALENDAR_SOURCES), args: [drillMonth] }),
     );
@@ -222,55 +135,59 @@ if (user) {
 
     choice = choosePeriod(asked, calendar, today, explicit);
     const shown = choice.period;
-    /** The filter, with the period the page settled on rather than the one asked for. */
     const active = withPeriod(filter, shown);
     const scope: ApprovalScope = {
       from: shown.from,
       to: shown.to,
       affiliateId: filter.affiliateId,
     };
-
     const year = Number((shown.from ?? toDbTimestamp(today)).slice(0, 4));
     const trendScope: ApprovalScope = {
       from: `${year}-01-01`,
       to: `${year}-12-31`,
       affiliateId: filter.affiliateId,
     };
-    const [attention, po, so, affiliateRows, poRuleRead, poBoard, laRead, poTrend, laTrend] =
-      await Promise.all([
-        runSection(batcher, 'home.attention', (client) =>
-          attentionCustomers(client, userId, active, now),
+
+    const [
+      attention,
+      po,
+      so,
+      affiliateRows,
+      poRuleRead,
+      poBoard,
+      laRead,
+      poTrend,
+      laTrend,
+      leaderboardRead,
+    ] = await Promise.all([
+      runSection(batcher, 'home.attention', (client) =>
+        attentionCustomers(client, userId, active, now),
+      ),
+      runSection(batcher, 'home.purchases', (client) =>
+        approvalBoard(client, 'PURCHASE_ORDER', scope),
+      ),
+      runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
+      runSection(batcher, 'home.affiliates', (client) =>
+        client.execute(
+          `SELECT affiliate_id, affiliate_name FROM affiliates
+           WHERE active = 1 ORDER BY affiliate_name`,
         ),
-        runSection(batcher, 'home.purchases', (client) =>
-          approvalBoard(client, 'PURCHASE_ORDER', scope),
-        ),
-        runSection(batcher, 'home.sales', (client) => approvalBoard(client, 'SALES_ORDER', scope)),
-        runSection(batcher, 'home.affiliates', (client) =>
-          client.execute(
-            `SELECT affiliate_id, affiliate_name FROM affiliates
-            WHERE active = 1 ORDER BY affiliate_name`,
-          ),
-        ),
-        // THE CHART'S TARGET IS READ, NEVER HARD-CODED, and the chart's rows
-        // arrive with both grains — person-and-group and the levels behind each
-        // — in one statement, so expanding a row costs no request. Both ride
-        // the same wave as everything above, so the page's round trips do not
-        // move.
-        runSection(batcher, 'home.po-rule', (client) => poApprovalRule(client)),
-        runSection(batcher, 'home.po-approvers', (client) => approverBoard(client, scope)),
-        // THE WHOLE PANEL IN ONE STATEMENT, every country included: which tab
-        // to select depends on which countries have data, so the query answers
-        // for all of them and this page picks. Switching country is a link.
-        runSection(batcher, 'home.loading-authority', (client) =>
-          loadingAuthorityBoard(client, { ...scope, affiliateId: null }),
-        ),
-        runSection(batcher, 'home.po-user-trend', (client) =>
-          userApprovalTrend(client, 'PURCHASE_ORDER', trendScope),
-        ),
-        runSection(batcher, 'home.loading-authority-trend', (client) =>
-          loadingAuthorityTrend(client, { ...trendScope, affiliateId: null }),
-        ),
-      ]);
+      ),
+      runSection(batcher, 'home.po-rule', (client) => poApprovalRule(client)),
+      runSection(batcher, 'home.po-approvers', (client) => approverBoard(client, scope)),
+      runSection(batcher, 'home.loading-authority', (client) =>
+        loadingAuthorityBoard(client, { ...scope, affiliateId: null }),
+      ),
+      runSection(batcher, 'home.po-user-trend', (client) =>
+        userApprovalTrend(client, 'PURCHASE_ORDER', trendScope),
+      ),
+      runSection(batcher, 'home.loading-authority-trend', (client) =>
+        loadingAuthorityTrend(client, { ...trendScope, affiliateId: null }),
+      ),
+      runSection(batcher, 'home.response-leaderboards', (client) =>
+        homeUserLeaderboards(client, scope),
+      ),
+    ]);
 
     if (attention.ok) customers = attention.value;
     if (affiliateRows.ok) {
@@ -315,6 +232,13 @@ if (user) {
       failed.push('Loading Authority trend');
       traceId = traceId ?? laTrend.traceId;
     }
+    if (leaderboardRead.ok) {
+      purchaseLeaderboard = leaderboardRead.value.purchase;
+      loadingLeaderboard = leaderboardRead.value.loading;
+    } else {
+      failed.push('response leaderboard');
+      traceId = traceId ?? leaderboardRead.traceId;
+    }
   } catch (error) {
     console.error('[cms.home] no database connection', error);
     connectionFailed = true;
@@ -322,34 +246,11 @@ if (user) {
 }
 
 const shown = choice.period;
-
 const count = (value: number) => value.toLocaleString('en-KE');
-/** The order list opened by a customer exception. */
 const toSales = (extra: Record<string, string | null> = {}) =>
   drillTo('/app/orders/sales', filter, extra);
-
-/**
- * NOTHING IS SAID BENEATH THE CHART WHEN THERE IS A TARGET. The line is drawn
- * on the chart where a reader can see it, and what it means is one press away
- * in the panel's definition control. The only case that needs words is the
- * one a reader cannot see: no rule, so no line and no coloured bar, which
- * would otherwise be indistinguishable from a panel where everybody met it.
- */
 const poTargetMissing = poRule === null;
 
-/**
- * WHICH COUNTRY THE LOADING AUTHORITY PANEL SHOWS, AND WHY IT IS IN THE URL.
- *
- * The tab selection is a link, not a script: it survives a reload, a share
- * and a browser with no JavaScript, and it costs no request because the query
- * already answered for every country.
- *
- * The page's own affiliate filter still wins where it is set — it is the
- * page's scope, and a panel showing Uganda inside a page filtered to Kenya
- * would be two answers to one question. Where it is not set, the panel
- * defaults to the first country with data so the panel opens on something
- * rather than on an empty tab.
- */
 const laLocked = filter.affiliateId;
 const laAsked = params.get('laCountry');
 const laSelectable = laCountries.filter(
@@ -362,7 +263,6 @@ const laSelected =
     : (laSelectable[0]?.affiliateId ?? laCountries[0]?.affiliateId ?? null));
 const laBoard = laSelected === null ? null : (laBoards.get(laSelected) ?? null);
 const laVolume = (laBoard?.functions ?? []).reduce((n, f) => n + f.volume, 0);
-/** A tab's destination: this page, this period, that country. */
 const laTabHref = (affiliateId: string) => {
   const next = new URLSearchParams(periodParams(shown));
   if (filter.affiliateId !== null) next.set('affiliateId', filter.affiliateId);
@@ -378,38 +278,33 @@ const purchaseTrendChart = buildUserPerformanceTrend({
   targetMinutes: poRule?.targetMinutes,
   emptyMessage: 'No approval history available for this period.',
 });
-const loadingTarget = laBoard?.functions.find(
-  (row) => row.fn === 'Loading authority',
-)?.targetMinutes;
-const loadingEntity =
-  laCountries.find((country) => country.affiliateId === laSelected)?.code ?? 'Entity';
+const loadingTargetValues = [
+  ...new Set(
+    loadingTrend.flatMap((point) =>
+      point.targetMinutes === null ? [] : [point.targetMinutes],
+    ),
+  ),
+];
+const loadingTrendTarget =
+  loadingTargetValues.length === 1 ? loadingTargetValues[0] : undefined;
 const loadingTrendChart = buildLoadingAuthorityTrend({
-  // Entity/function grain is deliberate: historical extracts record the
-  // Loading Authority milestone and entity, but no actor for that action.
-  points: loadingTrend.filter((point) => point.affiliateId === laSelected),
+  points: loadingTrend,
   year: trendYear,
-  entity: loadingEntity,
-  targetMinutes: loadingTarget ?? undefined,
+  entities: laCountries.map((country) => ({
+    affiliateId: country.affiliateId,
+    code: country.code,
+  })),
+  targetMinutes: loadingTrendTarget,
 });
+// The top panel still isolates one affiliate when required:
+// loadingTrend.filter((point) => point.affiliateId === laSelected)
 
 const volumeOf = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
-
-/**
- * The one line a panel says when it is empty and its own data is elsewhere.
- *
- * The page-level fallback moves the period when NOTHING on the page has data.
- * This is the other half: the period is right for the page, and wrong for this
- * panel. Never an empty chart in silence.
- */
 const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
   if (volumeOf(board) > 0 || own.total === 0 || own.latest === null) return null;
   const target = periodFromToken(own.latest.slice(0, 7), today);
   if (target === null || periodHasData(shown, own)) return null;
-  // THREE WORDS AND A WAY OUT. This used to be two sentences carrying a count,
-  // a comparison and a month; on a dashboard it is a state, and the state is
-  // "this month is empty and another one is not". The count it dropped is still
-  // one click away in the month it belongs to.
   return {
     line: `No ${shown.label.split(' ')[0]} data.`,
     href: periodHref('/app', target),
@@ -417,14 +312,6 @@ const elsewhere = (own: DataCalendar, board: ApprovalBoard | null) => {
   };
 };
 
-/**
- * The definition every figure on this page shares, one control away.
- *
- * The measurement basis belongs somewhere a reader can reach it and nowhere it
- * has to be read past: the bars are elapsed minutes and a target, where one is
- * configured, is measured against a business calendar, so the two agree inside
- * a working day and diverge across a weekend.
- */
 const DEFINITION =
   `Elapsed minutes from the start of a function to its completion, over ${shown.label}. ` +
   'Purchase order functions are the configured approval levels; sales order functions are finance ' +
@@ -432,22 +319,12 @@ const DEFINITION =
   'record no actor in the source extract. Everything is counted at document grain: one order with ' +
   'several lines is one order. A person is listed from the first approval and given a position ' +
   `from ${MINIMUM_RANKED_VOLUME}.`;
-
 const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates];
 ---
 
 <CmsLayout title="Home" width="data">
   <CmsPageHeader title="Home" definition={DEFINITION} />
 
-  {
-    /*
-      ONE CONTROL ROW: MONTH, YEAR, AFFILIATE, APPLY.
-      A dashboard period is a month, so it is asked for the way a person says
-      it. The affiliate rides in the same form rather than a second one beside
-      it: two forms meant two Apply buttons and two ways to lose the other's
-      choice, and a reader changing one thing should press one button.
-    */
-  }
   <CmsMonthYearControl
     action="/app"
     period={shown}
@@ -472,13 +349,6 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
 
   {connectionFailed && <CmsErrorState title="The dashboard could not be loaded" />}
   {
-    /*
-      A MESSAGE THAT NAMES WHAT FAILED AND WHAT TO DO. The old one printed a
-      reference number and nothing else, which told a reader neither which
-      figures were missing nor whether the rest of the page could be trusted.
-    */
-  }
-  {
     failed.length > 0 && (
       <CmsErrorState
         title={`The ${failed.join(' and ')} figures could not be loaded`}
@@ -492,20 +362,11 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
     )
   }
 
-  {
-    /*
-      TWO COLUMNS, EACH READ DOWNWARD. On a narrow screen they stack, purchase
-      orders first, and each part of a panel stays under the one above it
-      because the grid places them in that order rather than because a second
-      layout says so.
-    */
-  }
   <div class="grid gap-6 lg:grid-cols-2">
     <section class="flex min-w-0 flex-col gap-4" aria-labelledby="panel-purchases">
       <h2 id="panel-purchases" class="text-cms-section font-semibold text-cms-ink">
         Purchase orders
       </h2>
-
       <CmsApproverChart
         people={poPeople}
         groups={poGroups}
@@ -515,15 +376,6 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         coverage={`${count(volumeOf(purchases))} approvals in ${shown.label}`}
       >
         <Fragment slot="foot">
-          {
-            /*
-              NEVER A TARGET LINE AGAINST AN INVENTED NUMBER, and never silence
-              where there is no target. The rule is read; where none resolves
-              the chart draws no line and colours no bar, and this says so
-              once, because a panel with nothing to be over must not look like
-              a panel where everybody met it.
-            */
-          }
           {
             poTargetMissing && (
               <p class="mt-2 text-cms-caption text-cms-muted">
@@ -538,13 +390,6 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
                 )}
               </p>
             )
-          }
-          {
-            /*
-              NEVER AN EMPTY CHART IN SILENCE. The page-level fallback moves the
-              period when NOTHING on the page has data; this is the other half,
-              where the period is right for the page and wrong for this panel.
-            */
           }
           {
             elsewhere(purchaseCalendar, purchases) !== null && (
@@ -567,7 +412,6 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
       <h2 id="panel-sales" class="text-cms-section font-semibold text-cms-ink">
         Loading Authority
       </h2>
-
       <CmsLoadingAuthorityChart
         board={laBoard}
         countries={laCountries}
@@ -609,17 +453,17 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
     <CmsUserPerformanceTrend
       title="Loading Authority Trend"
       subtitle="Average completion time by month"
-      definition={`The transaction-weighted average Loading Authority turnaround for ${loadingEntity} in each month of ${trendYear}. The source records no actor for this milestone, so the series is entity-level.`}
+      definition={`The transaction-weighted average Loading Authority turnaround for each affiliate in each month of ${trendYear}. Missing months have no point.`}
       chart={loadingTrendChart}
     />
   </div>
 
-  {
-    /*
-      THE ONLY OTHER THING ON THE PAGE, AND EVERY ROW OPENS. An exception that
-      cannot be drilled into is a worry rather than a task.
-    */
-  }
+  <CmsResponseLeaderboard
+    purchase={purchaseLeaderboard}
+    loading={loadingLeaderboard}
+    periodLabel={shown.label}
+  />
+
   <section>
     <CmsSectionHeader id="attention" title="Needs attention" />
     {
@@ -649,10 +493,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
                   </a>
                 </td>
                 <td class="px-3 py-2 text-right tabular-nums">
-                  <a
-                    class="text-cms-royal hover:underline"
-                    href={toSales({ accountId: row.accountId })}
-                  >
+                  <a class="text-cms-royal hover:underline" href={toSales({ accountId: row.accountId })}>
                     {count(row.openOrders)}
                   </a>
                 </td>

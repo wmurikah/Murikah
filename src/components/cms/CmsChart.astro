@@ -61,9 +61,12 @@ function hash(value: string): number {
 
   {
     chart.legend && chart.legend.length > 0 && (
-      <ul class="mb-2 flex flex-wrap gap-x-3 gap-y-1" aria-label={`${title} users`}>
+      <ul
+        class="mb-2 flex flex-nowrap gap-x-3 overflow-x-auto whitespace-nowrap pb-1"
+        aria-label={`${title} legend`}
+      >
         {chart.legend.map((item) => (
-          <li class="flex items-center gap-1 text-cms-caption text-cms-muted">
+          <li class="flex shrink-0 items-center gap-1 text-cms-caption text-cms-muted">
             <span
               aria-hidden="true"
               class="h-0.5 w-4 rounded-full"
