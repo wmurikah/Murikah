@@ -19,7 +19,6 @@ test('CRM has an action-first overview without moving the existing Leads route',
   assert.match(home, /Closing in the next 30 days/);
   assert.match(home, /Recently active open opportunities/);
 
-  // Existing bookmarks and drill links still resolve to the original Leads workspace.
   assert.match(leads, /<CmsLayout title="Leads">/);
   assert.match(home, /href="\/app\/crm"/);
 });
@@ -50,4 +49,22 @@ test('CRM overview reuses scoped repositories and does not introduce schema or w
   assert.match(home, /myWork\(db, userId, now\)/);
   assert.match(home, /listOpportunities\(/);
   assert.doesNotMatch(home, /INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|ALTER\s+TABLE|CREATE\s+TABLE/i);
+});
+
+test('CRM overview surfaces commercial context and next actions from existing tables', () => {
+  const home = read('src/pages/cms/app/crm/home.astro');
+  const repo = read('src/lib/cms/repos/crmWorkspace.ts');
+
+  assert.match(home, /opportunityWorkspaceContext\(db, userId, ids\)/);
+  assert.match(home, /Expected demand/);
+  assert.match(home, /Next:/);
+
+  assert.match(repo, /JOIN accounts a ON a\.account_id = o\.account_id/);
+  assert.match(repo, /LEFT JOIN affiliates af ON af\.affiliate_id = a\.affiliate_id/);
+  assert.match(repo, /JOIN opportunity_products op ON op\.opportunity_id = o\.opportunity_id/);
+  assert.match(repo, /JOIN products p ON p\.product_id = op\.product_id/);
+  assert.match(repo, /JOIN activities act/);
+  assert.match(repo, /DUE_SQL/);
+  assert.match(repo, /scopedOpportunities\(db, userId\)/);
+  assert.doesNotMatch(repo, /INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|ALTER\s+TABLE|CREATE\s+TABLE/i);
 });
