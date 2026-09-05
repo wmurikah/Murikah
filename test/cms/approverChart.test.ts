@@ -393,14 +393,10 @@ test('the panel carries none of the narration it replaced', () => {
   assert.match(poPanel, /No target configured\./, 'nothing is said when no rule resolves');
   // The definition control carries the measure, on demand.
   assert.match(panel, /<CmsDefinition/, 'the panel has no definition control');
-  // The axis is bare: two values and nothing between them.
-  const axis = panel.slice(panel.indexOf('A BARE AXIS'), panel.indexOf('THE TABLE EQUIVALENT'));
-  assert.match(axis, />0</, 'the axis has no left value');
-  assert.match(axis, /formatDuration\(Math\.round\(scale\)\)/, 'the axis has no right value');
-  // The class names are stripped first: `text-cms-caption` is a utility, not
-  // a caption, and the assertion is about what a reader sees.
-  const axisText = axis.replace(/class(:list)?=("[^"]*"|\{[^}]*\})/g, '');
-  assert.ok(!/minute|target|clock|hour/i.test(axisText), 'the axis carries a caption');
+  // The lower scale captions are deliberately absent; the target above the
+  // marker and every row's exact duration remain.
+  assert.ok(!/A BARE AXIS|Math\.round\(scale\)/.test(panel));
+  assert.match(panel, /formatDuration\(rule\.targetMinutes\)/);
 });
 
 /**
