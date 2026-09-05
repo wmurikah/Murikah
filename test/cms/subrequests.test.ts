@@ -284,6 +284,13 @@ test('/app stays inside its subrequest budget', async () => {
           affiliateId: filter.affiliateId,
         }),
       ),
+      runSection(b, 'home.so-user-trend', (db) =>
+        userApprovalTrend(db, 'SALES_ORDER', {
+          from: `${shown.from!.slice(0, 4)}-01-01`,
+          to: `${shown.from!.slice(0, 4)}-12-31`,
+          affiliateId: null,
+        }),
+      ),
       runSection(b, 'home.affiliates', (db) =>
         db.execute(
           `SELECT affiliate_id, affiliate_name FROM affiliates
