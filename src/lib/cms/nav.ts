@@ -1,11 +1,7 @@
 /**
  * The CMS navigation rail.
  *
- * The rail has to become permission-driven, so the navigation is data rather
- * than markup: one typed array, one component (CmsSidebar.astro) that renders
- * it, and one place to change when a module arrives. Markup that hard-codes
- * destinations cannot be filtered later without being rewritten, which is the
- * mistake this avoids.
+ * The rail has to become permission-driven, so the navigation is data rather than markup: one typed array, one component (CmsSidebar.astro) that renders it, and one place to change when a module arrives. Markup that hard-codes destinations cannot be filtered later without being rewritten, which is the mistake this avoids.
  *
  * IT IS NOW DERIVED RATHER THAN WRITTEN. The rail is the subset of
  * ./destinations.ts that carries an icon, because that catalogue also feeds
@@ -44,16 +40,18 @@ export interface CmsNavItem {
 /**
  * The rail, in rail order: the catalogue entries that carry an icon.
  *
- * An icon is the marker because it is the thing only a rail entry needs. A
- * separate `rail: true` flag would be a second fact to keep true; this one
- * cannot be set without also giving the entry the picture it renders.
+ * CRM is the one deliberate navigation override. `/app/crm` remains the Leads
+ * workspace and therefore stays a stable route for existing links and
+ * bookmarks, while the module-level CRM rail entry now opens the action-first
+ * workspace at `/app/crm/home`. Record routes and page-search destinations do
+ * not need to move just to improve the module landing experience.
  */
 export const CMS_NAV: readonly CmsNavItem[] = CMS_DESTINATIONS.filter(
   (destination): destination is typeof destination & { icon: CmsIconName } =>
     destination.icon !== undefined,
 ).map((destination) => ({
   label: destination.label,
-  href: destination.href,
+  href: destination.label === 'CRM' ? '/app/crm/home' : destination.href,
   icon: destination.icon,
   permission: destination.permission,
 }));
@@ -79,6 +77,9 @@ export function visibleNav(permissions: readonly string[]): CmsNavItem[] {
  * The entry whose href best matches a visitor-facing path, or null. Longest
  * match wins, so /customers/123 marks Customers rather than Home. Exported so
  * the shell can mark the active item and title the page from one source.
+ *
+ * CRM keeps its active state for the legacy Leads route as well as every child
+ * route even though the rail itself now points at `/app/crm/home`.
  */
 export function activeNavItem(path: string): CmsNavItem | null {
   let best: CmsNavItem | null = null;
@@ -87,7 +88,11 @@ export function activeNavItem(path: string): CmsNavItem | null {
       if (path === '/app' && best === null) best = item;
       continue;
     }
-    if (path === item.href || path.startsWith(item.href + '/')) {
+    const matches =
+      item.label === 'CRM'
+        ? path === '/app/crm' || path.startsWith('/app/crm/')
+        : path === item.href || path.startsWith(item.href + '/');
+    if (matches) {
       if (best === null || item.href.length > best.href.length) best = item;
     }
   }
