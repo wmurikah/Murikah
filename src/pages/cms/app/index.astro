@@ -63,7 +63,6 @@ import CmsMonthYearControl from '@/components/cms/CmsMonthYearControl.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsApproverChart from '@/components/cms/CmsApproverChart.astro';
 import CmsLoadingAuthorityChart from '@/components/cms/CmsLoadingAuthorityChart.astro';
-import CmsUserPerformanceTrend from '@/components/cms/CmsUserPerformanceTrend.astro';
 import { requestDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
@@ -73,7 +72,6 @@ import {
   approvalBoard,
   approverBoard,
   loadingAuthorityBoard,
-  loadingAuthorityTrend,
   poApprovalRule,
   MINIMUM_RANKED_VOLUME,
   type ApprovalBoard,
@@ -82,17 +80,7 @@ import {
   type LaCountry,
   type LaCountryBoard,
   type PoApprovalRule,
-  type UserTrendPoint,
 } from '@/lib/cms/repos/approvalSla';
-import { buildUserPerformanceTrend } from '@/lib/cms/analytics/userPerformanceTrend';
-import {
-  buildLoadingAuthorityTrend,
-  buildUserPerformanceTrend,
-} from '@/lib/cms/analytics/userPerformanceTrend';
-import {
-  buildLoadingAuthorityTrend,
-  buildUserPerformanceTrend,
-} from '@/lib/cms/analytics/userPerformanceTrend';
 import {
   calendarSql,
   choosePeriod,
@@ -247,30 +235,22 @@ if (user) {
         client.execute(
           `SELECT affiliate_id, affiliate_name FROM affiliates
             WHERE active = 1 ORDER BY affiliate_name`,
-          ),
         ),
-        // THE CHART'S TARGET IS READ, NEVER HARD-CODED, and the chart's rows
-        // arrive with both grains — person-and-group and the levels behind each
-        // — in one statement, so expanding a row costs no request. Both ride
-        // the same wave as everything above, so the page's round trips do not
-        // move.
-        runSection(batcher, 'home.po-rule', (client) => poApprovalRule(client)),
-        runSection(batcher, 'home.po-approvers', (client) => approverBoard(client, scope)),
-        // THE WHOLE PANEL IN ONE STATEMENT, every country included: which tab
-        // to select depends on which countries have data, so the query answers
-        // for all of them and this page picks. Switching country is a link.
-        runSection(batcher, 'home.loading-authority', (client) =>
-          loadingAuthorityBoard(client, { ...scope, affiliateId: null }),
-        ),
-        runSection(batcher, 'home.po-user-trend', (client) =>
-          userApprovalTrend(client, 'PURCHASE_ORDER', trendScope),
-        ),
-        // Read all entities in one grouped statement. The selected Loading
-        // Authority tab is resolved from laRead below and filters these rows.
-        runSection(batcher, 'home.so-user-trend', (client) =>
-          userApprovalTrend(client, 'SALES_ORDER', { ...trendScope, affiliateId: null }),
-        ),
-      ]);
+      ),
+      // THE CHART'S TARGET IS READ, NEVER HARD-CODED, and the chart's rows
+      // arrive with both grains — person-and-group and the levels behind each
+      // — in one statement, so expanding a row costs no request. Both ride
+      // the same wave as everything above, so the page's round trips do not
+      // move.
+      runSection(batcher, 'home.po-rule', (client) => poApprovalRule(client)),
+      runSection(batcher, 'home.po-approvers', (client) => approverBoard(client, scope)),
+      // THE WHOLE PANEL IN ONE STATEMENT, every country included: which tab
+      // to select depends on which countries have data, so the query answers
+      // for all of them and this page picks. Switching country is a link.
+      runSection(batcher, 'home.loading-authority', (client) =>
+        loadingAuthorityBoard(client, { ...scope, affiliateId: null }),
+      ),
+    ]);
 
     if (attention.ok) customers = attention.value;
     if (affiliateRows.ok) {
@@ -304,16 +284,6 @@ if (user) {
     else {
       failed.push('Loading Authority');
       traceId = traceId ?? so.traceId;
-    }
-    if (poTrend.ok) purchaseUserTrend = poTrend.value;
-    else {
-      failed.push('purchase order trend');
-      traceId = traceId ?? poTrend.traceId;
-    }
-    if (soTrend.ok) salesUserTrend = soTrend.value;
-    else {
-      failed.push('Loading Authority trend');
-      traceId = traceId ?? soTrend.traceId;
     }
   } catch (error) {
     console.error('[cms.home] no database connection', error);
@@ -369,24 +339,6 @@ const laTabHref = (affiliateId: string) => {
   next.set('laCountry', affiliateId);
   return `/app?${next.toString()}`;
 };
-
-const trendYear = Number((shown.from ?? toDbTimestamp(today)).slice(0, 4));
-const purchaseTrendChart = buildUserPerformanceTrend({
-  points: purchaseUserTrend,
-  year: trendYear,
-  noun: 'approvals',
-  targetMinutes: poRule?.targetMinutes,
-  emptyMessage: 'No approval history available for this period.',
-});
-const loadingTrendChart = buildUserPerformanceTrend({
-  points: salesUserTrend.filter((point) => point.affiliateId === laSelected),
-  year: trendYear,
-  noun: 'completions',
-  // Loading Authority functions have independent targets. A single line here
-  // would misstate at least one function, so their existing bar markers remain
-  // the sole target source of truth.
-  emptyMessage: 'No completion history available for this period.',
-});
 
 const volumeOf = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
@@ -593,21 +545,6 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
         </Fragment>
       </CmsLoadingAuthorityChart>
     </section>
-  </div>
-
-  <div class="grid gap-6 lg:grid-cols-2">
-    <CmsUserPerformanceTrend
-      title="Purchase Order Approval Trend"
-      subtitle="Average approval time by user"
-      definition={`The transaction-weighted average approval duration for each user in each month of ${trendYear}. Missing months have no point.`}
-      chart={purchaseTrendChart}
-    />
-    <CmsUserPerformanceTrend
-      title="Loading Authority Trend"
-      subtitle="Average completion time by user"
-      definition={`The transaction-weighted average of attributable finance and credit approvals for each user in each month of ${trendYear}. Invoice and loading-authority milestones are excluded because the source records no user for them. Missing months have no point.`}
-      chart={loadingTrendChart}
-    />
   </div>
 
   {
