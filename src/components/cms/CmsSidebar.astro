@@ -53,6 +53,18 @@ const isActive = (href: string) =>
   href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(href + '/');
 
 /**
+ * CRM is the one module whose rail destination is a workspace overview rather
+ * than the first record list. `/app/crm` remains the Leads route for existing
+ * links and bookmarks; clicking CRM itself opens `/app/crm/home`.
+ */
+const navigationHref = (label: string, href: string) =>
+  label === 'CRM' ? '/app/crm/home' : href;
+const navigationActive = (label: string, href: string) =>
+  label === 'CRM'
+    ? currentPath === '/app/crm' || currentPath.startsWith('/app/crm/')
+    : isActive(href);
+
+/**
  * THE FIRST GROUP HAS NO HEADING, AND THAT IS THE POINT.
  *
  * It used to say WORK above Home, Customers, CRM, Helpdesk and Orders. Those
@@ -105,15 +117,16 @@ const rendered = groups
   {
     rendered.map((group) => {
       // OPEN BECAUSE THE READER IS IN IT, decided here rather than in a script.
-      const holdsCurrent = group.entries.some((item) => isActive(item.href));
+      const holdsCurrent = group.entries.some((item) => navigationActive(item.label, item.href));
       const items = (
         <ul class="flex flex-col gap-0.5">
           {group.entries.map((item) => {
-            const active = isActive(item.href);
+            const active = navigationActive(item.label, item.href);
+            const href = navigationHref(item.label, item.href);
             return (
               <li>
                 <a
-                  href={item.href}
+                  href={href}
                   aria-current={active ? 'page' : undefined}
                   class:list={[
                     'relative flex h-10 items-center rounded-cms pr-3 text-cms-body-sm',
