@@ -36,11 +36,11 @@ import { createBatcher, runSection } from '../../src/lib/cms/batching.ts';
 import { parseFilter, drillTo } from '../../src/lib/cms/analytics/filters.ts';
 import {
   approvalBoard,
-  approvalCycle,
   approvalTrend,
   approverBoard,
   loadingAuthorityBoard,
   poApprovalRule,
+  userApprovalTrend,
 } from '../../src/lib/cms/repos/approvalSla.ts';
 import {
   calendarSql,
@@ -52,7 +52,6 @@ import {
   withPeriod,
 } from '../../src/lib/cms/analytics/period.ts';
 import { countSalesOrders } from '../../src/lib/cms/repos/soPerformance.ts';
-import { countPurchaseOrders } from '../../src/lib/cms/repos/poPerformance.ts';
 import { listProviders, activeProvider } from '../../src/lib/cms/ai/providers.ts';
 import { listConnections } from '../../src/lib/cms/ai/channels.ts';
 import { reviewQueue } from '../../src/lib/cms/ai/inbox.ts';
@@ -198,7 +197,7 @@ function assertWithinBudget(page: string, trips: number, statements: number): vo
 const filter = parseFilter(new URLSearchParams());
 
 /**
- * Home: two panels, each a KPI strip, a bar chart, a trend and a leaderboard.
+ * Home: two process charts and the exception list beneath them.
  *
  * THE SHAPE IS THE ASSERTION. The calendar is read on its own, because nothing
  * else on the page can be asked for until the period is known — a fallback off
@@ -259,24 +258,14 @@ test('/app stays inside its subrequest budget', async () => {
     // fragment URL carries, from the calendar it already read.
     trendMonths = trendSpan(shown, calendar);
 
-    // EVERYTHING ELSE, IN ONE GO: the exceptions, four counts, two boards,
-    // two end-to-end spans and the affiliate list. The month before is no
+    // EVERYTHING ELSE, IN ONE GO: the exceptions, two boards, both chart
+    // reads and the affiliate list. The month before is no
     // longer queried: the trend fragment already carries the months ending at
     // this one, so a second board for it was a figure the chart draws anyway.
     await Promise.all([
       runSection(b, 'home.attention', (db) => attentionCustomers(db, USER, active, NOW)),
-      runSection(b, 'home.po-total', (db) => countPurchaseOrders(db, USER, active, NOW)),
-      runSection(b, 'home.so-total', (db) => countSalesOrders(db, USER, active, NOW)),
-      runSection(b, 'home.po-waiting', (db) =>
-        countPurchaseOrders(db, USER, { ...active, status: 'IN_APPROVAL' }, NOW),
-      ),
-      runSection(b, 'home.so-waiting', (db) =>
-        countSalesOrders(db, USER, { ...active, status: 'PENDING_FINANCE' }, NOW),
-      ),
       runSection(b, 'home.purchases', (db) => approvalBoard(db, 'PURCHASE_ORDER', scope)),
       runSection(b, 'home.sales', (db) => approvalBoard(db, 'SALES_ORDER', scope)),
-      runSection(b, 'home.purchases-cycle', (db) => approvalCycle(db, 'PURCHASE_ORDER', scope)),
-      runSection(b, 'home.sales-cycle', (db) => approvalCycle(db, 'SALES_ORDER', scope)),
       // The purchase order chart's rule and its approver-and-product rows —
       // BOTH GRAINS IN ONE STATEMENT — ride the same wave, so the chart's
       // rebuild adds two statements to this batch and zero round trips.
@@ -288,6 +277,20 @@ test('/app stays inside its subrequest budget', async () => {
       runSection(b, 'home.loading-authority', (db) =>
         loadingAuthorityBoard(db, { ...scope, affiliateId: null }),
       ),
+      runSection(b, 'home.po-user-trend', (db) =>
+        userApprovalTrend(db, 'PURCHASE_ORDER', {
+          from: `${shown.from!.slice(0, 4)}-01-01`,
+          to: `${shown.from!.slice(0, 4)}-12-31`,
+          affiliateId: filter.affiliateId,
+        }),
+      ),
+      runSection(b, 'home.so-user-trend', (db) =>
+        userApprovalTrend(db, 'SALES_ORDER', {
+          from: `${shown.from!.slice(0, 4)}-01-01`,
+          to: `${shown.from!.slice(0, 4)}-12-31`,
+          affiliateId: null,
+        }),
+      ),
       runSection(b, 'home.affiliates', (db) =>
         db.execute(
           `SELECT affiliate_id, affiliate_name FROM affiliates
@@ -297,9 +300,8 @@ test('/app stays inside its subrequest budget', async () => {
     ]);
   });
   assertWithinBudget('/app', trips, statements);
-  // THE FIGURE THE BRIEF ASKS FOR, PRINTED RATHER THAN DESCRIBED. Each panel
-  // carries a KPI strip, a bar chart and a leaderboard, and the page must not
-  // become more expensive for any of it.
+  // THE FIGURE THE BRIEF ASKS FOR, PRINTED RATHER THAN DESCRIBED. Removing
+  // summary-only work must not make the chart-first page more expensive.
   assert.ok(
     trips <= 6,
     `/app cost ${trips} round trips, up from the 6 it cost before the panels were rebuilt`,
@@ -333,15 +335,21 @@ test('/app stays inside its subrequest budget', async () => {
   );
 });
 
-/**
- * The waiting figure and the page it links to are the same question.
- *
- * A dashboard number whose destination holds a different count is worse than
- * no number, because it is checkable and wrong. This does not compare two
- * queries written to agree: the figure IS `countSalesOrders` under the filter
- * the link carries, so the only way they can diverge is if the page stops
- * using it, which is what the assertion below would catch.
- */
+test('/app runs no removed KPI-only reads', () => {
+  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  for (const section of [
+    'home.po-waiting',
+    'home.so-waiting',
+    'home.purchases-cycle',
+    'home.sales-cycle',
+  ]) {
+    assert.ok(!home.includes(section), `${section} still runs for a removed KPI`);
+  }
+  assert.ok(!home.includes('countPurchaseOrders'), 'Home still reads the removed purchase queue');
+  assert.ok(!home.includes('countSalesOrders'), 'Home still reads the removed sales queue');
+  assert.ok(!home.includes('approvalCycle'), 'Home still reads a removed end-to-end cycle');
+});
+
 /**
  * The three screens part 7 adds, and the shell control that adds nothing.
  *
@@ -386,7 +394,8 @@ test('the assistant and channel screens stay inside their budgets', async () => 
   console.log('[subrequests] assistant panel in the shell: 0 round trips');
 });
 
-test('a Home figure equals the count of the records behind it', async () => {
+/** The removed finance queue card's filtered order view remains available. */
+test('the former Home finance queue destination remains a valid filtered record view', async () => {
   const db = await seeded();
   const status = 'PENDING_FINANCE';
   const figure = await countSalesOrders(db as never, USER, { ...filter, status }, NOW);
@@ -395,8 +404,8 @@ test('a Home figure equals the count of the records behind it', async () => {
   const href = drillTo('/app/orders/sales', filter, { status });
   const destination = parseFilter(new URLSearchParams(href.slice(href.indexOf('?'))));
   const behind = await countSalesOrders(db as never, USER, destination, NOW);
-  assert.equal(behind, figure, 'the destination holds exactly the figure');
-  console.log(`[drill] /app finance-approval waiting: ${figure} = ${behind} records`);
+  assert.equal(behind, figure, 'the filtered destination changed its record population');
+  console.log(`[drill] finance-approval waiting filter: ${figure} = ${behind} records`);
 });
 
 test('/app/orders/sales/performance stays inside its subrequest budget', async () => {

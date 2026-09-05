@@ -656,31 +656,13 @@ test('every figure on Home carries a destination', () => {
       assert.match(before, /<a[\s\S]*$/, `the figure count(${figure}) is not inside a link`);
     }
   }
-  // THE KPI STRIP'S FIGURES ARE FIGURES TOO, and they are formatted in the
-  // frontmatter because the card renders its own anchor around them. The regex
-  // above cannot see inside a component, so the cards are asserted directly:
-  // every one of them carries a destination, which is the property the scan
-  // exists to protect rather than the string position it happens to check.
+  // HOME HAS NO SUMMARY LAYER. The two former four-card strips were removed
+  // rather than hidden or replaced, so only chart and exception figures count.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  const cards = [...home.matchAll(/<CmsKpiCard[\s\S]*?\/>/g)].map((m) => m[0]);
-  assert.ok(cards.length > 0, 'Home renders no KPI card');
-  for (const card of cards) {
-    assert.match(card, /href=\{/, 'a KPI card carries no destination');
-    assert.match(card, /value=\{/, 'a KPI card carries no figure');
-  }
-  // And each card is built from a list whose every entry has an href, so a
-  // fifth card cannot be added without one.
-  for (const strip of ['purchaseKpis', 'salesKpis']) {
-    const start = home.indexOf(`const ${strip}: Kpi[] = [`);
-    assert.ok(start !== -1, `${strip} is not declared`);
-    const block = home.slice(start, home.indexOf('\n];', start));
-    const labels = [...block.matchAll(/label: '([^']+)'/g)].length;
-    const hrefs = [...block.matchAll(/\n {4}href:/g)].length;
-    assert.equal(labels, 4, `${strip} should carry four measures`);
-    assert.equal(hrefs, 4, `${strip} has a measure with no destination`);
-    counted += 4;
-  }
-  assert.ok(counted >= 6, `expected Home's counts, found ${counted}`);
+  assert.ok(!home.includes('CmsKpiCard'), 'Home still renders a KPI card');
+  assert.ok(!home.includes('purchaseKpis'), 'the purchase summary model remains');
+  assert.ok(!home.includes('salesKpis'), 'the Loading Authority summary model remains');
+  assert.ok(counted >= 2, `expected Home's chart and exception counts, found ${counted}`);
 
   // The two duration columns are links too, and they are the ones this phase
   // added: Typical and Slowest 10% each open the records behind them.
@@ -714,15 +696,41 @@ test('every Home destination carries the filter and the scope', () => {
   assert.ok(hrefs.length >= 6, `expected the destinations, found ${hrefs.length}`);
   const bare = hrefs.filter((h) => h.startsWith("'/") || h.startsWith('"/'));
   assert.deepEqual(bare, [], `destinations that lose the filter: ${bare.join(', ')}`);
-  for (const name of ['toSales', 'toPurchases']) {
-    assert.match(
-      source,
-      new RegExp(`const ${name} = \\(extra`),
-      `the ${name} destination is built from drillTo`,
-    );
-  }
-  assert.match(source, /drillTo\('\/app\/orders\/purchases', filter/);
+  assert.match(source, /const toSales = \(extra/);
   assert.match(source, /drillTo\('\/app\/orders\/sales', filter/);
+});
+
+test('Home removes all eight KPI cards without replacement and keeps both charts first', () => {
+  const source = readFileSync('src/pages/cms/app/index.astro', 'utf8');
+  for (const label of [
+    'Approvals',
+    'Typical approval cycle',
+    'Slowest level',
+    'In approval',
+    'Completions',
+    'Typical finance approval',
+    'Order to loading authority',
+    'Awaiting finance approval',
+  ]) {
+    assert.ok(!source.includes(`label: '${label}'`), `${label} remains as a Home summary`);
+  }
+  assert.ok(!/<CmsKpiCard|purchaseKpis|salesKpis/.test(source));
+
+  const purchases = source.slice(
+    source.indexOf('id="panel-purchases"'),
+    source.indexOf('</section>', source.indexOf('id="panel-purchases"')),
+  );
+  const loading = source.slice(
+    source.indexOf('id="panel-sales"'),
+    source.indexOf('</section>', source.indexOf('id="panel-sales"')),
+  );
+  assert.match(purchases, /<\/h2>\s*<CmsApproverChart/);
+  assert.match(loading, /<\/h2>\s*<CmsLoadingAuthorityChart/);
+  const trendAt = source.indexOf('title="Purchase Order Approval Trend"');
+  const loadingTrendAt = source.indexOf('title="Loading Authority Trend"');
+  const attentionAt = source.indexOf('title="Needs attention"');
+  assert.ok(trendAt > 0 && loadingTrendAt > trendAt && attentionAt > loadingTrendAt);
+  assert.match(source, /salesUserTrend\.filter\(\(point\) => point\.affiliateId === laSelected\)/);
 });
 
 test('Home leads with its two charts and nothing between them', () => {
@@ -1323,28 +1331,12 @@ test('the leaderboard states its caveats rather than explaining them', () => {
   }
 });
 
-test('every Home chart names both of its axes', () => {
-  // A TICK SAYS "37 min"; A TITLE SAYS WHAT IS BEING MEASURED.
-  //
-  // BOTH PANELS ARE MARKUP NOW, not SVG, so neither takes an axis label from
-  // this page. What each must still do is name its own scale: the row labels
-  // are the category axis, and the value axis is the pair of numbers under
-  // the bars — with the purchase order panel's target marked once on its line
-  // and the loading authority panel's naming the target per function, because
-  // its three lines sit at three different places.
-  for (const [panel, middle] of [
-    ['CmsApproverChart', null],
-    ['CmsLoadingAuthorityChart', 'target per function'],
-  ] as const) {
+test('Home bar charts omit lower range captions while trend axes stay named', () => {
+  for (const panel of ['CmsApproverChart', 'CmsLoadingAuthorityChart']) {
     const source = readFileSync(`src/components/cms/${panel}.astro`, 'utf8');
-    assert.match(source, /A BARE AXIS|THE AXIS/, `${panel} draws no axis`);
-    assert.match(source, />0</, `${panel} does not say where its scale starts`);
-    assert.match(source, /formatDuration\(Math\.round\(scale\)\)/, `${panel} has no maximum`);
-    if (middle !== null) assert.ok(source.includes(middle), `${panel} does not name its targets`);
+    assert.ok(!/>0<|target per function|Math\.round\(scale\)/.test(source));
   }
-  const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.equal((home.match(/xAxisLabel:/g) ?? []).length, 0, 'no SVG chart is left on the page');
-  const trendRules = readFileSync('src/lib/cms/analytics/homeTrend.ts', 'utf8');
+  const trendRules = readFileSync('src/lib/cms/analytics/userPerformanceTrend.ts', 'utf8');
   assert.match(
     trendRules,
     /xAxisLabel: 'Month',\n\s*yAxisLabel: 'Minutes',/,
@@ -1372,7 +1364,8 @@ test('the Home trend is a line over months, not a scatter over days', () => {
   // fragment is intact and unreferenced from this page. It still runs no
   // trend query of its own, which is what this ever asserted.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
-  assert.ok(!/approvalTrend\(/.test(home), 'Home itself runs no trend query');
+  assert.match(home, /userApprovalTrend\(client, 'PURCHASE_ORDER'/);
+  assert.match(home, /userApprovalTrend\(client, 'SALES_ORDER'/);
   assert.ok(!/home-trend/.test(home), 'Home still fetches the trend fragment');
 
   // And the line is a line: a stroked path, with the markers as decoration on
@@ -1383,8 +1376,8 @@ test('the Home trend is a line over months, not a scatter over days', () => {
   // ONE MONTH IS NOT A TREND. The purchase order extract covers a single month,
   // and a line chart over it drew one dot per function against a row of empty
   // months, which is the scatter the brief asked to be rid of.
-  const chartRules = readFileSync('src/lib/cms/analytics/homeTrend.ts', 'utf8');
-  assert.match(chartRules, /minimumCategories: 2,/, 'a trend needs two months before it draws');
+  const chartRules = readFileSync('src/lib/cms/analytics/userPerformanceTrend.ts', 'utf8');
+  assert.match(chartRules, /MONTHS\.map<ChartPoint>/, 'the trend does not enumerate all months');
 });
 
 test('a chart never clips the units off its own axis', () => {
