@@ -1,7 +1,6 @@
 ---
 import CmsIcon from './CmsIcon.astro';
 import { visibleNav } from '@/lib/cms/nav';
-import { CMS_DESTINATIONS, destinationAllowed } from '@/lib/cms/destinations';
 
 interface Props {
   currentPath: string;
@@ -10,18 +9,7 @@ interface Props {
 }
 
 const { currentPath, idPrefix = 'rail', permissions = [] } = Astro.props;
-const railEntries = visibleNav(permissions);
-const reportsDestination = CMS_DESTINATIONS.find((item) => item.label === 'Reports');
-const reportsEntry =
-  reportsDestination !== undefined && destinationAllowed(reportsDestination, permissions)
-    ? {
-        label: 'Reports',
-        href: reportsDestination.href,
-        icon: 'performance' as const,
-        permission: reportsDestination.permission,
-      }
-    : null;
-const entries = reportsEntry === null ? railEntries : [...railEntries, reportsEntry];
+const entries = visibleNav(permissions);
 
 const isActive = (href: string) =>
   href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(href + '/');
@@ -29,20 +17,19 @@ const isActive = (href: string) =>
 const navigationHref = (label: string, href: string) =>
   label === 'CRM' ? '/app/crm/home' : href;
 
+const navigationLabel = (label: string) => (label === 'SLA Monitor' ? 'Exceptions' : label);
+
 const navigationActive = (label: string, href: string) => {
   if (label === 'CRM') return currentPath === '/app/crm' || currentPath.startsWith('/app/crm/');
-  if (label === 'Exceptions') {
-    return (
-      currentPath === '/app/performance' ||
-      (currentPath.startsWith('/app/performance/') && !currentPath.startsWith('/app/performance/reports'))
-    );
+  if (label === 'SLA Monitor') {
+    return currentPath === '/app/performance' || currentPath.startsWith('/app/performance/');
   }
   return isActive(href);
 };
 
 const groups = [
   { label: null, items: ['Home', 'CRM', 'Helpdesk', 'Orders'] },
-  { label: 'Insights', items: ['Exceptions', 'Reports'] },
+  { label: 'Insights', items: ['SLA Monitor'] },
   { label: 'Operations', items: ['Customers', 'Upload Centre'] },
   { label: 'System', items: ['Administration'] },
 ] as const;
@@ -90,7 +77,7 @@ const rendered = groups
                   <span class="flex w-16 shrink-0 items-center justify-center">
                     <CmsIcon name={item.icon} size={18} />
                   </span>
-                  <span class="whitespace-nowrap">{item.label}</span>
+                  <span class="whitespace-nowrap">{navigationLabel(item.label)}</span>
                 </a>
               </li>
             );
