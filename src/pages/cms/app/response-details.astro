@@ -1,0 +1,161 @@
+---
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import { requestDb } from '@/lib/cms/db';
+import { parseFilter } from '@/lib/cms/analytics/filters';
+import { formatDuration } from '@/lib/cms/analytics/stats';
+import {
+  homeUserLeaderboardDetails,
+  type LeaderboardProcess,
+  type UserResponseDetailRow,
+} from '@/lib/cms/repos/homeUserLeaderboardDetails';
+
+export const prerender = false;
+
+const params = Astro.url.searchParams;
+const filter = parseFilter(params);
+const processRaw = params.get('process');
+const process: LeaderboardProcess | null =
+  processRaw === 'PURCHASE_ORDER' || processRaw === 'LOADING_AUTHORITY' ? processRaw : null;
+const userId = (params.get('userId') ?? '').trim();
+const metricRaw = params.get('metric');
+const metric =
+  metricRaw === 'average' || metricRaw === 'fastest' || metricRaw === 'slowest'
+    ? metricRaw
+    : 'responses';
+
+let rows: UserResponseDetailRow[] = [];
+let loadFailed = false;
+if (process !== null && userId !== '') {
+  try {
+    const db = await requestDb(Astro.locals);
+    rows = await homeUserLeaderboardDetails(
+      db,
+      { from: filter.from, to: filter.to, affiliateId: filter.affiliateId },
+      process,
+      userId,
+    );
+  } catch (error) {
+    console.error('[cms.response-details] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const allRows = rows;
+const averageMinutes =
+  allRows.length === 0
+    ? null
+    : allRows.reduce((total, row) => total + row.minutes, 0) / allRows.length;
+
+if (metric === 'fastest' && rows.length > 0) {
+  const value = Math.min(...rows.map((row) => row.minutes));
+  rows = rows.filter((row) => row.minutes === value);
+} else if (metric === 'slowest' && rows.length > 0) {
+  const value = Math.max(...rows.map((row) => row.minutes));
+  rows = rows.filter((row) => row.minutes === value);
+} else if (metric === 'average' && averageMinutes !== null) {
+  rows = [...rows].sort(
+    (a, b) => Math.abs(a.minutes - averageMinutes) - Math.abs(b.minutes - averageMinutes),
+  );
+}
+
+const person = allRows[0]?.person ?? 'User';
+const processLabel = process === 'PURCHASE_ORDER' ? 'Purchase orders' : 'Loading Authority';
+const metricTitle =
+  metric === 'fastest'
+    ? 'Fastest response'
+    : metric === 'slowest'
+      ? 'Slowest response'
+      : metric === 'average'
+        ? 'Average response details'
+        : 'Response details';
+const periodLabel =
+  filter.from !== null && filter.to !== null ? `${filter.from} to ${filter.to}` : 'Selected period';
+const returnParams = new URLSearchParams();
+if (filter.from !== null) returnParams.set('period', filter.from.slice(0, 7));
+if (filter.affiliateId !== null) returnParams.set('affiliateId', filter.affiliateId);
+const backHref = `/app${returnParams.size > 0 ? `?${returnParams.toString()}` : ''}`;
+const detailHref = (row: UserResponseDetailRow) =>
+  row.process === 'PURCHASE_ORDER'
+    ? `/app/orders/purchases/${encodeURIComponent(row.entityId)}`
+    : `/app/orders/sales/${encodeURIComponent(row.entityId)}`;
+---
+
+<CmsLayout title={metricTitle} width="data">
+  <CmsPageHeader
+    title={metricTitle}
+    description={`${person} · ${processLabel} · ${periodLabel}`}
+  />
+
+  <p>
+    <a
+      class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+      href={backHref}
+    >
+      ← Back to Home
+    </a>
+  </p>
+
+  {loadFailed && <CmsErrorState title="Response details could not be loaded" />}
+
+  {
+    !loadFailed && (process === null || userId === '') && (
+      <CmsEmptyState title="No response selected" description="Open this page from a leaderboard value." />
+    )
+  }
+
+  {
+    !loadFailed && process !== null && userId !== '' && allRows.length === 0 && (
+      <CmsEmptyState title="No response details" description="No matching responses were found for this user and period." />
+    )
+  }
+
+  {
+    !loadFailed && allRows.length > 0 && (
+      <CmsCard
+        title={`${person} · ${processLabel}`}
+        description={`${allRows.length.toLocaleString('en-KE')} responses · average ${formatDuration(averageMinutes ?? 0)}`}
+        class="overflow-hidden"
+      >
+        <div class="overflow-x-auto rounded-cms border border-cms-line">
+          <table class="w-full min-w-[860px] border-collapse text-cms-body-sm">
+            <thead class="bg-cms-sunken">
+              <tr>
+                <th class="px-3 py-2 text-left text-cms-caption font-medium text-cms-muted">Document</th>
+                <th class="px-3 py-2 text-left text-cms-caption font-medium text-cms-muted">Affiliate</th>
+                <th class="px-3 py-2 text-left text-cms-caption font-medium text-cms-muted">Function</th>
+                <th class="px-3 py-2 text-left text-cms-caption font-medium text-cms-muted">Started</th>
+                <th class="px-3 py-2 text-left text-cms-caption font-medium text-cms-muted">Completed</th>
+                <th class="px-3 py-2 text-right text-cms-caption font-medium text-cms-muted">Response time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr class="border-t border-cms-line">
+                  <td class="px-3 py-2.5">
+                    <a
+                      class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                      href={detailHref(row)}
+                    >
+                      {row.documentNumber || row.entityId}
+                    </a>
+                  </td>
+                  <td class="px-3 py-2.5 text-cms-muted">{row.affiliateCode ?? '—'}</td>
+                  <td class="px-3 py-2.5 text-cms-ink">{row.stageName || row.stageCode}</td>
+                  <td class="px-3 py-2.5 text-cms-muted tabular-nums">{row.startedAt}</td>
+                  <td class="px-3 py-2.5 text-cms-muted tabular-nums">{row.completedAt}</td>
+                  <td class="px-3 py-2.5 text-right font-medium text-cms-ink tabular-nums">
+                    {formatDuration(row.minutes)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CmsCard>
+    )
+  }
+</CmsLayout>
