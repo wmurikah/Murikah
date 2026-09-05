@@ -21,6 +21,12 @@ test('all CmsModal close controls use the shared close lifecycle', () => {
   assert.match(overlay, /dialog\.close\(\)/);
 });
 
+test('CmsDrawer also stays closed by default and uses the shared close lifecycle', () => {
+  const drawer = read('src/components/cms/CmsDrawer.astro');
+  assert.ok(!/<dialog[^>]*\sopen(?:\s|=|>)/s.test(drawer), 'CmsDrawer must never render open by default');
+  assert.match(drawer, /data-cms-modal-close/);
+});
+
 test('Import history modal is button-triggered and Cancel closes it', () => {
   const history = read('src/pages/cms/app/data/history.astro');
   assert.match(history, /data-cms-modal-open="cms-clear-history"/);
