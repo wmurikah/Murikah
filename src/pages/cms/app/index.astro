@@ -1,11 +1,7 @@
 ---
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
-import CmsCard from '@/components/cms/CmsCard.astro';
-import CmsDataTable from '@/components/cms/CmsDataTable.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
-import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
-import CmsSectionHeader from '@/components/cms/CmsSectionHeader.astro';
 import CmsMonthYearControl from '@/components/cms/CmsMonthYearControl.astro';
 import CmsSelect from '@/components/cms/CmsSelect.astro';
 import CmsApproverChart from '@/components/cms/CmsApproverChart.astro';
@@ -16,7 +12,6 @@ import { requestDb } from '@/lib/cms/db';
 import { createBatcher, runSection } from '@/lib/cms/batching';
 import { parseFilter, drillTo } from '@/lib/cms/analytics/filters';
 import { canManageSlaRules } from '@/lib/cms/permissions';
-import { attentionCustomers, type AttentionCustomer } from '@/lib/cms/repos/executive';
 import {
   approvalBoard,
   approverBoard,
@@ -62,12 +57,10 @@ export const prerender = false;
 
 const principal = Astro.locals.cms;
 const user = principal?.user;
-const userId = user?.userId ?? '';
 const maySetTargets = canManageSlaRules(user?.permissions ?? []);
 const params = Astro.url.searchParams;
 const filter = parseFilter(params);
 const today = new Date();
-const now = toDbTimestamp(today);
 
 const CALENDAR_SOURCES = [
   {
@@ -109,7 +102,6 @@ let loadingTrend: LoadingAuthorityTrendPoint[] = [];
 let purchaseLeaderboard: UserResponseLeaderboardRow[] = [];
 let loadingLeaderboard: UserResponseLeaderboardRow[] = [];
 let affiliates: { value: string; label: string }[] = [];
-let customers: AttentionCustomer[] = [];
 const failed: string[] = [];
 let traceId: string | null = null;
 let connectionFailed = false;
@@ -135,7 +127,6 @@ if (user) {
 
     choice = choosePeriod(asked, calendar, today, explicit);
     const shown = choice.period;
-    const active = withPeriod(filter, shown);
     const scope: ApprovalScope = {
       from: shown.from,
       to: shown.to,
@@ -149,7 +140,6 @@ if (user) {
     };
 
     const [
-      attention,
       po,
       so,
       affiliateRows,
@@ -160,9 +150,6 @@ if (user) {
       laTrend,
       leaderboardRead,
     ] = await Promise.all([
-      runSection(batcher, 'home.attention', (client) =>
-        attentionCustomers(client, userId, active, now),
-      ),
       runSection(batcher, 'home.purchases', (client) =>
         approvalBoard(client, 'PURCHASE_ORDER', scope),
       ),
@@ -189,7 +176,6 @@ if (user) {
       ),
     ]);
 
-    if (attention.ok) customers = attention.value;
     if (affiliateRows.ok) {
       affiliates = (affiliateRows.value.rows as Record<string, unknown>[]).map((row) => ({
         value: String(row.affiliate_id),
@@ -247,8 +233,6 @@ if (user) {
 
 const shown = choice.period;
 const count = (value: number) => value.toLocaleString('en-KE');
-const toSales = (extra: Record<string, string | null> = {}) =>
-  drillTo('/app/orders/sales', filter, extra);
 const poTargetMissing = poRule === null;
 
 const laLocked = filter.affiliateId;
@@ -296,8 +280,6 @@ const loadingTrendChart = buildLoadingAuthorityTrend({
   })),
   targetMinutes: loadingTrendTarget,
 });
-// The top panel still isolates one affiliate when required:
-// loadingTrend.filter((point) => point.affiliateId === laSelected)
 
 const volumeOf = (board: ApprovalBoard | null) =>
   (board?.functions ?? []).reduce((n, f) => n + f.volume, 0);
@@ -320,6 +302,13 @@ const DEFINITION =
   'several lines is one order. A person is listed from the first approval and given a position ' +
   `from ${MINIMUM_RANKED_VOLUME}.`;
 const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates];
+const detailFilter = withPeriod(filter, shown);
+const purchaseDrillBase = drillTo('/app/response-details', detailFilter, {
+  process: 'PURCHASE_ORDER',
+});
+const loadingDrillBase = drillTo('/app/response-details', detailFilter, {
+  process: 'LOADING_AUTHORITY',
+});
 ---
 
 <CmsLayout title="Home" width="data">
@@ -462,65 +451,7 @@ const affiliateOptions = [{ value: '', label: 'Every affiliate' }, ...affiliates
     purchase={purchaseLeaderboard}
     loading={loadingLeaderboard}
     periodLabel={shown.label}
+    purchaseDrillBase={purchaseDrillBase}
+    loadingDrillBase={loadingDrillBase}
   />
-
-  <section>
-    <CmsSectionHeader id="attention" title="Needs attention" />
-    {
-      customers.length === 0 ? (
-        <CmsEmptyState title="No customer is showing an exception." />
-      ) : (
-        <CmsCard>
-          <CmsDataTable
-            caption="Customers needing attention"
-            columns={[
-              { key: 'customer', label: 'Customer' },
-              { key: 'orders', label: 'Open orders', numeric: true },
-              { key: 'cases', label: 'Open cases', numeric: true },
-              { key: 'breaches', label: 'SLA breaches', numeric: true },
-              { key: 'manager', label: 'Account manager', secondary: true },
-            ]}
-            rowCount={customers.length}
-          >
-            {customers.map((row) => (
-              <tr class="border-b border-cms-line last:border-0">
-                <td class="px-3 py-2">
-                  <a
-                    class="font-medium text-cms-royal hover:underline"
-                    href={`/app/operations/customers/${row.accountId}`}
-                  >
-                    {row.customerName}
-                  </a>
-                </td>
-                <td class="px-3 py-2 text-right tabular-nums">
-                  <a class="text-cms-royal hover:underline" href={toSales({ accountId: row.accountId })}>
-                    {count(row.openOrders)}
-                  </a>
-                </td>
-                <td class="px-3 py-2 text-right tabular-nums">
-                  <a
-                    class="text-cms-royal hover:underline"
-                    href={drillTo('/app/helpdesk', filter, { accountId: row.accountId })}
-                  >
-                    {count(row.openCases)}
-                  </a>
-                </td>
-                <td class="px-3 py-2 text-right tabular-nums">
-                  <a
-                    class="text-cms-royal hover:underline"
-                    href={drillTo('/app/performance', filter, { accountId: row.accountId })}
-                  >
-                    {count(row.slaBreaches)}
-                  </a>
-                </td>
-                <td class="hidden px-3 py-2 sm:table-cell">
-                  {row.accountManager ?? 'Not assigned'}
-                </td>
-              </tr>
-            ))}
-          </CmsDataTable>
-        </CmsCard>
-      )
-    }
-  </section>
 </CmsLayout>
