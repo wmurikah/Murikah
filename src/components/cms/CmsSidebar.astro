@@ -29,11 +29,9 @@ const isActive = (href: string) =>
 const navigationHref = (label: string, href: string) =>
   label === 'CRM' ? '/app/crm/home' : href;
 
-const navigationLabel = (label: string) => (label === 'SLA Monitor' ? 'Exceptions' : label);
-
 const navigationActive = (label: string, href: string) => {
   if (label === 'CRM') return currentPath === '/app/crm' || currentPath.startsWith('/app/crm/');
-  if (label === 'SLA Monitor') {
+  if (label === 'Exceptions') {
     return (
       currentPath === '/app/performance' ||
       (currentPath.startsWith('/app/performance/') && !currentPath.startsWith('/app/performance/reports'))
@@ -44,7 +42,7 @@ const navigationActive = (label: string, href: string) => {
 
 const groups = [
   { label: null, items: ['Home', 'CRM', 'Helpdesk', 'Orders'] },
-  { label: 'Insights', items: ['SLA Monitor', 'Reports'] },
+  { label: 'Insights', items: ['Exceptions', 'Reports'] },
   { label: 'Operations', items: ['Customers', 'Upload Centre'] },
   { label: 'System', items: ['Administration'] },
 ] as const;
@@ -92,7 +90,7 @@ const rendered = groups
                   <span class="flex w-16 shrink-0 items-center justify-center">
                     <CmsIcon name={item.icon} size={18} />
                   </span>
-                  <span class="whitespace-nowrap">{navigationLabel(item.label)}</span>
+                  <span class="whitespace-nowrap">{item.label}</span>
                 </a>
               </li>
             );
