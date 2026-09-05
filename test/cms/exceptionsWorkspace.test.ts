@@ -19,7 +19,7 @@ test('performance workspace is user-facing Exceptions rather than SLA Monitor', 
 test('Exceptions table is action-oriented', () => {
   const page = read('src/pages/cms/app/performance.astro');
   for (const label of ['Process', 'Record', 'Customer', 'Issue', 'Owner', 'Due / overdue', 'Status']) {
-    assert.match(page, new RegExp(`label: '${label.replace('/', '\\/')}'`));
+    assert.ok(page.includes(`label: '${label}'`), `missing ${label} column`);
   }
   assert.match(page, /recordHref/);
   assert.match(page, />Open</);
@@ -27,9 +27,17 @@ test('Exceptions table is action-oriented', () => {
 
 test('sidebar presents Exceptions and Reports as separate Insights destinations', () => {
   const sidebar = read('src/components/cms/CmsSidebar.astro');
-  assert.match(sidebar, /items: \['SLA Monitor', 'Reports'\]/);
-  assert.match(sidebar, /label === 'SLA Monitor' \? 'Exceptions'/);
+  assert.match(sidebar, /items: \['Exceptions', 'Reports'\]/);
+  assert.match(sidebar, /label === 'Exceptions'/);
   assert.match(sidebar, /!currentPath\.startsWith\('\/app\/performance\/reports'\)/);
+});
+
+test('navigation and page search expose Exceptions terminology', () => {
+  const nav = read('src/lib/cms/nav.ts');
+  const search = read('src/lib/cms/search/pageSearch.ts');
+  assert.match(nav, /label === 'SLA Monitor' \? 'Exceptions'/);
+  assert.match(search, /destination\.label === 'SLA Monitor' \? 'Exceptions'/);
+  assert.match(search, /destination\.area === 'SLA Monitor'\) return 'Insights'/);
 });
 
 test('exception repository excludes healthy completed SLA rows from the default view', () => {
