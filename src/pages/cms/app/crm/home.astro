@@ -1,0 +1,377 @@
+---
+/**
+ * CRM workspace home.
+ *
+ * This page is deliberately action-first. Leads, Opportunities and Activities
+ * remain the systems of record; this screen only brings the user's most useful
+ * signals together and links straight back to the underlying records.
+ */
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCrmNav from '@/components/cms/CmsCrmNav.astro';
+import CmsKpiCard from '@/components/cms/CmsKpiCard.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+
+import { requestDb } from '@/lib/cms/db';
+import { canViewLeads, canViewOpportunities } from '@/lib/cms/permissions';
+import { leadIndicators, type LeadIndicators } from '@/lib/cms/repos/leadAdmin';
+import { myWork, type ActivityRow, type MyWork } from '@/lib/cms/repos/activityAdmin';
+import {
+  listOpportunities,
+  type OpportunityPage,
+  type OpportunityQuery,
+} from '@/lib/cms/repos/opportunityAdmin';
+import { fractionToPercentLabel } from '@/lib/cms/crm/probability';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const userId = Astro.locals.cms?.user.userId ?? '';
+const mayViewLeads = canViewLeads(permissions);
+const mayViewOpportunities = canViewOpportunities(permissions);
+const mayUseCrm = mayViewLeads || mayViewOpportunities;
+
+const now = new Date();
+const nairobiDate = (value: Date) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Nairobi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(value);
+const today = nairobiDate(now);
+const closeTo = nairobiDate(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000));
+
+let leads: LeadIndicators | null = null;
+let work: MyWork = { overdue: [], upcoming: [], recentlyCompleted: [], completedTotal: 0 };
+let openOpportunities: OpportunityPage = { items: [], total: 0, page: 1, pageSize: 25 };
+let closingSoon: OpportunityPage = { items: [], total: 0, page: 1, pageSize: 25 };
+let loadFailed = false;
+
+const opportunityQuery = (
+  input: Partial<OpportunityQuery> = {},
+): OpportunityQuery => ({
+  search: '',
+  status: 'OPEN',
+  pipelineId: null,
+  stageId: null,
+  ownerUserId: null,
+  businessUnitId: null,
+  accountId: null,
+  currencyCode: null,
+  closeFrom: null,
+  closeTo: null,
+  page: 1,
+  ...input,
+});
+
+if (mayUseCrm) {
+  try {
+    const db = await requestDb(Astro.locals);
+    const leadPromise = mayViewLeads ? leadIndicators(db, userId) : Promise.resolve(null);
+    const workPromise = myWork(db, userId, now);
+    const openPromise = mayViewOpportunities
+      ? listOpportunities(db, userId, opportunityQuery())
+      : Promise.resolve(openOpportunities);
+    const closingPromise = mayViewOpportunities
+      ? listOpportunities(
+          db,
+          userId,
+          opportunityQuery({ closeFrom: today, closeTo }),
+        )
+      : Promise.resolve(closingSoon);
+
+    [leads, work, openOpportunities, closingSoon] = await Promise.all([
+      leadPromise,
+      workPromise,
+      openPromise,
+      closingPromise,
+    ]);
+  } catch (error) {
+    console.error('[cms.crm.home] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const money = (value: number, currency: string) =>
+  `${currency} ${Math.round(value).toLocaleString('en-KE')}`;
+
+function activityHref(activity: ActivityRow): string | null {
+  if (activity.entityType === 'LEAD') return `/app/crm/${activity.entityId}`;
+  if (activity.entityType === 'OPPORTUNITY') {
+    return `/app/crm/opportunities/${activity.entityId}`;
+  }
+  if (activity.entityType === 'ACCOUNT') {
+    return `/app/operations/customers/${activity.entityId}`;
+  }
+  return null;
+}
+
+const closingHref = `/app/crm/opportunities?status=OPEN&closeFrom=${encodeURIComponent(today)}&closeTo=${encodeURIComponent(closeTo)}`;
+---
+
+<CmsLayout title="CRM">
+  {
+    !mayUseCrm ? (
+      <CmsErrorState
+        title="You do not have access to CRM"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="CRM could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="CRM"
+          description="Your commercial workspace: what needs attention, what is moving and what is closing next."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'CRM' }]}
+        >
+          <Fragment slot="actions">
+            {mayViewLeads && (
+              <CmsButton href="/app/crm" variant="primary" icon="plus">
+                Leads
+              </CmsButton>
+            )}
+            {mayViewOpportunities && (
+              <CmsButton href="/app/crm/opportunities" variant="secondary">
+                Opportunities
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+
+        <CmsCrmNav current="/app/crm/home" permissions={permissions} />
+
+        <section aria-labelledby="crm-attention-heading">
+          <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="crm-attention-heading" class="text-cms-body font-semibold text-cms-ink">
+                Needs your attention
+              </h2>
+              <p class="text-cms-body-sm text-cms-muted">
+                Each figure opens the records behind it.
+              </p>
+            </div>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {mayViewLeads && leads !== null && (
+              <CmsKpiCard
+                label="Awaiting first contact"
+                value={String(leads.needsFirstContact)}
+                href="/app/crm?contact=pending"
+                definition="Leads where no first customer contact has been recorded and the lead has not been disqualified or converted."
+                token="cms-series-1"
+              />
+            )}
+            <CmsKpiCard
+              label="Overdue activities"
+              value={String(work.overdue.length)}
+              href="/app/crm/activities"
+              context="Owned by you"
+              tone={work.overdue.length > 0 ? 'negative' : 'neutral'}
+              token="cms-series-2"
+            />
+            {mayViewOpportunities && (
+              <CmsKpiCard
+                label="Open opportunities"
+                value={String(openOpportunities.total)}
+                href="/app/crm/opportunities?status=OPEN"
+                token="cms-series-3"
+              />
+            )}
+            {mayViewOpportunities && (
+              <CmsKpiCard
+                label="Closing in 30 days"
+                value={String(closingSoon.total)}
+                href={closingHref}
+                context={`${today} to ${closeTo}`}
+                token="cms-series-4"
+              />
+            )}
+          </div>
+        </section>
+
+        <div class="grid gap-4 xl:grid-cols-2">
+          <CmsCard
+            title={`Overdue follow-ups (${work.overdue.length})`}
+            description="The first items to clear before moving on to new work."
+          >
+            {work.overdue.length === 0 ? (
+              <CmsEmptyState icon="statusOk" title="Nothing overdue" />
+            ) : (
+              <ul class="flex flex-col divide-y divide-cms-line">
+                {work.overdue.slice(0, 6).map((activity) => (
+                  <li class="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div class="min-w-0">
+                      <p class="truncate text-cms-body-sm font-medium text-cms-ink">
+                        {titleCase(activity.activityType)} · {activity.summary}
+                      </p>
+                      <p class="mt-1 text-cms-caption text-cms-muted">
+                        Due {activity.dueAt ?? 'time not set'}
+                        {activity.accountName !== null && ` · ${activity.accountName}`}
+                      </p>
+                    </div>
+                    {activityHref(activity) !== null && (
+                      <CmsButton href={activityHref(activity)!} variant="ghost" size="md">
+                        Open
+                      </CmsButton>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {work.overdue.length > 6 && (
+              <div class="mt-4 border-t border-cms-line pt-3">
+                <a
+                  href="/app/crm/activities"
+                  class="text-cms-body-sm font-medium text-cms-royal hover:underline"
+                >
+                  View all overdue activities
+                </a>
+              </div>
+            )}
+          </CmsCard>
+
+          <CmsCard
+            title={`Upcoming activities (${work.upcoming.length})`}
+            description="Your next scheduled calls, meetings, visits and follow-ups."
+          >
+            {work.upcoming.length === 0 ? (
+              <CmsEmptyState icon="clock" title="Nothing scheduled" />
+            ) : (
+              <ul class="flex flex-col divide-y divide-cms-line">
+                {work.upcoming.slice(0, 6).map((activity) => (
+                  <li class="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div class="min-w-0">
+                      <p class="truncate text-cms-body-sm font-medium text-cms-ink">
+                        {titleCase(activity.activityType)} · {activity.summary}
+                      </p>
+                      <p class="mt-1 text-cms-caption text-cms-muted">
+                        {activity.dueAt === null ? 'No due time set' : `Due ${activity.dueAt}`}
+                        {activity.accountName !== null && ` · ${activity.accountName}`}
+                      </p>
+                    </div>
+                    {activityHref(activity) !== null && (
+                      <CmsButton href={activityHref(activity)!} variant="ghost" size="md">
+                        Open
+                      </CmsButton>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CmsCard>
+        </div>
+
+        {mayViewOpportunities && (
+          <section aria-labelledby="crm-opportunities-heading" class="grid gap-4 xl:grid-cols-2">
+            <CmsCard
+              title={`Closing in the next 30 days (${closingSoon.total})`}
+              description="Open opportunities with an estimated close date in the next 30 days."
+            >
+              {closingSoon.items.length === 0 ? (
+                <CmsEmptyState icon="crm" title="Nothing is due to close in this window" />
+              ) : (
+                <ul class="flex flex-col divide-y divide-cms-line">
+                  {closingSoon.items.slice(0, 6).map((opportunity) => (
+                    <li class="py-3 first:pt-0 last:pb-0">
+                      <a
+                        href={`/app/crm/opportunities/${opportunity.opportunityId}`}
+                        class="block rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        <div class="flex items-start justify-between gap-3">
+                          <div class="min-w-0">
+                            <p class="truncate text-cms-body-sm font-medium text-cms-ink">
+                              {opportunity.title}
+                            </p>
+                            <p class="mt-1 text-cms-caption text-cms-muted">
+                              {opportunity.accountName} · {opportunity.currentStageName} · {opportunity.ownerName}
+                            </p>
+                          </div>
+                          <CmsBadge tone="info" label={opportunity.estimatedCloseDate ?? 'No date'} />
+                        </div>
+                        <p class="mt-2 text-cms-caption text-cms-muted tabular-nums">
+                          {money(opportunity.estimatedValue, opportunity.currencyCode)} · {fractionToPercentLabel(opportunity.probability)} probability
+                        </p>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CmsCard>
+
+            <CmsCard
+              title={`Recently active open opportunities (${openOpportunities.total})`}
+              description="Most recently updated open commercial opportunities in your scope."
+            >
+              {openOpportunities.items.length === 0 ? (
+                <CmsEmptyState icon="crm" title="No open opportunities" />
+              ) : (
+                <ul class="flex flex-col divide-y divide-cms-line">
+                  {openOpportunities.items.slice(0, 6).map((opportunity) => (
+                    <li class="py-3 first:pt-0 last:pb-0">
+                      <a
+                        href={`/app/crm/opportunities/${opportunity.opportunityId}`}
+                        class="block rounded-cms outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        <div class="flex items-start justify-between gap-3">
+                          <div class="min-w-0">
+                            <p class="truncate text-cms-body-sm font-medium text-cms-ink">
+                              {opportunity.title}
+                            </p>
+                            <p class="mt-1 text-cms-caption text-cms-muted">
+                              {opportunity.accountName} · {opportunity.currentStageName}
+                            </p>
+                          </div>
+                          <span class="shrink-0 text-cms-caption text-cms-muted tabular-nums">
+                            {money(opportunity.estimatedValue, opportunity.currencyCode)}
+                          </span>
+                        </div>
+                        <p class="mt-2 text-cms-caption text-cms-muted">
+                          {opportunity.ownerName}
+                          {opportunity.estimatedCloseDate !== null && ` · Close ${opportunity.estimatedCloseDate}`}
+                        </p>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CmsCard>
+          </section>
+        )}
+
+        <CmsCard title="Quick access" description="Go straight to the workspace for the job you are doing.">
+          <div class="flex flex-wrap gap-3">
+            {mayViewLeads && (
+              <CmsButton href="/app/crm" variant="secondary">
+                Leads
+              </CmsButton>
+            )}
+            {mayViewOpportunities && (
+              <CmsButton href="/app/crm/opportunities" variant="secondary">
+                Opportunities
+              </CmsButton>
+            )}
+            <CmsButton href="/app/crm/activities" variant="secondary">
+              Activities
+            </CmsButton>
+            {mayViewOpportunities && (
+              <CmsButton href="/app/crm/analytics" variant="secondary">
+                Analytics
+              </CmsButton>
+            )}
+          </div>
+        </CmsCard>
+      </Fragment>
+    )
+  }
+</CmsLayout>
