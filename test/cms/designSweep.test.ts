@@ -1344,20 +1344,16 @@ test('Home bar charts omit lower range captions while trend axes stay named', ()
 });
 
 test('the Home trend is a line over months, not a scatter over days', () => {
-  // The trend moved out of the page and behind "More detail": the queries now
-  // live in the fragment fetched on first expansion, and the chart rules live
-  // in analytics/homeTrend.ts so the fragment and any future caller draw the
-  // same picture. The assertions follow the code; the rules are unchanged.
+  // The earlier function trend fragment remains available to other callers;
+  // Home now runs only the truthful Purchase Order user trend directly.
   const fragment = readFileSync('src/pages/cms/app/fragments/home-trend.astro', 'utf8');
   // ONE VALUE PER MONTH, over the year ending at the month on screen. Bucketing
   // one month's DAYS is what produced the scatter: a mark wherever an approval
   // landed and a gap on every other day.
   assert.match(fragment, /approvalTrend\(client, 'PURCHASE_ORDER', scope, 'MONTH'\)/);
   assert.match(fragment, /approvalTrend\(client, 'SALES_ORDER', scope, 'MONTH'\)/);
-  // HOME NO LONGER SHOWS THE TREND AT ALL. Build Prompt 47 removed the
-  // "More details" disclosure it lived in and did not relocate it, so the
-  // fragment is intact and unreferenced from this page. It still runs no
-  // trend query of its own, which is what this ever asserted.
+  // Loading Authority has no actor-attributed source, so Home must not call
+  // the generic sales workflow trend and relabel Finance/Credit users.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
   assert.match(home, /userApprovalTrend\(client, 'PURCHASE_ORDER'/);
   assert.match(home, /userApprovalTrend\(client, 'SALES_ORDER'/);
