@@ -6,6 +6,9 @@ import {
   USER_TREND_MONTHS,
 } from '../../src/lib/cms/analytics/userPerformanceTrend.ts';
 
+const valueTickCount = (svg: string): number =>
+  (svg.match(/text-anchor="end" font-size="11"/g) ?? []).length;
+
 test('a user trend always spans Jan to Dec and preserves missing months as null', () => {
   const chart = buildUserPerformanceTrend({
     year: 2026,
@@ -32,7 +35,7 @@ test('a user trend always spans Jan to Dec and preserves missing months as null'
   assert.match(chart.svg, /Test Approver\nApril 2026\nAverage: 42 min\nApprovals: 18/);
 });
 
-test('a user trend reuses the configured target and existing series palette', () => {
+test('Home user trend has five value levels and no target reference line', () => {
   const chart = buildUserPerformanceTrend({
     year: 2026,
     noun: 'completions',
@@ -50,12 +53,13 @@ test('a user trend reuses the configured target and existing series palette', ()
     ],
   });
 
-  assert.match(chart.svg, /Target · 30 min/);
+  assert.equal(valueTickCount(chart.svg), 5);
+  assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.deepEqual(chart.legend, [{ name: 'Test User', token: 'cms-series-1' }]);
   assert.equal(chart.table.rows[0]![1], '1 h 4 min · 1 completion');
 });
 
-test('Loading Authority trend renders affiliate series with null months and completion context', () => {
+test('Loading Authority trend renders affiliate series with clean five-level scale', () => {
   const chart = buildLoadingAuthorityTrend({
     year: 2026,
     entities: [
@@ -77,6 +81,8 @@ test('Loading Authority trend renders affiliate series with null months and comp
     { name: 'HPK', token: 'cms-series-1' },
     { name: 'HPU', token: 'cms-series-2' },
   ]);
+  assert.equal(valueTickCount(chart.svg), 5);
+  assert.doesNotMatch(chart.svg, /Target · 30 min/);
   assert.equal(chart.table.rows[0]![1], 'Not available');
   assert.equal(chart.table.rows[7]![1], '1 h 15 min · 2 completions');
   assert.match(chart.svg, /HPK\nAugust 2026\nAverage: 1 h 15 min\nCompletions: 2/);
