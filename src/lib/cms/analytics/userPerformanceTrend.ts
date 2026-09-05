@@ -17,6 +17,9 @@ const MONTH_NAMES = [
   'November',
   'December',
 ];
+const FIVE_TICKS = [0, 0.25, 0.5, 0.75, 1] as const;
+const VALUE_TICK =
+  /<text x="([^"]+)" y="([^"]+)" text-anchor="end" font-size="11" fill="var\(--color-cms-muted\)">[^<]*<\/text>/g;
 
 /** A compact, readable series name. Keep the full identity in the tooltip. */
 function compactUserName(name: string, allNames: readonly string[]): string {
@@ -29,6 +32,51 @@ function compactUserName(name: string, allNames: readonly string[]): string {
   if (sameFirst.length <= 1 || parts.length <= 1) return first;
   const last = parts[parts.length - 1] ?? '';
   return `${first} ${last.slice(0, 1)}.`;
+}
+
+/** Keep the same pleasant rounded ceiling as the shared SVG chart renderer. */
+function niceCeiling(maximum: number): number {
+  if (!Number.isFinite(maximum) || maximum <= 0) return 1;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maximum)));
+  const scaled = maximum / magnitude;
+  const step = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
+  return step * magnitude;
+}
+
+/**
+ * Home trends need a slightly more readable value scale than the shared
+ * three-label line-chart frame. Replace only that frame's three value labels
+ * with five evenly spaced labels; the shared chart geometry and all plotted
+ * coordinates remain untouched.
+ */
+function withFiveValueTicks(chart: Chart, values: readonly number[]): Chart {
+  const matches = [...chart.svg.matchAll(VALUE_TICK)];
+  if (matches.length < 3) return chart;
+
+  const bottom = matches[0];
+  const top = matches[2];
+  const x = bottom?.[1];
+  const bottomY = Number(bottom?.[2]);
+  const topY = Number(top?.[2]);
+  if (x === undefined || !Number.isFinite(bottomY) || !Number.isFinite(topY)) return chart;
+
+  const ceiling = niceCeiling(Math.max(0, ...values));
+  const replacement = FIVE_TICKS.map((fraction) => {
+    const y = bottomY + (topY - bottomY) * fraction;
+    return (
+      `<text x="${x}" y="${Math.round(y * 100) / 100}" text-anchor="end" font-size="11" ` +
+      `fill="var(--color-cms-muted)">${formatDuration(ceiling * fraction)}</text>`
+    );
+  }).join('');
+
+  let seen = 0;
+  const svg = chart.svg.replace(VALUE_TICK, (match) => {
+    seen += 1;
+    if (seen === 1) return replacement;
+    if (seen <= 3) return '';
+    return match;
+  });
+  return { ...chart, svg };
 }
 
 /** Build twelve chronological months; absent transactions remain null points. */
@@ -70,7 +118,7 @@ export function buildUserPerformanceTrend(options: {
       }),
     }));
 
-  return lineChart(series, {
+  const chart = lineChart(series, {
     unit: 'minutes',
     format: formatDuration,
     height: 300,
@@ -79,14 +127,11 @@ export function buildUserPerformanceTrend(options: {
     yAxisLabel: 'Minutes',
     endLabels: false,
     emptyMessage: options.emptyMessage,
-    reference:
-      options.targetMinutes === undefined
-        ? undefined
-        : {
-            value: options.targetMinutes,
-            label: `Target · ${formatDuration(options.targetMinutes)}`,
-          },
   });
+  return withFiveValueTicks(
+    chart,
+    options.points.map((point) => point.averageMinutes),
+  );
 }
 
 export function buildLoadingAuthorityTrend(options: {
@@ -127,22 +172,20 @@ export function buildLoadingAuthorityTrend(options: {
       };
     });
 
-  return lineChart(series, {
+  const chart = lineChart(series, {
     unit: 'minutes',
     format: formatDuration,
     height: 300,
     categoryName: 'Month',
     xAxisLabel: 'Month',
     yAxisLabel: 'Minutes',
+    endLabels: false,
     emptyMessage: 'No Loading Authority history available for this period.',
-    reference:
-      options.targetMinutes === undefined
-        ? undefined
-        : {
-            value: options.targetMinutes,
-            label: `Target · ${formatDuration(options.targetMinutes)}`,
-          },
   });
+  return withFiveValueTicks(
+    chart,
+    options.points.map((point) => point.averageMinutes),
+  );
 }
 
 export { MONTHS as USER_TREND_MONTHS };
