@@ -894,18 +894,20 @@ export interface UserTrendPoint {
  *
  * AVG is applied directly to individual durations after grouping by user and
  * month. Product is deliberately absent from the grouping, so a product with
- * two transactions never receives the same weight as one with twenty.
- *
- * This function accepts Purchase Orders only. The current sales extract does
- * not record the actor who issued a Loading Authority, so Finance or Credit
- * actors must never be repurposed as Loading Authority users.
+ * two transactions never receives the same weight as one with twenty. Sales
+ * order milestones that record no actor are excluded: the Loading Authority
+ * workflow can attribute finance and credit approvals to people, but the
+ * imported invoice and authority timestamps cannot honestly be assigned to a
+ * user.
  */
 export async function userApprovalTrend(
   db: Client,
-  _process: 'PURCHASE_ORDER',
+  process: ApprovalProcess,
   scope: ApprovalScope,
 ): Promise<UserTrendPoint[]> {
-  const sql = `WITH ${PO_CAL_CTE}, source AS (${PO_SOURCE}),
+  const purchase = process === 'PURCHASE_ORDER';
+  const sql = purchase
+    ? `WITH ${PO_CAL_CTE}, source AS (${PO_SOURCE}),
          d AS (
            SELECT source.*, ${PANEL_MINUTES.replaceAll('src.', 'source.')} AS measured_minutes
              FROM source CROSS JOIN cal
@@ -916,6 +918,13 @@ export async function userApprovalTrend(
               AVG(d.measured_minutes) AS average_minutes
          FROM d
         WHERE d.user_id IS NOT NULL AND d.measured_minutes IS NOT NULL
+        GROUP BY d.affiliate_id, d.user_id, substr(d.completed_at, 1, 7)`
+    : `WITH d AS (${SO_SOURCE})
+       SELECT d.affiliate_id, d.user_id, MAX(d.person) AS person,
+              substr(d.completed_at, 1, 7) AS bucket,
+              COUNT(d.minutes) AS volume, AVG(d.minutes) AS average_minutes
+         FROM d
+        WHERE d.user_id IS NOT NULL AND d.minutes IS NOT NULL
         GROUP BY d.affiliate_id, d.user_id, substr(d.completed_at, 1, 7)`;
   const found = await db.execute({ sql, args: windowArgs(scope) });
   return rowsOf(found).map((row) => ({
@@ -1664,14 +1673,7 @@ export async function loadingAuthorityTrend(
       FROM d
      WHERE d.affiliate_id IS NOT NULL AND d.acc IS NOT NULL
      GROUP BY d.affiliate_id, substr(d.completed_at, 1, 7)`;
-  const window = windowArgs(scope);
-  const found = await db.execute({
-    sql,
-    // LA_SOURCE is intentionally unscoped by affiliate so Home can reuse one
-    // grouped read for every entity tab. Preserve the repository's inclusive
-    // day-boundary convention without binding its unused affiliate argument.
-    args: { from: window.from, to: window.to },
-  });
+  const found = await db.execute({ sql, args: { from: scope.from, to: scope.to } });
   return rowsOf(found).map((row) => ({
     affiliateId: text(row.affiliate_id),
     bucket: text(row.bucket),

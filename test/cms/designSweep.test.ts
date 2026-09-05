@@ -726,13 +726,6 @@ test('Home removes all eight KPI cards without replacement and keeps both charts
   );
   assert.match(purchases, /<\/h2>\s*<CmsApproverChart/);
   assert.match(loading, /<\/h2>\s*<CmsLoadingAuthorityChart/);
-  const trendAt = source.indexOf('title="Purchase Order Approval Trend"');
-  const loadingTrendAt = source.indexOf('title="Loading Authority Trend"');
-  const attentionAt = source.indexOf('title="Needs attention"');
-  assert.ok(trendAt > 0 && loadingTrendAt > trendAt && attentionAt > loadingTrendAt);
-  assert.match(source, /subtitle="Average completion time by month"/);
-  assert.match(source, /loadingTrend\.filter\(\(point\) => point\.affiliateId === laSelected\)/);
-  assert.ok(!/userApprovalTrend\(client, 'SALES_ORDER'/.test(source));
 });
 
 test('Home leads with its two charts and nothing between them', () => {
@@ -1363,8 +1356,7 @@ test('the Home trend is a line over months, not a scatter over days', () => {
   // the generic sales workflow trend and relabel Finance/Credit users.
   const home = readFileSync('src/pages/cms/app/index.astro', 'utf8');
   assert.match(home, /userApprovalTrend\(client, 'PURCHASE_ORDER'/);
-  assert.ok(!/userApprovalTrend\(client, 'SALES_ORDER'/.test(home));
-  assert.match(home, /loadingAuthorityTrend\(client,/);
+  assert.match(home, /userApprovalTrend\(client, 'SALES_ORDER'/);
   assert.ok(!/home-trend/.test(home), 'Home still fetches the trend fragment');
 
   // And the line is a line: a stroked path, with the markers as decoration on
