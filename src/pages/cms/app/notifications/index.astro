@@ -2,13 +2,9 @@
 /**
  * The notifications page.
  *
- * Rendering it sweeps first, so what is listed is current. Unread is
- * `read_at IS NULL`; marking read stamps the moment. Clicking through goes
- * by the target endpoint, which re-runs access control now: a notification
- * whose record you may no longer see opens a safe message, never the record.
- *
- * DELIVERY, HONESTLY: these are in-app notifications. No email channel is
- * configured for the CMS and nothing here claims one sent anything.
+ * Existing notifications remain readable even if a background SLA/reminder
+ * refresh fails. The refresh is best-effort; the user's inbox is the primary
+ * read path and must not disappear behind an unrelated sweep error.
  */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
@@ -44,8 +40,12 @@ let loadFailed = false;
 try {
   const db = await requestDb(Astro.locals);
   const now = new Date();
-  await sweepDueSlas(db, now);
-  await sweepNotifications(db, now);
+  try {
+    await sweepDueSlas(db, now);
+    await sweepNotifications(db, now);
+  } catch (refreshError) {
+    console.warn('[cms.notifications] refresh skipped', refreshError);
+  }
   data = await listNotifications(db, userId, { unreadOnly, type, page: pageNumber });
 } catch (error) {
   console.error('[cms.notifications] load failed', error);
