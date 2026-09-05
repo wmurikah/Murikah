@@ -39,7 +39,9 @@ import {
   approvalTrend,
   approverBoard,
   loadingAuthorityBoard,
+  loadingAuthorityTrend,
   poApprovalRule,
+  userApprovalTrend,
 } from '../../src/lib/cms/repos/approvalSla.ts';
 import {
   calendarSql,
@@ -275,6 +277,20 @@ test('/app stays inside its subrequest budget', async () => {
       // is not allowed to cost a round trip the chart it replaced did not.
       runSection(b, 'home.loading-authority', (db) =>
         loadingAuthorityBoard(db, { ...scope, affiliateId: null }),
+      ),
+      runSection(b, 'home.po-user-trend', (db) =>
+        userApprovalTrend(db, 'PURCHASE_ORDER', {
+          from: `${shown.from!.slice(0, 4)}-01-01`,
+          to: `${shown.from!.slice(0, 4)}-12-31`,
+          affiliateId: filter.affiliateId,
+        }),
+      ),
+      runSection(b, 'home.loading-authority-trend', (db) =>
+        loadingAuthorityTrend(db, {
+          from: `${shown.from!.slice(0, 4)}-01-01`,
+          to: `${shown.from!.slice(0, 4)}-12-31`,
+          affiliateId: null,
+        }),
       ),
       runSection(b, 'home.affiliates', (db) =>
         db.execute(
