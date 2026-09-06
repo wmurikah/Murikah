@@ -20,7 +20,14 @@ export const POST: APIRoute = async (context) => {
   const phoneNumberId = text(body?.phoneNumberId);
   if (!code || !wabaId) {
     return Response.json(
-      { errors: [{ field: 'signup', message: 'WhatsApp pairing did not return the required account details.' }] },
+      {
+        errors: [
+          {
+            field: 'signup',
+            message: 'WhatsApp pairing did not return the required account details.',
+          },
+        ],
+      },
       { status: 400 },
     );
   }
@@ -29,7 +36,14 @@ export const POST: APIRoute = async (context) => {
     const db = await requestDb(context.locals);
     if (!(await channelCredentialsReady(db))) {
       return Response.json(
-        { errors: [{ field: 'setup', message: 'Run the Channels & Communications database setup first.' }] },
+        {
+          errors: [
+            {
+              field: 'setup',
+              message: 'Run the Channels & Communications database setup first.',
+            },
+          ],
+        },
         { status: 409 },
       );
     }
@@ -79,7 +93,10 @@ export const POST: APIRoute = async (context) => {
     });
     return Response.json({ ok: true, phoneNumber: phone.value.displayPhoneNumber });
   } catch (error) {
-    console.error('[cms.channels.meta.complete]', error instanceof Error ? error.message : String(error));
+    console.error(
+      '[cms.channels.meta.complete]',
+      error instanceof Error ? error.message : String(error),
+    );
     return Response.json(
       { errors: [{ field: 'signup', message: 'WhatsApp pairing could not be completed.' }] },
       { status: 500 },
