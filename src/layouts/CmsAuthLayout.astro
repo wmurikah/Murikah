@@ -28,6 +28,7 @@
  */
 import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
+import '@/styles/cms.css';
 import CmsWordmark from '@/components/cms/CmsWordmark.astro';
 
 interface Props {
@@ -38,7 +39,7 @@ const pageTitle = `${title} - Hass Petroleum`;
 ---
 
 <!doctype html>
-<html lang="en-KE" class="h-full">
+<html lang="en-KE" class="cms-shell h-full">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -99,13 +100,6 @@ const pageTitle = `${title} - Hass Petroleum`;
 </html>
 
 <style>
-  .auth-shell {
-    /* Login-only interaction ramp. Keep the wider CMS palette unchanged. */
-    --color-cms-royal: #002169;
-    --color-cms-royal-deep: #00184f;
-    --color-cms-royal-tint: #eaf0ff;
-  }
-
   .auth-brand {
     background-image:
       radial-gradient(
@@ -118,7 +112,7 @@ const pageTitle = `${title} - Hass Petroleum`;
         color-mix(in srgb, var(--color-cms-royal) 42%, transparent) 0,
         transparent 40%
       ),
-      linear-gradient(145deg, #002169 6%, #0a2e73 58%, #00184f);
+      linear-gradient(145deg, var(--color-cms-royal) 6%, #0a2e73 58%, var(--color-cms-royal-deep));
   }
   .auth-form-glow {
     background-image: radial-gradient(
