@@ -5,10 +5,10 @@ import { requireChannelsManage } from '@/lib/cms/channels/access';
 import { saveMicrosoftChannel, type ChannelPurpose } from '@/lib/cms/channels/credentials';
 import {
   exchangeMicrosoftCode,
-  microsoftConfig,
   microsoftMailbox,
   type EmailPurpose,
 } from '@/lib/cms/channels/microsoft';
+import { loadMicrosoftConfig } from '@/lib/cms/channels/providerSettings';
 import { openChannelSecret, sealChannelSecret } from '@/lib/cms/channels/secretBox';
 
 export const prerender = false;
@@ -57,20 +57,25 @@ export const GET: APIRoute = async (context) => {
     ) {
       return fail('The Microsoft sign-in response is not valid for this session.');
     }
-    if (Date.now() - state.issuedAt > MAX_AGE_MS) return fail('The Microsoft sign-in expired. Start again.');
+    if (Date.now() - state.issuedAt > MAX_AGE_MS) {
+      return fail('The Microsoft sign-in expired. Start again.');
+    }
 
-    const config = microsoftConfig(env);
-    if (!config) return fail('Microsoft sign-in is not configured for this CMS.');
+    const db = await requestDb(context.locals);
+    const config = await loadMicrosoftConfig(db, env);
+    if (!config) return redirect('setup=microsoft');
+
     const redirectUri = `${context.url.origin}/api/admin/channels/microsoft/callback`;
     const exchanged = await exchangeMicrosoftCode(config, state.purpose, code, redirectUri);
     if (!exchanged.ok) return fail(`Microsoft sign-in could not be completed: ${exchanged.error}`);
     if (!exchanged.value.refreshToken) {
-      return fail('Microsoft did not grant offline access. Reconnect and approve the requested mailbox access.');
+      return fail(
+        'Microsoft did not grant offline access. Reconnect and approve the requested mailbox access.',
+      );
     }
     const mailbox = await microsoftMailbox(exchanged.value.accessToken);
     if (!mailbox.ok) return fail(`The connected mailbox could not be read: ${mailbox.error}`);
 
-    const db = await requestDb(context.locals);
     await saveMicrosoftChannel(db, {
       purpose: state.purpose,
       mailbox: mailbox.value,
@@ -82,7 +87,10 @@ export const GET: APIRoute = async (context) => {
       `connected=${encodeURIComponent(mailbox.value)}&purpose=${encodeURIComponent(state.purpose)}`,
     );
   } catch (error) {
-    console.error('[cms.channels.microsoft.callback]', error instanceof Error ? error.message : String(error));
+    console.error(
+      '[cms.channels.microsoft.callback]',
+      error instanceof Error ? error.message : String(error),
+    );
     return fail('The mailbox connection could not be saved. Please try again.');
   }
 };
