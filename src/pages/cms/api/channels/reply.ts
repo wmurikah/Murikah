@@ -19,7 +19,9 @@ export const POST: APIRoute = async (context) => {
   const auth = requireInquiriesReply(context);
   if (!auth.ok) return auth.response;
   const body = (await context.request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body) return Response.json({ errors: [{ field: 'body', message: 'Send JSON.' }] }, { status: 400 });
+  if (!body) {
+    return Response.json({ errors: [{ field: 'body', message: 'Send JSON.' }] }, { status: 400 });
+  }
   const channelMessageId = text(body.channelMessageId);
   const message = text(body.message);
   if (!channelMessageId || message.length < 2) {
@@ -42,15 +44,27 @@ export const POST: APIRoute = async (context) => {
              WHERE channel_message_id = ? AND direction = 'INBOUND' LIMIT 1`,
       args: [channelMessageId],
     });
-    const caseId = String((pointer.rows[0] as Record<string, unknown> | undefined)?.case_id ?? '');
+    const caseId = String(
+      (pointer.rows[0] as Record<string, unknown> | undefined)?.case_id ?? '',
+    );
     if (!caseId) {
       return Response.json(
-        { errors: [{ field: 'case', message: 'Review and link this inquiry to a Helpdesk case before replying.' }] },
+        {
+          errors: [
+            {
+              field: 'case',
+              message: 'Review and link this inquiry to a Helpdesk case before replying.',
+            },
+          ],
+        },
         { status: 409 },
       );
     }
     if (!(await getCase(db, auth.userId, caseId))) {
-      return Response.json({ errors: [{ field: 'case', message: 'That case is outside your access.' }] }, { status: 403 });
+      return Response.json(
+        { errors: [{ field: 'case', message: 'That case is outside your access.' }] },
+        { status: 403 },
+      );
     }
 
     const found = await db.execute({
@@ -62,10 +76,22 @@ export const POST: APIRoute = async (context) => {
       args: [channelMessageId, caseId],
     });
     const row = found.rows[0] as Record<string, unknown> | undefined;
-    if (!row) return Response.json({ errors: [{ field: 'message', message: 'Inquiry not found.' }] }, { status: 404 });
+    if (!row) {
+      return Response.json(
+        { errors: [{ field: 'message', message: 'Inquiry not found.' }] },
+        { status: 404 },
+      );
+    }
     if (String(row.channel) !== 'EMAIL') {
       return Response.json(
-        { errors: [{ field: 'channel', message: 'WhatsApp replies become available after the Meta connection is completed.' }] },
+        {
+          errors: [
+            {
+              field: 'channel',
+              message: 'WhatsApp replies become available after the Meta connection is completed.',
+            },
+          ],
+        },
         { status: 409 },
       );
     }
@@ -79,21 +105,36 @@ export const POST: APIRoute = async (context) => {
     }
     const recipient = String(row.from_address ?? '').trim();
     if (!recipient) {
-      return Response.json({ errors: [{ field: 'recipient', message: 'This inquiry has no reply address.' }] }, { status: 409 });
+      return Response.json(
+        { errors: [{ field: 'recipient', message: 'This inquiry has no reply address.' }] },
+        { status: 409 },
+      );
     }
 
     const token = await microsoftAccessToken(db, env, credential);
     if (!token.ok) {
-      return Response.json({ errors: [{ field: 'connection', message: token.error }] }, { status: 409 });
+      return Response.json(
+        { errors: [{ field: 'connection', message: token.error }] },
+        { status: 409 },
+      );
     }
-    const sent = await microsoftReplyToMessage(token.accessToken, String(row.external_message_id), message);
+    const sent = await microsoftReplyToMessage(
+      token.accessToken,
+      String(row.external_message_id),
+      message,
+    );
     if (!sent.ok) {
-      return Response.json({ errors: [{ field: 'send', message: sent.error }] }, { status: sent.auth ? 409 : 502 });
+      return Response.json(
+        { errors: [{ field: 'send', message: sent.error }] },
+        { status: sent.auth ? 409 : 502 },
+      );
     }
 
     const now = new Date();
     const stamp = now.toISOString().slice(0, 19).replace('T', ' ');
     const subject = String(row.subject ?? '').trim();
+    const accountId = row.account_id == null ? null : String(row.account_id);
+    const contactId = row.contact_id == null ? null : String(row.contact_id);
     const outboundId = newId('CHM');
     await db.execute({
       sql: `INSERT INTO channel_messages
@@ -110,8 +151,8 @@ export const POST: APIRoute = async (context) => {
         subject ? `Re: ${subject.replace(/^Re:\s*/i, '')}` : 'Re: inquiry',
         message,
         stamp,
-        row.account_id ?? null,
-        row.contact_id ?? null,
+        accountId,
+        contactId,
         caseId,
         JSON.stringify({ provider: 'MICROSOFT', inReplyTo: String(row.external_message_id) }),
         stamp,
@@ -131,7 +172,7 @@ export const POST: APIRoute = async (context) => {
       {
         direction: 'OUTBOUND',
         channel: 'EMAIL',
-        contactId: row.contact_id == null ? null : String(row.contact_id),
+        contactId,
         subject: subject ? `Re: ${subject.replace(/^Re:\s*/i, '')}` : null,
         messageSummary: message,
         communicatedAt: stamp,
