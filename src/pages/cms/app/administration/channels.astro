@@ -1,9 +1,12 @@
 ---
+import { env } from 'cloudflare:workers';
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsCard from '@/components/cms/CmsCard.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
 import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsInput from '@/components/cms/CmsInput.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
 import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@/components/cms/CmsErrorState.astro';
 import { requestDb } from '@/lib/cms/db';
@@ -13,6 +16,10 @@ import {
   listChannelCredentials,
   type ChannelCredential,
 } from '@/lib/cms/channels/credentials';
+import {
+  microsoftProviderStatus,
+  type MicrosoftProviderStatus,
+} from '@/lib/cms/channels/providerSettings';
 
 export const prerender = false;
 
@@ -21,6 +28,13 @@ const mayManage = canManageChannels(permissions);
 
 let credentialsReady = false;
 let credentials: ChannelCredential[] = [];
+let microsoft: MicrosoftProviderStatus = {
+  ready: false,
+  configured: false,
+  clientId: null,
+  tenant: null,
+  source: null,
+};
 let whatsapp: {
   accountIdentifier: string;
   status: string;
@@ -34,6 +48,7 @@ if (mayManage) {
     const db = await requestDb(Astro.locals);
     credentialsReady = await channelCredentialsReady(db);
     if (credentialsReady) credentials = await listChannelCredentials(db);
+    microsoft = await microsoftProviderStatus(db, env);
 
     const found = await db.execute(
       `SELECT account_identifier, status, last_polled_at, last_error
@@ -59,14 +74,22 @@ if (mayManage) {
 const byPurpose = new Map(credentials.map((credential) => [credential.purpose, credential]));
 const notification = byPurpose.get('NOTIFICATION_EMAIL') ?? null;
 const inquiry = byPurpose.get('INQUIRY_EMAIL') ?? null;
-const error = Astro.url.searchParams.get('error');
+const rawError = Astro.url.searchParams.get('error');
+const legacyMissingMicrosoft = rawError?.includes('Microsoft sign-in is not configured') ?? false;
+const error = legacyMissingMicrosoft ? null : rawError;
+const setupRequested =
+  Astro.url.searchParams.get('setup') === 'microsoft' || legacyMissingMicrosoft;
 const connected = Astro.url.searchParams.get('connected');
 const connectedPurpose = Astro.url.searchParams.get('purpose');
+const saved = Astro.url.searchParams.get('saved');
 const pageMessage = error
   ? error
   : connected
     ? `${connectedPurpose === 'NOTIFICATION_EMAIL' ? 'Notification email' : 'Inquiry email'} connected: ${connected}`
-    : '';
+    : saved === 'microsoft'
+      ? 'Microsoft 365 setup saved.'
+      : '';
+const redirectUri = `${Astro.url.origin}/api/admin/channels/microsoft/callback`;
 
 const statusTone = (
   status: string | null | undefined,
@@ -132,17 +155,40 @@ const statusLabel = (credential: ChannelCredential | null): string => {
           </div>
         )}
 
+        <div class="mb-4">
+          <CmsCard title="Microsoft 365">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <CmsBadge
+                    tone={microsoft.configured ? 'success' : 'warning'}
+                    label={microsoft.configured ? 'Configured' : 'Setup required'}
+                  />
+                  {microsoft.tenant && (
+                    <span class="truncate text-cms-caption text-cms-muted">{microsoft.tenant}</span>
+                  )}
+                </div>
+                <div class="mt-2 text-cms-body-sm text-cms-ink">
+                  Used by notification and inquiry email.
+                </div>
+              </div>
+              <CmsButton
+                variant={microsoft.configured ? 'secondary' : 'primary'}
+                data-cms-modal-open="cms-microsoft-settings"
+              >
+                {microsoft.configured ? 'Edit setup' : 'Set up Microsoft'}
+              </CmsButton>
+            </div>
+          </CmsCard>
+        </div>
+
         <div class="grid gap-4 xl:grid-cols-3">
           <CmsCard title="Notification email">
             <div class="flex h-full flex-col gap-4">
               <div class="flex items-center justify-between gap-3">
                 <span class="text-cms-body-sm text-cms-muted">System notifications</span>
                 <CmsBadge
-                  tone={
-                    credentialsReady
-                      ? statusTone(notification?.connectionStatus)
-                      : 'warning'
-                  }
+                  tone={credentialsReady ? statusTone(notification?.connectionStatus) : 'warning'}
                   label={statusLabel(notification)}
                 />
               </div>
@@ -152,23 +198,24 @@ const statusLabel = (credential: ChannelCredential | null): string => {
               </div>
 
               <div class="mt-auto flex flex-wrap gap-2">
-                <CmsButton
-                  variant={notification ? 'secondary' : 'primary'}
-                  href={`/api/admin/channels/microsoft/connect?purpose=NOTIFICATION_EMAIL`}
-                  disabled={!credentialsReady}
-                >
-                  {notification ? 'Reconnect' : 'Connect Microsoft'}
-                </CmsButton>
-                {
-                  notification && (
-                    <CmsButton
-                      variant="ghost"
-                      data-channel-disconnect="NOTIFICATION_EMAIL"
-                    >
-                      Disconnect
-                    </CmsButton>
-                  )
-                }
+                {microsoft.configured ? (
+                  <CmsButton
+                    variant={notification ? 'secondary' : 'primary'}
+                    href="/api/admin/channels/microsoft/connect?purpose=NOTIFICATION_EMAIL"
+                    disabled={!credentialsReady}
+                  >
+                    {notification ? 'Reconnect' : 'Connect Microsoft'}
+                  </CmsButton>
+                ) : (
+                  <CmsButton variant="primary" data-cms-modal-open="cms-microsoft-settings">
+                    Connect Microsoft
+                  </CmsButton>
+                )}
+                {notification && (
+                  <CmsButton variant="ghost" data-channel-disconnect="NOTIFICATION_EMAIL">
+                    Disconnect
+                  </CmsButton>
+                )}
               </div>
             </div>
           </CmsCard>
@@ -191,34 +238,34 @@ const statusLabel = (credential: ChannelCredential | null): string => {
               </div>
 
               <div class="mt-auto flex flex-wrap gap-2">
-                <CmsButton
-                  variant={inquiry ? 'secondary' : 'primary'}
-                  href={`/api/admin/channels/microsoft/connect?purpose=INQUIRY_EMAIL`}
-                  disabled={!credentialsReady}
-                >
-                  {inquiry ? 'Reconnect' : 'Connect Microsoft'}
-                </CmsButton>
-                {
-                  inquiry && (
-                    <CmsButton variant="secondary" data-channel-sync>
-                      Sync now
-                    </CmsButton>
-                  )
-                }
-                {
-                  inquiry && (
-                    <CmsButton variant="ghost" href="/app/helpdesk/inbox">
-                      Open inbox
-                    </CmsButton>
-                  )
-                }
-                {
-                  inquiry && (
-                    <CmsButton variant="ghost" data-channel-disconnect="INQUIRY_EMAIL">
-                      Disconnect
-                    </CmsButton>
-                  )
-                }
+                {microsoft.configured ? (
+                  <CmsButton
+                    variant={inquiry ? 'secondary' : 'primary'}
+                    href="/api/admin/channels/microsoft/connect?purpose=INQUIRY_EMAIL"
+                    disabled={!credentialsReady}
+                  >
+                    {inquiry ? 'Reconnect' : 'Connect Microsoft'}
+                  </CmsButton>
+                ) : (
+                  <CmsButton variant="primary" data-cms-modal-open="cms-microsoft-settings">
+                    Connect Microsoft
+                  </CmsButton>
+                )}
+                {inquiry && (
+                  <CmsButton variant="secondary" data-channel-sync>
+                    Sync now
+                  </CmsButton>
+                )}
+                {inquiry && (
+                  <CmsButton variant="ghost" href="/app/helpdesk/inbox">
+                    Open inbox
+                  </CmsButton>
+                )}
+                {inquiry && (
+                  <CmsButton variant="ghost" data-channel-disconnect="INQUIRY_EMAIL">
+                    Disconnect
+                  </CmsButton>
+                )}
               </div>
             </div>
           </CmsCard>
@@ -256,6 +303,12 @@ const statusLabel = (credential: ChannelCredential | null): string => {
           </div>
         )}
 
+        {!microsoft.ready && !microsoft.source && (
+          <div class="mt-4 rounded-cms border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+            Run the Microsoft channel settings database setup once before saving the Microsoft setup.
+          </div>
+        )}
+
         <div class="mt-4">
           <CmsCard title="Access">
             <div class="flex flex-wrap items-center justify-between gap-4">
@@ -279,6 +332,74 @@ const statusLabel = (credential: ChannelCredential | null): string => {
           class="mt-4 text-cms-body-sm text-cms-muted"
         >
         </p>
+
+        <CmsModal
+          id="cms-microsoft-settings"
+          title="Microsoft 365 setup"
+          description="Enter the Entra application details once. The client secret is encrypted before it is stored."
+          confirmOnDirty
+        >
+          <form id="cms-microsoft-settings-form" class="flex flex-col gap-4">
+            <CmsInput
+              id="ms-tenant"
+              name="tenant"
+              label="Tenant ID or domain"
+              value={microsoft.tenant ?? ''}
+              placeholder="hasspetroleum.com"
+              required
+            />
+            <CmsInput
+              id="ms-client-id"
+              name="clientId"
+              label="Application (client) ID"
+              value={microsoft.clientId ?? ''}
+              required
+            />
+            <CmsInput
+              id="ms-client-secret"
+              name="clientSecret"
+              label="Client secret"
+              type="password"
+              revealable
+              autocomplete="new-password"
+              required={!microsoft.configured}
+              placeholder={microsoft.configured ? 'Leave blank to keep the current secret' : undefined}
+            />
+            <CmsInput
+              id="ms-redirect-uri"
+              name="redirectUri"
+              label="Redirect URI"
+              value={redirectUri}
+              readonly
+              hint="Add this exact Web redirect URI to the Microsoft Entra application."
+            />
+            <p id="cms-microsoft-settings-message" role="alert" class="text-cms-caption text-cms-negative"></p>
+          </form>
+          <Fragment slot="actions">
+            <CmsButton
+              type="submit"
+              variant="primary"
+              form="cms-microsoft-settings-form"
+              disabled={!microsoft.ready && !microsoft.source}
+            >
+              Save setup
+            </CmsButton>
+            <CmsButton type="button" variant="ghost" data-cms-modal-close>
+              Cancel
+            </CmsButton>
+          </Fragment>
+        </CmsModal>
+
+        {setupRequested && (
+          <button
+            type="button"
+            class="hidden"
+            data-auto-open-microsoft
+            data-cms-modal-open="cms-microsoft-settings"
+            aria-hidden="true"
+            tabindex="-1"
+          ></button>
+        )}
       </>
     )
   }
@@ -291,6 +412,45 @@ const statusLabel = (credential: ChannelCredential | null): string => {
   const say = (text: string) => {
     if (message) message.textContent = text;
   };
+
+  document.querySelector<HTMLButtonElement>('[data-auto-open-microsoft]')?.click();
+
+  document
+    .querySelector<HTMLFormElement>('#cms-microsoft-settings-form')
+    ?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget as HTMLFormElement;
+      const submit = document.querySelector<HTMLButtonElement>(
+        '[form="cms-microsoft-settings-form"][type="submit"]',
+      );
+      const restore = busy(submit, 'Saving…');
+      const status = document.querySelector<HTMLElement>('#cms-microsoft-settings-message');
+      const data = new FormData(form);
+      try {
+        const response = await fetch('/api/admin/channels/microsoft/settings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            tenant: data.get('tenant'),
+            clientId: data.get('clientId'),
+            clientSecret: data.get('clientSecret'),
+          }),
+        });
+        const body = (await response.json().catch(() => null)) as
+          | { errors?: { message: string }[] }
+          | null;
+        if (!response.ok) {
+          if (status) {
+            status.textContent =
+              body?.errors?.map((item) => item.message).join(' ') || 'Microsoft setup could not be saved.';
+          }
+          return;
+        }
+        location.href = '/app/administration/channels?saved=microsoft';
+      } finally {
+        restore();
+      }
+    });
 
   document.querySelector<HTMLButtonElement>('[data-channel-sync]')?.addEventListener('click', async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
