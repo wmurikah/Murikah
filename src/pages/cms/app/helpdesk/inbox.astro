@@ -1,0 +1,266 @@
+---
+import CmsLayout from '@/layouts/CmsLayout.astro';
+import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
+import CmsCard from '@/components/cms/CmsCard.astro';
+import CmsBadge from '@/components/cms/CmsBadge.astro';
+import CmsButton from '@/components/cms/CmsButton.astro';
+import CmsEmptyState from '@/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@/components/cms/CmsErrorState.astro';
+import CmsModal from '@/components/cms/CmsModal.astro';
+import { requestDb } from '@/lib/cms/db';
+import { canReplyToInquiries, canViewInquiries } from '@/lib/cms/channels/access';
+import { inquiryInboxCounts, listInquiryMessages, type InquiryMessageRow } from '@/lib/cms/channels/inbox';
+import { getChannelCredential } from '@/lib/cms/channels/credentials';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayView = canViewInquiries(permissions);
+const mayReply = canReplyToInquiries(permissions);
+const channel = Astro.url.searchParams.get('channel');
+const direction = Astro.url.searchParams.get('direction');
+const q = Astro.url.searchParams.get('q') ?? '';
+let rows: InquiryMessageRow[] = [];
+let counts = { total: 0, unlinked: 0, email: 0, whatsapp: 0 };
+let emailConnected = false;
+let loadFailed = false;
+
+if (mayView) {
+  try {
+    const db = await requestDb(Astro.locals);
+    [rows, counts] = await Promise.all([
+      listInquiryMessages(db, { channel, direction, search: q }),
+      inquiryInboxCounts(db),
+    ]);
+    try {
+      emailConnected = (await getChannelCredential(db, 'INQUIRY_EMAIL')) !== null;
+    } catch {
+      emailConnected = false;
+    }
+  } catch (error) {
+    console.error('[cms.helpdesk.inbox] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const excerpt = (value: string | null): string => {
+  const text = value?.replace(/\s+/g, ' ').trim() ?? '';
+  return text.length <= 240 ? text : `${text.slice(0, 237)}…`;
+};
+---
+
+<CmsLayout title="Channel inbox" width="data">
+  <CmsPageHeader
+    title="Channel inbox"
+    crumbs={[
+      { label: 'Home', href: '/app' },
+      { label: 'Helpdesk', href: '/app/helpdesk' },
+      { label: 'Channel inbox' },
+    ]}
+  >
+    {
+      mayView && (
+        <Fragment slot="actions">
+          <a href="/app/helpdesk/review" class="inline-flex min-h-10 items-center rounded-cms border border-cms-border px-3 text-cms-body-sm font-semibold text-cms-royal hover:bg-cms-royal-tint">
+            Review unlinked ({counts.unlinked})
+          </a>
+          {emailConnected && (
+            <CmsButton type="button" variant="primary" id="cms-sync-inquiry-email">Sync email</CmsButton>
+          )}
+        </Fragment>
+      )
+    }
+  </CmsPageHeader>
+
+  {!mayView && <CmsEmptyState title="You do not have access to customer inquiries" description="Ask an administrator to grant Inquiry view access." />}
+  {loadFailed && <CmsErrorState title="The channel inbox could not be loaded" description="Please try again in a moment." />}
+
+  {
+    mayView && !loadFailed && (
+      <>
+        <div class="grid gap-3 sm:grid-cols-4">
+          <CmsCard title="Messages"><p class="text-cms-display font-semibold text-cms-ink">{counts.total}</p></CmsCard>
+          <CmsCard title="Needs review"><p class="text-cms-display font-semibold text-cms-ink">{counts.unlinked}</p></CmsCard>
+          <CmsCard title="Email"><p class="text-cms-display font-semibold text-cms-ink">{counts.email}</p></CmsCard>
+          <CmsCard title="WhatsApp"><p class="text-cms-display font-semibold text-cms-ink">{counts.whatsapp}</p></CmsCard>
+        </div>
+
+        <CmsCard title="Inbox">
+          <form method="get" class="mb-4 grid gap-3 md:grid-cols-[1fr_12rem_12rem_auto]">
+            <input
+              type="search"
+              name="q"
+              value={q}
+              placeholder="Search sender, subject, customer or case"
+              class="min-h-10 rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            />
+            <select name="channel" class="min-h-10 rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus">
+              <option value="">All channels</option>
+              <option value="EMAIL" selected={channel === 'EMAIL'}>Email</option>
+              <option value="WHATSAPP" selected={channel === 'WHATSAPP'}>WhatsApp</option>
+            </select>
+            <select name="direction" class="min-h-10 rounded-cms border border-cms-border bg-cms-surface px-3 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus">
+              <option value="">Inbound + outbound</option>
+              <option value="INBOUND" selected={direction === 'INBOUND'}>Inbound</option>
+              <option value="OUTBOUND" selected={direction === 'OUTBOUND'}>Outbound</option>
+            </select>
+            <CmsButton type="submit" variant="secondary">Filter</CmsButton>
+          </form>
+
+          {rows.length === 0 ? (
+            <CmsEmptyState title="No messages here" description="Connected inquiry channels will appear here as messages are received or sent." />
+          ) : (
+            <ul class="divide-y divide-cms-line">
+              {rows.map((row) => (
+                <li class="py-4 first:pt-0 last:pb-0">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <CmsBadge tone={row.channel === 'WHATSAPP' ? 'success' : 'neutral'} label={row.channel === 'WHATSAPP' ? 'WhatsApp' : 'Email'} />
+                        <CmsBadge tone={row.direction === 'INBOUND' ? 'warning' : 'neutral'} label={row.direction === 'INBOUND' ? 'Inbound' : 'Outbound'} />
+                        {row.caseNumber === null && row.direction === 'INBOUND' && <CmsBadge tone="warning" label="Needs review" />}
+                      </div>
+                      <p class="mt-2 text-cms-body-sm font-semibold text-cms-ink">{row.subject ?? '(no subject)'}</p>
+                      <p class="mt-1 text-cms-caption text-cms-muted">
+                        {row.direction === 'INBOUND' ? row.fromAddress ?? 'Unknown sender' : row.toAddress ?? 'Unknown recipient'} · {row.receivedAt}
+                      </p>
+                      {excerpt(row.body) && <p class="mt-2 text-cms-body-sm text-cms-muted">{excerpt(row.body)}</p>}
+                      <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-cms-caption text-cms-muted">
+                        {row.accountName && <span>Customer: <strong class="font-medium text-cms-ink">{row.accountName}</strong></span>}
+                        {row.contactName && <span>Contact: <strong class="font-medium text-cms-ink">{row.contactName}</strong></span>}
+                        {row.caseNumber && row.caseId && (
+                          <a class="font-semibold text-cms-royal hover:underline" href={`/app/helpdesk/${row.caseId}`}>
+                            {row.caseNumber}{row.caseSubject ? ` · ${row.caseSubject}` : ''}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                      {row.caseId === null && row.direction === 'INBOUND' && (
+                        <a class="inline-flex min-h-9 items-center rounded-cms border border-cms-border px-3 text-cms-body-sm font-semibold text-cms-royal hover:bg-cms-royal-tint" href="/app/helpdesk/review">Review</a>
+                      )}
+                      {mayReply && row.channel === 'EMAIL' && row.direction === 'INBOUND' && row.caseId !== null && (
+                        <CmsButton
+                          type="button"
+                          variant="secondary"
+                          data-cms-reply-open
+                          data-message-id={row.channelMessageId}
+                          data-reply-label={row.subject ?? 'Email inquiry'}
+                        >
+                          Reply
+                        </CmsButton>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CmsCard>
+
+        <p id="cms-inquiry-status" class="text-cms-body-sm text-cms-muted" role="status" aria-live="polite"></p>
+      </>
+    )
+  }
+
+  {
+    mayReply && (
+      <CmsModal id="cms-inquiry-reply" title="Reply by email" confirmOnDirty>
+        <form id="cms-inquiry-reply-form" class="flex flex-col gap-3">
+          <input type="hidden" name="channelMessageId" id="cms-reply-message-id" />
+          <p id="cms-reply-context" class="text-cms-body-sm text-cms-muted"></p>
+          <label for="cms-reply-message" class="text-cms-label text-cms-ink">Message</label>
+          <textarea
+            id="cms-reply-message"
+            name="message"
+            required
+            rows="8"
+            maxlength="4000"
+            class="w-full rounded-cms border border-cms-border bg-cms-surface px-3 py-2 text-cms-body-sm text-cms-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          ></textarea>
+        </form>
+        <Fragment slot="actions">
+          <CmsButton type="submit" variant="primary" form="cms-inquiry-reply-form">Send reply</CmsButton>
+          <CmsButton type="button" variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+        </Fragment>
+      </CmsModal>
+    )
+  }
+</CmsLayout>
+
+<script>
+  import { busy } from '@/lib/cms/ui/busy';
+
+  const status = document.querySelector<HTMLElement>('#cms-inquiry-status');
+  const syncButton = document.querySelector<HTMLButtonElement>('#cms-sync-inquiry-email');
+
+  async function syncMailbox(silent = false): Promise<void> {
+    if (!syncButton && !silent) return;
+    const restore = silent ? () => undefined : busy(syncButton, 'Syncing…');
+    try {
+      const response = await fetch('/api/channels/inquiry-email/sync', { method: 'POST' });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok) {
+        const errors = (body?.errors ?? []) as { message?: string }[];
+        if (status && !silent) status.textContent = errors.map((e) => e.message).filter(Boolean).join(' ') || 'Email sync failed.';
+        return;
+      }
+      const stored = Number(body?.stored ?? 0);
+      if (stored > 0) location.reload();
+      else if (status && !silent) status.textContent = 'Email is up to date.';
+    } finally {
+      restore();
+    }
+  }
+
+  syncButton?.addEventListener('click', () => void syncMailbox(false));
+
+  try {
+    const key = 'cms.inquiry.lastAutoSync';
+    const last = Number(sessionStorage.getItem(key) ?? '0');
+    if (Date.now() - last > 5 * 60_000 && syncButton) {
+      sessionStorage.setItem(key, String(Date.now()));
+      void syncMailbox(true);
+    }
+  } catch {
+    // Storage may be unavailable; manual sync remains available.
+  }
+
+  const replyDialog = document.querySelector<HTMLDialogElement>('#cms-inquiry-reply');
+  const messageId = document.querySelector<HTMLInputElement>('#cms-reply-message-id');
+  const context = document.querySelector<HTMLElement>('#cms-reply-context');
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-cms-reply-open]')) {
+    button.addEventListener('click', () => {
+      if (messageId) messageId.value = button.dataset.messageId ?? '';
+      if (context) context.textContent = button.dataset.replyLabel ?? '';
+      replyDialog?.showModal();
+    });
+  }
+
+  document.querySelector<HTMLFormElement>('#cms-inquiry-reply-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const submit = document.querySelector<HTMLButtonElement>('[form="cms-inquiry-reply-form"][type="submit"]');
+    const restore = busy(submit, 'Sending…');
+    const data = new FormData(form);
+    try {
+      const response = await fetch('/api/channels/reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          channelMessageId: data.get('channelMessageId'),
+          message: data.get('message'),
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok) {
+        const errors = (body?.errors ?? []) as { message?: string }[];
+        if (status) status.textContent = errors.map((e) => e.message).filter(Boolean).join(' ') || 'Reply failed.';
+        return;
+      }
+      location.reload();
+    } finally {
+      restore();
+    }
+  });
+</script>
