@@ -45,9 +45,12 @@ export async function metaPhoneNumber(
   preferredPhoneNumberId?: string | null,
 ): Promise<MetaResult<MetaPhoneNumber>> {
   try {
-    const response = await fetch(`${GRAPH}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id,display_phone_number`, {
-      headers: { authorization: `Bearer ${accessToken}` },
-    });
+    const response = await fetch(
+      `${GRAPH}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id,display_phone_number`,
+      {
+        headers: { authorization: `Bearer ${accessToken}` },
+      },
+    );
     const body = (await response.json().catch(() => ({}))) as {
       data?: { id?: string; display_phone_number?: string }[];
       error?: { message?: string };
@@ -61,12 +64,16 @@ export async function metaPhoneNumber(
     }
     const rows = body.data ?? [];
     const selected = preferredPhoneNumberId
-      ? rows.find((row) => row.id === preferredPhoneNumberId) ?? rows[0]
+      ? (rows.find((row) => row.id === preferredPhoneNumberId) ?? rows[0])
       : rows[0];
     const id = selected?.id?.trim() ?? '';
     const displayPhoneNumber = selected?.display_phone_number?.trim() ?? '';
     if (!id || !displayPhoneNumber) {
-      return { ok: false, auth: false, error: 'Meta did not return the connected WhatsApp number.' };
+      return {
+        ok: false,
+        auth: false,
+        error: 'Meta did not return the connected WhatsApp number.',
+      };
     }
     return { ok: true, value: { id, displayPhoneNumber } };
   } catch (error) {
@@ -91,7 +98,8 @@ export async function subscribeMetaApp(
       return {
         ok: false,
         auth: response.status === 401 || response.status === 403,
-        error: body.error?.message?.slice(0, 300) || `Meta webhook subscription ${response.status}`,
+        error:
+          body.error?.message?.slice(0, 300) || `Meta webhook subscription ${response.status}`,
       };
     }
     return { ok: true, value: true };
