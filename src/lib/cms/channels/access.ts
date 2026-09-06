@@ -3,9 +3,10 @@ import type { APIContext } from 'astro';
 export const CHANNELS_MANAGE = 'ADMIN.CHANNELS.MANAGE';
 export const INQUIRIES_VIEW = 'SERVICE.INQUIRIES.VIEW';
 export const INQUIRIES_REPLY = 'SERVICE.INQUIRIES.REPLY';
+const LEGACY_ADMIN_MANAGE = 'ADMIN.USERS.MANAGE';
 
 export function canManageChannels(permissions: readonly string[]): boolean {
-  return permissions.includes(CHANNELS_MANAGE);
+  return permissions.includes(CHANNELS_MANAGE) || permissions.includes(LEGACY_ADMIN_MANAGE);
 }
 
 export function canViewInquiries(permissions: readonly string[]): boolean {
