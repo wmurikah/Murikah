@@ -20,12 +20,8 @@ const notice =
 <CmsAuthLayout title="Sign in">
   <CmsLoginCharacter slot="brand-character" />
   <div class="flex flex-col gap-6">
-    <header class="space-y-1.5">
-      <p class="text-cms-label font-semibold tracking-[0.12em] text-cms-gold-ink uppercase">
-        HASS Petroleum
-      </p>
+    <header>
       <h1 class="text-cms-display font-semibold text-cms-ink">Welcome back</h1>
-      <p class="text-cms-body-sm text-cms-muted">Sign in to customer operations.</p>
     </header>
     {
       notice && (
@@ -37,11 +33,6 @@ const notice =
         </div>
       )
     }
-    <CmsAuthProviders purpose="SIGN_IN" apple />
-    <div class="flex items-center gap-3 text-cms-caption text-cms-muted" aria-hidden="true">
-      <span class="h-px flex-1 bg-cms-line"></span><span>or use your work email</span><span
-        class="h-px flex-1 bg-cms-line"></span>
-    </div>
     <form id="cms-login-form" class="flex flex-col gap-4" novalidate>
       <div class="min-h-14">
         <div
@@ -88,6 +79,10 @@ const notice =
         >
       </section>
     </form>
+    <div class="flex items-center gap-3 text-cms-caption font-medium tracking-[0.08em] text-cms-muted uppercase" aria-hidden="true">
+      <span class="h-px flex-1 bg-cms-line"></span><span>or</span><span class="h-px flex-1 bg-cms-line"></span>
+    </div>
+    <CmsAuthProviders purpose="SIGN_IN" apple />
     <div class="flex flex-wrap items-center justify-between gap-3 text-cms-body-sm">
       <a href="/forgot-password" class="font-semibold text-cms-royal hover:underline"
         >Forgot password?</a
