@@ -17,7 +17,9 @@ import {
   type ChannelCredential,
 } from '@/lib/cms/channels/credentials';
 import {
+  metaProviderStatus,
   microsoftProviderStatus,
+  type MetaProviderStatus,
   type MicrosoftProviderStatus,
 } from '@/lib/cms/channels/providerSettings';
 
@@ -35,6 +37,12 @@ let microsoft: MicrosoftProviderStatus = {
   tenant: null,
   source: null,
 };
+let meta: MetaProviderStatus = {
+  ready: false,
+  configured: false,
+  appId: null,
+  configurationId: null,
+};
 let whatsapp: {
   accountIdentifier: string;
   status: string;
@@ -48,7 +56,10 @@ if (mayManage) {
     const db = await requestDb(Astro.locals);
     credentialsReady = await channelCredentialsReady(db);
     if (credentialsReady) credentials = await listChannelCredentials(db);
-    microsoft = await microsoftProviderStatus(db, env);
+    [microsoft, meta] = await Promise.all([
+      microsoftProviderStatus(db, env),
+      metaProviderStatus(db, env),
+    ]);
 
     const found = await db.execute(
       `SELECT account_identifier, status, last_polled_at, last_error
@@ -88,7 +99,9 @@ const pageMessage = error
     ? `${connectedPurpose === 'NOTIFICATION_EMAIL' ? 'Notification email' : 'Inquiry email'} connected: ${connected}`
     : saved === 'microsoft'
       ? 'Microsoft 365 setup saved.'
-      : '';
+      : saved === 'meta'
+        ? 'WhatsApp setup saved. Select Pair with QR to continue.'
+        : '';
 const redirectUri = `${Astro.url.origin}/api/admin/channels/microsoft/callback`;
 
 const statusTone = (
@@ -120,293 +133,289 @@ const statusLabel = (credential: ChannelCredential | null): string => {
     definition="Connect the accounts used for notifications and customer conversations."
   />
 
-  {
-    !mayManage && (
-      <CmsEmptyState
-        title="You do not have permission to configure channels"
-        description="Ask an administrator for access."
-      />
-    )
-  }
+  {!mayManage && (
+    <CmsEmptyState
+      title="You do not have permission to configure channels"
+      description="Ask an administrator for access."
+    />
+  )}
 
-  {
-    mayManage && loadFailed && (
-      <CmsErrorState
-        title="Channels could not be loaded"
-        description="Please try again in a moment."
-      />
-    )
-  }
+  {mayManage && loadFailed && (
+    <CmsErrorState title="Channels could not be loaded" description="Please try again in a moment." />
+  )}
 
-  {
-    mayManage && !loadFailed && (
-      <>
-        {pageMessage && (
-          <div
-            class:list={[
-              'mb-4 rounded-cms border px-4 py-3 text-cms-body-sm',
-              error
-                ? 'border-cms-negative/30 bg-cms-negative/5 text-cms-negative'
-                : 'border-cms-positive/30 bg-cms-positive/5 text-cms-ink',
-            ]}
-            role="status"
-          >
-            {pageMessage}
-          </div>
-        )}
-
-        <div class="mb-4">
-          <CmsCard title="Microsoft 365">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <CmsBadge
-                    tone={microsoft.configured ? 'success' : 'warning'}
-                    label={microsoft.configured ? 'Configured' : 'Setup required'}
-                  />
-                  {microsoft.tenant && (
-                    <span class="truncate text-cms-caption text-cms-muted">{microsoft.tenant}</span>
-                  )}
-                </div>
-                <div class="mt-2 text-cms-body-sm text-cms-ink">
-                  Used by notification and inquiry email.
-                </div>
-              </div>
-              <CmsButton
-                variant={microsoft.configured ? 'secondary' : 'primary'}
-                data-cms-modal-open="cms-microsoft-settings"
-              >
-                {microsoft.configured ? 'Edit setup' : 'Set up Microsoft'}
-              </CmsButton>
-            </div>
-          </CmsCard>
+  {mayManage && !loadFailed && (
+    <>
+      {pageMessage && (
+        <div
+          class:list={[
+            'mb-4 rounded-cms border px-4 py-3 text-cms-body-sm',
+            error
+              ? 'border-cms-negative/30 bg-cms-negative/5 text-cms-negative'
+              : 'border-cms-positive/30 bg-cms-positive/5 text-cms-ink',
+          ]}
+          role="status"
+        >
+          {pageMessage}
         </div>
+      )}
 
-        <div class="grid gap-4 xl:grid-cols-3">
-          <CmsCard title="Notification email">
-            <div class="flex h-full flex-col gap-4">
-              <div class="flex items-center justify-between gap-3">
-                <span class="text-cms-body-sm text-cms-muted">System notifications</span>
+      <div class="mb-4">
+        <CmsCard title="Microsoft 365">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
                 <CmsBadge
-                  tone={credentialsReady ? statusTone(notification?.connectionStatus) : 'warning'}
-                  label={statusLabel(notification)}
+                  tone={microsoft.configured ? 'success' : 'warning'}
+                  label={microsoft.configured ? 'Configured' : 'Setup required'}
                 />
-              </div>
-
-              <div class="min-h-10 text-cms-body-sm text-cms-ink">
-                {notification?.accountIdentifier || 'No mailbox connected'}
-              </div>
-
-              <div class="mt-auto flex flex-wrap gap-2">
-                {microsoft.configured ? (
-                  <CmsButton
-                    variant={notification ? 'secondary' : 'primary'}
-                    href="/api/admin/channels/microsoft/connect?purpose=NOTIFICATION_EMAIL"
-                    disabled={!credentialsReady}
-                  >
-                    {notification ? 'Reconnect' : 'Connect Microsoft'}
-                  </CmsButton>
-                ) : (
-                  <CmsButton variant="primary" data-cms-modal-open="cms-microsoft-settings">
-                    Connect Microsoft
-                  </CmsButton>
-                )}
-                {notification && (
-                  <CmsButton variant="ghost" data-channel-disconnect="NOTIFICATION_EMAIL">
-                    Disconnect
-                  </CmsButton>
+                {microsoft.tenant && (
+                  <span class="truncate text-cms-caption text-cms-muted">{microsoft.tenant}</span>
                 )}
               </div>
+              <div class="mt-2 text-cms-body-sm text-cms-ink">Used by notification and inquiry email.</div>
             </div>
-          </CmsCard>
+            <CmsButton
+              variant={microsoft.configured ? 'secondary' : 'primary'}
+              data-cms-modal-open="cms-microsoft-settings"
+            >
+              {microsoft.configured ? 'Edit setup' : 'Set up Microsoft'}
+            </CmsButton>
+          </div>
+        </CmsCard>
+      </div>
 
-          <CmsCard title="Inquiry email">
-            <div class="flex h-full flex-col gap-4">
-              <div class="flex items-center justify-between gap-3">
-                <span class="text-cms-body-sm text-cms-muted">Inbound & outbound</span>
-                <CmsBadge
-                  tone={credentialsReady ? statusTone(inquiry?.connectionStatus) : 'warning'}
-                  label={statusLabel(inquiry)}
-                />
-              </div>
-
-              <div class="min-h-10 text-cms-body-sm text-cms-ink">
-                <div>{inquiry?.accountIdentifier || 'No mailbox connected'}</div>
-                {inquiry?.lastPolledAt && (
-                  <div class="mt-1 text-cms-caption text-cms-muted">Last sync {inquiry.lastPolledAt}</div>
-                )}
-              </div>
-
-              <div class="mt-auto flex flex-wrap gap-2">
-                {microsoft.configured ? (
-                  <CmsButton
-                    variant={inquiry ? 'secondary' : 'primary'}
-                    href="/api/admin/channels/microsoft/connect?purpose=INQUIRY_EMAIL"
-                    disabled={!credentialsReady}
-                  >
-                    {inquiry ? 'Reconnect' : 'Connect Microsoft'}
-                  </CmsButton>
-                ) : (
-                  <CmsButton variant="primary" data-cms-modal-open="cms-microsoft-settings">
-                    Connect Microsoft
-                  </CmsButton>
-                )}
-                {inquiry && (
-                  <CmsButton variant="secondary" data-channel-sync>
-                    Sync now
-                  </CmsButton>
-                )}
-                {inquiry && (
-                  <CmsButton variant="ghost" href="/app/helpdesk/inbox">
-                    Open inbox
-                  </CmsButton>
-                )}
-                {inquiry && (
-                  <CmsButton variant="ghost" data-channel-disconnect="INQUIRY_EMAIL">
-                    Disconnect
-                  </CmsButton>
-                )}
-              </div>
+      <div class="grid gap-4 xl:grid-cols-3">
+        <CmsCard title="Notification email">
+          <div class="flex h-full flex-col gap-4">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-cms-body-sm text-cms-muted">System notifications</span>
+              <CmsBadge
+                tone={credentialsReady ? statusTone(notification?.connectionStatus) : 'warning'}
+                label={statusLabel(notification)}
+              />
             </div>
-          </CmsCard>
+            <div class="min-h-10 text-cms-body-sm text-cms-ink">
+              {notification?.accountIdentifier || 'No mailbox connected'}
+            </div>
+            <div class="mt-auto flex flex-wrap gap-2">
+              {microsoft.configured ? (
+                <CmsButton
+                  variant={notification ? 'secondary' : 'primary'}
+                  href="/api/admin/channels/microsoft/connect?purpose=NOTIFICATION_EMAIL"
+                  disabled={!credentialsReady}
+                >
+                  {notification ? 'Reconnect' : 'Connect Microsoft'}
+                </CmsButton>
+              ) : (
+                <CmsButton variant="primary" data-cms-modal-open="cms-microsoft-settings">
+                  Connect Microsoft
+                </CmsButton>
+              )}
+              {notification && (
+                <CmsButton variant="ghost" data-channel-disconnect="NOTIFICATION_EMAIL">
+                  Disconnect
+                </CmsButton>
+              )}
+            </div>
+          </div>
+        </CmsCard>
 
-          <CmsCard title="WhatsApp">
-            <div class="flex h-full flex-col gap-4">
-              <div class="flex items-center justify-between gap-3">
-                <span class="text-cms-body-sm text-cms-muted">Helpdesk conversations</span>
-                <CmsBadge
-                  tone={statusTone(whatsapp?.status)}
-                  label={whatsapp?.status === 'CONNECTED' ? 'Connected' : 'Not connected'}
-                />
-              </div>
+        <CmsCard title="Inquiry email">
+          <div class="flex h-full flex-col gap-4">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-cms-body-sm text-cms-muted">Inbound & outbound</span>
+              <CmsBadge
+                tone={credentialsReady ? statusTone(inquiry?.connectionStatus) : 'warning'}
+                label={statusLabel(inquiry)}
+              />
+            </div>
+            <div class="min-h-10 text-cms-body-sm text-cms-ink">
+              <div>{inquiry?.accountIdentifier || 'No mailbox connected'}</div>
+              {inquiry?.lastPolledAt && (
+                <div class="mt-1 text-cms-caption text-cms-muted">Last sync {inquiry.lastPolledAt}</div>
+              )}
+            </div>
+            <div class="mt-auto flex flex-wrap gap-2">
+              {microsoft.configured ? (
+                <CmsButton
+                  variant={inquiry ? 'secondary' : 'primary'}
+                  href="/api/admin/channels/microsoft/connect?purpose=INQUIRY_EMAIL"
+                  disabled={!credentialsReady}
+                >
+                  {inquiry ? 'Reconnect' : 'Connect Microsoft'}
+                </CmsButton>
+              ) : (
+                <CmsButton variant="primary" data-cms-modal-open="cms-microsoft-settings">
+                  Connect Microsoft
+                </CmsButton>
+              )}
+              {inquiry && <CmsButton variant="secondary" data-channel-sync>Sync now</CmsButton>}
+              {inquiry && <CmsButton variant="ghost" href="/app/helpdesk/inbox">Open inbox</CmsButton>}
+              {inquiry && (
+                <CmsButton variant="ghost" data-channel-disconnect="INQUIRY_EMAIL">Disconnect</CmsButton>
+              )}
+            </div>
+          </div>
+        </CmsCard>
 
-              <div class="min-h-10 text-cms-body-sm text-cms-ink">
-                <div>{whatsapp?.accountIdentifier || 'No WhatsApp number connected'}</div>
-                {whatsapp?.lastPolledAt && (
-                  <div class="mt-1 text-cms-caption text-cms-muted">Last sync {whatsapp.lastPolledAt}</div>
-                )}
-              </div>
-
-              <div class="mt-auto flex flex-wrap items-center gap-2">
-                <CmsButton variant="primary" disabled>
+        <CmsCard title="WhatsApp">
+          <div class="flex h-full flex-col gap-4">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-cms-body-sm text-cms-muted">Helpdesk conversations</span>
+              <CmsBadge
+                tone={statusTone(whatsapp?.status)}
+                label={whatsapp?.status === 'CONNECTED' ? 'Connected' : 'Not connected'}
+              />
+            </div>
+            <div class="min-h-10 text-cms-body-sm text-cms-ink">
+              <div>{whatsapp?.accountIdentifier || 'No WhatsApp number connected'}</div>
+              {whatsapp?.lastPolledAt && (
+                <div class="mt-1 text-cms-caption text-cms-muted">Last sync {whatsapp.lastPolledAt}</div>
+              )}
+            </div>
+            <div class="mt-auto flex flex-wrap items-center gap-2">
+              {meta.configured ? (
+                <CmsButton
+                  variant={whatsapp ? 'secondary' : 'primary'}
+                  data-whatsapp-pair
+                  data-meta-app-id={meta.appId ?? ''}
+                  data-meta-config-id={meta.configurationId ?? ''}
+                >
+                  {whatsapp ? 'Pair again' : 'Pair with QR'}
+                </CmsButton>
+              ) : (
+                <CmsButton variant="primary" data-cms-modal-open="cms-meta-settings">
                   Pair with QR
                 </CmsButton>
-                <span class="text-cms-caption text-cms-muted">Meta pairing is not enabled yet.</span>
+              )}
+              {meta.configured && (
+                <CmsButton variant="ghost" data-cms-modal-open="cms-meta-settings">Edit setup</CmsButton>
+              )}
+              {whatsapp && (
+                <CmsButton variant="ghost" data-channel-disconnect="WHATSAPP">Disconnect</CmsButton>
+              )}
+            </div>
+          </div>
+        </CmsCard>
+      </div>
+
+      {!credentialsReady && (
+        <div class="mt-4 rounded-cms border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+          Run the Channels & Communications database setup before connecting accounts.
+        </div>
+      )}
+
+      {!microsoft.ready && !microsoft.source && (
+        <div class="mt-4 rounded-cms border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
+          Run the channel provider settings database setup once before saving provider setup.
+        </div>
+      )}
+
+      <div class="mt-4">
+        <CmsCard title="Access">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="text-cms-body-sm font-semibold text-cms-ink">Role-based access</div>
+              <div class="mt-1 text-cms-caption text-cms-muted">
+                Control who can configure channels, view inquiries and reply.
               </div>
             </div>
-          </CmsCard>
-        </div>
-
-        {!credentialsReady && (
-          <div class="mt-4 rounded-cms border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
-            Run the Channels & Communications database setup before connecting email accounts.
+            <CmsButton variant="secondary" href="/app/administration/roles">Manage access</CmsButton>
           </div>
-        )}
+        </CmsCard>
+      </div>
 
-        {!microsoft.ready && !microsoft.source && (
-          <div class="mt-4 rounded-cms border border-cms-line bg-cms-surface px-4 py-3 text-cms-body-sm text-cms-muted">
-            Run the Microsoft channel settings database setup once before saving the Microsoft setup.
-          </div>
-        )}
+      <p id="cms-channel-message" role="status" aria-live="polite" class="mt-4 text-cms-body-sm text-cms-muted"></p>
 
-        <div class="mt-4">
-          <CmsCard title="Access">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <div class="text-cms-body-sm font-semibold text-cms-ink">Role-based access</div>
-                <div class="mt-1 text-cms-caption text-cms-muted">
-                  Control who can configure channels, view inquiries and reply.
-                </div>
-              </div>
-              <CmsButton variant="secondary" href="/app/administration/roles">
-                Manage access
-              </CmsButton>
-            </div>
-          </CmsCard>
-        </div>
+      <CmsModal
+        id="cms-microsoft-settings"
+        title="Microsoft 365 setup"
+        description="Enter the Entra application details once. The client secret is encrypted before it is stored."
+        confirmOnDirty
+      >
+        <form id="cms-microsoft-settings-form" class="flex flex-col gap-4">
+          <CmsInput id="ms-tenant" name="tenant" label="Tenant ID or domain" value={microsoft.tenant ?? ''} placeholder="hasspetroleum.com" required />
+          <CmsInput id="ms-client-id" name="clientId" label="Application (client) ID" value={microsoft.clientId ?? ''} required />
+          <CmsInput
+            id="ms-client-secret"
+            name="clientSecret"
+            label="Client secret"
+            type="password"
+            revealable
+            autocomplete="new-password"
+            required={!microsoft.configured}
+            placeholder={microsoft.configured ? 'Leave blank to keep the current secret' : undefined}
+          />
+          <CmsInput
+            id="ms-redirect-uri"
+            name="redirectUri"
+            label="Redirect URI"
+            value={redirectUri}
+            readonly
+            hint="Add this exact Web redirect URI to the Microsoft Entra application."
+          />
+          <p id="cms-microsoft-settings-message" role="alert" class="text-cms-caption text-cms-negative"></p>
+        </form>
+        <Fragment slot="actions">
+          <CmsButton type="submit" variant="primary" form="cms-microsoft-settings-form" disabled={!microsoft.ready && !microsoft.source}>Save setup</CmsButton>
+          <CmsButton type="button" variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+        </Fragment>
+      </CmsModal>
 
-        <p
-          id="cms-channel-message"
-          role="status"
-          aria-live="polite"
-          class="mt-4 text-cms-body-sm text-cms-muted"
-        >
-        </p>
+      <CmsModal
+        id="cms-meta-settings"
+        title="WhatsApp setup"
+        description="One-time Meta setup. After this, Pair with QR opens the WhatsApp connection flow."
+        confirmOnDirty
+      >
+        <form id="cms-meta-settings-form" class="flex flex-col gap-4">
+          <CmsInput id="meta-app-id" name="appId" label="Meta App ID" value={meta.appId ?? ''} required />
+          <CmsInput id="meta-config-id" name="configurationId" label="Embedded Signup configuration ID" value={meta.configurationId ?? ''} required />
+          <CmsInput
+            id="meta-app-secret"
+            name="appSecret"
+            label="Meta App Secret"
+            type="password"
+            revealable
+            autocomplete="new-password"
+            required={!meta.configured}
+            placeholder={meta.configured ? 'Leave blank to keep the current secret' : undefined}
+          />
+          <p class="text-cms-caption text-cms-muted">
+            Use a WhatsApp Embedded Signup configuration with WhatsApp Business App coexistence enabled.
+          </p>
+          <p id="cms-meta-settings-message" role="alert" class="text-cms-caption text-cms-negative"></p>
+        </form>
+        <Fragment slot="actions">
+          <CmsButton type="submit" variant="primary" form="cms-meta-settings-form" disabled={!meta.ready}>Save setup</CmsButton>
+          <CmsButton type="button" variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+        </Fragment>
+      </CmsModal>
 
-        <CmsModal
-          id="cms-microsoft-settings"
-          title="Microsoft 365 setup"
-          description="Enter the Entra application details once. The client secret is encrypted before it is stored."
-          confirmOnDirty
-        >
-          <form id="cms-microsoft-settings-form" class="flex flex-col gap-4">
-            <CmsInput
-              id="ms-tenant"
-              name="tenant"
-              label="Tenant ID or domain"
-              value={microsoft.tenant ?? ''}
-              placeholder="hasspetroleum.com"
-              required
-            />
-            <CmsInput
-              id="ms-client-id"
-              name="clientId"
-              label="Application (client) ID"
-              value={microsoft.clientId ?? ''}
-              required
-            />
-            <CmsInput
-              id="ms-client-secret"
-              name="clientSecret"
-              label="Client secret"
-              type="password"
-              revealable
-              autocomplete="new-password"
-              required={!microsoft.configured}
-              placeholder={microsoft.configured ? 'Leave blank to keep the current secret' : undefined}
-            />
-            <CmsInput
-              id="ms-redirect-uri"
-              name="redirectUri"
-              label="Redirect URI"
-              value={redirectUri}
-              readonly
-              hint="Add this exact Web redirect URI to the Microsoft Entra application."
-            />
-            <p id="cms-microsoft-settings-message" role="alert" class="text-cms-caption text-cms-negative"></p>
-          </form>
-          <Fragment slot="actions">
-            <CmsButton
-              type="submit"
-              variant="primary"
-              form="cms-microsoft-settings-form"
-              disabled={!microsoft.ready && !microsoft.source}
-            >
-              Save setup
-            </CmsButton>
-            <CmsButton type="button" variant="ghost" data-cms-modal-close>
-              Cancel
-            </CmsButton>
-          </Fragment>
-        </CmsModal>
-
-        {setupRequested && (
-          <button
-            type="button"
-            class="hidden"
-            data-auto-open-microsoft
-            data-cms-modal-open="cms-microsoft-settings"
-            aria-hidden="true"
-            tabindex="-1"
-          ></button>
-        )}
-      </>
-    )
-  }
+      {setupRequested && (
+        <button
+          type="button"
+          class="hidden"
+          data-auto-open-microsoft
+          data-cms-modal-open="cms-microsoft-settings"
+          aria-hidden="true"
+          tabindex="-1"
+        ></button>
+      )}
+    </>
+  )}
 </CmsLayout>
 
 <script>
   import { busy } from '@/lib/cms/ui/busy';
+
+  type FbResponse = { authResponse?: { code?: string } };
+  type FbApi = {
+    init: (input: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void;
+    login: (callback: (response: FbResponse) => void, options: Record<string, unknown>) => void;
+  };
+  type FbWindow = Window & { FB?: FbApi; fbAsyncInit?: () => void };
 
   const message = document.querySelector<HTMLElement>('#cms-channel-message');
   const say = (text: string) => {
@@ -415,42 +424,157 @@ const statusLabel = (credential: ChannelCredential | null): string => {
 
   document.querySelector<HTMLButtonElement>('[data-auto-open-microsoft]')?.click();
 
-  document
-    .querySelector<HTMLFormElement>('#cms-microsoft-settings-form')
-    ?.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const form = event.currentTarget as HTMLFormElement;
-      const submit = document.querySelector<HTMLButtonElement>(
-        '[form="cms-microsoft-settings-form"][type="submit"]',
-      );
-      const restore = busy(submit, 'Saving…');
-      const status = document.querySelector<HTMLElement>('#cms-microsoft-settings-message');
-      const data = new FormData(form);
+  document.querySelector<HTMLFormElement>('#cms-microsoft-settings-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const submit = document.querySelector<HTMLButtonElement>('[form="cms-microsoft-settings-form"][type="submit"]');
+    const restore = busy(submit, 'Saving…');
+    const status = document.querySelector<HTMLElement>('#cms-microsoft-settings-message');
+    const data = new FormData(form);
+    try {
+      const response = await fetch('/api/admin/channels/microsoft/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tenant: data.get('tenant'), clientId: data.get('clientId'), clientSecret: data.get('clientSecret') }),
+      });
+      const body = (await response.json().catch(() => null)) as { errors?: { message: string }[] } | null;
+      if (!response.ok) {
+        if (status) status.textContent = body?.errors?.map((item) => item.message).join(' ') || 'Microsoft setup could not be saved.';
+        return;
+      }
+      location.href = '/app/administration/channels?saved=microsoft';
+    } finally {
+      restore();
+    }
+  });
+
+  document.querySelector<HTMLFormElement>('#cms-meta-settings-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const submit = document.querySelector<HTMLButtonElement>('[form="cms-meta-settings-form"][type="submit"]');
+    const restore = busy(submit, 'Saving…');
+    const status = document.querySelector<HTMLElement>('#cms-meta-settings-message');
+    const data = new FormData(form);
+    try {
+      const response = await fetch('/api/admin/channels/meta/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ appId: data.get('appId'), configurationId: data.get('configurationId'), appSecret: data.get('appSecret') }),
+      });
+      const body = (await response.json().catch(() => null)) as { errors?: { message: string }[] } | null;
+      if (!response.ok) {
+        if (status) status.textContent = body?.errors?.map((item) => item.message).join(' ') || 'WhatsApp setup could not be saved.';
+        return;
+      }
+      location.href = '/app/administration/channels?saved=meta';
+    } finally {
+      restore();
+    }
+  });
+
+  const pairButton = document.querySelector<HTMLButtonElement>('[data-whatsapp-pair]');
+  if (pairButton) {
+    const appId = pairButton.dataset.metaAppId ?? '';
+    const configId = pairButton.dataset.metaConfigId ?? '';
+    const fbWindow = window as FbWindow;
+    fbWindow.fbAsyncInit = () => {
+      fbWindow.FB?.init({ appId, cookie: true, xfbml: false, version: 'v26.0' });
+    };
+    if (!document.querySelector('#facebook-jssdk')) {
+      const script = document.createElement('script');
+      script.id = 'facebook-jssdk';
+      script.async = true;
+      script.defer = true;
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      document.head.appendChild(script);
+    }
+
+    let authCode = '';
+    let wabaId = '';
+    let phoneNumberId = '';
+    let completing = false;
+
+    const finish = async () => {
+      if (completing || !authCode || !wabaId) return;
+      completing = true;
+      say('Finishing WhatsApp connection…');
       try {
-        const response = await fetch('/api/admin/channels/microsoft/settings', {
+        const response = await fetch('/api/admin/channels/meta/complete', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            tenant: data.get('tenant'),
-            clientId: data.get('clientId'),
-            clientSecret: data.get('clientSecret'),
-          }),
+          body: JSON.stringify({ code: authCode, wabaId, phoneNumberId }),
         });
         const body = (await response.json().catch(() => null)) as
-          | { errors?: { message: string }[] }
+          | { phoneNumber?: string; errors?: { message: string }[] }
           | null;
         if (!response.ok) {
-          if (status) {
-            status.textContent =
-              body?.errors?.map((item) => item.message).join(' ') || 'Microsoft setup could not be saved.';
-          }
+          say(body?.errors?.map((item) => item.message).join(' ') || 'WhatsApp pairing could not be completed.');
+          completing = false;
           return;
         }
-        location.href = '/app/administration/channels?saved=microsoft';
-      } finally {
-        restore();
+        say(`WhatsApp connected${body?.phoneNumber ? `: ${body.phoneNumber}` : '.'}`);
+        location.reload();
+      } catch {
+        say('WhatsApp pairing could not be completed.');
+        completing = false;
       }
+    };
+
+    window.addEventListener('message', (event) => {
+      try {
+        const host = new URL(event.origin).hostname;
+        if (host !== 'facebook.com' && !host.endsWith('.facebook.com')) return;
+      } catch {
+        return;
+      }
+      let payload: unknown = event.data;
+      if (typeof payload === 'string') {
+        try {
+          payload = JSON.parse(payload);
+        } catch {
+          return;
+        }
+      }
+      const data = payload as {
+        type?: string;
+        event?: string;
+        data?: { waba_id?: string; phone_number_id?: string };
+      };
+      if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
+      if (data.event !== 'FINISH' && data.event !== 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') return;
+      wabaId = data.data?.waba_id ?? '';
+      phoneNumberId = data.data?.phone_number_id ?? '';
+      void finish();
     });
+
+    pairButton.addEventListener('click', () => {
+      if (!fbWindow.FB) {
+        say('WhatsApp setup is still loading. Select Pair with QR again in a moment.');
+        return;
+      }
+      say('Opening WhatsApp pairing…');
+      fbWindow.FB.login(
+        (response) => {
+          authCode = response.authResponse?.code ?? '';
+          if (!authCode) {
+            say('WhatsApp pairing was not completed.');
+            return;
+          }
+          void finish();
+        },
+        {
+          config_id: configId,
+          auth_type: 'rerequest',
+          response_type: 'code',
+          override_default_response_type: true,
+          extras: {
+            setup: {},
+            featureType: 'whatsapp_business_app_onboarding',
+          },
+        },
+      );
+    });
+  }
 
   document.querySelector<HTMLButtonElement>('[data-channel-sync]')?.addEventListener('click', async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
@@ -458,9 +582,7 @@ const statusLabel = (credential: ChannelCredential | null): string => {
     say('Syncing inquiry email.');
     try {
       const response = await fetch('/api/channels/inquiry-email/sync', { method: 'POST' });
-      const body = (await response.json().catch(() => null)) as
-        | { errors?: { message: string }[] }
-        | null;
+      const body = (await response.json().catch(() => null)) as { errors?: { message: string }[] } | null;
       if (!response.ok) {
         say(body?.errors?.map((item) => item.message).join(' ') || 'The mailbox could not be synced.');
         return;
@@ -483,9 +605,7 @@ const statusLabel = (credential: ChannelCredential | null): string => {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ purpose }),
         });
-        const body = (await response.json().catch(() => null)) as
-          | { errors?: { message: string }[] }
-          | null;
+        const body = (await response.json().catch(() => null)) as { errors?: { message: string }[] } | null;
         if (!response.ok) {
           say(body?.errors?.map((item) => item.message).join(' ') || 'The channel could not be disconnected.');
           return;

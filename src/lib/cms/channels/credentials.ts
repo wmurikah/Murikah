@@ -186,6 +186,89 @@ export async function saveMicrosoftChannel(
   return connectionId;
 }
 
+export async function saveMetaChannel(
+  db: Client,
+  input: {
+    phoneNumber: string;
+    wabaId: string;
+    phoneNumberId: string;
+    sealedAccessToken: string;
+    actorUserId: string;
+  },
+): Promise<string> {
+  const phoneNumber = input.phoneNumber.trim();
+  const existing = await db.execute({
+    sql: `SELECT channel_connection_id FROM channel_connections
+           WHERE channel = 'WHATSAPP' AND account_identifier = ? LIMIT 1`,
+    args: [phoneNumber],
+  });
+  const connectionId = existing.rows[0]
+    ? String((existing.rows[0] as Record<string, unknown>).channel_connection_id)
+    : newId('CHC');
+  const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
+  const statements: InStatement[] = [];
+
+  if (existing.rows[0]) {
+    statements.push({
+      sql: `UPDATE channel_connections
+               SET provider = 'META', status = 'CONNECTED', last_error = NULL,
+                   secret_name = 'OAUTH_MANAGED', updated_at = ?
+             WHERE channel_connection_id = ?`,
+      args: [now, connectionId],
+    });
+  } else {
+    statements.push({
+      sql: `INSERT INTO channel_connections
+              (channel_connection_id, channel, display_name, provider, account_identifier,
+               affiliate_id, secret_name, webhook_secret_name, status, auto_create_case,
+               default_case_category_id, created_by_user_id, created_at, updated_at)
+            VALUES (?, 'WHATSAPP', 'WhatsApp', 'META', ?, NULL, 'OAUTH_MANAGED', NULL,
+                    'CONNECTED', 0, NULL, ?, ?, ?)`,
+      args: [connectionId, phoneNumber, input.actorUserId, now, now],
+    });
+  }
+
+  statements.push(
+    {
+      sql: `INSERT INTO channel_credentials
+              (channel_connection_id, purpose, auth_provider, sealed_refresh_token,
+               sealed_access_token, provider_account_id, provider_aux_id, granted_scopes,
+               sync_cursor, connected_at, connected_by_user_id, updated_at)
+            VALUES (?, 'WHATSAPP', 'META', NULL, ?, ?, ?,
+                    'whatsapp_business_management whatsapp_business_messaging', NULL, ?, ?, ?)
+            ON CONFLICT(channel_connection_id, purpose) DO UPDATE SET
+              auth_provider = 'META',
+              sealed_refresh_token = NULL,
+              sealed_access_token = excluded.sealed_access_token,
+              provider_account_id = excluded.provider_account_id,
+              provider_aux_id = excluded.provider_aux_id,
+              granted_scopes = excluded.granted_scopes,
+              sync_cursor = NULL,
+              connected_at = excluded.connected_at,
+              connected_by_user_id = excluded.connected_by_user_id,
+              updated_at = excluded.updated_at`,
+      args: [
+        connectionId,
+        input.sealedAccessToken,
+        input.wabaId,
+        input.phoneNumberId,
+        now,
+        input.actorUserId,
+        now,
+      ],
+    },
+    auditStatement(input.actorUserId, 'CHANNEL_CONNECTED', connectionId, {
+      purpose: 'WHATSAPP',
+      provider: 'META',
+      wabaId: input.wabaId,
+      phoneNumberId: input.phoneNumberId,
+      phoneNumber,
+    }),
+  );
+  await db.batch(statements, 'write');
+  return connectionId;
+}
+
 export async function rotateCredential(
   db: Client,
   credential: ChannelCredential,
