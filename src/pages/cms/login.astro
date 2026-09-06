@@ -34,16 +34,14 @@ const notice =
       )
     }
     <form id="cms-login-form" class="flex flex-col gap-4" novalidate>
-      <div class="min-h-14">
-        <div
-          id="cms-login-error"
-          role="alert"
-          aria-live="assertive"
-          class="flex max-h-14 items-start gap-2.5 overflow-y-auto rounded-cms border border-cms-negative-border bg-cms-negative-tint px-3.5 py-3 text-cms-body-sm text-cms-negative data-[empty]:invisible"
-          data-empty
-        >
-          <span data-error-text></span>
-        </div>
+      <div
+        id="cms-login-error"
+        role="alert"
+        aria-live="assertive"
+        class="flex max-h-14 items-start gap-2.5 overflow-y-auto rounded-cms border border-cms-negative-border bg-cms-negative-tint px-3.5 py-3 text-cms-body-sm text-cms-negative data-[empty]:hidden"
+        data-empty
+      >
+        <span data-error-text></span>
       </div>
       <section data-email-step>
         <CmsInput
