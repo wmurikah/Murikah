@@ -3,17 +3,14 @@ import { env } from 'cloudflare:workers';
 import { requestDb } from '@/lib/cms/db';
 import { requireChannelsManage } from '@/lib/cms/channels/access';
 import { channelCredentialsReady } from '@/lib/cms/channels/credentials';
-import {
-  microsoftAuthorizeUrl,
-  microsoftConfig,
-  type EmailPurpose,
-} from '@/lib/cms/channels/microsoft';
+import { microsoftAuthorizeUrl, type EmailPurpose } from '@/lib/cms/channels/microsoft';
+import { loadMicrosoftConfig } from '@/lib/cms/channels/providerSettings';
 import { sealChannelSecret } from '@/lib/cms/channels/secretBox';
 
 export const prerender = false;
 
 const PAGE = '/app/administration/channels';
-const back = (url: URL, message: string): Response =>
+const back = (message: string): Response =>
   new Response(null, {
     status: 303,
     headers: { location: `${PAGE}?error=${encodeURIComponent(message)}` },
@@ -28,22 +25,22 @@ export const GET: APIRoute = async (context) => {
   const auth = requireChannelsManage(context);
   if (!auth.ok) return auth.response;
   const purpose = purposeFrom(context.url);
-  if (!purpose) return back(context.url, 'Choose the email connection to configure.');
+  if (!purpose) return back('Choose the email connection to configure.');
 
   const db = await requestDb(context.locals);
   if (!(await channelCredentialsReady(db))) {
-    return back(context.url, 'Run the Channels & Communications database setup script first.');
+    return back('Run the Channels & Communications database setup script first.');
   }
 
-  const config = microsoftConfig(env);
+  const config = await loadMicrosoftConfig(db, env);
   if (!config) {
-    return back(
-      context.url,
-      'Microsoft sign-in is not configured for this CMS. The existing Microsoft application credentials are required.',
-    );
+    return new Response(null, {
+      status: 303,
+      headers: { location: `${PAGE}?setup=microsoft` },
+    });
   }
   const sessionSecret = env.CMS_SESSION_SECRET?.trim() ?? '';
-  if (sessionSecret === '') return back(context.url, 'The CMS session security secret is unavailable.');
+  if (sessionSecret === '') return back('The CMS session security secret is unavailable.');
 
   const redirectUri = `${context.url.origin}/api/admin/channels/microsoft/callback`;
   const state = await sealChannelSecret(
