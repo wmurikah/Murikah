@@ -48,7 +48,7 @@ const pageTitle = `${title} - Hass Petroleum`;
   </head>
   <body class="min-h-full bg-cms-canvas text-cms-ink antialiased">
     <div
-      class="flex min-h-dvh flex-col lg:grid lg:grid-cols-[minmax(23rem,0.9fr)_minmax(30rem,1.1fr)]"
+      class="auth-shell flex min-h-dvh flex-col lg:grid lg:grid-cols-[minmax(23rem,0.9fr)_minmax(30rem,1.1fr)]"
     >
       {/* The form. First in the DOM, second on screen from lg upwards. */}
       <main
@@ -72,7 +72,7 @@ const pageTitle = `${title} - Hass Petroleum`;
       */
       }
       <aside
-        class="auth-brand relative order-first flex min-h-40 flex-col justify-between gap-5 overflow-hidden border-r border-white/10 bg-cms-navy px-6 py-6 sm:px-10 lg:order-1 lg:min-h-dvh lg:gap-10 lg:px-14 lg:py-14"
+        class="auth-brand relative order-first flex min-h-40 flex-col justify-between gap-5 overflow-hidden border-r border-white/10 px-6 py-6 sm:px-10 lg:order-1 lg:min-h-dvh lg:gap-10 lg:px-14 lg:py-14"
         aria-hidden="true"
       >
         <div class="relative z-10"><CmsWordmark tone="onNavy" size="lg" /></div>
@@ -99,24 +99,26 @@ const pageTitle = `${title} - Hass Petroleum`;
 </html>
 
 <style>
+  .auth-shell {
+    /* Login-only interaction ramp. Keep the wider CMS palette unchanged. */
+    --color-cms-royal: #002169;
+    --color-cms-royal-deep: #00184f;
+    --color-cms-royal-tint: #eaf0ff;
+  }
+
   .auth-brand {
     background-image:
       radial-gradient(
         circle at 18% 18%,
-        color-mix(in srgb, var(--color-cms-auth-sky) 42%, transparent) 0,
+        color-mix(in srgb, var(--color-cms-auth-sky) 36%, transparent) 0,
         transparent 34%
       ),
       radial-gradient(
-        circle at 86% 76%,
-        color-mix(in srgb, var(--color-cms-auth-teal) 34%, transparent) 0,
-        transparent 38%
+        circle at 88% 78%,
+        color-mix(in srgb, var(--color-cms-royal) 42%, transparent) 0,
+        transparent 40%
       ),
-      linear-gradient(
-        145deg,
-        var(--color-cms-navy) 8%,
-        var(--color-cms-navy-soft) 56%,
-        var(--color-cms-navy-deep)
-      );
+      linear-gradient(145deg, #002169 6%, #0a2e73 58%, #00184f);
   }
   .auth-form-glow {
     background-image: radial-gradient(
