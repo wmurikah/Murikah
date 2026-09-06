@@ -1,15 +1,4 @@
 ---
-/**
- * Performance → SLA Monitor.
- *
- * Rendering this page is an entry into the engine: the sweep runs first, so
- * warnings and breaches that came due while nothing was running are settled
- * before anything is read. The server stays the source of truth for every
- * timestamp; nothing here counts down client-side.
- *
- * Colour never carries meaning alone: every state pairs its tone with the
- * word and the timestamps.
- */
 import CmsLayout from '@/layouts/CmsLayout.astro';
 import CmsPageHeader from '@/components/cms/CmsPageHeader.astro';
 import CmsBadge from '@/components/cms/CmsBadge.astro';
@@ -22,9 +11,12 @@ import CmsSelect from '@/components/cms/CmsSelect.astro';
 
 import { requestDb } from '@/lib/cms/db';
 import { canViewSlaDashboard, canManageSlaRules } from '@/lib/cms/permissions';
-import { listSlaInstances, type SlaMonitorRow } from '@/lib/cms/repos/slaAdmin';
+import {
+  listExceptions,
+  type ExceptionBucket,
+  type ExceptionRow,
+} from '@/lib/cms/repos/exceptionAdmin';
 import { sweepDueSlas, verifySlaTables, fromDb } from '@/lib/cms/sla/engine';
-import { readMonitorQuery } from '@/lib/cms/admin/slaInput';
 
 export const prerender = false;
 
@@ -32,12 +24,18 @@ const permissions = Astro.locals.cms?.user.permissions ?? [];
 const mayRead = canViewSlaDashboard(permissions);
 const mayConfigure = canManageSlaRules(permissions);
 const userId = Astro.locals.cms?.user.userId ?? '';
-
 const params = Astro.url.searchParams;
-const query = readMonitorQuery(params);
 const now = new Date();
 
-let page: { items: SlaMonitorRow[]; total: number; page: number; pageSize: number } = {
+const allowedBuckets: ExceptionBucket[] = ['all', 'at-risk', 'breached', 'unassigned', 'escalated'];
+const requestedBucket = params.get('bucket') as ExceptionBucket | null;
+const bucket: ExceptionBucket =
+  requestedBucket !== null && allowedBuckets.includes(requestedBucket) ? requestedBucket : 'all';
+const pageNumber = Math.max(1, Math.trunc(Number(params.get('page') ?? '1') || 1));
+const slaType = params.get('slaType') || null;
+const entityType = params.get('entityType') || null;
+
+let page: { items: ExceptionRow[]; total: number; page: number; pageSize: number } = {
   items: [],
   total: 0,
   page: 1,
@@ -54,131 +52,157 @@ if (mayRead) {
       tablesMissing = verified.missing;
     } else {
       await sweepDueSlas(db, now);
-      page = await listSlaInstances(db, userId, query, now);
+      page = await listExceptions(
+        db,
+        userId,
+        { bucket, slaType, entityType, page: pageNumber },
+        now,
+      );
     }
   } catch (error) {
-    console.error('[cms.performance.sla] load failed', error);
+    console.error('[cms.exceptions] load failed', error);
     loadFailed = true;
   }
 }
 
-const statusTone = (status: string) =>
-  status === 'BREACHED'
-    ? 'danger'
-    : status === 'MET'
-      ? 'success'
-      : status === 'PAUSED'
-        ? 'neutral'
-        : 'info';
 const titleCase = (value: string) =>
   value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
-
-/** Remaining or overrun, computed server-side from the authoritative stamps. */
-function variance(row: SlaMonitorRow): string {
-  const target = fromDb(row.targetAt);
-  if (row.status === 'MET') return 'Met';
-  if (row.status === 'CANCELLED') return 'Cancelled';
-  if (row.status === 'BREACHED') {
-    const end = row.stoppedAt === null ? now : fromDb(row.stoppedAt);
-    const minutes = Math.max(0, Math.round((end.getTime() - target.getTime()) / 60000));
-    return `Breached by ${minutes} min`;
-  }
-  const minutes = Math.round((target.getTime() - now.getTime()) / 60000);
-  return minutes >= 0 ? `${minutes} min remaining` : `${-minutes} min over`;
-}
-const atRisk = (row: SlaMonitorRow) =>
+const owner = (row: ExceptionRow) =>
+  row.accountableUserName ?? row.accountableTeamName ?? 'Unassigned';
+const atRisk = (row: ExceptionRow) =>
   row.status === 'RUNNING' && row.warningAt !== null && fromDb(row.warningAt) <= now;
 
-const BUCKETS = [
-  { key: null, label: 'All' },
+function minutesFromTarget(row: ExceptionRow): number {
+  const target = fromDb(row.targetAt).getTime();
+  const end = row.stoppedAt === null ? now.getTime() : fromDb(row.stoppedAt).getTime();
+  return Math.max(0, Math.round((end - target) / 60000));
+}
+
+function remaining(row: ExceptionRow): number {
+  return Math.max(0, Math.round((fromDb(row.targetAt).getTime() - now.getTime()) / 60000));
+}
+
+function issue(row: ExceptionRow): string {
+  if (row.status === 'BREACHED') return 'Breached';
+  if (row.escalated) return 'Escalated';
+  if (row.accountableUserName === null && row.accountableTeamName === null) return 'Unassigned';
+  if (atRisk(row)) return 'At risk';
+  return titleCase(row.status);
+}
+
+function issueTone(row: ExceptionRow): 'danger' | 'warning' | 'neutral' | 'info' {
+  if (row.status === 'BREACHED') return 'danger';
+  if (row.escalated || atRisk(row)) return 'warning';
+  if (row.accountableUserName === null && row.accountableTeamName === null) return 'neutral';
+  return 'info';
+}
+
+function due(row: ExceptionRow): string {
+  if (row.status === 'BREACHED') return `${row.targetAt} · ${minutesFromTarget(row)} min overdue`;
+  if (fromDb(row.targetAt) <= now) return `${row.targetAt} · due`;
+  return `${row.targetAt} · ${remaining(row)} min left`;
+}
+
+function recordHref(row: ExceptionRow): string | null {
+  switch (row.entityType) {
+    case 'CASE':
+      return `/app/helpdesk/${row.entityId}`;
+    case 'LEAD':
+      return `/app/crm/${row.entityId}`;
+    case 'OPPORTUNITY':
+      return `/app/crm/opportunities/${row.entityId}`;
+    case 'SALES_ORDER':
+      return `/app/orders/sales/${row.entityId}`;
+    case 'PURCHASE_ORDER':
+      return `/app/orders/purchases/${row.entityId}`;
+    default:
+      return null;
+  }
+}
+
+const BUCKETS: { key: ExceptionBucket; label: string }[] = [
+  { key: 'all', label: 'All exceptions' },
   { key: 'at-risk', label: 'At risk' },
   { key: 'breached', label: 'Breached' },
-  { key: 'active', label: 'Active' },
-  { key: 'completed', label: 'Completed' },
+  { key: 'unassigned', label: 'Unassigned' },
+  { key: 'escalated', label: 'Escalated' },
 ];
-const performanceFilters = [
-  query.slaType && { key: 'slaType', label: titleCase(query.slaType) },
-  query.entityType && { key: 'entityType', label: titleCase(query.entityType) },
-  query.status && { key: 'status', label: titleCase(query.status) },
-].filter(Boolean) as { key: string; label: string }[];
-const withoutPerformanceFilter = (key: string) => {
+
+function bucketHref(nextBucket: ExceptionBucket): string {
   const next = new URLSearchParams(params);
-  next.delete(key);
-  next.delete('page');
-  return `/app/performance?${next.toString()}`;
-};
-function bucketHref(key: string | null): string {
-  const next = new URLSearchParams(params);
-  if (key === null) next.delete('bucket');
-  else next.set('bucket', key);
+  if (nextBucket === 'all') next.delete('bucket');
+  else next.set('bucket', nextBucket);
   next.delete('page');
   return `/app/performance?${next.toString()}`;
 }
 ---
 
-<CmsLayout title="SLA Monitor">
+<CmsLayout title="Exceptions">
   {
     !mayRead ? (
       <CmsErrorState
-        title="You do not have access to the SLA monitor"
+        title="You do not have access to Exceptions"
         description="Contact your administrator if you think this is a mistake."
       />
     ) : loadFailed ? (
-      <CmsErrorState
-        title="The monitor could not be loaded"
-        description="Please try again in a moment."
-      />
+      <CmsErrorState title="Exceptions could not be loaded" description="Please try again in a moment." />
     ) : tablesMissing.length > 0 ? (
       <CmsErrorState
-        title="SLA monitoring is not available"
-        description="The required service configuration is incomplete. Contact your system administrator."
+        title="Exceptions are not available"
+        description="The required SLA configuration is incomplete."
       />
     ) : (
       <Fragment>
         <CmsPageHeader
-          title="SLA Monitor"
-          definition="Breached at is the moment the promise broke, not the moment somebody noticed."
-          crumbs={[
-            { label: 'Home', href: '/app' },
-            { label: 'SLA Monitor' },
-            { label: 'SLA Monitor' },
-          ]}
+          title="Exceptions"
+          description="Items that need intervention across CRM, Helpdesk and Orders."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Exceptions' }]}
         >
-          <CmsButton slot="actions" variant="secondary" href="/app/performance/reports">
-            Reports
-          </CmsButton>
           {mayConfigure && (
             <CmsButton slot="actions" variant="secondary" href="/app/administration/sla">
-              Configuration
+              SLA configuration
             </CmsButton>
           )}
         </CmsPageHeader>
 
-        <nav aria-label="Buckets" class="flex flex-wrap gap-2">
-          {BUCKETS.map((b) => (
+        <nav aria-label="Exception type" class="flex flex-wrap gap-2">
+          {BUCKETS.map((item) => (
             <a
-              href={bucketHref(b.key)}
-              aria-current={query.bucket === b.key ? 'page' : undefined}
+              href={bucketHref(item.key)}
+              aria-current={bucket === item.key ? 'page' : undefined}
               class:list={[
                 'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                query.bucket === b.key
+                bucket === item.key
                   ? 'bg-cms-royal text-white'
                   : 'text-cms-ink hover:bg-cms-canvas',
               ]}
             >
-              {b.label}
+              {item.label}
             </a>
           ))}
         </nav>
 
-        <CmsFilterPanel action="/app/performance" activeCount={performanceFilters.length}>
+        <CmsFilterPanel action="/app/performance" activeCount={Number(slaType !== null) + Number(entityType !== null)}>
           <Fragment slot="primary">
-            {query.bucket !== null && <input type="hidden" name="bucket" value={query.bucket} />}
+            {bucket !== 'all' && <input type="hidden" name="bucket" value={bucket} />}
+            <CmsSelect
+              id="f-entityType"
+              name="entityType"
+              label="Process"
+              value={entityType ?? ''}
+              options={[
+                { value: '', label: 'All processes' },
+                { value: 'CASE', label: 'Helpdesk' },
+                { value: 'LEAD', label: 'CRM leads' },
+                { value: 'SALES_ORDER', label: 'Sales orders' },
+                { value: 'PURCHASE_ORDER', label: 'Purchase orders' },
+              ]}
+            />
             <CmsSelect
               id="f-slaType"
               name="slaType"
-              label="Family"
-              value={query.slaType ?? ''}
+              label="SLA"
+              value={slaType ?? ''}
               options={[
                 { value: '', label: 'Internal and external' },
                 { value: 'INTERNAL', label: 'Internal' },
@@ -186,142 +210,80 @@ function bucketHref(key: string | null): string {
               ]}
             />
           </Fragment>
-          <Fragment slot="advanced">
-            <CmsSelect
-              id="f-entityType"
-              name="entityType"
-              label="Entity"
-              value={query.entityType ?? ''}
-              options={[
-                { value: '', label: 'Everything' },
-                { value: 'CASE', label: 'Cases' },
-                { value: 'LEAD', label: 'Leads' },
-                { value: 'SALES_ORDER', label: 'Sales orders' },
-                { value: 'PURCHASE_ORDER', label: 'Purchase orders' },
-              ]}
-            />
-            <CmsSelect
-              id="f-status"
-              name="status"
-              label="Status"
-              value={query.status ?? ''}
-              options={[
-                { value: '', label: 'Every status' },
-                ...['RUNNING', 'PAUSED', 'MET', 'BREACHED', 'CANCELLED'].map((s) => ({
-                  value: s,
-                  label: titleCase(s),
-                })),
-              ]}
-            />
-          </Fragment>
-          <Fragment slot="chips">
-            {performanceFilters.map((chip) => (
-              <a
-                href={withoutPerformanceFilter(chip.key)}
-                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                {chip.label} <span aria-hidden="true">×</span>
-                <span class="sr-only">Remove filter</span>
-              </a>
-            ))}
-          </Fragment>
         </CmsFilterPanel>
 
         <CmsDataTable
-          caption="SLA instances"
+          caption="Exceptions requiring intervention"
           columns={[
-            { key: 'entity', label: 'Entity' },
+            { key: 'process', label: 'Process' },
+            { key: 'record', label: 'Record' },
             { key: 'customer', label: 'Customer', secondary: true },
-            { key: 'rule', label: 'SLA' },
-            { key: 'family', label: 'Family' },
-            { key: 'accountable', label: 'Accountable', secondary: true },
-            { key: 'target', label: 'Target', secondary: true },
-            { key: 'variance', label: 'Remaining / over' },
+            { key: 'issue', label: 'Issue' },
+            { key: 'owner', label: 'Owner', secondary: true },
+            { key: 'due', label: 'Due / overdue' },
             { key: 'status', label: 'Status' },
+            { key: 'open', label: '' },
           ]}
           empty={page.items.length === 0}
         >
-          {page.items.map((row) => (
-            <tr class="border-b border-cms-line last:border-0">
-              <td class="px-4 py-2.5">
-                <span class="font-medium text-cms-ink">{row.entityLabel ?? row.entityId}</span>
-                <span class="ms-2 text-cms-caption text-cms-muted">
-                  {titleCase(row.entityType)}
-                </span>
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.customerName ?? 'Not available'}
-              </td>
-              <td class="px-4 py-2.5 text-cms-muted">{row.ruleName}</td>
-              <td class="px-4 py-2.5">
-                <CmsBadge
-                  tone={row.slaType === 'EXTERNAL' ? 'info' : 'neutral'}
-                  label={titleCase(row.slaType)}
-                />
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
-                {row.accountableUserName ?? row.accountableTeamName ?? 'Not assigned'}
-              </td>
-              <td class="hidden px-4 py-2.5 text-cms-muted tabular-nums sm:table-cell">
-                {row.targetAt}
-              </td>
-              <td class="px-4 py-2.5 text-cms-body-sm tabular-nums">
-                {variance(row)}
-                {row.pausedMinutes > 0 && (
-                  <span class="ms-1 text-cms-caption text-cms-muted">
-                    ({row.pausedMinutes} min paused)
-                  </span>
-                )}
-              </td>
-              <td class="px-4 py-2.5">
-                {atRisk(row) ? (
-                  <CmsBadge tone="warning" icon="statusWarn" label="At risk" />
-                ) : (
-                  <CmsBadge
-                    tone={statusTone(row.status)}
-                    icon={
-                      row.status === 'BREACHED'
-                        ? 'statusBreach'
-                        : row.status === 'MET'
-                          ? 'statusOk'
-                          : 'statusInfo'
-                    }
-                    label={titleCase(row.status)}
-                  />
-                )}
-              </td>
-            </tr>
-          ))}
+          {page.items.map((row) => {
+            const href = recordHref(row);
+            return (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-muted">{titleCase(row.entityType)}</td>
+                <td class="px-4 py-2.5 font-medium text-cms-ink">
+                  {row.entityLabel ?? row.entityId}
+                </td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                  {row.customerName ?? '—'}
+                </td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge tone={issueTone(row)} label={issue(row)} />
+                </td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{owner(row)}</td>
+                <td class="px-4 py-2.5 text-cms-body-sm text-cms-muted tabular-nums">{due(row)}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.ruleName}</td>
+                <td class="px-4 py-2.5 text-right">
+                  {href !== null && (
+                    <a
+                      href={href}
+                      class="font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      Open
+                    </a>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
           <Fragment slot="mobile">
-            {page.items.map((row) => (
-              <div class="flex min-h-16 items-center gap-3 px-4 py-3">
-                <span class="min-w-0 flex-1">
-                  <span class="block truncate font-semibold text-cms-ink">
-                    {row.entityLabel ?? row.entityId}
+            {page.items.map((row) => {
+              const href = recordHref(row);
+              return (
+                <div class="flex min-h-16 items-center gap-3 px-4 py-3">
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-semibold text-cms-ink">
+                      {row.entityLabel ?? row.entityId}
+                    </span>
+                    <span class="block truncate text-cms-caption text-cms-muted">
+                      {titleCase(row.entityType)} · {due(row)}
+                    </span>
                   </span>
-                  <span class="block truncate text-cms-caption text-cms-muted">
-                    {row.ruleName} · {variance(row)}
-                  </span>
-                </span>
-                {atRisk(row) ? (
-                  <CmsBadge tone="warning" icon="statusWarn" label="At risk" />
-                ) : (
-                  <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
-                )}
-              </div>
-            ))}
+                  <CmsBadge tone={issueTone(row)} label={issue(row)} />
+                  {href !== null && (
+                    <a href={href} class="text-cms-body-sm font-medium text-cms-royal">Open</a>
+                  )}
+                </div>
+              );
+            })}
           </Fragment>
           <Fragment slot="empty">
-            <CmsEmptyState
-              icon="performance"
-              title="Nothing in this bucket"
-              description="Try another bucket or remove a filter."
-            />
+            <CmsEmptyState icon="statusOk" title="No exceptions in this view" />
           </Fragment>
         </CmsDataTable>
 
-        <p class="text-cms-body-sm text-cms-muted">
-          {page.total} SLA instance{page.total === 1 ? '' : 's'}
+        <p class="text-cms-caption text-cms-muted">
+          {page.total} exception{page.total === 1 ? '' : 's'}
         </p>
       </Fragment>
     )
