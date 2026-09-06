@@ -31,7 +31,11 @@ export const POST: APIRoute = async (context) => {
   }
   if (appId.length > 200 || configurationId.length > 300 || appSecret.length > 1000) {
     return Response.json(
-      { errors: [{ field: 'settings', message: 'One of the WhatsApp setup values is too long.' }] },
+      {
+        errors: [
+          { field: 'settings', message: 'One of the WhatsApp setup values is too long.' },
+        ],
+      },
       { status: 400 },
     );
   }
@@ -40,7 +44,14 @@ export const POST: APIRoute = async (context) => {
     const db = await requestDb(context.locals);
     if (!(await providerSettingsReady(db))) {
       return Response.json(
-        { errors: [{ field: 'setup', message: 'Run the channel provider settings database setup first.' }] },
+        {
+          errors: [
+            {
+              field: 'setup',
+              message: 'Run the channel provider settings database setup first.',
+            },
+          ],
+        },
         { status: 409 },
       );
     }
@@ -54,7 +65,11 @@ export const POST: APIRoute = async (context) => {
     const current = existing.rows[0] as Record<string, unknown> | undefined;
     if (!current && !appSecret) {
       return Response.json(
-        { errors: [{ field: 'appSecret', message: 'App secret is required for the first setup.' }] },
+        {
+          errors: [
+            { field: 'appSecret', message: 'App secret is required for the first setup.' },
+          ],
+        },
         { status: 400 },
       );
     }
@@ -85,7 +100,10 @@ export const POST: APIRoute = async (context) => {
     });
     return Response.json({ ok: true });
   } catch (error) {
-    console.error('[cms.channels.meta.settings]', error instanceof Error ? error.message : String(error));
+    console.error(
+      '[cms.channels.meta.settings]',
+      error instanceof Error ? error.message : String(error),
+    );
     return Response.json(
       { errors: [{ field: 'settings', message: 'WhatsApp setup could not be saved.' }] },
       { status: 500 },
