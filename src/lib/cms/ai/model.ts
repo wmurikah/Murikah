@@ -17,6 +17,11 @@
  * Worker's secret store is rotated with one `wrangler secret put` and appears
  * in no dump.
  *
+ * SECURITY BOUNDARY. The database no longer chooses either the environment
+ * key or the outbound URL. Both are resolved through ./security.ts from a
+ * fixed application allowlist. A legacy or malicious row that names another
+ * Worker secret or another host is refused before `fetch` is reached.
+ *
  * WHAT A FAILURE IS ALLOWED TO SAY. Four states, and each is a different
  * action for the administrator:
  *
@@ -29,6 +34,10 @@
  * quote the request, and the request can contain a customer's message.
  */
 import type { AiProvider } from './providers.ts';
+import {
+  approvedAiProviderPolicy,
+  providerConfigurationApproved,
+} from './security.ts';
 
 /** What a model was asked, in the one shape both request builders take. */
 export interface ModelRequest {
@@ -58,19 +67,12 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 /** Longer than a model needs and shorter than a Worker's patience. */
 const TIMEOUT_MS = 30_000;
 
-const ENDPOINTS: Readonly<Record<string, string>> = {
-  ANTHROPIC: 'https://api.anthropic.com/v1/messages',
-  OPENAI: 'https://api.openai.com/v1/chat/completions',
-  GOOGLE: 'https://generativelanguage.googleapis.com/v1beta/models',
-};
-
 /**
- * The secret's value, by the name the provider row carries.
+ * The secret's value, by a name supplied by trusted application code.
  *
- * Deliberately narrow: it reads one property off the Worker environment and
- * returns whether it was set. The name comes from an administrator typing it
- * into a form, so it is checked against the shape a Worker secret can have
- * rather than used to index the environment with whatever arrived.
+ * Production model calls do not pass provider.secretName here. They first
+ * resolve an approved policy and pass that policy's fixed secret name. The
+ * helper remains exported for narrow diagnostics/tests that already use it.
  */
 export function secretValue(env: Record<string, unknown>, name: string): string | null {
   if (!/^[A-Z][A-Z0-9_]{2,63}$/.test(name)) return null;
@@ -78,7 +80,7 @@ export function secretValue(env: Record<string, unknown>, name: string): string 
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-/** True where the named secret is present, for the screen. Never the value. */
+/** True where the named secret is present, for trusted callers. Never the value. */
 export function secretPresent(env: Record<string, unknown>, name: string): boolean {
   return secretValue(env, name) !== null;
 }
@@ -108,7 +110,16 @@ export async function callModel(
     latencyMs: Date.now() - started,
   });
 
-  const key = secretValue(env, provider.secretName);
+  // FAIL CLOSED BEFORE READING ENV OR REACHING THE NETWORK. The provider row is
+  // data, not authority: a row written before this control, or written directly
+  // to the database, cannot select another Worker secret or another host.
+  const policy = approvedAiProviderPolicy(provider.providerType);
+  if (policy === null || !providerConfigurationApproved(provider)) {
+    console.error('[cms.ai.model] provider configuration refused by security policy');
+    return fail('ERROR');
+  }
+
+  const key = secretValue(env, policy.secretName);
   // A MISSING SECRET IS UNAUTHORISED, NOT AN ERROR. It is the same fix as a
   // revoked key: put the secret in place. Calling out with no credential to
   // learn that would spend a subrequest to be told what is already known.
@@ -117,12 +128,11 @@ export async function callModel(
   const maxTokens =
     request.maxOutputTokens ?? provider.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
 
-  let url: string;
+  const url = policy.endpoint;
   let headers: Record<string, string>;
   let body: unknown;
 
-  if (provider.providerType === 'ANTHROPIC') {
-    url = provider.baseUrl ?? ENDPOINTS.ANTHROPIC!;
+  if (policy.providerType === 'ANTHROPIC') {
     headers = {
       'content-type': 'application/json',
       'x-api-key': key,
@@ -136,12 +146,6 @@ export async function callModel(
       ...(provider.temperature === null ? {} : { temperature: provider.temperature }),
     };
   } else {
-    // OPENAI, AZURE_OPENAI and OTHER all speak the chat-completions shape; a
-    // provider that does not is configured with its own base URL and is
-    // expected to. GOOGLE is listed in the CHECK and has no endpoint here yet,
-    // so it is refused rather than sent somewhere that will not understand it.
-    if (provider.providerType === 'GOOGLE') return fail('ERROR');
-    url = provider.baseUrl ?? ENDPOINTS.OPENAI!;
     headers = { 'content-type': 'application/json', authorization: `Bearer ${key}` };
     body = {
       model: provider.model,
@@ -180,7 +184,7 @@ export async function callModel(
 
   const latencyMs = Date.now() - started;
 
-  if (provider.providerType === 'ANTHROPIC') {
+  if (policy.providerType === 'ANTHROPIC') {
     const blocks = Array.isArray(parsed.content) ? parsed.content : [];
     const content = blocks
       .map((block) => {
