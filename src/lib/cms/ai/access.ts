@@ -1,4 +1,5 @@
 import type { APIContext } from 'astro';
+import type { CmsIdentity } from '../repos/identity.ts';
 import { forbidden, unauthorised } from '../errors.ts';
 
 /** Dedicated permission for configuring or testing AI providers. */
@@ -8,8 +9,13 @@ export function canManageAi(permissions: readonly string[]): boolean {
   return permissions.includes(AI_MANAGE);
 }
 
+export interface AiPrincipal {
+  readonly sessionId: string;
+  readonly user: CmsIdentity;
+}
+
 export type AiAuthorisation =
-  | { readonly ok: true; readonly principal: NonNullable<APIContext['locals']['cms']> }
+  | { readonly ok: true; readonly principal: AiPrincipal }
   | { readonly ok: false; readonly response: Response };
 
 /**
@@ -23,5 +29,8 @@ export function requireAiManage(context: APIContext): AiAuthorisation {
   if (!canManageAi(principal.user.permissions ?? [])) {
     return { ok: false, response: forbidden() };
   }
-  return { ok: true, principal };
+  return {
+    ok: true,
+    principal: { sessionId: principal.sessionId, user: principal.user },
+  };
 }
