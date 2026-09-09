@@ -12,6 +12,7 @@
       "protocol": "http"
     }
   },
-  "postCreateCommand": "chmod +x tutor/codespaces/start.sh tutor/codespaces/stop.sh",
+  "postCreateCommand": "chmod +x tutor/codespaces/start.sh tutor/codespaces/stop.sh tutor/codespaces/autostart.sh",
+  "postStartCommand": "bash tutor/codespaces/autostart.sh",
   "remoteUser": "vscode"
 }
