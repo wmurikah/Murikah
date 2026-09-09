@@ -29,9 +29,15 @@ Public URL target: `https://tutor.murikah.com`
 
 ## Source strategy
 
-The intended source-of-truth is a Murikah-controlled fork of `HKUDS/DeepTutor`, linked from this `tutor/` boundary without vendoring the full upstream repository into the Murikah application tree.
+DeepTutor is currently consumed from an explicitly pinned upstream commit declared in `source/upstream.env`. Running `bash scripts/materialize.sh` creates an ignored checkout under `tutor/.vendor/DeepTutor`, copies the existing Murikah transparent logo into the generated web assets, and applies the Murikah Tutor presentation overlay.
 
-This keeps upstream updates manageable and prevents DeepTutor's Python/Next.js dependencies from being merged into the existing Astro stack.
+The preferred long-term source-of-truth remains a Murikah-controlled fork of `HKUDS/DeepTutor`. Once that fork exists, the pinned source URL can move to it without merging DeepTutor's Python/Next.js dependencies into the existing Astro stack.
+
+See `source/README.md` for the upstream/fork transition model.
+
+## Branding boundary
+
+At this stage only user-facing product presentation is branded as Murikah Tutor. DeepTutor's internal Python imports, CLI/runtime identifiers, API routes, environment variable names and persistence structures remain unchanged to preserve upstream compatibility.
 
 ## Data strategy
 
