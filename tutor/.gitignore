@@ -1,0 +1,31 @@
+# Murikah Tutor runtime data
+/data/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Logs and generated runtime files
+*.log
+logs/
+.tmp/
+tmp/
+
+# Local editor/system files
+.DS_Store
+Thumbs.db
