@@ -42,7 +42,7 @@ MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS=24
 
 Do not commit the password. It is used only to create the first bcrypt password hash in the persistent DeepTutor auth settings.
 
-After the first successful boot, the password hash is stored under `/app/data`; the plaintext Railway variable may be removed if desired. Later password/account administration should be performed through Murikah Tutor itself rather than by rebuilding the image.
+After the first successful authenticated boot **and after `/app/data` persistence has been verified across a restart/redeploy**, remove `MURIKAH_TUTOR_ADMIN_PASSWORD` from the Railway service variables. The bcrypt hash remains persisted under `/app/data`; later password/account administration should be performed through Murikah Tutor itself rather than by rebuilding the image.
 
 `MURIKAH_TUTOR_ALLOW_MAIN_CONTAINER_EXEC` must remain unset. Setting it to `1` deliberately re-enables subprocess execution in the main application container and is not approved for the initial public deployment.
 
@@ -116,6 +116,16 @@ The build materializes DeepTutor source at commit:
 which is DeepTutor `1.6.6`.
 
 The final image currently reuses the official `ghcr.io/hkuds/deeptutor:latest` runtime, but the Docker build verifies that the image version is exactly `1.6.6`. If upstream advances `latest`, the build deliberately fails until the Murikah Tutor pin is reviewed and updated. This prevents an unreviewed upstream release from entering production silently.
+
+## Preflight
+
+Before merging the Tutor stack and again before the first Railway deployment, run:
+
+```bash
+python tutor/scripts/preflight.py
+```
+
+It must finish with `PASS`. See `tutor/PREFLIGHT.md` for the full merge order and Railway acceptance gate.
 
 ## Not part of this phase
 
