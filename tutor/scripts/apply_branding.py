@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Apply the Murikah Tutor presentation overlay to a pinned DeepTutor checkout.
+"""Apply the Murikah Tutor product overlay to a pinned DeepTutor checkout.
 
-This intentionally changes only user-facing web branding. Internal package names,
-API routes, environment variables, persistence paths and DeepTutor runtime names
-remain untouched so upstream compatibility is preserved.
+This intentionally changes only user-facing identity, presentation, and the
+baseline teaching posture. Internal package names, API routes, environment
+variables, persistence paths and DeepTutor runtime names remain untouched so
+upstream compatibility is preserved.
 """
 from __future__ import annotations
 
@@ -43,22 +44,37 @@ def main() -> int:
     replace_once(
         app_shell,
         '''            <Link href="/" className="flex items-center gap-1.5">\n              <Image\n                src="/logo.png"\n                alt="DeepTutor"\n                width={20}\n                height={20}\n                className="h-5 w-5"\n              />\n              <Image\n                src="/banner.png"\n                alt="DeepTutor"\n                width={897}\n                height={236}\n                className="h-[18px] w-auto"\n              />\n            </Link>''',
-        '''            <Link href="/" className="flex items-center gap-2" aria-label="Murikah Tutor">\n              <Image\n                src="/murikah-logo.png"\n                alt="Murikah"\n                width={2172}\n                height={693}\n                className="h-[18px] w-auto"\n                priority\n              />\n              <span className="text-sm font-semibold tracking-tight text-[var(--foreground)]">Tutor</span>\n            </Link>''',
+        '''            <Link\n              href="/"\n              className="flex items-center gap-2 rounded-lg bg-[#1E2A30] px-2.5 py-1.5 shadow-sm"\n              aria-label="Murikah Tutor"\n            >\n              <Image\n                src="/murikah-logo.png"\n                alt="Murikah"\n                width={2172}\n                height={693}\n                className="h-[14px] w-auto"\n                priority\n              />\n              <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n              <span className="text-sm font-semibold tracking-tight text-white">Tutor</span>\n            </Link>''',
     )
 
     sidebar = root / "web" / "components" / "sidebar" / "SidebarShell.tsx"
     replace_once(
         sidebar,
         '''          <Link\n            href="/"\n            aria-label="DeepTutor"\n            className="flex items-center justify-center transition-opacity duration-150 group-hover/sb:opacity-0"\n          >\n            <Image\n              src="/logo.png"\n              alt="DeepTutor"\n              width={22}\n              height={22}\n              className="h-[22px] w-[22px] rounded-md"\n            />\n          </Link>''',
-        '''          <Link\n            href="/"\n            aria-label="Murikah Tutor"\n            className="flex items-center justify-center transition-opacity duration-150 group-hover/sb:opacity-0"\n          >\n            <span\n              aria-hidden\n              className="flex h-[22px] w-[22px] items-center justify-center rounded-md bg-[var(--foreground)] text-[11px] font-bold text-[var(--background)]"\n            >\n              M\n            </span>\n          </Link>''',
+        '''          <Link\n            href="/"\n            aria-label="Murikah Tutor"\n            className="flex items-center justify-center transition-opacity duration-150 group-hover/sb:opacity-0"\n          >\n            <span\n              aria-hidden\n              className="flex h-6 w-6 items-center justify-center rounded-md bg-[#1E2A30] text-[11px] font-bold text-white ring-1 ring-[#A9822E]/60"\n            >\n              M\n            </span>\n          </Link>''',
     )
     replace_once(
         sidebar,
         '''        <Link href="/" className="group flex items-center gap-1.5">\n          <Image\n            src="/logo.png"\n            alt="DeepTutor"\n            width={22}\n            height={22}\n            className="h-[22px] w-[22px] transition-transform duration-200 group-hover:scale-105"\n          />\n          <Image\n            src="/banner.png"\n            alt="DeepTutor"\n            width={897}\n            height={236}\n            priority\n            className="h-[22px] w-auto transition-transform duration-200 group-hover:scale-105"\n          />\n        </Link>''',
-        '''        <Link href="/" className="group flex items-center gap-2" aria-label="Murikah Tutor">\n          <Image\n            src="/murikah-logo.png"\n            alt="Murikah"\n            width={2172}\n            height={693}\n            priority\n            className="h-[20px] w-auto transition-transform duration-200 group-hover:scale-105"\n          />\n          <span className="text-sm font-semibold tracking-tight text-[var(--foreground)]">Tutor</span>\n        </Link>''',
+        '''        <Link\n          href="/"\n          className="group flex items-center gap-2 rounded-lg bg-[#1E2A30] px-2.5 py-1.5 shadow-sm transition-transform duration-200 hover:scale-[1.01]"\n          aria-label="Murikah Tutor"\n        >\n          <Image\n            src="/murikah-logo.png"\n            alt="Murikah"\n            width={2172}\n            height={693}\n            priority\n            className="h-[14px] w-auto"\n          />\n          <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n          <span className="text-sm font-semibold tracking-tight text-white">Tutor</span>\n        </Link>''',
     )
 
-    print("Applied Murikah Tutor web branding overlay.")
+    chat_prompt = (
+        root
+        / "deeptutor"
+        / "agents"
+        / "chat"
+        / "prompts"
+        / "en"
+        / "agentic_chat.yaml"
+    )
+    replace_once(
+        chat_prompt,
+        '''general: |-\n  You are DeepTutor, an interactive tutor and learning companion.\n  Never describe internal stages, prompt blocks, or implementation details\n  unless the user explicitly asks about the system design.''',
+        '''general: |-\n  You are Murikah Tutor, an AI-powered personalised learning companion.\n  For learning requests, default to rigorous university-level teaching unless the user asks for a different level. Build understanding in layers: begin with intuition, then formal concepts or derivations, then concrete examples or applications, and use a brief check for understanding when it adds value.\n  Adapt depth, notation, terminology, and examples to the learner's field and apparent level. Define specialised terms before relying on them; distinguish assumptions from established facts; show meaningful intermediate steps for quantitative work; and connect theory to practice where useful.\n  Answer direct questions directly. Do not force Socratic dialogue, quizzes, or long lessons when the user asks for a concise answer, and follow any explicit teaching style or level the user requests.\n  Never describe internal stages, prompt blocks, or implementation details\n  unless the user explicitly asks about the system design.''',
+    )
+
+    print("Applied Murikah Tutor product overlay.")
     return 0
 
 
