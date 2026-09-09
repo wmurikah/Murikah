@@ -7,7 +7,8 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
-EXPECTED_VERSION = "1.6.6"
+EXPECTED_SOURCE_TAG = "v1.6.6"
+EXPECTED_RUNTIME_VERSION = "1.6.6"
 EXPECTED_COMMIT = "7a96bba1ae03401644c17763a2411c28aff3dcc9"
 EXPECTED_UPSTREAM = "https://github.com/HKUDS/DeepTutor.git"
 
@@ -40,9 +41,10 @@ def parse_env(content: str) -> dict[str, str]:
 def check_source_pin() -> None:
     env = parse_env(require_file("tutor/source/upstream.env"))
     expected = {
-        "DEEPTUTOR_UPSTREAM_URL": EXPECTED_UPSTREAM,
-        "DEEPTUTOR_VERSION": EXPECTED_VERSION,
+        "DEEPTUTOR_REPOSITORY": EXPECTED_UPSTREAM,
+        "DEEPTUTOR_VERSION": EXPECTED_SOURCE_TAG,
         "DEEPTUTOR_COMMIT": EXPECTED_COMMIT,
+        "DEEPTUTOR_LICENSE": "Apache-2.0",
     }
     for key, value in expected.items():
         if env.get(key) != value:
@@ -50,7 +52,7 @@ def check_source_pin() -> None:
 
     dockerfile = require_file("tutor/Dockerfile.railway")
     for invariant in (
-        f"ARG DEEPTUTOR_VERSION={EXPECTED_VERSION}",
+        f"ARG DEEPTUTOR_VERSION={EXPECTED_RUNTIME_VERSION}",
         f"ARG DEEPTUTOR_COMMIT={EXPECTED_COMMIT}",
         "ghcr.io/hkuds/deeptutor:latest",
         "EXPOSE 3782",
@@ -169,7 +171,7 @@ def main() -> int:
         return 1
 
     print("\nPASS")
-    print(" - DeepTutor source/version pin is consistent")
+    print(" - DeepTutor source tag, commit and runtime version are consistent")
     print(" - Murikah Tutor branding invariants are present")
     print(" - production authentication and secure-cookie hardening are present")
     print(" - main-container subprocess execution defaults to disabled")
