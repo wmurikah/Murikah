@@ -3,6 +3,7 @@
 
 # Murikah Tutor runtime data
 /data/
+.codespaces-data/
 
 # Environment and secrets
 .env
