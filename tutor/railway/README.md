@@ -6,12 +6,17 @@ It is intentionally independent from the existing Murikah Astro/Cloudflare Worke
 
 ## Railway service source
 
-After the stacked Tutor PRs are merged, create one Railway service from:
+Create one Railway service from:
 
 - GitHub repository: `wmurikah/Murikah`
 - branch: `main`
-- root directory: `/`
-- custom Dockerfile path: `/tutor/Dockerfile.railway`
+- root directory/build context: `/`
+
+Railway's current custom-Dockerfile mechanism is a service variable. Set:
+
+```text
+RAILWAY_DOCKERFILE_PATH=/tutor/Dockerfile.railway
+```
 
 Keep the repository root as the build context because the Tutor build reuses the existing transparent Murikah logo at `docs/images/murikah_6.png`. The existing Murikah application is not built by this Dockerfile.
 
@@ -24,11 +29,12 @@ Recommended Railway watch paths:
 
 This prevents ordinary CRM/GRC/Engineering/marketing changes from triggering Tutor deployments.
 
-## Required runtime variables
+## Required service variables
 
 Set these in the Tutor Railway service only:
 
 ```text
+RAILWAY_DOCKERFILE_PATH=/tutor/Dockerfile.railway
 PORT=3782
 MURIKAH_TUTOR_ADMIN_USERNAME=admin
 MURIKAH_TUTOR_ADMIN_PASSWORD=<strong unique secret, minimum 14 characters>
@@ -119,13 +125,13 @@ The final image currently reuses the official `ghcr.io/hkuds/deeptutor:latest` r
 
 ## Preflight
 
-Before merging the Tutor stack and again before the first Railway deployment, run:
+Before the first Railway deployment, run:
 
 ```bash
 python tutor/scripts/preflight.py
 ```
 
-It must finish with `PASS`. See `tutor/PREFLIGHT.md` for the full merge order and Railway acceptance gate.
+It must finish with `PASS`. See `tutor/PREFLIGHT.md` for the Railway acceptance gate.
 
 ## Not part of this phase
 
