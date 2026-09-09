@@ -19,8 +19,11 @@ RUN mkdir -p /src/DeepTutor \
     && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "${DEEPTUTOR_COMMIT}"
 COPY tutor/scripts/apply_branding.py /opt/murikah/apply_branding.py
+COPY tutor/railway/apply_railway_overlay.py /opt/murikah/apply_railway_overlay.py
+COPY tutor/railway/health-route.ts /opt/murikah/health-route.ts
 COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
 RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
+    && python /opt/murikah/apply_railway_overlay.py /src/DeepTutor /opt/murikah/health-route.ts \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
 
 FROM node:22-slim AS frontend-builder
