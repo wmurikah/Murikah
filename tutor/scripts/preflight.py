@@ -66,9 +66,16 @@ def check_source_pin() -> None:
 
 def check_branding() -> None:
     branding = require_file("tutor/scripts/apply_branding.py")
-    for invariant in ("Murikah Tutor", "AI-powered personalised learning", "murikah-logo.png"):
+    for invariant in (
+        "Murikah Tutor",
+        "AI-powered personalised learning",
+        "murikah-logo.png",
+        "#1E2A30",
+        "#A9822E",
+        "rigorous university-level teaching",
+    ):
         if branding and invariant not in branding:
-            fail(f"branding invariant missing: {invariant!r}")
+            fail(f"branding/product invariant missing: {invariant!r}")
     if not (ROOT / "docs/images/murikah_6.png").is_file():
         fail("existing Murikah logo asset docs/images/murikah_6.png is missing")
 
@@ -182,7 +189,7 @@ def main() -> int:
 
     print("\nPASS")
     print(" - DeepTutor source tag, commit and runtime version are consistent")
-    print(" - Murikah Tutor branding invariants are present")
+    print(" - Murikah Tutor identity, visual tokens and teaching baseline are present")
     print(" - Railway custom Dockerfile path is explicitly documented")
     print(" - production authentication and secure-cookie hardening are present")
     print(" - main-container subprocess execution defaults to disabled")
