@@ -1,3 +1,6 @@
+# Generated upstream checkout (materialized from a pinned DeepTutor commit)
+.vendor/
+
 # Murikah Tutor runtime data
 /data/
 
