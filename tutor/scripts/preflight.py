@@ -112,12 +112,22 @@ def check_no_new_database_dependency() -> None:
         "tutor/railway/entrypoint.sh",
         "tutor/railway/apply_railway_overlay.py",
     )
-    prohibited = ("turso", "libsql", "postgresql://", "postgres://", "pocketbase")
+    # Look for operational integration signals rather than explanatory prose.
+    prohibited = (
+        "import libsql",
+        "from libsql",
+        "turso://",
+        "libsql://",
+        "postgresql://",
+        "postgres://",
+        "pocketbase_url",
+        "pocketbase_admin",
+    )
     for relative in executable_files:
         content = require_file(relative).lower()
         for token in prohibited:
             if content and token in content:
-                fail(f"{relative} unexpectedly introduces database dependency token {token!r}")
+                fail(f"{relative} unexpectedly introduces database integration signal {token!r}")
 
 
 def check_stack_isolation() -> None:
