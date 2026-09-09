@@ -11,6 +11,7 @@ EXPECTED_SOURCE_TAG = "v1.6.6"
 EXPECTED_RUNTIME_VERSION = "1.6.6"
 EXPECTED_COMMIT = "7a96bba1ae03401644c17763a2411c28aff3dcc9"
 EXPECTED_UPSTREAM = "https://github.com/HKUDS/DeepTutor.git"
+EXPECTED_RAILWAY_DOCKERFILE = "RAILWAY_DOCKERFILE_PATH=/tutor/Dockerfile.railway"
 
 failures: list[str] = []
 
@@ -65,14 +66,9 @@ def check_source_pin() -> None:
 
 def check_branding() -> None:
     branding = require_file("tutor/scripts/apply_branding.py")
-    for invariant in (
-        "Murikah Tutor",
-        "AI-powered personalised learning",
-        "murikah-logo.png",
-    ):
+    for invariant in ("Murikah Tutor", "AI-powered personalised learning", "murikah-logo.png"):
         if branding and invariant not in branding:
             fail(f"branding invariant missing: {invariant!r}")
-
     if not (ROOT / "docs/images/murikah_6.png").is_file():
         fail("existing Murikah logo asset docs/images/murikah_6.png is missing")
 
@@ -100,7 +96,13 @@ def check_security_and_persistence() -> None:
         fail("public Tutor health route does not verify FastAPI readiness")
 
     railway = require_file("tutor/railway/README.md")
-    for invariant in ("/app/data", "3782", "MURIKAH_TUTOR_ADMIN_PASSWORD", "/health"):
+    for invariant in (
+        "/app/data",
+        "3782",
+        "MURIKAH_TUTOR_ADMIN_PASSWORD",
+        "/health",
+        EXPECTED_RAILWAY_DOCKERFILE,
+    ):
         if railway and invariant not in railway:
             fail(f"Railway deployment documentation missing: {invariant!r}")
 
@@ -112,7 +114,6 @@ def check_no_new_database_dependency() -> None:
         "tutor/railway/entrypoint.sh",
         "tutor/railway/apply_railway_overlay.py",
     )
-    # Look for operational integration signals rather than explanatory prose.
     prohibited = (
         "import libsql",
         "from libsql",
@@ -131,7 +132,6 @@ def check_no_new_database_dependency() -> None:
 
 
 def check_stack_isolation() -> None:
-    """When git history is available, ensure this feature stack changes Tutor only."""
     base_ref = os.environ.get("MURIKAH_TUTOR_BASE_REF", "main")
     try:
         verify = subprocess.run(
@@ -163,7 +163,7 @@ def check_stack_isolation() -> None:
     changed = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
     outside_tutor = [path for path in changed if not path.startswith("tutor/")]
     if outside_tutor:
-        fail("Tutor feature stack modifies paths outside tutor/: " + ", ".join(outside_tutor))
+        fail("Tutor feature work modifies paths outside tutor/: " + ", ".join(outside_tutor))
 
 
 def main() -> int:
@@ -183,6 +183,7 @@ def main() -> int:
     print("\nPASS")
     print(" - DeepTutor source tag, commit and runtime version are consistent")
     print(" - Murikah Tutor branding invariants are present")
+    print(" - Railway custom Dockerfile path is explicitly documented")
     print(" - production authentication and secure-cookie hardening are present")
     print(" - main-container subprocess execution defaults to disabled")
     print(" - /app/data persistence and port 3782 deployment assumptions are documented")
