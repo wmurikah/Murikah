@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TUTOR_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MURIKAH_ROOT="$(cd "$TUTOR_ROOT/.." && pwd)"
 DATA_DIR="$TUTOR_ROOT/.codespaces-data"
+DISABLE_MARKER="$DATA_DIR/.autostart-disabled"
 IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
 BOOTSTRAP_CONTAINER="${CONTAINER}-bootstrap"
@@ -15,6 +16,8 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 mkdir -p "$DATA_DIR"
+# An explicit start re-enables automatic recovery on future Codespace resumes.
+rm -f "$DISABLE_MARKER"
 
 echo "[Murikah Tutor] Building the pinned production image..."
 docker build \
@@ -99,7 +102,8 @@ To share the test site temporarily, change port 3782 visibility to Public.
 
 Tutor data is stored in tutor/.codespaces-data and is intentionally ignored by Git.
 Stopping the Codespace preserves that directory; deleting the Codespace deletes its storage.
+On future Codespace resumes, Tutor will start automatically after first-boot setup.
 
-Stop Tutor without deleting its data:
+Stop Tutor without deleting its data or allowing automatic resume:
   bash tutor/codespaces/stop.sh
 EOF
