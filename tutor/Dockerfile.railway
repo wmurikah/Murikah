@@ -1,0 +1,62 @@
+# syntax=docker/dockerfile:1.7
+
+# Murikah Tutor is built independently from the existing Murikah application.
+# This Dockerfile is selected explicitly by the Railway Tutor service; it does
+# not participate in the root Astro/Cloudflare Worker build.
+
+ARG DEEPTUTOR_VERSION=1.6.6
+ARG DEEPTUTOR_COMMIT=7a96bba1ae03401644c17763a2411c28aff3dcc9
+
+FROM python:3.11-slim AS branded-source
+ARG DEEPTUTOR_COMMIT
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /src/DeepTutor \
+    && cd /src/DeepTutor \
+    && git init \
+    && git remote add origin https://github.com/HKUDS/DeepTutor.git \
+    && git fetch --depth 1 origin "${DEEPTUTOR_COMMIT}" \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${DEEPTUTOR_COMMIT}"
+COPY tutor/scripts/apply_branding.py /opt/murikah/apply_branding.py
+COPY tutor/railway/apply_railway_overlay.py /opt/murikah/apply_railway_overlay.py
+COPY tutor/railway/health-route.ts /opt/murikah/health-route.ts
+COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
+RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
+    && python /opt/murikah/apply_railway_overlay.py /src/DeepTutor /opt/murikah/health-route.ts \
+    && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
+
+FROM node:22-slim AS frontend-builder
+WORKDIR /app/web
+COPY --from=branded-source /src/DeepTutor/web/package.json /src/DeepTutor/web/package-lock.json ./
+RUN npm config set fetch-timeout 600000 \
+    && npm config set fetch-retries 5 \
+    && npm ci --legacy-peer-deps
+COPY --from=branded-source /src/DeepTutor/web/ ./
+RUN mkdir -p /app/deeptutor
+COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
+RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
+RUN npm run build
+
+# Reuse the official DeepTutor runtime rather than copying its Python dependency
+# stack into Murikah. `latest` is accepted only while it exactly matches our
+# pinned source version; a future upstream release makes this build fail closed
+# until we explicitly review and advance the pin.
+FROM ghcr.io/hkuds/deeptutor:latest AS runtime
+ARG DEEPTUTOR_VERSION
+USER root
+RUN python -c "from deeptutor.__version__ import __version__; expected='${DEEPTUTOR_VERSION}'; assert __version__ == expected, f'Expected DeepTutor {expected}, base image is {__version__}'"
+
+RUN rm -rf /app/web && mkdir -p /app/web
+COPY --from=frontend-builder /app/web/.next/standalone/ /app/web/
+COPY --from=frontend-builder /app/web/.next/static/ /app/web/.next/static/
+COPY --from=frontend-builder /app/web/public/ /app/web/public/
+RUN chown -R deeptutor:deeptutor /app/web
+
+COPY tutor/railway/bootstrap_runtime.py /app/murikah-tutor-bootstrap.py
+COPY tutor/railway/entrypoint.sh /app/murikah-tutor-entrypoint.sh
+RUN chmod 0755 /app/murikah-tutor-entrypoint.sh /app/murikah-tutor-bootstrap.py
+
+ENV PORT=3782
+EXPOSE 3782
+ENTRYPOINT ["/app/murikah-tutor-entrypoint.sh"]
