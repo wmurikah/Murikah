@@ -119,34 +119,50 @@ def check_codespaces_cloudflare_tunnel() -> None:
     for invariant in (
         "CLOUDFLARE_TUNNEL_TOKEN",
         "cloudflare/cloudflared:latest",
-        "murikah-tutor-net",
         "murikah-tutor-codespaces",
         "--token-file",
         "chmod 600",
         "stat -c '%u'",
         '--user "$token_uid:$token_gid"',
         ".State.Restarting",
-        'TUNNEL_DNS_PRIMARY="1.1.1.1"',
-        'TUNNEL_DNS_SECONDARY="1.0.0.1"',
-        '--dns "$TUNNEL_DNS_PRIMARY"',
-        '--dns "$TUNNEL_DNS_SECONDARY"',
+        "--network host",
+        'ORIGIN_URL="http://127.0.0.1:3782"',
         "--protocol http2",
         "Registered tunnel connection",
+        "origin_is_healthy",
     ):
         if tunnel and invariant not in tunnel:
             fail(f"Codespaces Cloudflare Tunnel invariant missing: {invariant!r}")
 
+    for obsolete in (
+        "murikah-tutor-net",
+        'TUNNEL_DNS_PRIMARY="1.1.1.1"',
+        'TUNNEL_DNS_SECONDARY="1.0.0.1"',
+    ):
+        if tunnel and obsolete in tunnel:
+            fail(f"Codespaces tunnel still contains obsolete bridge-network invariant: {obsolete!r}")
+
     runbook = require_file("tutor/codespaces/CLOUDFLARE.md")
     for invariant in (
         "tutor.murikah.com",
-        "http://murikah-tutor-codespaces:3782",
+        "http://127.0.0.1:3782",
         "CLOUDFLARE_TUNNEL_TOKEN",
         "Private",
-        "1.1.1.1",
+        "host networking",
         "HTTP/2",
+        "7844",
     ):
         if runbook and invariant not in runbook:
             fail(f"Cloudflare Tunnel runbook missing: {invariant!r}")
+
+    codespaces = require_file("tutor/codespaces/README.md")
+    for invariant in (
+        "host networking",
+        "http://127.0.0.1:3782",
+        "127.0.0.11",
+    ):
+        if codespaces and invariant not in codespaces:
+            fail(f"Codespaces documentation missing host-network tunnel invariant: {invariant!r}")
 
     start = require_file("tutor/codespaces/start.sh")
     autostart = require_file("tutor/codespaces/autostart.sh")
@@ -241,7 +257,7 @@ def main() -> int:
     print(" - production authentication and secure-cookie hardening are present")
     print(" - main-container subprocess execution defaults to disabled")
     print(" - /app/data persistence and port 3782 deployment assumptions are documented")
-    print(" - Codespaces named Cloudflare Tunnel wiring, protected token access, DNS override and edge registration checks are present")
+    print(" - Codespaces named Cloudflare Tunnel uses host networking, protected token access and edge registration checks")
     print(" - no Turso/Postgres/PocketBase dependency is introduced by Tutor deployment code")
     print(" - existing Murikah application stack remains outside the Tutor deployment boundary")
     return 0
