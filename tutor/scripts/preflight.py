@@ -126,6 +126,12 @@ def check_codespaces_cloudflare_tunnel() -> None:
         "stat -c '%u'",
         '--user "$token_uid:$token_gid"',
         ".State.Restarting",
+        'TUNNEL_DNS_PRIMARY="1.1.1.1"',
+        'TUNNEL_DNS_SECONDARY="1.0.0.1"',
+        '--dns "$TUNNEL_DNS_PRIMARY"',
+        '--dns "$TUNNEL_DNS_SECONDARY"',
+        "--protocol http2",
+        "Registered tunnel connection",
     ):
         if tunnel and invariant not in tunnel:
             fail(f"Codespaces Cloudflare Tunnel invariant missing: {invariant!r}")
@@ -136,6 +142,8 @@ def check_codespaces_cloudflare_tunnel() -> None:
         "http://murikah-tutor-codespaces:3782",
         "CLOUDFLARE_TUNNEL_TOKEN",
         "Private",
+        "1.1.1.1",
+        "HTTP/2",
     ):
         if runbook and invariant not in runbook:
             fail(f"Cloudflare Tunnel runbook missing: {invariant!r}")
@@ -233,7 +241,7 @@ def main() -> int:
     print(" - production authentication and secure-cookie hardening are present")
     print(" - main-container subprocess execution defaults to disabled")
     print(" - /app/data persistence and port 3782 deployment assumptions are documented")
-    print(" - Codespaces named Cloudflare Tunnel wiring and protected token-file access are present")
+    print(" - Codespaces named Cloudflare Tunnel wiring, protected token access, DNS override and edge registration checks are present")
     print(" - no Turso/Postgres/PocketBase dependency is introduced by Tutor deployment code")
     print(" - existing Murikah application stack remains outside the Tutor deployment boundary")
     return 0

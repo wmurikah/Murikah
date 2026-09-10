@@ -10,6 +10,8 @@ NETWORK="murikah-tutor-net"
 TUTOR_CONTAINER="murikah-tutor-codespaces"
 TUNNEL_CONTAINER="murikah-tutor-cloudflared"
 TUNNEL_IMAGE="cloudflare/cloudflared:latest"
+TUNNEL_DNS_PRIMARY="1.1.1.1"
+TUNNEL_DNS_SECONDARY="1.0.0.1"
 ACTION="${1:-start}"
 
 log() {
@@ -42,6 +44,10 @@ write_token_file() {
   umask 077
   printf '%s' "$CLOUDFLARE_TUNNEL_TOKEN" > "$TOKEN_FILE"
   chmod 600 "$TOKEN_FILE"
+}
+
+edge_connection_registered() {
+  docker logs --tail 500 "$TUNNEL_CONTAINER" 2>&1 | grep -Fq "Registered tunnel connection"
 }
 
 start_tunnel() {
@@ -79,32 +85,44 @@ start_tunnel() {
     --name "$TUNNEL_CONTAINER" \
     --restart unless-stopped \
     --network "$NETWORK" \
+    --dns "$TUNNEL_DNS_PRIMARY" \
+    --dns "$TUNNEL_DNS_SECONDARY" \
     --user "$token_uid:$token_gid" \
     -v "$TOKEN_FILE:/run/secrets/tunnel-token:ro" \
     "$TUNNEL_IMAGE" \
-    tunnel --no-autoupdate run --token-file /run/secrets/tunnel-token >/dev/null
+    tunnel --no-autoupdate --protocol http2 run --token-file /run/secrets/tunnel-token >/dev/null
 
-  # A container in a restart loop still appears in `docker ps`. Inspect the
-  # actual state after startup so permission/auth failures are not reported as
-  # a healthy connector.
-  sleep 5
-  if ! docker container inspect "$TUNNEL_CONTAINER" >/dev/null 2>&1; then
-    log "cloudflared container disappeared unexpectedly."
-    return 1
-  fi
+  # A process that merely remains running is not enough: wait until cloudflared
+  # has actually registered at least one edge connection with Cloudflare.
+  for _ in {1..30}; do
+    if ! docker container inspect "$TUNNEL_CONTAINER" >/dev/null 2>&1; then
+      log "cloudflared container disappeared unexpectedly."
+      return 1
+    fi
 
-  local state restarting restart_count
-  state="$(docker inspect -f '{{.State.Status}}' "$TUNNEL_CONTAINER")"
-  restarting="$(docker inspect -f '{{.State.Restarting}}' "$TUNNEL_CONTAINER")"
-  restart_count="$(docker inspect -f '{{.RestartCount}}' "$TUNNEL_CONTAINER")"
-  if [[ "$state" != "running" || "$restarting" == "true" || "$restart_count" != "0" ]]; then
-    log "cloudflared did not remain healthy (state=$state, restarting=$restarting, restarts=$restart_count)."
-    docker logs "$TUNNEL_CONTAINER" 2>/dev/null || true
-    return 1
-  fi
+    local state restarting restart_count
+    state="$(docker inspect -f '{{.State.Status}}' "$TUNNEL_CONTAINER")"
+    restarting="$(docker inspect -f '{{.State.Restarting}}' "$TUNNEL_CONTAINER")"
+    restart_count="$(docker inspect -f '{{.RestartCount}}' "$TUNNEL_CONTAINER")"
 
-  log "Cloudflare Tunnel connector is running."
-  log "Cloudflare route service URL must be: http://$TUTOR_CONTAINER:3782"
+    if [[ "$state" != "running" || "$restarting" == "true" ]]; then
+      log "cloudflared became unhealthy (state=$state, restarting=$restarting, restarts=$restart_count)."
+      docker logs --tail 100 "$TUNNEL_CONTAINER" 2>/dev/null || true
+      return 1
+    fi
+
+    if edge_connection_registered; then
+      log "Cloudflare Tunnel connector is running and registered with the edge."
+      log "Cloudflare route service URL must be: http://$TUTOR_CONTAINER:3782"
+      return 0
+    fi
+
+    sleep 2
+  done
+
+  log "cloudflared stayed running but did not register a Cloudflare edge connection within 60 seconds."
+  docker logs --tail 100 "$TUNNEL_CONTAINER" 2>/dev/null || true
+  return 1
 }
 
 stop_tunnel() {
@@ -127,9 +145,14 @@ status_tunnel() {
   restart_count="$(docker inspect -f '{{.RestartCount}}' "$TUNNEL_CONTAINER")"
 
   if [[ "$state" == "running" && "$restarting" != "true" ]]; then
-    log "Connector is running (restarts=$restart_count)."
+    if edge_connection_registered; then
+      log "Connector is running and registered with Cloudflare (restarts=$restart_count)."
+      docker ps --filter "name=$TUNNEL_CONTAINER"
+      return 0
+    fi
+    log "Connector process is running, but no Cloudflare edge connection is registered yet (restarts=$restart_count)."
     docker ps --filter "name=$TUNNEL_CONTAINER"
-    return 0
+    return 1
   fi
 
   log "Connector is unhealthy (state=$state, restarting=$restarting, restarts=$restart_count)."
