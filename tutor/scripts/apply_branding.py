@@ -40,11 +40,13 @@ def main() -> int:
         'description: "AI-powered personalised learning",',
     )
 
+    # Keep murikah-logo.png packaged as a brand asset, but use a text wordmark
+    # in compact navigation surfaces so "Murikah" stays crisp at small sizes.
     app_shell = root / "web" / "components" / "layout" / "AppShell.tsx"
     replace_once(
         app_shell,
         '''            <Link href="/" className="flex items-center gap-1.5">\n              <Image\n                src="/logo.png"\n                alt="DeepTutor"\n                width={20}\n                height={20}\n                className="h-5 w-5"\n              />\n              <Image\n                src="/banner.png"\n                alt="DeepTutor"\n                width={897}\n                height={236}\n                className="h-[18px] w-auto"\n              />\n            </Link>''',
-        '''            <Link\n              href="/"\n              className="flex items-center gap-2 rounded-lg bg-[#1E2A30] px-2.5 py-1.5 shadow-sm"\n              aria-label="Murikah Tutor"\n            >\n              <Image\n                src="/murikah-logo.png"\n                alt="Murikah"\n                width={2172}\n                height={693}\n                className="h-[14px] w-auto"\n                priority\n              />\n              <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n              <span className="text-sm font-semibold tracking-tight text-white">Tutor</span>\n            </Link>''',
+        '''            <Link\n              href="/"\n              className="flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 shadow-sm"\n              aria-label="Murikah Tutor"\n            >\n              <span className="text-sm font-semibold tracking-tight text-white">Murikah</span>\n              <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n              <span className="text-sm font-semibold tracking-tight text-white">Tutor</span>\n            </Link>''',
     )
 
     sidebar = root / "web" / "components" / "sidebar" / "SidebarShell.tsx"
@@ -56,7 +58,7 @@ def main() -> int:
     replace_once(
         sidebar,
         '''        <Link href="/" className="group flex items-center gap-1.5">\n          <Image\n            src="/logo.png"\n            alt="DeepTutor"\n            width={22}\n            height={22}\n            className="h-[22px] w-[22px] transition-transform duration-200 group-hover:scale-105"\n          />\n          <Image\n            src="/banner.png"\n            alt="DeepTutor"\n            width={897}\n            height={236}\n            priority\n            className="h-[22px] w-auto transition-transform duration-200 group-hover:scale-105"\n          />\n        </Link>''',
-        '''        <Link\n          href="/"\n          className="group flex items-center gap-2 rounded-lg bg-[#1E2A30] px-2.5 py-1.5 shadow-sm transition-transform duration-200 hover:scale-[1.01]"\n          aria-label="Murikah Tutor"\n        >\n          <Image\n            src="/murikah-logo.png"\n            alt="Murikah"\n            width={2172}\n            height={693}\n            priority\n            className="h-[14px] w-auto"\n          />\n          <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n          <span className="text-sm font-semibold tracking-tight text-white">Tutor</span>\n        </Link>''',
+        '''        <Link\n          href="/"\n          className="group flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 shadow-sm transition-transform duration-200 hover:scale-[1.01]"\n          aria-label="Murikah Tutor"\n        >\n          <span className="text-sm font-semibold tracking-tight text-white">Murikah</span>\n          <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n          <span className="text-sm font-semibold tracking-tight text-white">Tutor</span>\n        </Link>''',
     )
 
     chat_prompt = (
