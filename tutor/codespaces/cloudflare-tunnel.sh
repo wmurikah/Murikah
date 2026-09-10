@@ -6,12 +6,10 @@ TUTOR_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DATA_DIR="$TUTOR_ROOT/.codespaces-data"
 SECRET_DIR="$DATA_DIR/.secrets"
 TOKEN_FILE="$SECRET_DIR/cloudflare-tunnel-token"
-NETWORK="murikah-tutor-net"
 TUTOR_CONTAINER="murikah-tutor-codespaces"
 TUNNEL_CONTAINER="murikah-tutor-cloudflared"
 TUNNEL_IMAGE="cloudflare/cloudflared:latest"
-TUNNEL_DNS_PRIMARY="1.1.1.1"
-TUNNEL_DNS_SECONDARY="1.0.0.1"
+ORIGIN_URL="http://127.0.0.1:3782"
 ACTION="${1:-start}"
 
 log() {
@@ -29,13 +27,6 @@ ensure_docker() {
   fi
 }
 
-ensure_network() {
-  if ! docker network inspect "$NETWORK" >/dev/null 2>&1; then
-    docker network create "$NETWORK" >/dev/null
-  fi
-  docker network connect "$NETWORK" "$TUTOR_CONTAINER" >/dev/null 2>&1 || true
-}
-
 write_token_file() {
   if [[ -z "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
     return 1
@@ -50,11 +41,20 @@ edge_connection_registered() {
   docker logs --tail 500 "$TUNNEL_CONTAINER" 2>&1 | grep -Fq "Registered tunnel connection"
 }
 
+origin_is_healthy() {
+  curl --fail --silent --show-error "$ORIGIN_URL/health" >/dev/null 2>&1
+}
+
 start_tunnel() {
   ensure_docker || return 1
 
   if ! docker ps --format '{{.Names}}' | grep -Fxq "$TUTOR_CONTAINER"; then
     log "Tutor is not running; tunnel start skipped."
+    return 1
+  fi
+
+  if ! origin_is_healthy; then
+    log "Tutor origin is not healthy at $ORIGIN_URL; tunnel start skipped."
     return 1
   fi
 
@@ -64,8 +64,6 @@ start_tunnel() {
     return 0
   fi
 
-  ensure_network
-
   docker rm -f "$TUNNEL_CONTAINER" >/dev/null 2>&1 || true
 
   if ! docker image inspect "$TUNNEL_IMAGE" >/dev/null 2>&1; then
@@ -73,28 +71,28 @@ start_tunnel() {
     docker pull "$TUNNEL_IMAGE" >/dev/null
   fi
 
-  # The token file remains mode 600. Run cloudflared with the same numeric
-  # owner/group as that file so the container can read it without broadening
-  # the token permissions or exposing the token through docker inspect.
+  # Keep the token file mode 600 and run cloudflared with its numeric owner.
+  # Host networking deliberately bypasses Docker's embedded 127.0.0.11 DNS
+  # resolver, which can time out on Cloudflare Tunnel SRV lookups in Codespaces.
+  # Tutor is already published on the Docker host at port 3782, so cloudflared
+  # reaches it locally at http://127.0.0.1:3782 without exposing FastAPI 8001.
   local token_uid token_gid
   token_uid="$(stat -c '%u' "$TOKEN_FILE")"
   token_gid="$(stat -c '%g' "$TOKEN_FILE")"
 
-  log "Starting named Cloudflare Tunnel..."
+  log "Starting named Cloudflare Tunnel on the Codespaces host network..."
   docker run -d \
     --name "$TUNNEL_CONTAINER" \
     --restart unless-stopped \
-    --network "$NETWORK" \
-    --dns "$TUNNEL_DNS_PRIMARY" \
-    --dns "$TUNNEL_DNS_SECONDARY" \
+    --network host \
     --user "$token_uid:$token_gid" \
     -v "$TOKEN_FILE:/run/secrets/tunnel-token:ro" \
     "$TUNNEL_IMAGE" \
     tunnel --no-autoupdate --protocol http2 run --token-file /run/secrets/tunnel-token >/dev/null
 
-  # A process that merely remains running is not enough: wait until cloudflared
-  # has actually registered at least one edge connection with Cloudflare.
-  for _ in {1..30}; do
+  # Do not equate a running process with a connected tunnel. Wait until at
+  # least one Cloudflare edge connection is registered.
+  for _ in {1..45}; do
     if ! docker container inspect "$TUNNEL_CONTAINER" >/dev/null 2>&1; then
       log "cloudflared container disappeared unexpectedly."
       return 1
@@ -113,14 +111,14 @@ start_tunnel() {
 
     if edge_connection_registered; then
       log "Cloudflare Tunnel connector is running and registered with the edge."
-      log "Cloudflare route service URL must be: http://$TUTOR_CONTAINER:3782"
+      log "Cloudflare published application service URL must be: $ORIGIN_URL"
       return 0
     fi
 
     sleep 2
   done
 
-  log "cloudflared stayed running but did not register a Cloudflare edge connection within 60 seconds."
+  log "cloudflared stayed running but did not register a Cloudflare edge connection within 90 seconds."
   docker logs --tail 100 "$TUNNEL_CONTAINER" 2>/dev/null || true
   return 1
 }
