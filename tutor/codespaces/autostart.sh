@@ -9,9 +9,18 @@ AUTH_FILE="$DATA_DIR/user/settings/auth.json"
 DISABLE_MARKER="$DATA_DIR/.autostart-disabled"
 IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
+TUNNEL_SCRIPT="$SCRIPT_DIR/cloudflare-tunnel.sh"
 
 log() {
   printf '[Murikah Tutor] %s\n' "$*"
+}
+
+start_tunnel_if_configured() {
+  if [[ -f "$TUNNEL_SCRIPT" ]]; then
+    if ! bash "$TUNNEL_SCRIPT" start; then
+      log "Cloudflare Tunnel did not start; Tutor itself remains available locally."
+    fi
+  fi
 }
 
 # A brand-new Codespace must still perform the interactive first-boot setup.
@@ -88,6 +97,7 @@ fi
 for _ in {1..90}; do
   if curl --fail --silent --show-error http://127.0.0.1:3782/health >/dev/null 2>&1; then
     log "Tutor resumed successfully on port 3782."
+    start_tunnel_if_configured
     exit 0
   fi
   if ! docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER"; then
