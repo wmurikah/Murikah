@@ -85,10 +85,10 @@ The full setup runbook is in:
 tutor/codespaces/CLOUDFLARE.md
 ```
 
-The tunnel connector runs in its own `cloudflare/cloudflared` container and shares a private Docker network with Tutor. The Cloudflare published application route must point to:
+The `cloudflared` connector runs in its own container using Docker **host networking**. This bypasses Docker's embedded `127.0.0.11` DNS resolver in Codespaces. Since Tutor publishes frontend port `3782` on the Docker host, the Cloudflare published application route must point to:
 
 ```text
-http://murikah-tutor-codespaces:3782
+http://127.0.0.1:3782
 ```
 
 The tunnel token must be stored as the GitHub Codespaces secret:
@@ -124,6 +124,8 @@ bash tutor/codespaces/cloudflare-tunnel.sh logs
 bash tutor/codespaces/cloudflare-tunnel.sh restart
 bash tutor/codespaces/cloudflare-tunnel.sh stop
 ```
+
+A healthy `status` result means the process is running **and** at least one Cloudflare edge connection has been registered.
 
 ## Manual stop and restart
 
