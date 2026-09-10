@@ -9,6 +9,7 @@ DISABLE_MARKER="$DATA_DIR/.autostart-disabled"
 IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
 BOOTSTRAP_CONTAINER="${CONTAINER}-bootstrap"
+TUNNEL_SCRIPT="$SCRIPT_DIR/cloudflare-tunnel.sh"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is unavailable. Create the Codespace using the 'Murikah Tutor' dev container configuration." >&2
@@ -92,18 +93,24 @@ docker run -d \
 
 wait_for_health "$CONTAINER"
 
+# A configured named Cloudflare Tunnel becomes the public ingress. Missing
+# credentials are non-fatal so local/private Codespaces testing still works.
+if [[ -f "$TUNNEL_SCRIPT" ]]; then
+  bash "$TUNNEL_SCRIPT" start || echo "[Murikah Tutor] Cloudflare Tunnel did not start; Tutor itself remains healthy." >&2
+fi
+
 cat <<'EOF'
 
 Murikah Tutor is healthy.
 
-Open the PORTS tab in your Codespace and use the forwarded port 3782 URL.
-The port is private by default. Keep it private for your own testing.
-To share the test site temporarily, change port 3782 visibility to Public.
+For private operator testing, use the forwarded port 3782 URL from the PORTS tab.
+Keep the GitHub Codespaces port Private when Cloudflare Tunnel is configured.
+Public access should use the named Cloudflare Tunnel hostname (for example tutor.murikah.com), not app.github.dev.
 
 Tutor data is stored in tutor/.codespaces-data and is intentionally ignored by Git.
 Stopping the Codespace preserves that directory; deleting the Codespace deletes its storage.
-On future Codespace resumes, Tutor will start automatically after first-boot setup.
+On future Codespace resumes, Tutor and a configured Cloudflare Tunnel will start automatically after first-boot setup.
 
-Stop Tutor without deleting its data or allowing automatic resume:
+Stop Tutor and the Cloudflare Tunnel without deleting Tutor data or allowing automatic resume:
   bash tutor/codespaces/stop.sh
 EOF
