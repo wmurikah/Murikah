@@ -20,9 +20,9 @@ Do not use a Cloudflare Quick Tunnel for Tutor chat. Quick Tunnels are developme
 Internet
   -> Cloudflare
   -> named tunnel
-  -> cloudflared container
-  -> Docker network: murikah-tutor-net
-  -> http://murikah-tutor-codespaces:3782
+  -> cloudflared container using Docker host networking
+  -> http://127.0.0.1:3782
+  -> Docker-published Murikah Tutor frontend
   -> Murikah Tutor
 ```
 
@@ -30,16 +30,17 @@ FastAPI port `8001` remains internal and is never published.
 
 ## Codespaces networking compatibility
 
-GitHub Codespaces runs Tutor through Docker-in-Docker. On a user-defined Docker network, Docker normally exposes its embedded DNS resolver at `127.0.0.11`. In Codespaces that resolver can time out on the SRV lookups cloudflared uses to discover Cloudflare Tunnel edge endpoints.
+GitHub Codespaces runs Tutor through Docker-in-Docker. A user-defined Docker bridge normally presents Docker's embedded DNS resolver at `127.0.0.11`. In this environment, `cloudflared` SRV lookups to Cloudflare Tunnel edge endpoints can time out through that embedded resolver even when the Codespace host itself resolves the same endpoints and can reach Cloudflare over TCP `7844`.
 
-The repository launcher therefore starts `cloudflared` with explicit public resolvers:
+The connector therefore runs with Docker **host networking**. This bypasses Docker's embedded DNS path and uses the same host networking path that has already been verified from the Codespace shell.
+
+Because the Tutor container publishes frontend port `3782` on the Docker host, the Cloudflare connector reaches Tutor locally at:
 
 ```text
-1.1.1.1
-1.0.0.1
+http://127.0.0.1:3782
 ```
 
-It also forces the Cloudflare edge transport to **HTTP/2**. This uses TCP instead of relying on QUIC/UDP and is more predictable in a hosted development environment.
+The connector continues to force the Cloudflare edge transport to **HTTP/2**, using TCP rather than QUIC/UDP.
 
 A successful launcher run does not merely check that the Docker container is alive. It waits until the logs contain a registered Cloudflare edge connection. If no edge registration occurs within the startup window, the launcher exits with diagnostics instead of reporting a false success.
 
@@ -63,10 +64,10 @@ Configure:
 ```text
 Hostname: tutor.murikah.com
 Service type: HTTP
-Service URL: http://murikah-tutor-codespaces:3782
+Service URL: http://127.0.0.1:3782
 ```
 
-The service URL deliberately uses the Tutor Docker container name. The repository scripts attach Tutor and `cloudflared` to the private Docker network `murikah-tutor-net`, so `cloudflared` can reach Tutor without using GitHub's public forwarding layer.
+The service URL deliberately uses the Docker host loopback address because the `cloudflared` container shares the Docker host network namespace. It does not depend on GitHub's public forwarding layer and does not expose FastAPI port `8001`.
 
 Cloudflare manages the DNS route for the published application. Do not point `tutor.murikah.com` at the `app.github.dev` address.
 
@@ -141,22 +142,25 @@ It does **not** make Codespaces always-on. When GitHub suspends the entire Codes
 
 ## Troubleshooting
 
-If logs show DNS failures such as:
+If logs show:
 
 ```text
 lookup _v2-origintunneld._tcp.argotunnel.com on 127.0.0.11:53: i/o timeout
 ```
 
-confirm that the current repository version includes the explicit `1.1.1.1` and `1.0.0.1` Docker DNS overrides, then restart the connector.
+use the current repository version, which runs `cloudflared` with `--network host` so Cloudflare edge discovery bypasses Docker's embedded DNS resolver.
 
-If DNS succeeds but the tunnel cannot connect to the Cloudflare edge, inspect the logs for TCP connection failures to port `7844`. The Codespaces launcher deliberately uses HTTP/2, so outbound TCP `7844` must be available.
+If the host shell itself cannot resolve `region1.v2.argotunnel.com`, troubleshoot Codespaces DNS separately.
 
-The warning that no ingress rules are defined can appear before a published-application route has been added in the Cloudflare dashboard. After the connector is healthy, create the `tutor.murikah.com` route using the service URL documented above.
+If DNS succeeds but the tunnel cannot connect to the Cloudflare edge, test outbound TCP `7844`. The connector deliberately uses HTTP/2, so that port must be reachable.
+
+The warning that no ingress rules are defined can appear before a published-application route has been added in the Cloudflare dashboard. After the connector is healthy, create the `tutor.murikah.com` route using `http://127.0.0.1:3782`.
 
 ## Security notes
 
 - Keep Tutor authentication enabled.
 - Keep the tunnel token only in GitHub Codespaces secrets / ignored runtime storage.
+- Keep GitHub's forwarded port `3782` Private once the Cloudflare hostname works.
 - Do not expose FastAPI port `8001`.
 - Rotate the Cloudflare tunnel token if it is ever disclosed.
 - The local token file written by the launcher is stored under the Git-ignored `tutor/.codespaces-data/.secrets/` directory with restrictive file permissions.
