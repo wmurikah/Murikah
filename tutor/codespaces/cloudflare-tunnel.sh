@@ -67,18 +67,38 @@ start_tunnel() {
     docker pull "$TUNNEL_IMAGE" >/dev/null
   fi
 
+  # The token file remains mode 600. Run cloudflared with the same numeric
+  # owner/group as that file so the container can read it without broadening
+  # the token permissions or exposing the token through docker inspect.
+  local token_uid token_gid
+  token_uid="$(stat -c '%u' "$TOKEN_FILE")"
+  token_gid="$(stat -c '%g' "$TOKEN_FILE")"
+
   log "Starting named Cloudflare Tunnel..."
   docker run -d \
     --name "$TUNNEL_CONTAINER" \
     --restart unless-stopped \
     --network "$NETWORK" \
+    --user "$token_uid:$token_gid" \
     -v "$TOKEN_FILE:/run/secrets/tunnel-token:ro" \
     "$TUNNEL_IMAGE" \
     tunnel --no-autoupdate run --token-file /run/secrets/tunnel-token >/dev/null
 
-  sleep 3
-  if ! docker ps --format '{{.Names}}' | grep -Fxq "$TUNNEL_CONTAINER"; then
-    log "cloudflared stopped unexpectedly."
+  # A container in a restart loop still appears in `docker ps`. Inspect the
+  # actual state after startup so permission/auth failures are not reported as
+  # a healthy connector.
+  sleep 5
+  if ! docker container inspect "$TUNNEL_CONTAINER" >/dev/null 2>&1; then
+    log "cloudflared container disappeared unexpectedly."
+    return 1
+  fi
+
+  local state restarting restart_count
+  state="$(docker inspect -f '{{.State.Status}}' "$TUNNEL_CONTAINER")"
+  restarting="$(docker inspect -f '{{.State.Restarting}}' "$TUNNEL_CONTAINER")"
+  restart_count="$(docker inspect -f '{{.RestartCount}}' "$TUNNEL_CONTAINER")"
+  if [[ "$state" != "running" || "$restarting" == "true" || "$restart_count" != "0" ]]; then
+    log "cloudflared did not remain healthy (state=$state, restarting=$restarting, restarts=$restart_count)."
     docker logs "$TUNNEL_CONTAINER" 2>/dev/null || true
     return 1
   fi
@@ -96,12 +116,24 @@ stop_tunnel() {
 
 status_tunnel() {
   ensure_docker || return 1
-  if docker ps --format '{{.Names}}' | grep -Fxq "$TUNNEL_CONTAINER"; then
-    log "Connector is running."
+  if ! docker container inspect "$TUNNEL_CONTAINER" >/dev/null 2>&1; then
+    log "Connector is not running."
+    return 1
+  fi
+
+  local state restarting restart_count
+  state="$(docker inspect -f '{{.State.Status}}' "$TUNNEL_CONTAINER")"
+  restarting="$(docker inspect -f '{{.State.Restarting}}' "$TUNNEL_CONTAINER")"
+  restart_count="$(docker inspect -f '{{.RestartCount}}' "$TUNNEL_CONTAINER")"
+
+  if [[ "$state" == "running" && "$restarting" != "true" ]]; then
+    log "Connector is running (restarts=$restart_count)."
     docker ps --filter "name=$TUNNEL_CONTAINER"
     return 0
   fi
-  log "Connector is not running."
+
+  log "Connector is unhealthy (state=$state, restarting=$restarting, restarts=$restart_count)."
+  docker ps -a --filter "name=$TUNNEL_CONTAINER"
   return 1
 }
 
