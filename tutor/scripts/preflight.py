@@ -114,6 +114,40 @@ def check_security_and_persistence() -> None:
             fail(f"Railway deployment documentation missing: {invariant!r}")
 
 
+def check_codespaces_cloudflare_tunnel() -> None:
+    tunnel = require_file("tutor/codespaces/cloudflare-tunnel.sh")
+    for invariant in (
+        "CLOUDFLARE_TUNNEL_TOKEN",
+        "cloudflare/cloudflared:latest",
+        "murikah-tutor-net",
+        "murikah-tutor-codespaces",
+        "--token-file",
+    ):
+        if tunnel and invariant not in tunnel:
+            fail(f"Codespaces Cloudflare Tunnel invariant missing: {invariant!r}")
+
+    runbook = require_file("tutor/codespaces/CLOUDFLARE.md")
+    for invariant in (
+        "tutor.murikah.com",
+        "http://murikah-tutor-codespaces:3782",
+        "CLOUDFLARE_TUNNEL_TOKEN",
+        "Private",
+    ):
+        if runbook and invariant not in runbook:
+            fail(f"Cloudflare Tunnel runbook missing: {invariant!r}")
+
+    start = require_file("tutor/codespaces/start.sh")
+    autostart = require_file("tutor/codespaces/autostart.sh")
+    stop = require_file("tutor/codespaces/stop.sh")
+    for relative, content in (
+        ("start.sh", start),
+        ("autostart.sh", autostart),
+        ("stop.sh", stop),
+    ):
+        if content and "cloudflare-tunnel.sh" not in content:
+            fail(f"Codespaces {relative} is not wired to cloudflare-tunnel.sh")
+
+
 def check_no_new_database_dependency() -> None:
     executable_files = (
         "tutor/Dockerfile.railway",
@@ -178,6 +212,7 @@ def main() -> int:
     check_source_pin()
     check_branding()
     check_security_and_persistence()
+    check_codespaces_cloudflare_tunnel()
     check_no_new_database_dependency()
     check_stack_isolation()
 
@@ -194,6 +229,7 @@ def main() -> int:
     print(" - production authentication and secure-cookie hardening are present")
     print(" - main-container subprocess execution defaults to disabled")
     print(" - /app/data persistence and port 3782 deployment assumptions are documented")
+    print(" - Codespaces named Cloudflare Tunnel wiring and secret handling are present")
     print(" - no Turso/Postgres/PocketBase dependency is introduced by Tutor deployment code")
     print(" - existing Murikah application stack remains outside the Tutor deployment boundary")
     return 0
