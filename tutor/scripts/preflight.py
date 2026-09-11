@@ -176,6 +176,60 @@ def check_codespaces_cloudflare_tunnel() -> None:
             fail(f"Codespaces {relative} is not wired to cloudflare-tunnel.sh")
 
 
+def check_wake_worker() -> None:
+    worker = require_file("tutor/wake-worker/src/index.js")
+    for invariant in (
+        "GITHUB_CODESPACES_TOKEN",
+        "/user/codespaces/${encodeURIComponent(env.CODESPACE_NAME)}",
+        "/start",
+        "ORIGIN_HOST",
+        "tutor_dormant",
+        "sec-fetch-mode",
+        "Murikah Tutor is waking up",
+        "proxyToTutor",
+        "x-murikah-tutor-ingress",
+        "/__muri/wake-status",
+    ):
+        if worker and invariant not in worker:
+            fail(f"Tutor wake Worker invariant missing: {invariant!r}")
+
+    wrangler = require_file("tutor/wake-worker/wrangler.toml")
+    for invariant in (
+        'name = "murikah-tutor-wake"',
+        'workers_dev = false',
+        'ORIGIN_HOST = "tutor-origin.murikah.com"',
+        'CODESPACE_NAME = "glorious-yodel-x7jj5gw954h99vw"',
+    ):
+        if wrangler and invariant not in wrangler:
+            fail(f"Tutor wake Worker configuration missing: {invariant!r}")
+
+    if wrangler:
+        for line in wrangler.splitlines():
+            if line.strip().startswith("GITHUB_CODESPACES_TOKEN ="):
+                fail("GitHub Codespaces token must never be stored in wrangler.toml")
+
+    wake_runbook = require_file("tutor/wake-worker/README.md")
+    for invariant in (
+        "tutor.murikah.com",
+        "tutor-origin.murikah.com",
+        "GITHUB_CODESPACES_TOKEN",
+        "http://127.0.0.1:3782",
+        "Custom Domain",
+        "Codespaces lifecycle",
+    ):
+        if wake_runbook and invariant not in wake_runbook:
+            fail(f"Tutor wake Worker runbook missing: {invariant!r}")
+
+    package = require_file("tutor/wake-worker/package.json")
+    for invariant in (
+        '"murikah-tutor-wake-worker"',
+        '"wrangler"',
+        '"deploy"',
+    ):
+        if package and invariant not in package:
+            fail(f"Tutor wake Worker package metadata missing: {invariant!r}")
+
+
 def check_no_new_database_dependency() -> None:
     executable_files = (
         "tutor/Dockerfile.railway",
@@ -241,6 +295,7 @@ def main() -> int:
     check_branding()
     check_security_and_persistence()
     check_codespaces_cloudflare_tunnel()
+    check_wake_worker()
     check_no_new_database_dependency()
     check_stack_isolation()
 
@@ -258,6 +313,7 @@ def main() -> int:
     print(" - main-container subprocess execution defaults to disabled")
     print(" - /app/data persistence and port 3782 deployment assumptions are documented")
     print(" - Codespaces named Cloudflare Tunnel uses host networking, protected token access and edge registration checks")
+    print(" - Cloudflare wake Worker keeps the public Tutor front door independent from Codespaces uptime")
     print(" - no Turso/Postgres/PocketBase dependency is introduced by Tutor deployment code")
     print(" - existing Murikah application stack remains outside the Tutor deployment boundary")
     return 0
