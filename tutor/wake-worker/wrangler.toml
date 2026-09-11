@@ -1,0 +1,18 @@
+name = "murikah-tutor-wake"
+main = "src/index.js"
+compatibility_date = "2026-09-11"
+workers_dev = false
+
+# tutor.murikah.com is attached as a Custom Domain only after the existing
+# Tunnel route has been moved to tutor-origin.murikah.com. Keeping the domain
+# out of this file makes that one-time cutover explicit and avoids Wrangler
+# trying to take over a hostname that is still managed by Cloudflare Tunnel.
+
+[vars]
+ORIGIN_HOST = "tutor-origin.murikah.com"
+CODESPACE_NAME = "glorious-yodel-x7jj5gw954h99vw"
+WAKE_POLL_SECONDS = "4"
+ORIGIN_HEALTH_TIMEOUT_MS = "2500"
+
+# Secret configured in Cloudflare, never committed:
+# GITHUB_CODESPACES_TOKEN
