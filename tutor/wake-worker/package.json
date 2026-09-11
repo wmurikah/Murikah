@@ -1,0 +1,13 @@
+{
+  "name": "murikah-tutor-wake-worker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Always-available Cloudflare wake/proxy front door for Murikah Tutor Codespaces",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
