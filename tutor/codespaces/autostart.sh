@@ -110,20 +110,32 @@ CURRENT_SOURCE_REVISION="$(source_revision)"
 IMAGE_SOURCE_REVISION="$(docker image inspect -f '{{ index .Config.Labels "com.murikah.tutor.source-revision" }}' "$IMAGE" 2>/dev/null || true)"
 
 # Rebuild when the checked-out Tutor source differs from the source used for
-# the reusable image. This keeps fast Codespaces resumes without serving stale
-# Tutor code after a pull/merge.
+# the reusable image. Stop a running Tutor while building to reduce peak memory
+# use in smaller Codespaces; restore it if the new image build fails.
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || [[ "$IMAGE_SOURCE_REVISION" != "$CURRENT_SOURCE_REVISION" ]]; then
   if [[ -n "$IMAGE_SOURCE_REVISION" ]]; then
     log "Tutor source changed; rebuilding pinned image..."
   else
     log "Tutor image is missing or predates source tracking; rebuilding pinned image..."
   fi
+
+  WAS_RUNNING=false
+  if docker container inspect "$CONTAINER" >/dev/null 2>&1 \
+    && [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" == "true" ]]; then
+    WAS_RUNNING=true
+    log "Pausing the existing Tutor container to free build resources..."
+    docker stop "$CONTAINER" >/dev/null 2>&1 || true
+  fi
+
   if ! docker build \
     --label "$SOURCE_REVISION_LABEL=$CURRENT_SOURCE_REVISION" \
     --file "$TUTOR_ROOT/Dockerfile.railway" \
     --tag "$IMAGE" \
     "$MURIKAH_ROOT"; then
-    log "Image rebuild failed; run start.sh manually for diagnostics."
+    log "Image rebuild failed; restoring the previous Tutor container."
+    if [[ "$WAS_RUNNING" == "true" ]]; then
+      docker start "$CONTAINER" >/dev/null 2>&1 || true
+    fi
     exit 0
   fi
 fi
