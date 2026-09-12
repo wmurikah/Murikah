@@ -57,12 +57,30 @@ for env_name in \
   fi
 done
 
+# Building Next.js and type-checking can briefly use most of a small Codespace's
+# memory. Stop the existing Tutor container during the build to avoid the host
+# terminating the build under memory pressure. If the build fails, restore the
+# previous container so the current Tutor remains available.
+WAS_RUNNING=false
+if docker container inspect "$CONTAINER" >/dev/null 2>&1 \
+  && [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" == "true" ]]; then
+  WAS_RUNNING=true
+  echo "[Murikah Tutor] Pausing the existing Tutor container to free build resources..."
+  docker stop "$CONTAINER" >/dev/null
+fi
+
 echo "[Murikah Tutor] Building the pinned production image..."
-docker build \
+if ! docker build \
   --label "$SOURCE_REVISION_LABEL=$SOURCE_REVISION" \
   --file "$TUTOR_ROOT/Dockerfile.railway" \
   --tag "$IMAGE" \
-  "$MURIKAH_ROOT"
+  "$MURIKAH_ROOT"; then
+  if [[ "$WAS_RUNNING" == "true" ]]; then
+    echo "[Murikah Tutor] Build failed; restoring the previous Tutor container..." >&2
+    docker start "$CONTAINER" >/dev/null 2>&1 || true
+  fi
+  exit 1
+fi
 
 docker rm -f "$CONTAINER" "$BOOTSTRAP_CONTAINER" >/dev/null 2>&1 || true
 
