@@ -10,7 +10,7 @@ IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
 BOOTSTRAP_CONTAINER="${CONTAINER}-bootstrap"
 TUNNEL_SCRIPT="$SCRIPT_DIR/cloudflare-tunnel.sh"
-SOURCE_REVISION_LABEL="com.murikah.tutor.source-revision"
+PREBUILT_IMAGE_HELPER="$SCRIPT_DIR/prebuilt-image.sh"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is unavailable. Create the Codespace using the 'Murikah Tutor' dev container configuration." >&2
@@ -18,7 +18,6 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 mkdir -p "$DATA_DIR"
-# An explicit start re-enables automatic recovery on future Codespace resumes.
 rm -f "$DISABLE_MARKER"
 
 source_revision() {
@@ -33,9 +32,6 @@ source_revision() {
 }
 SOURCE_REVISION="$(source_revision)"
 
-# Public product configuration is explicit. Provider credentials are forwarded
-# only when present in the outer Codespace environment (normally GitHub
-# Codespaces secrets); their values are never written to this repository.
 RUNTIME_ENV_ARGS=(
   -e PORT=3782
   -e "MURIKAH_PUBLIC_BASE_URL=${MURIKAH_PUBLIC_BASE_URL:-https://tutor.murikah.com}"
@@ -57,31 +53,24 @@ for env_name in \
   fi
 done
 
-# Building Next.js and type-checking can briefly use most of a small Codespace's
-# memory. Stop the existing Tutor container during the build to avoid the host
-# terminating the build under memory pressure. If the build fails, restore the
-# previous container so the current Tutor remains available.
-WAS_RUNNING=false
-if docker container inspect "$CONTAINER" >/dev/null 2>&1 \
-  && [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" == "true" ]]; then
-  WAS_RUNNING=true
-  echo "[Murikah Tutor] Pausing the existing Tutor container to free build resources..."
-  docker stop "$CONTAINER" >/dev/null
-fi
-
-echo "[Murikah Tutor] Building the pinned production image..."
-if ! docker build \
-  --label "$SOURCE_REVISION_LABEL=$SOURCE_REVISION" \
-  --file "$TUTOR_ROOT/Dockerfile.railway" \
-  --tag "$IMAGE" \
-  "$MURIKAH_ROOT"; then
-  if [[ "$WAS_RUNNING" == "true" ]]; then
-    echo "[Murikah Tutor] Build failed; restoring the previous Tutor container..." >&2
-    docker start "$CONTAINER" >/dev/null 2>&1 || true
-  fi
+if [[ ! -f "$PREBUILT_IMAGE_HELPER" ]]; then
+  echo "[Murikah Tutor] Prebuilt-image helper is missing." >&2
   exit 1
 fi
+# shellcheck source=/dev/null
+source "$PREBUILT_IMAGE_HELPER"
 
+IMAGE_SOURCE_REVISION="$(docker image inspect -f '{{ index .Config.Labels "com.murikah.tutor.source-revision" }}' "$IMAGE" 2>/dev/null || true)"
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || [[ "$IMAGE_SOURCE_REVISION" != "$SOURCE_REVISION" ]]; then
+  echo "[Murikah Tutor] Retrieving the prebuilt pinned production image..."
+  if ! murikah_pull_prebuilt_image "$IMAGE" "$SOURCE_REVISION" 60 10; then
+    echo "[Murikah Tutor] Matching prebuilt image was not published within 10 minutes." >&2
+    echo "[Murikah Tutor] Check the 'Build Murikah Tutor image' GitHub Actions workflow, then run start.sh again." >&2
+    exit 1
+  fi
+fi
+
+# Only replace the current container after the exact new image is safely local.
 docker rm -f "$CONTAINER" "$BOOTSTRAP_CONTAINER" >/dev/null 2>&1 || true
 
 wait_for_health() {
@@ -132,9 +121,6 @@ if [[ ! -f "$AUTH_FILE" ]]; then
 
   unset admin_password
   wait_for_health "$BOOTSTRAP_CONTAINER"
-
-  # Remove the one-time container so the plaintext bootstrap secret is not
-  # retained in the long-running container configuration.
   docker rm -f "$BOOTSTRAP_CONTAINER" >/dev/null
 fi
 
@@ -149,8 +135,6 @@ docker run -d \
 
 wait_for_health "$CONTAINER"
 
-# A configured named Cloudflare Tunnel becomes the public ingress. Missing
-# credentials are non-fatal so local/private Codespaces testing still works.
 if [[ -f "$TUNNEL_SCRIPT" ]]; then
   bash "$TUNNEL_SCRIPT" start || echo "[Murikah Tutor] Cloudflare Tunnel did not start; Tutor itself remains healthy." >&2
 fi
@@ -165,7 +149,8 @@ Public access should use the named Cloudflare Tunnel hostname (for example tutor
 
 Tutor data is stored in tutor/.codespaces-data and is intentionally ignored by Git.
 Stopping the Codespace preserves that directory; deleting the Codespace deletes its storage.
-On future Codespace resumes, Tutor and a configured Cloudflare Tunnel will start automatically after first-boot setup.
+Production Tutor images are built by GitHub Actions and pulled into Codespaces; Codespaces no longer compiles the Next.js production bundle locally.
+On future Codespace resumes, Tutor and a configured Cloudflare Tunnel start automatically after first-boot setup.
 
 Stop Tutor and the Cloudflare Tunnel without deleting Tutor data or allowing automatic resume:
   bash tutor/codespaces/stop.sh
