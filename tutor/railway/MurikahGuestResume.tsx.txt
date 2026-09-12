@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
 
@@ -62,13 +62,13 @@ function importGuestConversation(state: StoredGuestState): Promise<string> {
 
 export default function MurikahGuestResume() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [status, setStatus] = useState<"idle" | "restoring" | "error">("idle");
   const [error, setError] = useState("");
   const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    if (searchParams.get("resume_guest") !== "1") return;
+    const shouldResume = new URLSearchParams(window.location.search).get("resume_guest") === "1";
+    if (!shouldResume) return;
 
     let cancelled = false;
     let state: StoredGuestState | null = null;
@@ -114,7 +114,7 @@ export default function MurikahGuestResume() {
     return () => {
       cancelled = true;
     };
-  }, [retryToken, router, searchParams]);
+  }, [retryToken, router]);
 
   if (status === "idle") return null;
 
