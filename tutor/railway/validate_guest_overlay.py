@@ -49,6 +49,13 @@ def main() -> None:
             '"mastery"',
             '"reading"',
             '"learning-space"',
+            '"diagram"',
+            'label: "Diagram Design"',
+            "function DiagramMessage({ content }",
+            "extractDiagramSvg",
+            'sandbox=""',
+            "Content-Security-Policy",
+            "Diagram preview is isolated from the Tutor page",
             "const [mobileExploreOpen, setMobileExploreOpen] = useState(false);",
             "function resetGuestConversation()",
             "setMessages([]);",
@@ -64,6 +71,8 @@ def main() -> None:
             'message.role === "assistant" ? (',
             "<MarkdownRenderer",
             "content={message.content}",
+            "setDraft(prompt);",
+            "Your prompt is still here",
         ),
     )
     forbid_markers(
@@ -82,6 +91,7 @@ def main() -> None:
             "ref={contentRef}",
             "overflow-y-auto overscroll-contain scroll-smooth",
             "Choose Learning Mode",
+            "Tutor could not answer that prompt.",
         ),
     )
     require_markers(
@@ -97,12 +107,47 @@ def main() -> None:
         ("MurikahGuestResume", "<ChatWorkspace />"),
     )
     require_markers(
-        root / "deeptutor/api/routers/murikah_guest.py",
+        root / "web/components/sidebar/nav-entries.ts",
+        (
+            'href: "/diagram-design"',
+            'label: "Diagram Design"',
+            "icon: Workflow",
+            'requires: "llm"',
+        ),
+    )
+    require_markers(
+        root / "web/components/diagram/MurikahDiagramStudio.tsx",
+        (
+            'fetch("/api/murikah/diagram"',
+            "const DIAGRAM_TYPES = [",
+            'sandbox=""',
+            "Content-Security-Policy",
+            "Download SVG",
+            "Design diagram",
+        ),
+    )
+    require_markers(
+        root / "web/app/(workspace)/diagram-design/page.tsx",
+        ("MurikahDiagramStudio", "<MurikahDiagramStudio />"),
+    )
+    guest_router = root / "deeptutor/api/routers/murikah_guest.py"
+    require_markers(
+        guest_router,
         (
             '@router.get("/guest-models")',
             '@router.post("/guest-handoff")',
+            '@router.post("/diagram")',
+            "class DiagramDesignRequest(BaseModel):",
+            "Depends(require_auth)",
             "next_used = used + 1",
             "resolve_llm_config_for_selection",
+            '"diagram",',
+            '"diagram": "Design an editorial-quality diagram',
+            "_GUEST_COMPLETION_TIMEOUT_SECONDS = 75",
+            "await asyncio.wait_for(",
+            "HTTP_504_GATEWAY_TIMEOUT",
+            "HTTP_503_SERVICE_UNAVAILABLE",
+            "Reference {incident_id}",
         ),
     )
 
