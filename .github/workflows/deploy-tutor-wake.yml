@@ -1,5 +1,6 @@
 name: Deploy Murikah Tutor Wake Worker
 
+# Dedicated deployment for the always-available Tutor ingress worker.
 on:
   push:
     branches: [main]
