@@ -2,11 +2,15 @@ name = "murikah-tutor-wake"
 main = "src/worker.js"
 compatibility_date = "2026-09-11"
 workers_dev = false
+preview_urls = false
 
-# tutor.murikah.com is attached as a Custom Domain only after the existing
-# Tunnel route has been moved to tutor-origin.murikah.com. Keeping the domain
-# out of this file makes that one-time cutover explicit and avoids Wrangler
-# trying to take over a hostname that is still managed by Cloudflare Tunnel.
+# Production custom domains for the always-available Tutor wake/proxy worker.
+# tutor-origin.murikah.com remains the Cloudflare Tunnel origin and must not be
+# attached to this Worker.
+routes = [
+  { pattern = "wake-test.murikah.com", custom_domain = true },
+  { pattern = "tutor.murikah.com", custom_domain = true }
+]
 
 [vars]
 ORIGIN_HOST = "tutor-origin.murikah.com"
