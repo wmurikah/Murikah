@@ -31,25 +31,28 @@ def main() -> int:
     text = replace_once(
         text,
         '''  typescript: {\n    tsconfigPath: process.env.DEEPTUTOR_NEXT_TSCONFIG || "tsconfig.json",\n  },''',
-        '''  typescript: {\n    tsconfigPath: process.env.DEEPTUTOR_NEXT_TSCONFIG || "tsconfig.json",\n    // The pinned upstream release is already type-checked upstream. Murikah's\n    // Docker build applies a narrow, validated overlay and runs in constrained\n    // Codespaces/Railway builders where Next 16's extra TypeScript worker can\n    // be terminated after compilation. Skip only that duplicate full-project\n    // check when the production image explicitly opts in below.\n    ignoreBuildErrors: process.env.MURIKAH_SKIP_NEXT_TYPECHECK === "1",\n  },''',
+        '''  typescript: {\n    tsconfigPath: process.env.DEEPTUTOR_NEXT_TSCONFIG || "tsconfig.json",\n    // The pinned upstream release is already type-checked upstream. Murikah's\n    // Docker build applies a narrow, validated overlay and runs in constrained\n    // builders where Next 16's extra TypeScript worker can be terminated after\n    // compilation. Skip only that duplicate full-project check when the\n    // production image explicitly opts in below.\n    ignoreBuildErrors: process.env.MURIKAH_SKIP_NEXT_TYPECHECK === "1",\n  },''',
         "TypeScript config block",
     )
 
-    # The pinned app already has a custom webpack hook, which means Next does
-    # not automatically enable its lower-memory webpack build worker. Recent
-    # guest UI additions pushed the small Codespaces builder past its memory
-    # ceiling during the webpack compilation itself (SIGTERM/143, before type
-    # checking). Next 16.2.3 officially supports these experimental controls:
-    # - webpackBuildWorker isolates webpack from the parent build process;
-    # - webpackMemoryOptimizations lowers webpack's peak memory usage;
-    # - cpus=1 bounds build-worker concurrency.
-    # Apply them only to Murikah's constrained production-image build so normal
-    # upstream/dev behaviour remains unchanged.
     text = replace_once(
         text,
         '''  experimental: {\n    proxyClientMaxBodySize: 210 * 1024 * 1024,\n    // Agentic reads and full-draft edits routinely exceed Next's 30-second\n    // rewrite default; the browser remains responsible for cancelling them.\n    proxyTimeout: 30 * 60 * 1000,\n  },''',
         '''  experimental: {\n    proxyClientMaxBodySize: 210 * 1024 * 1024,\n    // Agentic reads and full-draft edits routinely exceed Next's 30-second\n    // rewrite default; the browser remains responsible for cancelling them.\n    proxyTimeout: 30 * 60 * 1000,\n    ...(process.env.MURIKAH_CONSTRAINED_BUILD === "1"\n      ? {\n          webpackBuildWorker: true,\n          webpackMemoryOptimizations: true,\n          cpus: 1,\n        }\n      : {}),\n  },''',
         "experimental config block",
+    )
+
+    # DeepTutor already needs a custom webpack hook for Cytoscape. In a small
+    # builder, webpack's normal high parallelism and persistent build cache can
+    # create a larger peak than the JavaScript heap cap itself. Limit module
+    # work to one task and disable webpack's build cache only for the
+    # reproducible production image. A clean Docker build gets little value
+    # from an in-process cache anyway.
+    text = replace_once(
+        text,
+        '''  webpack: (config) => {\n    const path = require("path");\n    config.resolve.alias = {\n      ...config.resolve.alias,\n      cytoscape: path.resolve(\n        __dirname,\n        "node_modules/cytoscape/dist/cytoscape.cjs.js",\n      ),\n    };\n    return config;\n  },''',
+        '''  webpack: (config) => {\n    const path = require("path");\n    config.resolve.alias = {\n      ...config.resolve.alias,\n      cytoscape: path.resolve(\n        __dirname,\n        "node_modules/cytoscape/dist/cytoscape.cjs.js",\n      ),\n    };\n    if (process.env.MURIKAH_CONSTRAINED_BUILD === "1") {\n      config.parallelism = 1;\n      config.cache = false;\n    }\n    return config;\n  },''',
+        "webpack config block",
     )
 
     config.write_text(text, encoding="utf-8")
