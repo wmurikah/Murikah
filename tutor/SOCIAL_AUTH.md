@@ -1,33 +1,47 @@
-# Murikah Tutor social sign-in
+# Murikah Tutor SSO / social sign-in
 
-Murikah Tutor can expose Google, Microsoft and Apple as public account-creation/sign-in providers while keeping the existing local username/password login for administrators and manually managed accounts.
+Murikah Tutor supports Google, Microsoft and Apple sign-in while retaining the existing local username/password flow for administrators and manually managed accounts.
 
-Provider credentials are runtime secrets. Do not commit them to this repository, `wrangler.toml`, Dockerfiles or Tutor data files.
+The application-side OAuth/OIDC flow is already implemented. Activating a provider requires registering the Murikah Tutor web application with that identity provider and storing the resulting credentials as GitHub Codespaces secrets. Provider credentials are runtime secrets: never commit them to this repository, `wrangler.toml`, Dockerfiles, Tutor data files or shell history.
 
-## Public callback URLs
+## Production callback URLs
 
-Configure the provider applications with these exact HTTPS callbacks:
+Use these exact HTTPS redirect / return URLs in the provider consoles:
 
 - Google: `https://tutor.murikah.com/api/auth/oauth/google/callback`
 - Microsoft: `https://tutor.murikah.com/api/auth/oauth/microsoft/callback`
 - Apple: `https://tutor.murikah.com/api/auth/oauth/apple/callback`
 
-The public base URL defaults to `https://tutor.murikah.com` and can be set explicitly with `MURIKAH_PUBLIC_BASE_URL`.
+The runtime public base defaults to `https://tutor.murikah.com` and can be overridden with `MURIKAH_PUBLIC_BASE_URL`.
 
-## Runtime secrets
+## Google
 
-Google:
+Create a Google OAuth web client for Murikah Tutor. Configure the production redirect URI exactly as shown above. Use the normal `openid profile email` scopes; no Google API data access is required by Tutor sign-in.
+
+Store the credentials as repository-scoped Codespaces secrets:
 
 - `MURIKAH_GOOGLE_CLIENT_ID`
 - `MURIKAH_GOOGLE_CLIENT_SECRET`
 
-Microsoft:
+Google may require an OAuth consent screen, verified domain information and production verification depending on the audience and publication state of the OAuth app.
+
+## Microsoft
+
+Create a Microsoft Entra app registration for a server-side Web application and add the production redirect URI above under the Web platform. For broad public sign-in, choose an account type that permits the Microsoft account audiences Murikah intends to support.
+
+Create an application credential and store:
 
 - `MURIKAH_MICROSOFT_CLIENT_ID`
 - `MURIKAH_MICROSOFT_CLIENT_SECRET`
 - `MURIKAH_MICROSOFT_TENANT` — optional; defaults to `common`
 
-Apple:
+`common` supports the multitenant/personal-account style flow when the Entra app registration is configured for that audience. Use a concrete tenant ID instead if Murikah intentionally wants a tenant-restricted deployment.
+
+## Apple
+
+Apple web sign-in requires more provider-side setup than Google or Microsoft. Create/configure a Sign in with Apple Services ID, associate it with an eligible primary App ID, register `tutor.murikah.com`, configure the exact return URL above, and create a Sign in with Apple private key.
+
+Store:
 
 - `MURIKAH_APPLE_CLIENT_ID` — Services ID / client identifier
 - `MURIKAH_APPLE_TEAM_ID`
@@ -36,31 +50,37 @@ Apple:
   - `MURIKAH_APPLE_PRIVATE_KEY`
   - `MURIKAH_APPLE_PRIVATE_KEY_B64` — preferred for multiline `.p8` material in secret stores
 
-Guest access:
+Do not expose or commit the `.p8` private key.
 
-- `MURIKAH_GUEST_PROMPT_LIMIT` — defaults to `7`, bounded by the server to 1–7
+## Codespaces activation
 
-## Codespaces
+Create the provider credentials as GitHub Codespaces secrets scoped to `wmurikah/Murikah`. `tutor/codespaces/start.sh` and `autostart.sh` forward only provider variables that exist in the outer Codespace environment. Values are not written to Git.
 
-Store provider credentials as GitHub **Codespaces secrets** scoped to `wmurikah/Murikah`. `tutor/codespaces/start.sh` and `autostart.sh` forward only provider variables that are present in the Codespace environment. Values are not written to Git.
-
-After adding or changing provider secrets, recreate the Tutor container once with:
+After creating or changing secrets, start a new Codespace session if necessary so GitHub injects them, then recreate the Tutor container once:
 
 ```bash
-git pull origin main
+git pull --ff-only origin main
 bash tutor/codespaces/start.sh
 ```
 
-A later Codespace resume reuses those container settings automatically. If Docker state is lost and the container is recreated, `autostart.sh` forwards the Codespaces secrets again.
+Check readiness without printing any secret values:
 
-## Account model
+```bash
+bash tutor/codespaces/sso-status.sh
+```
 
-Social sign-in creates an ordinary Murikah Tutor user on first successful provider authentication. Provider subject identifiers are mapped to local user IDs under the persistent Tutor auth directory. A matching email address alone never auto-links an existing local account, so a social identity cannot silently take over an administrator account.
+The status command reports each provider as `READY`, `NOT CONFIGURED`, `RESTART NEEDED`, or `RUNNING ONLY`, prints the exact production callbacks, and checks the local `/api/auth/oauth/providers` endpoint when the Tutor container is running.
+
+## Runtime behaviour
+
+`/api/auth/oauth/providers` exposes only providers whose required runtime credentials are complete. The login page therefore renders `Continue with Google`, `Continue with Microsoft` and/or `Continue with Apple` only when that provider is actually configured.
+
+Successful provider authentication creates an ordinary Murikah Tutor user on first sign-in. Provider subject identifiers are mapped to local users under the persistent Tutor auth directory and the user receives the same signed DeepTutor session cookie used by local login.
+
+A matching email address alone never auto-links an existing local account. This deliberately prevents an external identity from silently taking over an administrator or other pre-existing local account.
 
 Password self-registration remains closed after the bootstrap administrator. `/register` routes users to the social-first sign-in page instead.
 
 ## Guest access boundary
 
-Unauthenticated learners receive seven model interactions by default. The public shell exposes Murikah Tutor's learning modes and learning-space navigation so a new learner can understand and try the product before registration. The remaining allowance is deliberately not displayed in the interface; the account-creation gate appears only when the allowance is exhausted.
-
-Guest learning modes use the configured LLM with mode-specific tutoring instructions. The guest surface still does **not** expose or persist DeepTutor sessions, tools, files, private knowledge bases, saved memory, workspace state, connected agents, Partners, or user settings. Those authenticated capabilities remain behind the normal account boundary.
+Unauthenticated learners receive seven successful model interactions by default. The remaining allowance is not displayed before exhaustion. Guest learning modes use the configured model and learner-facing defaults, but they do not expose or persist authenticated DeepTutor sessions, private knowledge bases, saved memory, workspace state, connected agents, Partners or user settings. Those capabilities remain behind sign-in.
