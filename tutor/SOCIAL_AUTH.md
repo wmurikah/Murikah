@@ -36,9 +36,9 @@ Apple:
   - `MURIKAH_APPLE_PRIVATE_KEY`
   - `MURIKAH_APPLE_PRIVATE_KEY_B64` — preferred for multiline `.p8` material in secret stores
 
-Guest preview:
+Guest access:
 
-- `MURIKAH_GUEST_PROMPT_LIMIT` — defaults to `3`, bounded by the server to 1–5
+- `MURIKAH_GUEST_PROMPT_LIMIT` — defaults to `7`, bounded by the server to 1–7
 
 ## Codespaces
 
@@ -59,6 +59,8 @@ Social sign-in creates an ordinary Murikah Tutor user on first successful provid
 
 Password self-registration remains closed after the bootstrap administrator. `/register` routes users to the social-first sign-in page instead.
 
-## Guest preview boundary
+## Guest access boundary
 
-The unauthenticated preview allows three prompts by default. It calls the configured LLM directly and does **not** expose or persist DeepTutor sessions, tools, files, knowledge bases, memory, workspace state or user settings. After the preview allowance is exhausted, the user must sign in to continue.
+Unauthenticated learners receive seven model interactions by default. The public shell exposes Murikah Tutor's learning modes and learning-space navigation so a new learner can understand and try the product before registration. The remaining allowance is deliberately not displayed in the interface; the account-creation gate appears only when the allowance is exhausted.
+
+Guest learning modes use the configured LLM with mode-specific tutoring instructions. The guest surface still does **not** expose or persist DeepTutor sessions, tools, files, private knowledge bases, saved memory, workspace state, connected agents, Partners, or user settings. Those authenticated capabilities remain behind the normal account boundary.
