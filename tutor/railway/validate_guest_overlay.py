@@ -36,7 +36,6 @@ def main() -> None:
             "Choose Learning Mode",
             'const [learningModeOpen, setLearningModeOpen] = useState(false);',
             "murikah:tutor:guest-handoff:v2",
-            "/api/murikah/guest-models",
             "Voice input",
             "const PERSONAS = [",
             'label: "Tutor"',
@@ -44,9 +43,12 @@ def main() -> None:
             'label: "Research Assistant"',
             "Persona · {activePersona.label}",
             "DEFAULT_MODE_BY_SPACE",
+            "SPACE_PLACEHOLDERS",
+            "composerPlaceholder",
+            "ref={contentRef}",
+            "overflow-y-auto overscroll-contain scroll-smooth",
             "Upload text file",
             "You have used up 7 of the 7 Guest Interactions. Please sign in.",
-            "overflow-y-auto overscroll-contain scroll-smooth",
         ),
     )
     forbid_markers(
@@ -56,8 +58,10 @@ def main() -> None:
             ">Personalise</span>",
             "of 7 guest interactions remaining",
             'guest {remaining === 1 ? "interaction" : "interactions"} left',
+            "function SpaceConfigurator({",
             "<SpaceConfigurator space={activeSpace}",
             "setLlmSelection(",
+            "/api/murikah/guest-models",
             "setSpaceConfigOverrides({ ...emptyOverrides(), ...stored.spaceConfigOverrides })",
         ),
     )
