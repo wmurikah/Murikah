@@ -2,8 +2,8 @@
 
 The preview is deliberately separate from DeepTutor sessions: no workspace,
 files, tools, memory, RAG or persisted conversation is exposed before sign-in.
-A signed HttpOnly cookie tracks the small preview allowance without creating a
-local account.
+A signed HttpOnly cookie tracks the guest allowance without creating a local
+account.
 """
 from __future__ import annotations
 
@@ -23,14 +23,66 @@ from deeptutor.services.llm import get_llm_client
 router = APIRouter()
 
 _COOKIE_NAME = "mt_guest"
-_DEFAULT_LIMIT = 3
+_DEFAULT_LIMIT = 7
 _MAX_PROMPT_CHARS = 6000
 _MAX_HISTORY_ITEMS = 6
 _SYSTEM_PROMPT = """You are Murikah Tutor, an AI-powered personalised learning companion.
 Teach clearly and rigorously. Start with intuition, then formal reasoning when useful,
 then a concrete example or application. Adapt depth to the learner's apparent level.
-Answer direct questions directly. This is a short guest preview, so do not claim that
-conversation history, files, preferences, or progress will be saved."""
+Answer direct questions directly. This is a bounded guest experience, so do not claim
+that conversation history, files, preferences, progress, memory, tools, browsing, or
+connected knowledge sources are being saved or used when they are not."""
+
+ModeName = Literal[
+    "chat",
+    "questions",
+    "quiz",
+    "research",
+    "visualize",
+    "solve",
+    "course",
+    "mastery",
+    "reading",
+    "watching",
+]
+SpaceName = Literal[
+    "home",
+    "partners",
+    "agents",
+    "cowriter",
+    "book",
+    "mastery",
+    "reading",
+    "learning-space",
+    "memory",
+    "knowledge",
+]
+
+_MODE_GUIDANCE: dict[str, str] = {
+    "chat": "Use a flexible conversational tutoring style and follow the learner's intent.",
+    "questions": "Lead mainly by asking one useful question at a time, then use the learner's answer to probe gaps and deepen understanding.",
+    "quiz": "Create a compact quiz or practice sequence, let the learner answer, then give clear feedback and corrections rather than dumping all answers up front.",
+    "research": "Structure the topic into claims, evidence, uncertainties, counterpoints, and next research steps. Do not claim live web browsing or source retrieval in guest mode.",
+    "visualize": "Prefer diagrams, tables, comparisons, flows, timelines, or Mermaid-style structures when they make the idea easier to see.",
+    "solve": "Work through the problem step by step, surface assumptions, show the reasoning, and check the result.",
+    "course": "Treat the prompt as course study: identify the objective, explain the core idea, give an example, and finish with a short check for understanding.",
+    "mastery": "Turn the goal into a staged mastery path with prerequisites, deliberate practice, checkpoints, and a clear next action.",
+    "reading": "Use an immersive reading loop: clarify the passage, explain difficult ideas, ask recall or interpretation questions, and connect the text to the larger topic.",
+    "watching": "Use an immersive watching style based only on the video topic or transcript the learner provides. Build checkpoints, questions, and summaries without claiming direct video access in guest mode.",
+}
+
+_SPACE_GUIDANCE: dict[str, str] = {
+    "home": "No additional workspace lens is needed.",
+    "partners": "Use a collaborative second-perspective style. Explain that live Partner connections require sign-in if the learner asks to invoke one.",
+    "agents": "Use an agent-like planning and execution style. Explain that live connected agents require sign-in if the learner asks to invoke one.",
+    "cowriter": "Act as a focused co-writer: improve structure, clarity, argument, tone, and revision choices while preserving the learner's intent.",
+    "book": "Treat the interaction as book study. Work from any passage or book context the learner provides and avoid implying access to an unprovided full text.",
+    "mastery": "Keep the interaction oriented to staged mastery, practice, and measurable checkpoints.",
+    "reading": "Keep the interaction oriented to close reading, comprehension, interpretation, and recall.",
+    "learning-space": "Frame the session around one explicit learning objective and keep the discussion coherent around that objective.",
+    "memory": "Demonstrate personalised tutoring from the current conversation only. Do not claim saved memory exists before sign-in.",
+    "knowledge": "Synthesize the learner's topic and any text they provide. Do not claim access to private knowledge libraries before sign-in.",
+}
 
 
 class GuestMessage(BaseModel):
@@ -41,11 +93,13 @@ class GuestMessage(BaseModel):
 class GuestChatRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=_MAX_PROMPT_CHARS)
     history: list[GuestMessage] = Field(default_factory=list, max_length=_MAX_HISTORY_ITEMS)
+    mode: ModeName = "chat"
+    space: SpaceName = "home"
 
 
 def _limit() -> int:
     try:
-        return max(1, min(5, int(os.getenv("MURIKAH_GUEST_PROMPT_LIMIT", str(_DEFAULT_LIMIT)))))
+        return max(1, min(7, int(os.getenv("MURIKAH_GUEST_PROMPT_LIMIT", str(_DEFAULT_LIMIT)))))
     except ValueError:
         return _DEFAULT_LIMIT
 
@@ -94,6 +148,14 @@ def _set_count(response: Response, count: int) -> None:
     )
 
 
+def _system_prompt(mode: ModeName, space: SpaceName) -> str:
+    return (
+        f"{_SYSTEM_PROMPT}\n\n"
+        f"Current learning mode: {mode}. {_MODE_GUIDANCE[mode]}\n"
+        f"Current learning space: {space}. {_SPACE_GUIDANCE[space]}"
+    )
+
+
 @router.get("/guest-status")
 async def guest_status(mt_guest: str | None = Cookie(default=None, alias=_COOKIE_NAME)) -> dict:
     used = _read_count(mt_guest)
@@ -117,7 +179,7 @@ async def guest_chat(
     if used >= limit:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Guest preview complete. Sign in or create an account to continue learning.",
+            detail="Guest access complete. Create an account or sign in to continue learning.",
         )
 
     prompt = body.prompt.strip()
@@ -133,9 +195,9 @@ async def guest_chat(
     client = get_llm_client()
     answer = await client.complete(
         prompt,
-        system_prompt=_SYSTEM_PROMPT,
+        system_prompt=_system_prompt(body.mode, body.space),
         history=history,
-        max_tokens=900,
+        max_tokens=1100,
     )
 
     next_used = used + 1

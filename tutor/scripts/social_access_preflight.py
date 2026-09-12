@@ -28,7 +28,10 @@ def main() -> int:
     contains(
         "tutor/railway/murikah_guest.py",
         "MURIKAH_GUEST_PROMPT_LIMIT",
-        "_DEFAULT_LIMIT = 3",
+        "_DEFAULT_LIMIT = 7",
+        "min(7",
+        "_MODE_GUIDANCE",
+        "_SPACE_GUIDANCE",
         "/guest-chat",
         "httponly=True",
         "secure=True",
@@ -54,7 +57,13 @@ def main() -> int:
     contains(
         "tutor/railway/MurikahGuestChat.tsx.txt",
         "/api/murikah/guest-chat",
-        "preview prompt",
+        'mode: activeMode.id',
+        'space: activeSpace.id',
+        "Ask Questions",
+        "Immersive Watching",
+        "Learning Space",
+        "Knowledge Center",
+        "Create an account to keep learning",
         "MurikahSocialButtons",
         "Apache-2.0",
     )
@@ -78,6 +87,7 @@ def main() -> int:
         "tutor/codespaces/start.sh",
         "MURIKAH_PUBLIC_BASE_URL",
         "MURIKAH_GUEST_PROMPT_LIMIT",
+        "${MURIKAH_GUEST_PROMPT_LIMIT:-7}",
         "MURIKAH_GOOGLE_CLIENT_ID",
         "MURIKAH_MICROSOFT_CLIENT_ID",
         "MURIKAH_APPLE_CLIENT_ID",
@@ -86,6 +96,7 @@ def main() -> int:
         "tutor/codespaces/autostart.sh",
         "MURIKAH_PUBLIC_BASE_URL",
         "MURIKAH_GUEST_PROMPT_LIMIT",
+        "${MURIKAH_GUEST_PROMPT_LIMIT:-7}",
         "MURIKAH_GOOGLE_CLIENT_ID",
         "MURIKAH_MICROSOFT_CLIENT_ID",
         "MURIKAH_APPLE_CLIENT_ID",
@@ -148,7 +159,8 @@ def main() -> int:
         return 1
 
     print("Murikah Tutor social/guest preflight: PASS")
-    print(" - guest preview is bounded and non-persistent")
+    print(" - seven-prompt guest access is bounded and non-persistent")
+    print(" - public learning shell exposes mode and workspace previews without showing the allowance")
     print(" - Google, Microsoft and Apple social sign-in overlays are present")
     print(" - provider credentials remain runtime-only")
     print(" - overlay templates stay outside the root Astro TypeScript compilation")
