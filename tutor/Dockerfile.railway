@@ -64,12 +64,16 @@ COPY --from=branded-source /src/DeepTutor/web/ ./
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
-# The pinned DeepTutor release is already type-checked upstream. The Murikah
-# overlay invariants are validated in branded-source above. Next 16 otherwise
-# starts an additional full-project TypeScript worker after webpack compilation,
-# which exceeds the constrained Codespaces builder and is terminated (143).
-# Opt out only for this reproducible production image build.
-RUN MURIKAH_SKIP_NEXT_TYPECHECK=1 NEXT_TELEMETRY_DISABLED=1 npm run build
+# The pinned release is validated by Murikah's overlay checks and already
+# type-checked upstream. For the production image only, enable Next 16's
+# lower-memory webpack worker/optimisations, limit build concurrency to one CPU,
+# cap the parent Node heap, and skip the duplicate full-project typecheck. This
+# keeps webpack compilation inside the memory ceiling of small Codespaces.
+RUN MURIKAH_CONSTRAINED_BUILD=1 \
+    MURIKAH_SKIP_NEXT_TYPECHECK=1 \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS=--max-old-space-size=2048 \
+    npm run build
 
 # Reuse the official DeepTutor runtime rather than copying its Python dependency
 # stack into Murikah. Pin the image to the same explicit release as the source
