@@ -1,41 +1,36 @@
-const GITHUB_API_VERSION = "2022-11-28";
-const INTERNAL_STATUS_PATH = "/__muri/wake-status";
-const INTERNAL_WAKE_PATH = "/__muri/wake";
+const GITHUB_API_VERSION = '2022-11-28';
+const INTERNAL_STATUS_PATH = '/__muri/wake-status';
+const INTERNAL_WAKE_PATH = '/__muri/wake';
 const DEFAULT_POLL_SECONDS = 4;
 const DEFAULT_HEALTH_TIMEOUT_MS = 2500;
 
 const ACTIVE_CODESPACE_STATES = new Set([
-  "Available",
-  "Starting",
-  "Queued",
-  "Provisioning",
-  "Rebuilding",
-  "Updating",
+  'Available',
+  'Starting',
+  'Queued',
+  'Provisioning',
+  'Rebuilding',
+  'Updating',
 ]);
 
-const TERMINAL_CODESPACE_STATES = new Set([
-  "Deleted",
-  "Archived",
-  "Failed",
-  "Unavailable",
-]);
+const TERMINAL_CODESPACE_STATES = new Set(['Deleted', 'Archived', 'Failed', 'Unavailable']);
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store, max-age=0",
-      pragma: "no-cache",
-      "x-content-type-options": "nosniff",
-      "referrer-policy": "same-origin",
-      "x-robots-tag": "noindex, nofollow",
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store, max-age=0',
+      pragma: 'no-cache',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'same-origin',
+      'x-robots-tag': 'noindex, nofollow',
     },
   });
 }
 
 function integerEnv(value, fallback, minimum, maximum) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
+  const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, parsed));
 }
@@ -56,29 +51,24 @@ function requiredConfig(env) {
 
 function originUrlFor(request, env) {
   const target = new URL(request.url);
-  target.protocol = "https:";
+  target.protocol = 'https:';
   target.hostname = env.ORIGIN_HOST;
-  target.port = "";
+  target.port = '';
   return target;
 }
 
 async function originIsHealthy(env) {
-  const timeoutMs = integerEnv(
-    env.ORIGIN_HEALTH_TIMEOUT_MS,
-    DEFAULT_HEALTH_TIMEOUT_MS,
-    500,
-    10000,
-  );
+  const timeoutMs = integerEnv(env.ORIGIN_HEALTH_TIMEOUT_MS, DEFAULT_HEALTH_TIMEOUT_MS, 500, 10000);
 
   try {
     const response = await fetch(`https://${env.ORIGIN_HOST}/health`, {
-      method: "GET",
-      redirect: "manual",
-      cache: "no-store",
+      method: 'GET',
+      redirect: 'manual',
+      cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs),
       headers: {
-        accept: "application/json,text/plain;q=0.9,*/*;q=0.1",
-        "user-agent": "Murikah-Tutor-Wake-Worker/1.0",
+        accept: 'application/json,text/plain;q=0.9,*/*;q=0.1',
+        'user-agent': 'Murikah-Tutor-Wake-Worker/1.0',
       },
     });
     return response.ok;
@@ -89,10 +79,10 @@ async function originIsHealthy(env) {
 
 function githubHeaders(env) {
   return {
-    accept: "application/vnd.github+json",
+    accept: 'application/vnd.github+json',
     authorization: `Bearer ${env.GITHUB_CODESPACES_TOKEN}`,
-    "x-github-api-version": GITHUB_API_VERSION,
-    "user-agent": "Murikah-Tutor-Wake-Worker/1.0",
+    'x-github-api-version': GITHUB_API_VERSION,
+    'user-agent': 'Murikah-Tutor-Wake-Worker/1.0',
   };
 }
 
@@ -100,15 +90,17 @@ async function getCodespace(env) {
   const response = await fetch(
     `https://api.github.com/user/codespaces/${encodeURIComponent(env.CODESPACE_NAME)}`,
     {
-      method: "GET",
+      method: 'GET',
       headers: githubHeaders(env),
-      cache: "no-store",
+      cache: 'no-store',
     },
   );
 
   if (!response.ok) {
-    const requestId = response.headers.get("x-github-request-id") || "unknown";
-    throw new Error(`GitHub Codespaces status request failed (${response.status}, request ${requestId})`);
+    const requestId = response.headers.get('x-github-request-id') || 'unknown';
+    throw new Error(
+      `GitHub Codespaces status request failed (${response.status}, request ${requestId})`,
+    );
   }
 
   return response.json();
@@ -118,15 +110,17 @@ async function startCodespace(env) {
   const response = await fetch(
     `https://api.github.com/user/codespaces/${encodeURIComponent(env.CODESPACE_NAME)}/start`,
     {
-      method: "POST",
+      method: 'POST',
       headers: githubHeaders(env),
-      cache: "no-store",
+      cache: 'no-store',
     },
   );
 
   if (!response.ok) {
-    const requestId = response.headers.get("x-github-request-id") || "unknown";
-    throw new Error(`GitHub Codespaces start request failed (${response.status}, request ${requestId})`);
+    const requestId = response.headers.get('x-github-request-id') || 'unknown';
+    throw new Error(
+      `GitHub Codespaces start request failed (${response.status}, request ${requestId})`,
+    );
   }
 
   return response.json().catch(() => ({}));
@@ -136,23 +130,23 @@ async function ensureCodespaceAwake(env) {
   requiredConfig(env);
 
   const codespace = await getCodespace(env);
-  const state = String(codespace.state || "Unknown");
+  const state = String(codespace.state || 'Unknown');
 
-  if (state === "Available") {
-    return { state: "available", githubState: state };
+  if (state === 'Available') {
+    return { state: 'available', githubState: state };
   }
 
   if (ACTIVE_CODESPACE_STATES.has(state)) {
-    return { state: "starting", githubState: state };
+    return { state: 'starting', githubState: state };
   }
 
-  if (state === "ShuttingDown") {
-    return { state: "waiting", githubState: state };
+  if (state === 'ShuttingDown') {
+    return { state: 'waiting', githubState: state };
   }
 
-  if (state === "Shutdown") {
+  if (state === 'Shutdown') {
     await startCodespace(env);
-    return { state: "starting", githubState: "Starting" };
+    return { state: 'starting', githubState: 'Starting' };
   }
 
   if (TERMINAL_CODESPACE_STATES.has(state)) {
@@ -162,45 +156,41 @@ async function ensureCodespaceAwake(env) {
   // GitHub can add lifecycle states over time. Try the documented start endpoint
   // for non-terminal states rather than silently leaving Tutor unavailable.
   await startCodespace(env);
-  return { state: "starting", githubState: state };
+  return { state: 'starting', githubState: state };
 }
 
 function isWakeEligibleNavigation(request) {
-  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false;
 
-  const accept = request.headers.get("accept") || "";
-  if (!accept.includes("text/html")) return false;
+  const accept = request.headers.get('accept') || '';
+  if (!accept.includes('text/html')) return false;
 
-  const mode = request.headers.get("sec-fetch-mode");
-  const destination = request.headers.get("sec-fetch-dest");
+  const mode = request.headers.get('sec-fetch-mode');
+  const destination = request.headers.get('sec-fetch-dest');
   const url = new URL(request.url);
 
   // Browser document navigation wakes Tutor automatically. This deliberately
   // avoids waking the Codespace for ordinary bots, asset probes and API calls.
-  return (
-    mode === "navigate" ||
-    destination === "document" ||
-    url.searchParams.get("wake") === "1"
-  );
+  return mode === 'navigate' || destination === 'document' || url.searchParams.get('wake') === '1';
 }
 
 async function proxyToTutor(request, env) {
   const target = originUrlFor(request, env);
   const headers = new Headers(request.headers);
   const publicUrl = new URL(request.url);
-  headers.set("x-forwarded-host", publicUrl.host);
-  headers.set("x-forwarded-proto", "https");
+  headers.set('x-forwarded-host', publicUrl.host);
+  headers.set('x-forwarded-proto', 'https');
 
   const upstreamRequest = new Request(target.toString(), {
     method: request.method,
     headers,
     body: request.body,
-    redirect: "manual",
+    redirect: 'manual',
   });
 
   const response = await fetch(upstreamRequest);
   const responseHeaders = new Headers(response.headers);
-  const location = responseHeaders.get("location");
+  const location = responseHeaders.get('location');
 
   if (location) {
     const originHttps = `https://${env.ORIGIN_HOST}`;
@@ -208,13 +198,13 @@ async function proxyToTutor(request, env) {
     if (location.startsWith(originHttps) || location.startsWith(originHttp)) {
       const replacement = `https://${publicUrl.host}`;
       responseHeaders.set(
-        "location",
+        'location',
         location.replace(originHttps, replacement).replace(originHttp, replacement),
       );
     }
   }
 
-  responseHeaders.set("x-murikah-tutor-ingress", "wake-worker");
+  responseHeaders.set('x-murikah-tutor-ingress', 'wake-worker');
 
   return new Response(response.body, {
     status: response.status,
@@ -225,18 +215,18 @@ async function proxyToTutor(request, env) {
 
 function htmlEscape(value) {
   return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
-function wakePage(request, env, initialState = "starting") {
+function wakePage(request, env, initialState = 'starting') {
   const url = new URL(request.url);
   const target = `${url.pathname}${url.search}${url.hash}`;
   const pollSeconds = integerEnv(env.WAKE_POLL_SECONDS, DEFAULT_POLL_SECONDS, 2, 15);
-  const safeTarget = JSON.stringify(target).replaceAll("<", "\\u003c");
+  const safeTarget = JSON.stringify(target).replaceAll('<', '\\u003c');
   const safeState = htmlEscape(initialState);
 
   const body = `<!doctype html>
@@ -330,29 +320,30 @@ function wakePage(request, env, initialState = "starting") {
   return new Response(body, {
     status: 202,
     headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store, max-age=0",
-      pragma: "no-cache",
-      "x-content-type-options": "nosniff",
-      "referrer-policy": "same-origin",
-      "x-frame-options": "DENY",
-      "x-robots-tag": "noindex, nofollow",
-      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store, max-age=0',
+      pragma: 'no-cache',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'same-origin',
+      'x-frame-options': 'DENY',
+      'x-robots-tag': 'noindex, nofollow',
+      'content-security-policy':
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
     },
   });
 }
 
 async function handleStatus(env) {
   if (await originIsHealthy(env)) {
-    return json({ ready: true, state: "ready" });
+    return json({ ready: true, state: 'ready' });
   }
 
   try {
     const state = await ensureCodespaceAwake(env);
     return json({ ready: false, ...state }, 202);
   } catch (error) {
-    console.error("Murikah Tutor wake status failed", error);
-    return json({ ready: false, state: "error" }, 503);
+    console.error('Murikah Tutor wake status failed', error);
+    return json({ ready: false, state: 'error' }, 503);
   }
 }
 
@@ -361,8 +352,8 @@ async function handleWake(env) {
     const state = await ensureCodespaceAwake(env);
     return json({ accepted: true, ...state }, 202);
   } catch (error) {
-    console.error("Murikah Tutor wake request failed", error);
-    return json({ accepted: false, state: "error" }, 503);
+    console.error('Murikah Tutor wake request failed', error);
+    return json({ accepted: false, state: 'error' }, 503);
   }
 }
 
@@ -375,8 +366,11 @@ export default {
     }
 
     if (url.pathname === INTERNAL_WAKE_PATH) {
-      if (request.method !== "POST") {
-        return new Response("Method Not Allowed", { status: 405, headers: { allow: "POST" } });
+      if (request.method !== 'POST') {
+        return new Response('Method Not Allowed', {
+          status: 405,
+          headers: { allow: 'POST' },
+        });
       }
       return handleWake(env);
     }
@@ -388,21 +382,22 @@ export default {
     }
 
     if (isWakeEligibleNavigation(request)) {
-      let state = "starting";
+      let state = 'starting';
       try {
         const result = await ensureCodespaceAwake(env);
         state = result.state;
       } catch (error) {
-        console.error("Murikah Tutor initial wake failed", error);
-        state = "error";
+        console.error('Murikah Tutor initial wake failed', error);
+        state = 'error';
       }
       return wakePage(request, env, state);
     }
 
     return json(
       {
-        error: "tutor_dormant",
-        message: "Murikah Tutor is currently dormant. Open tutor.murikah.com in a browser to wake it.",
+        error: 'tutor_dormant',
+        message:
+          'Murikah Tutor is currently dormant. Open tutor.murikah.com in a browser to wake it.',
       },
       503,
     );
