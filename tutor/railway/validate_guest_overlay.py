@@ -49,6 +49,13 @@ def main() -> None:
             '"mastery"',
             '"reading"',
             '"learning-space"',
+            '"diagram"',
+            'label: "Diagram Design"',
+            "function DiagramMessage({ content }",
+            "extractDiagramSvg",
+            'sandbox=""',
+            "Content-Security-Policy",
+            "Diagram preview is isolated from the Tutor page",
             "const [mobileExploreOpen, setMobileExploreOpen] = useState(false);",
             "function resetGuestConversation()",
             "setMessages([]);",
@@ -64,6 +71,8 @@ def main() -> None:
             'message.role === "assistant" ? (',
             "<MarkdownRenderer",
             "content={message.content}",
+            "setDraft(prompt);",
+            "Your prompt is still here",
         ),
     )
     forbid_markers(
@@ -82,6 +91,7 @@ def main() -> None:
             "ref={contentRef}",
             "overflow-y-auto overscroll-contain scroll-smooth",
             "Choose Learning Mode",
+            "Tutor could not answer that prompt.",
         ),
     )
     require_markers(
@@ -96,13 +106,21 @@ def main() -> None:
         root / "web/app/(workspace)/chat/page.tsx",
         ("MurikahGuestResume", "<ChatWorkspace />"),
     )
+    guest_router = root / "deeptutor/api/routers/murikah_guest.py"
     require_markers(
-        root / "deeptutor/api/routers/murikah_guest.py",
+        guest_router,
         (
             '@router.get("/guest-models")',
             '@router.post("/guest-handoff")',
             "next_used = used + 1",
             "resolve_llm_config_for_selection",
+            '"diagram",',
+            '"diagram": "Design an editorial-quality diagram',
+            "_GUEST_COMPLETION_TIMEOUT_SECONDS = 75",
+            "await asyncio.wait_for(",
+            "HTTP_504_GATEWAY_TIMEOUT",
+            "HTTP_503_SERVICE_UNAVAILABLE",
+            "Reference {incident_id}",
         ),
     )
 
