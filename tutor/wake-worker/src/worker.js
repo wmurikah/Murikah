@@ -1,4 +1,4 @@
-import wakeWorker from "./index.js";
+import wakeWorker from './index.js';
 
 /**
  * Preserve WebSocket upgrade responses end-to-end.
@@ -11,18 +11,18 @@ import wakeWorker from "./index.js";
  */
 async function proxyWebSocket(request, env) {
   if (!env.ORIGIN_HOST) {
-    return new Response("Tutor origin is not configured", { status: 503 });
+    return new Response('Tutor origin is not configured', { status: 503 });
   }
 
   const publicUrl = new URL(request.url);
   const target = new URL(request.url);
-  target.protocol = "https:";
+  target.protocol = 'https:';
   target.hostname = env.ORIGIN_HOST;
-  target.port = "";
+  target.port = '';
 
   const headers = new Headers(request.headers);
-  headers.set("x-forwarded-host", publicUrl.host);
-  headers.set("x-forwarded-proto", "https");
+  headers.set('x-forwarded-host', publicUrl.host);
+  headers.set('x-forwarded-proto', 'https');
 
   // Return Cloudflare's upstream response object unchanged. For a successful
   // upgrade this preserves response.webSocket and status 101.
@@ -30,15 +30,15 @@ async function proxyWebSocket(request, env) {
     new Request(target.toString(), {
       method: request.method,
       headers,
-      redirect: "manual",
+      redirect: 'manual',
     }),
   );
 }
 
 export default {
   async fetch(request, env, ctx) {
-    const upgrade = (request.headers.get("upgrade") || "").toLowerCase();
-    if (upgrade === "websocket") {
+    const upgrade = (request.headers.get('upgrade') || '').toLowerCase();
+    if (upgrade === 'websocket') {
       return proxyWebSocket(request, env);
     }
 
