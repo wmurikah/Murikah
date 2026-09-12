@@ -10,6 +10,7 @@ IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
 BOOTSTRAP_CONTAINER="${CONTAINER}-bootstrap"
 TUNNEL_SCRIPT="$SCRIPT_DIR/cloudflare-tunnel.sh"
+SOURCE_REVISION_LABEL="com.murikah.tutor.source-revision"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is unavailable. Create the Codespace using the 'Murikah Tutor' dev container configuration." >&2
@@ -19,6 +20,18 @@ fi
 mkdir -p "$DATA_DIR"
 # An explicit start re-enables automatic recovery on future Codespace resumes.
 rm -f "$DISABLE_MARKER"
+
+source_revision() {
+  local tutor_tree logo_blob
+  tutor_tree="$(git -C "$MURIKAH_ROOT" rev-parse HEAD:tutor 2>/dev/null || true)"
+  logo_blob="$(git -C "$MURIKAH_ROOT" rev-parse HEAD:docs/images/murikah_6.png 2>/dev/null || true)"
+  if [[ -n "$tutor_tree" && -n "$logo_blob" ]]; then
+    printf '%s-%s' "$tutor_tree" "$logo_blob"
+  else
+    printf 'unknown'
+  fi
+}
+SOURCE_REVISION="$(source_revision)"
 
 # Public product configuration is explicit. Provider credentials are forwarded
 # only when present in the outer Codespace environment (normally GitHub
@@ -46,6 +59,7 @@ done
 
 echo "[Murikah Tutor] Building the pinned production image..."
 docker build \
+  --label "$SOURCE_REVISION_LABEL=$SOURCE_REVISION" \
   --file "$TUTOR_ROOT/Dockerfile.railway" \
   --tag "$IMAGE" \
   "$MURIKAH_ROOT"
