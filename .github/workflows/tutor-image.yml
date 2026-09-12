@@ -53,7 +53,8 @@ jobs:
             --file tutor/Dockerfile.railway \
             --tag "${IMAGE}:source-${SOURCE_REVISION}" \
             .
-          test "$(docker image inspect -f '{{ index .Config.Labels \"com.murikah.tutor.source-revision\" }}' "${IMAGE}:source-${SOURCE_REVISION}")" = "${SOURCE_REVISION}"
+          actual_revision="$(docker image inspect -f '{{ index .Config.Labels "com.murikah.tutor.source-revision" }}' "${IMAGE}:source-${SOURCE_REVISION}")"
+          test "$actual_revision" = "$SOURCE_REVISION"
 
       - name: Publish immutable source image
         env:
