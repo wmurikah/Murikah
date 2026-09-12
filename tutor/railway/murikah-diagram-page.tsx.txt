@@ -1,0 +1,5 @@
+import MurikahDiagramStudio from "@/components/diagram/MurikahDiagramStudio";
+
+export default function DiagramDesignPage() {
+  return <MurikahDiagramStudio />;
+}
