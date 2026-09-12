@@ -10,6 +10,7 @@ IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
 BOOTSTRAP_CONTAINER="${CONTAINER}-bootstrap"
 TUNNEL_SCRIPT="$SCRIPT_DIR/cloudflare-tunnel.sh"
+SOURCE_REVISION_LABEL="com.murikah.tutor.source-revision"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is unavailable. Create the Codespace using the 'Murikah Tutor' dev container configuration." >&2
@@ -19,6 +20,18 @@ fi
 mkdir -p "$DATA_DIR"
 # An explicit start re-enables automatic recovery on future Codespace resumes.
 rm -f "$DISABLE_MARKER"
+
+source_revision() {
+  local tutor_tree logo_blob
+  tutor_tree="$(git -C "$MURIKAH_ROOT" rev-parse HEAD:tutor 2>/dev/null || true)"
+  logo_blob="$(git -C "$MURIKAH_ROOT" rev-parse HEAD:docs/images/murikah_6.png 2>/dev/null || true)"
+  if [[ -n "$tutor_tree" && -n "$logo_blob" ]]; then
+    printf '%s-%s' "$tutor_tree" "$logo_blob"
+  else
+    printf 'unknown'
+  fi
+}
+SOURCE_REVISION="$(source_revision)"
 
 # Public product configuration is explicit. Provider credentials are forwarded
 # only when present in the outer Codespace environment (normally GitHub
@@ -44,11 +57,30 @@ for env_name in \
   fi
 done
 
+# Building Next.js and type-checking can briefly use most of a small Codespace's
+# memory. Stop the existing Tutor container during the build to avoid the host
+# terminating the build under memory pressure. If the build fails, restore the
+# previous container so the current Tutor remains available.
+WAS_RUNNING=false
+if docker container inspect "$CONTAINER" >/dev/null 2>&1 \
+  && [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" == "true" ]]; then
+  WAS_RUNNING=true
+  echo "[Murikah Tutor] Pausing the existing Tutor container to free build resources..."
+  docker stop "$CONTAINER" >/dev/null
+fi
+
 echo "[Murikah Tutor] Building the pinned production image..."
-docker build \
+if ! docker build \
+  --label "$SOURCE_REVISION_LABEL=$SOURCE_REVISION" \
   --file "$TUTOR_ROOT/Dockerfile.railway" \
   --tag "$IMAGE" \
-  "$MURIKAH_ROOT"
+  "$MURIKAH_ROOT"; then
+  if [[ "$WAS_RUNNING" == "true" ]]; then
+    echo "[Murikah Tutor] Build failed; restoring the previous Tutor container..." >&2
+    docker start "$CONTAINER" >/dev/null 2>&1 || true
+  fi
+  exit 1
+fi
 
 docker rm -f "$CONTAINER" "$BOOTSTRAP_CONTAINER" >/dev/null 2>&1 || true
 
