@@ -15,21 +15,54 @@ def require_markers(path: Path, markers: tuple[str, ...]) -> None:
             raise RuntimeError(f"guest overlay invariant missing in {path}: {marker!r}")
 
 
+def forbid_markers(path: Path, markers: tuple[str, ...]) -> None:
+    if not path.is_file():
+        raise RuntimeError(f"missing guest overlay file: {path}")
+    content = path.read_text(encoding="utf-8")
+    for marker in markers:
+        if marker in content:
+            raise RuntimeError(f"guest overlay forbidden marker present in {path}: {marker!r}")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: validate_guest_overlay.py <deeptutor-root>")
     root = Path(sys.argv[1]).resolve()
+    guest_chat = root / "web/components/chat/MurikahGuestChat.tsx"
 
     require_markers(
-        root / "web/components/chat/MurikahGuestChat.tsx",
+        guest_chat,
         (
             "Choose Learning Mode",
+            'const [learningModeOpen, setLearningModeOpen] = useState(false);',
             "murikah:tutor:guest-handoff:v2",
-            "/api/murikah/guest-models",
             "Voice input",
-            "Tutor persona / personalisation",
+            "const PERSONAS = [",
+            'label: "Tutor"',
+            'label: "Peer"',
+            'label: "Research Assistant"',
+            "Persona · {activePersona.label}",
+            "DEFAULT_MODE_BY_SPACE",
+            "SPACE_PLACEHOLDERS",
+            "composerPlaceholder",
+            "ref={contentRef}",
+            "overflow-y-auto overscroll-contain scroll-smooth",
             "Upload text file",
-            "7 guest interactions",
+            "You have used up 7 of the 7 Guest Interactions. Please sign in.",
+        ),
+    )
+    forbid_markers(
+        guest_chat,
+        (
+            "Tutor persona / personalisation",
+            ">Personalise</span>",
+            "of 7 guest interactions remaining",
+            'guest {remaining === 1 ? "interaction" : "interactions"} left',
+            "function SpaceConfigurator({",
+            "<SpaceConfigurator space={activeSpace}",
+            "setLlmSelection(",
+            "/api/murikah/guest-models",
+            "setSpaceConfigOverrides({ ...emptyOverrides(), ...stored.spaceConfigOverrides })",
         ),
     )
     require_markers(
