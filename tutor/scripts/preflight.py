@@ -98,7 +98,7 @@ def check_security_and_persistence() -> None:
     if entrypoint and "murikah-tutor-bootstrap.py" not in entrypoint:
         fail("Tutor entrypoint does not run the production bootstrap")
 
-    health = require_file("tutor/railway/health-route.ts")
+    health = require_file("tutor/railway/health-route.ts.txt")
     if health and "/health/ready" not in health:
         fail("public Tutor health route does not verify FastAPI readiness")
 
