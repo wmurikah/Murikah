@@ -106,12 +106,39 @@ def main() -> None:
         root / "web/app/(workspace)/chat/page.tsx",
         ("MurikahGuestResume", "<ChatWorkspace />"),
     )
+    require_markers(
+        root / "web/components/sidebar/nav-entries.ts",
+        (
+            'href: "/diagram-design"',
+            'label: "Diagram Design"',
+            "icon: Workflow",
+            'requires: "llm"',
+        ),
+    )
+    require_markers(
+        root / "web/components/diagram/MurikahDiagramStudio.tsx",
+        (
+            'fetch("/api/murikah/diagram"',
+            "const DIAGRAM_TYPES = [",
+            'sandbox=""',
+            "Content-Security-Policy",
+            "Download SVG",
+            "Design diagram",
+        ),
+    )
+    require_markers(
+        root / "web/app/(workspace)/diagram-design/page.tsx",
+        ("MurikahDiagramStudio", "<MurikahDiagramStudio />"),
+    )
     guest_router = root / "deeptutor/api/routers/murikah_guest.py"
     require_markers(
         guest_router,
         (
             '@router.get("/guest-models")',
             '@router.post("/guest-handoff")',
+            '@router.post("/diagram")',
+            "class DiagramDesignRequest(BaseModel):",
+            "Depends(require_auth)",
             "next_used = used + 1",
             "resolve_llm_config_for_selection",
             '"diagram",',
