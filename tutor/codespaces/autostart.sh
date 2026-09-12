@@ -10,6 +10,7 @@ DISABLE_MARKER="$DATA_DIR/.autostart-disabled"
 IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
 TUNNEL_SCRIPT="$SCRIPT_DIR/cloudflare-tunnel.sh"
+SOURCE_REVISION_LABEL="com.murikah.tutor.source-revision"
 
 log() {
   printf '[Murikah Tutor] %s\n' "$*"
@@ -20,6 +21,17 @@ start_tunnel_if_configured() {
     if ! bash "$TUNNEL_SCRIPT" start; then
       log "Cloudflare Tunnel did not start; Tutor itself remains available locally."
     fi
+  fi
+}
+
+source_revision() {
+  local tutor_tree logo_blob
+  tutor_tree="$(git -C "$MURIKAH_ROOT" rev-parse HEAD:tutor 2>/dev/null || true)"
+  logo_blob="$(git -C "$MURIKAH_ROOT" rev-parse HEAD:docs/images/murikah_6.png 2>/dev/null || true)"
+  if [[ -n "$tutor_tree" && -n "$logo_blob" ]]; then
+    printf '%s-%s' "$tutor_tree" "$logo_blob"
+  else
+    printf 'unknown'
   fi
 }
 
@@ -44,6 +56,21 @@ runtime_env_args() {
       RUNTIME_ENV_ARGS+=(--env "$env_name")
     fi
   done
+}
+
+recreate_container() {
+  runtime_env_args
+  log "Recreating Tutor container from persisted data..."
+  if ! docker run -d \
+    --name "$CONTAINER" \
+    --restart unless-stopped \
+    -p 3782:3782 \
+    -v "$DATA_DIR:/app/data" \
+    "${RUNTIME_ENV_ARGS[@]}" \
+    "$IMAGE" >/dev/null; then
+    log "Container recreation failed; run start.sh manually for diagnostics."
+    return 1
+  fi
 }
 
 # A brand-new Codespace must still perform the interactive first-boot setup.
@@ -79,43 +106,47 @@ if ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
-# If the reusable container survived in Docker state, starting it is fastest.
+CURRENT_SOURCE_REVISION="$(source_revision)"
+IMAGE_SOURCE_REVISION="$(docker image inspect -f '{{ index .Config.Labels "com.murikah.tutor.source-revision" }}' "$IMAGE" 2>/dev/null || true)"
+
+# Rebuild when the checked-out Tutor source differs from the source used for
+# the reusable image. This keeps fast Codespaces resumes without serving stale
+# Tutor code after a pull/merge.
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || [[ "$IMAGE_SOURCE_REVISION" != "$CURRENT_SOURCE_REVISION" ]]; then
+  if [[ -n "$IMAGE_SOURCE_REVISION" ]]; then
+    log "Tutor source changed; rebuilding pinned image..."
+  else
+    log "Tutor image is missing or predates source tracking; rebuilding pinned image..."
+  fi
+  if ! docker build \
+    --label "$SOURCE_REVISION_LABEL=$CURRENT_SOURCE_REVISION" \
+    --file "$TUTOR_ROOT/Dockerfile.railway" \
+    --tag "$IMAGE" \
+    "$MURIKAH_ROOT"; then
+    log "Image rebuild failed; run start.sh manually for diagnostics."
+    exit 0
+  fi
+fi
+
+CURRENT_IMAGE_ID="$(docker image inspect -f '{{.Id}}' "$IMAGE" 2>/dev/null || true)"
+
 if docker container inspect "$CONTAINER" >/dev/null 2>&1; then
-  if [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]]; then
+  CONTAINER_IMAGE_ID="$(docker inspect -f '{{.Image}}' "$CONTAINER" 2>/dev/null || true)"
+  if [[ "$CONTAINER_IMAGE_ID" != "$CURRENT_IMAGE_ID" ]]; then
+    log "Tutor image changed; replacing the stale container..."
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    recreate_container || exit 0
+  elif [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]]; then
     log "Resuming existing Tutor container..."
     if ! docker start "$CONTAINER" >/dev/null; then
       log "Existing container could not be started; leaving manual recovery available."
       exit 0
     fi
   else
-    log "Tutor container is already running."
+    log "Tutor container is already running and matches the current source."
   fi
 else
-  # Some Codespaces resumes may restore the workspace but not Docker objects.
-  # Rebuild only when necessary; persisted auth/settings remain under DATA_DIR.
-  if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-    log "Tutor image is not present after resume; rebuilding pinned image..."
-    if ! docker build \
-      --file "$TUTOR_ROOT/Dockerfile.railway" \
-      --tag "$IMAGE" \
-      "$MURIKAH_ROOT"; then
-      log "Image rebuild failed; run start.sh manually for diagnostics."
-      exit 0
-    fi
-  fi
-
-  runtime_env_args
-  log "Recreating Tutor container from persisted data..."
-  if ! docker run -d \
-    --name "$CONTAINER" \
-    --restart unless-stopped \
-    -p 3782:3782 \
-    -v "$DATA_DIR:/app/data" \
-    "${RUNTIME_ENV_ARGS[@]}" \
-    "$IMAGE" >/dev/null; then
-    log "Container recreation failed; run start.sh manually for diagnostics."
-    exit 0
-  fi
+  recreate_container || exit 0
 fi
 
 for _ in {1..90}; do
