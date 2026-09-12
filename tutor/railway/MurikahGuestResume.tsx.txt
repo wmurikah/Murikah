@@ -1,0 +1,151 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
+const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
+
+type Message = { role: "user" | "assistant"; content: string };
+type LLMSelection = { profile_id: string; model_id: string; reasoning_effort?: string };
+type StoredGuestState = {
+  version?: number;
+  handoffId?: string;
+  messages?: Message[];
+  modeId?: string;
+  spaceId?: string;
+  spaceConfigOverrides?: Record<string, Record<string, string | boolean>>;
+  persona?: string;
+  llmSelection?: LLMSelection | null;
+};
+
+type HandoffResponse = { session_id?: string; detail?: string };
+
+const handoffs = new Map<string, Promise<string>>();
+
+function importGuestConversation(state: StoredGuestState): Promise<string> {
+  const key = state.handoffId || "pending-guest";
+  const existing = handoffs.get(key);
+  if (existing) return existing;
+
+  const request = fetch("/api/murikah/guest-handoff", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      handoff_id: state.handoffId || "",
+      messages: state.messages || [],
+      mode: state.modeId || "chat",
+      space: state.spaceId || "home",
+      configuration: state.spaceConfigOverrides?.[state.spaceId || "home"] || {},
+      persona: state.persona || "",
+      llm_selection: state.llmSelection || null,
+    }),
+  })
+    .then(async (response) => {
+      const data = (await response.json().catch(() => ({}))) as HandoffResponse;
+      if (!response.ok || !data.session_id) {
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "Your guest conversation could not be restored yet.",
+        );
+      }
+      return data.session_id;
+    })
+    .catch((error) => {
+      handoffs.delete(key);
+      throw error;
+    });
+
+  handoffs.set(key, request);
+  return request;
+}
+
+export default function MurikahGuestResume() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<"idle" | "restoring" | "error">("idle");
+  const [error, setError] = useState("");
+  const [retryToken, setRetryToken] = useState(0);
+
+  useEffect(() => {
+    if (searchParams.get("resume_guest") !== "1") return;
+
+    let cancelled = false;
+    let state: StoredGuestState | null = null;
+    try {
+      const raw = window.localStorage.getItem(GUEST_STATE_KEY);
+      state = raw ? (JSON.parse(raw) as StoredGuestState) : null;
+    } catch {
+      window.localStorage.removeItem(GUEST_STATE_KEY);
+    }
+
+    const messages = Array.isArray(state?.messages)
+      ? state.messages.filter(
+          (item): item is Message =>
+            Boolean(
+              item &&
+                (item.role === "user" || item.role === "assistant") &&
+                typeof item.content === "string" &&
+                item.content.trim(),
+            ),
+        )
+      : [];
+
+    if (!state || messages.length === 0) {
+      router.replace("/chat");
+      return;
+    }
+
+    setStatus("restoring");
+    setError("");
+    importGuestConversation({ ...state, messages })
+      .then((sessionId) => {
+        if (cancelled) return;
+        window.localStorage.removeItem(GUEST_STATE_KEY);
+        setStatus("idle");
+        router.replace(`/chat/${encodeURIComponent(sessionId)}`);
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        setStatus("error");
+        setError(reason instanceof Error ? reason.message : "Your guest conversation could not be restored yet.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [retryToken, router, searchParams]);
+
+  if (status === "idle") return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] grid place-items-center bg-[var(--background)]/92 px-5 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center shadow-xl">
+        <div className="mx-auto inline-flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 text-sm font-semibold text-white">
+          <span>Murikah</span><span aria-hidden className="h-4 w-px bg-[#A9822E]" /><span>Tutor</span>
+        </div>
+        {status === "restoring" ? (
+          <>
+            <div className="mx-auto mt-6 h-7 w-7 animate-spin rounded-full border-2 border-[#A9822E]/25 border-t-[#A9822E]" />
+            <h2 className="mt-4 text-xl font-semibold tracking-tight">Continuing your guest conversation</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+              Restoring your chat and learning context. You will continue from where you stopped before signing in.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="mt-6 text-xl font-semibold tracking-tight">Your guest chat is still safe</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{error}</p>
+            <button
+              type="button"
+              onClick={() => setRetryToken((value) => value + 1)}
+              className="mt-5 rounded-lg bg-[#1E2A30] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+            >
+              Try again
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
