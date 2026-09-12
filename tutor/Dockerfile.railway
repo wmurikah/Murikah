@@ -22,6 +22,7 @@ COPY tutor/scripts/apply_branding.py /opt/murikah/apply_branding.py
 COPY tutor/railway/apply_railway_overlay.py /opt/murikah/apply_railway_overlay.py
 COPY tutor/railway/apply_guest_continuity.py /opt/murikah/apply_guest_continuity.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
+COPY tutor/railway/prepare_next_build.py /opt/murikah/prepare_next_build.py
 # The Next.js overlay sources are stored with a trailing .txt in this monorepo
 # so the root Astro/TypeScript checker does not compile them as Murikah site
 # sources. They are restored to their real extensions inside the image before
@@ -40,6 +41,7 @@ RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
     && python /opt/murikah/apply_railway_overlay.py /src/DeepTutor /opt/murikah/health-route.ts \
     && python /opt/murikah/apply_guest_continuity.py /src/DeepTutor /opt/murikah/MurikahGuestResume.tsx \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
+    && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
 
 FROM node:22-slim AS frontend-builder
@@ -52,7 +54,12 @@ COPY --from=branded-source /src/DeepTutor/web/ ./
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
-RUN npm run build
+# The pinned DeepTutor release is already type-checked upstream. The Murikah
+# overlay invariants are validated in branded-source above. Next 16 otherwise
+# starts an additional full-project TypeScript worker after webpack compilation,
+# which exceeds the constrained Codespaces builder and is terminated (143).
+# Opt out only for this reproducible production image build.
+RUN MURIKAH_SKIP_NEXT_TYPECHECK=1 NEXT_TELEMETRY_DISABLED=1 npm run build
 
 # Reuse the official DeepTutor runtime rather than copying its Python dependency
 # stack into Murikah. Pin the image to the same explicit release as the source
