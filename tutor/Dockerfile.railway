@@ -20,14 +20,18 @@ RUN mkdir -p /src/DeepTutor \
     && test "$(git rev-parse HEAD)" = "${DEEPTUTOR_COMMIT}"
 COPY tutor/scripts/apply_branding.py /opt/murikah/apply_branding.py
 COPY tutor/railway/apply_railway_overlay.py /opt/murikah/apply_railway_overlay.py
-COPY tutor/railway/health-route.ts /opt/murikah/health-route.ts
+# The Next.js overlay sources are stored with a trailing .txt in this monorepo
+# so the root Astro/TypeScript checker does not compile them as Murikah site
+# sources. They are restored to their real extensions inside the image before
+# the overlay is applied to the pinned DeepTutor checkout.
+COPY tutor/railway/health-route.ts.txt /opt/murikah/health-route.ts
 COPY tutor/railway/murikah_guest.py /opt/murikah/murikah_guest.py
 COPY tutor/railway/murikah_oauth.py /opt/murikah/murikah_oauth.py
-COPY tutor/railway/MurikahGuestChat.tsx /opt/murikah/MurikahGuestChat.tsx
-COPY tutor/railway/MurikahSocialButtons.tsx /opt/murikah/MurikahSocialButtons.tsx
-COPY tutor/railway/murikah-entry-page.tsx /opt/murikah/murikah-entry-page.tsx
-COPY tutor/railway/murikah-login-page.tsx /opt/murikah/murikah-login-page.tsx
-COPY tutor/railway/murikah-register-page.tsx /opt/murikah/murikah-register-page.tsx
+COPY tutor/railway/MurikahGuestChat.tsx.txt /opt/murikah/MurikahGuestChat.tsx
+COPY tutor/railway/MurikahSocialButtons.tsx.txt /opt/murikah/MurikahSocialButtons.tsx
+COPY tutor/railway/murikah-entry-page.tsx.txt /opt/murikah/murikah-entry-page.tsx
+COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.tsx
+COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
 COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
 RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
     && python /opt/murikah/apply_railway_overlay.py /src/DeepTutor /opt/murikah/health-route.ts \
@@ -53,9 +57,9 @@ ARG DEEPTUTOR_VERSION
 USER root
 RUN python -c "from deeptutor.__version__ import __version__; expected='${DEEPTUTOR_VERSION}'; assert __version__ == expected, f'Expected DeepTutor {expected}, base image is {__version__}'"
 
-# The upstream runtime owns the Python dependency stack. Replace only the two
-# Murikah overlay router modules after verifying the runtime is the pinned
-# release; the rest of DeepTutor remains the reviewed upstream package.
+# The upstream runtime owns the Python dependency stack. Replace only the
+# Murikah overlay router modules and patched API main after verifying the
+# runtime is the pinned release; the rest remains the reviewed upstream image.
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py /app/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/api/main.py
