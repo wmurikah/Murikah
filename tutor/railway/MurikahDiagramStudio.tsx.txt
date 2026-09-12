@@ -1,0 +1,228 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Download, Sparkles, WandSparkles } from "lucide-react";
+import MarkdownRenderer from "@/components/common/MarkdownRenderer";
+
+const DIAGRAM_TYPES = [
+  "Auto",
+  "Architecture",
+  "Flowchart",
+  "Sequence",
+  "State machine",
+  "ER / data model",
+  "Timeline",
+  "Swimlane",
+  "Quadrant",
+  "Radar",
+  "Loop / flywheel",
+  "Nested hierarchy",
+  "Tree",
+  "Org chart",
+  "Layer stack",
+  "Venn",
+  "Pyramid / funnel",
+  "Bar chart",
+  "Treemap",
+  "Line chart",
+  "Gantt",
+  "Scatter plot",
+  "High-level system",
+  "Process",
+  "Medallion",
+  "Data flow",
+  "Integration",
+  "Security matrix",
+  "Sankey",
+  "Fishbone",
+  "Wardley map",
+  "Kanban",
+  "User journey",
+  "Deployment",
+  "Dependency graph",
+  "UML class",
+  "Story map",
+  "Database schema",
+  "Polar chart",
+  "Waterfall",
+] as const;
+
+const STYLES = [
+  { id: "editorial", label: "Editorial" },
+  { id: "minimal-light", label: "Minimal light" },
+  { id: "minimal-dark", label: "Minimal dark" },
+] as const;
+
+type DiagramResponse = { answer?: string; detail?: string };
+
+function extractDiagramSvg(content: string): { narrative: string; svg: string } | null {
+  const fenced = content.match(/```svg\s*([\s\S]*?)```/i);
+  const inline = content.match(/<svg\b[\s\S]*?<\/svg>/i);
+  const raw = fenced?.[1] || inline?.[0] || "";
+  const start = raw.search(/<svg\b/i);
+  const end = raw.toLowerCase().lastIndexOf("</svg>");
+  if (start < 0 || end < 0) return null;
+  const svg = raw.slice(start, end + 6)
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s(?:href|xlink:href)\s*=\s*(?:"(?:https?:|\/\/)[^"]*"|'(?:https?:|\/\/)[^']*')/gi, "");
+  const narrative = (fenced ? content.replace(fenced[0], "") : content.replace(inline?.[0] || "", "")).trim();
+  return { narrative, svg };
+}
+
+export default function MurikahDiagramStudio() {
+  const [prompt, setPrompt] = useState("");
+  const [diagramType, setDiagramType] = useState<(typeof DIAGRAM_TYPES)[number]>("Auto");
+  const [style, setStyle] = useState<(typeof STYLES)[number]["id"]>("editorial");
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const diagram = useMemo(() => extractDiagramSvg(answer), [answer]);
+  const srcDoc = useMemo(() => {
+    if (!diagram) return "";
+    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#f7f5f0}body{display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box}svg{display:block;max-width:100%;height:auto}</style></head><body>${diagram.svg}</body></html>`;
+  }, [diagram]);
+
+  async function generate() {
+    const clean = prompt.trim();
+    if (!clean || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/murikah/diagram", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: clean,
+          diagram_type: diagramType === "Auto" ? "auto" : diagramType,
+          style,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as DiagramResponse;
+      if (!response.ok) {
+        throw new Error(typeof data.detail === "string" ? data.detail : "Diagram Design is temporarily unavailable. Please try again.");
+      }
+      setAnswer(String(data.answer || ""));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Diagram Design is temporarily unavailable. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function downloadSvg() {
+    if (!diagram?.svg) return;
+    const blob = new Blob([diagram.svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "murikah-diagram.svg";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <main className="min-h-dvh bg-[var(--background)] text-[var(--foreground)]">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#A9822E]">
+              <Sparkles size={14} /> Murikah Tutor
+            </div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Diagram Design</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+              Turn a concept, process, architecture, decision or data story into a restrained editorial diagram. Choose a grammar yourself or let Tutor select one.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={downloadSvg}
+            disabled={!diagram?.svg}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--muted)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Download size={16} /> Download SVG
+          </button>
+        </div>
+
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm sm:p-5">
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            rows={4}
+            placeholder="Example: Show how a customer request moves from web intake through triage, approval and fulfilment, including the feedback loop."
+            className="w-full resize-y bg-transparent text-[15px] leading-7 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+          />
+          <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)]/70 pt-4 sm:flex-row sm:items-center">
+            <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-[var(--muted-foreground)]">
+              <span className="shrink-0 font-medium text-[var(--foreground)]">Type</span>
+              <select
+                value={diagramType}
+                onChange={(event) => setDiagramType(event.target.value as (typeof DIAGRAM_TYPES)[number])}
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[#A9822E]"
+              >
+                {DIAGRAM_TYPES.map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-[var(--muted-foreground)] sm:max-w-64">
+              <span className="shrink-0 font-medium text-[var(--foreground)]">Style</span>
+              <select
+                value={style}
+                onChange={(event) => setStyle(event.target.value as (typeof STYLES)[number]["id"])}
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[#A9822E]"
+              >
+                {STYLES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={generate}
+              disabled={busy || !prompt.trim()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1E2A30] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <WandSparkles size={16} className="text-[#A9822E]" />
+              {busy ? "Designing…" : "Design diagram"}
+            </button>
+          </div>
+        </section>
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
+        <section className="mt-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+          {diagram ? (
+            <>
+              {diagram.narrative && (
+                <div className="border-b border-[var(--border)] px-5 py-4">
+                  <MarkdownRenderer content={diagram.narrative} className="text-[14px] leading-6" />
+                </div>
+              )}
+              <iframe
+                title="Murikah Tutor generated diagram"
+                sandbox=""
+                srcDoc={srcDoc}
+                className="h-[440px] w-full border-0 sm:h-[620px]"
+              />
+            </>
+          ) : (
+            <div className="grid min-h-[360px] place-items-center px-6 text-center sm:min-h-[500px]">
+              <div className="max-w-md">
+                <Sparkles size={22} className="mx-auto text-[#A9822E]" />
+                <h2 className="mt-3 text-lg font-semibold">Your diagram will appear here</h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+                  Keep the brief focused on the relationship you want the reader to understand. Tutor will remove unnecessary visual noise and choose a fitting structure.
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
