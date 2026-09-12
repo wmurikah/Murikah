@@ -199,8 +199,8 @@ def main() -> int:
     )
     text = replace_once(
         text,
-        '<div className="min-w-0 flex-1">',
-        '<div ref={contentRef} className="h-screen min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">',
+        '        </aside>\n\n        <div className="min-w-0 flex-1">',
+        '        </aside>\n\n        <div ref={contentRef} className="h-screen min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">',
         "guest content scroll container",
     )
 
