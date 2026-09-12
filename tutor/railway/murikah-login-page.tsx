@@ -1,0 +1,96 @@
+"use client";
+
+import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { fetchAuthStatus, login } from "@/lib/auth";
+import { inheritLoginHash, normalizeInternalReturnPath } from "@/shared/auth/return-url";
+import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
+
+function LoginContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = normalizeInternalReturnPath(searchParams.get("next"));
+  const resolvedNext = useCallback(
+    () => inheritLoginHash(next, typeof window === "undefined" ? "" : window.location.hash),
+    [next],
+  );
+  const signup = searchParams.get("signup") === "1";
+  const oauthError = searchParams.get("oauth_error") || "";
+
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(oauthError);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchAuthStatus().then((status) => {
+      if (status?.authenticated) router.replace(resolvedNext());
+    });
+  }, [router, resolvedNext]);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+    const result = await login(username, password);
+    if (result.ok) {
+      router.replace(resolvedNext());
+      return;
+    }
+    setError(result.error || "Sign in failed");
+    setLoading(false);
+  }
+
+  return (
+    <div className="w-full max-w-sm px-5 py-10">
+      <div className="mb-8 text-center">
+        <div className="inline-flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 text-sm font-semibold tracking-tight text-white shadow-sm" aria-label="Murikah Tutor">
+          <span>Murikah</span><span aria-hidden className="h-4 w-px bg-[#A9822E]" /><span>Tutor</span>
+        </div>
+        <h1 className="mt-5 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
+          {signup ? "Create your Murikah Tutor account" : "Welcome back"}
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+          {signup ? "Continue with a trusted account to start saving your learning." : "Sign in to continue your learning."}
+        </p>
+      </div>
+
+      {error && <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</div>}
+
+      <MurikahSocialButtons next={next} />
+
+      <div className="my-5 flex items-center gap-3 text-xs text-[var(--muted-foreground)] before:h-px before:flex-1 before:bg-[var(--border)] after:h-px after:flex-1 after:bg-[var(--border)]">
+        administrator or existing local account
+      </div>
+
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-7 py-7 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label htmlFor="username" className="mb-1.5 block text-sm font-medium">Email or username</label>
+            <input id="username" type="text" autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} placeholder="you@example.com" className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#A9822E]/30" />
+          </div>
+          <div>
+            <label htmlFor="password" className="mb-1.5 block text-sm font-medium">Password</label>
+            <input id="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#A9822E]/30" />
+          </div>
+          <button type="submit" disabled={loading} className="w-full rounded-lg bg-[#1E2A30] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
+
+      <div className="mt-6 text-center">
+        <a href="/" className="text-sm font-medium text-[var(--foreground)]/70 hover:text-[var(--foreground)]">Try the 3-prompt preview</a>
+        <p className="mt-3 text-xs text-[var(--muted-foreground)]">Murikah Tutor · AI-powered personalised learning · Apache-2.0</p>
+      </div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-[var(--muted-foreground)]">Loading sign in…</div>}>
+      <LoginContent />
+    </Suspense>
+  );
+}
