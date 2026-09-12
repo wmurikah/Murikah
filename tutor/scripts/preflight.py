@@ -55,7 +55,7 @@ def check_source_pin() -> None:
     for invariant in (
         f"ARG DEEPTUTOR_VERSION={EXPECTED_RUNTIME_VERSION}",
         f"ARG DEEPTUTOR_COMMIT={EXPECTED_COMMIT}",
-        "ghcr.io/hkuds/deeptutor:latest",
+        "ghcr.io/hkuds/deeptutor:${DEEPTUTOR_VERSION}",
         "EXPOSE 3782",
         "tutor/railway/bootstrap_runtime.py",
         "tutor/railway/entrypoint.sh",
