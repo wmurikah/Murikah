@@ -24,6 +24,7 @@ COPY tutor/railway/apply_guest_continuity.py /opt/murikah/apply_guest_continuity
 COPY tutor/railway/refine_guest_experience.py /opt/murikah/refine_guest_experience.py
 COPY tutor/railway/polish_guest_shell.py /opt/murikah/polish_guest_shell.py
 COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.py
+COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 COPY tutor/railway/prepare_next_build.py /opt/murikah/prepare_next_build.py
 # The Next.js overlay sources are stored with a trailing .txt in this monorepo
@@ -36,6 +37,8 @@ COPY tutor/railway/murikah_oauth.py /opt/murikah/murikah_oauth.py
 COPY tutor/railway/MurikahGuestChatV2.tsx.txt /opt/murikah/MurikahGuestChat.tsx
 COPY tutor/railway/MurikahGuestResume.tsx.txt /opt/murikah/MurikahGuestResume.tsx
 COPY tutor/railway/MurikahSocialButtons.tsx.txt /opt/murikah/MurikahSocialButtons.tsx
+COPY tutor/railway/MurikahDiagramStudio.tsx.txt /opt/murikah/MurikahDiagramStudio.tsx
+COPY tutor/railway/murikah-diagram-page.tsx.txt /opt/murikah/murikah-diagram-page.tsx
 COPY tutor/railway/murikah-entry-page.tsx.txt /opt/murikah/murikah-entry-page.tsx
 COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.tsx
 COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
@@ -46,6 +49,7 @@ RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
     && python /opt/murikah/refine_guest_experience.py /src/DeepTutor \
     && python /opt/murikah/polish_guest_shell.py /src/DeepTutor \
     && python /opt/murikah/render_guest_markdown.py /src/DeepTutor \
+    && python /opt/murikah/enhance_guest_diagram.py /src/DeepTutor \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
