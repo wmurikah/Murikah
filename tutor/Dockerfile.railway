@@ -37,6 +37,8 @@ COPY tutor/railway/murikah_oauth.py /opt/murikah/murikah_oauth.py
 COPY tutor/railway/MurikahGuestChatV2.tsx.txt /opt/murikah/MurikahGuestChat.tsx
 COPY tutor/railway/MurikahGuestResume.tsx.txt /opt/murikah/MurikahGuestResume.tsx
 COPY tutor/railway/MurikahSocialButtons.tsx.txt /opt/murikah/MurikahSocialButtons.tsx
+COPY tutor/railway/MurikahDiagramStudio.tsx.txt /opt/murikah/MurikahDiagramStudio.tsx
+COPY tutor/railway/murikah-diagram-page.tsx.txt /opt/murikah/murikah-diagram-page.tsx
 COPY tutor/railway/murikah-entry-page.tsx.txt /opt/murikah/murikah-entry-page.tsx
 COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.tsx
 COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
