@@ -26,6 +26,8 @@ _COOKIE_NAME = "mt_guest"
 _DEFAULT_LIMIT = 7
 _MAX_PROMPT_CHARS = 6000
 _MAX_HISTORY_ITEMS = 6
+_MAX_CONFIGURATION_ITEMS = 24
+_MAX_CONFIGURATION_VALUE_CHARS = 500
 _SYSTEM_PROMPT = """You are Murikah Tutor, an AI-powered personalised learning companion.
 Teach clearly and rigorously. Start with intuition, then formal reasoning when useful,
 then a concrete example or application. Adapt depth to the learner's apparent level.
@@ -57,6 +59,7 @@ SpaceName = Literal[
     "memory",
     "knowledge",
 ]
+GuestConfigValue = str | bool | int | float
 
 _MODE_GUIDANCE: dict[str, str] = {
     "chat": "Use a flexible conversational tutoring style and follow the learner's intent.",
@@ -73,15 +76,15 @@ _MODE_GUIDANCE: dict[str, str] = {
 
 _SPACE_GUIDANCE: dict[str, str] = {
     "home": "No additional workspace lens is needed.",
-    "partners": "Use a collaborative second-perspective style. Explain that live Partner connections require sign-in if the learner asks to invoke one.",
-    "agents": "Use an agent-like planning and execution style. Explain that live connected agents require sign-in if the learner asks to invoke one.",
-    "cowriter": "Act as a focused co-writer: improve structure, clarity, argument, tone, and revision choices while preserving the learner's intent.",
-    "book": "Treat the interaction as book study. Work from any passage or book context the learner provides and avoid implying access to an unprovided full text.",
-    "mastery": "Keep the interaction oriented to staged mastery, practice, and measurable checkpoints.",
-    "reading": "Keep the interaction oriented to close reading, comprehension, interpretation, and recall.",
-    "learning-space": "Frame the session around one explicit learning objective and keep the discussion coherent around that objective.",
-    "memory": "Demonstrate personalised tutoring from the current conversation only. Do not claim saved memory exists before sign-in.",
-    "knowledge": "Synthesize the learner's topic and any text they provide. Do not claim access to private knowledge libraries before sign-in.",
+    "partners": "Use a collaborative Partner-style tutoring approach and honor the guest-selected Partner identity, persona, model preference, tools, assets, and channel settings as behavioural guidance. Do not claim external channels, private assets, or tools were actually connected or executed.",
+    "agents": "Use an agent-like planning and execution style and honor the selected role, autonomy, planning, self-check, tool and session-context settings. Do not claim external tools were actually executed.",
+    "cowriter": "Act as a focused co-writer and honor the selected task, tone, audience, revision and challenge settings while preserving the learner's intent.",
+    "book": "Treat the interaction as book study and honor the selected study style, depth and learning controls. Work from any passage or book context the learner provides and avoid implying access to an unprovided full text.",
+    "mastery": "Keep the interaction oriented to staged mastery, practice and measurable checkpoints, following the selected level, pace, timeframe and adaptation settings.",
+    "reading": "Keep the interaction oriented to close reading, comprehension, interpretation and recall, following the selected reading level, mode and reading controls.",
+    "learning-space": "Frame the session around the selected objective, session length, teaching style, pace, examples, practice and assessment controls.",
+    "memory": "Demonstrate personalised tutoring from the current conversation only and honor the selected personalisation settings. Do not claim saved memory exists before sign-in.",
+    "knowledge": "Synthesize the learner's topic and any text they provide using the selected synthesis, depth, citation and comparison controls. Do not claim access to private knowledge libraries before sign-in.",
 }
 
 
@@ -95,6 +98,7 @@ class GuestChatRequest(BaseModel):
     history: list[GuestMessage] = Field(default_factory=list, max_length=_MAX_HISTORY_ITEMS)
     mode: ModeName = "chat"
     space: SpaceName = "home"
+    configuration: dict[str, GuestConfigValue] = Field(default_factory=dict, max_length=_MAX_CONFIGURATION_ITEMS)
 
 
 def _limit() -> int:
@@ -148,11 +152,38 @@ def _set_count(response: Response, count: int) -> None:
     )
 
 
-def _system_prompt(mode: ModeName, space: SpaceName) -> str:
+def _configuration_guidance(configuration: dict[str, GuestConfigValue]) -> str:
+    if not configuration:
+        return ""
+
+    rendered: list[str] = []
+    for key, raw_value in list(configuration.items())[:_MAX_CONFIGURATION_ITEMS]:
+        safe_key = " ".join(str(key).replace("_", " ").split())[:80]
+        if isinstance(raw_value, bool):
+            safe_value = "enabled" if raw_value else "disabled"
+        else:
+            safe_value = " ".join(str(raw_value).split())[:_MAX_CONFIGURATION_VALUE_CHARS]
+        if safe_key and safe_value:
+            rendered.append(f"- {safe_key}: {safe_value}")
+
+    if not rendered:
+        return ""
+
+    return (
+        "\n\nGuest-selected configuration for this turn (ephemeral, not persisted):\n"
+        + "\n".join(rendered)
+        + "\nHonor these preferences where relevant. They describe desired behaviour only; "
+        "do not claim that disabled or unavailable external services, private assets, channels, "
+        "browsing, memory, tools, or integrations were actually connected or executed."
+    )
+
+
+def _system_prompt(mode: ModeName, space: SpaceName, configuration: dict[str, GuestConfigValue]) -> str:
     return (
         f"{_SYSTEM_PROMPT}\n\n"
         f"Current learning mode: {mode}. {_MODE_GUIDANCE[mode]}\n"
         f"Current learning space: {space}. {_SPACE_GUIDANCE[space]}"
+        f"{_configuration_guidance(configuration)}"
     )
 
 
@@ -195,7 +226,7 @@ async def guest_chat(
     client = get_llm_client()
     answer = await client.complete(
         prompt,
-        system_prompt=_system_prompt(body.mode, body.space),
+        system_prompt=_system_prompt(body.mode, body.space, body.configuration),
         history=history,
         max_tokens=1100,
     )
