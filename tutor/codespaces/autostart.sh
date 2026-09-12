@@ -10,7 +10,7 @@ DISABLE_MARKER="$DATA_DIR/.autostart-disabled"
 IMAGE="murikah-tutor:codespaces"
 CONTAINER="murikah-tutor-codespaces"
 TUNNEL_SCRIPT="$SCRIPT_DIR/cloudflare-tunnel.sh"
-SOURCE_REVISION_LABEL="com.murikah.tutor.source-revision"
+PREBUILT_IMAGE_HELPER="$SCRIPT_DIR/prebuilt-image.sh"
 
 log() {
   printf '[Murikah Tutor] %s\n' "$*"
@@ -73,15 +73,12 @@ recreate_container() {
   fi
 }
 
-# A brand-new Codespace must still perform the interactive first-boot setup.
-# postStartCommand is non-interactive, so never prompt for credentials here.
 if [[ ! -f "$AUTH_FILE" ]]; then
   log "First-boot setup has not been completed; automatic start skipped."
   log "Run: bash tutor/codespaces/start.sh"
   exit 0
 fi
 
-# Respect an explicit manual stop across Codespace resumes.
 if [[ -f "$DISABLE_MARKER" ]]; then
   log "Automatic start is disabled because Tutor was stopped manually."
   log "Run start.sh to re-enable it."
@@ -93,7 +90,6 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 0
 fi
 
-# Docker-in-Docker can take a moment to become ready after a Codespace resumes.
 for _ in {1..30}; do
   if docker info >/dev/null 2>&1; then
     break
@@ -106,36 +102,25 @@ if ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
+if [[ ! -f "$PREBUILT_IMAGE_HELPER" ]]; then
+  log "Prebuilt-image helper is missing; leaving the current Tutor untouched."
+  exit 0
+fi
+# shellcheck source=/dev/null
+source "$PREBUILT_IMAGE_HELPER"
+
 CURRENT_SOURCE_REVISION="$(source_revision)"
 IMAGE_SOURCE_REVISION="$(docker image inspect -f '{{ index .Config.Labels "com.murikah.tutor.source-revision" }}' "$IMAGE" 2>/dev/null || true)"
 
-# Rebuild when the checked-out Tutor source differs from the source used for
-# the reusable image. Stop a running Tutor while building to reduce peak memory
-# use in smaller Codespaces; restore it if the new image build fails.
+# Production frontend compilation is deliberately performed by GitHub Actions,
+# not inside the small Codespace. Pull the exact immutable image matching the
+# checked-out Tutor tree while the previous container stays online. This avoids
+# repeatedly exhausting the Codespaces host during Next.js webpack builds.
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || [[ "$IMAGE_SOURCE_REVISION" != "$CURRENT_SOURCE_REVISION" ]]; then
-  if [[ -n "$IMAGE_SOURCE_REVISION" ]]; then
-    log "Tutor source changed; rebuilding pinned image..."
-  else
-    log "Tutor image is missing or predates source tracking; rebuilding pinned image..."
-  fi
-
-  WAS_RUNNING=false
-  if docker container inspect "$CONTAINER" >/dev/null 2>&1 \
-    && [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" == "true" ]]; then
-    WAS_RUNNING=true
-    log "Pausing the existing Tutor container to free build resources..."
-    docker stop "$CONTAINER" >/dev/null 2>&1 || true
-  fi
-
-  if ! docker build \
-    --label "$SOURCE_REVISION_LABEL=$CURRENT_SOURCE_REVISION" \
-    --file "$TUTOR_ROOT/Dockerfile.railway" \
-    --tag "$IMAGE" \
-    "$MURIKAH_ROOT"; then
-    log "Image rebuild failed; restoring the previous Tutor container."
-    if [[ "$WAS_RUNNING" == "true" ]]; then
-      docker start "$CONTAINER" >/dev/null 2>&1 || true
-    fi
+  log "Tutor source changed; retrieving the prebuilt pinned image..."
+  if ! murikah_pull_prebuilt_image "$IMAGE" "$CURRENT_SOURCE_REVISION" 60 10; then
+    log "The matching prebuilt image is not available yet; keeping the previous Tutor online."
+    start_tunnel_if_configured
     exit 0
   fi
 fi
