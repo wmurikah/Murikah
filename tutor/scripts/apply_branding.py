@@ -61,6 +61,21 @@ def main() -> int:
         '''        <Link\n          href="/"\n          className="group flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 shadow-sm transition-transform duration-200 hover:scale-[1.01]"\n          aria-label="Murikah Tutor"\n        >\n          <span className="text-sm font-semibold tracking-tight text-white">Murikah</span>\n          <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n          <span className="text-sm font-semibold tracking-tight text-white">Tutor</span>\n        </Link>''',
     )
 
+    # Keep authentication pages aligned with the same text-only product identity
+    # used by the navigation and wake screen. Exact-match replacements are
+    # intentionally fail-closed against the pinned upstream source.
+    auth_heading_old = '''        <h1 className="font-serif text-2xl font-semibold text-[var(--foreground)] tracking-tight">\n          DeepTutor\n        </h1>'''
+    auth_heading_new = '''        <h1\n          className="inline-flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 text-sm font-semibold tracking-tight text-white shadow-sm"\n          aria-label="Murikah Tutor"\n        >\n          <span>Murikah</span>\n          <span aria-hidden className="h-4 w-px bg-[#A9822E]" />\n          <span>Tutor</span>\n        </h1>'''
+    auth_footer_old = '''      <p className="mt-3 text-center text-xs text-[var(--muted-foreground)]">\n        DeepTutor · Agent-Native Learning\n      </p>'''
+    auth_footer_new = '''      <p className="mt-3 text-center text-xs text-[var(--muted-foreground)]">\n        Murikah Tutor · AI-powered personalised learning\n      </p>'''
+
+    for auth_page in (
+        root / "web" / "app" / "(auth)" / "login" / "page.tsx",
+        root / "web" / "app" / "(auth)" / "register" / "page.tsx",
+    ):
+        replace_once(auth_page, auth_heading_old, auth_heading_new)
+        replace_once(auth_page, auth_footer_old, auth_footer_new)
+
     chat_prompt = (
         root
         / "deeptutor"
