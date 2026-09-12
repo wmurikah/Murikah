@@ -1,0 +1,76 @@
+name: Build Murikah Tutor image
+
+on:
+  push:
+    paths:
+      - "tutor/**"
+      - "docs/images/murikah_6.png"
+      - ".github/workflows/tutor-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: tutor-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Compute Tutor source revision
+        id: revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          tutor_tree="$(git rev-parse HEAD:tutor)"
+          logo_blob="$(git rev-parse HEAD:docs/images/murikah_6.png)"
+          source_revision="${tutor_tree}-${logo_blob}"
+          echo "value=${source_revision}" >> "$GITHUB_OUTPUT"
+          echo "Tutor source revision: ${source_revision}"
+
+      - name: Sign in to GitHub Container Registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build pinned Tutor image
+        env:
+          SOURCE_REVISION: ${{ steps.revision.outputs.value }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/murikah-tutor
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --label "com.murikah.tutor.source-revision=${SOURCE_REVISION}" \
+            --file tutor/Dockerfile.railway \
+            --tag "${IMAGE}:source-${SOURCE_REVISION}" \
+            .
+          test "$(docker image inspect -f '{{ index .Config.Labels \"com.murikah.tutor.source-revision\" }}' "${IMAGE}:source-${SOURCE_REVISION}")" = "${SOURCE_REVISION}"
+
+      - name: Publish immutable source image
+        env:
+          SOURCE_REVISION: ${{ steps.revision.outputs.value }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/murikah-tutor
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "${IMAGE}:source-${SOURCE_REVISION}"
+
+      - name: Publish main alias
+        if: github.ref == 'refs/heads/main'
+        env:
+          SOURCE_REVISION: ${{ steps.revision.outputs.value }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/murikah-tutor
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${IMAGE}:main"
+          docker push "${IMAGE}:main"
