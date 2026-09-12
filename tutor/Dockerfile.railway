@@ -39,10 +39,9 @@ RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
 RUN npm run build
 
 # Reuse the official DeepTutor runtime rather than copying its Python dependency
-# stack into Murikah. `latest` is accepted only while it exactly matches our
-# pinned source version; a future upstream release makes this build fail closed
-# until we explicitly review and advance the pin.
-FROM ghcr.io/hkuds/deeptutor:latest AS runtime
+# stack into Murikah. Pin the image to the same explicit release as the source
+# checkout so upstream changes to `latest` cannot break a reproducible rebuild.
+FROM ghcr.io/hkuds/deeptutor:${DEEPTUTOR_VERSION} AS runtime
 ARG DEEPTUTOR_VERSION
 USER root
 RUN python -c "from deeptutor.__version__ import __version__; expected='${DEEPTUTOR_VERSION}'; assert __version__ == expected, f'Expected DeepTutor {expected}, base image is {__version__}'"
