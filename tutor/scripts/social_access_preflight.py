@@ -52,14 +52,14 @@ def main() -> int:
         "create_token",
     )
     contains(
-        "tutor/railway/MurikahGuestChat.tsx",
+        "tutor/railway/MurikahGuestChat.tsx.txt",
         "/api/murikah/guest-chat",
         "preview prompt",
         "MurikahSocialButtons",
         "Apache-2.0",
     )
     contains(
-        "tutor/railway/MurikahSocialButtons.tsx",
+        "tutor/railway/MurikahSocialButtons.tsx.txt",
         "google",
         "microsoft",
         "apple",
@@ -92,15 +92,38 @@ def main() -> int:
     )
     contains(
         "tutor/Dockerfile.railway",
+        "health-route.ts.txt",
+        "MurikahGuestChat.tsx.txt",
+        "MurikahSocialButtons.tsx.txt",
+        "murikah-entry-page.tsx.txt",
+        "murikah-login-page.tsx.txt",
+        "murikah-register-page.tsx.txt",
+        "/opt/murikah/MurikahGuestChat.tsx",
+        "/opt/murikah/MurikahSocialButtons.tsx",
         "murikah_guest.py",
         "murikah_oauth.py",
-        "MurikahGuestChat.tsx",
-        "MurikahSocialButtons.tsx",
-        "murikah-entry-page.tsx",
-        "murikah-login-page.tsx",
-        "murikah-register-page.tsx",
     )
+    for template in (
+        "tutor/railway/health-route.ts.txt",
+        "tutor/railway/murikah-entry-page.tsx.txt",
+        "tutor/railway/murikah-login-page.tsx.txt",
+        "tutor/railway/murikah-register-page.tsx.txt",
+    ):
+        require(template)
     require("tutor/SOCIAL_AUTH.md")
+
+    # Compileable Next.js overlay files must not live directly under tutor/ in
+    # this Astro monorepo. They are stored as .txt and renamed only in Docker.
+    for forbidden in (
+        "tutor/railway/health-route.ts",
+        "tutor/railway/MurikahGuestChat.tsx",
+        "tutor/railway/MurikahSocialButtons.tsx",
+        "tutor/railway/murikah-entry-page.tsx",
+        "tutor/railway/murikah-login-page.tsx",
+        "tutor/railway/murikah-register-page.tsx",
+    ):
+        if (ROOT / forbidden).exists():
+            failures.append(f"compileable overlay template must remain renamed: {forbidden}")
 
     # Secret names are expected in source; literal values are not.
     for relative in (
@@ -128,6 +151,7 @@ def main() -> int:
     print(" - guest preview is bounded and non-persistent")
     print(" - Google, Microsoft and Apple social sign-in overlays are present")
     print(" - provider credentials remain runtime-only")
+    print(" - overlay templates stay outside the root Astro TypeScript compilation")
     print(" - end-user licence chrome is separated from admin developer links")
     return 0
 
