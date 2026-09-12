@@ -1,14 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import {
+  BarChart3,
+  BookOpen,
+  Bot,
+  Brain,
+  Calculator,
+  CheckCircle2,
+  ChevronDown,
+  CircleHelp,
+  GraduationCap,
+  Grid3X3,
+  Home,
+  Library,
+  MessageSquare,
+  PenLine,
+  Play,
+  Route,
+  Search,
+  Sparkles,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
 
 type Message = { role: "user" | "assistant"; content: string };
 type AuthStatusResponse = { authenticated?: boolean };
 type GuestStatusResponse = {
-  limit?: number;
   remaining?: number;
   requires_auth?: boolean;
 };
@@ -19,17 +40,225 @@ type GuestChatResponse = {
   detail?: string;
 };
 
+type ModeId =
+  | "chat"
+  | "questions"
+  | "quiz"
+  | "research"
+  | "visualize"
+  | "solve"
+  | "course"
+  | "mastery"
+  | "reading"
+  | "watching";
+
+type SpaceId =
+  | "home"
+  | "partners"
+  | "agents"
+  | "cowriter"
+  | "book"
+  | "mastery"
+  | "reading"
+  | "learning-space"
+  | "memory"
+  | "knowledge";
+
+type ModeOption = {
+  id: ModeId;
+  label: string;
+  description: string;
+  placeholder: string;
+  icon: LucideIcon;
+};
+
+type SpaceOption = {
+  id: SpaceId;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+};
+
+const MODES: ModeOption[] = [
+  {
+    id: "chat",
+    label: "Chat",
+    description: "Flexible conversation with the Tutor.",
+    placeholder: "What would you like to understand?",
+    icon: MessageSquare,
+  },
+  {
+    id: "questions",
+    label: "Ask Questions",
+    description: "Let the Tutor question you to expose gaps and guide your thinking.",
+    placeholder: "What topic should the Tutor question you about?",
+    icon: CircleHelp,
+  },
+  {
+    id: "quiz",
+    label: "Quiz",
+    description: "Generate practice questions, feedback, and self-checks.",
+    placeholder: "What should the quiz test?",
+    icon: CheckCircle2,
+  },
+  {
+    id: "research",
+    label: "Research",
+    description: "Break a topic into claims, evidence, unknowns, and a research plan.",
+    placeholder: "What should we investigate?",
+    icon: Search,
+  },
+  {
+    id: "visualize",
+    label: "Visualize",
+    description: "Turn an idea into a diagram, table, chart, or visual structure.",
+    placeholder: "What should we make easier to see?",
+    icon: BarChart3,
+  },
+  {
+    id: "solve",
+    label: "Solve",
+    description: "Work through a problem step by step and check the reasoning.",
+    placeholder: "What problem should we solve?",
+    icon: Calculator,
+  },
+  {
+    id: "course",
+    label: "Course Study",
+    description: "Build a focused study session around a syllabus, topic, or exam goal.",
+    placeholder: "What course topic are you studying?",
+    icon: GraduationCap,
+  },
+  {
+    id: "mastery",
+    label: "Mastery Path",
+    description: "Sequence a learning goal into stages, drills, and checkpoints.",
+    placeholder: "What do you want to master?",
+    icon: Route,
+  },
+  {
+    id: "reading",
+    label: "Immersive Reading",
+    description: "Read deeply with explanation, questioning, recall, and discussion.",
+    placeholder: "Paste a passage or name what you want to read closely.",
+    icon: BookOpen,
+  },
+  {
+    id: "watching",
+    label: "Immersive Watching",
+    description: "Turn a video topic or pasted transcript into an active learning session.",
+    placeholder: "What video topic or transcript should we learn from?",
+    icon: Play,
+  },
+];
+
+const SPACES: SpaceOption[] = [
+  { id: "home", label: "Home", description: "Start with any learning goal.", icon: Home },
+  {
+    id: "partners",
+    label: "Partners",
+    description: "Preview collaborative tutoring; connected Partners become available after sign-in.",
+    icon: Users,
+  },
+  {
+    id: "agents",
+    label: "My Agents",
+    description: "Preview an agent-style workflow; live connected agents become available after sign-in.",
+    icon: Bot,
+  },
+  {
+    id: "cowriter",
+    label: "Co-Writer",
+    description: "Draft, improve, restructure, or challenge a piece of writing.",
+    icon: PenLine,
+  },
+  {
+    id: "book",
+    label: "Book",
+    description: "Discuss a book or paste a passage for explanation, questioning, and recall.",
+    icon: BookOpen,
+  },
+  {
+    id: "mastery",
+    label: "Mastery Path",
+    description: "Turn a learning goal into a staged path with practice and checkpoints.",
+    icon: Route,
+  },
+  {
+    id: "reading",
+    label: "Immersive Reading",
+    description: "Read actively with explanations, prompts, recall, and discussion.",
+    icon: BookOpen,
+  },
+  {
+    id: "learning-space",
+    label: "Learning Space",
+    description: "Frame a topic as a focused learning session with a clear objective.",
+    icon: Grid3X3,
+  },
+  {
+    id: "memory",
+    label: "Memory",
+    description: "Preview personalised tutoring; saved and inspectable memory activates after sign-in.",
+    icon: Brain,
+  },
+  {
+    id: "knowledge",
+    label: "Knowledge Center",
+    description: "Ask across a topic now; your own knowledge libraries connect after sign-in.",
+    icon: Library,
+  },
+];
+
+function SidebarButton({
+  option,
+  active,
+  onSelect,
+}: {
+  option: SpaceOption;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const Icon = option.icon;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      title={option.description}
+      aria-pressed={active}
+      className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-medium transition-colors ${
+        active
+          ? "bg-[var(--muted)] text-[var(--foreground)]"
+          : "text-[var(--foreground)]/78 hover:bg-[var(--muted)]/70 hover:text-[var(--foreground)]"
+      }`}
+    >
+      <Icon size={18} strokeWidth={1.8} className="shrink-0" />
+      <span className="truncate">{option.label}</span>
+      <span className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-40 hidden w-64 -translate-y-1/2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-normal leading-5 text-[var(--muted-foreground)] shadow-lg group-hover:block group-focus-visible:block">
+        {option.description}
+      </span>
+    </button>
+  );
+}
+
 export default function MurikahGuestChat() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
-  const [remaining, setRemaining] = useState(3);
-  const [limit, setLimit] = useState(3);
+  const [remaining, setRemaining] = useState(7);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
   const [authNeeded, setAuthNeeded] = useState(false);
   const [error, setError] = useState("");
+  const [modeId, setModeId] = useState<ModeId>("chat");
+  const [spaceId, setSpaceId] = useState<SpaceId>("home");
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  const activeMode = MODES.find((mode) => mode.id === modeId) || MODES[0];
+  const activeSpace = SPACES.find((space) => space.id === spaceId) || SPACES[0];
+  const ActiveModeIcon = activeMode.icon;
+  const ActiveSpaceIcon = activeSpace.icon;
 
   useEffect(() => {
     let alive = true;
@@ -48,8 +277,7 @@ export default function MurikahGuestChat() {
           return;
         }
         if (guest) {
-          setLimit(Number(guest.limit) || 3);
-          setRemaining(Math.max(0, Number(guest.remaining) || 0));
+          setRemaining(Math.max(0, Number(guest.remaining ?? 7)));
           setAuthNeeded(Boolean(guest.requires_auth));
         }
         setChecking(false);
@@ -66,7 +294,7 @@ export default function MurikahGuestChat() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, busy, authNeeded]);
 
-  async function submit(event: { preventDefault(): void }) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const prompt = draft.trim();
     if (!prompt || busy) return;
@@ -85,7 +313,12 @@ export default function MurikahGuestChat() {
       const response = await fetch("/api/murikah/guest-chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt, history: prior }),
+        body: JSON.stringify({
+          prompt,
+          history: prior,
+          mode: activeMode.id,
+          space: activeSpace.id,
+        }),
       });
       const data = (await response.json().catch(() => ({}))) as GuestChatResponse;
       if (!response.ok) {
@@ -122,83 +355,253 @@ export default function MurikahGuestChat() {
 
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <header className="sticky top-0 z-10 border-b border-[var(--border)]/70 bg-[var(--background)]/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-5">
-          <div className="inline-flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 text-sm font-semibold tracking-tight text-white shadow-sm">
-            <span>Murikah</span><span aria-hidden className="h-4 w-px bg-[#A9822E]" /><span>Tutor</span>
-          </div>
-          <Link href="/login?next=/chat" className="text-sm font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]">
-            Sign in
-          </Link>
-        </div>
-      </header>
-
-      <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-4xl flex-col px-5 py-8">
-        {messages.length === 0 ? (
-          <div className="mx-auto my-auto w-full max-w-2xl pb-20 text-center">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#A9822E]">AI-powered personalised learning</p>
-            <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">What would you like to learn?</h1>
-            <p className="mx-auto mt-4 max-w-xl text-[15px] leading-7 text-[var(--muted-foreground)]">
-              Ask Murikah Tutor anything. You can try {limit} prompts before creating an account to save your learning and continue.
-            </p>
-          </div>
-        ) : (
-          <div className="mx-auto w-full max-w-2xl flex-1 space-y-6 pb-8">
-            {messages.map((message, index) => (
-              <article key={`${message.role}-${index}`} className={message.role === "user" ? "ml-auto max-w-[85%] rounded-2xl bg-[var(--muted)] px-4 py-3" : "max-w-full"}>
-                {message.role === "assistant" && <div className="mb-2 text-xs font-semibold text-[#A9822E]">Murikah Tutor</div>}
-                <div className="whitespace-pre-wrap text-[15px] leading-7">{message.content}</div>
-              </article>
-            ))}
-            {busy && <div className="text-sm text-[var(--muted-foreground)]">Murikah Tutor is thinking…</div>}
-            <div ref={endRef} />
-          </div>
-        )}
-
-        {authNeeded ? (
-          <div className="mx-auto w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
-            <div className="text-center">
-              <h2 className="text-xl font-semibold tracking-tight">Continue your learning</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
-                Your {limit}-prompt preview is complete. Sign in or create your account with a trusted provider to keep going.
-              </p>
+      <div className="flex min-h-screen">
+        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--border)]/70 bg-[var(--background)] px-3 py-4 lg:flex">
+          <div className="mb-5 px-2">
+            <div className="inline-flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 text-sm font-semibold tracking-tight text-white shadow-sm">
+              <span>Murikah</span>
+              <span aria-hidden className="h-4 w-px bg-[#A9822E]" />
+              <span>Tutor</span>
             </div>
-            <div className="mt-5"><MurikahSocialButtons next="/chat" /></div>
-            <div className="my-4 flex items-center gap-3 text-xs text-[var(--muted-foreground)] before:h-px before:flex-1 before:bg-[var(--border)] after:h-px after:flex-1 after:bg-[var(--border)]">or</div>
-            <Link href="/login?next=/chat" className="block w-full rounded-lg bg-[#1E2A30] px-4 py-2.5 text-center text-sm font-semibold text-white hover:opacity-90">
-              Sign in with username
-            </Link>
-            <p className="mt-4 text-center text-xs text-[var(--muted-foreground)]">Apache-2.0</p>
           </div>
-        ) : (
-          <form onSubmit={submit} className="mx-auto w-full max-w-2xl">
-            {error && <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-sm focus-within:ring-2 focus-within:ring-[#A9822E]/30">
-              <textarea
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                placeholder="Ask a question…"
-                rows={3}
-                maxLength={6000}
-                className="w-full resize-none bg-transparent px-3 py-2 text-[15px] outline-none placeholder:text-[var(--muted-foreground)]"
+          <nav className="space-y-1" aria-label="Learning spaces">
+            {SPACES.map((option) => (
+              <SidebarButton
+                key={option.id}
+                option={option}
+                active={option.id === spaceId}
+                onSelect={() => setSpaceId(option.id)}
               />
-              <div className="flex items-center justify-between px-2 pb-1">
-                <span className="text-xs text-[var(--muted-foreground)]">{remaining} preview prompt{remaining === 1 ? "" : "s"} remaining</span>
-                <button type="submit" disabled={busy || !draft.trim()} className="rounded-lg bg-[#1E2A30] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
-                  Send
-                </button>
+            ))}
+          </nav>
+          <div className="mt-auto border-t border-[var(--border)]/70 px-2 pt-4">
+            <Link
+              href="/login?next=/chat"
+              className="block rounded-lg px-3 py-2 text-sm font-medium text-[var(--foreground)]/75 hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              Sign in
+            </Link>
+            <p className="mt-2 px-3 text-[11px] text-[var(--muted-foreground)]">Apache-2.0</p>
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          <header className="sticky top-0 z-30 border-b border-[var(--border)]/70 bg-[var(--background)]/95 backdrop-blur">
+            <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+              <div className="inline-flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 text-sm font-semibold tracking-tight text-white shadow-sm lg:hidden">
+                <span>Murikah</span>
+                <span aria-hidden className="h-4 w-px bg-[#A9822E]" />
+                <span>Tutor</span>
               </div>
+              <div className="hidden text-sm font-medium text-[var(--muted-foreground)] lg:block">
+                {activeSpace.label}
+              </div>
+              <Link
+                href="/login?next=/chat"
+                className="text-sm font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
+              >
+                Sign in
+              </Link>
             </div>
-            <p className="mt-3 text-center text-[11px] text-[var(--muted-foreground)]">Preview chats are not saved · Apache-2.0</p>
-          </form>
-        )}
-      </section>
+          </header>
+
+          <div className="border-b border-[var(--border)]/60 px-4 py-2 lg:hidden">
+            <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Learning spaces">
+              {SPACES.map((option) => {
+                const Icon = option.icon;
+                const active = option.id === spaceId;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setSpaceId(option.id)}
+                    title={option.description}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                      active
+                        ? "border-[#A9822E]/40 bg-[#A9822E]/10 text-[var(--foreground)]"
+                        : "border-[var(--border)] text-[var(--muted-foreground)]"
+                    }`}
+                  >
+                    <Icon size={14} />
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col px-4 py-6 sm:px-6 sm:py-8">
+            {messages.length === 0 ? (
+              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center pb-8 text-center">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#A9822E]">
+                  One tutor. Every way you learn.
+                </p>
+                <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">
+                  Learn in the mode that fits the moment.
+                </h1>
+                <p className="mx-auto mt-4 max-w-2xl text-[15px] leading-7 text-[var(--muted-foreground)] sm:text-base">
+                  Chat, ask, quiz, research, visualize, solve, study, read and watch without losing the thread. Your books, knowledge and memory can join the same learning context when you sign in.
+                </p>
+                <div className="mx-auto mt-5 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-[var(--muted-foreground)]">
+                  {[
+                    "10 learning modes",
+                    "Connected context",
+                    "Knowledge + memory",
+                    "Agents + partners",
+                  ].map((item) => (
+                    <span key={item} className="rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mx-auto w-full max-w-3xl flex-1 space-y-6 pb-8">
+                {messages.map((message, index) => (
+                  <article
+                    key={`${message.role}-${index}`}
+                    className={
+                      message.role === "user"
+                        ? "ml-auto max-w-[85%] rounded-2xl bg-[var(--muted)] px-4 py-3"
+                        : "max-w-full"
+                    }
+                  >
+                    {message.role === "assistant" && (
+                      <div className="mb-2 text-xs font-semibold text-[#A9822E]">
+                        Murikah Tutor · {activeMode.label}
+                      </div>
+                    )}
+                    <div className="whitespace-pre-wrap text-[15px] leading-7">{message.content}</div>
+                  </article>
+                ))}
+                {busy && <div className="text-sm text-[var(--muted-foreground)]">Murikah Tutor is thinking…</div>}
+                <div ref={endRef} />
+              </div>
+            )}
+
+            {authNeeded ? (
+              <div className="mx-auto w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+                <div className="text-center">
+                  <h2 className="text-xl font-semibold tracking-tight">Create an account to keep learning</h2>
+                  <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+                    You have reached the guest limit. Create an account or sign in to continue, save your progress, and unlock connected knowledge, memory, tools, agents, and partners.
+                  </p>
+                </div>
+                <div className="mt-5">
+                  <MurikahSocialButtons next="/chat" />
+                </div>
+                <div className="my-4 flex items-center gap-3 text-xs text-[var(--muted-foreground)] before:h-px before:flex-1 before:bg-[var(--border)] after:h-px after:flex-1 after:bg-[var(--border)]">
+                  or
+                </div>
+                <Link
+                  href="/login?next=/chat"
+                  className="block w-full rounded-lg bg-[#1E2A30] px-4 py-2.5 text-center text-sm font-semibold text-white hover:opacity-90"
+                >
+                  Sign in with username
+                </Link>
+                <p className="mt-4 text-center text-xs text-[var(--muted-foreground)]">Apache-2.0</p>
+              </div>
+            ) : (
+              <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
+                <div className="mb-3 flex items-start gap-3 rounded-xl border border-[var(--border)]/80 bg-[var(--card)] px-3.5 py-3 text-left shadow-sm">
+                  <span className="mt-0.5 rounded-lg bg-[#A9822E]/10 p-2 text-[#A9822E]">
+                    <ActiveSpaceIcon size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-[var(--foreground)]">{activeSpace.label}</div>
+                    <p className="mt-0.5 text-xs leading-5 text-[var(--muted-foreground)]">{activeSpace.description}</p>
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>
+                )}
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-sm focus-within:ring-2 focus-within:ring-[#A9822E]/30">
+                  <textarea
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder={activeMode.placeholder}
+                    rows={3}
+                    maxLength={6000}
+                    className="w-full resize-none bg-transparent px-3 py-2 text-[15px] outline-none placeholder:text-[var(--muted-foreground)]"
+                  />
+
+                  <div className="flex items-end justify-between gap-3 px-2 pb-1">
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setModeMenuOpen((open) => !open)}
+                        aria-haspopup="menu"
+                        aria-expanded={modeMenuOpen}
+                        className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--muted)]"
+                      >
+                        <ActiveModeIcon size={17} className="text-[#A9822E]" />
+                        <span>{activeMode.label}</span>
+                        <ChevronDown size={15} className="text-[var(--muted-foreground)]" />
+                      </button>
+
+                      {modeMenuOpen && (
+                        <div
+                          role="menu"
+                          className="absolute bottom-[calc(100%+10px)] left-0 z-50 max-h-[420px] w-[min(430px,calc(100vw-3rem))] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-xl"
+                        >
+                          <div className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+                            Choose how you want to learn
+                          </div>
+                          {MODES.map((mode) => {
+                            const Icon = mode.icon;
+                            const active = mode.id === modeId;
+                            return (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setModeId(mode.id);
+                                  setModeMenuOpen(false);
+                                }}
+                                className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                                  active ? "bg-[var(--muted)]" : "hover:bg-[var(--muted)]/70"
+                                }`}
+                              >
+                                <Icon size={18} className="mt-0.5 shrink-0 text-[#A9822E]" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
+                                    {mode.label}
+                                    {active && <Sparkles size={13} className="text-[#A9822E]" />}
+                                  </span>
+                                  <span className="mt-0.5 block text-xs leading-5 text-[var(--muted-foreground)]">
+                                    {mode.description}
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={busy || !draft.trim()}
+                      className="rounded-lg bg-[#1E2A30] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-3 text-center text-[11px] text-[var(--muted-foreground)]">Apache-2.0</p>
+              </form>
+            )}
+          </section>
+        </div>
+      </div>
     </main>
   );
 }
