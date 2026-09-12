@@ -20,6 +20,30 @@ mkdir -p "$DATA_DIR"
 # An explicit start re-enables automatic recovery on future Codespace resumes.
 rm -f "$DISABLE_MARKER"
 
+# Public product configuration is explicit. Provider credentials are forwarded
+# only when present in the outer Codespace environment (normally GitHub
+# Codespaces secrets); their values are never written to this repository.
+RUNTIME_ENV_ARGS=(
+  -e PORT=3782
+  -e "MURIKAH_PUBLIC_BASE_URL=${MURIKAH_PUBLIC_BASE_URL:-https://tutor.murikah.com}"
+  -e "MURIKAH_GUEST_PROMPT_LIMIT=${MURIKAH_GUEST_PROMPT_LIMIT:-3}"
+)
+for env_name in \
+  MURIKAH_GOOGLE_CLIENT_ID \
+  MURIKAH_GOOGLE_CLIENT_SECRET \
+  MURIKAH_MICROSOFT_CLIENT_ID \
+  MURIKAH_MICROSOFT_CLIENT_SECRET \
+  MURIKAH_MICROSOFT_TENANT \
+  MURIKAH_APPLE_CLIENT_ID \
+  MURIKAH_APPLE_TEAM_ID \
+  MURIKAH_APPLE_KEY_ID \
+  MURIKAH_APPLE_PRIVATE_KEY \
+  MURIKAH_APPLE_PRIVATE_KEY_B64; do
+  if [[ -n "${!env_name:-}" ]]; then
+    RUNTIME_ENV_ARGS+=(--env "$env_name")
+  fi
+done
+
 echo "[Murikah Tutor] Building the pinned production image..."
 docker build \
   --file "$TUTOR_ROOT/Dockerfile.railway" \
@@ -69,7 +93,7 @@ if [[ ! -f "$AUTH_FILE" ]]; then
     --name "$BOOTSTRAP_CONTAINER" \
     -p 3782:3782 \
     -v "$DATA_DIR:/app/data" \
-    -e PORT=3782 \
+    "${RUNTIME_ENV_ARGS[@]}" \
     -e MURIKAH_TUTOR_ADMIN_USERNAME="$admin_username" \
     -e MURIKAH_TUTOR_ADMIN_PASSWORD="$admin_password" \
     "$IMAGE" >/dev/null
@@ -88,7 +112,7 @@ docker run -d \
   --restart unless-stopped \
   -p 3782:3782 \
   -v "$DATA_DIR:/app/data" \
-  -e PORT=3782 \
+  "${RUNTIME_ENV_ARGS[@]}" \
   "$IMAGE" >/dev/null
 
 wait_for_health "$CONTAINER"
