@@ -48,9 +48,14 @@ def main() -> int:
 
     text = remove_once(text, "  Cpu,\n", "Cpu icon import")
     text = remove_once(text, "  Settings2,\n", "Settings2 icon import")
+    text = remove_once(
+        text,
+        '''type GuestModelOption = LLMSelection & {\n  profile_name?: string;\n  model_name?: string;\n  provider_label?: string;\n  is_active_default?: boolean;\n};\n\ntype GuestModelsResponse = {\n  active?: { profile_id?: string; model_id?: string } | null;\n  options?: GuestModelOption[];\n};\n\n''',
+        "guest model option types",
+    )
 
     constants_anchor = 'const USERNAME_SIGN_IN = `/login?next=${encodeURIComponent(RESUME_NEXT)}`;\n'
-    constants = '''const USERNAME_SIGN_IN = `/login?next=${encodeURIComponent(RESUME_NEXT)}`;\n\nconst PERSONAS = [\n  {\n    id: "teacher",\n    label: "Tutor",\n    description: "Clear teaching, examples and checks for understanding.",\n    prompt: "Act as a patient, clear and rigorous tutor. Explain concepts with examples, check understanding, and adapt the depth to the learner.",\n  },\n  {\n    id: "peer",\n    label: "Peer",\n    description: "Collaborative discussion that thinks alongside you.",\n    prompt: "Act as a thoughtful learning peer. Think alongside the learner, compare ideas, ask useful questions, and challenge weak reasoning without becoming overly formal.",\n  },\n  {\n    id: "research-assistant",\n    label: "Research Assistant",\n    description: "Evidence-focused help with claims, sources and research questions.",\n    prompt: "Act as a rigorous research assistant. Separate claims from evidence, surface uncertainty, compare sources or viewpoints, and help the learner form precise research questions.",\n  },\n] as const;\n\nconst DEFAULT_MODE_BY_SPACE: Record<SpaceId, ModeId> = {\n  home: "chat",\n  partners: "chat",\n  agents: "chat",\n  cowriter: "chat",\n  book: "reading",\n  mastery: "mastery",\n  reading: "reading",\n  "learning-space": "course",\n  memory: "chat",\n  knowledge: "research",\n};\n'''
+    constants = '''const USERNAME_SIGN_IN = `/login?next=${encodeURIComponent(RESUME_NEXT)}`;\n\nconst PERSONAS = [\n  {\n    id: "teacher",\n    label: "Tutor",\n    description: "Clear teaching, examples and checks for understanding.",\n    prompt: "Act as a patient, clear and rigorous tutor. Explain concepts with examples, check understanding, and adapt the depth to the learner.",\n  },\n  {\n    id: "peer",\n    label: "Peer",\n    description: "Collaborative discussion that thinks alongside you.",\n    prompt: "Act as a thoughtful learning peer. Think alongside the learner, compare ideas, ask useful questions, and challenge weak reasoning without becoming overly formal.",\n  },\n  {\n    id: "research-assistant",\n    label: "Research Assistant",\n    description: "Evidence-focused help with claims, sources and research questions.",\n    prompt: "Act as a rigorous research assistant. Separate claims from evidence, surface uncertainty, compare sources or viewpoints, and help the learner form precise research questions.",\n  },\n] as const;\n\nconst DEFAULT_MODE_BY_SPACE: Record<SpaceId, ModeId> = {\n  home: "chat",\n  partners: "chat",\n  agents: "chat",\n  cowriter: "chat",\n  book: "reading",\n  mastery: "mastery",\n  reading: "reading",\n  "learning-space": "course",\n  memory: "chat",\n  knowledge: "research",\n};\n\nconst SPACE_PLACEHOLDERS: Partial<Record<SpaceId, string>> = {\n  partners: "What would you like to work through with your study partner?",\n  agents: "What goal should your learning agent help you plan or work through?",\n  cowriter: "What would you like to write, revise or improve?",\n  book: "What book, chapter or passage are you studying?",\n  mastery: "What do you want to master?",\n  reading: "Paste a passage or describe what you want to read closely.",\n  "learning-space": "What topic or learning objective should we work on?",\n  memory: "What should we continue from this conversation?",\n  knowledge: "What topic or material should we synthesize or compare?",\n};\n'''
     text = replace_once(text, constants_anchor, constants, "guest constants anchor")
 
     description_updates = {
@@ -63,6 +68,17 @@ def main() -> int:
     for old, new in description_updates.items():
         text = replace_once(text, old, new, f"space description {old!r}")
 
+    # Guest learning spaces are user-facing surfaces. Keep the default
+    # configuration data for behavioural guidance, but remove the configurator
+    # itself so unauthenticated learners do not edit advanced workspace setup.
+    text = replace_between_once(
+        text,
+        "function SpaceConfigurator({\n",
+        "\n\nexport default function MurikahGuestChat() {\n",
+        "",
+        "guest space configurator component",
+    )
+
     text = replace_once(
         text,
         '  const [learningModeOpen, setLearningModeOpen] = useState(true);',
@@ -72,7 +88,7 @@ def main() -> int:
     text = replace_once(
         text,
         '  const [persona, setPersona] = useState("Patient, clear and rigorous. Use examples and check understanding.");',
-        '  const [persona, setPersona] = useState(PERSONAS[0].prompt);',
+        '  const [persona, setPersona] = useState<string>(PERSONAS[0].prompt);',
         "default persona state",
     )
     text = replace_once(
@@ -81,12 +97,30 @@ def main() -> int:
         '  const [llmSelection] = useState<LLMSelection | null>(null);',
         "guest model state",
     )
+    text = remove_once(
+        text,
+        '  const [modelOptions, setModelOptions] = useState<GuestModelOption[]>([]);\n',
+        "guest model options state",
+    )
+    text = replace_once(
+        text,
+        '  const endRef = useRef<HTMLDivElement>(null);\n',
+        '  const contentRef = useRef<HTMLDivElement>(null);\n  const endRef = useRef<HTMLDivElement>(null);\n',
+        "content scroll ref",
+    )
 
     text = replace_once(
         text,
         '  const ActiveSpaceIcon = activeSpace.icon;\n',
-        '  const ActiveSpaceIcon = activeSpace.icon;\n  const activePersona = PERSONAS.find((option) => option.prompt === persona) || PERSONAS[0];\n',
-        "active persona derivation",
+        '  const ActiveSpaceIcon = activeSpace.icon;\n  const activePersona = PERSONAS.find((option) => option.prompt === persona) || PERSONAS[0];\n  const composerPlaceholder = spaceId === "home" ? activeMode.placeholder : (SPACE_PLACEHOLDERS[spaceId] || activeMode.placeholder);\n',
+        "active guest surface derivation",
+    )
+    text = replace_between_once(
+        text,
+        "  const selectedModelLabel = useMemo(() => {\n",
+        "\n\n  useEffect(() => {\n",
+        "",
+        "guest model label derivation",
     )
 
     text = remove_once(
@@ -106,9 +140,31 @@ def main() -> int:
         "stored guest model restoration",
     )
 
-    select_space_anchor = '''  function updateSpaceConfiguration(key: string, value: ConfigValue) {\n'''
-    select_space = '''  function selectSpace(nextSpace: SpaceId) {\n    setSpaceId(nextSpace);\n    setModeId(DEFAULT_MODE_BY_SPACE[nextSpace]);\n    setLearningModeOpen(false);\n    setModeMenuOpen(false);\n    setPreferencesOpen(false);\n  }\n\n  function updateSpaceConfiguration(key: string, value: ConfigValue) {\n'''
-    text = replace_once(text, select_space_anchor, select_space, "space selection handler")
+    text = remove_once(
+        text,
+        '''      fetch("/api/murikah/guest-models", { cache: "no-store" }).then(async (response) =>\n        response.ok ? ((await response.json()) as GuestModelsResponse) : null,\n      ),\n''',
+        "guest model catalogue request",
+    )
+    text = replace_once(
+        text,
+        "      .then(([auth, guest, models]) => {",
+        "      .then(([auth, guest]) => {",
+        "guest bootstrap result destructuring",
+    )
+    text = remove_once(
+        text,
+        "        if (Array.isArray(models?.options)) setModelOptions(models.options);\n",
+        "guest model options hydration",
+    )
+
+    select_space = '''  function selectSpace(nextSpace: SpaceId) {\n    setSpaceId(nextSpace);\n    setModeId(DEFAULT_MODE_BY_SPACE[nextSpace]);\n    setLearningModeOpen(false);\n    setModeMenuOpen(false);\n    setPreferencesOpen(false);\n    requestAnimationFrame(() => {\n      contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });\n    });\n  }\n'''
+    text = replace_between_once(
+        text,
+        "  function updateSpaceConfiguration(key: string, value: ConfigValue) {\n",
+        "\n\n  async function handleFiles",
+        select_space,
+        "guest space selection handler",
+    )
 
     text = replace_once(
         text,
@@ -144,7 +200,7 @@ def main() -> int:
     text = replace_once(
         text,
         '<div className="min-w-0 flex-1">',
-        '<div className="h-screen min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">',
+        '<div ref={contentRef} className="h-screen min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">',
         "guest content scroll container",
     )
 
@@ -183,7 +239,7 @@ def main() -> int:
     text = remove_once(
         text,
         '                <SpaceConfigurator space={activeSpace} values={activeOverrides} onChange={updateSpaceConfiguration} />\n\n',
-        "guest space configurator",
+        "guest space configurator invocation",
     )
 
     preferences_start = '                {preferencesOpen && (\n'
@@ -200,6 +256,13 @@ def main() -> int:
     old_personalise = '''                      <button type="button" onClick={() => setPreferencesOpen((open) => !open)} title="Persona and model" className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${preferencesOpen ? "bg-[var(--muted)] text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"}`}>\n                        <Settings2 size={16} />\n                        <span className="hidden sm:inline">Personalise</span>\n                      </button>\n                      <span title={`Model: ${selectedModelLabel}`} className="hidden max-w-44 items-center gap-1.5 truncate rounded-lg px-2 py-1.5 text-[11px] text-[var(--muted-foreground)] md:inline-flex">\n                        <Cpu size={14} />{selectedModelLabel}\n                      </span>\n'''
     new_persona_button = '''                      <button type="button" onClick={() => setPreferencesOpen((open) => !open)} title={`Persona: ${activePersona.label}`} className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${preferencesOpen ? "bg-[var(--muted)] text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"}`}>\n                        <Users size={16} />\n                        <span className="hidden sm:inline">Persona · {activePersona.label}</span>\n                      </button>\n'''
     text = replace_once(text, old_personalise, new_persona_button, "guest persona composer control")
+
+    text = replace_once(
+        text,
+        "                    placeholder={activeMode.placeholder}",
+        "                    placeholder={composerPlaceholder}",
+        "space-aware composer placeholder",
+    )
 
     text = remove_once(
         text,
