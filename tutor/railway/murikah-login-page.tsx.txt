@@ -80,7 +80,7 @@ function LoginContent() {
       </div>
 
       <div className="mt-6 text-center">
-        <a href="/" className="text-sm font-medium text-[var(--foreground)]/70 hover:text-[var(--foreground)]">Try the 3-prompt preview</a>
+        <a href="/" className="text-sm font-medium text-[var(--foreground)]/70 hover:text-[var(--foreground)]">Return to the 7-interaction guest Tutor</a>
         <p className="mt-3 text-xs text-[var(--muted-foreground)]">Murikah Tutor · AI-powered personalised learning · Apache-2.0</p>
       </div>
     </div>
