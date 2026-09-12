@@ -79,6 +79,39 @@ type SpaceOption = {
   icon: LucideIcon;
 };
 
+type ConfigValue = string | boolean;
+type ConfigState = Record<string, ConfigValue>;
+type ConfigField =
+  | {
+      key: string;
+      label: string;
+      kind: "text" | "textarea";
+      defaultValue: string;
+      placeholder?: string;
+      help?: string;
+    }
+  | {
+      key: string;
+      label: string;
+      kind: "select";
+      defaultValue: string;
+      options: string[];
+      help?: string;
+    }
+  | {
+      key: string;
+      label: string;
+      kind: "toggle";
+      defaultValue: boolean;
+      help?: string;
+    };
+
+type ConfigSection = {
+  title: string;
+  description?: string;
+  fields: ConfigField[];
+};
+
 const MODES: ModeOption[] = [
   {
     id: "chat",
@@ -157,13 +190,13 @@ const SPACES: SpaceOption[] = [
   {
     id: "partners",
     label: "Partners",
-    description: "Preview collaborative tutoring; connected Partners become available after sign-in.",
+    description: "Configure a collaborative tutor partner, its persona, model, tools, assets and channel.",
     icon: Users,
   },
   {
     id: "agents",
     label: "My Agents",
-    description: "Preview an agent-style workflow; live connected agents become available after sign-in.",
+    description: "Configure an agent-style learning workflow, tools, autonomy and checkpoints.",
     icon: Bot,
   },
   {
@@ -175,7 +208,7 @@ const SPACES: SpaceOption[] = [
   {
     id: "book",
     label: "Book",
-    description: "Discuss a book or paste a passage for explanation, questioning, and recall.",
+    description: "Discuss a book or passage with explanation, questioning, recall and study controls.",
     icon: BookOpen,
   },
   {
@@ -187,28 +220,229 @@ const SPACES: SpaceOption[] = [
   {
     id: "reading",
     label: "Immersive Reading",
-    description: "Read actively with explanations, prompts, recall, and discussion.",
+    description: "Read actively with explanations, prompts, recall, vocabulary and discussion controls.",
     icon: BookOpen,
   },
   {
     id: "learning-space",
     label: "Learning Space",
-    description: "Frame a topic as a focused learning session with a clear objective.",
+    description: "Configure a focused learning session around an objective, pace and assessment style.",
     icon: Grid3X3,
   },
   {
     id: "memory",
     label: "Memory",
-    description: "Preview personalised tutoring; saved and inspectable memory activates after sign-in.",
+    description: "Try personalised tutoring controls using the current guest conversation context.",
     icon: Brain,
   },
   {
     id: "knowledge",
     label: "Knowledge Center",
-    description: "Ask across a topic now; your own knowledge libraries connect after sign-in.",
+    description: "Configure how the Tutor should synthesize, compare and explain supplied knowledge.",
     icon: Library,
   },
 ];
+
+const SPACE_CONFIGURATION: Record<SpaceId, ConfigSection[]> = {
+  home: [],
+  partners: [
+    {
+      title: "Identity",
+      description: "Shape how your Partner appears and responds.",
+      fields: [
+        { key: "partner_name", label: "Partner name", kind: "text", defaultValue: "Study Partner", placeholder: "e.g. Civil Procedure Coach" },
+        { key: "reply_language", label: "Reply language", kind: "select", defaultValue: "Auto", options: ["Auto", "English", "中文"] },
+        { key: "description", label: "Description", kind: "text", defaultValue: "A collaborative learning partner", placeholder: "What is this Partner for?" },
+      ],
+    },
+    {
+      title: "Soul",
+      description: "The Partner persona and collaboration style used for each turn.",
+      fields: [
+        { key: "persona", label: "Persona", kind: "textarea", defaultValue: "Patient, rigorous and Socratic. Explain clearly, challenge weak reasoning, and end with a useful next step.", placeholder: "Describe the Partner's personality and teaching style." },
+      ],
+    },
+    {
+      title: "Model",
+      description: "Choose how the Partner should reason in this preview.",
+      fields: [
+        { key: "primary_model", label: "Primary model", kind: "select", defaultValue: "System default", options: ["System default", "Fast", "Balanced", "Reasoning"] },
+        { key: "backup_model", label: "Backup model", kind: "select", defaultValue: "No backup", options: ["No backup", "System default", "Fast"] },
+      ],
+    },
+    {
+      title: "Tools",
+      description: "Toggle the capabilities you want the Partner to simulate during the guest preview.",
+      fields: [
+        { key: "web_research", label: "Research assistance", kind: "toggle", defaultValue: true },
+        { key: "calculator", label: "Calculator", kind: "toggle", defaultValue: true },
+        { key: "code_reasoning", label: "Code reasoning", kind: "toggle", defaultValue: false },
+        { key: "structured_planning", label: "Structured planning", kind: "toggle", defaultValue: true },
+      ],
+    },
+    {
+      title: "Channels & assets",
+      description: "Explore the same configuration surface before connecting real accounts or persistent assets.",
+      fields: [
+        { key: "channel", label: "Channel", kind: "select", defaultValue: "In-app preview", options: ["In-app preview", "Discord", "Email", "Feishu", "DingTalk", "Matrix", "Mattermost", "MoChat", "Weixin"] },
+        { key: "knowledge_bases", label: "Knowledge bases", kind: "toggle", defaultValue: true },
+        { key: "skills", label: "Skills", kind: "toggle", defaultValue: true },
+        { key: "notebooks", label: "Notebooks", kind: "toggle", defaultValue: false },
+      ],
+    },
+  ],
+  agents: [
+    {
+      title: "Agent setup",
+      fields: [
+        { key: "agent_name", label: "Agent name", kind: "text", defaultValue: "Learning Agent" },
+        { key: "role", label: "Role", kind: "select", defaultValue: "Tutor", options: ["Tutor", "Researcher", "Study planner", "Exam coach", "Reviewer"] },
+        { key: "autonomy", label: "Autonomy", kind: "select", defaultValue: "Guided", options: ["Guided", "Balanced", "Proactive"] },
+        { key: "planning_depth", label: "Planning depth", kind: "select", defaultValue: "Step-by-step", options: ["Quick", "Step-by-step", "Deep"] },
+      ],
+    },
+    {
+      title: "Agent capabilities",
+      fields: [
+        { key: "ask_before_actions", label: "Ask before major actions", kind: "toggle", defaultValue: true },
+        { key: "self_check", label: "Self-check results", kind: "toggle", defaultValue: true },
+        { key: "research_tools", label: "Research tools", kind: "toggle", defaultValue: true },
+        { key: "code_tools", label: "Code tools", kind: "toggle", defaultValue: false },
+        { key: "session_memory", label: "Use session context", kind: "toggle", defaultValue: true },
+      ],
+    },
+  ],
+  cowriter: [
+    {
+      title: "Writing brief",
+      fields: [
+        { key: "writing_task", label: "Task", kind: "select", defaultValue: "Improve", options: ["Draft", "Improve", "Rewrite", "Shorten", "Expand", "Challenge argument"] },
+        { key: "tone", label: "Tone", kind: "select", defaultValue: "Clear and professional", options: ["Clear and professional", "Academic", "Plain language", "Persuasive", "Concise", "Conversational"] },
+        { key: "audience", label: "Audience", kind: "text", defaultValue: "General reader", placeholder: "e.g. first-year law student" },
+        { key: "goal", label: "Writing goal", kind: "text", defaultValue: "Improve clarity and structure" },
+      ],
+    },
+    {
+      title: "Revision controls",
+      fields: [
+        { key: "preserve_voice", label: "Preserve my voice", kind: "toggle", defaultValue: true },
+        { key: "explain_edits", label: "Explain important edits", kind: "toggle", defaultValue: true },
+        { key: "challenge_claims", label: "Challenge weak claims", kind: "toggle", defaultValue: true },
+        { key: "suggest_structure", label: "Suggest stronger structure", kind: "toggle", defaultValue: true },
+      ],
+    },
+  ],
+  book: [
+    {
+      title: "Book study",
+      fields: [
+        { key: "study_style", label: "Study style", kind: "select", defaultValue: "Guided discussion", options: ["Guided discussion", "Chapter summary", "Close reading", "Exam revision", "Book club"] },
+        { key: "depth", label: "Explanation depth", kind: "select", defaultValue: "Balanced", options: ["Simple", "Balanced", "Deep"] },
+        { key: "focus", label: "Focus", kind: "text", defaultValue: "Key ideas, reasoning and recall" },
+      ],
+    },
+    {
+      title: "Learning controls",
+      fields: [
+        { key: "socratic_questions", label: "Socratic questions", kind: "toggle", defaultValue: true },
+        { key: "recall_checks", label: "Recall checks", kind: "toggle", defaultValue: true },
+        { key: "connect_themes", label: "Connect themes", kind: "toggle", defaultValue: true },
+        { key: "exam_prompts", label: "Generate exam prompts", kind: "toggle", defaultValue: false },
+      ],
+    },
+  ],
+  mastery: [
+    {
+      title: "Mastery goal",
+      fields: [
+        { key: "current_level", label: "Current level", kind: "select", defaultValue: "Beginner", options: ["Beginner", "Intermediate", "Advanced"] },
+        { key: "target", label: "Target", kind: "text", defaultValue: "Confident independent performance" },
+        { key: "timeframe", label: "Timeframe", kind: "select", defaultValue: "4 weeks", options: ["1 week", "2 weeks", "4 weeks", "8 weeks", "Open-ended"] },
+        { key: "pace", label: "Pace", kind: "select", defaultValue: "Balanced", options: ["Gentle", "Balanced", "Intensive"] },
+      ],
+    },
+    {
+      title: "Path controls",
+      fields: [
+        { key: "prerequisite_check", label: "Check prerequisites", kind: "toggle", defaultValue: true },
+        { key: "deliberate_practice", label: "Deliberate practice", kind: "toggle", defaultValue: true },
+        { key: "checkpoints", label: "Mastery checkpoints", kind: "toggle", defaultValue: true },
+        { key: "adaptive_difficulty", label: "Adaptive difficulty", kind: "toggle", defaultValue: true },
+      ],
+    },
+  ],
+  reading: [
+    {
+      title: "Reading experience",
+      fields: [
+        { key: "reading_level", label: "Explanation level", kind: "select", defaultValue: "University", options: ["School", "University", "Professional", "Expert"] },
+        { key: "reading_mode", label: "Mode", kind: "select", defaultValue: "Close reading", options: ["Close reading", "Quick comprehension", "Critical reading", "Exam preparation"] },
+        { key: "focus", label: "Focus", kind: "text", defaultValue: "Meaning, argument and recall" },
+      ],
+    },
+    {
+      title: "Reading controls",
+      fields: [
+        { key: "vocabulary", label: "Explain difficult vocabulary", kind: "toggle", defaultValue: true },
+        { key: "annotations", label: "Surface key ideas", kind: "toggle", defaultValue: true },
+        { key: "questions", label: "Ask comprehension questions", kind: "toggle", defaultValue: true },
+        { key: "recall", label: "Add recall checks", kind: "toggle", defaultValue: true },
+      ],
+    },
+  ],
+  "learning-space": [
+    {
+      title: "Session setup",
+      fields: [
+        { key: "objective", label: "Learning objective", kind: "text", defaultValue: "Understand and apply the core concept" },
+        { key: "session_length", label: "Session length", kind: "select", defaultValue: "30 minutes", options: ["15 minutes", "30 minutes", "45 minutes", "60 minutes"] },
+        { key: "teaching_style", label: "Teaching style", kind: "select", defaultValue: "Explain + practice", options: ["Explain + practice", "Socratic", "Example-first", "Exam-focused"] },
+        { key: "pace", label: "Pace", kind: "select", defaultValue: "Adaptive", options: ["Slow", "Adaptive", "Fast"] },
+      ],
+    },
+    {
+      title: "Session controls",
+      fields: [
+        { key: "examples", label: "Use examples", kind: "toggle", defaultValue: true },
+        { key: "practice", label: "Include practice", kind: "toggle", defaultValue: true },
+        { key: "check_understanding", label: "Check understanding", kind: "toggle", defaultValue: true },
+        { key: "summary", label: "End with a summary", kind: "toggle", defaultValue: true },
+      ],
+    },
+  ],
+  memory: [
+    {
+      title: "Personalisation preview",
+      description: "Guest settings use only the current conversation and are not persisted after sign-in or across devices.",
+      fields: [
+        { key: "personalisation", label: "Personalisation", kind: "select", defaultValue: "Adaptive", options: ["Minimal", "Adaptive", "Highly personalised"] },
+        { key: "learner_level", label: "Learner level", kind: "select", defaultValue: "Infer from conversation", options: ["Infer from conversation", "Beginner", "Intermediate", "Advanced"] },
+        { key: "learning_preference", label: "Preferred approach", kind: "select", defaultValue: "Examples + explanation", options: ["Examples + explanation", "Questions first", "Visual structure", "Practice first"] },
+        { key: "use_recent_context", label: "Use recent conversation context", kind: "toggle", defaultValue: true },
+        { key: "adapt_difficulty", label: "Adapt difficulty", kind: "toggle", defaultValue: true },
+      ],
+    },
+  ],
+  knowledge: [
+    {
+      title: "Knowledge synthesis",
+      fields: [
+        { key: "synthesis_mode", label: "Synthesis mode", kind: "select", defaultValue: "Explain and connect", options: ["Explain and connect", "Compare sources", "Find contradictions", "Create study notes", "Build outline"] },
+        { key: "depth", label: "Depth", kind: "select", defaultValue: "Balanced", options: ["Quick", "Balanced", "Deep"] },
+        { key: "citation_style", label: "Citation style", kind: "select", defaultValue: "Source labels", options: ["Source labels", "APA-style", "Footnote-style", "No citations"] },
+      ],
+    },
+    {
+      title: "Knowledge controls",
+      fields: [
+        { key: "compare_sources", label: "Compare supplied sources", kind: "toggle", defaultValue: true },
+        { key: "flag_uncertainty", label: "Flag uncertainty", kind: "toggle", defaultValue: true },
+        { key: "surface_assumptions", label: "Surface assumptions", kind: "toggle", defaultValue: true },
+        { key: "study_questions", label: "Create study questions", kind: "toggle", defaultValue: false },
+      ],
+    },
+  ],
+};
 
 function SidebarButton({
   option,
@@ -241,6 +475,137 @@ function SidebarButton({
   );
 }
 
+function buildConfiguration(spaceId: SpaceId, overrides: ConfigState): ConfigState {
+  const configuration: ConfigState = {};
+  for (const section of SPACE_CONFIGURATION[spaceId]) {
+    for (const field of section.fields) {
+      configuration[field.key] = overrides[field.key] ?? field.defaultValue;
+    }
+  }
+  return configuration;
+}
+
+function SpaceConfigurator({
+  space,
+  values,
+  onChange,
+}: {
+  space: SpaceOption;
+  values: ConfigState;
+  onChange: (key: string, value: ConfigValue) => void;
+}) {
+  const sections = SPACE_CONFIGURATION[space.id];
+  if (sections.length === 0) return null;
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+      <div className="border-b border-[var(--border)]/70 px-4 py-3 sm:px-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-[var(--foreground)]">Configure {space.label}</div>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
+              Try the configuration before creating an account. Changes apply to your next guest interaction; sign in only when you want to save persistent settings, accounts or private assets.
+            </p>
+          </div>
+          <span className="hidden rounded-full border border-[#A9822E]/30 bg-[#A9822E]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#A9822E] sm:inline-flex">
+            Interactive preview
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4 sm:p-5">
+        {sections.map((section) => (
+          <section key={section.title} className="rounded-xl border border-[var(--border)]/80 p-3.5 sm:p-4">
+            <div className="mb-3">
+              <h3 className="text-[13px] font-semibold text-[var(--foreground)]">{section.title}</h3>
+              {section.description && (
+                <p className="mt-0.5 text-[11.5px] leading-5 text-[var(--muted-foreground)]">{section.description}</p>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {section.fields.map((field) => {
+                const value = values[field.key] ?? field.defaultValue;
+                if (field.kind === "toggle") {
+                  const enabled = Boolean(value);
+                  return (
+                    <button
+                      key={field.key}
+                      type="button"
+                      aria-pressed={enabled}
+                      onClick={() => onChange(field.key, !enabled)}
+                      className="flex min-h-14 items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-left hover:bg-[var(--muted)]/50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium text-[var(--foreground)]">{field.label}</span>
+                        {field.help && <span className="mt-0.5 block text-[10.5px] text-[var(--muted-foreground)]">{field.help}</span>}
+                      </span>
+                      <span
+                        aria-hidden
+                        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${enabled ? "bg-[#A9822E]" : "bg-[var(--muted)]"}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${enabled ? "translate-x-[18px]" : "translate-x-0.5"}`}
+                        />
+                      </span>
+                    </button>
+                  );
+                }
+
+                if (field.kind === "select") {
+                  return (
+                    <label key={field.key} className="block">
+                      <span className="mb-1 block text-[11.5px] font-medium text-[var(--foreground)]">{field.label}</span>
+                      <select
+                        value={String(value)}
+                        onChange={(event) => onChange(field.key, event.target.value)}
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[#A9822E]"
+                      >
+                        {field.options.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                      {field.help && <span className="mt-1 block text-[10.5px] text-[var(--muted-foreground)]">{field.help}</span>}
+                    </label>
+                  );
+                }
+
+                if (field.kind === "textarea") {
+                  return (
+                    <label key={field.key} className="block sm:col-span-2">
+                      <span className="mb-1 block text-[11.5px] font-medium text-[var(--foreground)]">{field.label}</span>
+                      <textarea
+                        rows={3}
+                        value={String(value)}
+                        placeholder={field.placeholder}
+                        onChange={(event) => onChange(field.key, event.target.value)}
+                        className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs leading-5 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[#A9822E]"
+                      />
+                      {field.help && <span className="mt-1 block text-[10.5px] text-[var(--muted-foreground)]">{field.help}</span>}
+                    </label>
+                  );
+                }
+
+                return (
+                  <label key={field.key} className="block">
+                    <span className="mb-1 block text-[11.5px] font-medium text-[var(--foreground)]">{field.label}</span>
+                    <input
+                      value={String(value)}
+                      placeholder={field.placeholder}
+                      onChange={(event) => onChange(field.key, event.target.value)}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[#A9822E]"
+                    />
+                    {field.help && <span className="mt-1 block text-[10.5px] text-[var(--muted-foreground)]">{field.help}</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MurikahGuestChat() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -253,12 +618,26 @@ export default function MurikahGuestChat() {
   const [modeId, setModeId] = useState<ModeId>("chat");
   const [spaceId, setSpaceId] = useState<SpaceId>("home");
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [spaceConfigOverrides, setSpaceConfigOverrides] = useState<Record<SpaceId, ConfigState>>({
+    home: {},
+    partners: {},
+    agents: {},
+    cowriter: {},
+    book: {},
+    mastery: {},
+    reading: {},
+    "learning-space": {},
+    memory: {},
+    knowledge: {},
+  });
   const endRef = useRef<HTMLDivElement>(null);
 
   const activeMode = MODES.find((mode) => mode.id === modeId) || MODES[0];
   const activeSpace = SPACES.find((space) => space.id === spaceId) || SPACES[0];
   const ActiveModeIcon = activeMode.icon;
   const ActiveSpaceIcon = activeSpace.icon;
+  const activeOverrides = spaceConfigOverrides[spaceId];
+  const activeConfiguration = buildConfiguration(spaceId, activeOverrides);
 
   useEffect(() => {
     let alive = true;
@@ -294,6 +673,16 @@ export default function MurikahGuestChat() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, busy, authNeeded]);
 
+  function updateSpaceConfiguration(key: string, value: ConfigValue) {
+    setSpaceConfigOverrides((current) => ({
+      ...current,
+      [spaceId]: {
+        ...current[spaceId],
+        [key]: value,
+      },
+    }));
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const prompt = draft.trim();
@@ -318,6 +707,7 @@ export default function MurikahGuestChat() {
           history: prior,
           mode: activeMode.id,
           space: activeSpace.id,
+          configuration: activeConfiguration,
         }),
       });
       const data = (await response.json().catch(() => ({}))) as GuestChatResponse;
@@ -431,7 +821,7 @@ export default function MurikahGuestChat() {
           </div>
 
           <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col px-4 py-6 sm:px-6 sm:py-8">
-            {messages.length === 0 ? (
+            {messages.length === 0 && spaceId === "home" ? (
               <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center pb-8 text-center">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#A9822E]">
                   One tutor. Every way you learn.
@@ -440,20 +830,21 @@ export default function MurikahGuestChat() {
                   Learn in the mode that fits the moment.
                 </h1>
                 <p className="mx-auto mt-4 max-w-2xl text-[15px] leading-7 text-[var(--muted-foreground)] sm:text-base">
-                  Chat, ask, quiz, research, visualize, solve, study, read and watch without losing the thread. Your books, knowledge and memory can join the same learning context when you sign in.
+                  Chat, ask, quiz, research, visualize, solve, study, read and watch without losing the thread. Explore the learning spaces in the sidebar and configure them before you sign in.
                 </p>
                 <div className="mx-auto mt-5 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-[var(--muted-foreground)]">
-                  {[
-                    "10 learning modes",
-                    "Connected context",
-                    "Knowledge + memory",
-                    "Agents + partners",
-                  ].map((item) => (
+                  {["10 learning modes", "Configurable spaces", "Knowledge + memory", "Agents + partners"].map((item) => (
                     <span key={item} className="rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5">
                       {item}
                     </span>
                   ))}
                 </div>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="mx-auto w-full max-w-3xl pb-4 text-left">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">Try {activeSpace.label}</p>
+                <h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">Set it up the way you would after sign-in.</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">{activeSpace.description}</p>
               </div>
             ) : (
               <div className="mx-auto w-full max-w-3xl flex-1 space-y-6 pb-8">
@@ -484,7 +875,7 @@ export default function MurikahGuestChat() {
                 <div className="text-center">
                   <h2 className="text-xl font-semibold tracking-tight">Create an account to keep learning</h2>
                   <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
-                    You have reached the guest limit. Create an account or sign in to continue, save your progress, and unlock connected knowledge, memory, tools, agents, and partners.
+                    You have reached the guest limit. Create an account or sign in to continue, save your progress, and keep your configured knowledge, memory, tools, agents and partners.
                   </p>
                 </div>
                 <div className="mt-5">
@@ -503,6 +894,12 @@ export default function MurikahGuestChat() {
               </div>
             ) : (
               <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
+                <SpaceConfigurator
+                  space={activeSpace}
+                  values={activeOverrides}
+                  onChange={updateSpaceConfiguration}
+                />
+
                 <div className="mb-3 flex items-start gap-3 rounded-xl border border-[var(--border)]/80 bg-[var(--card)] px-3.5 py-3 text-left shadow-sm">
                   <span className="mt-0.5 rounded-lg bg-[#A9822E]/10 p-2 text-[#A9822E]">
                     <ActiveSpaceIcon size={16} />
