@@ -35,6 +35,32 @@ async function proxyWebSocket(request, env) {
   );
 }
 
+async function withMurikahWakeCopy(response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (response.status !== 202 || !contentType.includes('text/html')) {
+    return response;
+  }
+
+  const html = (await response.text())
+    .replace(
+      '<h1>Murikah Tutor is waking up</h1>',
+      '<h1>Murikah Tutor was dormant to conserve compute.</h1>',
+    )
+    .replace(
+      'The learning environment was dormant to conserve compute. It is starting automatically and this page will open Tutor as soon as it is ready.',
+      'Waking Tutor now. Please wait about 30–60 seconds. This page checks readiness automatically and will open your learning environment as soon as it is ready.',
+    )
+    .replace('Waiting for Tutor…', 'Waking Tutor · usually 30–60 seconds');
+
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  return new Response(html, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const upgrade = (request.headers.get('upgrade') || '').toLowerCase();
@@ -42,6 +68,6 @@ export default {
       return proxyWebSocket(request, env);
     }
 
-    return wakeWorker.fetch(request, env, ctx);
+    return withMurikahWakeCopy(await wakeWorker.fetch(request, env, ctx));
   },
 };
