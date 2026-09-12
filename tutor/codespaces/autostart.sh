@@ -23,6 +23,29 @@ start_tunnel_if_configured() {
   fi
 }
 
+runtime_env_args() {
+  RUNTIME_ENV_ARGS=(
+    -e PORT=3782
+    -e "MURIKAH_PUBLIC_BASE_URL=${MURIKAH_PUBLIC_BASE_URL:-https://tutor.murikah.com}"
+    -e "MURIKAH_GUEST_PROMPT_LIMIT=${MURIKAH_GUEST_PROMPT_LIMIT:-3}"
+  )
+  for env_name in \
+    MURIKAH_GOOGLE_CLIENT_ID \
+    MURIKAH_GOOGLE_CLIENT_SECRET \
+    MURIKAH_MICROSOFT_CLIENT_ID \
+    MURIKAH_MICROSOFT_CLIENT_SECRET \
+    MURIKAH_MICROSOFT_TENANT \
+    MURIKAH_APPLE_CLIENT_ID \
+    MURIKAH_APPLE_TEAM_ID \
+    MURIKAH_APPLE_KEY_ID \
+    MURIKAH_APPLE_PRIVATE_KEY \
+    MURIKAH_APPLE_PRIVATE_KEY_B64; do
+    if [[ -n "${!env_name:-}" ]]; then
+      RUNTIME_ENV_ARGS+=(--env "$env_name")
+    fi
+  done
+}
+
 # A brand-new Codespace must still perform the interactive first-boot setup.
 # postStartCommand is non-interactive, so never prompt for credentials here.
 if [[ ! -f "$AUTH_FILE" ]]; then
@@ -81,13 +104,14 @@ else
     fi
   fi
 
+  runtime_env_args
   log "Recreating Tutor container from persisted data..."
   if ! docker run -d \
     --name "$CONTAINER" \
     --restart unless-stopped \
     -p 3782:3782 \
     -v "$DATA_DIR:/app/data" \
-    -e PORT=3782 \
+    "${RUNTIME_ENV_ARGS[@]}" \
     "$IMAGE" >/dev/null; then
     log "Container recreation failed; run start.sh manually for diagnostics."
     exit 0
