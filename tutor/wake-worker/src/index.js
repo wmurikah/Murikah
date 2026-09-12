@@ -58,12 +58,7 @@ function originUrlFor(request, env) {
 }
 
 async function originIsHealthy(env) {
-  const timeoutMs = integerEnv(
-    env.ORIGIN_HEALTH_TIMEOUT_MS,
-    DEFAULT_HEALTH_TIMEOUT_MS,
-    500,
-    10000,
-  );
+  const timeoutMs = integerEnv(env.ORIGIN_HEALTH_TIMEOUT_MS, DEFAULT_HEALTH_TIMEOUT_MS, 500, 10000);
 
   try {
     const response = await fetch(`https://${env.ORIGIN_HOST}/health`, {
@@ -176,11 +171,7 @@ function isWakeEligibleNavigation(request) {
 
   // Browser document navigation wakes Tutor automatically. This deliberately
   // avoids waking the Codespace for ordinary bots, asset probes and API calls.
-  return (
-    mode === 'navigate' ||
-    destination === 'document' ||
-    url.searchParams.get('wake') === '1'
-  );
+  return mode === 'navigate' || destination === 'document' || url.searchParams.get('wake') === '1';
 }
 
 async function proxyToTutor(request, env) {
