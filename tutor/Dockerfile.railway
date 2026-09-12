@@ -21,6 +21,7 @@ RUN mkdir -p /src/DeepTutor \
 COPY tutor/scripts/apply_branding.py /opt/murikah/apply_branding.py
 COPY tutor/railway/apply_railway_overlay.py /opt/murikah/apply_railway_overlay.py
 COPY tutor/railway/apply_guest_continuity.py /opt/murikah/apply_guest_continuity.py
+COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 # The Next.js overlay sources are stored with a trailing .txt in this monorepo
 # so the root Astro/TypeScript checker does not compile them as Murikah site
 # sources. They are restored to their real extensions inside the image before
@@ -38,6 +39,7 @@ COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
 RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
     && python /opt/murikah/apply_railway_overlay.py /src/DeepTutor /opt/murikah/health-route.ts \
     && python /opt/murikah/apply_guest_continuity.py /src/DeepTutor /opt/murikah/MurikahGuestResume.tsx \
+    && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
 
 FROM node:22-slim AS frontend-builder
