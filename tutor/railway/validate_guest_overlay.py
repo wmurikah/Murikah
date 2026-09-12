@@ -49,6 +49,10 @@ def main() -> None:
             "overflow-y-auto overscroll-contain scroll-smooth",
             "Upload text file",
             "You have used up 7 of the 7 Guest Interactions. Please sign in.",
+            'import MarkdownRenderer from "@/components/common/MarkdownRenderer";',
+            'message.role === "assistant" ? (',
+            "<MarkdownRenderer",
+            "content={message.content}",
         ),
     )
     forbid_markers(
