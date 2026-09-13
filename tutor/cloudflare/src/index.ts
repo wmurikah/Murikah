@@ -94,7 +94,9 @@ export class TutorContainer extends Container<TutorEnv> {
     console.error("Murikah Tutor container lifecycle error", error);
   }
 
-  private async state(): Promise<ContainerState | { error: string }> {
+  // Do not call this method `state`: Container/Durable Object instances already
+  // use state internally, which shadows a subclass method with that name.
+  private async readContainerState(): Promise<ContainerState | { error: string }> {
     try {
       return (await this.getState()) as ContainerState;
     } catch (error) {
@@ -112,23 +114,20 @@ export class TutorContainer extends Container<TutorEnv> {
       };
     }
 
-    const before = await this.state();
+    const before = await this.readContainerState();
     if ("status" in before && isLiveState(before)) {
       const current = await this.runtimeStatus();
       return { ...current, workerSecretConfigured: true };
     }
 
     try {
-      // Pass bindings from the stateless fetch handler explicitly on every
-      // Linux start. This avoids relying on class-field/global binding timing
-      // and follows Cloudflare's per-instance environment contract directly.
       this.ctx.container.start({
         env: runtimeEnv,
         enableInternet: true,
         entrypoint: [CLOUDFLARE_ENTRYPOINT],
       });
     } catch (error) {
-      const afterError = await this.state();
+      const afterError = await this.readContainerState();
       if (!("status" in afterError && isLiveState(afterError))) {
         return {
           running: false,
@@ -146,7 +145,7 @@ export class TutorContainer extends Container<TutorEnv> {
   }
 
   async runtimeStatus(): Promise<RuntimeStatus> {
-    const state = await this.state();
+    const state = await this.readContainerState();
     if (!("status" in state) || !isLiveState(state)) {
       return { running: false, ready: false, state };
     }
@@ -186,9 +185,6 @@ export class TutorContainer extends Container<TutorEnv> {
       workerSecretConfigured: hasAdminSecret(runtimeEnv),
     };
 
-    // Diagnostics must never inherit an older passive process or stale env.
-    // Tear down the diagnostic VM first, then start a fresh one using the same
-    // runtime environment that the real application receives.
     if (this.ctx.container.running) {
       try {
         this.ctx.container.destroy("Restarting Murikah staging diagnostic");
@@ -222,11 +218,15 @@ export class TutorContainer extends Container<TutorEnv> {
     report.startError = startError || undefined;
     if (!this.ctx.container.running) return report;
 
-    const run = async (command: string[]): Promise<Record<string, unknown>> => {
+    const run = async (
+      command: string[],
+      env?: Record<string, string>,
+    ): Promise<Record<string, unknown>> => {
       try {
         const process = await this.ctx.container.exec(command, {
           stdout: "pipe",
           stderr: "combined",
+          ...(env ? { env } : {}),
         });
         const output = await process.output();
         return {
@@ -246,7 +246,7 @@ export class TutorContainer extends Container<TutorEnv> {
           "id",
           "printf 'node='; node --version 2>&1 || true",
           "printf 'python='; python --version 2>&1 || true",
-          "printf 'image-revision='; cat /app/.murikah-cloudflare-image-revision 2>/dev/null || echo missing",
+          "printf 'image-revision='; cat /app/murikah-cloudflare-image-rev 2>/dev/null || echo missing",
           "for p in /app/web/server.js /app/start-frontend.sh /app/start-backend.sh /app/murikah-tutor-bootstrap.py /app/murikah-cloudflare-entrypoint.sh /app/data; do if [ -e \"$p\" ]; then stat -c '%A %u:%g %n' \"$p\" 2>/dev/null || ls -ld \"$p\"; else echo \"missing $p\"; fi; done",
         ].join("; "),
       ]);
@@ -260,7 +260,14 @@ export class TutorContainer extends Container<TutorEnv> {
             "-lc",
             "rm -f /tmp/muri-start.log; timeout 25s /app/murikah-cloudflare-entrypoint.sh >/tmp/muri-start.log 2>&1 || true",
           ],
-          { stdout: "ignore", stderr: "ignore" },
+          {
+            stdout: "ignore",
+            stderr: "ignore",
+            // exec() only guarantees inheritance of class envVars. Pass the
+            // per-request Worker bindings again so this diagnostic exactly
+            // reproduces the real first-boot environment without exposing them.
+            env: runtimeEnv,
+          },
         );
       } catch (error) {
         appProcessError = errorText(error);
@@ -325,9 +332,6 @@ export class TutorContainer extends Container<TutorEnv> {
         ].join("\n"),
       ]);
     } finally {
-      // Diagnostic VMs must never occupy a staging slot after the report has
-      // been collected. This also prevents old diagnostic identities from
-      // starving the real Tutor of capacity on later deployments.
       try {
         if (this.ctx.container.running) {
           this.ctx.container.destroy("Murikah staging diagnostic complete");
@@ -367,8 +371,13 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
   );
 }
 
-function startingShell(message = "Preparing your learning space. You can stay on this page."): Response {
-  const safeMessage = message.replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char);
+function startingShell(
+  message = "Preparing your learning space. You can stay on this page.",
+): Response {
+  const safeMessage = message.replace(
+    /[<>&]/g,
+    (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char,
+  );
   return new Response(
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(560px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:20px;padding:34px;box-sizing:border-box;box-shadow:0 18px 60px rgba(30,42,48,.06)}.brand{font-weight:760}.brand span{color:#A9822E}h1{font-size:30px;letter-spacing:-.035em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:26px;border-radius:999px;overflow:hidden;background:#e5e8e9}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:14px;font-size:13px;color:#879298}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Opening your Tutor…</h1><p id="status">${safeMessage}</p><div class="bar"></div><div class="small" id="small">The edge experience is already loaded while Tutor finishes starting.</div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.workerSecretConfigured===false){document.getElementById('status').textContent='Tutor staging configuration is incomplete.';document.getElementById('small').textContent='The edge is healthy; the runtime secret binding needs attention.';return;}if(attempts>40){document.getElementById('status').textContent='Tutor is still starting. Staging diagnostics are running automatically.';document.getElementById('small').textContent='You do not need to refresh this page.';}}catch(e){}setTimeout(check,attempts<15?750:1500);}check();})();</script></body></html>`,
     {
@@ -400,9 +409,6 @@ async function safeStatus(
     if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
     return { ...status, workerSecretConfigured: true };
   } catch (error) {
-    // No Durable Object or Container exception should ever escape to the edge as
-    // Cloudflare 1101. The browser keeps a usable edge shell and the next poll
-    // retries startup while observability receives the safe error text.
     console.error("Murikah Tutor runtime RPC failed", error);
     return {
       running: false,
