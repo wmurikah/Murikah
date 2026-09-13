@@ -34,8 +34,8 @@ type RuntimeStatus = {
   workerSecretConfigured?: boolean;
 };
 
-const APP_INSTANCE = "murikah-tutor-staging-v6";
-const DIAGNOSTIC_INSTANCE = "murikah-tutor-staging-diagnostics-v6";
+const APP_INSTANCE = "murikah-tutor-staging-v7";
+const DIAGNOSTIC_INSTANCE = "murikah-tutor-staging-diagnostics-v7";
 const CLOUDFLARE_ENTRYPOINT = "/app/murikah-cloudflare-entrypoint.sh";
 
 function optional(value: string | undefined): string {
@@ -76,10 +76,6 @@ function hasAdminSecret(runtimeEnv: Record<string, string>): boolean {
   return (runtimeEnv.MURIKAH_TUTOR_ADMIN_PASSWORD || "").length >= 14;
 }
 
-function isLiveState(state: ContainerState | undefined): boolean {
-  return state?.status === "running" || state?.status === "healthy";
-}
-
 export class TutorContainer extends Container<TutorEnv> {
   defaultPort = 3782;
   sleepAfter = "30m";
@@ -114,26 +110,35 @@ export class TutorContainer extends Container<TutorEnv> {
       };
     }
 
-    const before = await this.readContainerState();
-    if ("status" in before && isLiveState(before)) {
+    // Cloudflare documents ctx.container.running as the authoritative test
+    // before calling start(). getState() can lag during the start/stop transition,
+    // which previously produced the contradictory combination state=stopped while
+    // start() rejected with "container is already running".
+    if (this.ctx.container.running) {
       const current = await this.runtimeStatus();
       return { ...current, workerSecretConfigured: true };
     }
 
+    let startError = "";
     try {
+      // There is deliberately no await between the running check above and this
+      // synchronous start request. That avoids an RPC interleave starting the
+      // same Durable Object container twice.
       this.ctx.container.start({
         env: runtimeEnv,
         enableInternet: true,
         entrypoint: [CLOUDFLARE_ENTRYPOINT],
       });
     } catch (error) {
-      const afterError = await this.readContainerState();
-      if (!("status" in afterError && isLiveState(afterError))) {
+      startError = errorText(error);
+      // A concurrent/transitioning start is not a failure if the low-level
+      // runtime now reports the container as running.
+      if (!this.ctx.container.running) {
         return {
           running: false,
           ready: false,
-          state: afterError,
-          error: errorText(error),
+          state: await this.readContainerState(),
+          error: startError,
           workerSecretConfigured: true,
         };
       }
@@ -141,12 +146,21 @@ export class TutorContainer extends Container<TutorEnv> {
 
     await delay(150);
     const status = await this.runtimeStatus();
-    return { ...status, workerSecretConfigured: true };
+    return {
+      ...status,
+      error: status.error || (status.running ? undefined : startError || undefined),
+      workerSecretConfigured: true,
+    };
   }
 
   async runtimeStatus(): Promise<RuntimeStatus> {
     const state = await this.readContainerState();
-    if (!("status" in state) || !isLiveState(state)) {
+
+    // Do not use getState().status to decide whether start() is allowed. During
+    // Cloudflare lifecycle transitions it can briefly report stopped while the
+    // underlying VM is already running. The low-level running flag is designed
+    // for this exact guard and is what Cloudflare's exec examples use.
+    if (!this.ctx.container.running) {
       return { running: false, ready: false, state };
     }
 
