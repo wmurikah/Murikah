@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "check": "wrangler deploy --dry-run --config wrangler.toml --outdir .wrangler/dry-run",
-    "deploy:staging": "wrangler deploy --config wrangler.toml",
+    "deploy:staging": "wrangler deploy --config wrangler.toml && python smoke_staging.py",
     "dev": "wrangler dev --config wrangler.toml"
   },
   "dependencies": {
