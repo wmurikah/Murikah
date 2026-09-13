@@ -70,11 +70,13 @@ def main() -> int:
             'enableInternet = true',
             'FRONTEND_HOST: "0.0.0.0"',
             'getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging")',
-            'startAndWaitForPorts',
-            'portReadyTimeoutMS: 120_000',
-            'startupDiagnostics',
-            'this.ctx.container.start({',
+            '"murikah-tutor-staging-diagnostics-v2"',
+            'isolatedStartupDiagnostics',
+            'entrypoint: [',
             'this.ctx.container.exec(',
+            'this.ctx.container.getTcpPort(3782).fetch(',
+            'timeout 8s /app/murikah-tutor-entrypoint.sh',
+            'portReadyTimeoutMS: 10_000',
             '"/__muri/container-diagnostics"',
             '"/__muri/edge-health"',
             'x-murikah-tutor-runtime',
@@ -89,6 +91,7 @@ def main() -> int:
         (
             '<meta http-equiv="refresh"',
             'os.environ',
+            'portReadyTimeoutMS: 120_000',
         ),
     )
     require_markers(
@@ -130,8 +133,8 @@ def main() -> int:
     print("Murikah Tutor Cloudflare migration preflight: PASS")
     print(" - staging Container cannot claim the production Tutor hostname")
     print(" - one stable Container instance proxies streaming/WebSocket traffic on port 3782")
-    print(" - Cloudflare waits explicitly for DeepTutor first-boot port readiness")
-    print(" - staging exposes redacted process/port diagnostics without secret values")
+    print(" - failed primary startup returns within 10 seconds instead of blocking for two minutes")
+    print(" - diagnostics use a separate passive Container instance and reproduce startup safely")
     print(" - production cutover remains blocked on externalised /app/data persistence")
     print(" - Workers Builds deployment contract is documented")
     return 0
