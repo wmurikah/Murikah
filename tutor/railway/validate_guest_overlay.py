@@ -73,6 +73,11 @@ def main() -> None:
             "content={message.content}",
             "setDraft(prompt);",
             "Your prompt is still here",
+            "const transcriptRef = useRef<HTMLDivElement>(null);",
+            "transcript.scrollTo({",
+            'h-[calc(100dvh-4rem)]',
+            'ref={transcriptRef} className="mx-auto min-h-0 w-full max-w-3xl flex-1 space-y-6 overflow-y-auto overscroll-y-contain scroll-smooth',
+            'shrink-0 bg-[var(--background)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-3',
         ),
     )
     forbid_markers(
@@ -92,6 +97,7 @@ def main() -> None:
             "overflow-y-auto overscroll-contain scroll-smooth",
             "Choose Learning Mode",
             "Tutor could not answer that prompt.",
+            'endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });',
         ),
     )
     require_markers(
