@@ -1,3 +1,4 @@
+import { env as workerBindings } from "cloudflare:workers";
 import { Container, getContainer } from "@cloudflare/containers";
 
 type TutorEnv = {
@@ -19,6 +20,8 @@ type TutorEnv = {
   MURIKAH_APPLE_PRIVATE_KEY_B64?: string;
 };
 
+const runtimeBindings = workerBindings as unknown as TutorEnv;
+
 function optional(value: string | undefined): string {
   return value?.trim() || "";
 }
@@ -34,22 +37,27 @@ export class TutorContainer extends Container<TutorEnv> {
   enableInternet = true;
   pingEndpoint = "localhost/health";
 
+  // Cloudflare documents Worker bindings/secrets for Container defaults via the
+  // global `env` binding. Using `this.env` in a class-field initializer can run
+  // before the Durable Object instance binding is available, which previously
+  // produced empty strings even though the secret existed in the dashboard.
   envVars = {
-    TZ: this.env.TZ || "Africa/Nairobi",
+    TZ: runtimeBindings.TZ || "Africa/Nairobi",
     FRONTEND_HOST: "0.0.0.0",
-    MURIKAH_TUTOR_ADMIN_USERNAME: optional(this.env.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
-    MURIKAH_TUTOR_ADMIN_PASSWORD: optional(this.env.MURIKAH_TUTOR_ADMIN_PASSWORD),
+    MURIKAH_TUTOR_ADMIN_USERNAME:
+      optional(runtimeBindings.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
+    MURIKAH_TUTOR_ADMIN_PASSWORD: optional(runtimeBindings.MURIKAH_TUTOR_ADMIN_PASSWORD),
     MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS:
-      optional(this.env.MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS) || "24",
-    MURIKAH_GOOGLE_CLIENT_ID: optional(this.env.MURIKAH_GOOGLE_CLIENT_ID),
-    MURIKAH_GOOGLE_CLIENT_SECRET: optional(this.env.MURIKAH_GOOGLE_CLIENT_SECRET),
-    MURIKAH_MICROSOFT_CLIENT_ID: optional(this.env.MURIKAH_MICROSOFT_CLIENT_ID),
-    MURIKAH_MICROSOFT_CLIENT_SECRET: optional(this.env.MURIKAH_MICROSOFT_CLIENT_SECRET),
-    MURIKAH_MICROSOFT_TENANT: optional(this.env.MURIKAH_MICROSOFT_TENANT) || "common",
-    MURIKAH_APPLE_CLIENT_ID: optional(this.env.MURIKAH_APPLE_CLIENT_ID),
-    MURIKAH_APPLE_TEAM_ID: optional(this.env.MURIKAH_APPLE_TEAM_ID),
-    MURIKAH_APPLE_KEY_ID: optional(this.env.MURIKAH_APPLE_KEY_ID),
-    MURIKAH_APPLE_PRIVATE_KEY_B64: optional(this.env.MURIKAH_APPLE_PRIVATE_KEY_B64),
+      optional(runtimeBindings.MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS) || "24",
+    MURIKAH_GOOGLE_CLIENT_ID: optional(runtimeBindings.MURIKAH_GOOGLE_CLIENT_ID),
+    MURIKAH_GOOGLE_CLIENT_SECRET: optional(runtimeBindings.MURIKAH_GOOGLE_CLIENT_SECRET),
+    MURIKAH_MICROSOFT_CLIENT_ID: optional(runtimeBindings.MURIKAH_MICROSOFT_CLIENT_ID),
+    MURIKAH_MICROSOFT_CLIENT_SECRET: optional(runtimeBindings.MURIKAH_MICROSOFT_CLIENT_SECRET),
+    MURIKAH_MICROSOFT_TENANT: optional(runtimeBindings.MURIKAH_MICROSOFT_TENANT) || "common",
+    MURIKAH_APPLE_CLIENT_ID: optional(runtimeBindings.MURIKAH_APPLE_CLIENT_ID),
+    MURIKAH_APPLE_TEAM_ID: optional(runtimeBindings.MURIKAH_APPLE_TEAM_ID),
+    MURIKAH_APPLE_KEY_ID: optional(runtimeBindings.MURIKAH_APPLE_KEY_ID),
+    MURIKAH_APPLE_PRIVATE_KEY_B64: optional(runtimeBindings.MURIKAH_APPLE_PRIVATE_KEY_B64),
   };
 
   onStop(stopParams: unknown): void {
@@ -60,11 +68,6 @@ export class TutorContainer extends Container<TutorEnv> {
     console.error("Murikah Tutor container lifecycle error", error);
   }
 
-  // Runs only on the dedicated diagnostics instance. The instance starts with a
-  // passive shell entrypoint, so it never inherits the primary instance's
-  // required-port wait/alarm. We then reproduce the real Murikah entrypoint for
-  // eight seconds and inspect only process, file-presence, ownership and socket
-  // state. Environment values and settings contents are never returned.
   async isolatedStartupDiagnostics(): Promise<Record<string, unknown>> {
     let startError = "";
     if (!this.ctx.container.running) {
@@ -246,9 +249,6 @@ export default {
     if (url.pathname === "/__muri/edge-health") return edgeHealth(env);
 
     if (url.pathname === "/__muri/container-diagnostics") {
-      // A separate Durable Object/container ID keeps this probe independent of
-      // the primary instance's pending port-readiness alarm. It therefore
-      // returns even while the application instance is stuck starting.
       const diagnostic = getContainer(
         env.TUTOR_CONTAINER,
         "murikah-tutor-staging-diagnostics-v2",
