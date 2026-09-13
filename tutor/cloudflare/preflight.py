@@ -68,7 +68,10 @@ def main() -> int:
             'requiredPorts = [3782]',
             'sleepAfter = "15m"',
             'enableInternet = true',
+            'FRONTEND_HOST: "0.0.0.0"',
             'getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging")',
+            'startAndWaitForPorts',
+            'portReadyTimeoutMS: 120_000',
             '"/__muri/edge-health"',
             'x-murikah-tutor-runtime',
             'MURIKAH_TUTOR_ADMIN_PASSWORD',
@@ -116,6 +119,7 @@ def main() -> int:
     print("Murikah Tutor Cloudflare migration preflight: PASS")
     print(" - staging Container cannot claim the production Tutor hostname")
     print(" - one stable Container instance proxies streaming/WebSocket traffic on port 3782")
+    print(" - Cloudflare waits explicitly for DeepTutor first-boot port readiness")
     print(" - production cutover remains blocked on externalised /app/data persistence")
     print(" - Workers Builds deployment contract is documented")
     return 0
