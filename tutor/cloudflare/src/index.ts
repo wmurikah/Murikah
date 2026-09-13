@@ -1,4 +1,3 @@
-import { env as workerBindings } from "cloudflare:workers";
 import { Container, getContainer } from "@cloudflare/containers";
 
 type TutorEnv = {
@@ -32,15 +31,19 @@ type RuntimeStatus = {
   httpStatus?: number;
   state?: ContainerState | { error: string };
   error?: string;
+  workerSecretConfigured?: boolean;
 };
 
-const runtimeBindings = workerBindings as unknown as TutorEnv;
-const APP_INSTANCE = "murikah-tutor-staging-v5";
-const DIAGNOSTIC_INSTANCE = "murikah-tutor-staging-diagnostics-v5";
+const APP_INSTANCE = "murikah-tutor-staging-v6";
+const DIAGNOSTIC_INSTANCE = "murikah-tutor-staging-diagnostics-v6";
 const CLOUDFLARE_ENTRYPOINT = "/app/murikah-cloudflare-entrypoint.sh";
 
 function optional(value: string | undefined): string {
   return value?.trim() || "";
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function delay(ms: number): Promise<void> {
@@ -69,6 +72,10 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
   };
 }
 
+function hasAdminSecret(runtimeEnv: Record<string, string>): boolean {
+  return (runtimeEnv.MURIKAH_TUTOR_ADMIN_PASSWORD || "").length >= 14;
+}
+
 function isLiveState(state: ContainerState | undefined): boolean {
   return state?.status === "running" || state?.status === "healthy";
 }
@@ -78,7 +85,6 @@ export class TutorContainer extends Container<TutorEnv> {
   sleepAfter = "30m";
   enableInternet = true;
   entrypoint = [CLOUDFLARE_ENTRYPOINT];
-  envVars = buildContainerEnv(runtimeBindings);
 
   onStop(stopParams: unknown): void {
     console.log("Murikah Tutor container stopped", JSON.stringify(stopParams));
@@ -92,19 +98,30 @@ export class TutorContainer extends Container<TutorEnv> {
     try {
       return (await this.getState()) as ContainerState;
     } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
+      return { error: errorText(error) };
     }
   }
 
   async ensureStarted(runtimeEnv: Record<string, string>): Promise<RuntimeStatus> {
+    if (!hasAdminSecret(runtimeEnv)) {
+      return {
+        running: false,
+        ready: false,
+        error: "Required Tutor admin secret is not available to the Worker runtime.",
+        workerSecretConfigured: false,
+      };
+    }
+
     const before = await this.state();
-    if ("status" in before && isLiveState(before)) return this.runtimeStatus();
+    if ("status" in before && isLiveState(before)) {
+      const current = await this.runtimeStatus();
+      return { ...current, workerSecretConfigured: true };
+    }
 
     try {
-      // Use the low-level start so the Worker never blocks on port readiness.
-      // Readiness is checked separately by runtimeStatus(). The Cloudflare-
-      // specific entrypoint bypasses supervisord privilege dropping and starts
-      // FastAPI + Next.js directly inside the isolated VM.
+      // Pass bindings from the stateless fetch handler explicitly on every
+      // Linux start. This avoids relying on class-field/global binding timing
+      // and follows Cloudflare's per-instance environment contract directly.
       this.ctx.container.start({
         env: runtimeEnv,
         enableInternet: true,
@@ -117,13 +134,15 @@ export class TutorContainer extends Container<TutorEnv> {
           running: false,
           ready: false,
           state: afterError,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorText(error),
+          workerSecretConfigured: true,
         };
       }
     }
 
     await delay(150);
-    return this.runtimeStatus();
+    const status = await this.runtimeStatus();
+    return { ...status, workerSecretConfigured: true };
   }
 
   async runtimeStatus(): Promise<RuntimeStatus> {
@@ -153,38 +172,54 @@ export class TutorContainer extends Container<TutorEnv> {
         running: true,
         ready: false,
         state,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorText(error),
       };
     } finally {
       clearTimeout(timer);
     }
   }
 
-  async isolatedStartupDiagnostics(): Promise<Record<string, unknown>> {
-    let startError = "";
-    if (!this.ctx.container.running) {
+  async isolatedStartupDiagnostics(
+    runtimeEnv: Record<string, string>,
+  ): Promise<Record<string, unknown>> {
+    const report: Record<string, unknown> = {
+      workerSecretConfigured: hasAdminSecret(runtimeEnv),
+    };
+
+    // Diagnostics must never inherit an older passive process or stale env.
+    // Tear down the diagnostic VM first, then start a fresh one using the same
+    // runtime environment that the real application receives.
+    if (this.ctx.container.running) {
       try {
-        this.ctx.container.start({
-          env: this.envVars,
-          enableInternet: true,
-          entrypoint: [
-            "/bin/sh",
-            "-c",
-            "trap 'exit 0' TERM INT; while :; do sleep 60; done",
-          ],
-        });
-        for (let attempt = 0; attempt < 50 && !this.ctx.container.running; attempt += 1) {
-          await delay(100);
-        }
+        this.ctx.container.destroy("Restarting Murikah staging diagnostic");
       } catch (error) {
-        startError = error instanceof Error ? error.message : String(error);
+        report.preflightDestroyError = errorText(error);
+      }
+      for (let attempt = 0; attempt < 50 && this.ctx.container.running; attempt += 1) {
+        await delay(100);
       }
     }
 
-    const report: Record<string, unknown> = {
-      running: this.ctx.container.running,
-      startError: startError || undefined,
-    };
+    let startError = "";
+    try {
+      this.ctx.container.start({
+        env: runtimeEnv,
+        enableInternet: true,
+        entrypoint: [
+          "/bin/sh",
+          "-c",
+          "trap 'exit 0' TERM INT; while :; do sleep 60; done",
+        ],
+      });
+      for (let attempt = 0; attempt < 50 && !this.ctx.container.running; attempt += 1) {
+        await delay(100);
+      }
+    } catch (error) {
+      startError = errorText(error);
+    }
+
+    report.running = this.ctx.container.running;
+    report.startError = startError || undefined;
     if (!this.ctx.container.running) return report;
 
     const run = async (command: string[]): Promise<Record<string, unknown>> => {
@@ -199,94 +234,108 @@ export class TutorContainer extends Container<TutorEnv> {
           output: new TextDecoder().decode(output.stdout).slice(0, 16000),
         };
       } catch (error) {
-        return { error: error instanceof Error ? error.message : String(error) };
+        return { error: errorText(error) };
       }
     };
 
-    report.image = await run([
-      "/bin/sh",
-      "-lc",
-      [
-        "id",
-        "printf 'node='; node --version 2>&1 || true",
-        "printf 'python='; python --version 2>&1 || true",
-        "for p in /app/web/server.js /app/start-frontend.sh /app/start-backend.sh /app/murikah-tutor-bootstrap.py /app/murikah-cloudflare-entrypoint.sh /app/data; do if [ -e \"$p\" ]; then stat -c '%A %u:%g %n' \"$p\" 2>/dev/null || ls -ld \"$p\"; else echo \"missing $p\"; fi; done",
-      ].join("; "),
-    ]);
-
-    let appProcess: Awaited<ReturnType<typeof this.ctx.container.exec>> | null = null;
-    let appProcessError = "";
     try {
-      appProcess = await this.ctx.container.exec(
+      report.image = await run([
+        "/bin/sh",
+        "-lc",
         [
-          "/bin/sh",
-          "-lc",
-          "rm -f /tmp/muri-start.log; timeout 25s /app/murikah-cloudflare-entrypoint.sh >/tmp/muri-start.log 2>&1 || true",
-        ],
-        { stdout: "ignore", stderr: "ignore" },
-      );
-    } catch (error) {
-      appProcessError = error instanceof Error ? error.message : String(error);
-    }
+          "id",
+          "printf 'node='; node --version 2>&1 || true",
+          "printf 'python='; python --version 2>&1 || true",
+          "printf 'image-revision='; cat /app/.murikah-cloudflare-image-revision 2>/dev/null || echo missing",
+          "for p in /app/web/server.js /app/start-frontend.sh /app/start-backend.sh /app/murikah-tutor-bootstrap.py /app/murikah-cloudflare-entrypoint.sh /app/data; do if [ -e \"$p\" ]; then stat -c '%A %u:%g %n' \"$p\" 2>/dev/null || ls -ld \"$p\"; else echo \"missing $p\"; fi; done",
+        ].join("; "),
+      ]);
 
-    await delay(10000);
-
-    let portProbe = "not-tested";
-    if (appProcess) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 1500);
+      let appProcess: Awaited<ReturnType<typeof this.ctx.container.exec>> | null = null;
+      let appProcessError = "";
       try {
-        const response = await this.ctx.container.getTcpPort(3782).fetch(
-          "http://container/health",
-          { signal: controller.signal },
+        appProcess = await this.ctx.container.exec(
+          [
+            "/bin/sh",
+            "-lc",
+            "rm -f /tmp/muri-start.log; timeout 25s /app/murikah-cloudflare-entrypoint.sh >/tmp/muri-start.log 2>&1 || true",
+          ],
+          { stdout: "ignore", stderr: "ignore" },
         );
-        portProbe = `http-${response.status}`;
       } catch (error) {
-        portProbe = error instanceof Error ? error.message : String(error);
-      } finally {
-        clearTimeout(timer);
+        appProcessError = errorText(error);
       }
-    }
 
-    report.runtime = {
-      appProcessError: appProcessError || undefined,
-      port3782: portProbe,
-      snapshot: await run([
+      await delay(10000);
+
+      let portProbe = "not-tested";
+      if (appProcess) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 1500);
+        try {
+          const response = await this.ctx.container.getTcpPort(3782).fetch(
+            "http://container/health",
+            { signal: controller.signal },
+          );
+          portProbe = `http-${response.status}`;
+        } catch (error) {
+          portProbe = errorText(error);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      report.runtime = {
+        appProcessError: appProcessError || undefined,
+        port3782: portProbe,
+        snapshot: await run([
+          "python",
+          "-c",
+          [
+            "from pathlib import Path",
+            "def text(p):",
+            "    try: return Path(p).read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace').strip()",
+            "    except Exception as exc: return f'<unavailable:{type(exc).__name__}>'",
+            "print('tcp4:')",
+            "print(text('/proc/net/tcp'))",
+            "print('tcp6:')",
+            "print(text('/proc/net/tcp6'))",
+            "print('processes:')",
+            "for d in sorted(Path('/proc').iterdir(), key=lambda x: int(x.name) if x.name.isdigit() else 10**9):",
+            "    if d.name.isdigit():",
+            "        cmd = text(str(d / 'cmdline'))",
+            "        if cmd: print(d.name + ' ' + cmd[:700])",
+          ].join("\n"),
+        ]),
+      };
+
+      if (appProcess) await appProcess.exitCode;
+
+      report.startupLog = await run([
         "python",
         "-c",
         [
           "from pathlib import Path",
-          "def text(p):",
-          "    try: return Path(p).read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace').strip()",
-          "    except Exception as exc: return f'<unavailable:{type(exc).__name__}>'",
-          "print('tcp4:')",
-          "print(text('/proc/net/tcp'))",
-          "print('tcp6:')",
-          "print(text('/proc/net/tcp6'))",
-          "print('processes:')",
-          "for d in sorted(Path('/proc').iterdir(), key=lambda x: int(x.name) if x.name.isdigit() else 10**9):",
-          "    if d.name.isdigit():",
-          "        cmd = text(str(d / 'cmdline'))",
-          "        if cmd: print(d.name + ' ' + cmd[:700])",
+          "p=Path('/tmp/muri-start.log')",
+          "data=p.read_text(encoding='utf-8', errors='replace')[-14000:] if p.exists() else '<no startup log>'",
+          "blocked=('password=', 'secret=', 'token=', 'client_secret=', 'private_key=')",
+          "for line in data.splitlines():",
+          "    low=line.lower()",
+          "    print('<redacted diagnostic line>' if any(x in low for x in blocked) else line)",
         ].join("\n"),
-      ]),
-    };
-
-    if (appProcess) await appProcess.exitCode;
-
-    report.startupLog = await run([
-      "python",
-      "-c",
-      [
-        "from pathlib import Path",
-        "p=Path('/tmp/muri-start.log')",
-        "data=p.read_text(encoding='utf-8', errors='replace')[-14000:] if p.exists() else '<no startup log>'",
-        "blocked=('password=', 'secret=', 'token=', 'client_secret=', 'private_key=')",
-        "for line in data.splitlines():",
-        "    low=line.lower()",
-        "    print('<redacted diagnostic line>' if any(x in low for x in blocked) else line)",
-      ].join("\n"),
-    ]);
+      ]);
+    } finally {
+      // Diagnostic VMs must never occupy a staging slot after the report has
+      // been collected. This also prevents old diagnostic identities from
+      // starving the real Tutor of capacity on later deployments.
+      try {
+        if (this.ctx.container.running) {
+          this.ctx.container.destroy("Murikah staging diagnostic complete");
+        }
+      } catch (error) {
+        report.cleanupError = errorText(error);
+      }
+    }
 
     return report;
   }
@@ -303,9 +352,25 @@ function edgeHealth(env: TutorEnv): Response {
   );
 }
 
-function startingShell(): Response {
+function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Response {
+  return Response.json(
+    {
+      ok: hasAdminSecret(runtimeEnv),
+      runtime: env.MURIKAH_TUTOR_RUNTIME,
+      adminPasswordConfigured: hasAdminSecret(runtimeEnv),
+      appInstance: APP_INSTANCE,
+    },
+    {
+      status: hasAdminSecret(runtimeEnv) ? 200 : 503,
+      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+    },
+  );
+}
+
+function startingShell(message = "Preparing your learning space. You can stay on this page."): Response {
+  const safeMessage = message.replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char);
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(560px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:20px;padding:34px;box-sizing:border-box;box-shadow:0 18px 60px rgba(30,42,48,.06)}.brand{font-weight:760}.brand span{color:#A9822E}h1{font-size:30px;letter-spacing:-.035em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:26px;border-radius:999px;overflow:hidden;background:#e5e8e9}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:14px;font-size:13px;color:#879298}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Opening your Tutor…</h1><p id="status">Preparing your learning space. You can stay on this page.</p><div class="bar"></div><div class="small" id="small">The edge experience is already loaded while Tutor finishes starting.</div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.state&&String(s.state.status||'').startsWith('stopped')){document.getElementById('status').textContent='Restarting the Tutor runtime…';}if(attempts>40){document.getElementById('status').textContent='Tutor is still starting. Staging diagnostics are running automatically.';document.getElementById('small').textContent='You do not need to refresh this page.';}}catch(e){}setTimeout(check,attempts<15?750:1500);}check();})();</script></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(560px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:20px;padding:34px;box-sizing:border-box;box-shadow:0 18px 60px rgba(30,42,48,.06)}.brand{font-weight:760}.brand span{color:#A9822E}h1{font-size:30px;letter-spacing:-.035em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:26px;border-radius:999px;overflow:hidden;background:#e5e8e9}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:14px;font-size:13px;color:#879298}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Opening your Tutor…</h1><p id="status">${safeMessage}</p><div class="bar"></div><div class="small" id="small">The edge experience is already loaded while Tutor finishes starting.</div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.workerSecretConfigured===false){document.getElementById('status').textContent='Tutor staging configuration is incomplete.';document.getElementById('small').textContent='The edge is healthy; the runtime secret binding needs attention.';return;}if(attempts>40){document.getElementById('status').textContent='Tutor is still starting. Staging diagnostics are running automatically.';document.getElementById('small').textContent='You do not need to refresh this page.';}}catch(e){}setTimeout(check,attempts<15?750:1500);}check();})();</script></body></html>`,
     {
       status: 200,
       headers: {
@@ -317,26 +382,71 @@ function startingShell(): Response {
   );
 }
 
+async function safeStatus(
+  tutor: ReturnType<typeof getContainer<TutorContainer>>,
+  runtimeEnv: Record<string, string>,
+): Promise<RuntimeStatus> {
+  if (!hasAdminSecret(runtimeEnv)) {
+    return {
+      running: false,
+      ready: false,
+      error: "Required Tutor admin secret is not available to the Worker runtime.",
+      workerSecretConfigured: false,
+    };
+  }
+
+  try {
+    let status = await tutor.runtimeStatus();
+    if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
+    return { ...status, workerSecretConfigured: true };
+  } catch (error) {
+    // No Durable Object or Container exception should ever escape to the edge as
+    // Cloudflare 1101. The browser keeps a usable edge shell and the next poll
+    // retries startup while observability receives the safe error text.
+    console.error("Murikah Tutor runtime RPC failed", error);
+    return {
+      running: false,
+      ready: false,
+      error: errorText(error),
+      workerSecretConfigured: true,
+    };
+  }
+}
+
 export default {
   async fetch(request: Request, env: TutorEnv): Promise<Response> {
     const url = new URL(request.url);
+    const runtimeEnv = buildContainerEnv(env);
 
     if (url.pathname === "/favicon.ico") return new Response(null, { status: 204 });
     if (url.pathname === "/__muri/edge-health") return edgeHealth(env);
+    if (url.pathname === "/__muri/worker-config") return workerConfig(runtimeEnv, env);
 
     if (url.pathname === "/__muri/container-diagnostics") {
-      const diagnostic = getContainer(env.TUTOR_CONTAINER, DIAGNOSTIC_INSTANCE);
-      const report = await diagnostic.isolatedStartupDiagnostics();
-      return Response.json(report, {
-        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
-      });
+      try {
+        const diagnostic = getContainer(env.TUTOR_CONTAINER, DIAGNOSTIC_INSTANCE);
+        const report = await diagnostic.isolatedStartupDiagnostics(runtimeEnv);
+        return Response.json(report, {
+          headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+        });
+      } catch (error) {
+        console.error("Murikah Tutor diagnostics RPC failed", error);
+        return Response.json(
+          {
+            running: false,
+            workerSecretConfigured: hasAdminSecret(runtimeEnv),
+            error: errorText(error),
+          },
+          {
+            status: 503,
+            headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+          },
+        );
+      }
     }
 
     const tutor = getContainer(env.TUTOR_CONTAINER, APP_INSTANCE);
-    const runtimeEnv = buildContainerEnv(env);
-
-    let status = await tutor.runtimeStatus();
-    if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
+    const status = await safeStatus(tutor, runtimeEnv);
 
     if (url.pathname === "/__muri/runtime-status") {
       return Response.json(status, {
@@ -345,22 +455,29 @@ export default {
     }
 
     if (status.ready) {
-      const response = await tutor.fetch(request);
-      const headers = new Headers(response.headers);
-      headers.set("x-murikah-tutor-runtime", "cloudflare-container");
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
+      try {
+        const response = await tutor.fetch(request);
+        const headers = new Headers(response.headers);
+        headers.set("x-murikah-tutor-runtime", "cloudflare-container");
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      } catch (error) {
+        console.error("Murikah Tutor proxy failed", error);
+        return startingShell("Reconnecting to your Tutor…");
+      }
     }
 
     if (url.pathname === "/health") {
       return Response.json(
         {
-          status: "starting",
+          status: hasAdminSecret(runtimeEnv) ? "starting" : "configuration-error",
           runtime: env.MURIKAH_TUTOR_RUNTIME,
+          workerSecretConfigured: hasAdminSecret(runtimeEnv),
           containerState: status.state,
+          error: status.error,
         },
         {
           status: 503,
@@ -369,6 +486,10 @@ export default {
       );
     }
 
-    return startingShell();
+    return startingShell(
+      hasAdminSecret(runtimeEnv)
+        ? "Preparing your learning space. You can stay on this page."
+        : "Tutor staging configuration is incomplete.",
+    );
   },
 };

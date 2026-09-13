@@ -24,11 +24,11 @@ image_build_context = "../.."
 # Explicit image revision is a deliberate compatibility boundary between the
 # Worker lifecycle code and the Linux image. Bump it whenever that contract
 # changes so Workers Builds cannot leave a new Worker talking to an old image.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-13-v6" }
-# One slot is the real staging Tutor. The second is reserved for the short-lived
-# isolated diagnostic instance. standard-2 gives the Python + Next.js startup
-# path a full vCPU instead of the 0.5 vCPU staging originally used.
-max_instances = 2
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-13-v7" }
+# Staging keeps spare capacity for one fresh application identity, one isolated
+# diagnostic, and short-lived stale instances left by previous deployment tests.
+# max_instances is only a ceiling; unused slots do not run containers.
+max_instances = 4
 instance_type = "standard-2"
 # Staging deliberately has no active-instance grace period. A new Worker/image
 # contract must replace stale instances immediately rather than keeping the
