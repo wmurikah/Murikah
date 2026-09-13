@@ -6,6 +6,7 @@
 
 ARG DEEPTUTOR_VERSION=1.6.6
 ARG DEEPTUTOR_COMMIT=7a96bba1ae03401644c17763a2411c28aff3dcc9
+ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev
 
 FROM python:3.11-slim AS branded-source
 ARG DEEPTUTOR_COMMIT
@@ -82,6 +83,8 @@ RUN MURIKAH_CONSTRAINED_BUILD=1 \
 # checkout so upstream changes to `latest` cannot break a reproducible rebuild.
 FROM ghcr.io/hkuds/deeptutor:${DEEPTUTOR_VERSION} AS runtime
 ARG DEEPTUTOR_VERSION
+ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev
+LABEL com.murikah.tutor.cloudflare-image-rev="${MURIKAH_CLOUDFLARE_IMAGE_REV}"
 USER root
 RUN python -c "from deeptutor.__version__ import __version__; expected='${DEEPTUTOR_VERSION}'; assert __version__ == expected, f'Expected DeepTutor {expected}, base image is {__version__}'"
 
@@ -104,7 +107,8 @@ COPY tutor/cloudflare/entrypoint.sh /app/murikah-cloudflare-entrypoint.sh
 RUN chmod 0755 \
     /app/murikah-tutor-entrypoint.sh \
     /app/murikah-tutor-bootstrap.py \
-    /app/murikah-cloudflare-entrypoint.sh
+    /app/murikah-cloudflare-entrypoint.sh \
+    && printf '%s\n' "${MURIKAH_CLOUDFLARE_IMAGE_REV}" > /app/murikah-cloudflare-image-rev
 
 ENV PORT=3782
 EXPOSE 3782
