@@ -20,6 +20,14 @@ type TutorEnv = {
   MURIKAH_APPLE_PRIVATE_KEY_B64?: string;
 };
 
+type RuntimeStatus = {
+  running: boolean;
+  ready: boolean;
+  httpStatus?: number;
+  state?: unknown;
+  error?: string;
+};
+
 const runtimeBindings = workerBindings as unknown as TutorEnv;
 
 function optional(value: string | undefined): string {
@@ -30,35 +38,37 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function buildContainerEnv(source: TutorEnv): Record<string, string> {
+  return {
+    TZ: source.TZ || "Africa/Nairobi",
+    FRONTEND_HOST: "0.0.0.0",
+    MURIKAH_TUTOR_ADMIN_USERNAME: optional(source.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
+    MURIKAH_TUTOR_ADMIN_PASSWORD: optional(source.MURIKAH_TUTOR_ADMIN_PASSWORD),
+    MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS:
+      optional(source.MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS) || "24",
+    MURIKAH_GOOGLE_CLIENT_ID: optional(source.MURIKAH_GOOGLE_CLIENT_ID),
+    MURIKAH_GOOGLE_CLIENT_SECRET: optional(source.MURIKAH_GOOGLE_CLIENT_SECRET),
+    MURIKAH_MICROSOFT_CLIENT_ID: optional(source.MURIKAH_MICROSOFT_CLIENT_ID),
+    MURIKAH_MICROSOFT_CLIENT_SECRET: optional(source.MURIKAH_MICROSOFT_CLIENT_SECRET),
+    MURIKAH_MICROSOFT_TENANT: optional(source.MURIKAH_MICROSOFT_TENANT) || "common",
+    MURIKAH_APPLE_CLIENT_ID: optional(source.MURIKAH_APPLE_CLIENT_ID),
+    MURIKAH_APPLE_TEAM_ID: optional(source.MURIKAH_APPLE_TEAM_ID),
+    MURIKAH_APPLE_KEY_ID: optional(source.MURIKAH_APPLE_KEY_ID),
+    MURIKAH_APPLE_PRIVATE_KEY_B64: optional(source.MURIKAH_APPLE_PRIVATE_KEY_B64),
+  };
+}
+
 export class TutorContainer extends Container<TutorEnv> {
   defaultPort = 3782;
   requiredPorts = [3782];
-  sleepAfter = "15m";
+  sleepAfter = "30m";
   enableInternet = true;
   pingEndpoint = "localhost/health";
 
-  // Cloudflare documents Worker bindings/secrets for Container defaults via the
-  // global `env` binding. Using `this.env` in a class-field initializer can run
-  // before the Durable Object instance binding is available, which previously
-  // produced empty strings even though the secret existed in the dashboard.
-  envVars = {
-    TZ: runtimeBindings.TZ || "Africa/Nairobi",
-    FRONTEND_HOST: "0.0.0.0",
-    MURIKAH_TUTOR_ADMIN_USERNAME:
-      optional(runtimeBindings.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
-    MURIKAH_TUTOR_ADMIN_PASSWORD: optional(runtimeBindings.MURIKAH_TUTOR_ADMIN_PASSWORD),
-    MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS:
-      optional(runtimeBindings.MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS) || "24",
-    MURIKAH_GOOGLE_CLIENT_ID: optional(runtimeBindings.MURIKAH_GOOGLE_CLIENT_ID),
-    MURIKAH_GOOGLE_CLIENT_SECRET: optional(runtimeBindings.MURIKAH_GOOGLE_CLIENT_SECRET),
-    MURIKAH_MICROSOFT_CLIENT_ID: optional(runtimeBindings.MURIKAH_MICROSOFT_CLIENT_ID),
-    MURIKAH_MICROSOFT_CLIENT_SECRET: optional(runtimeBindings.MURIKAH_MICROSOFT_CLIENT_SECRET),
-    MURIKAH_MICROSOFT_TENANT: optional(runtimeBindings.MURIKAH_MICROSOFT_TENANT) || "common",
-    MURIKAH_APPLE_CLIENT_ID: optional(runtimeBindings.MURIKAH_APPLE_CLIENT_ID),
-    MURIKAH_APPLE_TEAM_ID: optional(runtimeBindings.MURIKAH_APPLE_TEAM_ID),
-    MURIKAH_APPLE_KEY_ID: optional(runtimeBindings.MURIKAH_APPLE_KEY_ID),
-    MURIKAH_APPLE_PRIVATE_KEY_B64: optional(runtimeBindings.MURIKAH_APPLE_PRIVATE_KEY_B64),
-  };
+  // Default values cover automatic Container-class starts. Normal staging
+  // launches also pass the same values explicitly through ensureStarted(), so
+  // Worker secrets reach the Linux process without depending on class-init timing.
+  envVars = buildContainerEnv(runtimeBindings);
 
   onStop(stopParams: unknown): void {
     console.log("Murikah Tutor container stopped", JSON.stringify(stopParams));
@@ -68,6 +78,69 @@ export class TutorContainer extends Container<TutorEnv> {
     console.error("Murikah Tutor container lifecycle error", error);
   }
 
+  // Start the Linux container only. Do not block the learner's HTTP request on
+  // application readiness; the edge shell polls runtimeStatus() while DeepTutor
+  // boots. This removes the previous 10/20/120-second request timeout loop.
+  async ensureStarted(runtimeEnv: Record<string, string>): Promise<RuntimeStatus> {
+    if (!this.ctx.container.running) {
+      try {
+        this.ctx.container.start({
+          env: runtimeEnv,
+          enableInternet: true,
+        });
+      } catch (error) {
+        return {
+          running: false,
+          ready: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+    return this.runtimeStatus();
+  }
+
+  // Readiness is defined by the actual Tutor /health route. That route becomes
+  // 200 only after both Next.js on 3782 and FastAPI on 8001 are usable.
+  async runtimeStatus(): Promise<RuntimeStatus> {
+    let state: unknown;
+    try {
+      state = await this.getState();
+    } catch (error) {
+      state = { error: error instanceof Error ? error.message : String(error) };
+    }
+
+    if (!this.ctx.container.running) {
+      return { running: false, ready: false, state };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    try {
+      const response = await this.ctx.container.getTcpPort(3782).fetch(
+        "http://container/health",
+        { signal: controller.signal, headers: { "cache-control": "no-store" } },
+      );
+      return {
+        running: true,
+        ready: response.status === 200,
+        httpStatus: response.status,
+        state,
+      };
+    } catch (error) {
+      return {
+        running: true,
+        ready: false,
+        state,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Dedicated staging diagnostic instance. It starts with a passive shell so
+  // it cannot be trapped by application-port readiness, then runs the real
+  // Murikah entrypoint briefly and reports only process/socket/file metadata.
   async isolatedStartupDiagnostics(): Promise<Record<string, unknown>> {
     let startError = "";
     if (!this.ctx.container.running) {
@@ -131,7 +204,7 @@ export class TutorContainer extends Container<TutorEnv> {
         [
           "/bin/sh",
           "-lc",
-          "rm -f /tmp/muri-start.log; timeout 8s /app/murikah-tutor-entrypoint.sh >/tmp/muri-start.log 2>&1 || true",
+          "rm -f /tmp/muri-start.log; timeout 20s /app/murikah-tutor-entrypoint.sh >/tmp/muri-start.log 2>&1 || true",
         ],
         { stdout: "ignore", stderr: "ignore" },
       );
@@ -139,7 +212,7 @@ export class TutorContainer extends Container<TutorEnv> {
       appProcessError = error instanceof Error ? error.message : String(error);
     }
 
-    await delay(3500);
+    await delay(9000);
 
     let portProbe = "not-tested";
     if (appProcess) {
@@ -182,9 +255,7 @@ export class TutorContainer extends Container<TutorEnv> {
       ]),
     };
 
-    if (appProcess) {
-      await appProcess.exitCode;
-    }
+    if (appProcess) await appProcess.exitCode;
 
     report.startupLog = await run([
       "python",
@@ -192,7 +263,7 @@ export class TutorContainer extends Container<TutorEnv> {
       [
         "from pathlib import Path",
         "p=Path('/tmp/muri-start.log')",
-        "data=p.read_text(encoding='utf-8', errors='replace')[-10000:] if p.exists() else '<no startup log>'",
+        "data=p.read_text(encoding='utf-8', errors='replace')[-12000:] if p.exists() else '<no startup log>'",
         "blocked=('password=', 'secret=', 'token=', 'client_secret=', 'private_key=')",
         "for line in data.splitlines():",
         "    low=line.lower()",
@@ -209,7 +280,7 @@ function edgeHealth(env: TutorEnv): Response {
     {
       ok: true,
       runtime: env.MURIKAH_TUTOR_RUNTIME,
-      note: "Edge Worker is available. This endpoint does not wake the Tutor container.",
+      note: "Edge Worker is available. This endpoint does not require Tutor to be warm.",
     },
     {
       headers: {
@@ -220,22 +291,13 @@ function edgeHealth(env: TutorEnv): Response {
   );
 }
 
-function unavailable(request: Request): Response {
-  const acceptsHtml = (request.headers.get("accept") || "").includes("text/html");
-  if (!acceptsHtml) {
-    return Response.json(
-      { error: "tutor_start_failed", message: "Murikah Tutor could not start. Please retry shortly." },
-      { status: 503, headers: { "retry-after": "10", "cache-control": "no-store" } },
-    );
-  }
-
+function startingShell(): Response {
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(520px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:18px;padding:32px;box-sizing:border-box}.brand{font-weight:750}.brand span{color:#A9822E}h1{font-size:28px;letter-spacing:-.03em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:24px;border-radius:999px;background:linear-gradient(90deg,#A9822E 0 30%,#e5e8e9 30%);animation:pulse 1.2s ease-in-out infinite}@keyframes pulse{50%{opacity:.4}}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Tutor is taking longer to start</h1><p>The edge experience is available, but the learning runtime has not become ready yet. Staging diagnostics are isolating the startup process.</p><div class="bar"></div></main></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(560px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:20px;padding:34px;box-sizing:border-box;box-shadow:0 18px 60px rgba(30,42,48,.06)}.brand{font-weight:760}.brand span{color:#A9822E}h1{font-size:30px;letter-spacing:-.035em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:26px;border-radius:999px;overflow:hidden;background:#e5e8e9}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:14px;font-size:13px;color:#879298}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Opening your Tutor…</h1><p id="status">Preparing your learning space. You can stay on this page.</p><div class="bar"></div><div class="small">The edge experience is already loaded while Tutor finishes starting.</div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.state&&s.state.status==='stopped_with_code'){document.getElementById('status').textContent='Tutor is restarting automatically…';}}catch(e){}setTimeout(check,attempts<10?700:1200);}check();})();</script></body></html>`,
     {
-      status: 503,
+      status: 200,
       headers: {
         "content-type": "text/html; charset=utf-8",
-        "retry-after": "10",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },
@@ -251,7 +313,7 @@ export default {
     if (url.pathname === "/__muri/container-diagnostics") {
       const diagnostic = getContainer(
         env.TUTOR_CONTAINER,
-        "murikah-tutor-staging-diagnostics-v2",
+        "murikah-tutor-staging-diagnostics-v3",
       );
       const report = await diagnostic.isolatedStartupDiagnostics();
       return Response.json(report, {
@@ -262,23 +324,26 @@ export default {
       });
     }
 
-    const tutor = getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging");
+    // New instance name intentionally discards every previous failed/stale
+    // staging container lifecycle. Production remains untouched.
+    const tutor = getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging-v4");
+    const runtimeEnv = buildContainerEnv(env);
 
-    try {
-      const startedAt = Date.now();
-      await tutor.startAndWaitForPorts({
-        ports: [3782],
-        cancellationOptions: {
-          instanceGetTimeoutMS: 8_000,
-          portReadyTimeoutMS: 10_000,
-          waitInterval: 300,
+    if (url.pathname === "/__muri/runtime-status") {
+      let status = await tutor.runtimeStatus();
+      if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
+      return Response.json(status, {
+        headers: {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
         },
       });
-      const startupMs = Date.now() - startedAt;
-      if (startupMs > 1_000) {
-        console.log(`Murikah Tutor container became ready in ${startupMs}ms`);
-      }
+    }
 
+    let status = await tutor.runtimeStatus();
+    if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
+
+    if (status.ready) {
       const response = await tutor.fetch(request);
       const headers = new Headers(response.headers);
       headers.set("x-murikah-tutor-runtime", "cloudflare-container");
@@ -287,9 +352,28 @@ export default {
         statusText: response.statusText,
         headers,
       });
-    } catch (error) {
-      console.error("Murikah Tutor container request failed", error);
-      return unavailable(request);
     }
+
+    if (url.pathname === "/health") {
+      return Response.json(
+        { status: "starting", runtime: env.MURIKAH_TUTOR_RUNTIME },
+        {
+          status: 503,
+          headers: {
+            "retry-after": "2",
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+          },
+        },
+      );
+    }
+
+    // Browsers request a favicon in parallel with the document. Do not let that
+    // second request create noise or duplicate startup work while Tutor is cold.
+    if (url.pathname === "/favicon.ico") {
+      return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+    }
+
+    return startingShell();
   },
 };
