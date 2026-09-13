@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed checks for the staged Cloudflare Container migration."""
+"""Fail-closed checks for the Cloudflare Container runtime."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -46,6 +46,8 @@ def main() -> int:
         (
             'name = "murikah-tutor-container-staging"',
             'workers_dev = true',
+            'pattern = "tutor.murikah.com"',
+            'custom_domain = true',
             'class_name = "TutorContainer"',
             'image = "../Dockerfile.railway"',
             'image_build_context = "../.."',
@@ -56,13 +58,8 @@ def main() -> int:
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             'required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]',
-        ),
-    )
-    forbid_markers(
-        "tutor/cloudflare/wrangler.toml",
-        (
-            'pattern = "tutor.murikah.com"',
-            'custom_domain = true',
+            'MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"',
+            'MURIKAH_GUEST_PROMPT_LIMIT = "7"',
         ),
     )
     require_markers(
@@ -148,10 +145,9 @@ def main() -> int:
         "tutor/cloudflare/README.md",
         (
             "Cloudflare Workers Builds",
-            "Production remains on the existing Cloudflare wake Worker",
+            "tutor.murikah.com",
             "python tutor/scripts/preflight.py",
             "npm --prefix tutor/cloudflare run deploy:staging",
-            "Do **not** attach `tutor.murikah.com`",
             "PERSISTENCE.md",
         ),
     )
@@ -181,19 +177,16 @@ def main() -> int:
         return 1
 
     print("Murikah Tutor Cloudflare migration preflight: PASS")
-    print(" - staging Container cannot claim the production Tutor hostname")
+    print(" - tutor.murikah.com is attached as the Cloudflare Container custom domain")
+    print(" - production public base is fixed to https://tutor.murikah.com")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - low-level container.running is authoritative for start eligibility")
     print(" - stale getState transitions cannot trigger duplicate start() calls")
     print(" - staging startup is non-blocking at the edge")
     print(" - Worker bindings are passed explicitly into every Linux container start")
-    print(" - Worker secret visibility is probed before the smoke test waits on Tutor")
     print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
-    print(" - isolated diagnostics use the real runtime env and release their container slot")
     print(" - readiness is determined by the real Tutor /health route")
-    print(" - standard-2 gives staging a full vCPU for Python + Next.js cold start")
-    print(" - spare staging capacity tolerates stale instances during migration")
-    print(" - production cutover remains blocked on externalised /app/data persistence")
+    print(" - production data migration remains blocked on externalised /app/data persistence")
     return 0
 
 
