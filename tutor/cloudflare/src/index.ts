@@ -5,8 +5,6 @@ type TutorEnv = {
   MURIKAH_TUTOR_RUNTIME: string;
   TZ: string;
 
-  // Runtime secrets are configured in Cloudflare and forwarded only to the
-  // Tutor container. Empty optional values simply leave that integration off.
   MURIKAH_TUTOR_ADMIN_USERNAME?: string;
   MURIKAH_TUTOR_ADMIN_PASSWORD?: string;
   MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS?: string;
@@ -25,6 +23,10 @@ function optional(value: string | undefined): string {
   return value?.trim() || "";
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class TutorContainer extends Container<TutorEnv> {
   defaultPort = 3782;
   requiredPorts = [3782];
@@ -34,10 +36,6 @@ export class TutorContainer extends Container<TutorEnv> {
 
   envVars = {
     TZ: this.env.TZ || "Africa/Nairobi",
-    // Cloudflare reaches the container over its private 10.x address, so the
-    // Next.js frontend must listen on every container interface rather than
-    // loopback. DeepTutor defaults to this too; keeping it explicit prevents
-    // a stale runtime setting or inherited environment from narrowing it.
     FRONTEND_HOST: "0.0.0.0",
     MURIKAH_TUTOR_ADMIN_USERNAME: optional(this.env.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
     MURIKAH_TUTOR_ADMIN_PASSWORD: optional(this.env.MURIKAH_TUTOR_ADMIN_PASSWORD),
@@ -62,65 +60,142 @@ export class TutorContainer extends Container<TutorEnv> {
     console.error("Murikah Tutor container lifecycle error", error);
   }
 
-  // Staging-only safe diagnostic. It reports process/port/file-presence state
-  // but never reads settings contents, environment values, credentials or user
-  // data. `start=true` uses the low-level non-blocking start API so we can see
-  // what the image is doing even when port-readiness never succeeds.
-  async startupDiagnostics(start = false): Promise<Record<string, unknown>> {
+  // Runs only on the dedicated diagnostics instance. The instance starts with a
+  // passive shell entrypoint, so it never inherits the primary instance's
+  // required-port wait/alarm. We then reproduce the real Murikah entrypoint for
+  // eight seconds and inspect only process, file-presence, ownership and socket
+  // state. Environment values and settings contents are never returned.
+  async isolatedStartupDiagnostics(): Promise<Record<string, unknown>> {
     let startError = "";
-    if (start && !this.ctx.container.running) {
+    if (!this.ctx.container.running) {
       try {
         this.ctx.container.start({
           env: this.envVars,
           enableInternet: true,
+          entrypoint: [
+            "/bin/sh",
+            "-c",
+            "trap 'exit 0' TERM INT; while :; do sleep 60; done",
+          ],
         });
-        await new Promise<void>((resolve) => setTimeout(resolve, 2500));
+        for (let attempt = 0; attempt < 40 && !this.ctx.container.running; attempt += 1) {
+          await delay(100);
+        }
       } catch (error) {
         startError = error instanceof Error ? error.message : String(error);
       }
     }
 
-    const state = await this.getState();
     const report: Record<string, unknown> = {
-      state,
       running: this.ctx.container.running,
       startError: startError || undefined,
     };
 
     if (!this.ctx.container.running) return report;
 
+    const run = async (command: string[]): Promise<Record<string, unknown>> => {
+      try {
+        const process = await this.ctx.container.exec(command, {
+          stdout: "pipe",
+          stderr: "combined",
+        });
+        const output = await process.output();
+        return {
+          exitCode: output.exitCode,
+          output: new TextDecoder().decode(output.stdout).slice(0, 12000),
+        };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    };
+
+    report.image = await run([
+      "/bin/sh",
+      "-lc",
+      [
+        "id",
+        "printf 'node='; node --version 2>&1 || true",
+        "printf 'python='; python --version 2>&1 || true",
+        "printf 'supervisord='; supervisord --version 2>&1 || true",
+        "for p in /app/web/server.js /app/start-frontend.sh /app/start-backend.sh /app/entrypoint.sh /app/murikah-tutor-entrypoint.sh /app/murikah-tutor-bootstrap.py /app/data; do if [ -e \"$p\" ]; then stat -c '%A %u:%g %n' \"$p\" 2>/dev/null || ls -ld \"$p\"; else echo \"missing $p\"; fi; done",
+      ].join("; "),
+    ]);
+
+    let appProcessError = "";
+    let appProcess: Awaited<ReturnType<typeof this.ctx.container.exec>> | null = null;
     try {
-      const process = await this.ctx.container.exec(
+      appProcess = await this.ctx.container.exec(
         [
-          "python",
-          "-c",
-          [
-            "from pathlib import Path",
-            "def text(p):",
-            "    try: return Path(p).read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace').strip()",
-            "    except Exception as exc: return f'<unavailable:{type(exc).__name__}>'",
-            "print('pid1=' + text('/proc/1/cmdline'))",
-            "for p in ['/app/web/server.js','/app/start-frontend.sh','/app/entrypoint.sh','/app/murikah-tutor-entrypoint.sh','/app/data/user/settings/auth.json','/app/data/user/settings/system.json']:",
-            "    print('exists ' + p + '=' + ('yes' if Path(p).exists() else 'no'))",
-            "print('tcp4:')",
-            "print(text('/proc/net/tcp'))",
-            "print('tcp6:')",
-            "print(text('/proc/net/tcp6'))",
-            "print('processes:')",
-            "for d in sorted(Path('/proc').iterdir(), key=lambda x: int(x.name) if x.name.isdigit() else 10**9):",
-            "    if d.name.isdigit():",
-            "        cmd = text(str(d / 'cmdline'))",
-            "        if cmd: print(d.name + ' ' + cmd[:500])",
-          ].join("\n"),
+          "/bin/sh",
+          "-lc",
+          "rm -f /tmp/muri-start.log; timeout 8s /app/murikah-tutor-entrypoint.sh >/tmp/muri-start.log 2>&1 || true",
         ],
-        { stdout: "pipe", stderr: "combined" },
+        { stdout: "ignore", stderr: "ignore" },
       );
-      const output = await process.output();
-      report.probe = new TextDecoder().decode(output.stdout).slice(0, 12000);
-      report.probeExitCode = await process.exitCode;
     } catch (error) {
-      report.probeError = error instanceof Error ? error.message : String(error);
+      appProcessError = error instanceof Error ? error.message : String(error);
     }
+
+    await delay(3500);
+
+    let portProbe = "not-tested";
+    if (appProcess) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1500);
+      try {
+        const response = await this.ctx.container.getTcpPort(3782).fetch(
+          "http://container/health",
+          { signal: controller.signal },
+        );
+        portProbe = `http-${response.status}`;
+      } catch (error) {
+        portProbe = error instanceof Error ? error.message : String(error);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    report.runtime = {
+      appProcessError: appProcessError || undefined,
+      port3782: portProbe,
+      snapshot: await run([
+        "python",
+        "-c",
+        [
+          "from pathlib import Path",
+          "def text(p):",
+          "    try: return Path(p).read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace').strip()",
+          "    except Exception as exc: return f'<unavailable:{type(exc).__name__}>'",
+          "print('tcp4:')",
+          "print(text('/proc/net/tcp'))",
+          "print('tcp6:')",
+          "print(text('/proc/net/tcp6'))",
+          "print('processes:')",
+          "for d in sorted(Path('/proc').iterdir(), key=lambda x: int(x.name) if x.name.isdigit() else 10**9):",
+          "    if d.name.isdigit():",
+          "        cmd = text(str(d / 'cmdline'))",
+          "        if cmd: print(d.name + ' ' + cmd[:500])",
+        ].join("\n"),
+      ]),
+    };
+
+    if (appProcess) {
+      await appProcess.exitCode;
+    }
+
+    report.startupLog = await run([
+      "python",
+      "-c",
+      [
+        "from pathlib import Path",
+        "p=Path('/tmp/muri-start.log')",
+        "data=p.read_text(encoding='utf-8', errors='replace')[-10000:] if p.exists() else '<no startup log>'",
+        "blocked=('password=', 'secret=', 'token=', 'client_secret=', 'private_key=')",
+        "for line in data.splitlines():",
+        "    low=line.lower()",
+        "    print('<redacted diagnostic line>' if any(x in low for x in blocked) else line)",
+      ].join("\n"),
+    ]);
 
     return report;
   }
@@ -147,17 +222,17 @@ function unavailable(request: Request): Response {
   if (!acceptsHtml) {
     return Response.json(
       { error: "tutor_start_failed", message: "Murikah Tutor could not start. Please retry shortly." },
-      { status: 503, headers: { "retry-after": "3", "cache-control": "no-store" } },
+      { status: 503, headers: { "retry-after": "10", "cache-control": "no-store" } },
     );
   }
 
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(520px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:18px;padding:32px;box-sizing:border-box}.brand{font-weight:750}.brand span{color:#A9822E}h1{font-size:28px;letter-spacing:-.03em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:24px;border-radius:999px;background:linear-gradient(90deg,#A9822E 0 30%,#e5e8e9 30%);animation:pulse 1.2s ease-in-out infinite}@keyframes pulse{50%{opacity:.4}}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Tutor is taking longer to start</h1><p>The edge experience is available, but the learning runtime has not become ready yet. Refresh once in a moment while staging diagnostics capture the startup state.</p><div class="bar"></div></main></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(520px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:18px;padding:32px;box-sizing:border-box}.brand{font-weight:750}.brand span{color:#A9822E}h1{font-size:28px;letter-spacing:-.03em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:24px;border-radius:999px;background:linear-gradient(90deg,#A9822E 0 30%,#e5e8e9 30%);animation:pulse 1.2s ease-in-out infinite}@keyframes pulse{50%{opacity:.4}}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Tutor is taking longer to start</h1><p>The edge experience is available, but the learning runtime has not become ready yet. Staging diagnostics are isolating the startup process.</p><div class="bar"></div></main></body></html>`,
     {
       status: 503,
       headers: {
         "content-type": "text/html; charset=utf-8",
-        "retry-after": "3",
+        "retry-after": "10",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },
@@ -170,13 +245,15 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/__muri/edge-health") return edgeHealth(env);
 
-    // One stable instance keeps all requests on the same Tutor runtime while
-    // the migration is single-instance. Horizontal scaling is deliberately
-    // deferred until persistent application state is externalised.
-    const tutor = getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging");
-
     if (url.pathname === "/__muri/container-diagnostics") {
-      const report = await tutor.startupDiagnostics(url.searchParams.get("start") === "1");
+      // A separate Durable Object/container ID keeps this probe independent of
+      // the primary instance's pending port-readiness alarm. It therefore
+      // returns even while the application instance is stuck starting.
+      const diagnostic = getContainer(
+        env.TUTOR_CONTAINER,
+        "murikah-tutor-staging-diagnostics-v2",
+      );
+      const report = await diagnostic.isolatedStartupDiagnostics();
       return Response.json(report, {
         headers: {
           "cache-control": "no-store",
@@ -185,18 +262,15 @@ export default {
       });
     }
 
+    const tutor = getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging");
+
     try {
-      // Container.fetch() uses Cloudflare's normal startup wait, which is too
-      // short for DeepTutor's first boot (bootstrap + runtime initialisation)
-      // and was returning "not listening ...:3782" before Next.js had time to
-      // bind. Wait explicitly for the real frontend port, with enough headroom
-      // for first boot; warm requests return through this check immediately.
       const startedAt = Date.now();
       await tutor.startAndWaitForPorts({
         ports: [3782],
         cancellationOptions: {
-          instanceGetTimeoutMS: 15_000,
-          portReadyTimeoutMS: 120_000,
+          instanceGetTimeoutMS: 8_000,
+          portReadyTimeoutMS: 10_000,
           waitInterval: 300,
         },
       });
