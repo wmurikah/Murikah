@@ -1,5 +1,5 @@
 name = "murikah-tutor-container-staging"
-main = "src/index.ts"
+main = "src/index_v2.ts"
 compatibility_date = "2026-09-13"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
@@ -21,9 +21,9 @@ required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# One slot is the real staging Tutor. The second is reserved for the short-lived
-# isolated diagnostic instance. standard-2 gives the Python + Next.js startup
-# path a full vCPU instead of the 0.5 vCPU staging originally used.
+# standard-2 gives Python + Next.js a full vCPU. The public port itself is now
+# owned by a tiny Node gateway that binds immediately and proxies to Next.js on
+# 3783 only after the real Tutor health route is ready.
 max_instances = 2
 instance_type = "standard-2"
 rollout_active_grace_period = 120
