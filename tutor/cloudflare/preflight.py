@@ -72,12 +72,23 @@ def main() -> int:
             'getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging")',
             'startAndWaitForPorts',
             'portReadyTimeoutMS: 120_000',
+            'startupDiagnostics',
+            'this.ctx.container.start({',
+            'this.ctx.container.exec(',
+            '"/__muri/container-diagnostics"',
             '"/__muri/edge-health"',
             'x-murikah-tutor-runtime',
             'MURIKAH_TUTOR_ADMIN_PASSWORD',
             'MURIKAH_GOOGLE_CLIENT_ID',
             'MURIKAH_MICROSOFT_CLIENT_ID',
             'MURIKAH_APPLE_CLIENT_ID',
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            '<meta http-equiv="refresh"',
+            'os.environ',
         ),
     )
     require_markers(
@@ -120,6 +131,7 @@ def main() -> int:
     print(" - staging Container cannot claim the production Tutor hostname")
     print(" - one stable Container instance proxies streaming/WebSocket traffic on port 3782")
     print(" - Cloudflare waits explicitly for DeepTutor first-boot port readiness")
+    print(" - staging exposes redacted process/port diagnostics without secret values")
     print(" - production cutover remains blocked on externalised /app/data persistence")
     print(" - Workers Builds deployment contract is documented")
     return 0
