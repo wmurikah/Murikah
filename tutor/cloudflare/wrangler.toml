@@ -8,6 +8,12 @@ preview_urls = false
 [observability]
 enabled = true
 
+# Fail closed before deployment if the first-boot admin secret is not actually
+# configured on the Worker. This keeps staging from publishing an image that
+# can never pass the Murikah Tutor bootstrap.
+[secrets]
+required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]
+
 # Staging only for the migration phase. Production tutor.murikah.com remains on
 # the existing wake Worker + Codespaces origin until /app/data persistence has
 # been externalised and migration/recovery tests pass.
