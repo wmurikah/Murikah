@@ -45,6 +45,8 @@ def main() -> int:
         (
             'name = "murikah-tutor-container-staging"',
             'workers_dev = true',
+            '[secrets]',
+            'required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]',
             'class_name = "TutorContainer"',
             'image = "../Dockerfile.railway"',
             'image_build_context = "../.."',
@@ -132,6 +134,7 @@ def main() -> int:
 
     print("Murikah Tutor Cloudflare migration preflight: PASS")
     print(" - staging Container cannot claim the production Tutor hostname")
+    print(" - Cloudflare deploys fail closed unless the first-boot admin secret exists")
     print(" - primary staging Tutor remains a single stable application instance")
     print(" - one extra staging slot is reserved only for isolated startup diagnostics")
     print(" - failed primary startup returns within 10 seconds instead of blocking for two minutes")
