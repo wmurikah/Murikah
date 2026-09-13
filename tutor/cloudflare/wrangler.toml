@@ -8,31 +8,28 @@ preview_urls = false
 [observability]
 enabled = true
 
+# The Cloudflare Container Worker is now the origin for the public Tutor
+# hostname. workers.dev remains enabled temporarily for direct diagnostics.
+[[routes]]
+pattern = "tutor.murikah.com"
+custom_domain = true
+
 # Fail closed before deployment if the first-boot admin secret is not actually
-# configured on the Worker. This keeps staging from publishing an image that
-# can never pass the Murikah Tutor bootstrap.
+# configured on the Worker.
 [secrets]
 required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]
 
-# Staging only for the migration phase. Production tutor.murikah.com remains on
-# the existing wake Worker + Codespaces origin until /app/data persistence has
-# been externalised and migration/recovery tests pass.
 [[containers]]
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# Explicit image revision is a deliberate compatibility boundary between the
-# Worker lifecycle code and the Linux image. Bump it whenever that contract
-# changes so Workers Builds cannot leave a new Worker talking to an old image.
+# Explicit image revision is a compatibility boundary between the Worker
+# lifecycle code and the Linux image.
 image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-13-v7" }
-# Staging keeps spare capacity for one fresh application identity, one isolated
-# diagnostic, and short-lived stale instances left by previous deployment tests.
-# max_instances is only a ceiling; unused slots do not run containers.
+# Staging keeps spare capacity for one active app, diagnostics and short-lived
+# rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
 instance_type = "standard-2"
-# Staging deliberately has no active-instance grace period. A new Worker/image
-# contract must replace stale instances immediately rather than keeping the
-# previous image alive while the new Worker is already serving requests.
 rollout_active_grace_period = 0
 rollout_step_percentage = [100]
 
@@ -46,4 +43,6 @@ new_sqlite_classes = ["TutorContainer"]
 
 [vars]
 MURIKAH_TUTOR_RUNTIME = "cloudflare-container-staging"
+MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"
+MURIKAH_GUEST_PROMPT_LIMIT = "7"
 TZ = "Africa/Nairobi"
