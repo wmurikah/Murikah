@@ -95,10 +95,10 @@ def main() -> int:
             'sleepAfter = "30m"',
             'entrypoint = [CLOUDFLARE_ENTRYPOINT]',
             'CLOUDFLARE_ENTRYPOINT = "/app/murikah-cloudflare-entrypoint.sh"',
-            'isLiveState(',
-            'state?.status === "running" || state?.status === "healthy"',
             'buildContainerEnv(env)',
             'this.ctx.container.start({',
+            'if (this.ctx.container.running)',
+            'if (!this.ctx.container.running)',
             'env: runtimeEnv',
             'entrypoint: [CLOUDFLARE_ENTRYPOINT]',
             'async ensureStarted(',
@@ -107,8 +107,8 @@ def main() -> int:
             'isolatedStartupDiagnostics(runtimeEnv)',
             'this.ctx.container.getTcpPort(3782).fetch(',
             'this.ctx.container.destroy("Murikah staging diagnostic complete")',
-            '"murikah-tutor-staging-v6"',
-            '"murikah-tutor-staging-diagnostics-v6"',
+            '"murikah-tutor-staging-v7"',
+            '"murikah-tutor-staging-diagnostics-v7"',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             '"/__muri/edge-health"',
@@ -131,6 +131,7 @@ def main() -> int:
             'requiredPorts = [3782]',
             'env as workerBindings',
             'runtimeBindings',
+            'isLiveState(',
         ),
     )
     require_markers(
@@ -182,7 +183,8 @@ def main() -> int:
     print("Murikah Tutor Cloudflare migration preflight: PASS")
     print(" - staging Container cannot claim the production Tutor hostname")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
-    print(" - stopped/stopped_with_code are treated as stopped and are restarted")
+    print(" - low-level container.running is authoritative for start eligibility")
+    print(" - stale getState transitions cannot trigger duplicate start() calls")
     print(" - staging startup is non-blocking at the edge")
     print(" - Worker bindings are passed explicitly into every Linux container start")
     print(" - Worker secret visibility is probed before the smoke test waits on Tutor")
