@@ -19,13 +19,16 @@ BASE_URL = os.environ.get(
     "MURIKAH_TUTOR_STAGING_URL",
     "https://murikah-tutor-container-staging.hasspe.workers.dev",
 ).rstrip("/")
-DEADLINE_SECONDS = int(os.environ.get("MURIKAH_TUTOR_SMOKE_TIMEOUT", "150"))
+# Cloudflare activates Worker code before a container rollout has necessarily
+# replaced every old instance. Staging uses immediate rollout + zero grace, but
+# still allow several minutes for image provisioning/replacement before failing.
+DEADLINE_SECONDS = int(os.environ.get("MURIKAH_TUTOR_SMOKE_TIMEOUT", "300"))
 
 
 def get(path: str, timeout: float = 8.0) -> tuple[int, str]:
     request = urllib.request.Request(
         BASE_URL + path,
-        headers={"User-Agent": "murikah-tutor-deploy-smoke/1.0", "Cache-Control": "no-store"},
+        headers={"User-Agent": "murikah-tutor-deploy-smoke/1.1", "Cache-Control": "no-store"},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -62,8 +65,11 @@ def main() -> int:
                             print(" - Tutor frontend listening on 3782")
                             print(" - Tutor backend readiness passed")
                             return 0
-                        print(f" - readiness probe passed but /health returned HTTP {health_code}: {health_body[:300]}")
-        except Exception as exc:  # network/DNS may settle briefly after deploy
+                        print(
+                            f" - readiness probe passed but /health returned HTTP {health_code}: "
+                            f"{health_body[:300]}"
+                        )
+        except Exception as exc:  # network/DNS and rollout state can settle after deploy
             print(f" - probe retry: {type(exc).__name__}: {exc}")
         time.sleep(2)
 
