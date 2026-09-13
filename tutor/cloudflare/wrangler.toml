@@ -22,10 +22,10 @@ class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
 # One slot is the real staging Tutor. The second is reserved for the short-lived
-# isolated diagnostic instance so a stuck primary startup cannot block the
-# diagnostic RPC. Production scaling remains deliberately deferred.
+# isolated diagnostic instance. standard-2 gives the Python + Next.js startup
+# path a full vCPU instead of the 0.5 vCPU staging originally used.
 max_instances = 2
-instance_type = "standard-1"
+instance_type = "standard-2"
 rollout_active_grace_period = 120
 rollout_step_percentage = [100]
 
