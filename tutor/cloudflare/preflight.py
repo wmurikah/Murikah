@@ -63,25 +63,46 @@ def main() -> int:
         ),
     )
     require_markers(
+        "tutor/cloudflare/entrypoint.sh",
+        (
+            'python /app/murikah-tutor-bootstrap.py',
+            'export BACKEND_HOST=127.0.0.1',
+            'export FRONTEND_HOST=0.0.0.0',
+            '/app/start-backend.sh &',
+            '/app/start-frontend.sh &',
+            'wait -n',
+        ),
+    )
+    require_markers(
+        "tutor/Dockerfile.railway",
+        (
+            'COPY tutor/cloudflare/entrypoint.sh /app/murikah-cloudflare-entrypoint.sh',
+            '/app/murikah-cloudflare-entrypoint.sh',
+            'ENTRYPOINT ["/app/murikah-tutor-entrypoint.sh"]',
+        ),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             'extends Container<TutorEnv>',
             'defaultPort = 3782',
-            'requiredPorts = [3782]',
             'sleepAfter = "30m"',
-            'enableInternet = true',
-            'FRONTEND_HOST: "0.0.0.0"',
+            'entrypoint = [CLOUDFLARE_ENTRYPOINT]',
+            'CLOUDFLARE_ENTRYPOINT = "/app/murikah-cloudflare-entrypoint.sh"',
+            'isLiveState(',
+            'state?.status === "running" || state?.status === "healthy"',
             'buildContainerEnv(env)',
             'this.ctx.container.start({',
-            'env: runtimeEnv',
+            'entrypoint: [CLOUDFLARE_ENTRYPOINT]',
             'async ensureStarted(',
             'async runtimeStatus()',
             'this.ctx.container.getTcpPort(3782).fetch(',
-            '"murikah-tutor-staging-v4"',
-            '"murikah-tutor-staging-diagnostics-v3"',
+            '"murikah-tutor-staging-v5"',
+            '"murikah-tutor-staging-diagnostics-v5"',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             '"/__muri/edge-health"',
+            'url.pathname === "/favicon.ico"',
             'x-murikah-tutor-runtime',
             'MURIKAH_TUTOR_ADMIN_PASSWORD',
             'MURIKAH_GOOGLE_CLIENT_ID',
@@ -95,6 +116,7 @@ def main() -> int:
             '<meta http-equiv="refresh"',
             'startAndWaitForPorts(',
             'portReadyTimeoutMS',
+            'requiredPorts = [3782]',
         ),
     )
     require_markers(
@@ -135,12 +157,13 @@ def main() -> int:
 
     print("Murikah Tutor Cloudflare migration preflight: PASS")
     print(" - staging Container cannot claim the production Tutor hostname")
-    print(" - staging startup is non-blocking at the edge; learners never wait on a port timeout")
-    print(" - runtime secrets are passed explicitly into each Linux container start")
+    print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
+    print(" - stopped/stopped_with_code are treated as stopped and are restarted")
+    print(" - staging startup is non-blocking at the edge")
+    print(" - runtime secrets are passed explicitly into every Linux container start")
     print(" - readiness is determined by the real Tutor /health route")
     print(" - standard-2 gives staging a full vCPU for Python + Next.js cold start")
-    print(" - a fresh container identity discards stale failed startup state")
-    print(" - diagnostics remain isolated from the application container")
+    print(" - fresh application and diagnostic identities discard stale lifecycle state")
     print(" - production cutover remains blocked on externalised /app/data persistence")
     return 0
 
