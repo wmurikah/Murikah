@@ -15,7 +15,10 @@ enabled = true
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-max_instances = 1
+# One slot is the real staging Tutor. The second is reserved for the short-lived
+# isolated diagnostic instance so a stuck primary startup cannot block the
+# diagnostic RPC. Production scaling remains deliberately deferred.
+max_instances = 2
 instance_type = "standard-1"
 rollout_active_grace_period = 120
 rollout_step_percentage = [100]
