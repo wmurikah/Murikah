@@ -48,7 +48,7 @@ def main() -> int:
             'class_name = "TutorContainer"',
             'image = "../Dockerfile.railway"',
             'image_build_context = "../.."',
-            'max_instances = 1',
+            'max_instances = 2',
             'instance_type = "standard-1"',
             'new_sqlite_classes = ["TutorContainer"]',
         ),
@@ -132,9 +132,10 @@ def main() -> int:
 
     print("Murikah Tutor Cloudflare migration preflight: PASS")
     print(" - staging Container cannot claim the production Tutor hostname")
-    print(" - one stable Container instance proxies streaming/WebSocket traffic on port 3782")
+    print(" - primary staging Tutor remains a single stable application instance")
+    print(" - one extra staging slot is reserved only for isolated startup diagnostics")
     print(" - failed primary startup returns within 10 seconds instead of blocking for two minutes")
-    print(" - diagnostics use a separate passive Container instance and reproduce startup safely")
+    print(" - diagnostics reproduce startup without sharing the primary readiness alarm")
     print(" - production cutover remains blocked on externalised /app/data persistence")
     print(" - Workers Builds deployment contract is documented")
     return 0
