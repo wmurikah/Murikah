@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""First-boot production hardening for Murikah Tutor on Railway.
+"""First-boot production hardening for Murikah Tutor on Railway/Cloudflare.
 
 This wrapper writes only DeepTutor's own persisted runtime settings under
 /app/data. It never touches Murikah's Astro, Cloudflare Worker, or Turso stack.
@@ -76,6 +76,19 @@ def bootstrap_auth() -> None:
     print(f"[Murikah Tutor] Created protected bootstrap admin: {username!r}.")
 
 
+def _runtime_port(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer.") from exc
+    if not 1 <= port <= 65535:
+        raise RuntimeError(f"{name} must be between 1 and 65535.")
+    return port
+
+
 def harden_system_settings() -> None:
     if SYSTEM_PATH.exists():
         current = json.loads(SYSTEM_PATH.read_text(encoding="utf-8"))
@@ -91,10 +104,10 @@ def harden_system_settings() -> None:
     else:
         current["sandbox_allow_subprocess"] = False
 
-    # Railway public traffic targets the Next.js service on 3782. The FastAPI
-    # backend remains internal to the same container on 8001 and is reached by
-    # DeepTutor's server-side proxy.
-    current["frontend_port"] = 3782
+    # Codespaces/Railway expose DeepTutor directly on 3782. Cloudflare reserves
+    # 3782 for the tiny always-fast Murikah gateway and runs Next.js internally on
+    # 3783. The gateway then proxies HTTP/WebSocket traffic once /health is ready.
+    current["frontend_port"] = _runtime_port("MURIKAH_TUTOR_APP_PORT", 3782)
     current["backend_port"] = 8001
     current["backend_workers"] = 1
 
