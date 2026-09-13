@@ -25,7 +25,7 @@ One-time setup in Cloudflare:
 5. Build command:
 
 ```bash
-python tutor/scripts/preflight.py && npm install --prefix tutor/cloudflare --no-audit --no-fund
+python tutor/scripts/preflight.py && python tutor/cloudflare/preflight.py && npm install --prefix tutor/cloudflare --no-audit --no-fund
 ```
 
 6. Deploy command:
