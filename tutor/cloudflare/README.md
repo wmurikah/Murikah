@@ -1,55 +1,52 @@
 # Murikah Tutor on Cloudflare Containers
 
-This directory is the migration target for the Murikah Tutor runtime. During the migration phase it deploys a **staging-only** Cloudflare Worker + Container and does not attach `tutor.murikah.com`.
+This directory now owns the Cloudflare Container runtime for Murikah Tutor and the public hostname `https://tutor.murikah.com`.
 
-Production remains on the existing Cloudflare wake Worker -> Codespaces -> named Tunnel path until `/app/data` persistence has been externalised, existing data has been migrated, and restart/rollback tests pass.
+The previous wake Worker -> Codespaces -> named Tunnel path is retained only as rollback infrastructure while persistence and data migration are completed. The public hostname is attached to the Cloudflare Container Worker as a Custom Domain.
 
-## Why this shape
+## Runtime shape
 
-The Tutor application image remains built from the reviewed `tutor/Dockerfile.railway` and pinned DeepTutor 1.6.6 source. Cloudflare owns the runtime lifecycle instead of GitHub Codespaces.
+The Tutor image is built from `tutor/Dockerfile.railway` and the pinned DeepTutor 1.6.6 source. Cloudflare owns the runtime lifecycle. The application listens on port `3782`, outbound Internet access is enabled for LLM/provider calls, the runtime uses `standard-2`, and it sleeps after 30 minutes of inactivity.
 
-The Worker routes requests to one stable Container instance. The Container uses port `3782`, keeps outbound Internet access for model/provider calls, and sleeps after 15 minutes of inactivity. Cloudflare can then restart it on demand without the multi-minute Codespaces wake path.
+`MURIKAH_PUBLIC_BASE_URL` is fixed to:
 
-`standard-1` is intentionally conservative for staging (0.5 vCPU, 4 GiB memory). We can right-size after observing real runtime memory and latency.
+```text
+https://tutor.murikah.com
+```
+
+This is the canonical base URL for OAuth callbacks and other externally generated links.
 
 ## Automatic deployment from GitHub
 
-Use **Cloudflare Workers Builds** rather than adding Cloudflare deployment credentials to the root Murikah application.
+Use **Cloudflare Workers Builds**.
 
-One-time setup in Cloudflare:
-
-1. Workers & Pages -> create or open the Worker named `murikah-tutor-container-staging`.
-2. Settings -> Builds -> Connect -> GitHub -> select `wmurikah/Murikah`.
-3. Production branch: `main`.
-4. Root directory: `/` (repository root).
-5. Build command:
+- Repository: `wmurikah/Murikah`
+- Production branch: `main`
+- Root directory: `/`
+- Build command:
 
 ```bash
 python tutor/scripts/preflight.py && python tutor/cloudflare/preflight.py && npm install --prefix tutor/cloudflare --no-audit --no-fund
 ```
 
-6. Deploy command:
+- Deploy command:
 
 ```bash
 npm --prefix tutor/cloudflare run deploy:staging
 ```
 
-7. Leave non-production branch deployment disabled for this Worker. Container preview builds do not provide a full Container preview; use a separate staging Worker for full-app testing.
-
-After this one-time connection, a merged Tutor PR that changes `tutor/**` can be deployed from `main` without opening Codespaces or running Docker manually.
+The deployment command publishes the Worker/Container and performs an immediate Container rollout. The optional smoke test is separate and does not determine deployment success.
 
 ## Runtime secrets
 
-Configure these in Cloudflare Worker **Settings -> Variables & Secrets**, not in Git or Wrangler:
+Configure these in Cloudflare Worker **Settings -> Variables & Secrets**, not in Git or Wrangler.
 
-Required for a fresh staging boot:
+Required:
 
 - `MURIKAH_TUTOR_ADMIN_PASSWORD`
 
-Optional/when configured:
+SSO when enabled:
 
-- `MURIKAH_TUTOR_ADMIN_USERNAME`
-- `MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS`
 - `MURIKAH_GOOGLE_CLIENT_ID`
 - `MURIKAH_GOOGLE_CLIENT_SECRET`
 - `MURIKAH_MICROSOFT_CLIENT_ID`
@@ -60,40 +57,26 @@ Optional/when configured:
 - `MURIKAH_APPLE_KEY_ID`
 - `MURIKAH_APPLE_PRIVATE_KEY_B64`
 
-The existing DeepTutor model/provider catalogue currently lives under `/app/data`; it is part of the persistence migration rather than being duplicated into source control.
+Other optional runtime values include `MURIKAH_TUTOR_ADMIN_USERNAME` and `MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS`.
 
-## Staging checks
+The DeepTutor model/provider catalogue currently lives under `/app/data`; persistence migration remains separate from the hostname cutover.
 
-After the first deployment, use the Worker-provided `workers.dev` hostname and verify:
+## Health checks
 
-```text
-/__muri/edge-health
-/health
-/
-```
-
-`/__muri/edge-health` is answered by the edge Worker and deliberately does not wake the Container. `/health` and the application routes are forwarded to the Tutor Container.
-
-The response from Container-backed routes includes:
+Public production checks:
 
 ```text
-x-murikah-tutor-runtime: cloudflare-container
+https://tutor.murikah.com/__muri/edge-health
+https://tutor.murikah.com/__muri/worker-config
+https://tutor.murikah.com/__muri/runtime-status
+https://tutor.murikah.com/health
+https://tutor.murikah.com/
 ```
 
-## Production cutover gate
+The Worker-provided `workers.dev` hostname remains enabled temporarily for direct diagnostics.
 
-Do **not** attach `tutor.murikah.com` to this Worker yet.
+## Persistence remains pending
 
-Production cutover requires all of the following:
-
-- durable persistence for settings, users/auth, sessions/messages, memory and knowledge state;
-- object persistence for uploaded/generated files and workspaces;
-- migration of the existing Codespaces `/app/data` without losing current data;
-- restart/sleep/restart verification;
-- rollback verification;
-- Google/Microsoft/Apple callback validation against the production hostname;
-- guest and authenticated end-to-end tests;
-- streaming response verification through the Cloudflare Worker;
-- removal of the Codespaces wake dependency only after the new runtime has passed production smoke tests.
+The public hostname cutover does not make Container-local `/app/data` durable. Before retiring the Codespaces rollback path, externalise and migrate settings, users/auth, sessions/messages, memory, knowledge state, uploads and generated workspaces, then verify sleep/wake, replacement and rollback behavior.
 
 See `PERSISTENCE.md` for the storage migration design.
