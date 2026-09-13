@@ -1,0 +1,33 @@
+name = "murikah-tutor-container-staging"
+main = "src/index.ts"
+compatibility_date = "2026-09-13"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = true
+
+# Staging only for the migration phase. Production tutor.murikah.com remains on
+# the existing wake Worker + Codespaces origin until /app/data persistence has
+# been externalised and migration/recovery tests pass.
+[[containers]]
+class_name = "TutorContainer"
+image = "../Dockerfile.railway"
+image_build_context = "../.."
+max_instances = 1
+instance_type = "standard-1"
+rollout_active_grace_period = 120
+rollout_step_percentage = [100]
+
+[[durable_objects.bindings]]
+name = "TUTOR_CONTAINER"
+class_name = "TutorContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TutorContainer"]
+
+[vars]
+MURIKAH_TUTOR_RUNTIME = "cloudflare-container-staging"
+TZ = "Africa/Nairobi"
