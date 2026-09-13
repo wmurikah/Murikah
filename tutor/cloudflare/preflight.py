@@ -37,6 +37,7 @@ def main() -> int:
             '"@cloudflare/containers": "0.3.7"',
             '"wrangler": "4.130.0"',
             '"deploy:staging"',
+            '--containers-rollout=immediate',
             '"check"',
         ),
     )
@@ -48,8 +49,10 @@ def main() -> int:
             'class_name = "TutorContainer"',
             'image = "../Dockerfile.railway"',
             'image_build_context = "../.."',
-            'max_instances = 2',
+            'max_instances = 4',
             'instance_type = "standard-2"',
+            'rollout_active_grace_period = 0',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-13-v7"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             'required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]',
@@ -76,8 +79,11 @@ def main() -> int:
     require_markers(
         "tutor/Dockerfile.railway",
         (
+            'ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev',
+            'LABEL com.murikah.tutor.cloudflare-image-rev=',
             'COPY tutor/cloudflare/entrypoint.sh /app/murikah-cloudflare-entrypoint.sh',
             '/app/murikah-cloudflare-entrypoint.sh',
+            '/app/murikah-cloudflare-image-rev',
             'ENTRYPOINT ["/app/murikah-tutor-entrypoint.sh"]',
         ),
     )
@@ -93,15 +99,21 @@ def main() -> int:
             'state?.status === "running" || state?.status === "healthy"',
             'buildContainerEnv(env)',
             'this.ctx.container.start({',
+            'env: runtimeEnv',
             'entrypoint: [CLOUDFLARE_ENTRYPOINT]',
             'async ensureStarted(',
             'async runtimeStatus()',
+            'async isolatedStartupDiagnostics(',
+            'isolatedStartupDiagnostics(runtimeEnv)',
             'this.ctx.container.getTcpPort(3782).fetch(',
-            '"murikah-tutor-staging-v5"',
-            '"murikah-tutor-staging-diagnostics-v5"',
+            'this.ctx.container.destroy("Murikah staging diagnostic complete")',
+            '"murikah-tutor-staging-v6"',
+            '"murikah-tutor-staging-diagnostics-v6"',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             '"/__muri/edge-health"',
+            '"/__muri/worker-config"',
+            'workerSecretConfigured',
             'url.pathname === "/favicon.ico"',
             'x-murikah-tutor-runtime',
             'MURIKAH_TUTOR_ADMIN_PASSWORD',
@@ -117,6 +129,18 @@ def main() -> int:
             'startAndWaitForPorts(',
             'portReadyTimeoutMS',
             'requiredPorts = [3782]',
+            'env as workerBindings',
+            'runtimeBindings',
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/smoke_staging.py",
+        (
+            '"/__muri/worker-config"',
+            'adminPasswordConfigured',
+            '"/__muri/runtime-status"',
+            '"/__muri/container-diagnostics"',
+            'MURIKAH_TUTOR_SMOKE_TIMEOUT',
         ),
     )
     require_markers(
@@ -160,10 +184,13 @@ def main() -> int:
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stopped/stopped_with_code are treated as stopped and are restarted")
     print(" - staging startup is non-blocking at the edge")
-    print(" - runtime secrets are passed explicitly into every Linux container start")
+    print(" - Worker bindings are passed explicitly into every Linux container start")
+    print(" - Worker secret visibility is probed before the smoke test waits on Tutor")
+    print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
+    print(" - isolated diagnostics use the real runtime env and release their container slot")
     print(" - readiness is determined by the real Tutor /health route")
     print(" - standard-2 gives staging a full vCPU for Python + Next.js cold start")
-    print(" - fresh application and diagnostic identities discard stale lifecycle state")
+    print(" - spare staging capacity tolerates stale instances during migration")
     print(" - production cutover remains blocked on externalised /app/data persistence")
     return 0
 
