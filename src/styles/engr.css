@@ -1393,6 +1393,25 @@ input.engr-switch:hover {
   background: var(--color-stone);
   color: var(--color-navy);
 }
+/* Seal verdict pills: colour supplements the "Verified"/"Changed" text, never
+   carries the meaning alone. */
+.engr-pill--ok {
+  background: #e7f4ec;
+  color: #1c6b3f;
+}
+.engr-pill--alert {
+  background: #fdecea;
+  color: #8a1c12;
+}
+/* A monospace, wrapping code span for the seal hash. */
+.engr-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--engr-fs-caption);
+  word-break: break-all;
+}
+.engr-detail--money dd {
+  font-variant-numeric: tabular-nums;
+}
 
 /* Action panels: a titled box holding one or more action forms. */
 .engr-panel {
