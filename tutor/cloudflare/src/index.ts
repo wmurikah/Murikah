@@ -53,6 +53,77 @@ export class TutorContainer extends Container<TutorEnv> {
     MURIKAH_APPLE_KEY_ID: optional(this.env.MURIKAH_APPLE_KEY_ID),
     MURIKAH_APPLE_PRIVATE_KEY_B64: optional(this.env.MURIKAH_APPLE_PRIVATE_KEY_B64),
   };
+
+  onStop(stopParams: unknown): void {
+    console.log("Murikah Tutor container stopped", JSON.stringify(stopParams));
+  }
+
+  onError(error: unknown): void {
+    console.error("Murikah Tutor container lifecycle error", error);
+  }
+
+  // Staging-only safe diagnostic. It reports process/port/file-presence state
+  // but never reads settings contents, environment values, credentials or user
+  // data. `start=true` uses the low-level non-blocking start API so we can see
+  // what the image is doing even when port-readiness never succeeds.
+  async startupDiagnostics(start = false): Promise<Record<string, unknown>> {
+    let startError = "";
+    if (start && !this.ctx.container.running) {
+      try {
+        this.ctx.container.start({
+          env: this.envVars,
+          enableInternet: true,
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 2500));
+      } catch (error) {
+        startError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    const state = await this.getState();
+    const report: Record<string, unknown> = {
+      state,
+      running: this.ctx.container.running,
+      startError: startError || undefined,
+    };
+
+    if (!this.ctx.container.running) return report;
+
+    try {
+      const process = await this.ctx.container.exec(
+        [
+          "python",
+          "-c",
+          [
+            "from pathlib import Path",
+            "def text(p):",
+            "    try: return Path(p).read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace').strip()",
+            "    except Exception as exc: return f'<unavailable:{type(exc).__name__}>'",
+            "print('pid1=' + text('/proc/1/cmdline'))",
+            "for p in ['/app/web/server.js','/app/start-frontend.sh','/app/entrypoint.sh','/app/murikah-tutor-entrypoint.sh','/app/data/user/settings/auth.json','/app/data/user/settings/system.json']:",
+            "    print('exists ' + p + '=' + ('yes' if Path(p).exists() else 'no'))",
+            "print('tcp4:')",
+            "print(text('/proc/net/tcp'))",
+            "print('tcp6:')",
+            "print(text('/proc/net/tcp6'))",
+            "print('processes:')",
+            "for d in sorted(Path('/proc').iterdir(), key=lambda x: int(x.name) if x.name.isdigit() else 10**9):",
+            "    if d.name.isdigit():",
+            "        cmd = text(str(d / 'cmdline'))",
+            "        if cmd: print(d.name + ' ' + cmd[:500])",
+          ].join("\n"),
+        ],
+        { stdout: "pipe", stderr: "combined" },
+      );
+      const output = await process.output();
+      report.probe = new TextDecoder().decode(output.stdout).slice(0, 12000);
+      report.probeExitCode = await process.exitCode;
+    } catch (error) {
+      report.probeError = error instanceof Error ? error.message : String(error);
+    }
+
+    return report;
+  }
 }
 
 function edgeHealth(env: TutorEnv): Response {
@@ -81,7 +152,7 @@ function unavailable(request: Request): Response {
   }
 
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="3"><title>Murikah Tutor</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(520px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:18px;padding:32px;box-sizing:border-box}.brand{font-weight:750}.brand span{color:#A9822E}h1{font-size:28px;letter-spacing:-.03em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:24px;border-radius:999px;background:linear-gradient(90deg,#A9822E 0 30%,#e5e8e9 30%);animation:pulse 1.2s ease-in-out infinite}@keyframes pulse{50%{opacity:.4}}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Opening your Tutor…</h1><p>The learning environment is starting. This page will retry automatically in a moment.</p><div class="bar"></div></main></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(520px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:18px;padding:32px;box-sizing:border-box}.brand{font-weight:750}.brand span{color:#A9822E}h1{font-size:28px;letter-spacing:-.03em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:24px;border-radius:999px;background:linear-gradient(90deg,#A9822E 0 30%,#e5e8e9 30%);animation:pulse 1.2s ease-in-out infinite}@keyframes pulse{50%{opacity:.4}}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Tutor is taking longer to start</h1><p>The edge experience is available, but the learning runtime has not become ready yet. Refresh once in a moment while staging diagnostics capture the startup state.</p><div class="bar"></div></main></body></html>`,
     {
       status: 503,
       headers: {
@@ -103,6 +174,16 @@ export default {
     // the migration is single-instance. Horizontal scaling is deliberately
     // deferred until persistent application state is externalised.
     const tutor = getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging");
+
+    if (url.pathname === "/__muri/container-diagnostics") {
+      const report = await tutor.startupDiagnostics(url.searchParams.get("start") === "1");
+      return Response.json(report, {
+        headers: {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    }
 
     try {
       // Container.fetch() uses Cloudflare's normal startup wait, which is too
