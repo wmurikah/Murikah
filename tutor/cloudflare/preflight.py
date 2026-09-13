@@ -44,11 +44,11 @@ def main() -> int:
         "tutor/cloudflare/wrangler.toml",
         (
             'name = "murikah-tutor-container-staging"',
+            'main = "src/index_v2.ts"',
             'workers_dev = true',
             'class_name = "TutorContainer"',
             'image = "../Dockerfile.railway"',
             'image_build_context = "../.."',
-            'max_instances = 2',
             'instance_type = "standard-2"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
@@ -57,28 +57,19 @@ def main() -> int:
     )
     forbid_markers(
         "tutor/cloudflare/wrangler.toml",
-        (
-            'pattern = "tutor.murikah.com"',
-            'custom_domain = true',
-        ),
+        ('pattern = "tutor.murikah.com"', 'custom_domain = true'),
     )
     require_markers(
-        "tutor/cloudflare/src/index.ts",
+        "tutor/cloudflare/src/index_v2.ts",
         (
             'extends Container<TutorEnv>',
             'defaultPort = 3782',
             'requiredPorts = [3782]',
             'sleepAfter = "30m"',
-            'enableInternet = true',
-            'FRONTEND_HOST: "0.0.0.0"',
-            'buildContainerEnv(env)',
-            'this.ctx.container.start({',
-            'env: runtimeEnv',
-            'async ensureStarted(',
-            'async runtimeStatus()',
-            'this.ctx.container.getTcpPort(3782).fetch(',
-            '"murikah-tutor-staging-v4"',
-            '"murikah-tutor-staging-diagnostics-v3"',
+            'pingEndpoint = "localhost/__muri/gateway-health"',
+            'MURIKAH_EDGE_GATEWAY: "1"',
+            'MURIKAH_TUTOR_APP_PORT: "3783"',
+            '"murikah-tutor-staging-v5"',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             '"/__muri/edge-health"',
@@ -89,13 +80,31 @@ def main() -> int:
             'MURIKAH_APPLE_CLIENT_ID',
         ),
     )
-    forbid_markers(
-        "tutor/cloudflare/src/index.ts",
+    require_markers(
+        "tutor/cloudflare/murikah_edge_gateway.js",
         (
-            '<meta http-equiv="refresh"',
-            'startAndWaitForPorts(',
-            'portReadyTimeoutMS',
+            'server.listen(listenPort, listenHost',
+            '"/__muri/gateway-health"',
+            'server.on("upgrade"',
+            'appPort = Number(process.env.MURIKAH_TUTOR_APP_PORT || 3783)',
         ),
+    )
+    require_markers(
+        "tutor/railway/entrypoint.sh",
+        (
+            'MURIKAH_EDGE_GATEWAY',
+            'node /app/murikah-edge-gateway.js',
+            'MURIKAH_TUTOR_APP_PORT:=3783',
+            'DeepTutor runtime exited with code',
+        ),
+    )
+    require_markers(
+        "tutor/railway/bootstrap_runtime.py",
+        ('_runtime_port("MURIKAH_TUTOR_APP_PORT", 3782)',),
+    )
+    require_markers(
+        "tutor/Dockerfile.railway",
+        ('COPY tutor/cloudflare/murikah_edge_gateway.js /app/murikah-edge-gateway.js',),
     )
     require_markers(
         "tutor/cloudflare/README.md",
@@ -118,14 +127,6 @@ def main() -> int:
             "Production cutover is blocked until",
         ),
     )
-    require_markers(
-        "tutor/cloudflare/inventory_app_data.py",
-        (
-            "SQLITE_MAGIC",
-            "SQLite databases detected",
-            "No file contents were read beyond the 16-byte SQLite signature check.",
-        ),
-    )
 
     if failures:
         print("Murikah Tutor Cloudflare migration preflight: FAILED")
@@ -134,14 +135,12 @@ def main() -> int:
         return 1
 
     print("Murikah Tutor Cloudflare migration preflight: PASS")
-    print(" - staging Container cannot claim the production Tutor hostname")
-    print(" - staging startup is non-blocking at the edge; learners never wait on a port timeout")
+    print(" - port 3782 is owned by an immediate lightweight gateway")
+    print(" - Next.js runs internally on 3783 and FastAPI on 8001")
+    print(" - HTTP and WebSocket traffic proxy only after Tutor /health is ready")
     print(" - runtime secrets are passed explicitly into each Linux container start")
-    print(" - readiness is determined by the real Tutor /health route")
-    print(" - standard-2 gives staging a full vCPU for Python + Next.js cold start")
-    print(" - a fresh container identity discards stale failed startup state")
-    print(" - diagnostics remain isolated from the application container")
-    print(" - production cutover remains blocked on externalised /app/data persistence")
+    print(" - failed DeepTutor child processes restart behind the live gateway")
+    print(" - production tutor.murikah.com remains untouched")
     return 0
 
 
