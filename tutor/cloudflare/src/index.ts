@@ -34,6 +34,11 @@ export class TutorContainer extends Container<TutorEnv> {
 
   envVars = {
     TZ: this.env.TZ || "Africa/Nairobi",
+    // Cloudflare reaches the container over its private 10.x address, so the
+    // Next.js frontend must listen on every container interface rather than
+    // loopback. DeepTutor defaults to this too; keeping it explicit prevents
+    // a stale runtime setting or inherited environment from narrowing it.
+    FRONTEND_HOST: "0.0.0.0",
     MURIKAH_TUTOR_ADMIN_USERNAME: optional(this.env.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
     MURIKAH_TUTOR_ADMIN_PASSWORD: optional(this.env.MURIKAH_TUTOR_ADMIN_PASSWORD),
     MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS:
@@ -100,6 +105,25 @@ export default {
     const tutor = getContainer(env.TUTOR_CONTAINER, "murikah-tutor-staging");
 
     try {
+      // Container.fetch() uses Cloudflare's normal startup wait, which is too
+      // short for DeepTutor's first boot (bootstrap + runtime initialisation)
+      // and was returning "not listening ...:3782" before Next.js had time to
+      // bind. Wait explicitly for the real frontend port, with enough headroom
+      // for first boot; warm requests return through this check immediately.
+      const startedAt = Date.now();
+      await tutor.startAndWaitForPorts({
+        ports: [3782],
+        cancellationOptions: {
+          instanceGetTimeoutMS: 15_000,
+          portReadyTimeoutMS: 120_000,
+          waitInterval: 300,
+        },
+      });
+      const startupMs = Date.now() - startedAt;
+      if (startupMs > 1_000) {
+        console.log(`Murikah Tutor container became ready in ${startupMs}ms`);
+      }
+
       const response = await tutor.fetch(request);
       const headers = new Headers(response.headers);
       headers.set("x-murikah-tutor-runtime", "cloudflare-container");
