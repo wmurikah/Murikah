@@ -100,7 +100,11 @@ RUN chown -R deeptutor:deeptutor /app/web /app/deeptutor
 
 COPY tutor/railway/bootstrap_runtime.py /app/murikah-tutor-bootstrap.py
 COPY tutor/railway/entrypoint.sh /app/murikah-tutor-entrypoint.sh
-RUN chmod 0755 /app/murikah-tutor-entrypoint.sh /app/murikah-tutor-bootstrap.py
+COPY tutor/cloudflare/entrypoint.sh /app/murikah-cloudflare-entrypoint.sh
+RUN chmod 0755 \
+    /app/murikah-tutor-entrypoint.sh \
+    /app/murikah-tutor-bootstrap.py \
+    /app/murikah-cloudflare-entrypoint.sh
 
 ENV PORT=3782
 EXPOSE 3782
