@@ -46,6 +46,7 @@ def main() -> int:
         (
             'name = "murikah-tutor-container-staging"',
             'workers_dev = true',
+            'keep_vars = true',
             'pattern = "tutor.murikah.com"',
             'custom_domain = true',
             'class_name = "TutorContainer"',
@@ -54,10 +55,13 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-13-v7"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-14-v8"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
-            'required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]',
+            '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
+            '"MURIKAH_NVIDIA_NIM_API_KEY"',
+            '"MURIKAH_DASHSCOPE_API_KEY"',
+            '"MURIKAH_TAVILY_API_KEY"',
             'MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"',
             'MURIKAH_GUEST_PROMPT_LIMIT = "7"',
         ),
@@ -113,10 +117,37 @@ def main() -> int:
             'workerSecretConfigured',
             'url.pathname === "/favicon.ico"',
             'x-murikah-tutor-runtime',
+            'MURIKAH_TUTOR_RUNTIME',
+            'MURIKAH_PUBLIC_BASE_URL',
+            'MURIKAH_GUEST_PROMPT_LIMIT',
             'MURIKAH_TUTOR_ADMIN_PASSWORD',
+            'MURIKAH_NVIDIA_NIM_API_KEY',
+            'MURIKAH_DASHSCOPE_API_KEY',
+            'MURIKAH_TAVILY_API_KEY',
+            'MURIKAH_VIDEO_LEARNING_PROVIDER',
             'MURIKAH_GOOGLE_CLIENT_ID',
             'MURIKAH_MICROSOFT_CLIENT_ID',
             'MURIKAH_APPLE_CLIENT_ID',
+        ),
+    )
+    require_markers(
+        "tutor/railway/bootstrap_runtime.py",
+        (
+            'MODEL_CATALOG_PATH = SETTINGS_DIR / "model_catalog.json"',
+            'VIDEO_LEARNING_PATH = SETTINGS_DIR / "video_learning.json"',
+            'def bootstrap_cloudflare_model_catalog()',
+            'def bootstrap_cloudflare_video_learning()',
+            'MURIKAH_NVIDIA_NIM_API_KEY',
+            'MURIKAH_LLM_PRIMARY_MODEL',
+            'MURIKAH_DASHSCOPE_API_KEY',
+            'MURIKAH_EMBEDDING_ENDPOINT',
+            'MURIKAH_TAVILY_API_KEY',
+            'MURIKAH_TTS_MODEL',
+            'MURIKAH_STT_MODEL',
+            'MURIKAH_IMAGE_MODEL',
+            'MURIKAH_VIDEO_MODEL',
+            'MURIKAH_VIDEO_LEARNING_TRANSCRIPT_PROVIDER',
+            'atomic_write_json(MODEL_CATALOG_PATH, catalog)',
         ),
     )
     forbid_markers(
@@ -179,6 +210,8 @@ def main() -> int:
     print("Murikah Tutor Cloudflare migration preflight: PASS")
     print(" - tutor.murikah.com is attached as the Cloudflare Container custom domain")
     print(" - production public base is fixed to https://tutor.murikah.com")
+    print(" - dashboard Variables & Secrets survive repo-backed Wrangler deploys")
+    print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - low-level container.running is authoritative for start eligibility")
     print(" - stale getState transitions cannot trigger duplicate start() calls")
@@ -186,7 +219,7 @@ def main() -> int:
     print(" - Worker bindings are passed explicitly into every Linux container start")
     print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
     print(" - readiness is determined by the real Tutor /health route")
-    print(" - production data migration remains blocked on externalised /app/data persistence")
+    print(" - user content persistence remains blocked on externalised /app/data storage")
     return 0
 
 
