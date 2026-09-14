@@ -158,10 +158,11 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-14-v8"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-14-v9"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
+            '"MURIKAH_TUTOR_AUTH_SECRET"',
             '"MURIKAH_NVIDIA_NIM_API_KEY"',
             '"MURIKAH_DASHSCOPE_API_KEY"',
             '"MURIKAH_TAVILY_API_KEY"',
@@ -172,6 +173,9 @@ def main() -> int:
     require_markers(
         "tutor/cloudflare/entrypoint.sh",
         (
+            'MURIKAH_TUTOR_AUTH_SECRET',
+            '/app/data/system/auth/auth_secret',
+            'Stable Cloudflare auth signing secret restored.',
             'python /app/murikah-tutor-bootstrap.py',
             'export BACKEND_HOST=127.0.0.1',
             'export FRONTEND_HOST=0.0.0.0',
@@ -218,12 +222,14 @@ def main() -> int:
             '"/__muri/edge-health"',
             '"/__muri/worker-config"',
             'workerSecretConfigured',
+            'authSecretConfigured',
             'url.pathname === "/favicon.ico"',
             'x-murikah-tutor-runtime',
             'MURIKAH_TUTOR_RUNTIME',
             'MURIKAH_PUBLIC_BASE_URL',
             'MURIKAH_GUEST_PROMPT_LIMIT',
             'MURIKAH_TUTOR_ADMIN_PASSWORD',
+            'MURIKAH_TUTOR_AUTH_SECRET',
             'MURIKAH_NVIDIA_NIM_API_KEY',
             'MURIKAH_DASHSCOPE_API_KEY',
             'MURIKAH_TAVILY_API_KEY',
@@ -282,6 +288,7 @@ def main() -> int:
             "tutor.murikah.com",
             "python tutor/scripts/preflight.py",
             "npm --prefix tutor/cloudflare run deploy:staging",
+            "MURIKAH_TUTOR_AUTH_SECRET",
             "PERSISTENCE.md",
         ),
     )
@@ -315,6 +322,7 @@ def main() -> int:
     print(" - tutor.murikah.com is attached as the Cloudflare Container custom domain")
     print(" - production public base is fixed to https://tutor.murikah.com")
     print(" - dashboard Variables & Secrets survive repo-backed Wrangler deploys")
+    print(" - stable auth signing secret is restored before DeepTutor auth imports")
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - low-level container.running is authoritative for start eligibility")
