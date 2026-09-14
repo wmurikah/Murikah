@@ -14,6 +14,38 @@ export BACKEND_HOST=127.0.0.1
 export BACKEND_WORKERS=1
 export DEEPTUTOR_IGNORE_PROCESS_ENV_OVERRIDES=1
 
+# DeepTutor signs login sessions with data/system/auth/auth_secret. Container
+# disk is disposable, so restore the same Cloudflare-managed signing secret
+# before any DeepTutor auth module can import and generate a replacement.
+python - <<'PY'
+from pathlib import Path
+import os
+import tempfile
+
+secret = os.environ.get("MURIKAH_TUTOR_AUTH_SECRET", "").strip()
+if len(secret) < 32:
+    raise RuntimeError("MURIKAH_TUTOR_AUTH_SECRET is required and must be at least 32 characters.")
+
+target = Path("/app/data/system/auth/auth_secret")
+target.parent.mkdir(parents=True, exist_ok=True)
+current = target.read_text(encoding="utf-8").strip() if target.exists() else ""
+if current != secret:
+    fd, temp_name = tempfile.mkstemp(prefix=".auth_secret.", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(secret + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp_name, 0o600)
+        os.replace(temp_name, target)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+else:
+    os.chmod(target, 0o600)
+print("[Murikah Tutor] Stable Cloudflare auth signing secret restored.")
+PY
+
 python /app/murikah-tutor-bootstrap.py
 
 # Keep DeepTutor's own JSON-backed runtime settings as the source of truth.
