@@ -8,6 +8,7 @@ type TutorEnv = {
   TZ: string;
   MURIKAH_TUTOR_ADMIN_USERNAME?: string;
   MURIKAH_TUTOR_ADMIN_PASSWORD?: string;
+  MURIKAH_TUTOR_AUTH_SECRET?: string;
   MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS?: string;
   MURIKAH_GOOGLE_CLIENT_ID?: string;
   MURIKAH_GOOGLE_CLIENT_SECRET?: string;
@@ -92,6 +93,7 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
     MURIKAH_TUTOR_ADMIN_USERNAME:
       optional(source.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
     MURIKAH_TUTOR_ADMIN_PASSWORD: optional(source.MURIKAH_TUTOR_ADMIN_PASSWORD),
+    MURIKAH_TUTOR_AUTH_SECRET: optional(source.MURIKAH_TUTOR_AUTH_SECRET),
     MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS:
       optional(source.MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS) || "24",
     MURIKAH_GOOGLE_CLIENT_ID: optional(source.MURIKAH_GOOGLE_CLIENT_ID),
@@ -145,6 +147,14 @@ function hasAdminSecret(runtimeEnv: Record<string, string>): boolean {
   return (runtimeEnv.MURIKAH_TUTOR_ADMIN_PASSWORD || "").length >= 14;
 }
 
+function hasAuthSecret(runtimeEnv: Record<string, string>): boolean {
+  return (runtimeEnv.MURIKAH_TUTOR_AUTH_SECRET || "").length >= 32;
+}
+
+function hasRequiredRuntimeSecrets(runtimeEnv: Record<string, string>): boolean {
+  return hasAdminSecret(runtimeEnv) && hasAuthSecret(runtimeEnv);
+}
+
 export class TutorContainer extends Container<TutorEnv> {
   defaultPort = 3782;
   sleepAfter = "30m";
@@ -170,11 +180,11 @@ export class TutorContainer extends Container<TutorEnv> {
   }
 
   async ensureStarted(runtimeEnv: Record<string, string>): Promise<RuntimeStatus> {
-    if (!hasAdminSecret(runtimeEnv)) {
+    if (!hasRequiredRuntimeSecrets(runtimeEnv)) {
       return {
         running: false,
         ready: false,
-        error: "Required Tutor admin secret is not available to the Worker runtime.",
+        error: "Required Tutor runtime secrets are not available to the Worker runtime.",
         workerSecretConfigured: false,
       };
     }
@@ -265,7 +275,7 @@ export class TutorContainer extends Container<TutorEnv> {
     runtimeEnv: Record<string, string>,
   ): Promise<Record<string, unknown>> {
     const report: Record<string, unknown> = {
-      workerSecretConfigured: hasAdminSecret(runtimeEnv),
+      workerSecretConfigured: hasRequiredRuntimeSecrets(runtimeEnv),
     };
 
     if (this.ctx.container.running) {
@@ -440,15 +450,17 @@ function edgeHealth(env: TutorEnv): Response {
 }
 
 function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Response {
+  const ready = hasRequiredRuntimeSecrets(runtimeEnv);
   return Response.json(
     {
-      ok: hasAdminSecret(runtimeEnv),
+      ok: ready,
       runtime: env.MURIKAH_TUTOR_RUNTIME,
       adminPasswordConfigured: hasAdminSecret(runtimeEnv),
+      authSecretConfigured: hasAuthSecret(runtimeEnv),
       appInstance: APP_INSTANCE,
     },
     {
-      status: hasAdminSecret(runtimeEnv) ? 200 : 503,
+      status: ready ? 200 : 503,
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
     },
   );
@@ -478,11 +490,11 @@ async function safeStatus(
   tutor: ReturnType<typeof getContainer<TutorContainer>>,
   runtimeEnv: Record<string, string>,
 ): Promise<RuntimeStatus> {
-  if (!hasAdminSecret(runtimeEnv)) {
+  if (!hasRequiredRuntimeSecrets(runtimeEnv)) {
     return {
       running: false,
       ready: false,
-      error: "Required Tutor admin secret is not available to the Worker runtime.",
+      error: "Required Tutor runtime secrets are not available to the Worker runtime.",
       workerSecretConfigured: false,
     };
   }
@@ -523,7 +535,7 @@ export default {
         return Response.json(
           {
             running: false,
-            workerSecretConfigured: hasAdminSecret(runtimeEnv),
+            workerSecretConfigured: hasRequiredRuntimeSecrets(runtimeEnv),
             error: errorText(error),
           },
           {
@@ -562,9 +574,9 @@ export default {
     if (url.pathname === "/health") {
       return Response.json(
         {
-          status: hasAdminSecret(runtimeEnv) ? "starting" : "configuration-error",
+          status: hasRequiredRuntimeSecrets(runtimeEnv) ? "starting" : "configuration-error",
           runtime: env.MURIKAH_TUTOR_RUNTIME,
-          workerSecretConfigured: hasAdminSecret(runtimeEnv),
+          workerSecretConfigured: hasRequiredRuntimeSecrets(runtimeEnv),
           containerState: status.state,
           error: status.error,
         },
@@ -576,7 +588,7 @@ export default {
     }
 
     return startingShell(
-      hasAdminSecret(runtimeEnv)
+      hasRequiredRuntimeSecrets(runtimeEnv)
         ? "Preparing your learning space. You can stay on this page."
         : "Tutor staging configuration is incomplete.",
     );
