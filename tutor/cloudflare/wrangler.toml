@@ -4,6 +4,9 @@ compatibility_date = "2026-09-13"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = false
+# Production model/service variables are maintained in the Cloudflare dashboard.
+# Preserve them when Workers Builds deploys the repo-backed Worker.
+keep_vars = true
 
 [observability]
 enabled = true
@@ -14,10 +17,15 @@ enabled = true
 pattern = "tutor.murikah.com"
 custom_domain = true
 
-# Fail closed before deployment if the first-boot admin secret is not actually
-# configured on the Worker.
+# Fail closed before deployment if essential production secrets are not actually
+# configured on the Worker. SSO provider secrets remain optional until enabled.
 [secrets]
-required = ["MURIKAH_TUTOR_ADMIN_PASSWORD"]
+required = [
+  "MURIKAH_TUTOR_ADMIN_PASSWORD",
+  "MURIKAH_NVIDIA_NIM_API_KEY",
+  "MURIKAH_DASHSCOPE_API_KEY",
+  "MURIKAH_TAVILY_API_KEY",
+]
 
 [[containers]]
 class_name = "TutorContainer"
@@ -25,7 +33,7 @@ image = "../Dockerfile.railway"
 image_build_context = "../.."
 # Explicit image revision is a compatibility boundary between the Worker
 # lifecycle code and the Linux image.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-13-v7" }
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-14-v8" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4

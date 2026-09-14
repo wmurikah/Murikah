@@ -37,13 +37,18 @@ npm --prefix tutor/cloudflare run deploy:staging
 
 The deployment command publishes the Worker/Container and performs an immediate Container rollout. The optional smoke test is separate and does not determine deployment success.
 
-## Runtime secrets
+`keep_vars = true` is deliberate: non-secret production model/service variables are maintained in the Cloudflare dashboard and must survive a repo-backed Wrangler deployment. Worker Secrets are preserved by Cloudflare independently.
 
-Configure these in Cloudflare Worker **Settings -> Variables & Secrets**, not in Git or Wrangler.
+## Runtime secrets and model configuration
 
-Required:
+Configure production credentials in Cloudflare Worker **Settings -> Variables & Secrets**, not in Git or Wrangler.
+
+Required secrets:
 
 - `MURIKAH_TUTOR_ADMIN_PASSWORD`
+- `MURIKAH_NVIDIA_NIM_API_KEY`
+- `MURIKAH_DASHSCOPE_API_KEY`
+- `MURIKAH_TAVILY_API_KEY`
 
 SSO when enabled:
 
@@ -59,7 +64,9 @@ SSO when enabled:
 
 Other optional runtime values include `MURIKAH_TUTOR_ADMIN_USERNAME` and `MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS`.
 
-The DeepTutor model/provider catalogue currently lives under `/app/data`; persistence migration remains separate from the hostname cutover.
+The Cloudflare Worker forwards the dashboard-managed NVIDIA, DashScope, Tavily, model, endpoint, and Video Learning variables into the Linux Container. On every Cloudflare Container start, `bootstrap_runtime.py` rebuilds DeepTutor's `model_catalog.json` and `video_learning.json` from those bindings. This makes provider credentials and production model selections recoverable after a disposable Container replacement and prevents duplicate provider cards from accumulating across restarts.
+
+Cloudflare is authoritative only for service configuration. Chats, users, learner progress, memory, knowledge bases, attachments, generated files, and other user data still require durable storage and are not stored in Worker Variables or Secrets.
 
 ## Health checks
 
@@ -77,6 +84,6 @@ The Worker-provided `workers.dev` hostname remains enabled temporarily for direc
 
 ## Persistence remains pending
 
-The public hostname cutover does not make Container-local `/app/data` durable. Before retiring the Codespaces rollback path, externalise and migrate settings, users/auth, sessions/messages, memory, knowledge state, uploads and generated workspaces, then verify sleep/wake, replacement and rollback behavior.
+The public hostname cutover does not make Container-local `/app/data` durable. Provider/model configuration is now reconstructable from Cloudflare, but before retiring the Codespaces rollback path we still need durable persistence for users/auth, sessions/messages, memory, knowledge state, uploads, generated workspaces, and learning progress, followed by sleep/wake, replacement, migration, and rollback verification.
 
 See `PERSISTENCE.md` for the storage migration design.
