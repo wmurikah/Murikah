@@ -2,7 +2,7 @@
 """Post-deploy smoke test for Murikah Tutor Cloudflare staging.
 
 Runs in Cloudflare Workers Builds after `wrangler deploy`. It never reads secret
-values. It first verifies that the deployed Worker can see the required secret,
+values. It first verifies that the deployed Worker can see the required secrets,
 then waits for the real Tutor health route. On failure it prints safe isolated
 startup diagnostics so the build log contains the root cause automatically.
 """
@@ -45,8 +45,8 @@ def parse_json(body: str) -> dict:
 def main() -> int:
     print(f"Murikah Tutor staging smoke test: {BASE_URL}")
 
-    # This proves the secret exists in the deployed Worker execution context,
-    # not merely in dashboard metadata. No secret value or length is returned.
+    # This proves the required secrets exist in the deployed Worker execution
+    # context, not merely in dashboard metadata. No secret value or length is returned.
     try:
         config_code, config_body = get("/__muri/worker-config")
         config = parse_json(config_body)
@@ -54,12 +54,16 @@ def main() -> int:
         print(f"Murikah Tutor staging smoke test: FAILED - Worker config probe: {type(exc).__name__}: {exc}")
         return 1
 
-    if config_code != 200 or config.get("adminPasswordConfigured") is not True:
-        print("Murikah Tutor staging smoke test: FAILED - required Worker secret is not visible at runtime")
+    if (
+        config_code != 200
+        or config.get("adminPasswordConfigured") is not True
+        or config.get("authSecretConfigured") is not True
+    ):
+        print("Murikah Tutor staging smoke test: FAILED - required Worker secrets are not visible at runtime")
         print(f"Worker config status: HTTP {config_code} {config_body[:1000]}")
         return 1
 
-    print(" - Worker runtime can see the required admin secret")
+    print(" - Worker runtime can see the required admin and auth-signing secrets")
     started = time.monotonic()
     last: dict = {}
 
