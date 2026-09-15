@@ -33,8 +33,9 @@ class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
 # Explicit image revision is a compatibility boundary between the Worker
-# lifecycle code and the Linux image.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-14-v9" }
+# lifecycle code and the Linux image. v10 includes the /app Python import-root
+# fix and is intentionally distinct from the stale v9 application image.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-15-v10" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
