@@ -2,11 +2,11 @@
 """Deploy Murikah Tutor and recover from Cloudflare's stale container-app rollout bug.
 
 Cloudflare Containers issue #233 can report a completed rollout while a named
-Durable Object keeps receiving the previous application image.  We deploy
-normally first, verify the image that the runtime actually serves, and only if
-it is stale do we delete the Tutor container application and deploy it again.
-Deleting the container application does not delete the Worker, Worker secrets,
-or the Durable Object namespace.
+Durable Object keeps receiving the previous application image. We deploy
+normally first, verify the image the runtime actually serves, and only if the
+old image remains after a propagation window do we recycle the Tutor container
+application. Control-plane deletion/recreation is explicitly waited and retried
+to avoid transient APPLICATION_NOT_FOUND races.
 """
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ VERIFY_BASES = (
     "https://murikah-tutor-container-staging.hasspe.workers.dev",
     "https://tutor.murikah.com",
 )
+APPLICATION_NOT_FOUND = "APPLICATION_NOT_FOUND"
 
 
 def wrangler_path() -> str:
@@ -55,8 +56,8 @@ def expected_image_revision() -> str:
 def run_wrangler(*args: str, capture: bool = False) -> subprocess.CompletedProcess[str]:
     command = [wrangler_path(), *args, "--config", str(CONFIG)]
     environment = os.environ.copy()
-    # Cloudflare Workers Builds is non-interactive. Make that explicit so the
-    # one-time stale-application recycle can never block on a confirmation prompt.
+    # Cloudflare Workers Builds is non-interactive. Make that explicit so a
+    # stale-application recycle can never block on a confirmation prompt.
     environment["CI"] = "true"
     return subprocess.run(
         command,
@@ -69,8 +70,51 @@ def run_wrangler(*args: str, capture: bool = False) -> subprocess.CompletedProce
     )
 
 
-def deploy() -> None:
-    run_wrangler("deploy", "--containers-rollout=immediate")
+def emit_completed_process(result: subprocess.CompletedProcess[str]) -> None:
+    if result.stdout:
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+    if result.stderr:
+        print(
+            result.stderr,
+            end="" if result.stderr.endswith("\n") else "\n",
+            file=sys.stderr,
+        )
+
+
+def deploy(*, attempts: int = 7) -> None:
+    """Deploy, tolerating Cloudflare's transient deleted-application tombstone."""
+
+    delays = (3, 5, 8, 13, 20, 30)
+    for attempt in range(1, attempts + 1):
+        try:
+            result = run_wrangler(
+                "deploy",
+                "--containers-rollout=immediate",
+                capture=True,
+            )
+            emit_completed_process(result)
+            return
+        except subprocess.CalledProcessError as exc:
+            if exc.stdout:
+                print(exc.stdout, end="" if exc.stdout.endswith("\n") else "\n")
+            if exc.stderr:
+                print(
+                    exc.stderr,
+                    end="" if exc.stderr.endswith("\n") else "\n",
+                    file=sys.stderr,
+                )
+            combined = f"{exc.stdout or ''}\n{exc.stderr or ''}"
+            if APPLICATION_NOT_FOUND not in combined or attempt >= attempts:
+                raise
+            delay = delays[min(attempt - 1, len(delays) - 1)]
+            print(
+                "[Murikah Tutor] Cloudflare container application deletion is "
+                f"still propagating; retrying deploy in {delay}s "
+                f"({attempt}/{attempts})."
+            )
+            time.sleep(delay)
+
+    raise RuntimeError("Tutor deploy retry loop exhausted unexpectedly")
 
 
 def parse_json_output(raw: str) -> Any:
@@ -93,28 +137,53 @@ def parse_json_output(raw: str) -> Any:
         raise
 
 
-def recycle_tutor_application() -> None:
+def list_tutor_applications() -> list[dict[str, Any]]:
     result = run_wrangler("containers", "list", "--json", capture=True)
     applications = parse_json_output(result.stdout)
     if not isinstance(applications, list):
         raise RuntimeError("wrangler containers list did not return a JSON list")
-
-    matches = [
+    return [
         app
         for app in applications
         if isinstance(app, dict)
         and str(app.get("name", "")).casefold() == APP_NAME.casefold()
         and app.get("id")
     ]
+
+
+def wait_for_application_absent(*, timeout_seconds: int = 90) -> None:
+    """Wait until Cloudflare's container listing no longer exposes the old app."""
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if not list_tutor_applications():
+            # The deploy API and dashboard list are not guaranteed to converge
+            # at the exact same instant. Give the modify/create path a small
+            # grace period; deploy() also retries APPLICATION_NOT_FOUND.
+            time.sleep(3)
+            return
+        time.sleep(3)
+    raise RuntimeError(
+        f"container application {APP_NAME!r} still exists after {timeout_seconds}s"
+    )
+
+
+def recycle_tutor_application() -> None:
+    matches = list_tutor_applications()
     if not matches:
-        raise RuntimeError(
-            f"stale Tutor image detected, but container application {APP_NAME!r} was not found"
+        # A prior failed recovery may already have completed the deletion.
+        print(
+            "[Murikah Tutor] Stale container application is already absent; "
+            "continuing with recreation."
         )
+        return
 
     for app in matches:
         app_id = str(app["id"])
         print(f"[Murikah Tutor] Recycling stale Cloudflare container application {APP_NAME}.")
         run_wrangler("containers", "delete", app_id)
+
+    wait_for_application_absent()
 
 
 def fetch_json(base: str, path: str, *, timeout: float) -> dict[str, Any]:
@@ -149,9 +218,18 @@ def startup_log(report: dict[str, Any]) -> str:
     return str(value.get("output", "")) if isinstance(value, dict) else ""
 
 
-def diagnostic_report(expected_revision: str, *, timeout_seconds: int = 75) -> tuple[dict[str, Any], str]:
+def diagnostic_report(
+    expected_revision: str,
+    *,
+    timeout_seconds: int = 90,
+) -> tuple[dict[str, Any], str]:
+    """Poll until the deployed revision is actually served or the window expires."""
+
     deadline = time.monotonic() + timeout_seconds
     last_error = ""
+    last_report: dict[str, Any] | None = None
+    last_base = ""
+
     while time.monotonic() < deadline:
         for base in VERIFY_BASES:
             try:
@@ -161,14 +239,20 @@ def diagnostic_report(expected_revision: str, *, timeout_seconds: int = 75) -> t
                     "[Murikah Tutor] Runtime image check: "
                     f"{revision or 'unknown'} (expected {expected_revision})."
                 )
-                return report, base
+                last_report = report
+                last_base = base
+                if revision == expected_revision:
+                    return report, base
             except (HTTPError, URLError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
-        time.sleep(2)
+        time.sleep(3)
+
+    if last_report is not None:
+        return last_report, last_base
     raise RuntimeError(f"could not obtain Tutor container diagnostics: {last_error}")
 
 
-def wait_until_ready(base: str, *, timeout_seconds: int = 120) -> dict[str, Any]:
+def wait_until_ready(base: str, *, timeout_seconds: int = 180) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
@@ -199,13 +283,15 @@ def verify_fresh_runtime(expected_revision: str) -> tuple[bool, dict[str, Any], 
 def main() -> int:
     expected_revision = expected_image_revision()
 
-    # Normal deploy first. Healthy rollouts remain non-destructive.
+    # Normal deploy first. Healthy rollouts remain non-destructive. deploy()
+    # also heals a tombstoned application left by a previous failed recovery.
     deploy()
     fresh, report, base = verify_fresh_runtime(expected_revision)
 
     if not fresh:
         # Cloudflare containers#233 workaround: remove the stale application,
-        # then let Wrangler recreate it against the same Durable Object namespace.
+        # wait for control-plane deletion to converge, then let Wrangler recreate
+        # it against the same Durable Object namespace.
         recycle_tutor_application()
         deploy()
         fresh, report, base = verify_fresh_runtime(expected_revision)
