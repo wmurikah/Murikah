@@ -140,6 +140,7 @@ def main() -> int:
             '"@cloudflare/containers": "0.3.7"',
             '"wrangler": "4.130.0"',
             '"deploy:staging"',
+            'python deploy_staging.py',
             '--containers-rollout=immediate',
             '"check"',
         ),
@@ -158,7 +159,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-14-v9"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-15-v10"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
@@ -171,8 +172,23 @@ def main() -> int:
         ),
     )
     require_markers(
+        "tutor/cloudflare/deploy_staging.py",
+        (
+            'APP_NAME = "murikah-tutor-container-staging-TutorContainer"',
+            'containers", "list", "--json"',
+            'containers", "delete"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV',
+            '"/__muri/container-diagnostics"',
+            '"/__muri/runtime-status"',
+            'ModuleNotFoundError: No module named \'deeptutor\'',
+            'port 3782 healthy',
+        ),
+    )
+    require_markers(
         "tutor/cloudflare/entrypoint.sh",
         (
+            'cd /app',
+            'export PYTHONPATH="/app${PYTHONPATH:+:${PYTHONPATH}}"',
             'MURIKAH_TUTOR_AUTH_SECRET',
             '/app/data/system/auth/auth_secret',
             'Stable Cloudflare auth signing secret restored.',
@@ -323,8 +339,10 @@ def main() -> int:
     print(" - production public base is fixed to https://tutor.murikah.com")
     print(" - dashboard Variables & Secrets survive repo-backed Wrangler deploys")
     print(" - stable auth signing secret is restored before DeepTutor auth imports")
+    print(" - /app is fixed as the Python import root before runtime initialization")
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
+    print(" - stale Cloudflare container applications are detected and recycled during deploy")
     print(" - low-level container.running is authoritative for start eligibility")
     print(" - stale getState transitions cannot trigger duplicate start() calls")
     print(" - staging startup is non-blocking at the edge")
