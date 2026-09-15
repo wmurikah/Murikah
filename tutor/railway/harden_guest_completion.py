@@ -60,8 +60,8 @@ def patch_backend(root: Path) -> None:
     text = replace_between(
         text,
         "    _set_count(response, next_used)\n",
-        "    }\n\n\n@router.post(\"/guest-handoff\")\n",
-        NEW_RETURN + "\n\n@router.post(\"/guest-handoff\")\n",
+        "\n\n@router.post(\"/diagram\")\n",
+        NEW_RETURN + "\n\n@router.post(\"/diagram\")\n",
         "guest response return",
     )
     target.write_text(text, encoding="utf-8")
