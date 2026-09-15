@@ -175,8 +175,9 @@ def main() -> int:
         "tutor/cloudflare/deploy_staging.py",
         (
             'APP_NAME = "murikah-tutor-container-staging-TutorContainer"',
-            'containers", "list", "--json"',
-            'containers", "delete"',
+            'def list_tutor_applications()',
+            'def recycle_tutor_application()',
+            'TRANSIENT_DEPLOY_ERRORS',
             'MURIKAH_CLOUDFLARE_IMAGE_REV',
             '"/__muri/container-diagnostics"',
             '"/__muri/runtime-status"',
