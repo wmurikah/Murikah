@@ -54,9 +54,14 @@ def expected_image_revision() -> str:
 
 def run_wrangler(*args: str, capture: bool = False) -> subprocess.CompletedProcess[str]:
     command = [wrangler_path(), *args, "--config", str(CONFIG)]
+    environment = os.environ.copy()
+    # Cloudflare Workers Builds is non-interactive. Make that explicit so the
+    # one-time stale-application recycle can never block on a confirmation prompt.
+    environment["CI"] = "true"
     return subprocess.run(
         command,
         cwd=ROOT,
+        env=environment,
         check=True,
         text=True,
         stdout=subprocess.PIPE if capture else None,
