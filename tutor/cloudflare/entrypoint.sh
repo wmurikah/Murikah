@@ -14,6 +14,43 @@ export BACKEND_HOST=127.0.0.1
 export BACKEND_WORKERS=1
 export DEEPTUTOR_IGNORE_PROCESS_ENV_OVERRIDES=1
 
+# Cloudflare dashboard Variables remain authoritative. These are runtime-only
+# fallbacks used only when a non-secret variable is absent/blank, so a missing
+# optional service setting cannot take the entire Tutor offline. Existing
+# dashboard values always win. API keys/secrets are never defaulted here.
+export MURIKAH_NVIDIA_NIM_BASE_URL="${MURIKAH_NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}"
+export MURIKAH_LLM_PRIMARY_MODEL="${MURIKAH_LLM_PRIMARY_MODEL:-moonshotai/kimi-k3}"
+export MURIKAH_LLM_SECONDARY_MODEL="${MURIKAH_LLM_SECONDARY_MODEL:-deepseek-ai/deepseek-v4-flash-0731}"
+export MURIKAH_LLM_TERTIARY_MODEL="${MURIKAH_LLM_TERTIARY_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}"
+
+export MURIKAH_DASHSCOPE_BASE_URL="${MURIKAH_DASHSCOPE_BASE_URL:-https://dashscope-intl.aliyuncs.com/api/v1}"
+export MURIKAH_EMBEDDING_PROVIDER="${MURIKAH_EMBEDDING_PROVIDER:-aliyun}"
+export MURIKAH_EMBEDDING_MODEL="${MURIKAH_EMBEDDING_MODEL:-qwen3.7-text-embedding}"
+export MURIKAH_EMBEDDING_DIMENSION="${MURIKAH_EMBEDDING_DIMENSION:-1024}"
+export MURIKAH_EMBEDDING_ENDPOINT="${MURIKAH_EMBEDDING_ENDPOINT:-https://dashscope-intl.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding}"
+
+export MURIKAH_SEARCH_PROVIDER="${MURIKAH_SEARCH_PROVIDER:-tavily}"
+
+export MURIKAH_TTS_PROVIDER="${MURIKAH_TTS_PROVIDER:-dashscope}"
+export MURIKAH_TTS_MODEL="${MURIKAH_TTS_MODEL:-qwen3-tts-flash}"
+export MURIKAH_TTS_VOICE="${MURIKAH_TTS_VOICE:-Cherry}"
+export MURIKAH_TTS_BASE_URL="${MURIKAH_TTS_BASE_URL:-https://dashscope-intl.aliyuncs.com/api/v1}"
+
+export MURIKAH_STT_PROVIDER="${MURIKAH_STT_PROVIDER:-dashscope}"
+export MURIKAH_STT_MODEL="${MURIKAH_STT_MODEL:-qwen3-asr-flash}"
+export MURIKAH_STT_BASE_URL="${MURIKAH_STT_BASE_URL:-https://dashscope-intl.aliyuncs.com/api/v1}"
+
+export MURIKAH_IMAGE_PROVIDER="${MURIKAH_IMAGE_PROVIDER:-dashscope}"
+export MURIKAH_IMAGE_MODEL="${MURIKAH_IMAGE_MODEL:-wan2.1-t2i-turbo}"
+export MURIKAH_IMAGE_BASE_URL="${MURIKAH_IMAGE_BASE_URL:-https://dashscope-intl.aliyuncs.com/api/v1}"
+
+export MURIKAH_VIDEO_PROVIDER="${MURIKAH_VIDEO_PROVIDER:-dashscope}"
+export MURIKAH_VIDEO_MODEL="${MURIKAH_VIDEO_MODEL:-wan2.1-t2v-turbo}"
+export MURIKAH_VIDEO_BASE_URL="${MURIKAH_VIDEO_BASE_URL:-https://dashscope-intl.aliyuncs.com/api/v1}"
+
+export MURIKAH_VIDEO_LEARNING_PROVIDER="${MURIKAH_VIDEO_LEARNING_PROVIDER:-youtube}"
+export MURIKAH_VIDEO_LEARNING_TRANSCRIPT_PROVIDER="${MURIKAH_VIDEO_LEARNING_TRANSCRIPT_PROVIDER:-youtube_transcript_api}"
+
 # DeepTutor signs login sessions with data/system/auth/auth_secret. Container
 # disk is disposable, so restore the same Cloudflare-managed signing secret
 # before any DeepTutor auth module can import and generate a replacement.
