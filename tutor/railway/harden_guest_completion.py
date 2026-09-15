@@ -50,7 +50,6 @@ def patch_backend(root: Path) -> None:
         "from deeptutor.services.llm import factory as llm_factory\nfrom deeptutor.services.llm.client import LLMClient\n",
         "LLM factory import",
     )
-    text = replace_exact(text, ") -> dict:\n    used = _read_count(mt_guest)\n", ") -> Response:\n    used = _read_count(mt_guest)\n", "guest return annotation")
     text = replace_between(
         text,
         "    client = _client_for_selection(body.llm_selection)\n    incident_id = uuid.uuid4().hex[:10]\n",
