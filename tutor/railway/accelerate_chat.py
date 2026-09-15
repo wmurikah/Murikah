@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
-"""Patch DeepTutor's ordinary authenticated chat for low-latency streaming.
-
-The full agent loop remains available whenever the learner explicitly enables
-or attaches capabilities that require tools, knowledge bases, or files. Plain
-Chat uses the same DeepTutor prompt assembly and selected model catalog, but
-starts a direct streamed completion immediately and falls back to the other
-already-configured models only when no visible first token arrives promptly.
-"""
+"""Give ordinary authenticated Chat a low-latency streamed path."""
 from __future__ import annotations
 
 from pathlib import Path
 import sys
-
 
 MARKER = "MURIKAH_FAST_CHAT_FIRST_TOKEN"
 
@@ -31,17 +23,16 @@ from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticC
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
 from deeptutor.core.context import UnifiedContext
 from deeptutor.core.trace import build_trace_metadata, merge_trace_metadata, new_call_id
+from deeptutor.multi_user.model_access import allowed_llm_options
 from deeptutor.runtime.request_contracts import get_capability_request_schema
 from deeptutor.runtime.stream_bus import StreamBus
-from deeptutor.services.config import get_model_catalog_service
 from deeptutor.services.llm import factory as llm_factory
-from deeptutor.services.model_selection.llm import list_llm_options
 from deeptutor.services.model_selection.runtime import resolve_llm_config_for_selection
 
 logger = logging.getLogger(__name__)
 
 # MURIKAH_FAST_CHAT_FIRST_TOKEN
-_FIRST_TOKEN_BUDGETS = (8.0, 5.0, 5.0)
+_FIRST_TOKEN_BUDGETS = (6.0, 4.0, 4.0)
 _STREAM_IDLE_TIMEOUT_SECONDS = 25.0
 '''
 
@@ -52,13 +43,12 @@ OLD_RUN = '''    async def run(self, context: UnifiedContext, stream: StreamBus)
 
 NEW_RUN = '''    @staticmethod
     def _requires_agent_loop(context: UnifiedContext) -> bool:
-        """Keep DeepTutor's full agent loop when the turn actually needs it."""
+        """Use the full agent loop only when the learner actually needs tools."""
         return bool(
             context.enabled_tools
             or context.knowledge_bases
             or context.attachments
             or context.source_manifest
-            or context.skills_manifest
             or context.metadata.get("source_index")
             or context.metadata.get("mastery_mode")
             or context.metadata.get("immersive_reading_mode")
@@ -67,7 +57,7 @@ NEW_RUN = '''    @staticmethod
 
     @staticmethod
     def _candidate_selections(context: UnifiedContext) -> list[dict[str, str]]:
-        """Selected model first, then catalog default and remaining configured models."""
+        """Selected model first, then only models the current account may use."""
         candidates: list[dict[str, str]] = []
 
         def add(value: Any) -> None:
@@ -78,18 +68,19 @@ NEW_RUN = '''    @staticmethod
             if not profile_id or not model_id:
                 return
             candidate = {"profile_id": profile_id, "model_id": model_id}
-            reasoning_effort = str(value.get("reasoning_effort") or "").strip().lower()
-            if reasoning_effort:
-                candidate["reasoning_effort"] = reasoning_effort
+            effort = str(value.get("reasoning_effort") or "").strip().lower()
+            if effort:
+                candidate["reasoning_effort"] = effort
             if not any(
-                item.get("profile_id") == profile_id and item.get("model_id") == model_id
-                for item in candidates
+                existing.get("profile_id") == profile_id
+                and existing.get("model_id") == model_id
+                for existing in candidates
             ):
                 candidates.append(candidate)
 
         add((context.metadata or {}).get("llm_selection"))
         try:
-            options = list_llm_options(get_model_catalog_service().load())
+            options = allowed_llm_options()
         except Exception:
             options = {"active": None, "options": []}
         add(options.get("active"))
@@ -98,8 +89,8 @@ NEW_RUN = '''    @staticmethod
         return candidates
 
     @staticmethod
-    async def _next_visible_chunk(iterator: Any, timeout: float) -> str:
-        """Return the next user-visible chunk, hiding provider reasoning blocks."""
+    async def _next_visible(iterator: Any, timeout: float) -> str:
+        """Wait for user-facing text, not hidden reasoning."""
         in_think = False
         deadline = asyncio.get_running_loop().time() + timeout
         while True:
@@ -119,20 +110,17 @@ NEW_RUN = '''    @staticmethod
             return text
 
     async def _run_fast_chat(self, context: UnifiedContext, stream: StreamBus) -> None:
-        # Reuse DeepTutor's own prompt assembler and conversation formatting so
-        # direct Chat keeps persona, memory, sidebar context and compressed
-        # history. Only tool exploration is skipped for a plain chat turn.
+        # Preserve DeepTutor's own system prompt, persona, memory, sidebar
+        # grounding and conversation history. Plain Chat skips only the tool
+        # exploration loop that can delay the first visible answer by minutes.
         prompt_pipeline = AgenticChatPipeline(language=context.language)
         messages = prompt_pipeline._build_loop_messages(
             context=context,
             enabled_tools=[],
             include_tool_manifest=False,
         )
-
         candidates = self._candidate_selections(context)
         if not candidates:
-            # Defensive fallback: preserve upstream behaviour if the catalog is
-            # unexpectedly unavailable rather than inventing a provider config.
             await prompt_pipeline.run(context, stream)
             return
 
@@ -177,11 +165,12 @@ NEW_RUN = '''    @staticmethod
                     max_retries=0,
                     reasoning_effort=config.reasoning_effort,
                     extra_headers=config.extra_headers,
+                    temperature=prompt_pipeline._chat_temperature,
                     max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
                     stream_coalesce_chars=24,
                     stream_coalesce_seconds=0.02,
                 )
-                first_chunk = await self._next_visible_chunk(
+                first_chunk = await self._next_visible(
                     candidate_stream,
                     _FIRST_TOKEN_BUDGETS[attempt],
                 )
@@ -230,22 +219,12 @@ NEW_RUN = '''    @staticmethod
                     },
                 ),
             )
-            if last_error is not None:
-                raise RuntimeError("No configured Tutor model produced a timely response") from last_error
-            raise RuntimeError("No configured Tutor model produced a timely response")
+            raise RuntimeError("No configured Tutor model produced a timely response") from last_error
 
         answer_parts = [first_chunk]
         chunk_meta = merge_trace_metadata(trace_meta, {"trace_kind": "llm_chunk"})
-        await stream.content(
-            first_chunk,
-            source="chat",
-            stage="responding",
-            metadata=chunk_meta,
-        )
+        await stream.content(first_chunk, source="chat", stage="responding", metadata=chunk_meta)
 
-        # Once the first visible text is on screen, keep streaming that same
-        # response. A post-first-token stall is surfaced as a transport failure
-        # instead of silently replaying another model and duplicating prose.
         in_think = False
         try:
             while True:
@@ -266,12 +245,7 @@ NEW_RUN = '''    @staticmethod
                 if in_think or not text:
                     continue
                 answer_parts.append(text)
-                await stream.content(
-                    text,
-                    source="chat",
-                    stage="responding",
-                    metadata=chunk_meta,
-                )
+                await stream.content(text, source="chat", stage="responding", metadata=chunk_meta)
         finally:
             try:
                 await chosen_stream.aclose()
