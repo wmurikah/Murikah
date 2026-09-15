@@ -18,7 +18,7 @@ RUN mkdir -p /src/DeepTutor \
     && git remote add origin https://github.com/HKUDS/DeepTutor.git \
     && git fetch --depth 1 origin "${DEEPTUTOR_COMMIT}" \
     && git checkout --detach FETCH_HEAD \
-    && test "$(git rev-parse HEAD)" = "${DEEPTUTOR_COMMIT"
+    && test "$(git rev-parse HEAD)" = "${DEEPTUTOR_COMMIT}"
 COPY tutor/scripts/apply_branding.py /opt/murikah/apply_branding.py
 COPY tutor/railway/apply_railway_overlay.py /opt/murikah/apply_railway_overlay.py
 COPY tutor/railway/apply_guest_continuity.py /opt/murikah/apply_guest_continuity.py
