@@ -18,7 +18,7 @@ RUN mkdir -p /src/DeepTutor \
     && git remote add origin https://github.com/HKUDS/DeepTutor.git \
     && git fetch --depth 1 origin "${DEEPTUTOR_COMMIT}" \
     && git checkout --detach FETCH_HEAD \
-    && test "$(git rev-parse HEAD)" = "${DEEPTUTOR_COMMIT}"
+    && test "$(git rev-parse HEAD)" = "${DEEPTUTOR_COMMIT"
 COPY tutor/scripts/apply_branding.py /opt/murikah/apply_branding.py
 COPY tutor/railway/apply_railway_overlay.py /opt/murikah/apply_railway_overlay.py
 COPY tutor/railway/apply_guest_continuity.py /opt/murikah/apply_guest_continuity.py
@@ -26,6 +26,7 @@ COPY tutor/railway/refine_guest_experience.py /opt/murikah/refine_guest_experien
 COPY tutor/railway/polish_guest_shell.py /opt/murikah/polish_guest_shell.py
 COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.py
 COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
+COPY tutor/railway/harden_guest_completion.py /opt/murikah/harden_guest_completion.py
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 COPY tutor/railway/prepare_next_build.py /opt/murikah/prepare_next_build.py
@@ -52,6 +53,7 @@ RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
     && python /opt/murikah/polish_guest_shell.py /src/DeepTutor \
     && python /opt/murikah/render_guest_markdown.py /src/DeepTutor \
     && python /opt/murikah/enhance_guest_diagram.py /src/DeepTutor \
+    && python /opt/murikah/harden_guest_completion.py /src/DeepTutor \
     && python /opt/murikah/lock_guest_composer.py /src/DeepTutor \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
