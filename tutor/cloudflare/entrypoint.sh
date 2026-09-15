@@ -1,6 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+# Cloudflare invokes this entrypoint outside the application root. Keep /app as
+# the working directory and Python import root so stdin-driven Python snippets
+# can import the vendored DeepTutor package just like /app/*.py scripts do.
+cd /app
+export PYTHONPATH="/app${PYTHONPATH:+:${PYTHONPATH}}"
+
 # Cloudflare Containers run the same Murikah Tutor image as Codespaces, but do
 # not need supervisord's privilege-dropping layer. Start the two application
 # services directly so a platform-specific supervisor/setuid failure cannot
