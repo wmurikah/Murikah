@@ -61,8 +61,8 @@ def patch_backend(root: Path) -> None:
     text = replace_between(
         text,
         "    _set_count(response, next_used)\n",
-        "    }\n\n\nasync def _resolve_handoff_token",
-        NEW_RETURN + "\n\nasync def _resolve_handoff_token",
+        "    }\n\n\n@router.post(\"/guest-handoff\")\n",
+        NEW_RETURN + "\n\n@router.post(\"/guest-handoff\")\n",
         "guest response return",
     )
     target.write_text(text, encoding="utf-8")
