@@ -24,6 +24,13 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Validate Tutor deployment invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tutor/scripts/preflight.py
+          python tutor/cloudflare/preflight.py
+
       - name: Compute Tutor source revision
         id: revision
         shell: bash
