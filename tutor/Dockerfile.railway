@@ -35,6 +35,7 @@ COPY tutor/railway/apply_workspace_access.py /opt/murikah/apply_workspace_access
 COPY tutor/railway/hide_guest_account_ui.py /opt/murikah/hide_guest_account_ui.py
 COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
 COPY tutor/railway/murikah_diagram.py /opt/murikah/murikah_diagram.py
+COPY tutor/railway/murikah_er.py /opt/murikah/murikah_er.py
 COPY tutor/railway/MurikahWorkspaceEntry.tsx.txt /opt/murikah/MurikahWorkspaceEntry.tsx.txt
 COPY tutor/railway/MurikahGuestBanner.tsx.txt /opt/murikah/MurikahGuestBanner.tsx.txt
 COPY tutor/railway/MurikahAccountPage.tsx.txt /opt/murikah/MurikahAccountPage.tsx.txt
@@ -57,6 +58,7 @@ COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-p
 COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
 RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_lane.py \
     && cp /opt/murikah/murikah_diagram.py /src/DeepTutor/deeptutor/murikah_diagram.py \
+    && cp /opt/murikah/murikah_er.py /src/DeepTutor/deeptutor/murikah_er.py \
     && python /opt/murikah/apply_branding.py /src/DeepTutor \
     && python /opt/murikah/apply_railway_overlay.py /src/DeepTutor /opt/murikah/health-route.ts \
     && python /opt/murikah/apply_guest_continuity.py /src/DeepTutor /opt/murikah/MurikahGuestResume.tsx \
@@ -114,6 +116,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_access.py /app/deeptutor/murikah_access.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_diagram.py /app/deeptutor/murikah_diagram.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_er.py /app/deeptutor/murikah_er.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/services/auth.py /app/deeptutor/services/auth.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/app/service.py /app/deeptutor/app/service.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/api/main.py
