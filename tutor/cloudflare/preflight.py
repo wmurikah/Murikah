@@ -159,7 +159,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v12"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v13"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
@@ -319,10 +319,11 @@ def main() -> int:
     require_markers(
         "tutor/railway/prepare_next_build.py",
         (
-            'MURIKAH_FAST_LANE_FAILOVER_V3',
+            'MURIKAH_FAST_LANE_FAILOVER_V4',
             'trust_env=False',
             'gemini_compat =',
-            'Provider returned an error payload instead of guest output',
+            'service temporarily overloaded',
+            'Provider returned a retryable error payload instead of guest output',
         ),
     )
     forbid_markers(
@@ -394,7 +395,7 @@ def main() -> int:
     print(" - Gemini fast chat is additive and deep-task NVIDIA settings remain preserved")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
     print(" - fast chat uses native + OpenAI-compatible Gemini transports before NVIDIA fallback")
-    print(" - provider error payloads cannot be rendered as Tutor answers")
+    print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
     print(" - low-level container.running is authoritative for start eligibility")
