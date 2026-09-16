@@ -13,7 +13,8 @@ source = Path(__file__).resolve().parents[1] / 'railway/murikah_diagram.py'
 if not source.exists(): source = Path('/app/deeptutor/murikah_diagram.py')
 spec = importlib.util.spec_from_file_location('diagram_under_test', source)
 diagram = importlib.util.module_from_spec(spec)
-with patch.dict(sys.modules, {'deeptutor.murikah_fast_lane': fast}):
+from test_er_diagram import er
+with patch.dict(sys.modules, {'deeptutor.murikah_fast_lane': fast, 'deeptutor.murikah_er': er}):
     spec.loader.exec_module(diagram)
 
 SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="10" y="20">Course</text></svg>'
@@ -128,6 +129,23 @@ class DiagramTests(unittest.IsolatedAsyncioTestCase):
         normalized = diagram.validate_answer(answer)
         self.assertIn('Order &amp; fulfilment&#160;&#8212; delivery &amp; returns', normalized)
         self.assertEqual(diagram.validate_answer(normalized), normalized)
+
+    async def test_reported_finance_er_prompt_uses_json_and_renders_without_model_svg(self):
+        from test_er_diagram import FINANCE
+        captured = []
+        async def model():
+            payload = json.dumps(FINANCE)
+            for i in range(0, len(payload), 60): yield payload[i:i+60]
+        def candidates(messages):
+            captured.extend(messages)
+            return [fast.HedgeCandidate('planner', 0, model)]
+        with patch.object(diagram, 'candidates_for', side_effect=candidates):
+            events = await self.collect(diagram.diagram_events('Design ER diagram for a finance database', 'Legacy SVG prompt', {}))
+        self.assertEqual(events[-1]['type'], 'done')
+        self.assertIn('<svg', events[-1]['answer'])
+        self.assertIn('Account.account_id', events[-1]['answer'])
+        self.assertIn('Return ONLY one compact JSON object', captured[0]['content'])
+        self.assertNotIn('Legacy SVG prompt', captured[0]['content'])
 
     def test_invalid_xml_is_rejected(self):
         with self.assertRaises(Exception): diagram.validate_answer('<svg viewBox="0 0 1 1"><g></svg>')

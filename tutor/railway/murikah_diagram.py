@@ -13,6 +13,8 @@ from deeptutor.murikah_fast_lane import (
     gemini_stream, validated_stream,
 )
 
+from deeptutor.murikah_er import ER_SYSTEM_PROMPT, InvalidERPlan, er_answer, uses_er_plan
+
 logger = logging.getLogger(__name__)
 TOTAL_SECONDS = 90
 IDLE_SECONDS = 20
@@ -86,7 +88,7 @@ def validate_answer(answer):
     return answer[:match.start()] + raw + answer[match.end():]
 
 
-async def collect_candidate(candidate, updates, reference):
+async def collect_candidate(candidate, updates, reference, validator=validate_answer, structured=False):
     """A provider wins only after producing a complete, validated diagram."""
     stream = None
     try:
@@ -115,19 +117,19 @@ async def collect_candidate(candidate, updates, reference):
                 if updates.qsize() < 4:
                     updates.put_nowait(("progress", length))
                 # Do not wait for extra prose after a finished SVG.
-                if "</svg>" in "".join(parts).lower():
+                if (structured and "}" in chunk) or "</svg>" in "".join(parts).lower():
                     try:
-                        answer = validate_answer("".join(parts))
-                    except InvalidDiagram:
+                        answer = validator("".join(parts))
+                    except (InvalidDiagram, InvalidERPlan):
                         continue
                     updates.put_nowait(("done", answer))
                     return
-            updates.put_nowait(("done", validate_answer("".join(parts))))
+            updates.put_nowait(("done", validator("".join(parts))))
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         # Log the stage/type only: never prompts, provider URLs or secrets.
-        code = "invalid_svg" if isinstance(exc, InvalidDiagram) else "timeout" if isinstance(exc, TimeoutError) else "provider_unavailable"
+        code = "invalid_svg" if isinstance(exc, (InvalidDiagram, InvalidERPlan)) else "timeout" if isinstance(exc, TimeoutError) else "provider_unavailable"
         logger.warning("Diagram candidate failed [%s] candidate=%s reason=%s", reference, candidate.name, code)
         updates.put_nowait(("failed", code))
     finally:
@@ -138,7 +140,7 @@ def event(kind, **fields):
     return json.dumps({"type": kind, **fields}) + "\n"
 
 
-async def diagram_events(prompt, system_prompt, scope):
+async def diagram_events(prompt, system_prompt, scope, diagram_type="auto", style="editorial"):
     reference = uuid.uuid4().hex[:10]
     tasks = []
     completed = False
@@ -150,11 +152,16 @@ async def diagram_events(prompt, system_prompt, scope):
                 "Keep labels short, fit all elements inside the viewBox, and close every tag. "
                 "Escape ampersands in labels as &amp;. Do not include a reasoning trace."},
                 {"role": "user", "content": prompt}]
+            structured = uses_er_plan(prompt, diagram_type)
+            validator = (lambda answer: er_answer(answer, style)) if structured else validate_answer
+            if structured:
+                messages[0]["content"] = ER_SYSTEM_PROMPT
+                yield event("status", message="Planning entities, keys and relationships…")
             candidates = candidates_for(messages)
             if not candidates:
                 raise RuntimeError("no_models")
             updates = asyncio.Queue()
-            tasks = [asyncio.create_task(collect_candidate(c, updates, reference)) for c in candidates]
+            tasks = [asyncio.create_task(collect_candidate(c, updates, reference, validator, structured)) for c in candidates]
             remaining = len(tasks)
             failures = []
             characters = 0
@@ -188,7 +195,7 @@ async def diagram_events(prompt, system_prompt, scope):
         raise
     except Exception as exc:
         scope["murikah_prompt_failed"] = True
-        code = "invalid_svg" if isinstance(exc, InvalidDiagram) else "timeout" if isinstance(exc, TimeoutError) else "provider_unavailable"
+        code = "invalid_svg" if isinstance(exc, (InvalidDiagram, InvalidERPlan)) else "timeout" if isinstance(exc, TimeoutError) else "provider_unavailable"
         logger.warning("Diagram failed [%s] reason=%s type=%s", reference, code, type(exc).__name__)
         message = {
             "invalid_svg": "The design models returned incomplete diagrams.",
@@ -203,8 +210,8 @@ async def diagram_events(prompt, system_prompt, scope):
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def diagram_response(prompt, system_prompt, scope):
-    return StreamingResponse(diagram_events(prompt, system_prompt, scope),
+def diagram_response(prompt, system_prompt, scope, diagram_type="auto", style="editorial"):
+    return StreamingResponse(diagram_events(prompt, system_prompt, scope, diagram_type, style),
         media_type="application/x-ndjson", headers={
             "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no",
         })
