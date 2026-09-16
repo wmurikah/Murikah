@@ -45,9 +45,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v15 makes prompt editing visible for guests and members, retaining signup
-# and stream-wide rejection of serialized provider failures.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v15" }
+# v16 streams Diagram Design with model failover and visible progress.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v16" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4

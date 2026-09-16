@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Download, Sparkles, WandSparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, LoaderCircle, Sparkles, WandSparkles } from "lucide-react";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 
 const DIAGRAM_TYPES = [
@@ -53,7 +53,7 @@ const STYLES = [
   { id: "minimal-dark", label: "Minimal dark" },
 ] as const;
 
-type DiagramResponse = { answer?: string; detail?: string };
+type DiagramEvent = { type: string; answer?: string; message?: string; characters?: number };
 
 function extractDiagramSvg(content: string): { narrative: string; svg: string } | null {
   const fenced = content.match(/```svg\s*([\s\S]*?)```/i);
@@ -78,6 +78,10 @@ export default function MurikahDiagramStudio() {
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState("");
+  const [characters, setCharacters] = useState(0);
+  const activeRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => activeRequest.current?.abort(), []);
 
   const diagram = useMemo(() => extractDiagramSvg(answer), [answer]);
   const srcDoc = useMemo(() => {
@@ -87,27 +91,71 @@ export default function MurikahDiagramStudio() {
 
   async function generate() {
     const clean = prompt.trim();
-    if (!clean || busy) return;
+    if (!clean || activeRequest.current) return;
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setBusy(true);
     setError("");
+    setCharacters(0);
+    setProgress("Connecting to a design model…");
+    let expired = false;
+    const timer = window.setTimeout(() => {
+      expired = true;
+      controller.abort();
+    }, 100_000);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
       const response = await fetch("/api/murikah/diagram", {
         method: "POST",
+        signal: controller.signal,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          prompt: clean,
-          diagram_type: diagramType === "Auto" ? "auto" : diagramType,
-          style,
-        }),
+        body: JSON.stringify({ prompt: clean, diagram_type: diagramType === "Auto" ? "auto" : diagramType, style }),
       });
-      const data = (await response.json().catch(() => ({}))) as DiagramResponse;
       if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
         throw new Error(typeof data.detail === "string" ? data.detail : "Diagram Design is temporarily unavailable. Please try again.");
       }
-      setAnswer(String(data.answer || ""));
+      if (!response.body || !response.headers.get("content-type")?.includes("application/x-ndjson")) {
+        throw new Error("The diagram connection could not start. Please reload and try again.");
+      }
+      reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completed = false;
+      while (!completed) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        if (buffer.length > 1_000_000) throw new Error("The diagram response is too large. Try a shorter brief.");
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as DiagramEvent;
+          if (event.type === "error") throw new Error(event.message || "Diagram generation failed. Please try again.");
+          if (event.type === "status") {
+            setProgress(event.message || "Designing…");
+            if (typeof event.characters === "number") setCharacters(event.characters);
+          }
+          if (event.type === "done") {
+            const result = event.answer || "";
+            if (!extractDiagramSvg(result)) throw new Error("The model returned an incomplete diagram. Please try again.");
+            setAnswer(result);
+            completed = true;
+            break;
+          }
+        }
+        if (done) break;
+      }
+      if (!completed) throw new Error("The connection ended before your diagram was ready. Please try again.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Diagram Design is temporarily unavailable. Please try again.");
+      setError(controller.signal.aborted
+        ? expired ? "Diagram Design took too long. Your brief is still here. Please try again." : "Design cancelled. Your brief is still here."
+        : cause instanceof Error ? cause.message : "Diagram Design is temporarily unavailable. Please try again.");
     } finally {
+      window.clearTimeout(timer);
+      await reader?.cancel().catch(() => {});
+      controller.abort();
+      activeRequest.current = null;
       setBusy(false);
     }
   }
@@ -183,19 +231,41 @@ export default function MurikahDiagramStudio() {
               disabled={busy || !prompt.trim()}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1E2A30] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <WandSparkles size={16} className="text-[#A9822E]" />
+              {busy ? <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" /> : <WandSparkles size={16} className="text-[#A9822E]" />}
               {busy ? "Designing…" : "Design diagram"}
             </button>
           </div>
         </section>
 
+        {busy && (
+          <div role="status" aria-live="polite" className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <LoaderCircle size={22} aria-hidden="true" className="animate-spin text-[#A9822E] motion-reduce:animate-none" />
+                <p className="font-medium">{progress}</p>
+              </div>
+              <button type="button" onClick={() => activeRequest.current?.abort()} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm">Cancel</button>
+            </div>
+            <div aria-hidden="true" className="mt-5 flex items-center justify-center gap-3 motion-safe:animate-pulse">
+              <div className="h-14 w-24 rounded-lg border-2 border-[#A9822E]/50 bg-[#A9822E]/10" />
+              <div className="h-px w-10 bg-[#A9822E]/50" />
+              <div className="h-14 w-24 rounded-lg border-2 border-[#A9822E]/50 bg-[#A9822E]/10" />
+              <div className="h-px w-10 bg-[#A9822E]/50" />
+              <div className="h-14 w-24 rounded-lg border-2 border-[#A9822E]/50 bg-[#A9822E]/10" />
+            </div>
+            <p aria-live="off" className="mt-4 text-sm text-[var(--muted-foreground)]">
+              {characters > 0 ? `${characters.toLocaleString()} characters received. The preview will appear when the diagram is complete.` : "Preparing your diagram. You can cancel at any time."}
+            </p>
+          </div>
+        )}
+
         {error && (
-          <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+          <div role="alert" className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
             {error}
           </div>
         )}
 
-        <section className="mt-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+        <section hidden={busy && !diagram} aria-busy={busy} className="mt-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
           {diagram ? (
             <>
               {diagram.narrative && (
