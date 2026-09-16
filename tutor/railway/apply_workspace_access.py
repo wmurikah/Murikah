@@ -30,6 +30,24 @@ def main(root, overlay):
     layout = root / "web/components/layout/AppShell.tsx"
     replace(layout, 'import Image from "next/image";', 'import Image from "next/image";\nimport MurikahGuestBanner from "@/components/auth/MurikahGuestBanner";')
     replace(layout, '<main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--background)]">', '<main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--background)]">\n          <MurikahGuestBanner />')
+    # Guests and members share this message component and the existing branch editor.
+    # Keep the action visible without hover so touch users can discover it too.
+    messages = root / "web/features/chat/messages/ChatMessageList.tsx"
+    replace(messages,
+        'className="flex h-7 items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"',
+        'className="flex min-h-9 items-center justify-end gap-1"')
+    replace(messages, '''              <RoughActionButton
+                icon={Pencil}
+                label={t("Edit")}
+                onClick={startEdit}
+              />''', '''              <button
+                type="button"
+                onClick={startEdit}
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                <Pencil size={15} strokeWidth={1.5} aria-hidden="true" />
+                {t("Edit")}
+              </button>''')
     main_py = root / "deeptutor/api/main.py"
     # Imported here after auth/router modules, avoiding initialization cycles.
     replace(main_py, '# Auth router is public — login/logout/register/status require no token',
