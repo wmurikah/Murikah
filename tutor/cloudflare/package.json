@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "python prepare_runtime_proxy.py && wrangler deploy --dry-run --config wrangler.toml --outdir .wrangler/dry-run",
-    "deploy:staging": "python prepare_runtime_proxy.py && python -m py_compile deploy_staging.py && python deploy_staging.py --containers-rollout=immediate",
+    "check": "python validate_persistence_config.py && python prepare_runtime_proxy.py && wrangler deploy --dry-run --config wrangler.toml --outdir .wrangler/dry-run",
+    "deploy:staging": "python validate_persistence_config.py && python prepare_runtime_proxy.py && python -m py_compile deploy_staging.py && python deploy_staging.py --containers-rollout=immediate",
     "smoke:staging": "python smoke_staging.py",
     "dev": "wrangler dev --config wrangler.toml"
   },
