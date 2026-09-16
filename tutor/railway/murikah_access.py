@@ -285,9 +285,13 @@ class GuestBudgetMiddleware:
                     release(payload.user_id, rid)
                 await send(message)
             try:
-                return await self.app(scope, receive, counted_send)
+                result = await self.app(scope, receive, counted_send)
+                if scope.get("murikah_prompt_failed"):
+                    release(payload.user_id, rid)
+                return result
             except BaseException:
-                release(payload.user_id, rid)
+                if not scope.get("murikah_prompt_completed"):
+                    release(payload.user_id, rid)
                 raise
         if not (path == "/ws/books" or path.startswith(("/ws/questions/", "/ws/partners/", "/ws/partner-groups/"))):
             return await self.app(scope, receive, send)
