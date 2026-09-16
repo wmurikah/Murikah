@@ -32,6 +32,7 @@ COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 COPY tutor/railway/apply_workspace_access.py /opt/murikah/apply_workspace_access.py
+COPY tutor/railway/hide_guest_account_ui.py /opt/murikah/hide_guest_account_ui.py
 COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
 COPY tutor/railway/MurikahWorkspaceEntry.tsx.txt /opt/murikah/MurikahWorkspaceEntry.tsx.txt
 COPY tutor/railway/MurikahGuestBanner.tsx.txt /opt/murikah/MurikahGuestBanner.tsx.txt
@@ -67,6 +68,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
     && python /opt/murikah/apply_workspace_access.py /src/DeepTutor \
+    && python /opt/murikah/hide_guest_account_ui.py /src/DeepTutor \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
 
 FROM node:22-slim AS frontend-builder
