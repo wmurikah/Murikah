@@ -83,6 +83,30 @@ export default function MurikahDiagramStudio() {
   const activeRequest = useRef<AbortController | null>(null);
   useEffect(() => () => activeRequest.current?.abort(), []);
 
+  // Carry this tab's diagram through account creation/sign-in, then consume it.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("murikah.diagram.continuation");
+      sessionStorage.removeItem("murikah.diagram.continuation");
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (typeof saved.at !== "number" || Date.now() - saved.at > 3_600_000) return;
+      if (typeof saved.prompt === "string") setPrompt(saved.prompt);
+      if (typeof saved.answer === "string" && extractDiagramSvg(saved.answer)) setAnswer(saved.answer);
+      if (DIAGRAM_TYPES.includes(saved.diagramType)) setDiagramType(saved.diagramType);
+      if (STYLES.some(item => item.id === saved.style)) setStyle(saved.style);
+    } catch { /* Storage may be disabled; account navigation still works. */ }
+  }, []);
+  useEffect(() => {
+    const preserve = () => {
+      try {
+        sessionStorage.setItem("murikah.diagram.continuation", JSON.stringify({ prompt, answer, diagramType, style, at: Date.now() }));
+      } catch { /* The current diagram remains available until navigation. */ }
+    };
+    window.addEventListener("murikah:account-navigation", preserve);
+    return () => window.removeEventListener("murikah:account-navigation", preserve);
+  }, [prompt, answer, diagramType, style]);
+
   const diagram = useMemo(() => extractDiagramSvg(answer), [answer]);
   const srcDoc = useMemo(() => {
     if (!diagram) return "";

@@ -15,8 +15,23 @@ async function start() {
   fireEvent.click(screen.getByRole("button", { name: "Design diagram" }));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); });
 describe("Diagram Design", () => {
+  it("keeps the brief and completed diagram through account navigation", async () => {
+    const stream = streamResponse();
+    const page = render(<MurikahDiagramStudio />);
+    await start();
+    await act(async () => stream.emit({ type: "done", answer: svg }));
+    await screen.findByTitle("Murikah Tutor generated diagram");
+    act(() => window.dispatchEvent(new Event("murikah:account-navigation")));
+    expect(sessionStorage.getItem("murikah.diagram.continuation")).toContain("Computer Science Courses");
+    page.unmount();
+    render(<MurikahDiagramStudio />);
+    expect(screen.getByRole("textbox")).toHaveValue("Computer Science Courses");
+    expect(screen.getByTitle("Murikah Tutor generated diagram")).toHaveAttribute("srcdoc", expect.stringContaining(svg));
+    expect(sessionStorage.getItem("murikah.diagram.continuation")).toBeNull();
+  });
+
   it("shows progress immediately, decodes split events and commits one complete preview", async () => {
     const stream = streamResponse();
     render(<MurikahDiagramStudio />);
