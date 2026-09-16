@@ -24,6 +24,8 @@ type TutorEnv = {
   MURIKAH_LLM_PRIMARY_MODEL?: string;
   MURIKAH_LLM_SECONDARY_MODEL?: string;
   MURIKAH_LLM_TERTIARY_MODEL?: string;
+  MURIKAH_GEMINI_API_KEY?: string;
+  MURIKAH_FAST_CHAT_MODEL?: string;
   MURIKAH_DASHSCOPE_API_KEY?: string;
   MURIKAH_DASHSCOPE_BASE_URL?: string;
   MURIKAH_EMBEDDING_PROVIDER?: string;
@@ -111,6 +113,8 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
     MURIKAH_LLM_PRIMARY_MODEL: optional(source.MURIKAH_LLM_PRIMARY_MODEL),
     MURIKAH_LLM_SECONDARY_MODEL: optional(source.MURIKAH_LLM_SECONDARY_MODEL),
     MURIKAH_LLM_TERTIARY_MODEL: optional(source.MURIKAH_LLM_TERTIARY_MODEL),
+    MURIKAH_GEMINI_API_KEY: optional(source.MURIKAH_GEMINI_API_KEY),
+    MURIKAH_FAST_CHAT_MODEL: optional(source.MURIKAH_FAST_CHAT_MODEL) || "gemini-3.8-flash",
     MURIKAH_DASHSCOPE_API_KEY: optional(source.MURIKAH_DASHSCOPE_API_KEY),
     MURIKAH_DASHSCOPE_BASE_URL: optional(source.MURIKAH_DASHSCOPE_BASE_URL),
     MURIKAH_EMBEDDING_PROVIDER: optional(source.MURIKAH_EMBEDDING_PROVIDER),
@@ -169,8 +173,6 @@ export class TutorContainer extends Container<TutorEnv> {
     console.error("Murikah Tutor container lifecycle error", error);
   }
 
-  // Do not call this method `state`: Container/Durable Object instances already
-  // use state internally, which shadows a subclass method with that name.
   private async readContainerState(): Promise<ContainerState | { error: string }> {
     try {
       return (await this.getState()) as ContainerState;
@@ -189,10 +191,6 @@ export class TutorContainer extends Container<TutorEnv> {
       };
     }
 
-    // Cloudflare documents ctx.container.running as the authoritative test
-    // before calling start(). getState() can lag during the start/stop transition,
-    // which previously produced the contradictory combination state=stopped while
-    // start() rejected with "container is already running".
     if (this.ctx.container.running) {
       const current = await this.runtimeStatus();
       return { ...current, workerSecretConfigured: true };
@@ -200,9 +198,6 @@ export class TutorContainer extends Container<TutorEnv> {
 
     let startError = "";
     try {
-      // There is deliberately no await between the running check above and this
-      // synchronous start request. That avoids an RPC interleave starting the
-      // same Durable Object container twice.
       this.ctx.container.start({
         env: runtimeEnv,
         enableInternet: true,
@@ -210,8 +205,6 @@ export class TutorContainer extends Container<TutorEnv> {
       });
     } catch (error) {
       startError = errorText(error);
-      // A concurrent/transitioning start is not a failure if the low-level
-      // runtime now reports the container as running.
       if (!this.ctx.container.running) {
         return {
           running: false,
@@ -234,11 +227,6 @@ export class TutorContainer extends Container<TutorEnv> {
 
   async runtimeStatus(): Promise<RuntimeStatus> {
     const state = await this.readContainerState();
-
-    // Do not use getState().status to decide whether start() is allowed. During
-    // Cloudflare lifecycle transitions it can briefly report stopped while the
-    // underlying VM is already running. The low-level running flag is designed
-    // for this exact guard and is what Cloudflare's exec examples use.
     if (!this.ctx.container.running) {
       return { running: false, ready: false, state };
     }
@@ -356,9 +344,6 @@ export class TutorContainer extends Container<TutorEnv> {
           {
             stdout: "ignore",
             stderr: "ignore",
-            // exec() only guarantees inheritance of class envVars. Pass the
-            // per-request Worker bindings again so this diagnostic exactly
-            // reproduces the real first-boot environment without exposing them.
             env: runtimeEnv,
           },
         );
@@ -457,6 +442,8 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
       runtime: env.MURIKAH_TUTOR_RUNTIME,
       adminPasswordConfigured: hasAdminSecret(runtimeEnv),
       authSecretConfigured: hasAuthSecret(runtimeEnv),
+      geminiFastLaneConfigured: Boolean(runtimeEnv.MURIKAH_GEMINI_API_KEY),
+      fastChatModel: runtimeEnv.MURIKAH_FAST_CHAT_MODEL,
       appInstance: APP_INSTANCE,
     },
     {
@@ -558,6 +545,9 @@ export default {
     if (status.ready) {
       try {
         const response = await tutor.fetch(request);
+        if (response.status === 101 || request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+          return response;
+        }
         const headers = new Headers(response.headers);
         headers.set("x-murikah-tutor-runtime", "cloudflare-container");
         return new Response(response.body, {
