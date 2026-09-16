@@ -63,7 +63,9 @@ def main() -> None:
         "base_url": GEMINI_OPENAI_BASE,
         "api_version": "",
         "extra_headers": {},
-        "api_format": "auto",
+        # Google's compatibility endpoint explicitly supports Chat Completions.
+        # Do not let provider auto-selection choose a different wire protocol.
+        "api_format": "openai_chat",
         "wire_api": "auto",
         "models": [
             {
