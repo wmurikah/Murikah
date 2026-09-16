@@ -159,7 +159,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-15-v10"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v11"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
@@ -194,6 +194,8 @@ def main() -> int:
             '/app/data/system/auth/auth_secret',
             'Stable Cloudflare auth signing secret restored.',
             'python /app/murikah-tutor-bootstrap.py',
+            'python /app/murikah-fast-lane-bootstrap.py',
+            'MURIKAH_FAST_CHAT_MODEL',
             'export BACKEND_HOST=127.0.0.1',
             'export FRONTEND_HOST=0.0.0.0',
             '/app/start-backend.sh &',
@@ -206,6 +208,8 @@ def main() -> int:
         (
             'ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev',
             'LABEL com.murikah.tutor.cloudflare-image-rev=',
+            'COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py',
+            'COPY tutor/railway/bootstrap_fast_lane.py /app/murikah-fast-lane-bootstrap.py',
             'COPY tutor/cloudflare/entrypoint.sh /app/murikah-cloudflare-entrypoint.sh',
             '/app/murikah-cloudflare-entrypoint.sh',
             '/app/murikah-cloudflare-image-rev',
@@ -240,7 +244,11 @@ def main() -> int:
             '"/__muri/worker-config"',
             'workerSecretConfigured',
             'authSecretConfigured',
+            'geminiFastLaneConfigured',
+            'MURIKAH_GEMINI_API_KEY',
+            'MURIKAH_FAST_CHAT_MODEL',
             'url.pathname === "/favicon.ico"',
+            'response.status === 101',
             'x-murikah-tutor-runtime',
             'MURIKAH_TUTOR_RUNTIME',
             'MURIKAH_PUBLIC_BASE_URL',
@@ -274,6 +282,37 @@ def main() -> int:
             'MURIKAH_VIDEO_MODEL',
             'MURIKAH_VIDEO_LEARNING_TRANSCRIPT_PROVIDER',
             'atomic_write_json(MODEL_CATALOG_PATH, catalog)',
+        ),
+    )
+    require_markers(
+        "tutor/railway/bootstrap_fast_lane.py",
+        (
+            'PROFILE_ID = "muri-llm-gemini"',
+            'DEFAULT_MODEL = "gemini-3.8-flash"',
+            'MURIKAH_GEMINI_API_KEY',
+            'MURIKAH_FAST_CHAT_MODEL',
+            'llm["active_profile_id"] = PROFILE_ID',
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_fast_lane.py",
+        (
+            'DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"',
+            'thinkingLevel": "low"',
+            'async def gemini_stream(',
+            'async def race_first_visible(',
+            'MURIKAH_LATENCY route=fast',
+        ),
+    )
+    require_markers(
+        "tutor/railway/accelerate_chat.py",
+        (
+            'MURIKAH_DUAL_LANE_CHAT_V2',
+            'def _agent_reason(',
+            'force_agentic_chat',
+            'race_first_visible(',
+            'route=deep_agent',
+            'route=fast',
         ),
     )
     forbid_markers(
@@ -342,6 +381,9 @@ def main() -> int:
     print(" - stable auth signing secret is restored before DeepTutor auth imports")
     print(" - /app is fixed as the Python import root before runtime initialization")
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
+    print(" - Gemini fast chat is additive and deep-task NVIDIA settings remain preserved")
+    print(" - ordinary Chat is separated from the DeepTutor agent lane")
+    print(" - fast chat hedges providers after a bounded first-token delay")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
     print(" - low-level container.running is authoritative for start eligibility")
