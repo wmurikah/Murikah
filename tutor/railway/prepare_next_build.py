@@ -19,11 +19,11 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 def harden_fast_lane(root: Path) -> None:
     fast = root / "deeptutor" / "murikah_fast_lane.py"
     text = fast.read_text(encoding="utf-8")
-    if "MURIKAH_FAST_LANE_FAILOVER_V3" not in text:
+    if "MURIKAH_FAST_LANE_FAILOVER_V4" not in text:
         text = replace_once(
             text,
             'logger = logging.getLogger(__name__)\n',
-            'logger = logging.getLogger(__name__)\n\n# MURIKAH_FAST_LANE_FAILOVER_V3\n',
+            'logger = logging.getLogger(__name__)\n\n# MURIKAH_FAST_LANE_FAILOVER_V4\n',
             "fast-lane marker",
         )
         text = replace_once(
@@ -70,8 +70,22 @@ def harden_fast_lane(root: Path) -> None:
             '        if in_think or not text:\n'
             '            continue\n'
             '        normalized = text.strip().lower()\n'
-            '        if normalized.startswith("error calling llm:") or normalized.startswith("llm call failed:"):\n'
-            '            raise RuntimeError("Provider returned an error payload instead of model output")\n'
+            '        overloaded_payload = (\n'
+            '            "service temporarily overloaded" in normalized\n'
+            '            or "overloaded_error" in normalized\n'
+            '            or "\'type\': \'overloaded\'" in normalized\n'
+            '            or "\\\"type\\\": \\"overloaded\\\"" in normalized\n'
+            '            or "\'code\': 529" in normalized\n'
+            '            or "\\\"code\\\": 529" in normalized\n'
+            '            or "\\\"code\\\":529" in normalized\n'
+            '        )\n'
+            '        if (\n'
+            '            normalized.startswith("error calling llm:")\n'
+            '            or normalized.startswith("llm call failed:")\n'
+            '            or (normalized.startswith("error:") and overloaded_payload)\n'
+            '            or overloaded_payload\n'
+            '        ):\n'
+            '            raise RuntimeError("Provider returned a retryable error payload instead of model output")\n'
             '        return text\n'
             '    raise StopAsyncIteration\n',
             "provider error-token guard",
@@ -88,12 +102,12 @@ def harden_fast_lane(root: Path) -> None:
 
     guest = root / "deeptutor" / "api" / "routers" / "murikah_guest.py"
     text = guest.read_text(encoding="utf-8")
-    marker = "Provider returned an error payload instead of guest output"
+    marker = "Provider returned a retryable error payload instead of guest output"
     if marker not in text:
         text = replace_once(
             text,
             '''            if in_think or not text:\n                continue\n            return text\n        raise RuntimeError("Provider stream ended before producing visible text")\n''',
-            '''            if in_think or not text:\n                continue\n            normalized = text.strip().lower()\n            if normalized.startswith("error calling llm:") or normalized.startswith("llm call failed:"):\n                raise RuntimeError("Provider returned an error payload instead of guest output")\n            return text\n        raise RuntimeError("Provider stream ended before producing visible text")\n''',
+            '''            if in_think or not text:\n                continue\n            normalized = text.strip().lower()\n            overloaded_payload = (\n                "service temporarily overloaded" in normalized\n                or "overloaded_error" in normalized\n                or "'type': 'overloaded'" in normalized\n                or '"type": "overloaded"' in normalized\n                or "'code': 529" in normalized\n                or '"code": 529' in normalized\n                or '"code":529' in normalized\n            )\n            if (\n                normalized.startswith("error calling llm:")\n                or normalized.startswith("llm call failed:")\n                or (normalized.startswith("error:") and overloaded_payload)\n                or overloaded_payload\n            ):\n                raise RuntimeError("Provider returned a retryable error payload instead of guest output")\n            return text\n        raise RuntimeError("Provider stream ended before producing visible text")\n''',
             "guest error-token guard",
         )
         guest.write_text(text, encoding="utf-8")
@@ -134,7 +148,7 @@ def main() -> int:
 
     config.write_text(text, encoding="utf-8")
     harden_fast_lane(root)
-    print("Prepared pinned DeepTutor build configuration and fast-lane failover.")
+    print("Prepared pinned DeepTutor build configuration and overload-aware fast-lane failover.")
     return 0
 
 

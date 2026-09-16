@@ -33,9 +33,9 @@ required = [
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v12 hardens the low-latency lane: explicit Gemini Chat Completions,
-# independent native + compatibility transports, and error-aware failover.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v12" }
+# v13 treats upstream overload/capacity payloads as transient provider failures
+# and continues to another configured model instead of displaying them as answers.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v13" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
