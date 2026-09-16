@@ -235,7 +235,7 @@ class AccessTests(unittest.TestCase):
     def test_navigation_and_uploads_are_free(self):
         for path in ("/api/reading/materials", "/api/documents", "/api/sessions", "/api/knowledge-bases", "/api/auth/login"):
             self.assertFalse(access.is_http_prompt(path), path)
-        for path in ("/api/books", "/api/murikah/diagram", "/api/mastery-paths/topics/draft", "/api/reading/materials/a/extensions/quiz/actions/generate"):
+        for path in ("/api/books", "/api/partners/p1/chat", "/api/partners/p1/chat/execute-stream", "/api/murikah/diagram", "/api/mastery-paths/topics/draft", "/api/reading/materials/a/extensions/quiz/actions/generate"):
             self.assertTrue(access.is_http_prompt(path), path)
 
 
