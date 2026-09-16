@@ -45,11 +45,13 @@ The helper reports sizes and storage types only; it does not print file contents
 
 R2 remains private. No `r2.dev` public URL or custom domain is required.
 
-Do not place a live SQLite database directly on R2 or an R2/FUSE mount. SQLite requires local-filesystem locking and atomicity semantics that object storage does not provide.
+Do not put a live SQLite database on an R2/FUSE mount. SQLite requires local-filesystem locking and atomicity semantics that object storage does not provide.
 
 ### D1 / structured state
 
 `TUTOR_DB` is the selected Cloudflare-native durable store for structured persistence metadata and application state that can be cleanly adapted from the pinned DeepTutor 1.6.6 runtime.
+
+Durable Object SQLite was considered as an earlier Cloudflare-native option for transactional state. For this production implementation, the dedicated D1 binding `TUTOR_DB` is the selected structured store, while the existing `TutorContainer` Durable Object continues to manage the container lifecycle.
 
 The persistence adapter must preserve:
 
@@ -88,7 +90,7 @@ Cloudflare dashboard Variables remain authoritative for model/service configurat
 
 ## Acceptance conditions
 
-Persistence is not complete merely because the bindings exist. Production persistence is accepted only when:
+Persistence is not complete merely because the bindings exist. Production cutover is blocked until:
 
 - a Container can be destroyed and recreated without losing a learner account or conversation;
 - a deployment rollback does not roll user data back with the image;
