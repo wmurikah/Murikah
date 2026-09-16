@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from functools import wraps
 import json
+import os
 import re
 import secrets
 import sqlite3
@@ -82,8 +83,27 @@ def request_identity(request):
 
 
 def check_origin(request):
+    """Accept the public Tutor origin after Next.js rewrites to loopback.
+
+    Browser requests arrive at tutor.murikah.com, then the Next.js proxy rewrites
+    /api/* to 127.0.0.1:8001. FastAPI can therefore see an internal Host header
+    while Origin correctly remains the public hostname. Validate against the
+    configured public base as well as direct/forwarded hosts instead of rejecting
+    that legitimate same-origin request.
+    """
     origin = request.headers.get("origin")
-    if origin and urlsplit(origin).netloc != request.headers.get("host"):
+    if not origin:
+        return
+    origin_host = urlsplit(origin).netloc.lower()
+    allowed_hosts = {
+        str(request.headers.get("host") or "").split(",", 1)[0].strip().lower(),
+        str(request.headers.get("x-forwarded-host") or "").split(",", 1)[0].strip().lower(),
+    }
+    public_base = os.environ.get("MURIKAH_PUBLIC_BASE_URL", "").strip()
+    if public_base:
+        allowed_hosts.add(urlsplit(public_base).netloc.lower())
+    allowed_hosts.discard("")
+    if origin_host not in allowed_hosts:
         raise HTTPException(403, "Please use the Tutor website to continue.")
 
 
