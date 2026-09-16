@@ -19,13 +19,14 @@ export default function MurikahGuestBanner() {
     window.addEventListener("focus", refresh);
     return () => { alive = false; clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, []);
-  if (!status?.guest) return null;
+  if (!status?.guest || !status.requires_auth) return null;
   const next = encodeURIComponent(path || "/chat");
-  return <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#A9822E]/25 bg-[#A9822E]/10 px-5 py-3 text-sm">
-    <span>{status.requires_auth ? "You've used your 7 guest prompts. Sign up or sign in to continue." : `Guest workspace · ${status.remaining} of 7 prompts remaining`}</span>
+  const preserveWork = () => window.dispatchEvent(new Event("murikah:account-navigation"));
+  return <div role="alert" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#A9822E]/25 bg-[#A9822E]/10 px-5 py-3 text-sm">
+    <div><p className="font-semibold">Continue your work</p><p>You've reached the free guest limit. Sign up to keep your guest workspace and continue, or sign in to your account.</p></div>
     <div className="flex items-center gap-4">
-      <a href={`/login?next=${next}`} className="font-medium">Sign in</a>
-      <a href={`/register?next=${next}`} className="rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">Sign up</a>
+      <a onClick={preserveWork} href={`/login?next=${next}`} className="font-medium">Sign in</a>
+      <a onClick={preserveWork} href={`/register?next=${next}`} className="rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">Sign up</a>
     </div>
   </div>;
 }

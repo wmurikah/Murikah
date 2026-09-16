@@ -81,7 +81,8 @@ RUN npm config set fetch-timeout 600000 \
     && npm ci --legacy-peer-deps
 COPY --from=branded-source /src/DeepTutor/web/ ./
 COPY tutor/tests/diagram-studio.spec.tsx.txt ./tests/integration/diagram-studio.spec.tsx
-RUN npx vitest run tests/integration/diagram-studio.spec.tsx
+COPY tutor/tests/guest-limit.spec.tsx.txt ./tests/integration/guest-limit.spec.tsx
+RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
