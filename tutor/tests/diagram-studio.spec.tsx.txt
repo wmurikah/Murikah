@@ -1,0 +1,72 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import MurikahDiagramStudio from "@/components/diagram/MurikahDiagramStudio";
+vi.mock("@/components/common/MarkdownRenderer", () => ({ default: ({ content }: { content: string }) => <div>{content}</div> }));
+const svg = '<svg viewBox="0 0 100 100"><text x="5" y="20">Courses</text></svg>';
+const encoder = new TextEncoder();
+function streamResponse() {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { headers: { "content-type": "application/x-ndjson" } })));
+  return { emit: (event: object) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n")), controller };
+}
+async function start() {
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Computer Science Courses" } });
+  fireEvent.click(screen.getByRole("button", { name: "Design diagram" }));
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+}
+afterEach(() => vi.unstubAllGlobals());
+describe("Diagram Design", () => {
+  it("shows progress immediately, decodes split events and commits one complete preview", async () => {
+    const stream = streamResponse();
+    render(<MurikahDiagramStudio />);
+    await start();
+    expect(screen.getByRole("status")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Download SVG" })).toBeDisabled();
+    await act(async () => stream.emit({ type: "status", message: "Drawing the diagram…", characters: 72 }));
+    expect(screen.getByText(/72 characters received/)).toBeVisible();
+    expect(screen.queryByTitle("Murikah Tutor generated diagram")).toBeNull();
+    const bytes = encoder.encode(JSON.stringify({ type: "done", answer: svg }) + "\n");
+    await act(async () => { stream.controller.enqueue(bytes.slice(0, 20)); stream.controller.enqueue(bytes.slice(20)); });
+    expect(await screen.findByTitle("Murikah Tutor generated diagram")).toHaveAttribute("srcdoc", expect.stringContaining(svg));
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(screen.getByRole("button", { name: "Download SVG" })).toBeEnabled();
+  });
+  it("preserves the last diagram and brief after a failed redesign", async () => {
+    let stream = streamResponse();
+    render(<MurikahDiagramStudio />);
+    await start();
+    await act(async () => stream.emit({ type: "done", answer: svg }));
+    const frame = await screen.findByTitle("Murikah Tutor generated diagram");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Design diagram" })).toBeEnabled());
+    stream = streamResponse();
+    fireEvent.click(screen.getByRole("button", { name: "Design diagram" }));
+    await act(async () => stream.emit({ type: "error", message: "Please try again." }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Please try again.");
+    expect(screen.getByTitle("Murikah Tutor generated diagram")).toBe(frame);
+    expect(screen.getByRole("textbox")).toHaveValue("Computer Science Courses");
+  });
+  it("recovers from a disconnected stream and allows retry", async () => {
+    const stream = streamResponse();
+    render(<MurikahDiagramStudio />);
+    await start();
+    await act(async () => stream.controller.close());
+    expect(await screen.findByRole("alert")).toHaveTextContent("connection ended");
+    expect(screen.getByRole("button", { name: "Design diagram" })).toBeEnabled();
+  });
+  it("cancels a waiting request and retains the brief", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn((_url, options) => {
+      signal = options.signal;
+      return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+    }));
+    render(<MurikahDiagramStudio />);
+    await start();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Design cancelled");
+    expect(signal?.aborted).toBe(true);
+    expect(screen.getByRole("textbox")).toHaveValue("Computer Science Courses");
+    expect(screen.getByRole("button", { name: "Design diagram" })).toBeEnabled();
+  });
+});

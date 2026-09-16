@@ -183,6 +183,31 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/documents/actions/edit").status_code, 403)
         self.assertEqual(self.client.get("/api/documents").status_code, 200)
 
+    def test_failed_diagram_stream_refunds_but_success_uses_one_prompt(self):
+        self.guest()
+        from fastapi import Request
+        from fastapi.responses import StreamingResponse
+        app = FastAPI()
+        app.add_middleware(access.GuestBudgetMiddleware)
+        @app.post("/api/murikah/diagram")
+        async def diagram(request: Request):
+            async def body():
+                yield '{"type":"status"}\n'
+                if request.headers.get("x-test-fail"):
+                    request.scope["murikah_prompt_failed"] = True
+                    yield '{"type":"error"}\n'
+                else:
+                    yield '{"type":"done"}\n'
+            return StreamingResponse(body(), media_type="application/x-ndjson")
+        with TestClient(app) as client:
+            client.cookies.set("dt_token", "test")
+            self.assertEqual(client.post("/api/murikah/diagram", headers={"x-test-fail": "yes"}).status_code, 200)
+            self.assertEqual(access.guest_status(self.payload)["remaining"], 7)
+            self.assertEqual(client.post("/api/murikah/diagram").status_code, 200)
+            self.assertEqual(access.guest_status(self.payload)["remaining"], 6)
+            for _ in range(6): client.post("/api/murikah/diagram")
+            self.assertEqual(client.post("/api/murikah/diagram").status_code, 403)
+
     def test_failed_turn_is_refunded(self):
         uid = self.guest()
         @access.guest_prompt
