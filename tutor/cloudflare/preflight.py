@@ -159,7 +159,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v11"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v12"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
@@ -291,6 +291,7 @@ def main() -> int:
             'DEFAULT_MODEL = "gemini-3.8-flash"',
             'MURIKAH_GEMINI_API_KEY',
             'MURIKAH_FAST_CHAT_MODEL',
+            '"api_format": "openai_chat"',
             'llm["active_profile_id"] = PROFILE_ID',
         ),
     )
@@ -313,6 +314,15 @@ def main() -> int:
             'race_first_visible(',
             'route=deep_agent',
             'route=fast',
+        ),
+    )
+    require_markers(
+        "tutor/railway/prepare_next_build.py",
+        (
+            'MURIKAH_FAST_LANE_FAILOVER_V3',
+            'trust_env=False',
+            'gemini_compat =',
+            'Provider returned an error payload instead of guest output',
         ),
     )
     forbid_markers(
@@ -383,7 +393,8 @@ def main() -> int:
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Gemini fast chat is additive and deep-task NVIDIA settings remain preserved")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
-    print(" - fast chat hedges providers after a bounded first-token delay")
+    print(" - fast chat uses native + OpenAI-compatible Gemini transports before NVIDIA fallback")
+    print(" - provider error payloads cannot be rendered as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
     print(" - low-level container.running is authoritative for start eligibility")
