@@ -49,3 +49,5 @@ The existing `/app/data` persistence limitation remains: accounts, guest budgets
 conversations and files are on the container disk and can be lost on replacement.
 This is not a durable account-storage implementation. Externalizing that data is a
 separate infrastructure milestone documented in `cloudflare/PERSISTENCE.md`.
+
+Sent text prompts show an always-visible Edit button in the shared chat for guests and members, including on touchscreens. The existing editor supports Cancel and Send, retaining conversation branches. Opening/cancelling an edit uses no allowance; sending an edited prompt uses the same seven-prompt guest budget as a new prompt. Editing is unavailable while a response is streaming.
