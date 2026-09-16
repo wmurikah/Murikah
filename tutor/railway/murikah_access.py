@@ -231,6 +231,7 @@ def is_http_prompt(path):
         r"|/topics/draft$|/generate-from-(?:notebook|reading)$|/extensions/[^/]+/actions/"
         r"|/notes/organize$|/memory/runs/start$|/memory/doc/[^/]+/[^/]+/(?:update|audit|dedup)$"
         r"|/connections/[^/]+/message$|/suggestions/refresh$|/api/murikah/diagram$"
+        r"|/partners/[^/]+/chat(?:/execute-stream)?$"
         r"|/partner-groups/.+/(?:retry|summary|approve)$|/notebooks/actions/add-record-with-summary$", path))
 
 
