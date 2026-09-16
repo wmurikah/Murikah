@@ -51,3 +51,5 @@ This is not a durable account-storage implementation. Externalizing that data is
 separate infrastructure milestone documented in `cloudflare/PERSISTENCE.md`.
 
 Sent text prompts show an always-visible Edit button in the shared chat for guests and members, including on touchscreens. The existing editor supports Cancel and Send, retaining conversation branches. Opening/cancelling an edit uses no allowance; sending an edited prompt uses the same seven-prompt guest budget as a new prompt. Editing is unavailable while a response is streaming.
+
+Diagram Design streams status updates immediately, races allowed models with bounded startup/idle/overall timeouts, and commits only complete SVG output. The page shows animated progress, supports cancellation and retains the last diagram/brief on failure. Failed or cancelled diagram requests refund the shared guest allowance; a completed diagram uses one prompt. No model credentials or access grants are changed.
