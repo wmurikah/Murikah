@@ -1,0 +1,31 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import MurikahGuestBanner from "@/components/auth/MurikahGuestBanner";
+vi.mock("next/navigation", () => ({ usePathname: () => "/diagram-design" }));
+afterEach(() => vi.unstubAllGlobals());
+function status(value: object) {
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => value })));
+}
+describe("Guest limit prompt", () => {
+  it("does not render a banner or counter while free prompts remain", async () => {
+    status({ guest: true, remaining: 6, requires_auth: false });
+    const { container } = render(<MurikahGuestBanner />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/Guest workspace|prompts remaining/)).toBeNull();
+  });
+  it("offers signup and sign-in at the limit, preserving the return page", async () => {
+    status({ guest: true, remaining: 0, requires_auth: true });
+    render(<MurikahGuestBanner />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Continue your work");
+    expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/register?next=%2Fdiagram-design");
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?next=%2Fdiagram-design");
+    expect(screen.queryByText(/prompts remaining/)).toBeNull();
+  });
+  it("does not prompt signed-in users", async () => {
+    status({ guest: false });
+    const { container } = render(<MurikahGuestBanner />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
+  });
+});

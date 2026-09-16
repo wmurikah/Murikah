@@ -70,7 +70,7 @@ class DiagramTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(diagram, 'IDLE_SECONDS', .01), patch.object(diagram, 'candidates_for', return_value=[fast.HedgeCandidate('stall', 0, model)]):
             events = await self.collect(diagram.diagram_events('Courses', 'Draw', {}))
         self.assertEqual(events[-1]['type'], 'error')
-        self.assertIn('too long', events[-1]['message'])
+        self.assertEqual(events[-1]['code'], 'timeout')
         self.assertEqual(closed, [True])
 
     async def test_disconnect_cancels_provider(self):
@@ -91,6 +91,43 @@ class DiagramTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError): await task
         self.assertTrue(scope['murikah_prompt_failed'])
         self.assertEqual(closed, [True])
+
+    async def test_fast_incomplete_reply_does_not_cancel_valid_backup(self):
+        async def broken():
+            yield 'Here is your diagram: <svg viewBox="0 0 10 10"><text>'
+        async def backup():
+            await asyncio.sleep(.01)
+            yield SVG
+        candidates = [fast.HedgeCandidate('broken', 0, broken), fast.HedgeCandidate('backup', 0, backup)]
+        scope = {}
+        with patch.object(diagram, 'candidates_for', return_value=candidates):
+            events = await self.collect(diagram.diagram_events('Order to fulfilment', 'Draw', scope))
+        self.assertEqual(events[-1]['answer'], SVG)
+        self.assertTrue(scope['murikah_prompt_completed'])
+        self.assertFalse(scope.get('murikah_prompt_failed'))
+
+    async def test_valid_backup_wins_even_while_first_provider_stalls(self):
+        closed = []
+        async def stalled():
+            try:
+                yield 'Here is your diagram: '
+                await asyncio.Event().wait()
+            finally: closed.append(True)
+        async def backup():
+            await asyncio.sleep(.01)
+            yield SVG
+        with patch.object(diagram, 'candidates_for', return_value=[
+            fast.HedgeCandidate('stalled', 0, stalled), fast.HedgeCandidate('backup', 0, backup),
+        ]):
+            events = await self.collect(diagram.diagram_events('Order to fulfilment', 'Draw', {}))
+        self.assertEqual(events[-1]['answer'], SVG)
+        self.assertEqual(closed, [True])
+
+    def test_normalizes_label_entities_without_inventing_missing_content(self):
+        answer = SVG.replace('Course', 'Order & fulfilment&nbsp;&mdash; delivery &amp; returns')
+        normalized = diagram.validate_answer(answer)
+        self.assertIn('Order &amp; fulfilment&#160;&#8212; delivery &amp; returns', normalized)
+        self.assertEqual(diagram.validate_answer(normalized), normalized)
 
     def test_invalid_xml_is_rejected(self):
         with self.assertRaises(Exception): diagram.validate_answer('<svg viewBox="0 0 1 1"><g></svg>')
