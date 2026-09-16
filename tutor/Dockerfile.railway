@@ -28,6 +28,7 @@ COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.p
 COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
 COPY tutor/railway/harden_guest_completion.py /opt/murikah/harden_guest_completion.py
 COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
+COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 COPY tutor/railway/prepare_next_build.py /opt/murikah/prepare_next_build.py
@@ -47,7 +48,8 @@ COPY tutor/railway/murikah-entry-page.tsx.txt /opt/murikah/murikah-entry-page.ts
 COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.tsx
 COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
 COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
-RUN python /opt/murikah/apply_branding.py /src/DeepTutor \
+RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_lane.py \
+    && python /opt/murikah/apply_branding.py /src/DeepTutor \
     && python /opt/murikah/apply_railway_overlay.py /src/DeepTutor /opt/murikah/health-route.ts \
     && python /opt/murikah/apply_guest_continuity.py /src/DeepTutor /opt/murikah/MurikahGuestResume.tsx \
     && python /opt/murikah/refine_guest_experience.py /src/DeepTutor \
@@ -99,6 +101,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/api/main.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /app/deeptutor/agents/chat/capability.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
 
 RUN rm -rf /app/web && mkdir -p /app/web
 COPY --from=frontend-builder /app/web/.next/standalone/ /app/web/
@@ -107,6 +110,7 @@ COPY --from=frontend-builder /app/web/public/ /app/web/public/
 RUN chown -R deeptutor:deeptutor /app/web /app/deeptutor
 
 COPY tutor/railway/bootstrap_runtime.py /app/murikah-tutor-bootstrap.py
+COPY tutor/railway/bootstrap_fast_lane.py /app/murikah-fast-lane-bootstrap.py
 COPY tutor/railway/entrypoint.sh /app/murikah-tutor-entrypoint.sh
 COPY tutor/cloudflare/entrypoint.sh /app/murikah-cloudflare-entrypoint.sh
 RUN chmod 0755 \
