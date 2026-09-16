@@ -57,3 +57,5 @@ Diagram Design streams status updates immediately, races allowed models with bou
 The guest allowance is enforced silently. No guest banner or remaining-prompt counter is shown before the limit. At the limit, the shared workspace prompts the visitor to create an account to keep the guest workspace or sign in to an existing account. Signing in to an existing account does not merge the guest workspace.
 
 Diagram fallbacks remain alive until one provider returns a complete, validated SVG, rather than choosing the first provider to emit text. Common label entities are normalized for XML; incomplete or malformed diagrams trigger another available candidate. Responses distinguish provider availability, timeout and invalid output without exposing provider details.
+
+Account links in the limit prompt preserve the current diagram and brief in this tab for the return from signup/sign-in. This one-time continuation expires after one hour and is consumed on return; it is not a replacement for durable server storage.
