@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Give ordinary authenticated Chat a low-latency streamed path."""
+"""Route ordinary Tutor chat through a low-latency streamed fast lane."""
 from __future__ import annotations
 
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_FAST_CHAT_FIRST_TOKEN"
+MARKER = "MURIKAH_DUAL_LANE_CHAT_V2"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -16,6 +16,7 @@ from deeptutor.runtime.stream_bus import StreamBus
 
 NEW_IMPORTS = '''import asyncio
 import logging
+import time
 from typing import Any
 
 from deeptutor.agents._shared.capability_result import emit_capability_result
@@ -24,6 +25,15 @@ from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapabilit
 from deeptutor.core.context import UnifiedContext
 from deeptutor.core.trace import build_trace_metadata, merge_trace_metadata, new_call_id
 from deeptutor.multi_user.model_access import allowed_llm_options
+from deeptutor.murikah_fast_lane import (
+    HedgeCandidate,
+    close_stream,
+    configured_gemini_model,
+    gemini_configured,
+    gemini_stream,
+    latency_ms,
+    race_first_visible,
+)
 from deeptutor.runtime.request_contracts import get_capability_request_schema
 from deeptutor.runtime.stream_bus import StreamBus
 from deeptutor.services.llm import factory as llm_factory
@@ -31,8 +41,7 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_FAST_CHAT_FIRST_TOKEN
-_FIRST_TOKEN_BUDGETS = (6.0, 4.0, 4.0)
+# MURIKAH_DUAL_LANE_CHAT_V2
 _STREAM_IDLE_TIMEOUT_SECONDS = 25.0
 '''
 
@@ -42,22 +51,38 @@ OLD_RUN = '''    async def run(self, context: UnifiedContext, stream: StreamBus)
 '''
 
 NEW_RUN = '''    @staticmethod
-    def _requires_agent_loop(context: UnifiedContext) -> bool:
-        """Use the full agent loop only when the learner actually needs tools."""
-        return bool(
-            context.enabled_tools
-            or context.knowledge_bases
-            or context.attachments
-            or context.source_manifest
-            or context.metadata.get("source_index")
-            or context.metadata.get("mastery_mode")
-            or context.metadata.get("immersive_reading_mode")
-            or context.metadata.get("question_bank_context")
-        )
+    def _agent_reason(context: UnifiedContext) -> str:
+        """Return why this turn genuinely needs the full DeepTutor agent lane.
+
+        Tool availability alone is deliberately not a reason. DeepTutor can expose
+        optional tools on ordinary Chat by default; routing every such turn through
+        the agent loop is what made simple prompts take minutes.
+        """
+        metadata = context.metadata or {}
+        if context.knowledge_bases:
+            return "knowledge_base"
+        if context.attachments:
+            return "attachments"
+        if context.source_manifest:
+            return "sources"
+        if metadata.get("source_index"):
+            return "source_index"
+        for key in (
+            "mastery_mode",
+            "immersive_reading_mode",
+            "question_bank_context",
+            "deep_mode",
+            "research_mode",
+            "force_agentic_chat",
+            "tool_execution_requested",
+        ):
+            if metadata.get(key):
+                return key
+        return ""
 
     @staticmethod
     def _candidate_selections(context: UnifiedContext) -> list[dict[str, str]]:
-        """Selected model first, then only models the current account may use."""
+        """Selected model first, followed by models the current account may use."""
         candidates: list[dict[str, str]] = []
 
         def add(value: Any) -> None:
@@ -88,39 +113,102 @@ NEW_RUN = '''    @staticmethod
             add(item)
         return candidates
 
-    @staticmethod
-    async def _next_visible(iterator: Any, timeout: float) -> str:
-        """Wait for user-facing text, not hidden reasoning."""
-        in_think = False
-        deadline = asyncio.get_running_loop().time() + timeout
-        while True:
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                raise asyncio.TimeoutError
-            chunk = await asyncio.wait_for(iterator.__anext__(), timeout=remaining)
-            text = str(chunk or "")
-            if text == "<think>":
-                in_think = True
-                continue
-            if text == "</think>":
-                in_think = False
-                continue
-            if in_think or not text:
-                continue
-            return text
-
     async def _run_fast_chat(self, context: UnifiedContext, stream: StreamBus) -> None:
-        # Preserve DeepTutor's own system prompt, persona, memory, sidebar
-        # grounding and conversation history. Plain Chat skips only the tool
-        # exploration loop that can delay the first visible answer by minutes.
+        request_started = time.perf_counter()
         prompt_pipeline = AgenticChatPipeline(language=context.language)
         messages = prompt_pipeline._build_loop_messages(
             context=context,
             enabled_tools=[],
             include_tool_manifest=False,
         )
-        candidates = self._candidate_selections(context)
-        if not candidates:
+
+        resolved: list[Any] = []
+        seen: set[tuple[str, str]] = set()
+        for candidate in self._candidate_selections(context):
+            try:
+                config = resolve_llm_config_for_selection(candidate)
+            except Exception as exc:
+                logger.warning(
+                    "MURIKAH_LATENCY route=fast event=config_failed model=%s type=%s",
+                    candidate.get("model_id", "unknown"),
+                    type(exc).__name__,
+                )
+                continue
+            key = (str(config.provider_name or config.binding or ""), str(config.model or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            resolved.append(config)
+
+        gemini_model = configured_gemini_model()
+        gemini_on = gemini_configured()
+        selected_is_gemini = bool(
+            resolved and str(getattr(resolved[0], "model", "")) == gemini_model
+        )
+        hedges: list[HedgeCandidate] = []
+
+        def deep_candidate(config: Any, delay_seconds: float) -> HedgeCandidate:
+            name = f"{config.provider_name or config.binding or 'provider'}:{config.model}"
+            return HedgeCandidate(
+                name=name,
+                delay_seconds=delay_seconds,
+                factory=lambda config=config: llm_factory.stream(
+                    prompt="",
+                    system_prompt="",
+                    model=config.model,
+                    api_key=config.api_key,
+                    base_url=config.effective_url or config.base_url,
+                    api_version=config.api_version,
+                    binding=config.provider_name or config.binding,
+                    messages=messages,
+                    max_retries=0,
+                    reasoning_effort=config.reasoning_effort,
+                    extra_headers=config.extra_headers,
+                    temperature=prompt_pipeline._chat_temperature,
+                    max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                    stream_coalesce_chars=24,
+                    stream_coalesce_seconds=0.02,
+                ),
+            )
+
+        # Honour an explicitly selected non-Gemini model first. Otherwise Gemini
+        # is the normal interactive lane. After 2.5s a second provider is launched
+        # instead of waiting serially for a slow endpoint.
+        non_gemini = [config for config in resolved if str(config.model) != gemini_model]
+        if resolved and not selected_is_gemini:
+            hedges.append(deep_candidate(resolved[0], 0.0))
+            if gemini_on:
+                hedges.append(
+                    HedgeCandidate(
+                        name=f"gemini:{gemini_model}",
+                        delay_seconds=2.5,
+                        factory=lambda: gemini_stream(
+                            messages,
+                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        ),
+                    )
+                )
+            remainder = [config for config in non_gemini if config is not resolved[0]]
+            for index, config in enumerate(remainder[:2]):
+                hedges.append(deep_candidate(config, 4.5 + (index * 2.0)))
+        else:
+            if gemini_on:
+                hedges.append(
+                    HedgeCandidate(
+                        name=f"gemini:{gemini_model}",
+                        delay_seconds=0.0,
+                        factory=lambda: gemini_stream(
+                            messages,
+                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        ),
+                    )
+                )
+            for index, config in enumerate(non_gemini[:3]):
+                delay = 2.5 + (index * 2.0) if gemini_on else index * 2.5
+                hedges.append(deep_candidate(config, delay))
+
+        if not hedges:
+            logger.warning("MURIKAH_LATENCY route=fast event=no_candidates")
             await prompt_pipeline.run(context, stream)
             return
 
@@ -140,71 +228,17 @@ NEW_RUN = '''    @staticmethod
             stage="responding",
             metadata=merge_trace_metadata(
                 trace_meta,
-                {"trace_kind": "call_status", "call_state": "running"},
+                {"trace_kind": "call_status", "call_state": "running", "murikah_lane": "fast"},
             ),
         )
 
-        chosen_stream: Any | None = None
-        first_chunk = ""
-        chosen_model = ""
-        last_error: Exception | None = None
-
-        for attempt, candidate in enumerate(candidates[: len(_FIRST_TOKEN_BUDGETS)]):
-            candidate_stream: Any | None = None
-            try:
-                config = resolve_llm_config_for_selection(candidate)
-                candidate_stream = llm_factory.stream(
-                    prompt="",
-                    system_prompt="",
-                    model=config.model,
-                    api_key=config.api_key,
-                    base_url=config.effective_url or config.base_url,
-                    api_version=config.api_version,
-                    binding=config.provider_name or config.binding,
-                    messages=messages,
-                    max_retries=0,
-                    reasoning_effort=config.reasoning_effort,
-                    extra_headers=config.extra_headers,
-                    temperature=prompt_pipeline._chat_temperature,
-                    max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
-                    stream_coalesce_chars=24,
-                    stream_coalesce_seconds=0.02,
-                )
-                first_chunk = await self._next_visible(
-                    candidate_stream,
-                    _FIRST_TOKEN_BUDGETS[attempt],
-                )
-                chosen_stream = candidate_stream
-                chosen_model = str(config.model or candidate.get("model_id") or "")
-                logger.info(
-                    "Murikah fast chat started model=%s attempt=%s",
-                    chosen_model,
-                    attempt + 1,
-                )
-                break
-            except (asyncio.TimeoutError, StopAsyncIteration) as exc:
-                last_error = exc
-                logger.warning(
-                    "Murikah fast chat first-token timeout model=%s attempt=%s",
-                    candidate.get("model_id", "unknown"),
-                    attempt + 1,
-                )
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "Murikah fast chat provider failed model=%s attempt=%s type=%s",
-                    candidate.get("model_id", "unknown"),
-                    attempt + 1,
-                    type(exc).__name__,
-                )
-            finally:
-                if chosen_stream is not candidate_stream and candidate_stream is not None:
-                    try:
-                        await candidate_stream.aclose()
-                    except Exception:
-                        pass
-
-        if chosen_stream is None or not first_chunk:
+        winner = await race_first_visible(
+            hedges,
+            request_started=request_started,
+            first_token_timeout=8.0,
+            overall_timeout=12.0,
+        )
+        if winner is None:
             await stream.progress(
                 "",
                 source="chat",
@@ -216,21 +250,35 @@ NEW_RUN = '''    @staticmethod
                         "call_state": "failed",
                         "error_code": "provider_timeout",
                         "retryable": True,
+                        "murikah_lane": "fast",
                     },
                 ),
             )
-            raise RuntimeError("No configured Tutor model produced a timely response") from last_error
+            raise RuntimeError("No Tutor fast-lane provider produced a timely response")
 
-        answer_parts = [first_chunk]
-        chunk_meta = merge_trace_metadata(trace_meta, {"trace_kind": "llm_chunk"})
-        await stream.content(first_chunk, source="chat", stage="responding", metadata=chunk_meta)
+        answer_parts = [winner.first_chunk]
+        chunk_meta = merge_trace_metadata(
+            trace_meta,
+            {
+                "trace_kind": "llm_chunk",
+                "murikah_lane": "fast",
+                "provider": winner.name,
+                "first_token_ms": winner.first_token_ms,
+            },
+        )
+        await stream.content(
+            winner.first_chunk,
+            source="chat",
+            stage="responding",
+            metadata=chunk_meta,
+        )
 
         in_think = False
         try:
             while True:
                 try:
                     chunk = await asyncio.wait_for(
-                        chosen_stream.__anext__(),
+                        winner.stream.__anext__(),
                         timeout=_STREAM_IDLE_TIMEOUT_SECONDS,
                     )
                 except StopAsyncIteration:
@@ -247,14 +295,18 @@ NEW_RUN = '''    @staticmethod
                 answer_parts.append(text)
                 await stream.content(text, source="chat", stage="responding", metadata=chunk_meta)
         finally:
-            try:
-                await chosen_stream.aclose()
-            except Exception:
-                pass
+            await close_stream(winner.stream)
 
         answer = "".join(answer_parts).strip()
         context.capability_output.agent_output = answer
         context.capability_output.answer_published = True
+        total_ms = latency_ms(request_started)
+        logger.info(
+            "MURIKAH_LATENCY route=fast event=complete provider=%s first_token_ms=%s total_ms=%s",
+            winner.name,
+            winner.first_token_ms,
+            total_ms,
+        )
         await stream.progress(
             "",
             source="chat",
@@ -265,8 +317,10 @@ NEW_RUN = '''    @staticmethod
                     "trace_kind": "call_status",
                     "call_state": "complete",
                     "call_role": "finish",
-                    "murikah_fast_chat": True,
-                    "model": chosen_model,
+                    "murikah_lane": "fast",
+                    "provider": winner.name,
+                    "first_token_ms": winner.first_token_ms,
+                    "total_ms": total_ms,
                 },
             ),
         )
@@ -278,14 +332,28 @@ NEW_RUN = '''    @staticmethod
                 "engine": "murikah_fast_chat",
                 "rounds": 1,
                 "tool_steps": 0,
+                "provider": winner.name,
+                "first_token_ms": winner.first_token_ms,
             },
             source="chat",
         )
 
     async def run(self, context: UnifiedContext, stream: StreamBus) -> None:
-        if self._requires_agent_loop(context):
+        reason = self._agent_reason(context)
+        if reason:
+            started = time.perf_counter()
+            logger.info(
+                "MURIKAH_LATENCY route=deep_agent event=start reason=%s enabled_tools=%s",
+                reason,
+                len(context.enabled_tools or []),
+            )
             pipeline = AgenticChatPipeline(language=context.language)
             await pipeline.run(context, stream)
+            logger.info(
+                "MURIKAH_LATENCY route=deep_agent event=complete reason=%s total_ms=%s",
+                reason,
+                latency_ms(started),
+            )
             return
         await self._run_fast_chat(context, stream)
 '''
@@ -306,7 +374,7 @@ def main() -> int:
     target = root / "deeptutor" / "agents" / "chat" / "capability.py"
     text = target.read_text(encoding="utf-8")
     if MARKER in text:
-        print("[Murikah Tutor] Fast authenticated chat already applied.")
+        print("[Murikah Tutor] Dual-lane chat already applied.")
         return 0
     try:
         text = replace_once(text, OLD_IMPORTS, NEW_IMPORTS, "chat capability imports")
@@ -315,7 +383,7 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 1
     target.write_text(text, encoding="utf-8")
-    print("[Murikah Tutor] Added fast first-token authenticated Chat path.")
+    print("[Murikah Tutor] Added dual-lane fast chat and deep agent routing.")
     return 0
 
 
