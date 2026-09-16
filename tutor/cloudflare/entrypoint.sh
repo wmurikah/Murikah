@@ -28,6 +28,7 @@ export MURIKAH_NVIDIA_NIM_BASE_URL="${MURIKAH_NVIDIA_NIM_BASE_URL:-https://integ
 export MURIKAH_LLM_PRIMARY_MODEL="${MURIKAH_LLM_PRIMARY_MODEL:-moonshotai/kimi-k3}"
 export MURIKAH_LLM_SECONDARY_MODEL="${MURIKAH_LLM_SECONDARY_MODEL:-deepseek-ai/deepseek-v4-flash-0731}"
 export MURIKAH_LLM_TERTIARY_MODEL="${MURIKAH_LLM_TERTIARY_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}"
+export MURIKAH_FAST_CHAT_MODEL="${MURIKAH_FAST_CHAT_MODEL:-gemini-3.8-flash}"
 
 export MURIKAH_DASHSCOPE_BASE_URL="${MURIKAH_DASHSCOPE_BASE_URL:-https://dashscope-intl.aliyuncs.com/api/v1}"
 export MURIKAH_EMBEDDING_PROVIDER="${MURIKAH_EMBEDDING_PROVIDER:-aliyun}"
@@ -90,6 +91,7 @@ print("[Murikah Tutor] Stable Cloudflare auth signing secret restored.")
 PY
 
 python /app/murikah-tutor-bootstrap.py
+python /app/murikah-fast-lane-bootstrap.py
 
 # Keep DeepTutor's own JSON-backed runtime settings as the source of truth.
 python - <<'PY'
