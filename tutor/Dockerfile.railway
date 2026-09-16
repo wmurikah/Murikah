@@ -31,6 +31,11 @@ COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
 COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
+COPY tutor/railway/apply_workspace_access.py /opt/murikah/apply_workspace_access.py
+COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
+COPY tutor/railway/MurikahWorkspaceEntry.tsx.txt /opt/murikah/MurikahWorkspaceEntry.tsx.txt
+COPY tutor/railway/MurikahGuestBanner.tsx.txt /opt/murikah/MurikahGuestBanner.tsx.txt
+COPY tutor/railway/MurikahAccountPage.tsx.txt /opt/murikah/MurikahAccountPage.tsx.txt
 COPY tutor/railway/prepare_next_build.py /opt/murikah/prepare_next_build.py
 # The Next.js overlay sources are stored with a trailing .txt in this monorepo
 # so the root Astro/TypeScript checker does not compile them as Murikah site
@@ -61,6 +66,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/lock_guest_composer.py /src/DeepTutor \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
+    && python /opt/murikah/apply_workspace_access.py /src/DeepTutor \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
 
 FROM node:22-slim AS frontend-builder
@@ -99,9 +105,15 @@ RUN python -c "from deeptutor.__version__ import __version__; expected='${DEEPTU
 # the runtime is the pinned release; the rest remains the reviewed upstream image.
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py /app/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_access.py /app/deeptutor/murikah_access.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/services/auth.py /app/deeptutor/services/auth.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/app/service.py /app/deeptutor/app/service.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/api/main.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /app/deeptutor/agents/chat/capability.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
+
+COPY tutor/tests /opt/murikah/tests
+RUN python -m unittest discover -s /opt/murikah/tests -v
 
 RUN rm -rf /app/web && mkdir -p /app/web
 COPY --from=frontend-builder /app/web/.next/standalone/ /app/web/
