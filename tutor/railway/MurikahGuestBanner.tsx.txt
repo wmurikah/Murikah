@@ -1,0 +1,31 @@
+"use client";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+
+type Status = { guest: boolean; remaining?: number; requires_auth?: boolean };
+export default function MurikahGuestBanner() {
+  const path = usePathname();
+  const [status, setStatus] = useState<Status | null>(null);
+  useEffect(() => {
+    let alive = true;
+    async function refresh() {
+      try {
+        const res = await fetch("/api/murikah/access/status", { cache: "no-store" });
+        if (res.ok) { const value = await res.json(); if (alive) setStatus(value); }
+      } catch { /* Keep the last confirmed allowance during a network interruption. */ }
+    }
+    void refresh();
+    const timer = window.setInterval(refresh, 2000);
+    window.addEventListener("focus", refresh);
+    return () => { alive = false; clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, []);
+  if (!status?.guest) return null;
+  const next = encodeURIComponent(path || "/chat");
+  return <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#A9822E]/25 bg-[#A9822E]/10 px-5 py-3 text-sm">
+    <span>{status.requires_auth ? "You've used your 7 guest prompts. Sign up or sign in to continue." : `Guest workspace · ${status.remaining} of 7 prompts remaining`}</span>
+    <div className="flex items-center gap-4">
+      <a href={`/login?next=${next}`} className="font-medium">Sign in</a>
+      <a href={`/register?next=${next}`} className="rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">Sign up</a>
+    </div>
+  </div>;
+}
