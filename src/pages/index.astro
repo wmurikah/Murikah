@@ -47,9 +47,9 @@ const faqs: FaqItem[] = [
 ---
 
 <BaseLayout titleFull="Internal audit and AI governance | Murikah" description={SITE.description}>
-  <section class="border-b border-hairline bg-surface py-16 lg:py-24" aria-labelledby="home-title">
+  <section class="border-b border-hairline bg-surface py-6 lg:py-4" aria-labelledby="home-title">
     <Container>
-      <div class="grid items-center gap-12 lg:grid-cols-2">
+      <div class="grid items-center gap-6 lg:grid-cols-2">
         <div>
           <p class="eyebrow">Internal audit · Governance · Software</p>
           <h1
@@ -81,16 +81,16 @@ const faqs: FaqItem[] = [
           id="proof-title"
           class="mt-4 font-serif text-3xl text-navy"
         >
-          Evidence you can inspect.
+          Working products you can explore.
         </h2>
       </div>
       <div>
         <p class="text-lg text-slate">
-          Explore our working products, review a sample audit finding and see how evidence connects
-          to action.
+          Explore CMS for customer operations, GRC for audit, Tutor for learning and ENGR for
+          maintenance.
         </p>
         <div class="mt-5 flex flex-wrap gap-6">
-          <a href="/sample-report">View sample finding →</a><a href="/about#how-we-work"
+          <a href="/products">Explore the products →</a><a href="/about#how-we-work"
             >Review our approach →</a
           >
         </div>
@@ -98,7 +98,7 @@ const faqs: FaqItem[] = [
     </div>
   </Section>
   <Section tone="surface" aria-labelledby="products-title">
-    <div class="mb-10">
+    <div class="mb-5">
       <p class="eyebrow">Products</p><h2
         id="products-title"
         class="mt-4 font-serif text-4xl text-navy"
@@ -123,10 +123,10 @@ const faqs: FaqItem[] = [
       </p>
     </div>
 
-    <div class="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div class="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {
         SERVICES.filter((s) => s.slug !== 'audit-os').map((s, i) => (
-          <a href={s.href} class="group flex flex-col border-t border-hairline py-6 no-underline">
+          <a href={s.href} class="group flex flex-col border-t border-hairline py-4 no-underline">
             <span class="text-sm font-semibold tracking-[0.16em] text-gold uppercase">
               {String(i + 1).padStart(2, '0')}
             </span>
@@ -143,7 +143,7 @@ const faqs: FaqItem[] = [
   </Section>
 
   <Section tone="paper" aria-labelledby="experience-title">
-    <div class="grid items-start gap-12 lg:grid-cols-12 lg:gap-16">
+    <div class="grid items-start gap-6 lg:grid-cols-12 lg:gap-8">
       <div class="reveal lg:sticky lg:top-28 lg:col-span-5">
         <p class="eyebrow">Why it works</p>
         <h2
@@ -156,7 +156,7 @@ const faqs: FaqItem[] = [
       <div class="lg:col-span-7">
         {
           why.map((w) => (
-            <div class="reveal border-t border-hairline py-8 first:border-t-0 first:pt-0">
+            <div class="reveal border-t border-hairline py-4 first:border-t-0 first:pt-0">
               <h3 class="text-2xl text-navy">{w.title}</h3>
               <p class="mt-3 max-w-2xl text-lg text-slate">{w.body}</p>
             </div>
@@ -176,7 +176,7 @@ const faqs: FaqItem[] = [
         For teams accountable to boards, regulators and funders.
       </h2>
     </div>
-    <div class="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+    <div class="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-5">
       {
         AUDIENCE.map((seg) => (
           <div class="reveal rounded-[1.6rem] bg-paper p-6 ring-1 ring-hairline">
@@ -208,7 +208,7 @@ const faqs: FaqItem[] = [
             All insights &rarr;
           </a>
         </div>
-        <FeatureGrid cols={3} class="mt-12">
+        <FeatureGrid cols={3} class="mt-6">
           {topGuides.map((g) => (
             <Card href={`/insights/${g.id}/`} class="reveal flex flex-col">
               {g.data.category && <p class="eyebrow text-xs">{g.data.category}</p>}
@@ -237,7 +237,7 @@ const faqs: FaqItem[] = [
         Questions before you enquire
       </h2>
     </div>
-    <Faq items={faqs} class="reveal mt-10 max-w-3xl" />
+    <Faq items={faqs} class="reveal mt-6 max-w-3xl" />
     <FaqPageSchema items={faqs} />
   </Section>
 

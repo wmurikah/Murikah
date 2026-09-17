@@ -6,7 +6,7 @@ import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
-import { SITE, STANDARDS } from '@/site.config';
+import { SITE, STANDARDS, PRODUCTS } from '@/site.config';
 
 const crumbs = [
   { label: 'Home', href: '/' },
@@ -99,32 +99,23 @@ const how = [
     </div>
   </Section>
 
-  {
-    /* Company statement, deliberately not founder-led. A calm paper band, set
-      off from its neighbours by hairline rules rather than a dark fill. */
-  }
-  <Section tone="shade" class="border-y border-hairline">
-    <div class="reveal mx-auto max-w-3xl text-center">
-      <p class="eyebrow is-centred">Accountability from the start</p>
-      <p
-        class="mt-6 text-[length:var(--text-title)] leading-[1.15] font-semibold tracking-[-0.01em] text-balance text-navy"
-      >
-        Ask to meet your proposed engagement lead, review relevant experience and agree who owns
-        each deliverable before work begins.
-      </p>
+  <Section tone="shade" aria-labelledby="built-products" class="border-y border-hairline">
+    <h2 id="built-products" class="font-serif text-3xl text-navy">Explore what we build.</h2>
+    <p class="mt-3 max-w-prose text-lg text-slate">
+      CMS connects customer operations. GRC supports audit and remediation. Tutor supports learning
+      and research. ENGR manages maintenance work.
+    </p>
+    <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+      {
+        PRODUCTS.map((product) => (
+          <a href={product.href} class="inline-flex min-h-11 items-center">
+            Open {product.label} →
+          </a>
+        ))
+      }
     </div>
   </Section>
 
-  <Section tone="paper" aria-labelledby="inspect-work">
-    <h2 id="inspect-work" class="font-serif text-3xl text-navy">
-      Review our work before a conversation.
-    </h2>
-    <div class="mt-6 flex flex-wrap gap-6">
-      <a href="/sample-report">Read an illustrative audit finding →</a><a href="/products"
-        >Open our products →</a
-      ><a href="/contact">Discuss the proposed team and scope →</a>
-    </div>
-  </Section>
   {/* Why now. */}
   <Section tone="surface" aria-labelledby="why-now" class="border-b border-hairline">
     <div class="reveal max-w-2xl">

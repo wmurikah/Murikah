@@ -154,22 +154,22 @@ export const PRODUCTS = [
   {
     label: 'CMS',
     href: 'https://cms.murikah.com',
-    description: 'Customers, orders and service workflows.',
+    description: 'Manage leads, customer accounts, orders and service requests.',
   },
   {
     label: 'GRC',
     href: 'https://grc.murikah.com',
-    description: 'Internal audit, risk, evidence and remediation.',
+    description: 'Plan audits, review evidence and track findings and action plans.',
   },
   {
     label: 'Tutor',
     href: 'https://tutor.murikah.com',
-    description: 'AI-assisted learning, writing and research.',
+    description: 'Learn, research, co-write and design diagrams with AI.',
   },
   {
     label: 'ENGR',
     href: 'https://engr.murikah.com',
-    description: 'Engineering maintenance and work orders.',
+    description: 'Manage assets, maintenance schedules and work orders.',
   },
 ];
 
