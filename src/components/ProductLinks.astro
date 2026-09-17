@@ -5,7 +5,7 @@ import { PRODUCTS } from '@/site.config';
 <ul class="grid gap-x-10 sm:grid-cols-2">
   {
     PRODUCTS.map((product) => (
-      <li class="border-t border-hairline py-6">
+      <li class="border-t border-hairline py-3">
         <a href={product.href} class="group block no-underline">
           <span class="flex items-center justify-between text-2xl font-semibold text-navy">
             {product.label}
@@ -14,7 +14,7 @@ import { PRODUCTS } from '@/site.config';
             </span>
           </span>
           <span class="mt-2 block text-slate">{product.description}</span>
-          <span class="mt-4 inline-block text-sm font-medium text-blue group-hover:underline">
+          <span class="mt-2 inline-block text-sm font-medium text-blue group-hover:underline">
             Open {product.label}
           </span>
         </a>
