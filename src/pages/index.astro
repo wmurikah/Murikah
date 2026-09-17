@@ -13,7 +13,7 @@ import Container from '@/components/primitives/Container.astro';
 import Button from '@/components/primitives/Button.astro';
 import ProductLinks from '@/components/ProductLinks.astro';
 import HeroFilm from '@/components/hero/HeroFilm.astro';
-import { SITE, SERVICES, AUDIENCE } from '@/site.config';
+import { SITE, SERVICES, AUDIENCE, STANDARDS } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
 const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
@@ -84,6 +84,17 @@ const faqs: FaqItem[] = [
           </p>
         </div>
         <HeroFilm />
+      </div>
+      <div
+        class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-hairline pt-3 text-xs text-slate"
+        aria-label="Standards and service context"
+      >
+        <span class="font-medium tracking-[0.08em] text-gold uppercase">Work guided by</span>
+        {STANDARDS.map((standard) => <span>{standard.short}</span>)}
+        <span>{SITE.areaServed}</span>
+        <a href="/pricing" class="font-medium text-blue no-underline hover:underline">
+          Indicative pricing
+        </a>
       </div>
     </Container>
   </section>

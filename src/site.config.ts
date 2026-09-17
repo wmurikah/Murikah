@@ -143,7 +143,7 @@ export const SERVICES: ServiceLine[] = [
 /**
  * Primary navigation: three groups (Hick's Law) that carry the whole site, so
  * the header reads as who we are, what we do and where to read our thinking.
- * The logo links home and the gold "Book a demo" action is rendered separately
+ * The logo links home and the gold primary action is rendered separately
  * (Von Restorff). Each group opens a disclosure menu of its pages. Descriptions
  * are short, one line each. `match` lists the route prefixes that light a
  * group's active state, so a page cross-linked from another group (Intelligence
@@ -338,7 +338,7 @@ export const NAV: NavItem[] = [
 
 /** The one gold action across the site. */
 export const PRIMARY_CTA = {
-  label: 'Talk to us',
+  label: 'Discuss your requirements',
   href: '/contact',
 } as const;
 

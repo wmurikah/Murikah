@@ -1,20 +1,7 @@
 <figure class="min-w-0" data-hero-film>
-  <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-    <p class="text-sm font-medium text-navy">
-      Watch product workflows <span class="text-slate">· 60 sec</span>
-    </p>
-    <div class="flex flex-wrap gap-1.5" aria-label="Video controls">
-      <button type="button" class="film-control" data-film-play aria-controls="hero-product-film"
-        >Play film</button
-      >
-      <button
-        type="button"
-        class="film-control"
-        data-film-fullscreen
-        aria-controls="hero-product-film">Full screen</button
-      >
-    </div>
-  </div>
+  <p class="mb-2 text-sm font-medium text-navy">
+    Watch product workflows <span class="text-slate">· 60 sec</span>
+  </p>
   <video
     id="hero-product-film"
     controls
@@ -66,18 +53,8 @@
   document.querySelectorAll<HTMLElement>('[data-hero-film]').forEach((figure) => {
     const video = figure.querySelector<HTMLVideoElement>('video');
     if (!video) return;
-    const play = figure.querySelector<HTMLButtonElement>('[data-film-play]');
-    const fullScreen = figure.querySelector<HTMLButtonElement>('[data-film-fullscreen]');
     const chapters = Array.from(figure.querySelectorAll<HTMLButtonElement>('[data-film-time]'));
 
-    const updatePlayLabel = () => {
-      if (play)
-        play.textContent = video.paused
-          ? video.currentTime > 0
-            ? 'Continue film'
-            : 'Play film'
-          : 'Pause film';
-    };
     const updateChapter = () => {
       const active = Math.min(3, Math.floor(video.currentTime / 15));
       chapters.forEach((chapter, index) => {
@@ -86,30 +63,18 @@
       });
     };
 
-    play?.addEventListener('click', () => {
-      if (video.paused) void video.play();
-      else video.pause();
-    });
-    fullScreen?.addEventListener('click', () => {
-      if (video.requestFullscreen) void video.requestFullscreen();
-    });
     chapters.forEach((chapter) => {
       chapter.addEventListener('click', () => {
         video.currentTime = Number(chapter.dataset.filmTime ?? 0);
         void video.play();
       });
     });
-    video.addEventListener('play', updatePlayLabel);
-    video.addEventListener('pause', updatePlayLabel);
-    video.addEventListener('ended', updatePlayLabel);
     video.addEventListener('timeupdate', updateChapter);
-    updatePlayLabel();
     updateChapter();
   });
 </script>
 
 <style>
-  .film-control,
   .film-chapter {
     min-height: 2.75rem;
     border: 1px solid var(--color-hairline);
@@ -122,9 +87,6 @@
       background-color 150ms ease,
       border-color 150ms ease;
   }
-  .film-control {
-    padding-inline: 0.75rem;
-  }
   .film-chapter {
     display: flex;
     align-items: center;
@@ -132,7 +94,6 @@
     gap: 0.5rem;
     padding-inline: 0.625rem;
   }
-  .film-control:hover,
   .film-chapter:hover,
   .film-chapter[aria-current='true'] {
     border-color: var(--color-brass);
