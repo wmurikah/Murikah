@@ -8,8 +8,7 @@
  * personal qualifications appear anywhere in this file or on the site.
  *
  * Voice rules apply to every string in this file: no em dashes, plain English,
- * British and Kenyan spelling, no superlatives. Unverified specifics use a
- * {{PLACEHOLDER}} token so they are obvious before launch.
+ * British and Kenyan spelling, no superlatives. Only confirmed details belong in public copy.
  */
 
 export interface NavChild {
@@ -89,8 +88,8 @@ export const SITE = {
 export const SERVICES: ServiceLine[] = [
   {
     slug: 'assurance',
-    name: 'Assurance',
-    fullName: 'Assurance',
+    name: 'Internal audit',
+    fullName: 'Internal audit',
     href: '/assurance',
     summary:
       'Co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and ISO 42001 and AI-governance readiness.',
@@ -99,7 +98,7 @@ export const SERVICES: ServiceLine[] = [
   {
     slug: 'audit-os',
     name: 'Assurance OS',
-    fullName: 'Assurance OS',
+    fullName: 'Assurance OS · Audit software',
     href: '/audit-os',
     summary:
       'The subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting, and an AI assistant.',
@@ -107,8 +106,8 @@ export const SERVICES: ServiceLine[] = [
   },
   {
     slug: 'labs',
-    name: 'Labs',
-    fullName: 'Labs',
+    name: 'Automation',
+    fullName: 'Automation',
     href: '/labs',
     summary: 'Automation builds, CRM and CMS, workflow engineering, and custom automations.',
     serviceType: 'Automation and workflow engineering',
@@ -124,8 +123,8 @@ export const SERVICES: ServiceLine[] = [
   },
   {
     slug: 'academy',
-    name: 'Academy',
-    fullName: 'Academy',
+    name: 'Training',
+    fullName: 'Training',
     href: '/academy',
     summary:
       'Training and certification: CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses.',
@@ -133,8 +132,8 @@ export const SERVICES: ServiceLine[] = [
   },
   {
     slug: 'intelligence',
-    name: 'Intelligence',
-    fullName: 'Intelligence',
+    name: 'Research & benchmarks',
+    fullName: 'Research & benchmarks',
     href: '/intelligence',
     summary: 'Anonymised cross-client benchmarking and an annual flagship report (forthcoming).',
     serviceType: 'Benchmarking and research',
@@ -150,9 +149,45 @@ export const SERVICES: ServiceLine[] = [
  * group's active state, so a page cross-linked from another group (Intelligence
  * appears under both) is owned by exactly one group.
  */
+/** Existing applications; shared by desktop, mobile, homepage and footer. */
+export const PRODUCTS = [
+  {
+    label: 'CMS',
+    href: 'https://cms.murikah.com',
+    description: 'Customers, orders and service workflows.',
+  },
+  {
+    label: 'GRC',
+    href: 'https://grc.murikah.com',
+    description: 'Internal audit, risk, evidence and remediation.',
+  },
+  {
+    label: 'Tutor',
+    href: 'https://tutor.murikah.com',
+    description: 'AI-assisted learning, writing and research.',
+  },
+  {
+    label: 'ENGR',
+    href: 'https://engr.murikah.com',
+    description: 'Engineering maintenance and work orders.',
+  },
+];
+
 export const NAV: NavItem[] = [
   {
-    label: 'Who we are',
+    label: 'Products',
+    href: '/products',
+    children: [
+      {
+        label: 'All products',
+        href: '/products',
+        description: 'Choose the workspace for your task.',
+      },
+      ...PRODUCTS,
+    ],
+  },
+  {
+    label: 'About',
     href: '/about',
     match: ['/about'],
     children: [
@@ -184,7 +219,7 @@ export const NAV: NavItem[] = [
     ],
   },
   {
-    label: 'What we do',
+    label: 'Services',
     href: '/services',
     match: ['/services', '/pricing', ...SERVICES.map((s) => s.href)],
     children: [
@@ -194,30 +229,34 @@ export const NAV: NavItem[] = [
         description: 'Connected lines of assurance, systems and intelligence.',
       },
       {
-        label: 'Assurance',
+        label: 'Internal audit',
         href: '/assurance',
         description:
           'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
       },
       {
-        label: 'Assurance OS',
+        label: 'Audit software · Assurance OS',
         href: '/audit-os',
         description:
           'Work papers, approvals, findings, remediation, follow-ups and board reporting.',
       },
-      { label: 'Labs', href: '/labs', description: 'Automation, CRM, CMS and workflow builds.' },
+      {
+        label: 'Automation',
+        href: '/labs',
+        description: 'Automation, CRM, CMS and workflow builds.',
+      },
       {
         label: 'Advisory',
         href: '/advisory',
         description: 'AI strategy, governance roadmaps, analytics and board papers.',
       },
       {
-        label: 'Academy',
+        label: 'Training',
         href: '/academy',
         description: 'CISA, ISO 42001, lead-auditor readiness and masterclasses.',
       },
       {
-        label: 'Intelligence',
+        label: 'Research & benchmarks',
         href: '/intelligence',
         description: 'Benchmarking, research and cross-client intelligence.',
       },
@@ -229,7 +268,7 @@ export const NAV: NavItem[] = [
     ],
   },
   {
-    label: 'News & Insights',
+    label: 'Insights',
     href: '/insights',
     match: ['/insights'],
     children: [
@@ -279,7 +318,7 @@ export const NAV: NavItem[] = [
 
 /** The one gold action across the site. */
 export const PRIMARY_CTA = {
-  label: 'Book a demo',
+  label: 'Talk to us',
   href: '/contact',
 } as const;
 
@@ -298,6 +337,7 @@ export const SOCIAL: SocialLink[] = [
  * lives in the header navigation, so the footer can stay short and scannable.
  */
 export const FOOTER_GROUPS: { heading: string; links: { label: string; href: string }[] }[] = [
+  { heading: 'Products', links: PRODUCTS },
   {
     heading: 'Who we are',
     links: [
@@ -310,7 +350,7 @@ export const FOOTER_GROUPS: { heading: string; links: { label: string; href: str
     heading: 'What we do',
     links: [
       { label: 'Services', href: '/services' },
-      { label: 'Assurance', href: '/assurance' },
+      { label: 'Internal audit', href: '/assurance' },
       { label: 'Automation Lab', href: '/labs' },
       { label: 'Pricing', href: '/pricing' },
     ],

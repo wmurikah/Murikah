@@ -48,7 +48,7 @@ const {
     <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
       <Button href={primaryHref} variant="primary" size="lg">{primaryLabel}</Button>
       {
-        secondaryLabel && secondaryHref && (
+        secondaryLabel && secondaryHref && secondaryHref !== primaryHref && (
           <Button
             href={secondaryHref}
             variant="ghost"
