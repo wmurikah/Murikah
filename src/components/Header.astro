@@ -68,7 +68,7 @@ const navLink =
         {
           NAV.map((item) =>
             item.children ? (
-              <div class="group relative">
+              <div class="desktop-nav-group group relative" data-desktop-nav-group>
                 {/* The trigger is a real link to the hub, so it works on click,
                     on touch and for keyboard users; the menu reveals on hover
                     and focus-within with no JavaScript. */}
@@ -76,6 +76,9 @@ const navLink =
                   href={item.href}
                   class={navLink}
                   aria-current={groupActive(item) ? 'page' : undefined}
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                  data-desktop-nav-trigger
                 >
                   {item.label}
                   <svg
@@ -98,7 +101,10 @@ const navLink =
 
                 {/* Disclosure menu. The pt-3 wrapper is a transparent hover
                     bridge so the pointer never crosses a dead gap. */}
-                <div class="invisible absolute top-full left-1/2 z-50 w-[26rem] -translate-x-1/2 pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+                <div
+                  class="desktop-nav-menu invisible absolute top-full left-1/2 z-50 w-[26rem] -translate-x-1/2 pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+                  data-desktop-nav-menu
+                >
                   <div class="rounded-[1.4rem] bg-header-veil p-2 shadow-pop ring-1 ring-white/10">
                     <ul class="grid gap-0.5">
                       {item.children.map((c) => (
@@ -237,6 +243,50 @@ const navLink =
   // group-focus-within), so there is no dropdown JavaScript to fail.
   // Progressive enhancement: every link works without this script.
   function initNav() {
+    const desktopGroups = document.querySelectorAll<HTMLElement>('[data-desktop-nav-group]');
+    desktopGroups.forEach((group) => {
+      const trigger = group.querySelector<HTMLElement>('[data-desktop-nav-trigger]');
+      const dismiss = () => {
+        // Focus the owning link first; then suppress the focus-within menu.
+        // It reopens on the next intentional pointer or keyboard entry.
+        trigger?.focus();
+        group.dataset.dismissed = 'true';
+        trigger?.setAttribute('aria-expanded', 'false');
+      };
+
+      group.addEventListener('pointerenter', () => {
+        delete group.dataset.dismissed;
+        trigger?.setAttribute('aria-expanded', 'true');
+      });
+      group.addEventListener('pointerleave', () => {
+        if (!group.contains(document.activeElement))
+          trigger?.setAttribute('aria-expanded', 'false');
+      });
+      group.addEventListener('focusin', () => {
+        if (group.dataset.dismissed !== 'true') trigger?.setAttribute('aria-expanded', 'true');
+      });
+      group.addEventListener('focusout', (event) => {
+        const next = event.relatedTarget;
+        if (!(next instanceof Node) || !group.contains(next)) {
+          delete group.dataset.dismissed;
+          trigger?.setAttribute('aria-expanded', 'false');
+        }
+      });
+      group.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') dismiss();
+      });
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      desktopGroups.forEach((group) => {
+        if (!group.matches(':hover') && !group.contains(document.activeElement)) return;
+        const trigger = group.querySelector<HTMLElement>('[data-desktop-nav-trigger]');
+        trigger?.focus();
+        group.dataset.dismissed = 'true';
+        trigger?.setAttribute('aria-expanded', 'false');
+      });
+    });
+
     const mToggle = document.querySelector<HTMLElement>('[data-mobile-toggle]');
     const mPanel = document.querySelector<HTMLElement>('[data-mobile-panel]');
     if (mToggle && mPanel) {
@@ -291,3 +341,11 @@ const navLink =
 
   initNav();
 </script>
+
+<style>
+  .desktop-nav-group[data-dismissed='true'] .desktop-nav-menu {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+</style>
