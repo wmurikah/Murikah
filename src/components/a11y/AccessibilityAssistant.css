@@ -6,8 +6,8 @@
 
 .a11y {
   position: fixed;
-  right: clamp(1rem, 3vw, 1.5rem);
-  bottom: clamp(1rem, 3vw, 1.5rem);
+  right: calc(clamp(1rem, 3vw, 1.5rem) + env(safe-area-inset-right));
+  bottom: calc(clamp(1rem, 3vw, 1.5rem) + env(safe-area-inset-bottom));
   z-index: 80;
 }
 
@@ -89,8 +89,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 0.5rem;
   border: 0;
   background: transparent;
@@ -124,8 +124,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 0.45rem;
   border: 1px solid var(--color-hairline);
   background: var(--color-surface);
@@ -154,6 +154,7 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-height: 2.75rem;
   gap: 0.75rem;
   padding: 0.5rem 0.35rem;
   border: 0;
@@ -196,6 +197,7 @@
 .a11y__reset {
   margin-top: 0.5rem;
   width: 100%;
+  min-height: 2.75rem;
   padding: 0.5rem;
   border-radius: 0.5rem;
   border: 1px solid var(--color-hairline);
