@@ -36,7 +36,7 @@ const toneClass: Record<string, string> = {
 };
 ---
 
-<section id={id} class:list={['py-16 sm:py-20 lg:py-28', toneClass[tone], className]} {...rest}>
+<section id={id} class:list={['marketing-section', toneClass[tone], className]} {...rest}>
   {
     bleed ? (
       <slot />
@@ -47,3 +47,9 @@ const toneClass: Record<string, string> = {
     )
   }
 </section>
+
+<style>
+  .marketing-section {
+    padding-block: var(--marketing-section-padding);
+  }
+</style>
