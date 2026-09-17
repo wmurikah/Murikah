@@ -27,6 +27,19 @@ const why = [
   },
 ];
 
+const serviceCards = SERVICES.filter((service) => service.slug !== 'audit-os').map(
+  (service, index) => ({
+    ...service,
+    shortSummary: [
+      'Independent assurance over operations, systems, governance and data protection.',
+      'Practical CRM, CMS and workflow automation built around the work.',
+      'AI governance, analytics and decision support for executives and boards.',
+      'CISA, ISO 42001 and lead-auditor readiness grounded in practice.',
+      'Anonymised benchmarks and research for better-informed decisions.',
+    ][index],
+  }),
+);
+
 const faqs: FaqItem[] = [
   {
     question: 'What does Murikah do?',
@@ -74,37 +87,25 @@ const faqs: FaqItem[] = [
       </div>
     </Container>
   </section>
-  <Section tone="paper" aria-labelledby="proof-title" class="border-b border-hairline">
-    <div class="grid gap-8 lg:grid-cols-2">
+  <Section tone="paper" aria-labelledby="products-title" class="border-b border-hairline">
+    <div class="mb-6 grid gap-5 lg:grid-cols-2 lg:items-end">
       <div>
-        <p class="eyebrow">See the work</p><h2
-          id="proof-title"
-          class="mt-4 font-serif text-3xl text-navy"
+        <p class="eyebrow">Working products</p><h2
+          id="products-title"
+          class="mt-4 font-serif text-4xl text-navy"
         >
-          Working products you can explore.
+          Your work. The right workspace.
         </h2>
       </div>
       <div>
         <p class="text-lg text-slate">
-          Explore CMS for customer operations, GRC for audit, Tutor for learning and ENGR for
-          maintenance.
+          See a real task each workspace handles, then open the product directly.
         </p>
-        <div class="mt-5 flex flex-wrap gap-6">
-          <a href="/products">Explore the products →</a><a href="/about#how-we-work"
-            >Review our approach →</a
-          >
-        </div>
+        <p class="mt-3 text-sm text-slate">
+          <strong class="font-medium text-navy">GRC</strong> is the audit and risk workspace within Murikah's
+          Assurance OS offering.
+        </p>
       </div>
-    </div>
-  </Section>
-  <Section tone="surface" aria-labelledby="products-title">
-    <div class="mb-5">
-      <p class="eyebrow">Products</p><h2
-        id="products-title"
-        class="mt-4 font-serif text-4xl text-navy"
-      >
-        Your work. The right workspace.
-      </h2><p class="mt-4 text-slate">Open a product directly, or explore our services below.</p>
     </div>
     <ProductLinks />
   </Section>
@@ -123,18 +124,26 @@ const faqs: FaqItem[] = [
       </p>
     </div>
 
-    <div class="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div class="mt-6 grid gap-x-6 gap-y-3 lg:grid-cols-6">
       {
-        SERVICES.filter((s) => s.slug !== 'audit-os').map((s, i) => (
-          <a href={s.href} class="group flex flex-col border-t border-hairline py-4 no-underline">
-            <span class="text-sm font-semibold tracking-[0.16em] text-gold uppercase">
+        serviceCards.map((s, i) => (
+          <a
+            href={s.href}
+            class:list={[
+              'group grid grid-cols-[2.25rem_1fr] gap-x-3 border-t border-hairline py-4 no-underline lg:col-span-2',
+              i >= 3 && 'lg:col-span-3',
+            ]}
+          >
+            <span class="pt-0.5 text-xs font-semibold tracking-[0.14em] text-gold uppercase">
               {String(i + 1).padStart(2, '0')}
             </span>
-            <h3 class="mt-6 text-2xl text-navy">{s.fullName}</h3>
-            <p class="mt-3 text-slate">{s.summary}</p>
-            <span class="mt-auto inline-flex items-center gap-2 pt-6 font-medium text-blue">
-              View service{' '}
-              <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
+            <span>
+              <span class="block text-xl font-semibold text-navy">{s.fullName}</span>
+              <span class="mt-1.5 block text-sm leading-relaxed text-slate">{s.shortSummary}</span>
+              <span class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-blue">
+                View service{' '}
+                <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
+              </span>
             </span>
           </a>
         ))

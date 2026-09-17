@@ -153,23 +153,43 @@ export const SERVICES: ServiceLine[] = [
 export const PRODUCTS = [
   {
     label: 'CMS',
+    fullName: 'Customer operations',
     href: 'https://cms.murikah.com',
     description: 'Manage leads, customer accounts, orders and service requests.',
+    useCase: 'Create a lead and keep the customer journey connected to fulfilment.',
+    access: 'Sign-in required',
+    previewLabel: 'Lead workspace',
+    preview: ['Solar pump installation', 'Website enquiry', 'Owner assigned'],
   },
   {
     label: 'GRC',
+    fullName: 'Audit & risk',
     href: 'https://grc.murikah.com',
     description: 'Plan audits, review evidence and track findings and action plans.',
+    useCase: 'Turn an audit observation into an owned, dated remediation action.',
+    access: 'Sign-in or invitation required',
+    previewLabel: 'Action plan',
+    preview: ['Observation linked', 'Owner assigned', 'Due date recorded'],
   },
   {
     label: 'Tutor',
+    fullName: 'AI learning',
     href: 'https://tutor.murikah.com',
     description: 'Learn, research, co-write and design diagrams with AI.',
+    useCase: 'Ask a learning question, develop the answer and shape it into useful work.',
+    access: 'Try as guest; sign in to save',
+    previewLabel: 'Learning workspace',
+    preview: ['Ask a question', 'Explore the answer', 'Create and refine'],
   },
   {
     label: 'ENGR',
+    fullName: 'Maintenance',
     href: 'https://engr.murikah.com',
     description: 'Manage assets, maintenance schedules and work orders.',
+    useCase: 'Assign a technician and follow a work order through its operating stages.',
+    access: 'Sign-in required',
+    previewLabel: 'Work order',
+    preview: ['Request accepted', 'Technician assigned', 'Work tracked'],
   },
 ];
 
@@ -235,10 +255,10 @@ export const NAV: NavItem[] = [
           'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
       },
       {
-        label: 'Audit software · Assurance OS',
+        label: 'GRC · Assurance OS',
         href: '/audit-os',
         description:
-          'Work papers, approvals, findings, remediation, follow-ups and board reporting.',
+          'The GRC workspace for work papers, findings, remediation and board reporting.',
       },
       {
         label: 'Automation',
