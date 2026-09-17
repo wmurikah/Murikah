@@ -80,7 +80,7 @@ const { mainClass, ...seo } = Astro.props;
     </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#070B12" />
+    <meta name="theme-color" content="#08090C" />
     <meta name="generator" content={Astro.generator} />
 
     {
@@ -96,7 +96,7 @@ const { mainClass, ...seo } = Astro.props;
     {/* Pages may inject extra <head> tags (e.g. page-specific schema). */}
     <slot name="head" />
   </head>
-  <body>
+  <body class="marketing-shell obsidian-glass">
     {/* Skip link, first focusable element (keyboard + screen-reader users). */}
     <a href="#main" class="skip-link">Skip to content</a>
 
