@@ -64,7 +64,7 @@ const navLink =
         /* Desktop primary nav, three groups mapped straight from NAV. Inline
           text links, no enclosing pill, with calm spacing between groups. */
       }
-      <nav aria-label="Primary" class="hidden items-center gap-8 lg:flex">
+      <nav aria-label="Primary" class="hidden items-center gap-5 lg:flex">
         {
           NAV.map((item) =>
             item.children ? (
@@ -110,7 +110,7 @@ const navLink =
                             <span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-brass transition-transform group-hover/row:scale-125" />
                             <span>
                               <span class="block text-sm font-medium text-white">{c.label}</span>
-                              <span class="mt-0.5 block text-xs leading-snug text-paper/55">
+                              <span class="mt-0.5 block text-xs leading-snug text-paper/80">
                                 {c.description}
                               </span>
                             </span>
@@ -164,7 +164,7 @@ const navLink =
     id="mobile-menu"
     data-mobile-panel
     hidden
-    class="on-dark border-t border-paper/[0.08] bg-header-bg lg:hidden"
+    class="on-dark max-h-[calc(100dvh-4rem)] overflow-y-auto border-t border-paper/[0.08] bg-header-bg lg:hidden"
   >
     <Container>
       <nav aria-label="Mobile" class="flex flex-col gap-1 py-4">
@@ -243,7 +243,7 @@ const navLink =
       const focusables = () =>
         Array.from(
           mPanel.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), summary'),
-        );
+        ).filter((el) => el.getClientRects().length > 0);
 
       const setOpen = (open: boolean) => {
         mToggle.setAttribute('aria-expanded', String(open));
@@ -253,6 +253,9 @@ const navLink =
         if (open) focusables()[0]?.focus();
       };
 
+      window.matchMedia('(min-width: 1024px)').addEventListener('change', (event) => {
+        if (event.matches) setOpen(false);
+      });
       mToggle.addEventListener('click', () => {
         setOpen(mToggle.getAttribute('aria-expanded') !== 'true');
       });

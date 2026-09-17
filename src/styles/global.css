@@ -234,8 +234,8 @@
    is visible. Reduced motion disables all of it. */
 @layer utilities {
   .js .reveal {
-    opacity: 0;
-    transform: translateY(14px);
+    opacity: 1;
+    transform: none;
     transition:
       opacity 0.6s var(--ease-out-soft),
       transform 0.6s var(--ease-out-soft);

@@ -38,7 +38,7 @@ const tierPlans: Record<string, { highlight: boolean; label?: string; features: 
   },
   Growth: {
     highlight: true,
-    label: 'Most teams start here',
+    label: 'For growing teams',
     features: [
       'Everything in Starter',
       'Several entities in one place, kept separate where they need to be',
@@ -50,7 +50,7 @@ const tierPlans: Record<string, { highlight: boolean; label?: string; features: 
     features: [
       'Everything in Growth',
       'A consolidated group view across entities and countries',
-      '{{PRICING: confirm feature gating per tier}}',
+      'Confirm the required capabilities in your written proposal',
     ],
   },
 };
@@ -67,7 +67,7 @@ const faqs: FaqItem[] = [
   {
     question: 'How does billing work?',
     answer:
-      'Assurance OS is a monthly subscription. The ranges on this page are indicative and validated against your size and setup before you commit, so the figure you agree is the figure you pay. {{PRICING: confirm invoicing cycle and accepted payment methods}}',
+      'Assurance OS is a monthly subscription. The ranges on this page are indicative and validated against your size and setup before you commit, so the figure you agree is the figure you pay. Ask for the billing schedule, payment methods and any setup charges in your written quote.',
   },
   {
     question: 'Can we move between tiers as we grow?',
@@ -77,7 +77,7 @@ const faqs: FaqItem[] = [
   {
     question: 'Is there a contract or lock-in?',
     answer:
-      'There is no long lock-in. The idea is that you stay because the system is working for you, not because a contract holds you there. {{PRICING: confirm minimum term and notice period}}',
+      'The written agreement sets out the minimum term, renewal, cancellation notice and data export arrangements. Review these before subscribing.',
   },
   {
     question: 'What happens after you validate the range on a call?',
@@ -128,13 +128,12 @@ const faqs: FaqItem[] = [
         Assurance OS subscription
       </h2>
       <p class="mt-4 text-lg text-slate">
-        A Big 4 retainer is priced by the hour and hard to flex once it is signed. This is a monthly
-        figure you can plan a budget around, for a system your team keeps using between audits
-        rather than a report that lands once and goes stale.
+        Budget for ongoing audit software separately from professional services. Confirm the number
+        of users and entities, onboarding, support and required features when requesting a quote.
       </p>
       <p class="mt-3 text-sm text-slate">
-        Indicative monthly ranges, validated on enquiry against your size and needs. No long
-        lock-in.
+        Indicative monthly ranges. Final features, fees and contract terms are confirmed in your
+        written quote.
       </p>
     </div>
 
@@ -182,8 +181,8 @@ const faqs: FaqItem[] = [
       }
     </div>
     <p class="mt-8 max-w-prose text-sm text-slate">
-      Every tier includes role-based access, full audit logging, encryption in transit and at rest,
-      and data retention set to your policy.
+      The capabilities above describe typical requirements. Confirm feature availability, access
+      controls, hosting, retention and support for your chosen plan before purchase.
     </p>
   </Section>
 
@@ -257,7 +256,7 @@ const faqs: FaqItem[] = [
       </div>
     </div>
     <div class="mt-10">
-      <Button href="/contact" variant="secondary">Book a call</Button>
+      <Button href="/contact" variant="secondary">Request a call</Button>
     </div>
   </Section>
 
@@ -277,7 +276,7 @@ const faqs: FaqItem[] = [
     eyebrow="No card needed"
     title="One call turns the range into your number"
     body="Tell us your size and setup and we will validate the right tier on a call. No card, no obligation, and you leave with a figure you can take to your board."
-    primaryLabel="Book a call"
+    primaryLabel="Request a call"
     secondaryLabel="Contact us"
     secondaryHref="/contact"
   />

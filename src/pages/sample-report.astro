@@ -1,0 +1,61 @@
+---
+export const prerender = true;
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+---
+
+<BaseLayout
+  title="Sample audit finding"
+  description="An illustrative audit finding showing how scope, evidence, risk and management actions connect. Fictional example, not a client report."
+>
+  <Section tone="paper" aria-labelledby="sample-title">
+    <div class="mx-auto max-w-3xl">
+      <p class="eyebrow">Illustrative deliverable · Fictional data</p>
+      <h1 id="sample-title" class="mt-5 font-serif text-4xl text-navy">
+        From evidence to a clear action.
+      </h1>
+      <p class="mt-5 text-lg text-slate">
+        This example shows the structure of an audit finding. It is not a client result or a
+        screenshot of a live engagement.
+      </p>
+      <article class="mt-10 border-y border-hairline py-8">
+        <h2 class="text-2xl">User access reviews need documented approval</h2>
+        <dl class="mt-8 grid gap-6">
+          <div>
+            <dt class="font-semibold">Scope</dt><dd class="mt-2">
+              Quarterly access reviews for a fictional finance application.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Evidence</dt><dd class="mt-2">
+              Two of six sampled review records lacked an approver and completion date. The sample
+              does not establish the position of every account.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Risk</dt><dd class="mt-2">
+              Inappropriate access may remain undetected when reviews cannot be demonstrated.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Agreed action</dt><dd class="mt-2">
+              The system owner records reviewer approval, resolves exceptions and retains the
+              evidence before the next quarterly review.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Closure evidence</dt><dd class="mt-2">
+              An approved review, exception log and follow-up validation by the audit team.
+            </dd>
+          </div>
+        </dl>
+      </article>
+      <p class="mt-8"><a href="/assurance">Explore internal audit services →</a></p>
+    </div>
+  </Section>
+  <CtaSection
+    title="Review the approach for your organisation"
+    body="Discuss scope, responsibilities and expected deliverables before an engagement."
+  />
+</BaseLayout>
