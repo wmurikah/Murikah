@@ -2,20 +2,57 @@
 import { PRODUCTS } from '@/site.config';
 ---
 
-<ul class="grid gap-x-10 sm:grid-cols-2">
+<ul class="grid gap-4 sm:grid-cols-2">
   {
     PRODUCTS.map((product) => (
-      <li class="border-t border-hairline py-3">
-        <a href={product.href} class="group block no-underline">
-          <span class="flex items-center justify-between text-2xl font-semibold text-navy">
-            {product.label}
-            <span aria-hidden="true" class="text-gold">
+      <li class="min-w-0">
+        <a
+          href={product.href}
+          class="group flex h-full min-h-[19rem] flex-col overflow-hidden rounded-card bg-surface p-5 no-underline ring-1 ring-hairline transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lift"
+          aria-label={`Open ${product.label}, ${product.fullName}. ${product.access}`}
+        >
+          <span class="flex items-start justify-between gap-4">
+            <span>
+              <span class="block text-2xl font-semibold text-navy">{product.label}</span>
+              <span class="mt-1 block text-sm font-medium text-gold">{product.fullName}</span>
+            </span>
+            <span
+              aria-hidden="true"
+              class="text-xl text-gold transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+            >
               ↗
             </span>
           </span>
-          <span class="mt-2 block text-slate">{product.description}</span>
-          <span class="mt-2 inline-block text-sm font-medium text-blue group-hover:underline">
-            Open {product.label}
+          <span class="mt-3 block text-slate">{product.description}</span>
+
+          <span class="mt-5 block rounded-lg bg-paper p-4 ring-1 ring-hairline/80">
+            <span class="block text-xs font-semibold tracking-[0.12em] text-gold uppercase">
+              {product.previewLabel}
+            </span>
+            <span class="mt-3 grid gap-2">
+              {product.preview.map((step, index) => (
+                <span class="flex items-center gap-2 text-sm text-navy">
+                  <span
+                    aria-hidden="true"
+                    class:list={[
+                      'size-2 shrink-0 rounded-full',
+                      index === product.preview.length - 1 ? 'bg-gold' : 'bg-navy/25',
+                    ]}
+                  />
+                  {step}
+                </span>
+              ))}
+            </span>
+          </span>
+
+          <span class="mt-4 block text-sm text-slate">
+            <span class="font-medium text-navy">Example:</span> {product.useCase}
+          </span>
+          <span class="mt-auto flex items-end justify-between gap-3 pt-4">
+            <span class="text-xs text-slate">{product.access}</span>
+            <span class="text-sm font-medium text-blue group-hover:underline">
+              Open {product.label}
+            </span>
           </span>
         </a>
       </li>
