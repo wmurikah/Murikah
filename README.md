@@ -1,264 +1,200 @@
 # Murikah
 
-> **Assurance. Systems. Intelligence.**
+**Assurance. Systems. Intelligence.**
+
+Murikah is an MIT-licensed software monorepo for operational assurance, governance and workflow tools. It brings together four working product areas: customer operations, audit and risk, engineering maintenance, and AI-assisted learning.
+
+The repository contains the applications, shared platform code, database schemas, tests, deployment configuration and product documentation used to build and operate the Murikah platform. It is actively maintained and is intended to be useful both as deployable software and as a reference implementation for teams building practical governance and operational systems.
+
 > Pronounced _moo-REE-kah_ (rhymes with Eureka).
 
-Marketing website for **Murikah**, an AI-native assurance and governance company
-helping organisations run, prove, and continuously improve their internal
-audit and their AI and system governance.
+## What is in this repository
 
-This repository is the **framework** (Build Prompt 1): project setup, design
-system, layout/navigation, all routes, the component library, the SEO and
-AI-discoverability foundation, and the data/deploy plumbing. **Final marketing
-copy and the interactive Labs demos are out of scope** and arrive in later
-prompts, placeholder copy is clearly marked with `[placeholder]`.
+| Product | Purpose | Main areas |
+| --- | --- | --- |
+| **CMS** | Customer operations | Leads, customer accounts, orders, service requests and connected fulfilment workflows |
+| **GRC / Assurance OS** | Internal audit and risk | Audit planning, evidence, work papers, findings, action plans, remediation and reporting |
+| **ENGR / Engineering Rhythm** | Maintenance operations | Assets, maintenance schedules, work orders, technician assignment and operating follow-up |
+| **Tutor** | AI-assisted learning | Learning, research, co-writing and diagram design in an isolated AI workspace |
 
----
+Live product entry points are maintained at:
 
-## Tech stack
+- `https://cms.murikah.com`
+- `https://grc.murikah.com`
+- `https://engr.murikah.com`
+- `https://tutor.murikah.com`
 
-| Concern       | Choice                                                                  |
-| ------------- | ----------------------------------------------------------------------- |
-| Framework     | [Astro](https://astro.build) v7 (TypeScript, strict)                    |
-| Platform      | Cloudflare **Workers** + static assets (`@astrojs/cloudflare` v14)      |
-| Styling       | Tailwind CSS v4 via `@tailwindcss/vite` + design tokens in `@theme`     |
-| Content       | `@astrojs/mdx` content collection · `@astrojs/rss` · `@astrojs/sitemap` |
-| Interactivity | `@astrojs/react` islands (Labs sandbox, stubbed for now)                |
-| Database      | [Turso](https://turso.tech) (libSQL) via `@libsql/client/web`           |
-| Email         | [Resend](https://resend.com) (behind an env check; optional)            |
-| Fonts         | Self-hosted via Fontsource (Outfit + Fraunces), preloaded               |
-| Tooling       | pnpm · ESLint (flat) · Prettier · GitHub Actions CI                     |
+The public site and product directory are served from `https://murikah.com`.
 
-Marketing pages are **prerendered** to static HTML and ship **~1 KB of gzipped
-JS** (the accessible nav only). Only the API endpoints run on-demand in the Worker.
+## Why Murikah exists
 
-## Prerequisites
+Operational assurance work often lives across spreadsheets, email, document folders and disconnected line-of-business tools. Murikah is an attempt to make those workflows explicit, testable and maintainable in software.
 
-- **Node 22.12+** (Astro 7 requirement) and **pnpm 9+**
-- A [Turso](https://turso.tech) database (for the contact/subscribe endpoints)
-- A [Cloudflare](https://cloudflare.com) account (to deploy)
-- Optionally a [Resend](https://resend.com) API key (for transactional email)
+The project focuses on problems such as:
 
-## Quick start
+- linking audit observations to owned and dated remediation actions;
+- preserving traceable evidence and approval workflows;
+- connecting customer activity to fulfilment and service operations;
+- managing maintenance work from request through assignment and follow-up;
+- making AI-assisted learning useful without coupling it to the rest of the platform;
+- running these systems on infrastructure that can be tested, deployed and reviewed as code.
+
+The project is still evolving. Public adoption is not represented here as larger than it is; the repository is published so its architecture, implementation choices and maintenance work can be inspected directly.
+
+## Architecture
+
+Murikah is organised as a monorepo with two deliberately different application boundaries.
+
+### Core Murikah applications
+
+The public site, CMS, GRC and ENGR share the main TypeScript/Astro codebase and Cloudflare deployment model. Host-based routing keeps the applications separated while allowing them to reuse selected platform primitives.
+
+Core technologies include:
+
+- **Astro 7** and **TypeScript**
+- **React** islands where client interactivity is needed
+- **Tailwind CSS 4**
+- **Cloudflare Workers**
+- **Turso/libSQL** for application data
+- **GitHub Actions** for CI and deployment checks
+- **ESLint**, **Prettier** and automated tests
+
+### Murikah Tutor
+
+Tutor is intentionally isolated from the core Astro applications. It is based on the open-source [HKUDS/DeepTutor](https://github.com/HKUDS/DeepTutor) project and currently consumes a pinned upstream commit rather than vendoring the full upstream repository.
+
+Murikah adds its own deployment, access, persistence, provider failover, guest-workspace and presentation layers while retaining compatibility with DeepTutor internals where practical.
+
+The upstream source is materialised locally with:
 
 ```bash
+cd tutor
+./scripts/materialize.sh
+```
+
+The generated checkout is written to `tutor/.vendor/DeepTutor` and is ignored by Git. See [`tutor/README.md`](./tutor/README.md) and [`tutor/source/README.md`](./tutor/source/README.md) for the source and compatibility model.
+
+DeepTutor is distributed under the Apache License 2.0. Its upstream licence and notices remain applicable to the materialised upstream project and derivative deployment as required.
+
+## Repository map
+
+```text
+.
+├── src/                  # Shared Astro application, routes, components and platform code
+│   ├── components/       # Shared and product-specific UI components
+│   ├── layouts/          # Site and application layouts
+│   ├── lib/              # Application logic, auth, routing and integrations
+│   └── pages/            # Public site plus CMS, GRC and ENGR routes
+├── cms/                  # CMS database and supporting application assets
+│   └── db/
+├── grc/                  # GRC database, documentation and tests
+│   ├── db/
+│   ├── docs/
+│   └── test/
+├── engr/                 # Engineering Rhythm database and tests
+│   ├── db/
+│   └── test/
+├── tutor/                # Isolated Tutor source, deployment, persistence and tests
+│   ├── cloudflare/
+│   ├── scripts/
+│   ├── source/
+│   └── tests/
+├── test/                 # Cross-application and CMS test suites
+├── db/                   # Shared/public-site database tooling
+├── docs/                 # Architecture, product and implementation documentation
+└── .github/              # CI and repository automation
+```
+
+## Getting started
+
+### Prerequisites
+
+- Node.js **22.12+**
+- pnpm **9+**
+- A Cloudflare account for Worker deployment
+- A Turso/libSQL database for workflows that persist data
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/wmurikah/Murikah.git
+cd Murikah
 pnpm install
-cp .dev.vars.example .dev.vars   # fill in your values (gitignored)
-pnpm dev                         # http://localhost:4321
+cp .dev.vars.example .dev.vars
+pnpm dev
 ```
 
-`pnpm dev` runs Astro's dev server. The Cloudflare adapter (v14) integrates the
-Cloudflare Vite plugin, so KV/R2/vars from `wrangler.jsonc` + `.dev.vars` are
-available on the Workers runtime during dev.
+The local Astro development server runs at `http://localhost:4321` by default.
 
-### Run on the Workers runtime (`wrangler dev`)
+Environment variables are documented in `.dev.vars.example`. Keep secrets in local or platform-managed secret stores; do not commit them.
+
+## Development commands
 
 ```bash
-pnpm cf:dev    # astro build && wrangler dev --config dist/server/wrangler.json
+pnpm dev            # local Astro development server
+pnpm build          # Astro type-check and production build
+pnpm test           # core application test suites
+pnpm lint           # ESLint
+pnpm format:check   # Prettier verification
+pnpm cf:dev         # build and run on the Cloudflare Worker runtime
+pnpm cf:deploy      # build and deploy using the generated Worker config
 ```
 
-The adapter generates the deployable Worker config at
-`dist/server/wrangler.json` during the build (with the correct `main`, the
-`../client` assets directory, and all your bindings), so `wrangler dev`/`deploy`
-point at that generated file, not the root `wrangler.jsonc` (which is the
-human-edited **source** of bindings).
-
-## Environment variables
-
-Set locally in `.dev.vars` (see `.dev.vars.example`); in production set them as
-Cloudflare secrets. **Never commit secrets.**
-
-| Variable               | Required | Purpose                                             |
-| ---------------------- | -------- | --------------------------------------------------- |
-| `TURSO_DATABASE_URL`   | yes\*    | libSQL connection URL (`libsql://…`)                |
-| `TURSO_AUTH_TOKEN`     | yes\*    | Turso auth token                                    |
-| `RESEND_API_KEY`       | no       | Resend key. If unset, email is **skipped** (no-op). |
-| `CONTACT_NOTIFY_EMAIL` | no       | Recipient for contact notifications                 |
-| `RESEND_FROM_EMAIL`    | no       | Verified sender address                             |
-| `PUBLIC_SITE_URL`      | no       | Canonical/OG origin for non-production environments |
-
-\* Required for the contact/subscribe endpoints to persist data. The site
-**builds and runs without them**; the endpoints degrade gracefully and return a
-clear error.
-
-## Database (Turso)
-
-1. Create a database and capture its URL + token:
-
-   ```bash
-   turso db create murikah
-   turso db show murikah --url
-   turso db tokens create murikah
-   ```
-
-2. Put the URL/token in `.dev.vars` (or your environment).
-
-3. Apply the schema and (optionally) seed sample data:
-
-   ```bash
-   pnpm db:apply   # runs db/schema.sql against TURSO_DATABASE_URL
-   pnpm db:seed    # inserts a couple of sample rows (dev only)
-   ```
-
-   Both scripts auto-load `.dev.vars` if present. Alternatively, apply the schema
-   with the Turso CLI: `turso db shell murikah < db/schema.sql`.
-
-Tables: `leads` (contact submissions), `subscribers` (newsletter), and a
-forward-looking `demo_sessions` placeholder for future Labs sandboxes.
-
-## Deploy (Cloudflare Workers)
-
-The site deploys as a single Cloudflare Worker that serves the prerendered pages
-as static assets, plus the two API endpoints. On `main` the configuration is
-intentionally minimal: it needs no pre-created KV namespace, no R2 bucket, and no
-cron trigger, so it can go straight to a free `workers.dev` preview. The KV
-cache, the R2 bucket, and the scheduled retention all return with the feature
-branches that use them.
-
-The deploy must use the config the adapter generates at
-`dist/server/wrangler.json` (it carries the correct entrypoint and the
-`../client` assets directory), not the root `wrangler.jsonc`:
+Database scripts include:
 
 ```bash
-pnpm build
-npx wrangler deploy --config dist/server/wrangler.json
+pnpm db:apply
+pnpm db:seed
+pnpm db:cms:bootstrap-admin
+pnpm db:engr:apply
+pnpm db:engr:seed
+pnpm db:engr:bootstrap
+pnpm db:engr:seed-demo
 ```
 
-(`pnpm cf:deploy` runs both of those in one step.)
+Product-specific deployment and migration instructions live with the relevant application rather than being duplicated here.
 
-If you want the contact and subscribe forms to actually save submissions, set the
-database secrets against the generated config. They are optional: without them the
-forms still work and fail gracefully.
+## Testing and maintenance
 
-```bash
-npx wrangler secret put TURSO_DATABASE_URL  --config dist/server/wrangler.json
-npx wrangler secret put TURSO_AUTH_TOKEN    --config dist/server/wrangler.json
-# Optional, only if contact notifications should be emailed:
-npx wrangler secret put RESEND_API_KEY      --config dist/server/wrangler.json
-npx wrangler secret put CONTACT_NOTIFY_EMAIL --config dist/server/wrangler.json
-npx wrangler secret put RESEND_FROM_EMAIL   --config dist/server/wrangler.json
-```
+Changes are expected to keep application boundaries intact and include appropriate validation. Depending on the area changed, maintenance work includes:
 
-### Deploy a free preview
+- TypeScript and Astro checks;
+- unit and integration tests;
+- product-specific persistence and migration checks;
+- Cloudflare deployment preflights;
+- Tutor runtime and image-build regression tests;
+- accessibility and browser behaviour checks for user-facing changes.
 
-A plain, no-cost first deploy to a `workers.dev` address, with no custom domain:
+The repository uses pull requests for feature, maintenance and deployment changes so implementation decisions and validation remain reviewable in Git history.
 
-1. In the Cloudflare dashboard, open **Workers and Pages**, choose **Create**,
-   and **import your repository from GitHub** (connect GitHub first and pick
-   `wmurikah/Murikah` if it is not already connected).
-2. Set the **build command** to `pnpm build`.
-3. Set the **deploy command** to
-   `npx wrangler deploy --config dist/server/wrangler.json`. This matters: the
-   deploy has to use the config the adapter generates, not the root
-   `wrangler.jsonc`.
-4. Add one **variable** so the pages show the correct canonical and social-share
-   URLs: `PUBLIC_SITE_URL`. You can leave the committed default for the first
-   deploy and update it to your preview address afterwards (see step 6).
-5. The contact and subscribe forms only need a database **if you want them to
-   save**. They load and submit fine without one. To turn on saving, add these as
-   **secrets** (not plain variables): `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`.
-   To also email the contact notification, add the optional `RESEND_API_KEY`,
-   `CONTACT_NOTIFY_EMAIL`, and `RESEND_FROM_EMAIL`.
-6. On the first deploy, Cloudflare asks you to pick a free `workers.dev`
-   **subdomain**. After that the site is live at
-   `murikah-web.<your-subdomain>.workers.dev`, with no custom domain required. If
-   you set `PUBLIC_SITE_URL` to that address and redeploy, the canonical and
-   social-share tags will match the live preview.
+## Contributing
 
-Nothing else needs to exist in your Cloudflare account for the preview: there is
-no KV namespace, R2 bucket, or cron trigger to create.
+Issues and pull requests are welcome.
 
-If your final domain differs from `https://murikah.com`, update the canonical
-URL in `SITE_URL` (`src/site.config.ts`) and `site` (`astro.config.ts`), which
-are kept in sync, plus the `Sitemap:` line in `public/robots.txt`.
+Before opening a pull request:
 
-## Scripts
+1. keep the affected product boundary clear;
+2. avoid introducing secrets or environment-specific credentials;
+3. add or update tests where behaviour changes;
+4. run the relevant lint, format, test and build checks;
+5. document deployment or migration implications when applicable.
 
-| Script            | Description                                         |
-| ----------------- | --------------------------------------------------- |
-| `pnpm dev`        | Astro dev server                                    |
-| `pnpm build`      | `astro check` (type-check) + `astro build`          |
-| `pnpm preview`    | Preview the static build                            |
-| `pnpm cf:dev`     | Build + `wrangler dev` on the Workers runtime       |
-| `pnpm cf:deploy`  | Build + deploy to Cloudflare                        |
-| `pnpm cf:typegen` | Generate Worker binding types from `wrangler.jsonc` |
-| `pnpm lint`       | ESLint                                              |
-| `pnpm format`     | Prettier (write)                                    |
-| `pnpm db:apply`   | Apply `db/schema.sql` to Turso                      |
-| `pnpm db:seed`    | Seed sample rows                                    |
+For Tutor changes, preserve the upstream compatibility boundary documented under `tutor/` unless the change intentionally revises that architecture.
 
-## Project structure
+A more detailed contributor guide will be maintained as the external contributor workflow develops.
 
-```
-src/
-  components/
-    primitives/      Section, Container, Button, Card, FeatureGrid, Stat,
-                     CtaSection, Faq, Prose, Breadcrumb
-    schema/          Organization, Service, FaqPage (JSON-LD emitters)
-    islands/         SandboxDemo.tsx (stubbed React island for /labs)
-    Header / Footer / Nav / Logo / Seo / DemoEmbed
-  layouts/           BaseLayout, ServiceLayout, InsightLayout
-  pages/             home, 6 service lines, about, contact, insights,
-                     privacy, terms, 404, rss.xml, api/{contact,subscribe}
-  content/insights/  MDX guides (one example)
-  lib/               db, validation, rate-limit, email, http, format, types
-  styles/            tokens.css (@theme), global.css
-  site.config.ts     single source of truth (nav, services, SEO, org schema)
-  content.config.ts  insights collection schema
-db/                  schema.sql, apply.ts, seed.ts
-public/              robots.txt, llms.txt, favicon.svg, og-default.png, .assetsignore
-```
+## Security
 
-## Design system
+Please do not publish credentials, tokens, private customer data or exploitable production details in issues or pull requests. Security-sensitive reports should be handled privately with the project maintainer rather than disclosed publicly before remediation.
 
-Tokens live in `src/styles/tokens.css` inside a Tailwind v4 `@theme` block, so
-every token is available **both** as a utility (`bg-navy`, `text-gold`,
-`font-serif`, `text-display`) and as a raw var (`var(--color-navy)`).
+## Project status
 
-- **Brand:** navy `#0B1733` (authority), gold `#C9A227` (the _single_ accent, used only for the one primary action, per Von Restorff), blue `#1E4FA3`
-  (interactive). Warm paper background, ink/slate text.
-- **Type:** Outfit (UI + headings) and Fraunces (the hero headline only),
-  self-hosted and preloaded; a ~1.2 modular scale with tight tracking on
-  display sizes; body measure capped at 68ch.
-- **Status colours** (RAG) are reserved for product/status only (here: the one
-  sanctioned marketing use is contact-form validation feedback).
+Murikah is under active development. Interfaces, schemas and deployment patterns may continue to change as the products mature. The repository should therefore be treated as evolving software rather than a frozen framework or finished reference architecture.
 
-The build is grounded in usability research, Jakob, Hick, Fitts, Miller,
-Gestalt, Von Restorff, Doherty, Tesler, serial-position and peak-end, with
-code comments marking non-obvious applications.
+The maintainer welcomes review of architecture, tests, security controls, documentation and product workflows, including contributions that make the project easier for other teams to understand, deploy or extend.
 
-## Accessibility & performance
+## Licence
 
-- WCAG 2.2 AA intent: semantic landmarks, a skip link, visible `:focus-visible`
-  styles everywhere, full keyboard operation of the nav and mobile menu (with
-  focus trap + Escape), labelled form fields with clear errors, correct heading
-  order (one `h1` per page), and `prefers-reduced-motion` support.
-- Performance: prerendered HTML, ~1 KB gz JS on marketing pages, preloaded
-  fonts (`font-display: swap`), reserved image dimensions, modern formats.
-- **Verify before launch:** run Lighthouse (mobile) and `axe` against a deployed
-  preview, and replace placeholder copy and the legal pages with reviewed text.
+Unless a subcomponent states otherwise, Murikah-authored code in this repository is licensed under the [MIT License](./LICENSE).
 
-## SEO & AI discoverability
-
-- Per-page title, meta description, canonical, Open Graph + Twitter tags, and a
-  default share image (`/og-default.png`).
-- JSON-LD: `Organization` / `ProfessionalService` on every page, `Service` per
-  line, `FAQPage` on FAQ pages and guides, `BreadcrumbList`, and `BlogPosting`
-  (authored by the Organization, Murikah) on guides.
-- `public/robots.txt` (allows Googlebot, Bingbot, GPTBot, OAI-SearchBot,
-  PerplexityBot, Google-Extended), `sitemap-index.xml` (generated, with
-  priorities), `rss.xml`, and `public/llms.txt`.
-- Guide convention: answer-first opening, semantic H2/H3 mirroring real
-  questions, and an FAQ block, encoded in `InsightLayout` and the guides.
-
-### Submit the sitemap after launch
-
-Once the site is live, submit `https://murikah.com/sitemap-index.xml` to
-both [Google Search Console](https://search.google.com/search-console) and
-[Bing Webmaster Tools](https://www.bing.com/webmasters). Bing matters beyond
-Bing itself, because ChatGPT search draws on the Bing index, so submitting there
-helps the site surface in AI answers as well as classic search.
-
-## License
-
-MIT © Murikah, see [LICENSE](./LICENSE).
+Third-party and upstream components retain their own licences. In particular, Murikah Tutor builds on [HKUDS/DeepTutor](https://github.com/HKUDS/DeepTutor), which is distributed under the Apache License 2.0; applicable upstream notices and licence terms must be preserved.
