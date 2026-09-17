@@ -28,7 +28,7 @@ const labelCls = 'block text-sm font-medium text-navy';
 ---
 
 <BaseLayout
-  titleFull="Contact Murikah | Book a demo or an assurance conversation"
+  titleFull="Contact Murikah | Request a demo or discuss your requirements"
   description="Talk to Murikah about co-sourced internal audit, Assurance OS, AI governance or training. Tell us about your organisation and we respond within two working days."
 >
   <Section
@@ -44,7 +44,7 @@ const labelCls = 'block text-sm font-medium text-navy';
         id="page-title"
         class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
       >
-        Book a demo or start a conversation
+        Request a demo or discuss your requirements
       </h1>
       <p class="mt-6 max-w-2xl text-xl text-slate">
         Tell us about your organisation and what you are trying to achieve, whether that is
@@ -69,6 +69,10 @@ const labelCls = 'block text-sm font-medium text-navy';
           {initialStatus?.msg}
         </div>
 
+        <p class="mb-6 text-sm text-slate">
+          Required fields are marked *. After your enquiry, we will agree a suitable time if a
+          demonstration or call is needed.
+        </p>
         <form id="contact-form" action="/api/contact" method="post" novalidate class="grid gap-5">
           <div class="grid gap-5 sm:grid-cols-2">
             <div>
@@ -223,6 +227,11 @@ const labelCls = 'block text-sm font-medium text-navy';
   function initContactForm() {
     const form = document.querySelector<HTMLFormElement>('#contact-form');
     if (!form) return;
+    const params = new URLSearchParams(window.location.search);
+    const message = form.querySelector<HTMLTextAreaElement>('[name="message"]');
+    if (params.get('intent') === 'demo' && message && !message.value) {
+      message.value = 'I would like a demonstration of Assurance OS / GRC. Our priorities are: ';
+    }
     const statusEl = document.querySelector<HTMLElement>('#form-status');
     const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     const submitLabel = submit?.textContent ?? 'Send message';

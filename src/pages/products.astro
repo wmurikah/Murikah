@@ -1,0 +1,34 @@
+---
+export const prerender = true;
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import ProductLinks from '@/components/ProductLinks.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+---
+
+<BaseLayout
+  title="Products: CMS, GRC, Tutor and ENGR"
+  description="Open Murikah CMS, GRC, Tutor and ENGR. Workspaces for customer operations, internal audit, AI-assisted learning and engineering maintenance."
+>
+  <Section tone="surface" aria-labelledby="products-title">
+    <p class="eyebrow">Murikah products</p>
+    <h1
+      id="products-title"
+      class="mt-5 max-w-3xl font-serif text-[length:var(--text-title)] leading-tight text-navy"
+    >
+      Choose your workspace.
+    </h1>
+    <p class="mt-6 max-w-2xl text-xl text-slate">
+      Go directly to the product you need. Each workspace manages its own access; some require an
+      account or an invitation.
+    </p>
+    <div class="mt-12"><ProductLinks /></div>
+    <p class="mt-8">
+      <a href="/audit-os">Explore the GRC audit workflow and Assurance OS pricing →</a>
+    </p>
+  </Section>
+  <CtaSection
+    title="Find the right fit for your team"
+    body="Tell us about the work you need to manage. We will respond within two working days."
+  />
+</BaseLayout>
