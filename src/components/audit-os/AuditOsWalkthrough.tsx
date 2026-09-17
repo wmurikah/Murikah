@@ -129,7 +129,7 @@ function PauseIcon() {
 export default function AuditOsWalkthrough() {
   const [reduced, setReduced] = useState(false);
   const [active, setActive] = useState(0);
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(false);
   const [inView, setInView] = useState(true);
   const [docVisible, setDocVisible] = useState(true);
   const rootRef = useRef<HTMLDivElement>(null);

@@ -9,8 +9,11 @@ import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Faq from '@/components/primitives/Faq.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
 import FaqPageSchema from '@/components/schema/FaqPage.astro';
-import HeroStage from '@/components/hero/HeroStage';
-import { SITE, SERVICES, PRIMARY_CTA, AUDIENCE } from '@/site.config';
+import Container from '@/components/primitives/Container.astro';
+import Button from '@/components/primitives/Button.astro';
+import ProductLinks from '@/components/ProductLinks.astro';
+import HeroFilm from '@/components/hero/HeroFilm.astro';
+import { SITE, SERVICES, AUDIENCE } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
 const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
@@ -36,7 +39,7 @@ const faqs: FaqItem[] = [
       'Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. Our first focus is SACCOs, banks, microfinance institutions, fintechs, donor-funded NGOs and family businesses with active boards.',
   },
   {
-    question: 'How is Murikah different from the Big 4 and from audit software?',
+    question: 'Can we use the software and services separately?',
     answer:
       'We combine senior assurance judgement and the platform it runs on. You get people who can reason through the work, software that keeps evidence and follow-up moving, and a cost model designed for the mid-market.',
   },
@@ -44,18 +47,67 @@ const faqs: FaqItem[] = [
 ---
 
 <BaseLayout titleFull="Internal audit and AI governance | Murikah" description={SITE.description}>
-  {
-    /* Full-bleed dark cinematic hero: rotating background scenes with rotating
-      copy and two fixed calls to action. Scene one renders server-side, so the
-      canonical headline is in the HTML. */
-  }
-  <HeroStage
-    client:visible
-    primary={PRIMARY_CTA}
-    secondaryLabel="Explore Automation Lab"
-    secondaryHref="/labs"
-  />
-
+  <section class="border-b border-hairline bg-surface py-16 lg:py-24" aria-labelledby="home-title">
+    <Container>
+      <div class="grid items-center gap-12 lg:grid-cols-2">
+        <div>
+          <p class="eyebrow">Internal audit · Governance · Software</p>
+          <h1
+            id="home-title"
+            class="mt-6 font-serif text-[clamp(2.6rem,5vw,4.5rem)] leading-[1.06] tracking-tight text-navy"
+          >
+            Clear evidence.<br />Confident decisions.
+          </h1>
+          <p class="mt-6 max-w-xl text-xl leading-relaxed text-slate">
+            Internal audit, AI governance and practical software for teams accountable to boards,
+            regulators and customers.
+          </p>
+          <div class="mt-8 flex flex-wrap gap-3">
+            <Button href="/contact" size="lg">Discuss your requirements</Button>
+            <Button href="/products" variant="ghost" size="lg">Explore products</Button>
+          </div>
+          <p class="mt-6 text-sm text-slate">
+            Kenya and East Africa · Services scoped to your organisation
+          </p>
+        </div>
+        <HeroFilm />
+      </div>
+    </Container>
+  </section>
+  <Section tone="paper" aria-labelledby="proof-title" class="border-b border-hairline">
+    <div class="grid gap-8 lg:grid-cols-2">
+      <div>
+        <p class="eyebrow">See the work</p><h2
+          id="proof-title"
+          class="mt-4 font-serif text-3xl text-navy"
+        >
+          Evidence you can inspect.
+        </h2>
+      </div>
+      <div>
+        <p class="text-lg text-slate">
+          Explore our working products, review a sample audit finding and see how evidence connects
+          to action.
+        </p>
+        <div class="mt-5 flex flex-wrap gap-6">
+          <a href="/sample-report">View sample finding →</a><a href="/about#how-we-work"
+            >Review our approach →</a
+          >
+        </div>
+      </div>
+    </div>
+  </Section>
+  <Section tone="surface" aria-labelledby="products-title">
+    <div class="mb-10">
+      <p class="eyebrow">Products</p><h2
+        id="products-title"
+        class="mt-4 font-serif text-4xl text-navy"
+      >
+        Your work. The right workspace.
+      </h2><p class="mt-4 text-slate">Open a product directly, or explore our services below.</p>
+    </div>
+    <ProductLinks />
+  </Section>
   <Section tone="surface" aria-labelledby="services-title" class="border-b border-hairline">
     <div class="reveal mx-auto max-w-3xl text-center">
       <p class="eyebrow is-centred">What we do</p>
@@ -63,18 +115,18 @@ const faqs: FaqItem[] = [
         id="services-title"
         class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
       >
-        Six connected services. One clear system.
+        Specialist support where you need it.
       </h2>
       <p class="mt-5 text-lg text-slate">
-        Start with what is most urgent. The rest of the system is ready when your team is, not
-        before, so you are never paying for capability you have not grown into yet.
+        Five service lines, scoped to your priorities. Software is available separately through our
+        products.
       </p>
     </div>
 
     <div class="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {
-        SERVICES.map((s, i) => (
-          <a href={s.href} class="reveal group premium-card no-underline">
+        SERVICES.filter((s) => s.slug !== 'audit-os').map((s, i) => (
+          <a href={s.href} class="group flex flex-col border-t border-hairline py-6 no-underline">
             <span class="text-sm font-semibold tracking-[0.16em] text-gold uppercase">
               {String(i + 1).padStart(2, '0')}
             </span>
@@ -98,7 +150,7 @@ const faqs: FaqItem[] = [
           id="experience-title"
           class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
         >
-          Built to fit your team, not to become another system to babysit.
+          From fieldwork to follow-up.
         </h2>
       </div>
       <div class="lg:col-span-7">
@@ -182,7 +234,7 @@ const faqs: FaqItem[] = [
         id="home-faq"
         class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
       >
-        Questions before you book
+        Questions before you enquire
       </h2>
     </div>
     <Faq items={faqs} class="reveal mt-10 max-w-3xl" />
@@ -190,10 +242,10 @@ const faqs: FaqItem[] = [
   </Section>
 
   <CtaSection
-    eyebrow="Book a demo"
-    title="See assurance designed like a product, not a pile of files"
-    body="Book a demo and we will map Murikah to your audit universe, your regulator and your board."
-    secondaryLabel="Contact us"
-    secondaryHref="/contact"
+    eyebrow="Discuss your requirements"
+    title="Start with the work that matters most"
+    body="Tell us what you need. We will respond within two working days."
+    secondaryLabel="Explore products"
+    secondaryHref="/products"
   />
 </BaseLayout>
