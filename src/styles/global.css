@@ -451,160 +451,166 @@ html.cms-overlay-open {
   --marketing-footer-padding: 0.5rem;
 }
 
-/* ---- Obsidian Glass -------------------------------------------------------
-   Public marketing pages only. Product workspaces use their own layouts and
-   namespaced palettes, so this atmosphere never leaks into CMS, GRC, Tutor or
-   ENGR. The canvas stays grayscale; aged brass is the single scarce signal. */
-.marketing-shell.obsidian-glass {
-  color-scheme: dark;
+/* ---- Ceramic Ink × Glacier Blue -----------------------------------------
+   Public marketing pages only. Ceramic white provides the reading field;
+   deep ink anchors navigation and type; glacier blue is atmospheric light,
+   never a competing decorative brand. Product workspaces keep their own
+   namespaced systems. */
+.marketing-shell.ceramic-glacier {
+  color-scheme: light;
 
-  --color-obsidian: #08090c;
-  --color-header-bg: rgba(8, 9, 12, 0.76);
-  --color-header-veil: rgba(17, 19, 24, 0.94);
-  --color-demo-button-bg: #f4f1e8;
+  --color-obsidian: #041528;
+  --color-header-bg: #071d35;
+  --color-header-veil: #0c2946;
+  --color-demo-button-bg: #071d35;
+  --color-navy: #071d35;
+  --color-navy-deep: #041528;
+  --color-ink: #17283b;
+  --color-graphite: #31465b;
+  --color-slate: #53667a;
+  --color-ivory: #f5f9fc;
+  --color-porcelain: #ffffff;
+  --color-stone: #e4eff6;
+  --color-hairline: #cadbe7;
+  --color-paper: #f5f9fc;
+  --color-surface: #ffffff;
+  --color-paper-shade: #eaf3f9;
+  --color-brass: #b78b32;
+  --color-brass-deep: #7b5c1d;
+  --color-brass-soft: #e4d2a4;
+  --color-gold: #8a671f;
+  --color-gold-deep: #73561b;
+  --color-champagne: #e4d2a4;
+  --color-blue: #155b91;
+  --color-blue-deep: #0b3f69;
 
-  /* On the dark canvas, the legacy `navy` role becomes pearl foreground. */
-  --color-navy: #f6f4ee;
-  --color-navy-deep: #ffffff;
-  --color-ink: #f6f4ee;
-  --color-graphite: #d7d6d2;
-  --color-slate: #b8bac2;
-
-  /* Existing light-surface utilities become translucent glass planes. */
-  --color-ivory: rgba(8, 9, 12, 0.82);
-  --color-porcelain: rgba(255, 255, 255, 0.075);
-  --color-stone: rgba(255, 255, 255, 0.105);
-  --color-hairline: rgba(255, 255, 255, 0.18);
-  --color-paper: rgba(8, 9, 12, 0.82);
-  --color-surface: rgba(255, 255, 255, 0.075);
-  --color-paper-shade: rgba(255, 255, 255, 0.04);
-
-  --color-brass: #b89a55;
-  --color-brass-deep: #d0b56e;
-  --color-brass-soft: #d7c690;
-  --color-gold: #b89a55;
-  --color-gold-deep: #d0b56e;
-  --color-champagne: #d7c690;
-  --color-blue: #d9dde4;
-  --color-blue-deep: #ffffff;
-
-  background-color: #08090c;
+  background-color: #f5f9fc;
   background-image:
-    radial-gradient(circle at 78% 8%, rgba(184, 154, 85, 0.13), transparent 27rem),
-    radial-gradient(circle at 7% 48%, rgba(255, 255, 255, 0.055), transparent 31rem),
-    linear-gradient(145deg, #08090c 0%, #111318 54%, #08090c 100%);
+    radial-gradient(circle at 86% 8%, rgba(97, 188, 232, 0.17), transparent 31rem),
+    radial-gradient(circle at 8% 34%, rgba(202, 226, 241, 0.4), transparent 35rem),
+    linear-gradient(180deg, #ffffff 0%, #f5f9fc 70%, #eef6fb 100%);
   background-attachment: fixed;
 }
 
-.marketing-shell.obsidian-glass > header {
-  backdrop-filter: blur(24px) saturate(125%);
-  -webkit-backdrop-filter: blur(24px) saturate(125%);
-  box-shadow:
-    inset 0 -1px rgba(255, 255, 255, 0.05),
-    0 12px 34px rgba(0, 0, 0, 0.2);
+/* The navigation is an opaque landmark at every breakpoint. */
+.marketing-shell.ceramic-glacier > header,
+.marketing-shell.ceramic-glacier #mobile-menu {
+  background: #071d35;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 10px 30px rgba(7, 29, 53, 0.13);
 }
 
-.marketing-shell.obsidian-glass .desktop-nav-menu > div,
-.marketing-shell.obsidian-glass .newsletter-panel {
-  backdrop-filter: blur(28px) saturate(120%);
-  -webkit-backdrop-filter: blur(28px) saturate(120%);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.1),
-    0 24px 60px rgba(0, 0, 0, 0.34);
+.marketing-shell.ceramic-glacier .desktop-nav-menu > div,
+.marketing-shell.ceramic-glacier .newsletter-panel {
+  background: #0c2946;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 24px 60px rgba(4, 21, 40, 0.22);
 }
 
-.marketing-shell.obsidian-glass .hero-luxe {
+.marketing-shell.ceramic-glacier .ceramic-hero,
+.marketing-shell.ceramic-glacier .hero-luxe {
   background:
-    radial-gradient(circle at 12% 16%, rgba(184, 154, 85, 0.12), transparent 24rem),
-    linear-gradient(150deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+    radial-gradient(circle at 82% 18%, rgba(99, 192, 236, 0.22), transparent 25rem),
+    radial-gradient(circle at 65% 72%, rgba(213, 235, 247, 0.55), transparent 26rem),
+    linear-gradient(145deg, #ffffff 0%, #f7fbfe 52%, #edf7fc 100%);
 }
 
-.marketing-shell.obsidian-glass .navy-rich {
-  background-color: #08090c;
+.marketing-shell.ceramic-glacier main > .bg-surface:not(.ceramic-hero) {
+  background:
+    radial-gradient(circle at 94% 12%, rgba(162, 213, 239, 0.11), transparent 24rem), #ffffff;
+}
+
+.marketing-shell.ceramic-glacier .navy-rich {
+  background-color: #071d35;
   background-image:
-    radial-gradient(100% 125% at 50% -25%, rgba(38, 42, 52, 0.72), transparent 58%),
-    linear-gradient(180deg, #111318 0%, #08090c 100%);
+    radial-gradient(100% 135% at 72% -30%, rgba(77, 169, 216, 0.25), transparent 58%),
+    linear-gradient(180deg, #0b2a49 0%, #071d35 100%);
 }
 
-.marketing-shell.obsidian-glass .premium-card,
-.marketing-shell.obsidian-glass .rounded-card:is(.bg-surface, .bg-paper) {
+/* Glass is selective: raised cards only, never navigation or reading fields. */
+.marketing-shell.ceramic-glacier .premium-card,
+.marketing-shell.ceramic-glacier .rounded-card:is(.bg-surface, .bg-paper) {
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.045)),
-    rgba(12, 14, 18, 0.64);
-  border-color: rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(22px) saturate(118%);
-  -webkit-backdrop-filter: blur(22px) saturate(118%);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.97), rgba(239, 247, 252, 0.86)),
+    rgba(255, 255, 255, 0.9);
+  border-color: rgba(101, 145, 176, 0.24);
+  backdrop-filter: blur(18px) saturate(112%);
+  -webkit-backdrop-filter: blur(18px) saturate(112%);
   box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.11),
-    0 22px 55px rgba(0, 0, 0, 0.18);
+    inset 0 1px rgba(255, 255, 255, 0.94),
+    0 18px 46px rgba(7, 29, 53, 0.08);
 }
 
-.marketing-shell.obsidian-glass .premium-card:hover,
-.marketing-shell.obsidian-glass .rounded-card:is(.bg-surface, .bg-paper):hover {
-  border-color: rgba(184, 154, 85, 0.5);
+.marketing-shell.ceramic-glacier .premium-card:hover,
+.marketing-shell.ceramic-glacier .rounded-card:is(.bg-surface, .bg-paper):hover {
+  border-color: rgba(21, 91, 145, 0.38);
   box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.14),
-    0 28px 64px rgba(0, 0, 0, 0.26);
+    inset 0 1px #ffffff,
+    0 24px 58px rgba(7, 29, 53, 0.12);
 }
 
-/* Pearl action, dark ink: one bright control against the smoked canvas. */
-.marketing-shell.obsidian-glass .btn-primary,
-.marketing-shell.obsidian-glass .on-dark .btn-primary {
-  background: #f4f1e8;
-  color: #101116;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.72),
-    0 10px 30px rgba(0, 0, 0, 0.24);
-}
-
-.marketing-shell.obsidian-glass .btn-primary:hover,
-.marketing-shell.obsidian-glass .on-dark .btn-primary:hover {
-  background: #ffffff;
-  color: #08090c;
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.82),
-    0 16px 38px rgba(0, 0, 0, 0.32);
-}
-
-.marketing-shell.obsidian-glass .btn-secondary,
-.marketing-shell.obsidian-glass .btn-ghost {
-  color: #f6f4ee;
-  background: rgba(255, 255, 255, 0.055);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-}
-
-.marketing-shell.obsidian-glass .btn-secondary:hover,
-.marketing-shell.obsidian-glass .btn-ghost:hover {
+.marketing-shell.ceramic-glacier .btn-primary {
+  background: #071d35;
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.105);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+  border-color: rgba(183, 139, 50, 0.55);
 }
 
-/* `text-paper` means dark canvas in normal sections. Dark chrome needs pearl. */
-.marketing-shell.obsidian-glass .on-dark {
-  --color-paper: #f6f4ee;
+.marketing-shell.ceramic-glacier .btn-primary:hover {
+  background: #0b3f69;
+  color: #ffffff;
+}
+
+/* The header action follows the selected Ceramic Ink concept. */
+.marketing-shell.ceramic-glacier > header .btn-primary {
+  background: #d1aa58;
+  color: #071d35;
+  border-color: #e4c986;
+  box-shadow: 0 8px 22px rgba(4, 21, 40, 0.2);
+}
+
+.marketing-shell.ceramic-glacier > header .btn-primary:hover {
+  background: #e1c37f;
+  color: #041528;
+}
+
+.marketing-shell.ceramic-glacier .btn-secondary,
+.marketing-shell.ceramic-glacier .btn-ghost {
+  color: #071d35;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: inset 0 0 0 1px #7892a6;
+}
+
+.marketing-shell.ceramic-glacier .btn-secondary:hover,
+.marketing-shell.ceramic-glacier .btn-ghost:hover {
+  color: #041528;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(21, 91, 145, 0.45);
+}
+
+/* Dark chrome always receives a local pearl foreground reset. */
+.marketing-shell.ceramic-glacier .on-dark {
+  --color-paper: #f7fbfe;
   --color-surface: #ffffff;
-  --color-navy: #101116;
+  --color-navy: #071d35;
 }
 
-.marketing-shell.obsidian-glass .grain::after {
-  opacity: 0.075;
+.marketing-shell.ceramic-glacier .grain::after {
+  opacity: 0.035;
 }
 
 /* User-selected high contrast remains authoritative over the theme. */
-.a11y-high-contrast .marketing-shell.obsidian-glass {
-  --color-navy: #ffffff;
-  --color-ink: #ffffff;
-  --color-slate: #f0f0f0;
-  --color-paper: #000000;
-  --color-surface: #111111;
-  --color-paper-shade: #080808;
-  --color-stone: #1a1a1a;
-  --color-hairline: #ffffff;
-  --color-blue: #ffffff;
-  --color-blue-deep: #ffffff;
-  background: #000000;
+.a11y-high-contrast .marketing-shell.ceramic-glacier {
+  --color-navy: #06172b;
+  --color-ink: #06172b;
+  --color-slate: #27394c;
+  --color-paper: #ffffff;
+  --color-surface: #ffffff;
+  --color-paper-shade: #edf3f7;
+  --color-stone: #e2e9ee;
+  --color-hairline: #617386;
+  --color-blue: #073f6b;
+  --color-blue-deep: #062f50;
+  background: #ffffff;
 }
