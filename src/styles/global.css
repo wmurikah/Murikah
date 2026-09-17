@@ -444,3 +444,9 @@ html {
 html.cms-overlay-open {
   overflow: hidden;
 }
+
+/* Compact public-site rhythm; product workspace tokens remain independent. */
+:root {
+  --marketing-section-padding: clamp(1.5rem, 2.5vw, 2rem);
+  --marketing-footer-padding: 0.5rem;
+}
