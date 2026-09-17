@@ -52,7 +52,7 @@ const security = [
   'A full audit log of every action in the platform',
   'Encryption in transit and at rest',
   'Defined data retention, set to your policy',
-  'Registration with the Office of the Data Protection Commissioner (ODPC)',
+  'Request the applicable privacy and processing documentation',
   'Clear controller and processor terms in writing',
 ];
 
@@ -70,7 +70,7 @@ const faqs: FaqItem[] = [
   {
     question: 'Is our audit data secure, and where is it stored?',
     answer:
-      'Access is role-based, every action is logged, and data is encrypted in transit and at rest, with retention set to your policy. We operate under clear controller and processor terms and are registered with the ODPC. {{DATA: confirm hosting region and data-residency commitments before launch}}',
+      'Ask us for the hosting locations, data processing terms, access controls, retention and export arrangements for your deployment. Confirm any residency requirements with us before uploading sensitive information.',
   },
   {
     question: 'Does it work across multiple entities and countries?',
@@ -90,11 +90,12 @@ const faqs: FaqItem[] = [
   metaTitle="Affordable internal audit software | Murikah"
   metaDescription="Assurance OS, Murikah's assurance platform, runs work papers, findings, remediation and board reporting in one place, with an AI assistant. Built for mid-market audit teams."
   heading="The platform your audit work runs on."
-  intro="Assurance OS is internal audit software built for mid-market teams. It holds your engagements and work papers with review and sign-off, tracks findings and remediation with automatic follow-up and overdue escalation, and generates board and committee reporting from live data, so your quarterly pack is a click, not a week. An embedded AI assistant helps with drafting and analysis, with role-based permissions and full audit logging of every action. It runs on a modern, low-cost edge stack, which is how it serves mid-market price points starting at KES 15,000 a month rather than enterprise licence fees."
-  secondaryCta={{ label: 'See Assurance', href: '/assurance' }}
+  intro="Plan engagements, review work papers, track findings and prepare committee reports in one workspace. Assurance OS brings the audit workflow together in Murikah GRC, with an AI assistant to support drafting and analysis."
+  primaryCta={{ label: 'Request a demo', href: '/contact?intent=demo' }}
+  secondaryCta={{ label: 'Open GRC', href: 'https://grc.murikah.com' }}
   faqs={faqs}
   closingTitle="Put your audit on a system built to be proven"
-  closingBody="Book a demo and we will show Assurance OS against your own engagements and reporting."
+  closingBody="Request a demonstration of the audit workflow and discuss your reporting needs."
 >
   <Section tone="paper" aria-labelledby="what-it-does">
     <h2
@@ -182,7 +183,8 @@ const faqs: FaqItem[] = [
       Pricing
     </h2>
     <p class="mt-3 max-w-prose text-slate">
-      Indicative monthly ranges, validated on enquiry against your size and needs. No long lock-in.
+      Indicative monthly ranges, validated on enquiry against your size and needs. Contract terms
+      are confirmed in writing.
     </p>
     <div class="mt-8 grid gap-5 sm:grid-cols-3 sm:gap-6">
       {
