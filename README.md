@@ -6,7 +6,6 @@ Murikah is an MIT-licensed software monorepo for operational assurance, governan
 
 The repository contains the applications, shared platform code, database schemas, tests, deployment configuration and product documentation used to build and operate the Murikah platform. It is actively maintained and is intended to be useful both as deployable software and as a reference implementation for teams building practical governance and operational systems.
 
-> Pronounced _moo-REE-kah_ (rhymes with Eureka).
 
 ## What is in this repository
 
