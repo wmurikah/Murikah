@@ -31,8 +31,8 @@ const groupActive = (item: NavItem) =>
 // soft ivory and brighten to full ivory on hover and on the active group, with
 // brass kept to the underline, so the header reads as open, calm and premium.
 const navLink =
-  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-paper/[0.82] transition-colors duration-150 hover:text-paper focus-visible:text-paper aria-[current=page]:text-paper ' +
-  'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[0.7rem] after:h-px after:origin-left after:scale-x-0 after:bg-brass after:transition-transform after:duration-200 ' +
+  'relative inline-flex min-h-[2.75rem] items-center gap-1 px-0.5 text-sm font-medium text-paper/[0.82] transition-[color,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:text-paper focus-visible:text-paper aria-[current=page]:text-paper ' +
+  'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[0.7rem] after:h-px after:origin-center after:scale-x-0 after:bg-brass after:transition-transform after:duration-300 after:ease-[cubic-bezier(0.22,1,0.36,1)] ' +
   'hover:after:scale-x-100 focus-visible:after:scale-x-100 group-hover:after:scale-x-100 group-focus-within:after:scale-x-100 aria-[current=page]:after:scale-x-100';
 ---
 
@@ -41,9 +41,9 @@ const navLink =
     the old near-black, on a fine ivory hairline at 8%. The transparent logo
     sits directly on it, so the top reads as integrated rather than boxed-in. */
 }
-<header class="on-dark sticky top-0 z-50 border-b border-paper/[0.08] bg-header-bg">
+<header class="site-header on-dark sticky top-0 z-50 border-b border-paper/[0.08] bg-header-bg">
   <Container>
-    <div class="flex h-16 items-center justify-between lg:h-[4.5rem]">
+    <div class="site-header-row flex items-center justify-between">
       {/* Logo, top-left, links home (Jakob's Law). The white-and-brass lockup. */}
       <a href="/" class="inline-flex rounded-md no-underline" aria-label="Murikah, home">
         {
@@ -64,7 +64,7 @@ const navLink =
         /* Desktop primary nav, three groups mapped straight from NAV. Inline
           text links, no enclosing pill, with calm spacing between groups. */
       }
-      <nav aria-label="Primary" class="hidden items-center gap-5 lg:flex">
+      <nav aria-label="Primary" class="site-primary-nav hidden items-center lg:flex">
         {
           NAV.map((item) =>
             item.children ? (
@@ -102,7 +102,7 @@ const navLink =
                 {/* Disclosure menu. The pt-3 wrapper is a transparent hover
                     bridge so the pointer never crosses a dead gap. */}
                 <div
-                  class="desktop-nav-menu invisible absolute top-full left-1/2 z-50 w-[26rem] -translate-x-1/2 pt-3 opacity-0 transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+                  class="desktop-nav-menu invisible absolute top-full left-1/2 z-50 w-[26rem] -translate-x-1/2 translate-y-1 scale-[0.985] pt-3 opacity-0 transition-[opacity,transform,visibility] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:scale-100 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100"
                   data-desktop-nav-menu
                 >
                   <div class="rounded-[1.4rem] bg-header-veil p-2 shadow-pop ring-1 ring-white/10">
@@ -343,6 +343,14 @@ const navLink =
 </script>
 
 <style>
+  .site-header-row {
+    min-height: clamp(4rem, 5.2vw, 4.5rem);
+  }
+
+  .site-primary-nav {
+    gap: clamp(1rem, 2.2vw, 2rem);
+  }
+
   .desktop-nav-group[data-dismissed='true'] .desktop-nav-menu {
     visibility: hidden !important;
     opacity: 0 !important;
