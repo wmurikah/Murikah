@@ -12,5 +12,7 @@
     }
   },
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist", ".wrangler", "eslint.config.js"]
+  // Tutor has its own package.json, dependencies and Wrangler deployment.
+  // Do not type-check its Workers against the main Astro app dependency tree.
+  "exclude": ["dist", ".wrangler", "eslint.config.js", "tutor/**"]
 }
