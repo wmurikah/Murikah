@@ -13,14 +13,33 @@ are valid and must not make a deployment fail.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import sys
 
 
 TARGET = Path(__file__).resolve().parent / "src" / "index.ts"
-PREPARED_MARKERS = (
-    "const isWebSocketUpgrade =",
-    'response.status === 101 || request.headers.get("upgrade")?.toLowerCase() === "websocket"',
-)
+
+
+def normalized_source(text: str) -> str:
+    """Ignore source formatting while preserving the proxy's semantics."""
+    return re.sub(r"\s+", "", text).replace('"', "'")
+
+
+def has_websocket_passthrough(text: str) -> bool:
+    """Recognize the guarded proxy block regardless of Prettier's layout."""
+    source = normalized_source(text)
+    fetch = "constresponse=awaittutor.fetch(request);"
+    headers = "constheaders=newHeaders(response.headers);"
+    start = source.find(fetch)
+    end = source.find(headers, start + len(fetch)) if start >= 0 else -1
+    if start < 0 or end < 0:
+        return False
+
+    guard = source[start + len(fetch) : end]
+    checks_upgrade = "request.headers.get('upgrade')?.toLowerCase()==='websocket'" in guard
+    checks_status = "response.status===101" in guard
+    returns_original = "returnresponse;" in guard
+    return checks_upgrade and checks_status and returns_original
 
 OLD = '''        const response = await tutor.fetch(request);\n        const headers = new Headers(response.headers);\n        headers.set("x-murikah-tutor-runtime", "cloudflare-container");\n        return new Response(response.body, {\n          status: response.status,\n          statusText: response.statusText,\n          headers,\n        });\n'''
 
@@ -30,10 +49,9 @@ NEW = '''        const response = await tutor.fetch(request);\n        // A Work
 def main() -> int:
     text = TARGET.read_text(encoding="utf-8")
 
-    # PR #303 already introduced a compact, semantically equivalent WebSocket
-    # pass-through. Treat either implementation as prepared instead of insisting
-    # on one exact source formatting.
-    if any(marker in text for marker in PREPARED_MARKERS):
+    # Treat compact and expanded implementations as prepared. Prettier may
+    # change quotes and line wrapping, neither of which changes the guard.
+    if has_websocket_passthrough(text):
         print("[Murikah Tutor] Cloudflare WebSocket pass-through already prepared.")
         return 0
 
