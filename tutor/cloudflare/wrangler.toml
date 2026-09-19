@@ -46,8 +46,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v19 activates D1-backed guest quotas and private R2 checkpoints for /app/data.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v19" }
+# v20 stores persistence file mtimes at JS-safe millisecond precision.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v20" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
