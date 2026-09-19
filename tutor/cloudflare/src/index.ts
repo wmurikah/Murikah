@@ -410,13 +410,15 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     const uid = validPersistenceId(url.searchParams.get('uid'));
     if (!uid) return persistenceJson({ error: 'invalid_guest' }, 400);
     const row = await env.TUTOR_DB.prepare(
-      'SELECT expires_at, used_count, prompt_limit FROM guest_sessions WHERE uid = ?',
+      'SELECT s.expires_at, s.used_count + COUNT(p.request_id) AS used_count, s.prompt_limit ' +
+        'FROM guest_sessions s LEFT JOIN guest_prompts p ON p.uid = s.uid ' +
+        'WHERE s.uid = ? GROUP BY s.uid, s.expires_at, s.used_count, s.prompt_limit',
     )
       .bind(uid)
       .first<{ expires_at: number; used_count: number; prompt_limit: number }>();
     const expired = !row || row.expires_at <= now;
-    const used = row?.used_count || 0;
-    const limit = row?.prompt_limit || 7;
+    const used = Number(row?.used_count || 0);
+    const limit = Number(row?.prompt_limit || 7);
     return persistenceJson({
       guest: true,
       used,
@@ -431,27 +433,46 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     const uid = validPersistenceId(body.uid);
     const requestId = validPersistenceId(body.request_id);
     if (!uid || !requestId) return persistenceJson({ error: 'invalid_guest_prompt' }, 400);
-    try {
-      await env.TUTOR_DB.prepare(
-        'INSERT INTO guest_prompts(uid, request_id, created_at) VALUES (?, ?, ?)',
-      )
-        .bind(uid, requestId, now)
-        .run();
+
+    // One conditional write enforces expiry, idempotency and the seven-prompt
+    // ceiling without CREATE TRIGGER statements. D1 serializes the write, so
+    // concurrent tabs cannot both claim the final remaining prompt.
+    const inserted = await env.TUTOR_DB.prepare(
+      'INSERT OR IGNORE INTO guest_prompts(uid, request_id, created_at) ' +
+        'SELECT ?, ?, ? WHERE EXISTS (' +
+        'SELECT 1 FROM guest_sessions s WHERE s.uid = ? AND s.expires_at > ? ' +
+        'AND s.used_count + (SELECT COUNT(*) FROM guest_prompts gp WHERE gp.uid = s.uid) < s.prompt_limit' +
+        ')',
+    )
+      .bind(uid, requestId, now, uid, now)
+      .run();
+    if ((inserted.meta?.changes || 0) === 1) {
       return persistenceJson({ ok: true, charged: true });
-    } catch (error) {
-      const detail = errorText(error);
-      if (detail.includes('guest_prompt_limit')) {
-        return persistenceJson({ error: 'guest_prompt_limit' }, 403);
-      }
-      if (detail.includes('guest_session_expired')) {
-        return persistenceJson({ error: 'guest_session_expired' }, 403);
-      }
-      if (detail.includes('UNIQUE constraint failed')) {
-        return persistenceJson({ ok: true, charged: false });
-      }
-      console.error('Tutor D1 guest reserve failed', error);
-      return persistenceJson({ error: 'persistence_failed' }, 503);
     }
+
+    const duplicate = await env.TUTOR_DB.prepare(
+      'SELECT 1 AS present FROM guest_prompts WHERE uid = ? AND request_id = ?',
+    )
+      .bind(uid, requestId)
+      .first<{ present: number }>();
+    if (duplicate) return persistenceJson({ ok: true, charged: false });
+
+    const state = await env.TUTOR_DB.prepare(
+      'SELECT s.expires_at, s.used_count + COUNT(p.request_id) AS used_count, s.prompt_limit ' +
+        'FROM guest_sessions s LEFT JOIN guest_prompts p ON p.uid = s.uid ' +
+        'WHERE s.uid = ? GROUP BY s.uid, s.expires_at, s.used_count, s.prompt_limit',
+    )
+      .bind(uid)
+      .first<{ expires_at: number; used_count: number; prompt_limit: number }>();
+    if (!state || state.expires_at <= now) {
+      return persistenceJson({ error: 'guest_session_expired' }, 403);
+    }
+    if (Number(state.used_count || 0) >= Number(state.prompt_limit || 7)) {
+      return persistenceJson({ error: 'guest_prompt_limit' }, 403);
+    }
+
+    console.error('Tutor D1 guest reserve failed without a classified state');
+    return persistenceJson({ error: 'persistence_failed' }, 503);
   }
 
   if (route === '/guest/release' && request.method === 'POST') {
