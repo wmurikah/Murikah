@@ -12,6 +12,7 @@ EXPECTED_D1 = {
     "binding": "TUTOR_DB",
     "database_name": "murikah-tutor-prod",
     "database_id": "e8916f9a-fc2e-4bc6-925f-76c6c401c95b",
+    "migrations_dir": "migrations",
 }
 EXPECTED_R2 = {
     "binding": "TUTOR_FILES",
@@ -34,7 +35,7 @@ def main() -> int:
     failures: list[str] = []
 
     if not exact_match(config.get("d1_databases"), EXPECTED_D1):
-        failures.append("TUTOR_DB must bind exactly to murikah-tutor-prod and its approved database id")
+        failures.append("TUTOR_DB must bind to murikah-tutor-prod with its approved database id and migrations directory")
     if not exact_match(config.get("r2_buckets"), EXPECTED_R2):
         failures.append("TUTOR_FILES must bind exactly to the private murikah-tutor-files-prod bucket")
     if config.get("keep_vars") is not True:
