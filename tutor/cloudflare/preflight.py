@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v19"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v20"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -447,8 +447,16 @@ def main() -> int:
         ("CREATE TRIGGER",),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0002_persistence_mtime_ms.sql",
+        (
+            "ALTER TABLE persistence_objects RENAME COLUMN mtime_ns TO mtime_ms",
+        ),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
+            "x-murikah-object-mtime-ms",
+            "mtime_ms",
             "INSERT OR IGNORE INTO guest_prompts",
             "s.used_count + COUNT(p.request_id) AS used_count",
             "guest_prompt_limit",
@@ -465,6 +473,8 @@ def main() -> int:
             "def sync_loop()",
             "def guest_reserve(",
             "def guest_status(",
+            "mtime_ms = max(0, int(mtime_ns) // 1_000_000)",
+            "x-murikah-object-mtime-ms",
         ),
     )
     require_markers(
