@@ -80,5 +80,25 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(winner.name, "fallback")
         await fast.close_stream(winner.stream)
 
+    async def test_followup_history_is_valid_gemini_conversation(self):
+        payload = fast._gemini_payload([
+            {"role": "system", "content": "Teach clearly."},
+            {"role": "user", "content": "Teach me data science"},
+            {"role": "assistant", "content": "Data science combines programming and statistics."},
+            {"role": "user", "content": "I am a novice in programming and statistics"},
+        ], 600)
+        self.assertEqual(
+            [item["role"] for item in payload["contents"]],
+            ["user", "model", "user"],
+        )
+        self.assertEqual(
+            payload["contents"][-1]["parts"][0]["text"],
+            "I am a novice in programming and statistics",
+        )
+        self.assertEqual(
+            payload["systemInstruction"]["parts"][0]["text"],
+            "Teach clearly.",
+        )
+
 
 if __name__ == "__main__": unittest.main()
