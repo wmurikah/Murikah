@@ -41,21 +41,23 @@ def validate_persistence_migration_fixture() -> None:
     Cloudflare Workers Builds currently supplies Python without the optional
     _sqlite3 extension, so preflight must not import or execute sqlite3. The
     migration itself is applied and validated by Wrangler against remote D1.
-    Here we fail closed on the constructs that caused the production failure
-    and on obvious truncation/shape errors before Wrangler is invoked.
+    Here we fail closed on constructs that caused the production failure and
+    on obvious truncation/shape errors before Wrangler is invoked.
     """
     relative = "tutor/cloudflare/migrations/0001_tutor_persistence.sql"
     content = require(relative)
     if not content:
         return
 
-    sql = re.sub(r"(?m)--.*$", "", content)
-    if re.search(r"(?i)\\bCREATE\\s+TRIGGER\\b", sql):
+    sql = "\n".join(line.split("--", 1)[0] for line in content.splitlines())
+    normalized = " ".join(sql.split()).upper()
+
+    if "CREATE TRIGGER" in normalized:
         failures.append(
             f"{relative} contains a trigger definition; Wrangler D1 migrations previously "
             "rejected multi-statement trigger bodies with SQLITE_ERROR incomplete input"
         )
-    if re.search(r"(?i)\\bBEGIN\\b", sql):
+    if " BEGIN " in f" {normalized} ":
         failures.append(
             f"{relative} contains a BEGIN block; keep D1 migrations as simple standalone statements"
         )
@@ -68,17 +70,16 @@ def validate_persistence_migration_fixture() -> None:
         "guest_prompts",
     )
     for table in required_tables:
-        pattern = rf"(?i)CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+{re.escape(table)}\\s*\\("
-        if not re.search(pattern, sql):
+        marker = f"CREATE TABLE IF NOT EXISTS {table.upper()} ("
+        if marker not in normalized:
             failures.append(f"{relative} missing table definition: {table}")
 
     if sql.count("(") != sql.count(")"):
         failures.append(f"{relative} has unbalanced parentheses")
     if not sql.rstrip().endswith(";"):
         failures.append(f"{relative} does not end with a complete SQL statement")
-    if "schema_version" not in sql:
+    if "SCHEMA_VERSION" not in normalized:
         failures.append(f"{relative} missing schema_version marker")
-
 
 def validate_bootstrap_fixture() -> None:
     """Exercise the Cloudflare settings bootstrap without real provider secrets."""
