@@ -185,30 +185,26 @@ async function upsertLearningActor(
   guestSessionId: string,
   now: number,
 ): Promise<void> {
-  await env.TUTOR_DB.prepare(
-    'INSERT INTO tutor_actors(actor_id, actor_type, username, guest_session_id, created_at, updated_at, converted_at) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, NULL) ' +
-      'ON CONFLICT(actor_id) DO UPDATE SET ' +
-      'actor_type = excluded.actor_type, ' +
-      "username = CASE WHEN excluded.username <> '' THEN excluded.username ELSE tutor_actors.username END, " +
-      "guest_session_id = CASE WHEN excluded.guest_session_id <> '' THEN excluded.guest_session_id ELSE tutor_actors.guest_session_id END, " +
-      'updated_at = excluded.updated_at, ' +
-      "converted_at = CASE WHEN tutor_actors.actor_type = 'guest' AND excluded.actor_type <> 'guest' " +
-      'THEN COALESCE(tutor_actors.converted_at, excluded.updated_at) ELSE tutor_actors.converted_at END',
-  )
-    .bind(actorId, actorType, username, guestSessionId, now, now)
-    .run();
-  await env.TUTOR_DB.prepare(
-    'INSERT OR IGNORE INTO tutor_training_consent(actor_id, training_opt_in, research_opt_in, consent_version, consented_at, updated_at) ' +
-      "VALUES (?, 0, 0, '', NULL, ?)",
-  )
-    .bind(actorId, now)
-    .run();
-  await env.TUTOR_DB.prepare(
-    'INSERT OR IGNORE INTO tutor_actor_profiles(actor_id, updated_at) VALUES (?, ?)',
-  )
-    .bind(actorId, now)
-    .run();
+  await env.TUTOR_DB.batch([
+    env.TUTOR_DB.prepare(
+      'INSERT INTO tutor_actors(actor_id, actor_type, username, guest_session_id, created_at, updated_at, converted_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, NULL) ' +
+        'ON CONFLICT(actor_id) DO UPDATE SET ' +
+        'actor_type = excluded.actor_type, ' +
+        "username = CASE WHEN excluded.username <> '' THEN excluded.username ELSE tutor_actors.username END, " +
+        "guest_session_id = CASE WHEN excluded.guest_session_id <> '' THEN excluded.guest_session_id ELSE tutor_actors.guest_session_id END, " +
+        'updated_at = excluded.updated_at, ' +
+        "converted_at = CASE WHEN tutor_actors.actor_type = 'guest' AND excluded.actor_type <> 'guest' " +
+        'THEN COALESCE(tutor_actors.converted_at, excluded.updated_at) ELSE tutor_actors.converted_at END',
+    ).bind(actorId, actorType, username, guestSessionId, now, now),
+    env.TUTOR_DB.prepare(
+      'INSERT OR IGNORE INTO tutor_training_consent(actor_id, training_opt_in, research_opt_in, consent_version, consented_at, updated_at) ' +
+        "VALUES (?, 0, 0, '', NULL, ?)",
+    ).bind(actorId, now),
+    env.TUTOR_DB.prepare(
+      'INSERT OR IGNORE INTO tutor_actor_profiles(actor_id, updated_at) VALUES (?, ?)',
+    ).bind(actorId, now),
+  ]);
 }
 
 async function verifyPersistenceRequest(
