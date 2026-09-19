@@ -237,6 +237,7 @@ def _upload(rel: str, data: bytes, *, mtime_ns: int, generation: str) -> None:
             "x-murikah-object-sha256": sha,
             "x-murikah-object-mtime-ns": str(max(0, int(mtime_ns))),
             "x-murikah-object-generation": generation,
+            "x-murikah-object-size": str(len(data)),
         },
         timeout=max(20.0, min(120.0, len(data) / (1024 * 1024) * 4.0 + 20.0)),
     )
@@ -298,6 +299,10 @@ def sync_once() -> int:
         rel = _valid_relpath(path.relative_to(DATA_ROOT).as_posix())
         if _skip(rel):
             continue
+        # Mark the path as current before reading it. If a live SQLite file is
+        # momentarily busy, its previous durable version is retained rather
+        # than being pruned by this checkpoint.
+        current_paths.append(rel)
         try:
             data = _read_consistent(path)
             stat = path.stat()
@@ -306,7 +311,6 @@ def sync_once() -> int:
             print(f"[Murikah Tutor] Persistence skipped unstable file {rel}: {type(exc).__name__}.")
             continue
         sha = hashlib.sha256(data).hexdigest()
-        current_paths.append(rel)
         known = remote.get(rel) or {}
         if str(known.get("sha256") or "") == sha and int(known.get("size_bytes") or -1) == len(data):
             continue
