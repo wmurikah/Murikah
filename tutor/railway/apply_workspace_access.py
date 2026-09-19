@@ -117,9 +117,6 @@ async def validated_stream(source):
     finally:
         await close_stream(source)
 ''')
-    chat = root / "deeptutor/agents/chat/capability.py"
-    replace(chat, 'raise RuntimeError("No Tutor fast-lane provider produced a timely response")',
-            'raise RuntimeError("Tutor is temporarily busy. Please try again in a moment.")')
     print("Applied full guest workspace, shared prompt budget and public signup.")
 
 
