@@ -312,13 +312,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         customMetadata: { path, sha256: sha },
       });
       await env.TUTOR_DB.prepare(
-        'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ms, generation, updated_at) ' +
-          'VALUES (?, ?, ?, ?, ?, ?, ?) ' +
+        'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ns, mtime_ms, generation, updated_at) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
           'ON CONFLICT(path) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256, ' +
-          'size_bytes = excluded.size_bytes, mtime_ms = excluded.mtime_ms, generation = excluded.generation, ' +
+          'size_bytes = excluded.size_bytes, mtime_ns = excluded.mtime_ns, mtime_ms = excluded.mtime_ms, ' +
+          'generation = excluded.generation, ' +
           'updated_at = excluded.updated_at',
       )
-        .bind(path, key, sha, size, mtime, generation, now)
+        .bind(path, key, sha, size, mtime, mtime, generation, now)
         .run();
       return persistenceJson({ ok: true });
     }
