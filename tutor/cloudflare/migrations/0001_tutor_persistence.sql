@@ -47,46 +47,10 @@ CREATE TABLE IF NOT EXISTS guest_prompts (
 CREATE INDEX IF NOT EXISTS idx_guest_prompts_uid
   ON guest_prompts(uid);
 
-CREATE TRIGGER IF NOT EXISTS guest_prompt_guard
-BEFORE INSERT ON guest_prompts
-BEGIN
-  SELECT CASE
-    WHEN NOT EXISTS (
-      SELECT 1 FROM guest_sessions
-      WHERE uid = NEW.uid
-        AND expires_at > unixepoch()
-    )
-    THEN RAISE(ABORT, 'guest_session_expired')
-  END;
-
-  SELECT CASE
-    WHEN (
-      SELECT used_count >= prompt_limit
-      FROM guest_sessions
-      WHERE uid = NEW.uid
-    )
-    THEN RAISE(ABORT, 'guest_prompt_limit')
-  END;
-END;
-
-CREATE TRIGGER IF NOT EXISTS guest_prompt_charge
-AFTER INSERT ON guest_prompts
-BEGIN
-  UPDATE guest_sessions
-  SET used_count = used_count + 1,
-      updated_at = unixepoch()
-  WHERE uid = NEW.uid;
-END;
-
-CREATE TRIGGER IF NOT EXISTS guest_prompt_release
-AFTER DELETE ON guest_prompts
-BEGIN
-  UPDATE guest_sessions
-  SET used_count = CASE WHEN used_count > 0 THEN used_count - 1 ELSE 0 END,
-      updated_at = unixepoch()
-  WHERE uid = OLD.uid;
-END;
-
+-- Keep the migration intentionally trigger-free. Wrangler's D1 migration
+-- execution path splits SQL statements and rejected the previous multi-
+-- statement CREATE TRIGGER bodies with "incomplete input". Guest quota
+-- admission is enforced atomically by a conditional INSERT in the Worker.
 INSERT INTO persistence_meta(key, value, updated_at)
 VALUES ('schema_version', '1', unixepoch())
 ON CONFLICT(key) DO UPDATE SET
