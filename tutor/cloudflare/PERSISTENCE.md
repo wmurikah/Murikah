@@ -2,7 +2,7 @@
 
 Cloudflare Container disk is disposable. Murikah Tutor therefore needs durable state outside the Container before accounts, conversations and files can be considered production-safe.
 
-The migration deliberately separates **structured state** from **file/object state** rather than treating `/app/data` as one opaque volume.
+The migration deliberately separates **structured state** from **file/object state** rather than treating `/app/data` as one opaque volume. The Container filesystem is now an execution cache only: learner prompts, answers, turn status, guest identity/quota and learning metadata are written to durable Cloudflare stores and must not exist only in the Container.
 
 ## Provisioned production resources
 
@@ -31,6 +31,25 @@ The application integration is now repository-managed rather than a dashboard-on
 - Cloudflare-managed provider configuration and the auth signing secret are excluded from R2 checkpoints because their authoritative copies remain Worker Variables/Secrets.
 
 The existing `MURIKAH_TUTOR_AUTH_SECRET` authenticates this internal bridge with a separate HMAC request protocol, timestamp window and D1 replay nonce. No additional Cloudflare secret or API token is required.
+
+## D1 learning journal
+
+`0003_tutor_learning_journal.sql` makes D1 the durable learning-data journal for Tutor. It stores:
+
+- an opaque actor id and actor type (guest/member/admin);
+- a guest session subject without persisting the internal `guest_...` compatibility username;
+- conversations and turn lifecycle state;
+- the full user prompt and full final assistant response;
+- compact extractive prompt/response summaries generated without an extra model call;
+- model/provider and latency fields where available;
+- failures, timeouts, retries and regeneration flags;
+- explicit learner-profile fields for future self-declared learning demographics;
+- explicit training/research consent, defaulting to **off**;
+- feedback records for future thumbs-up/down or quality labels.
+
+A record becomes `training_eligible=1` only when the learner has explicitly opted in and the turn completed successfully. Sensitive demographics are not inferred from conversation text. Future profile UI may collect only optional, self-declared fields such as learner level, education level, age band, country code, learner role and preferred language.
+
+Binary uploads, diagrams, books and other large objects remain in private R2; D1 stores their ownership/metadata references. This avoids abusing a relational database as blob storage while ensuring no durable user object depends on the Container filesystem.
 
 ## What DeepTutor currently places in `/app/data`
 
@@ -76,7 +95,7 @@ The persistence adapter must preserve:
 - audit/security state;
 - durable object/file manifests and migration checkpoints.
 
-Where a pinned DeepTutor subsystem still requires local SQLite semantics, the migration layer must use a safe export/import or adapter pattern rather than running that SQLite file on R2.
+Where a pinned DeepTutor subsystem still requires local SQLite semantics, that SQLite file is a compatibility execution cache. Murikah synchronously journals the learner turn in D1 before generation and journals the final answer before completion; the broader DeepTutor cache is additionally checkpointed to private R2. The migration layer must use a safe export/import or adapter pattern rather than running that SQLite file on R2.
 
 ### Worker/container boundary
 
@@ -97,10 +116,11 @@ Cloudflare dashboard Variables remain authoritative for model/service configurat
 3. **Create the persistence schema and Worker bridge** for structured state and private objects. Implemented in code.
 4. **Externalise file stores** to private R2 checkpoints with a D1 manifest. Implemented in code.
 5. **Externalise the guest quota ledger** into D1 and safely checkpoint SQLite-backed runtime state. Implemented in code.
-6. **Import** an existing snapshot only when one exists. The current production resources are empty, so the first successful checkpoint becomes the baseline.
-7. **Run staging/production verification** through sleep/wake, redeploy and one deliberate forced container replacement.
-8. **Verify** users, sessions, guest handoff, conversations, Knowledge Bases, Memory, uploads and generated outputs survive every lifecycle event.
-9. **Cut over to multi-container sharding** only after the durability tests pass; keep a rollback checkpoint until acceptance is complete.
+6. **Journal learner turns directly in D1** before generation/completion, including prompts, final answers, summaries, status, performance metadata and consent gating. Implemented in v21.
+7. **Import** an existing snapshot only when one exists. The current production resources are empty, so the first successful checkpoint becomes the baseline.
+8. **Run staging/production verification** through sleep/wake, redeploy and one deliberate forced container replacement.
+9. **Verify** users, sessions, guest handoff, conversations, Knowledge Bases, Memory, uploads and generated outputs survive every lifecycle event.
+10. **Cut over to multi-container sharding** only after the durability tests pass; keep a rollback checkpoint until acceptance is complete.
 
 ## Acceptance conditions
 

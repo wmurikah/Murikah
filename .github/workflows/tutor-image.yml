@@ -31,6 +31,13 @@ jobs:
           python tutor/scripts/preflight.py
           python tutor/cloudflare/preflight.py
 
+      - name: Validate Cloudflare Worker bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tutor/cloudflare --no-audit --no-fund
+          npm --prefix tutor/cloudflare run check
+
       - name: Compute Tutor source revision
         id: revision
         shell: bash
