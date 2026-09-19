@@ -6,7 +6,6 @@ import importlib.util
 import json
 import os
 import re
-import sqlite3
 from pathlib import Path
 import tempfile
 
@@ -37,46 +36,50 @@ def forbid_markers(relative: str, markers: tuple[str, ...]) -> None:
 
 
 def validate_persistence_migration_fixture() -> None:
-    """Keep D1 migrations simple enough for Wrangler's remote SQL runner."""
+    """Keep D1 migrations compatible with Cloudflare's build environment.
+
+    Cloudflare Workers Builds currently supplies Python without the optional
+    _sqlite3 extension, so preflight must not import or execute sqlite3. The
+    migration itself is applied and validated by Wrangler against remote D1.
+    Here we fail closed on constructs that caused the production failure and
+    on obvious truncation/shape errors before Wrangler is invoked.
+    """
     relative = "tutor/cloudflare/migrations/0001_tutor_persistence.sql"
     content = require(relative)
     if not content:
         return
-    sql_without_line_comments = re.sub(r"(?m)--.*$", "", content)
-    if re.search(r"(?i)\\bCREATE\\s+TRIGGER\\b", sql_without_line_comments):
+
+    sql = "\n".join(line.split("--", 1)[0] for line in content.splitlines())
+    normalized = " ".join(sql.split()).upper()
+
+    if "CREATE TRIGGER" in normalized:
         failures.append(
             f"{relative} contains a trigger definition; Wrangler D1 migrations previously "
             "rejected multi-statement trigger bodies with SQLITE_ERROR incomplete input"
         )
-        return
-    try:
-        connection = sqlite3.connect(":memory:")
-        connection.executescript(content)
-        tables = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-    except sqlite3.Error as exc:
-        failures.append(f"{relative} SQLite syntax fixture failed: {exc}")
-        return
-    finally:
-        try:
-            connection.close()
-        except Exception:
-            pass
-    required = {
+    if " BEGIN " in f" {normalized} ":
+        failures.append(
+            f"{relative} contains a BEGIN block; keep D1 migrations as simple standalone statements"
+        )
+
+    required_tables = (
         "persistence_meta",
         "persistence_objects",
         "persistence_replay",
         "guest_sessions",
         "guest_prompts",
-    }
-    missing = sorted(required - tables)
-    if missing:
-        failures.append(f"{relative} fixture did not create tables: {', '.join(missing)}")
+    )
+    for table in required_tables:
+        marker = f"CREATE TABLE IF NOT EXISTS {table.upper()} ("
+        if marker not in normalized:
+            failures.append(f"{relative} missing table definition: {table}")
 
+    if sql.count("(") != sql.count(")"):
+        failures.append(f"{relative} has unbalanced parentheses")
+    if not sql.rstrip().endswith(";"):
+        failures.append(f"{relative} does not end with a complete SQL statement")
+    if "SCHEMA_VERSION" not in normalized:
+        failures.append(f"{relative} missing schema_version marker")
 
 def validate_bootstrap_fixture() -> None:
     """Exercise the Cloudflare settings bootstrap without real provider secrets."""
