@@ -255,7 +255,7 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
   if (route === '/manifest' && request.method === 'GET') {
     const result = await env.TUTOR_DB.prepare(
-      'SELECT path, sha256, size_bytes, mtime_ns, updated_at FROM persistence_objects ORDER BY path',
+      'SELECT path, sha256, size_bytes, mtime_ms, updated_at FROM persistence_objects ORDER BY path',
     ).all();
     return persistenceJson({ items: result.results || [] });
   }
@@ -266,14 +266,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
     if (request.method === 'GET') {
       const row = await env.TUTOR_DB.prepare(
-        'SELECT object_key, sha256, size_bytes, mtime_ns FROM persistence_objects WHERE path = ?',
+        'SELECT object_key, sha256, size_bytes, mtime_ms FROM persistence_objects WHERE path = ?',
       )
         .bind(path)
         .first<{
           object_key: string;
           sha256: string;
           size_bytes: number;
-          mtime_ns: number;
+          mtime_ms: number;
         }>();
       if (!row) return persistenceJson({ error: 'not_found' }, 404);
       const object = await env.TUTOR_FILES.get(row.object_key);
@@ -283,7 +283,7 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
           'content-type': 'application/octet-stream',
           'content-length': String(object.size),
           'x-murikah-object-sha256': row.sha256,
-          'x-murikah-object-mtime-ns': String(row.mtime_ns),
+          'x-murikah-object-mtime-ms': String(row.mtime_ms),
           'cache-control': 'no-store',
           'x-content-type-options': 'nosniff',
         },
@@ -294,7 +294,7 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       const sha = request.headers.get('x-murikah-object-sha256') || '';
       const signedContentSha = request.headers.get('x-murikah-content-sha256') || '';
       const generation = request.headers.get('x-murikah-object-generation') || '';
-      const mtime = Number(request.headers.get('x-murikah-object-mtime-ns') || '0');
+      const mtime = Number(request.headers.get('x-murikah-object-mtime-ms') || '0');
       const size = Number(request.headers.get('x-murikah-object-size') || '0');
       if (
         !/^[0-9a-f]{64}$/i.test(sha) ||
@@ -312,10 +312,10 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         customMetadata: { path, sha256: sha },
       });
       await env.TUTOR_DB.prepare(
-        'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ns, generation, updated_at) ' +
+        'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ms, generation, updated_at) ' +
           'VALUES (?, ?, ?, ?, ?, ?, ?) ' +
           'ON CONFLICT(path) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256, ' +
-          'size_bytes = excluded.size_bytes, mtime_ns = excluded.mtime_ns, generation = excluded.generation, ' +
+          'size_bytes = excluded.size_bytes, mtime_ms = excluded.mtime_ms, generation = excluded.generation, ' +
           'updated_at = excluded.updated_at',
       )
         .bind(path, key, sha, size, mtime, generation, now)
