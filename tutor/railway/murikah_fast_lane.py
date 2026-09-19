@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_HEDGE_DELAY_SECONDS = 2.5
-DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 8.0
-DEFAULT_OVERALL_FIRST_TOKEN_SECONDS = 12.0
+DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 12.0
+DEFAULT_OVERALL_FIRST_TOKEN_SECONDS = 20.0
 
 
 @dataclass(frozen=True)
@@ -204,9 +204,20 @@ async def race_first_visible(
     first_token_timeout: float = DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS,
     overall_timeout: float = DEFAULT_OVERALL_FIRST_TOKEN_SECONDS,
 ) -> HedgeWinner | None:
-    """Hedge providers and keep the first one that produces visible text."""
+    """Hedge providers and keep the first one that produces visible text.
+
+    A delayed candidate must receive the same first-token allowance as the
+    primary candidate. Previously the fixed race deadline cut the last
+    fallback's allowance short, which was most visible on follow-up turns.
+    """
     if not candidates:
         return None
+
+    latest_start = max(max(0.0, candidate.delay_seconds) for candidate in candidates)
+    effective_overall_timeout = max(
+        max(0.0, overall_timeout),
+        latest_start + max(0.0, first_token_timeout) + 0.5,
+    )
 
     async def probe(candidate: HedgeCandidate) -> HedgeWinner | None:
         stream: AsyncIterator[str] | None = None
@@ -254,7 +265,7 @@ async def race_first_visible(
                 await close_stream(stream)
 
     tasks = {asyncio.create_task(probe(candidate)) for candidate in candidates}
-    deadline = time.perf_counter() + overall_timeout
+    deadline = time.perf_counter() + effective_overall_timeout
     try:
         pending = set(tasks)
         while pending:

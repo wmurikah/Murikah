@@ -16,6 +16,7 @@ from deeptutor.runtime.stream_bus import StreamBus
 
 NEW_IMPORTS = '''import asyncio
 import logging
+import os
 import time
 from typing import Any
 
@@ -42,7 +43,23 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 logger = logging.getLogger(__name__)
 
 # MURIKAH_DUAL_LANE_CHAT_V2
-_STREAM_IDLE_TIMEOUT_SECONDS = 25.0
+def _positive_seconds(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+_FIRST_TOKEN_TIMEOUT_SECONDS = _positive_seconds(
+    "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 12.0
+)
+_OVERALL_FIRST_TOKEN_SECONDS = _positive_seconds(
+    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 20.0
+)
+_STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
+    "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
+)
 '''
 
 OLD_RUN = '''    async def run(self, context: UnifiedContext, stream: StreamBus) -> None:
@@ -161,7 +178,7 @@ NEW_RUN = '''    @staticmethod
                     api_version=config.api_version,
                     binding=config.provider_name or config.binding,
                     messages=messages,
-                    max_retries=0,
+                    max_retries=1,
                     reasoning_effort=config.reasoning_effort,
                     extra_headers=config.extra_headers,
                     temperature=prompt_pipeline._chat_temperature,
@@ -235,26 +252,31 @@ NEW_RUN = '''    @staticmethod
         winner = await race_first_visible(
             hedges,
             request_started=request_started,
-            first_token_timeout=8.0,
-            overall_timeout=12.0,
+            first_token_timeout=_FIRST_TOKEN_TIMEOUT_SECONDS,
+            overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
         )
         if winner is None:
+            logger.warning(
+                "MURIKAH_LATENCY route=fast event=recover_with_standard_pipeline elapsed_ms=%s",
+                latency_ms(request_started),
+            )
             await stream.progress(
-                "",
+                "Still working on your answer",
                 source="chat",
                 stage="responding",
                 metadata=merge_trace_metadata(
                     trace_meta,
                     {
                         "trace_kind": "call_status",
-                        "call_state": "failed",
-                        "error_code": "provider_timeout",
+                        "call_state": "running",
+                        "status_code": "fast_lane_recovery",
                         "retryable": True,
                         "murikah_lane": "fast",
                     },
                 ),
             )
-            raise RuntimeError("No Tutor fast-lane provider produced a timely response")
+            await prompt_pipeline.run(context, stream)
+            return
 
         answer_parts = [winner.first_chunk]
         chunk_meta = merge_trace_metadata(
