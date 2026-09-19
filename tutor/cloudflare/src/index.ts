@@ -354,26 +354,19 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     }
     if (statements.length) await env.TUTOR_DB.batch(statements);
 
-    const stale = await env.TUTOR_DB.prepare(
-      'SELECT object_key FROM persistence_objects WHERE generation <> ?',
-    )
-      .bind(generation)
-      .all<{ object_key: string }>();
-    for (const row of stale.results || []) {
-      await env.TUTOR_FILES.delete(row.object_key);
-    }
-    const deleted = await env.TUTOR_DB.prepare(
-      'DELETE FROM persistence_objects WHERE generation <> ?',
-    )
-      .bind(generation)
-      .run();
+    // Do not infer deletes from one container's missing local paths. During a
+    // Cloudflare rollout, old and new image generations can overlap briefly;
+    // treating either snapshot as globally authoritative could delete a newer
+    // object's durable copy. Explicit tombstones can be introduced after the
+    // single-container replacement test. Until then, orphaned objects are safer
+    // than data loss.
     await env.TUTOR_DB.prepare(
       "INSERT INTO persistence_meta(key, value, updated_at) VALUES ('last_generation', ?, ?) " +
         'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
     )
       .bind(generation, now)
       .run();
-    return persistenceJson({ ok: true, pruned: deleted.meta?.changes || 0 });
+    return persistenceJson({ ok: true, pruned: 0 });
   }
 
   if (route === '/guest/session' && request.method === 'POST') {
