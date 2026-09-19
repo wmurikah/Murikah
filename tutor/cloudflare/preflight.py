@@ -449,7 +449,7 @@ def main() -> int:
     require_markers(
         "tutor/cloudflare/migrations/0002_persistence_mtime_ms.sql",
         (
-            "ALTER TABLE persistence_objects RENAME COLUMN mtime_ns TO mtime_ms",
+            "ADD COLUMN mtime_ms INTEGER NOT NULL DEFAULT 0 CHECK (mtime_ms >= 0)",
         ),
     )
     require_markers(
