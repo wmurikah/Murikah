@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_DUAL_LANE_CHAT_V2"
+MARKER = "MURIKAH_DUAL_LANE_CHAT_V3"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -42,7 +42,7 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_DUAL_LANE_CHAT_V2
+# MURIKAH_DUAL_LANE_CHAT_V3
 def _positive_seconds(name: str, default: float) -> float:
     try:
         value = float(os.environ.get(name, "") or default)
@@ -59,6 +59,9 @@ _OVERALL_FIRST_TOKEN_SECONDS = _positive_seconds(
 )
 _STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
+)
+_FAST_TURN_TIMEOUT_SECONDS = _positive_seconds(
+    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 60.0
 )
 '''
 
@@ -80,10 +83,8 @@ NEW_RUN = '''    @staticmethod
             return "knowledge_base"
         if context.attachments:
             return "attachments"
-        if context.source_manifest:
-            return "sources"
-        if metadata.get("source_index"):
-            return "source_index"
+        # Source metadata can persist from the previous answer. It must not
+        # promote an ordinary follow-up into the multi-agent lane by itself.
         for key in (
             "mastery_mode",
             "immersive_reading_mode",
@@ -256,27 +257,35 @@ NEW_RUN = '''    @staticmethod
             overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
         )
         if winner is None:
+            elapsed = latency_ms(request_started)
+            context.metadata["murikah_provider"] = ""
+            context.metadata["murikah_model"] = ""
+            context.metadata["murikah_first_token_ms"] = 0
             logger.warning(
-                "MURIKAH_LATENCY route=fast event=recover_with_standard_pipeline elapsed_ms=%s",
-                latency_ms(request_started),
+                "MURIKAH_LATENCY route=fast event=terminal_first_token_timeout elapsed_ms=%s",
+                elapsed,
             )
             await stream.progress(
-                "Still working on your answer",
+                "Murikah could not start this response. Please retry.",
                 source="chat",
-                stage="responding",
+                stage="failed",
                 metadata=merge_trace_metadata(
                     trace_meta,
                     {
                         "trace_kind": "call_status",
-                        "call_state": "running",
-                        "status_code": "fast_lane_recovery",
+                        "call_state": "failed",
+                        "status_code": "fast_lane_timeout",
                         "retryable": True,
                         "murikah_lane": "fast",
                     },
                 ),
             )
-            await prompt_pipeline.run(context, stream)
-            return
+            # Ordinary chat never falls through to the multi-agent pipeline.
+            # Raising gives the turn runtime a terminal ERROR + DONE event and
+            # releases the composer instead of leaving Reasoning spinning.
+            raise TimeoutError(
+                "Murikah fast chat timed out before the first visible response."
+            )
 
         answer_parts = [winner.first_chunk]
         chunk_meta = merge_trace_metadata(
@@ -295,13 +304,25 @@ NEW_RUN = '''    @staticmethod
             metadata=chunk_meta,
         )
 
+        context.metadata["murikah_provider"] = winner.name
+        context.metadata["murikah_model"] = (
+            configured_gemini_model()
+            if winner.name.startswith("gemini")
+            else str((candidates[0].get("model_id") if candidates else "") or "")
+        )
+        context.metadata["murikah_first_token_ms"] = winner.first_token_ms
+        turn_deadline = request_started + max(15.0, _FAST_TURN_TIMEOUT_SECONDS)
+
         in_think = False
         try:
             while True:
+                remaining = turn_deadline - time.perf_counter()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError
                 try:
                     chunk = await asyncio.wait_for(
                         winner.stream.__anext__(),
-                        timeout=_STREAM_IDLE_TIMEOUT_SECONDS,
+                        timeout=min(_STREAM_IDLE_TIMEOUT_SECONDS, remaining),
                     )
                 except StopAsyncIteration:
                     break
@@ -316,6 +337,13 @@ NEW_RUN = '''    @staticmethod
                     continue
                 answer_parts.append(text)
                 await stream.content(text, source="chat", stage="responding", metadata=chunk_meta)
+        except asyncio.TimeoutError as exc:
+            logger.warning(
+                "MURIKAH_LATENCY route=fast event=terminal_stream_timeout provider=%s elapsed_ms=%s",
+                winner.name,
+                latency_ms(request_started),
+            )
+            raise TimeoutError("Murikah fast chat exceeded its response deadline.") from exc
         finally:
             await close_stream(winner.stream)
 
@@ -323,6 +351,7 @@ NEW_RUN = '''    @staticmethod
         context.capability_output.agent_output = answer
         context.capability_output.answer_published = True
         total_ms = latency_ms(request_started)
+        context.metadata["murikah_total_ms"] = total_ms
         logger.info(
             "MURIKAH_LATENCY route=fast event=complete provider=%s first_token_ms=%s total_ms=%s",
             winner.name,

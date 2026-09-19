@@ -28,6 +28,8 @@ COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.p
 COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
 COPY tutor/railway/harden_guest_completion.py /opt/murikah/harden_guest_completion.py
 COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
+COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py
+COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py
 COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
 COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
@@ -74,6 +76,8 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
     && python /opt/murikah/apply_workspace_access.py /src/DeepTutor \
+    && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
+    && python /opt/murikah/brand_chat_status.py /src/DeepTutor \
     && python /opt/murikah/hide_guest_account_ui.py /src/DeepTutor \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
 
@@ -123,6 +127,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/services/auth.py /app/deeptu
 COPY --from=branded-source /src/DeepTutor/deeptutor/app/service.py /app/deeptutor/app/service.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/api/main.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /app/deeptutor/agents/chat/capability.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py
 

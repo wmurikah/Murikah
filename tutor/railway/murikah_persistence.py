@@ -30,6 +30,8 @@ PERSIST_PREFIX = "/__muri/persist"
 SQLITE_MAGIC = b"SQLite format 3\x00"
 DEFAULT_INTERVAL = 30
 MAX_MANIFEST_ITEMS = 20000
+MAX_LEARNING_CONTENT_CHARS = 120_000
+MAX_LEARNING_SUMMARY_CHARS = 800
 SKIP_DIRS = {"__pycache__", ".cache", ".git", "logs", "tmp"}
 SKIP_PATHS = {
     "system/auth/auth_secret",
@@ -130,6 +132,167 @@ def _json_request(method: str, path: str, payload: dict[str, Any] | None = None)
     if not isinstance(parsed, dict):
         raise PersistenceError("Persistence bridge returned an unexpected JSON payload.")
     return parsed
+
+
+def _learning_text(value: Any, limit: int = MAX_LEARNING_CONTENT_CHARS) -> str:
+    text = str(value or "").replace("\x00", "")
+    return text[: max(0, int(limit))]
+
+
+def _learning_summary(value: Any) -> str:
+    """Small extractive summary without adding another model call to chat latency."""
+    text = " ".join(_learning_text(value).split())
+    if not text:
+        return ""
+    pieces = []
+    current = []
+    for char in text:
+        current.append(char)
+        if char in ".!?":
+            sentence = "".join(current).strip()
+            if sentence:
+                pieces.append(sentence)
+            current = []
+            if len(pieces) >= 2:
+                break
+    if current and len(pieces) < 2:
+        pieces.append("".join(current).strip())
+    summary = " ".join(part for part in pieces if part).strip() or text
+    return summary[:MAX_LEARNING_SUMMARY_CHARS]
+
+
+def _selection_fields(value: Any) -> tuple[str, str]:
+    if not isinstance(value, dict):
+        return "", ""
+    profile = str(
+        value.get("profile_id")
+        or value.get("profileId")
+        or value.get("profile")
+        or ""
+    ).strip()
+    model = str(
+        value.get("model_id")
+        or value.get("modelId")
+        or value.get("model")
+        or ""
+    ).strip()
+    return profile[:128], model[:256]
+
+
+def learning_actor(
+    actor_id: str,
+    actor_type: str,
+    *,
+    username: str = "",
+    guest_session_id: str = "",
+) -> None:
+    if not enabled():
+        return
+    _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/learning/actor",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "actor_type": _learning_text(actor_type, 16),
+            "username": "" if actor_type == "guest" else _learning_text(username, 254),
+            "guest_session_id": (
+                _learning_text(guest_session_id or actor_id, 128)
+                if actor_type == "guest"
+                else ""
+            ),
+        },
+    )
+
+
+def learning_turn_start(
+    *,
+    turn_id: str,
+    conversation_id: str,
+    actor_id: str,
+    actor_type: str,
+    username: str,
+    prompt: str,
+    capability: str,
+    language: str,
+    llm_selection: Any = None,
+    regenerate: bool = False,
+) -> None:
+    if not enabled():
+        return
+    profile_id, model_id = _selection_fields(llm_selection)
+    _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/learning/turn/start",
+        {
+            "turn_id": _learning_text(turn_id, 128),
+            "conversation_id": _learning_text(conversation_id, 128),
+            "actor_id": _learning_text(actor_id, 128),
+            "actor_type": _learning_text(actor_type, 16),
+            "username": "" if actor_type == "guest" else _learning_text(username, 254),
+            "guest_session_id": _learning_text(actor_id, 128) if actor_type == "guest" else "",
+            "prompt": _learning_text(prompt),
+            "prompt_summary": _learning_summary(prompt),
+            "capability": _learning_text(capability or "chat", 64),
+            "language": _learning_text(language, 24),
+            "model_profile_id": profile_id,
+            "model_id": model_id,
+            "regenerate": bool(regenerate),
+        },
+    )
+
+
+def learning_turn_finish(
+    *,
+    turn_id: str,
+    response: str,
+    status: str = "completed",
+    provider: str = "",
+    model_id: str = "",
+    first_token_ms: int = 0,
+    total_ms: int = 0,
+    error_code: str = "",
+    error_text: str = "",
+    retryable: bool = False,
+) -> None:
+    if not enabled():
+        return
+    _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/learning/turn/finish",
+        {
+            "turn_id": _learning_text(turn_id, 128),
+            "response": _learning_text(response),
+            "response_summary": _learning_summary(response),
+            "status": _learning_text(status, 16),
+            "provider": _learning_text(provider, 128),
+            "model_id": _learning_text(model_id, 256),
+            "first_token_ms": max(0, int(first_token_ms or 0)),
+            "total_ms": max(0, int(total_ms or 0)),
+            "error_code": _learning_text(error_code, 128),
+            "error_text": _learning_text(error_text, 2_000),
+            "retryable": bool(retryable),
+        },
+    )
+
+
+def learning_turn_fail(
+    *,
+    turn_id: str,
+    error: str,
+    status: str = "failed",
+    error_code: str = "internal_error",
+    retryable: bool = True,
+    total_ms: int = 0,
+) -> None:
+    learning_turn_finish(
+        turn_id=turn_id,
+        response="",
+        status=status,
+        total_ms=total_ms,
+        error_code=error_code,
+        error_text=error,
+        retryable=retryable,
+    )
 
 
 def guest_create(uid: str, expires: float, *, used: int = 0, prompt_limit: int = 7) -> None:

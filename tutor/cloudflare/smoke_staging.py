@@ -71,11 +71,16 @@ def main() -> int:
     except Exception as exc:
         print(f"Murikah Tutor staging smoke test: FAILED - persistence probe: {type(exc).__name__}: {exc}")
         return 1
-    if persistence_code != 200 or persistence.get("ok") is not True or persistence.get("schemaVersion") != "1":
-        print("Murikah Tutor staging smoke test: FAILED - D1 persistence schema is not ready")
+    if (
+        persistence_code != 200
+        or persistence.get("ok") is not True
+        or persistence.get("schemaVersion") != "1"
+        or persistence.get("learningJournalSchemaVersion") != "1"
+    ):
+        print("Murikah Tutor staging smoke test: FAILED - D1 persistence/learning journal schema is not ready")
         print(f"Persistence status: HTTP {persistence_code} {persistence_body[:1000]}")
         return 1
-    print(" - D1 persistence schema v1 is ready and the private R2 binding is available")
+    print(" - D1 persistence schema v1 and learning journal schema v1 are ready")
     started = time.monotonic()
     last: dict = {}
 

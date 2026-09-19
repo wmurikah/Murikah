@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v20"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v21"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -265,7 +265,12 @@ def main() -> int:
             'LABEL com.murikah.tutor.cloudflare-image-rev=',
             'COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py',
             'COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py',
+            'COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py',
+            'COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py',
+            'python /opt/murikah/persist_learning_journal.py /src/DeepTutor',
+            'python /opt/murikah/brand_chat_status.py /src/DeepTutor',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py',
             'COPY tutor/railway /opt/murikah/railway',
             'COPY tutor/tests /opt/murikah/tests',
             'RUN python -m unittest discover -s /opt/murikah/tests -v',
@@ -377,12 +382,39 @@ def main() -> int:
     require_markers(
         "tutor/railway/accelerate_chat.py",
         (
-            'MURIKAH_DUAL_LANE_CHAT_V2',
+            'MURIKAH_DUAL_LANE_CHAT_V3',
             'def _agent_reason(',
             'force_agentic_chat',
             'race_first_visible(',
+            'terminal_first_token_timeout',
+            '_FAST_TURN_TIMEOUT_SECONDS',
             'route=deep_agent',
             'route=fast',
+        ),
+    )
+    forbid_markers(
+        "tutor/railway/accelerate_chat.py",
+        (
+            "recover_with_standard_pipeline",
+            "fast_lane_recovery",
+            "if context.source_manifest:",
+            'if metadata.get("source_index"):',
+        ),
+    )
+    require_markers(
+        "tutor/railway/persist_learning_journal.py",
+        (
+            "MURIKAH_D1_LEARNING_JOURNAL_V1",
+            "learning_turn_start",
+            "learning_turn_finish",
+            "learning_turn_fail",
+        ),
+    )
+    require_markers(
+        "tutor/railway/brand_chat_status.py",
+        (
+            "Murikah is reasoning…",
+            "Murikah is working…",
         ),
     )
     require_markers(
@@ -415,6 +447,7 @@ def main() -> int:
             'persistenceConfigured',
             '"/__muri/persistence-status"',
             'schemaVersion',
+            'learningJournalSchemaVersion',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             'MURIKAH_TUTOR_SMOKE_TIMEOUT',
@@ -453,6 +486,34 @@ def main() -> int:
         ),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0003_tutor_learning_journal.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS tutor_actors",
+            "CREATE TABLE IF NOT EXISTS tutor_actor_profiles",
+            "CREATE TABLE IF NOT EXISTS tutor_training_consent",
+            "CREATE TABLE IF NOT EXISTS tutor_conversations",
+            "CREATE TABLE IF NOT EXISTS tutor_turns",
+            "CREATE TABLE IF NOT EXISTS tutor_messages",
+            "CREATE TABLE IF NOT EXISTS tutor_feedback",
+            "learning_journal_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0003_tutor_learning_journal.sql",
+        ("CREATE TRIGGER",),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            "/learning/actor",
+            "/learning/turn/start",
+            "/learning/turn/finish",
+            "/learning/status",
+            "tutor_training_consent",
+            "training_eligible",
+        ),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             "x-murikah-object-mtime-ms",
@@ -473,6 +534,11 @@ def main() -> int:
             "def sync_loop()",
             "def guest_reserve(",
             "def guest_status(",
+            "def learning_actor(",
+            "def learning_turn_start(",
+            "def learning_turn_finish(",
+            "def learning_turn_fail(",
+            "MAX_LEARNING_CONTENT_CHARS",
             "mtime_ms = max(0, int(mtime_ns) // 1_000_000)",
             "x-murikah-object-mtime-ms",
         ),
@@ -523,7 +589,9 @@ def main() -> int:
     print(" - Worker bindings are passed explicitly into every Linux container start")
     print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
     print(" - readiness is determined by the real Tutor /health route")
-    print(" - D1-backed guest quotas and private R2 /app/data checkpoints are wired through the Worker bridge")
+    print(" - D1-backed guest quotas and private R2 runtime checkpoints are wired through the Worker bridge")
+    print(" - ordinary follow-ups cannot silently fall into the multi-agent pipeline")
+    print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - production persistence cutover remains gated on the destructive container-replacement acceptance test")
     return 0
 
