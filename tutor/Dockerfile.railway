@@ -123,6 +123,12 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/a
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /app/deeptutor/agents/chat/capability.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
 
+# The Python regression suite intentionally validates both installed runtime
+# modules and repository overlay sources. Copy the complete non-secret railway
+# overlay tree into the test fixture root so any source-backed regression test
+# has the same paths it has in a repository checkout. This prevents Cloudflare
+# image builds from failing when a new test reads an overlay source file.
+COPY tutor/railway /opt/murikah/railway
 COPY tutor/tests /opt/murikah/tests
 RUN python -m unittest discover -s /opt/murikah/tests -v
 
