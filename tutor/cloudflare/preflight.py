@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import sqlite3
 from pathlib import Path
 import tempfile
 
@@ -32,6 +33,47 @@ def forbid_markers(relative: str, markers: tuple[str, ...]) -> None:
     for marker in markers:
         if content and marker in content:
             failures.append(f"{relative} contains forbidden migration marker: {marker!r}")
+
+
+def validate_persistence_migration_fixture() -> None:
+    """Keep D1 migrations simple enough for Wrangler's remote SQL runner."""
+    relative = "tutor/cloudflare/migrations/0001_tutor_persistence.sql"
+    content = require(relative)
+    if not content:
+        return
+    if "CREATE TRIGGER" in content.upper():
+        failures.append(
+            f"{relative} contains CREATE TRIGGER; Wrangler D1 migrations previously rejected "
+            "multi-statement trigger bodies with SQLITE_ERROR incomplete input"
+        )
+        return
+    try:
+        connection = sqlite3.connect(":memory:")
+        connection.executescript(content)
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    except sqlite3.Error as exc:
+        failures.append(f"{relative} SQLite syntax fixture failed: {exc}")
+        return
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+    required = {
+        "persistence_meta",
+        "persistence_objects",
+        "persistence_replay",
+        "guest_sessions",
+        "guest_prompts",
+    }
+    missing = sorted(required - tables)
+    if missing:
+        failures.append(f"{relative} fixture did not create tables: {', '.join(missing)}")
 
 
 def validate_bootstrap_fixture() -> None:
@@ -391,9 +433,21 @@ def main() -> int:
             "CREATE TABLE IF NOT EXISTS persistence_replay",
             "CREATE TABLE IF NOT EXISTS guest_sessions",
             "CREATE TABLE IF NOT EXISTS guest_prompts",
-            "guest_prompt_guard",
-            "guest_prompt_charge",
-            "guest_prompt_release",
+            "CREATE INDEX IF NOT EXISTS idx_guest_prompts_uid",
+            "schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0001_tutor_persistence.sql",
+        ("CREATE TRIGGER",),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            "INSERT OR IGNORE INTO guest_prompts",
+            "s.used_count + COUNT(p.request_id) AS used_count",
+            "guest_prompt_limit",
+            "guest_session_expired",
         ),
     )
     require_markers(
@@ -426,6 +480,7 @@ def main() -> int:
             "No file contents were read beyond the 16-byte SQLite signature check.",
         ),
     )
+    validate_persistence_migration_fixture()
     validate_bootstrap_fixture()
 
     if failures:
