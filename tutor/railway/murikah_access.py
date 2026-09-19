@@ -21,6 +21,24 @@ MESSAGE = "You've used your 7 guest prompts. Sign up or sign in to continue."
 router = APIRouter()
 
 
+def _durable_guest_store():
+    """Return the Cloudflare persistence client or None outside Cloudflare.
+
+    Cloudflare guest quotas must never silently fall back to per-container
+    SQLite because that would let a learner reset the seven-prompt allowance by
+    landing on a replacement container.
+    """
+    if not os.environ.get("MURIKAH_TUTOR_RUNTIME", "").startswith("cloudflare-container"):
+        return None
+    try:
+        from deeptutor import murikah_persistence
+    except Exception as exc:
+        raise RuntimeError("Guest persistence is temporarily unavailable.") from exc
+    if not murikah_persistence.enabled():
+        raise RuntimeError("Guest persistence is temporarily unavailable.")
+    return murikah_persistence
+
+
 def database():
     from deeptutor.multi_user.identity import AUTH_DIR
     AUTH_DIR.mkdir(parents=True, exist_ok=True)
@@ -41,7 +59,19 @@ def ledger():
 
 
 def reserve(uid: str, request_id: str) -> bool:
-    """One atomic budget across tabs, transports and processes on this runtime."""
+    """One atomic guest budget across tabs, processes and containers."""
+    durable = _durable_guest_store()
+    if durable is not None:
+        try:
+            return durable.guest_reserve(uid, request_id)
+        except durable.PersistenceError as exc:
+            detail = str(exc)
+            if "guest_prompt_limit" in detail:
+                raise RuntimeError(MESSAGE) from exc
+            if "guest_session_expired" in detail:
+                raise RuntimeError("Guest session expired. Sign up or sign in to continue.") from exc
+            raise RuntimeError("Guest persistence is temporarily unavailable.") from exc
+
     with ledger() as db:
         db.execute("BEGIN IMMEDIATE")
         guest = db.execute("SELECT expires FROM guests WHERE uid=?", (uid,)).fetchone()
@@ -57,6 +87,15 @@ def reserve(uid: str, request_id: str) -> bool:
 
 
 def release(uid: str, request_id: str):
+    durable = _durable_guest_store()
+    if durable is not None:
+        try:
+            durable.guest_release(uid, request_id)
+        except durable.PersistenceError:
+            # A failed model turn should not be made worse by a release retry;
+            # the durable ledger remains conservative until its next correction.
+            pass
+        return
     with ledger() as db:
         db.execute("DELETE FROM prompts WHERE uid=? AND request_id=?", (uid, request_id))
 
@@ -64,6 +103,20 @@ def release(uid: str, request_id: str):
 def guest_status(payload):
     if payload is None or not payload.username.startswith(PREFIX):
         return {"guest": False, "authenticated": payload is not None}
+    durable = _durable_guest_store()
+    if durable is not None:
+        try:
+            status = durable.guest_status(payload.user_id)
+        except durable.PersistenceError as exc:
+            raise RuntimeError("Guest persistence is temporarily unavailable.") from exc
+        return {
+            "guest": True,
+            "used": int(status.get("used", 0)),
+            "limit": int(status.get("limit", LIMIT)),
+            "remaining": int(status.get("remaining", 0)),
+            "requires_auth": bool(status.get("requires_auth", False)),
+        }
+
     with ledger() as db:
         row = db.execute("SELECT expires FROM guests WHERE uid=?", (payload.user_id,)).fetchone()
         used = db.execute("SELECT COUNT(*) FROM prompts WHERE uid=?", (payload.user_id,)).fetchone()[0]
@@ -166,12 +219,26 @@ async def guest_session(request: Request, response: Response):
                            "disabled": False, "avatar": ""}
         identity._write_users(users)
     grant_models(uid)
-    with ledger() as db:
-        db.execute("INSERT INTO guests VALUES (?, ?)", (uid, time.time() + 30 * 86400))
-        # Carry forward the old guest cookie's allowance; switching UI is not a reset.
-        from deeptutor.api.routers.murikah_guest import _read_count
-        for n in range(min(LIMIT, _read_count(request.cookies.get("mt_guest")))):
-            db.execute("INSERT INTO prompts VALUES (?, ?)", (uid, f"legacy:{n}"))
+    # Carry forward the old stateless cookie allowance; switching to the full
+    # workspace must never reset the learner's seven-prompt budget.
+    from deeptutor.api.routers.murikah_guest import _read_count
+    legacy_used = min(LIMIT, _read_count(request.cookies.get("mt_guest")))
+    durable = _durable_guest_store()
+    if durable is not None:
+        try:
+            durable.guest_create(
+                uid,
+                time.time() + 30 * 86400,
+                used=legacy_used,
+                prompt_limit=LIMIT,
+            )
+        except durable.PersistenceError as exc:
+            raise HTTPException(503, "Guest access is temporarily unavailable. Please retry.") from exc
+    else:
+        with ledger() as db:
+            db.execute("INSERT INTO guests VALUES (?, ?)", (uid, time.time() + 30 * 86400))
+            for n in range(legacy_used):
+                db.execute("INSERT INTO prompts VALUES (?, ?)", (uid, f"legacy:{n}"))
     set_session(response, username, uid)
     return {"guest": True, "ok": True}
 
@@ -213,8 +280,15 @@ async def signup(body: Signup, request: Request, response: Response):
         users[username] = record
         identity._write_users(users)
     if guest_name:
-        with ledger() as db:
-            db.execute("DELETE FROM guests WHERE uid=?", (record["id"],))
+        durable = _durable_guest_store()
+        if durable is not None:
+            try:
+                durable.guest_delete(record["id"])
+            except durable.PersistenceError as exc:
+                raise HTTPException(503, "Account created, but guest cleanup is still pending. Please retry.") from exc
+        else:
+            with ledger() as db:
+                db.execute("DELETE FROM guests WHERE uid=?", (record["id"],))
     grant_models(record["id"])
     set_session(response, username, record["id"])
     return {"ok": True, "role": "user"}
