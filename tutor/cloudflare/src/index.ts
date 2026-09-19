@@ -178,7 +178,6 @@ async function textSha256(value: string): Promise<string> {
 
 async function upsertLearningActor(
   env: TutorEnv,
-  *,
   actorId: string,
   actorType: string,
   username: string,
@@ -304,13 +303,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       return persistenceJson({ error: 'invalid_learning_actor' }, 400);
     }
     try {
-      await upsertLearningActor(env, {
+      await upsertLearningActor(
+        env,
         actorId,
         actorType,
-        username: actorType === 'guest' ? '' : username,
-        guestSessionId: actorType === 'guest' ? (guestSessionId || actorId) : '',
+        actorType === 'guest' ? '' : username,
+        actorType === 'guest' ? (guestSessionId || actorId) : '',
         now,
-      });
+      );
       return persistenceJson({ ok: true });
     } catch (error) {
       console.error('Tutor D1 actor upsert failed', error);
@@ -343,13 +343,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       return persistenceJson({ error: 'invalid_learning_turn' }, 400);
     }
     try {
-      await upsertLearningActor(env, {
+      await upsertLearningActor(
+        env,
         actorId,
         actorType,
-        username: actorType === 'guest' ? '' : username,
-        guestSessionId: actorType === 'guest' ? (guestSessionId || actorId) : '',
+        actorType === 'guest' ? '' : username,
+        actorType === 'guest' ? (guestSessionId || actorId) : '',
         now,
-      });
+      );
       await env.TUTOR_DB.prepare(
         'INSERT INTO tutor_conversations(conversation_id, actor_id, title, summary, surface, created_at, updated_at, message_count, last_turn_id) ' +
           "VALUES (?, ?, ?, '', 'chat', ?, ?, 0, ?) " +
