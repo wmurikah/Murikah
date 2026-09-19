@@ -91,6 +91,70 @@ class PersistenceClientTests(unittest.TestCase):
         self.assertEqual(headers["x-murikah-object-mtime-ms"], "1789817400123")
         self.assertNotIn("x-murikah-object-mtime-ns", headers)
 
+    def test_learning_summary_is_bounded_and_extracts_sentences(self):
+        text = "First useful sentence. Second useful sentence! Third sentence should not be needed."
+        summary = persistence._learning_summary(text)
+        self.assertEqual(summary, "First useful sentence. Second useful sentence!")
+        self.assertLessEqual(len(summary), persistence.MAX_LEARNING_SUMMARY_CHARS)
+
+    def test_guest_learning_actor_never_needs_username(self):
+        captured = {}
+        original_enabled = persistence.enabled
+        original_json = persistence._json_request
+        persistence.enabled = lambda: True
+
+        def fake_json(method, path, payload=None):
+            captured.update(method=method, path=path, payload=payload)
+            return {"ok": True}
+
+        persistence._json_request = fake_json
+        try:
+            persistence.learning_actor(
+                "u_guest_123",
+                "guest",
+                username="guest_internal_should_not_persist",
+                guest_session_id="u_guest_123",
+            )
+        finally:
+            persistence.enabled = original_enabled
+            persistence._json_request = original_json
+
+        self.assertEqual(captured["path"], "/__muri/persist/learning/actor")
+        self.assertEqual(captured["payload"]["actor_type"], "guest")
+        self.assertEqual(captured["payload"]["guest_session_id"], "u_guest_123")
+
+    def test_learning_turn_start_carries_full_prompt_and_summary(self):
+        captured = {}
+        original_enabled = persistence.enabled
+        original_json = persistence._json_request
+        persistence.enabled = lambda: True
+
+        def fake_json(method, path, payload=None):
+            captured.update(method=method, path=path, payload=payload)
+            return {"ok": True}
+
+        persistence._json_request = fake_json
+        try:
+            persistence.learning_turn_start(
+                turn_id="turn_1",
+                conversation_id="conv_1",
+                actor_id="u_1",
+                actor_type="member",
+                username="learner",
+                prompt="Teach me regression. I am a beginner.",
+                capability="chat",
+                language="en",
+                llm_selection={"profile_id": "fast", "model_id": "model"},
+            )
+        finally:
+            persistence.enabled = original_enabled
+            persistence._json_request = original_json
+
+        self.assertEqual(captured["path"], "/__muri/persist/learning/turn/start")
+        self.assertEqual(captured["payload"]["prompt"], "Teach me regression. I am a beginner.")
+        self.assertTrue(captured["payload"]["prompt_summary"])
+        self.assertEqual(captured["payload"]["model_id"], "model")
+
     def test_provider_catalog_and_auth_secret_are_not_checkpointed(self):
         self.assertTrue(persistence._skip("system/auth/auth_secret"))
         self.assertTrue(persistence._skip("user/settings/model_catalog.json"))
