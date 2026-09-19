@@ -365,6 +365,9 @@ def main() -> int:
         (
             '"/__muri/worker-config"',
             'adminPasswordConfigured',
+            'persistenceConfigured',
+            '"/__muri/persistence-status"',
+            'schemaVersion',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             'MURIKAH_TUTOR_SMOKE_TIMEOUT',
