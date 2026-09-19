@@ -342,7 +342,7 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       !conversationId ||
       !actorId ||
       !['guest', 'member', 'admin'].includes(actorType) ||
-      !prompt.trim()
+      (!prompt.trim() && regenerate !== 1)
     ) {
       return persistenceJson({ error: 'invalid_learning_turn' }, 400);
     }
@@ -382,15 +382,17 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
           now,
         )
         .run();
-      const messageId = turnId + '_user';
-      const promptHash = await textSha256(prompt);
-      await env.TUTOR_DB.prepare(
-        'INSERT INTO tutor_messages(message_id, conversation_id, turn_id, actor_id, role, content, content_summary, content_sha256, created_at) ' +
-          "VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?) " +
-          'ON CONFLICT(message_id) DO UPDATE SET content = excluded.content, content_summary = excluded.content_summary, content_sha256 = excluded.content_sha256',
-      )
-        .bind(messageId, conversationId, turnId, actorId, prompt, promptSummary, promptHash, now)
-        .run();
+      if (prompt.trim()) {
+        const messageId = turnId + '_user';
+        const promptHash = await textSha256(prompt);
+        await env.TUTOR_DB.prepare(
+          'INSERT INTO tutor_messages(message_id, conversation_id, turn_id, actor_id, role, content, content_summary, content_sha256, created_at) ' +
+            "VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?) " +
+            'ON CONFLICT(message_id) DO UPDATE SET content = excluded.content, content_summary = excluded.content_summary, content_sha256 = excluded.content_sha256',
+        )
+          .bind(messageId, conversationId, turnId, actorId, prompt, promptSummary, promptHash, now)
+          .run();
+      }
       await env.TUTOR_DB.prepare(
         'UPDATE tutor_conversations SET message_count = (SELECT COUNT(*) FROM tutor_messages WHERE conversation_id = ?), updated_at = ? WHERE conversation_id = ?',
       )
