@@ -67,5 +67,18 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         ], request_started=time.perf_counter(), first_token_timeout=.1, overall_timeout=.2)
         self.assertIsNone(winner)
 
+    async def test_delayed_fallback_receives_full_first_token_allowance(self):
+        async def delayed_answer():
+            await asyncio.sleep(.05)
+            yield "A healthy follow-up answer."
+
+        winner = await fast.race_first_visible([
+            fast.HedgeCandidate("primary", 0, lambda: stream()),
+            fast.HedgeCandidate("fallback", .08, delayed_answer),
+        ], request_started=time.perf_counter(), first_token_timeout=.1, overall_timeout=.1)
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner.name, "fallback")
+        await fast.close_stream(winner.stream)
+
 
 if __name__ == "__main__": unittest.main()

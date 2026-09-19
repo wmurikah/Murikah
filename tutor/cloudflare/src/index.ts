@@ -72,6 +72,10 @@ type RuntimeStatus = {
 const APP_INSTANCE = "murikah-tutor-staging-v7";
 const DIAGNOSTIC_INSTANCE = "murikah-tutor-staging-diagnostics-v7";
 const CLOUDFLARE_ENTRYPOINT = "/app/murikah-cloudflare-entrypoint.sh";
+const READY_CACHE_MS = 5_000;
+
+let readyCacheUntil = 0;
+let statusInFlight: Promise<RuntimeStatus> | null = null;
 
 function optional(value: string | undefined): string {
   return value?.trim() || "";
@@ -461,7 +465,7 @@ function startingShell(
     (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char,
   );
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}.card{width:min(560px,calc(100% - 32px));background:white;border:1px solid #e1e5e7;border-radius:20px;padding:34px;box-sizing:border-box;box-shadow:0 18px 60px rgba(30,42,48,.06)}.brand{font-weight:760}.brand span{color:#A9822E}h1{font-size:30px;letter-spacing:-.035em;margin:24px 0 10px}p{color:#66747b;line-height:1.6;margin:0}.bar{height:3px;margin-top:26px;border-radius:999px;overflow:hidden;background:#e5e8e9}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:14px;font-size:13px;color:#879298}</style></head><body><main class="card"><div class="brand">Murikah <span>|</span> Tutor</div><h1>Opening your Tutor…</h1><p id="status">${safeMessage}</p><div class="bar"></div><div class="small" id="small">The edge experience is already loaded while Tutor finishes starting.</div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.workerSecretConfigured===false){document.getElementById('status').textContent='Tutor staging configuration is incomplete.';document.getElementById('small').textContent='The edge is healthy; the runtime secret binding needs attention.';return;}if(attempts>40){document.getElementById('status').textContent='Tutor is still starting. Staging diagnostics are running automatically.';document.getElementById('small').textContent='You do not need to refresh this page.';}}catch(e){}setTimeout(check,attempts<15?750:1500);}check();})();</script></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}header{height:80px;display:flex;align-items:center;padding:0 clamp(20px,4vw,40px);border-bottom:1px solid #dfe4e6;background:#fff}.brand{border-radius:12px;background:#1E2A30;color:#fff;padding:12px 20px;font-size:18px;font-weight:760}.brand span{color:#C59A39;margin:0 8px}main{width:min(900px,100%);min-height:calc(100dvh - 80px);margin:auto;padding:clamp(28px,5vw,52px) clamp(20px,4vw,40px);display:flex;flex-direction:column}h1{font-size:clamp(26px,4vw,38px);letter-spacing:-.035em;margin:0 0 12px}p{color:#66747b;line-height:1.6;margin:0}.bar{width:min(420px,100%);height:3px;margin-top:22px;border-radius:999px;overflow:hidden;background:#e1e5e7}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:12px;font-size:13px;color:#879298}.composer{margin-top:auto;border:1px solid #d8dee1;border-radius:30px;background:#fff;padding:20px;box-shadow:0 12px 40px rgba(30,42,48,.06)}.prompt{min-height:58px;color:#879298;font-size:18px}.tools{display:flex;align-items:center;justify-content:space-between;color:#66747b}.send{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#e7ebed;color:#1E2A30;font-size:23px}</style></head><body><header><div class="brand">Murikah <span>|</span> Tutor</div></header><main><section><h1>How can I help you learn today?</h1><p id="status">${safeMessage}</p><div class="bar"></div><div class="small" id="small">Preparing your guest workspace…</div></section><div class="composer"><div class="prompt">Ask anything…</div><div class="tools"><span>Chat</span><span class="send">↑</span></div></div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.workerSecretConfigured===false){document.getElementById('status').textContent='Tutor staging configuration is incomplete.';document.getElementById('small').textContent='The runtime secret binding needs attention.';return;}if(attempts>40){document.getElementById('status').textContent='Tutor is still starting.';document.getElementById('small').textContent='You can stay on this page; it will open automatically.';}}catch(e){}setTimeout(check,attempts<15?750:1500);}check();})();</script></body></html>`,
     {
       status: 200,
       headers: {
@@ -501,6 +505,26 @@ async function safeStatus(
   }
 }
 
+async function cachedStatus(
+  tutor: ReturnType<typeof getContainer<TutorContainer>>,
+  runtimeEnv: Record<string, string>,
+): Promise<RuntimeStatus> {
+  if (Date.now() < readyCacheUntil) {
+    return { running: true, ready: true, workerSecretConfigured: true };
+  }
+  if (statusInFlight) return statusInFlight;
+
+  statusInFlight = safeStatus(tutor, runtimeEnv)
+    .then((status) => {
+      if (status.ready) readyCacheUntil = Date.now() + READY_CACHE_MS;
+      return status;
+    })
+    .finally(() => {
+      statusInFlight = null;
+    });
+  return statusInFlight;
+}
+
 export default {
   async fetch(request: Request, env: TutorEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -534,7 +558,7 @@ export default {
     }
 
     const tutor = getContainer(env.TUTOR_CONTAINER, APP_INSTANCE);
-    const status = await safeStatus(tutor, runtimeEnv);
+    const status = await cachedStatus(tutor, runtimeEnv);
 
     if (url.pathname === "/__muri/runtime-status") {
       return Response.json(status, {
@@ -556,6 +580,7 @@ export default {
           headers,
         });
       } catch (error) {
+        readyCacheUntil = 0;
         console.error("Murikah Tutor proxy failed", error);
         return startingShell("Reconnecting to your Tutor…");
       }

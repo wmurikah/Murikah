@@ -3,27 +3,88 @@ import { useEffect, useState } from "react";
 
 let sessionRequest: Promise<Response> | null = null;
 
+async function openGuestSession(): Promise<Response> {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    response = await fetch("/api/murikah/access/session", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (response.ok || response.status < 500) return response;
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+  return response as Response;
+}
+
+function destination(): string {
+  const candidate = new URLSearchParams(window.location.search).get("next") || "/chat";
+  return candidate.startsWith("/") &&
+    !candidate.startsWith("//") &&
+    !candidate.includes("\\") &&
+    candidate !== "/"
+    ? candidate
+    : "/chat";
+}
+
 export default function MurikahWorkspaceEntry() {
   const [error, setError] = useState("");
+
   useEffect(() => {
     let alive = true;
     async function enter() {
       try {
-        sessionRequest ??= fetch("/api/murikah/access/session", { method: "POST", credentials: "same-origin" });
-        const res = await sessionRequest;
-        if (!res.ok) throw new Error("Tutor couldn't open your workspace. Please try again.");
-        const candidate = new URLSearchParams(window.location.search).get("next") || "/chat";
-        const next = candidate.startsWith("/") && !candidate.startsWith("//") && !candidate.includes("\\") && candidate !== "/" ? candidate : "/chat";
-        if (alive) window.location.replace(next);
-      } catch (e) { if (alive) setError(e instanceof Error ? e.message : "Please try again."); }
+        sessionRequest ??= openGuestSession();
+        const response = await sessionRequest;
+        if (!response.ok) {
+          sessionRequest = null;
+          throw new Error("Tutor couldn't open your workspace. Please try again.");
+        }
+        if (alive) window.location.replace(destination());
+      } catch (reason) {
+        sessionRequest = null;
+        if (alive) {
+          setError(reason instanceof Error ? reason.message : "Please try again.");
+        }
+      }
     }
     void enter();
     return () => { alive = false; };
   }, []);
-  return <main className="flex min-h-dvh items-center justify-center p-8"><div className="text-center">
-    <h1 className="text-2xl font-semibold">Murikah Tutor</h1>
-    <p className="mt-4" role="status">{error || "Opening your learning workspace…"}</p>
-    {error && <button className="mt-4 rounded-lg bg-[#1E2A30] px-5 py-2 text-white" onClick={() => window.location.reload()}>Try again</button>}
-    <p className="mt-5"><a href="/register">Sign up</a><span className="mx-3">·</span><a href="/login">Sign in</a></p>
-  </div></main>;
+
+  // Paint the guest chat surface immediately while its short-lived account is
+  // created in parallel. First-time visitors never see an authentication page.
+  return (
+    <main className="min-h-dvh bg-[var(--background)] text-[var(--foreground)]" aria-busy={!error}>
+      <header className="flex h-20 items-center border-b border-[var(--border)] px-5 sm:px-8">
+        <div className="rounded-xl bg-[#1E2A30] px-5 py-3 text-lg font-semibold text-white shadow-sm">
+          Murikah <span className="mx-2 text-[#C59A39]">|</span> Tutor
+        </div>
+      </header>
+      <section className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-4xl flex-col px-5 py-8 sm:px-8">
+        <div className="flex-1">
+          <h1 className="text-2xl font-semibold sm:text-3xl">How can I help you learn today?</h1>
+          <p className="mt-3 max-w-xl text-[var(--muted-foreground)]" role="status">
+            {error || "Preparing your guest workspace…"}
+          </p>
+          {error && (
+            <button
+              type="button"
+              className="mt-5 rounded-xl bg-[#1E2A30] px-5 py-3 font-medium text-white"
+              onClick={() => window.location.reload()}
+            >
+              Try again
+            </button>
+          )}
+        </div>
+        <div className="rounded-[2rem] border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+          <div className="min-h-16 text-lg text-[var(--muted-foreground)]">Ask anything…</div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[var(--muted-foreground)]">Chat</span>
+            <span className="grid size-11 place-items-center rounded-full bg-[var(--muted)] text-xl" aria-hidden="true">↑</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
 }
