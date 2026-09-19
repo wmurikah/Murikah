@@ -50,6 +50,18 @@ def emit_completed_process(result: subprocess.CompletedProcess[str]) -> None:
     if result.stderr:
         print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr)
 
+def apply_persistence_migrations() -> None:
+    print("[Murikah Tutor] Applying version-controlled D1 persistence migrations.")
+    result = run_wrangler(
+        "d1", "migrations", "apply", "murikah-tutor-prod", "--remote",
+        capture=True, check=False,
+    )
+    emit_completed_process(result)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, output=result.stdout, stderr=result.stderr
+        )
+
 def is_transient_deploy_error(output: str) -> bool:
     folded = output.casefold()
     return any(marker in folded for marker in TRANSIENT_DEPLOY_ERRORS)
@@ -184,6 +196,7 @@ def validate_runtime_report(report: dict[str,Any]) -> None:
 
 def main() -> int:
     expected_revision=expected_image_revision()
+    apply_persistence_migrations()
     application_existed_before=bool(list_tutor_applications())
     deploy()
     fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=120)
