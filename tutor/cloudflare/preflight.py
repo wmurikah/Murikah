@@ -396,7 +396,7 @@ def main() -> int:
     require_markers(
         "tutor/railway/murikah_persistence.py",
         (
-            "sqlite3.backup",
+            "source.backup(destination)",
             "PERSIST_PREFIX = \"/__muri/persist\"",
             "def restore()",
             "def sync_once()",
