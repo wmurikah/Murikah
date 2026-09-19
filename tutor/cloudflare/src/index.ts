@@ -1,4 +1,4 @@
-import { Container, getContainer } from "@cloudflare/containers";
+import { Container, getContainer } from '@cloudflare/containers';
 
 type TutorEnv = {
   TUTOR_CONTAINER: DurableObjectNamespace<TutorContainer>;
@@ -69,16 +69,16 @@ type RuntimeStatus = {
   workerSecretConfigured?: boolean;
 };
 
-const APP_INSTANCE = "murikah-tutor-staging-v7";
-const DIAGNOSTIC_INSTANCE = "murikah-tutor-staging-diagnostics-v7";
-const CLOUDFLARE_ENTRYPOINT = "/app/murikah-cloudflare-entrypoint.sh";
+const APP_INSTANCE = 'murikah-tutor-staging-v7';
+const DIAGNOSTIC_INSTANCE = 'murikah-tutor-staging-diagnostics-v7';
+const CLOUDFLARE_ENTRYPOINT = '/app/murikah-cloudflare-entrypoint.sh';
 const READY_CACHE_MS = 5_000;
 
 let readyCacheUntil = 0;
 let statusInFlight: Promise<RuntimeStatus> | null = null;
 
 function optional(value: string | undefined): string {
-  return value?.trim() || "";
+  return value?.trim() || '';
 }
 
 function errorText(error: unknown): string {
@@ -91,23 +91,20 @@ function delay(ms: number): Promise<void> {
 
 function buildContainerEnv(source: TutorEnv): Record<string, string> {
   return {
-    TZ: source.TZ || "Africa/Nairobi",
-    FRONTEND_HOST: "0.0.0.0",
+    TZ: source.TZ || 'Africa/Nairobi',
+    FRONTEND_HOST: '0.0.0.0',
     MURIKAH_TUTOR_RUNTIME: optional(source.MURIKAH_TUTOR_RUNTIME),
     MURIKAH_PUBLIC_BASE_URL: optional(source.MURIKAH_PUBLIC_BASE_URL),
-    MURIKAH_GUEST_PROMPT_LIMIT: optional(source.MURIKAH_GUEST_PROMPT_LIMIT) || "7",
-    MURIKAH_TUTOR_ADMIN_USERNAME:
-      optional(source.MURIKAH_TUTOR_ADMIN_USERNAME) || "admin",
+    MURIKAH_GUEST_PROMPT_LIMIT: optional(source.MURIKAH_GUEST_PROMPT_LIMIT) || '7',
+    MURIKAH_TUTOR_ADMIN_USERNAME: optional(source.MURIKAH_TUTOR_ADMIN_USERNAME) || 'admin',
     MURIKAH_TUTOR_ADMIN_PASSWORD: optional(source.MURIKAH_TUTOR_ADMIN_PASSWORD),
     MURIKAH_TUTOR_AUTH_SECRET: optional(source.MURIKAH_TUTOR_AUTH_SECRET),
-    MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS:
-      optional(source.MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS) || "24",
+    MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS: optional(source.MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS) || '24',
     MURIKAH_GOOGLE_CLIENT_ID: optional(source.MURIKAH_GOOGLE_CLIENT_ID),
     MURIKAH_GOOGLE_CLIENT_SECRET: optional(source.MURIKAH_GOOGLE_CLIENT_SECRET),
     MURIKAH_MICROSOFT_CLIENT_ID: optional(source.MURIKAH_MICROSOFT_CLIENT_ID),
     MURIKAH_MICROSOFT_CLIENT_SECRET: optional(source.MURIKAH_MICROSOFT_CLIENT_SECRET),
-    MURIKAH_MICROSOFT_TENANT:
-      optional(source.MURIKAH_MICROSOFT_TENANT) || "common",
+    MURIKAH_MICROSOFT_TENANT: optional(source.MURIKAH_MICROSOFT_TENANT) || 'common',
     MURIKAH_APPLE_CLIENT_ID: optional(source.MURIKAH_APPLE_CLIENT_ID),
     MURIKAH_APPLE_TEAM_ID: optional(source.MURIKAH_APPLE_TEAM_ID),
     MURIKAH_APPLE_KEY_ID: optional(source.MURIKAH_APPLE_KEY_ID),
@@ -118,7 +115,7 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
     MURIKAH_LLM_SECONDARY_MODEL: optional(source.MURIKAH_LLM_SECONDARY_MODEL),
     MURIKAH_LLM_TERTIARY_MODEL: optional(source.MURIKAH_LLM_TERTIARY_MODEL),
     MURIKAH_GEMINI_API_KEY: optional(source.MURIKAH_GEMINI_API_KEY),
-    MURIKAH_FAST_CHAT_MODEL: optional(source.MURIKAH_FAST_CHAT_MODEL) || "gemini-3.8-flash",
+    MURIKAH_FAST_CHAT_MODEL: optional(source.MURIKAH_FAST_CHAT_MODEL) || 'gemini-3.8-flash',
     MURIKAH_DASHSCOPE_API_KEY: optional(source.MURIKAH_DASHSCOPE_API_KEY),
     MURIKAH_DASHSCOPE_BASE_URL: optional(source.MURIKAH_DASHSCOPE_BASE_URL),
     MURIKAH_EMBEDDING_PROVIDER: optional(source.MURIKAH_EMBEDDING_PROVIDER),
@@ -145,18 +142,16 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
       source.MURIKAH_VIDEO_LEARNING_TRANSCRIPT_PROVIDER,
     ),
     MURIKAH_INVIDIOUS_API_BASE_URL: optional(source.MURIKAH_INVIDIOUS_API_BASE_URL),
-    MURIKAH_INVIDIOUS_PUBLIC_BASE_URL: optional(
-      source.MURIKAH_INVIDIOUS_PUBLIC_BASE_URL,
-    ),
+    MURIKAH_INVIDIOUS_PUBLIC_BASE_URL: optional(source.MURIKAH_INVIDIOUS_PUBLIC_BASE_URL),
   };
 }
 
 function hasAdminSecret(runtimeEnv: Record<string, string>): boolean {
-  return (runtimeEnv.MURIKAH_TUTOR_ADMIN_PASSWORD || "").length >= 14;
+  return (runtimeEnv.MURIKAH_TUTOR_ADMIN_PASSWORD || '').length >= 14;
 }
 
 function hasAuthSecret(runtimeEnv: Record<string, string>): boolean {
-  return (runtimeEnv.MURIKAH_TUTOR_AUTH_SECRET || "").length >= 32;
+  return (runtimeEnv.MURIKAH_TUTOR_AUTH_SECRET || '').length >= 32;
 }
 
 function hasRequiredRuntimeSecrets(runtimeEnv: Record<string, string>): boolean {
@@ -165,16 +160,16 @@ function hasRequiredRuntimeSecrets(runtimeEnv: Record<string, string>): boolean 
 
 export class TutorContainer extends Container<TutorEnv> {
   defaultPort = 3782;
-  sleepAfter = "30m";
+  sleepAfter = '30m';
   enableInternet = true;
   entrypoint = [CLOUDFLARE_ENTRYPOINT];
 
   onStop(stopParams: unknown): void {
-    console.log("Murikah Tutor container stopped", JSON.stringify(stopParams));
+    console.log('Murikah Tutor container stopped', JSON.stringify(stopParams));
   }
 
   onError(error: unknown): void {
-    console.error("Murikah Tutor container lifecycle error", error);
+    console.error('Murikah Tutor container lifecycle error', error);
   }
 
   private async readContainerState(): Promise<ContainerState | { error: string }> {
@@ -190,7 +185,7 @@ export class TutorContainer extends Container<TutorEnv> {
       return {
         running: false,
         ready: false,
-        error: "Required Tutor runtime secrets are not available to the Worker runtime.",
+        error: 'Required Tutor runtime secrets are not available to the Worker runtime.',
         workerSecretConfigured: false,
       };
     }
@@ -200,7 +195,7 @@ export class TutorContainer extends Container<TutorEnv> {
       return { ...current, workerSecretConfigured: true };
     }
 
-    let startError = "";
+    let startError = '';
     try {
       this.ctx.container.start({
         env: runtimeEnv,
@@ -238,13 +233,10 @@ export class TutorContainer extends Container<TutorEnv> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 1200);
     try {
-      const response = await this.ctx.container.getTcpPort(3782).fetch(
-        "http://container/health",
-        {
-          signal: controller.signal,
-          headers: { "cache-control": "no-store" },
-        },
-      );
+      const response = await this.ctx.container.getTcpPort(3782).fetch('http://container/health', {
+        signal: controller.signal,
+        headers: { 'cache-control': 'no-store' },
+      });
       return {
         running: true,
         ready: response.status === 200,
@@ -272,7 +264,7 @@ export class TutorContainer extends Container<TutorEnv> {
 
     if (this.ctx.container.running) {
       try {
-        this.ctx.container.destroy("Restarting Murikah staging diagnostic");
+        this.ctx.container.destroy('Restarting Murikah staging diagnostic');
       } catch (error) {
         report.preflightDestroyError = errorText(error);
       }
@@ -281,16 +273,12 @@ export class TutorContainer extends Container<TutorEnv> {
       }
     }
 
-    let startError = "";
+    let startError = '';
     try {
       this.ctx.container.start({
         env: runtimeEnv,
         enableInternet: true,
-        entrypoint: [
-          "/bin/sh",
-          "-c",
-          "trap 'exit 0' TERM INT; while :; do sleep 60; done",
-        ],
+        entrypoint: ['/bin/sh', '-c', "trap 'exit 0' TERM INT; while :; do sleep 60; done"],
       });
       for (let attempt = 0; attempt < 50 && !this.ctx.container.running; attempt += 1) {
         await delay(100);
@@ -309,8 +297,8 @@ export class TutorContainer extends Container<TutorEnv> {
     ): Promise<Record<string, unknown>> => {
       try {
         const process = await this.ctx.container.exec(command, {
-          stdout: "pipe",
-          stderr: "combined",
+          stdout: 'pipe',
+          stderr: 'combined',
           ...(env ? { env } : {}),
         });
         const output = await process.output();
@@ -325,29 +313,29 @@ export class TutorContainer extends Container<TutorEnv> {
 
     try {
       report.image = await run([
-        "/bin/sh",
-        "-lc",
+        '/bin/sh',
+        '-lc',
         [
-          "id",
+          'id',
           "printf 'node='; node --version 2>&1 || true",
           "printf 'python='; python --version 2>&1 || true",
           "printf 'image-revision='; cat /app/murikah-cloudflare-image-rev 2>/dev/null || echo missing",
-          "for p in /app/web/server.js /app/start-frontend.sh /app/start-backend.sh /app/murikah-tutor-bootstrap.py /app/murikah-cloudflare-entrypoint.sh /app/data; do if [ -e \"$p\" ]; then stat -c '%A %u:%g %n' \"$p\" 2>/dev/null || ls -ld \"$p\"; else echo \"missing $p\"; fi; done",
-        ].join("; "),
+          'for p in /app/web/server.js /app/start-frontend.sh /app/start-backend.sh /app/murikah-tutor-bootstrap.py /app/murikah-cloudflare-entrypoint.sh /app/data; do if [ -e "$p" ]; then stat -c \'%A %u:%g %n\' "$p" 2>/dev/null || ls -ld "$p"; else echo "missing $p"; fi; done',
+        ].join('; '),
       ]);
 
       let appProcess: Awaited<ReturnType<typeof this.ctx.container.exec>> | null = null;
-      let appProcessError = "";
+      let appProcessError = '';
       try {
         appProcess = await this.ctx.container.exec(
           [
-            "/bin/sh",
-            "-lc",
-            "rm -f /tmp/muri-start.log; timeout 25s /app/murikah-cloudflare-entrypoint.sh >/tmp/muri-start.log 2>&1 || true",
+            '/bin/sh',
+            '-lc',
+            'rm -f /tmp/muri-start.log; timeout 25s /app/murikah-cloudflare-entrypoint.sh >/tmp/muri-start.log 2>&1 || true',
           ],
           {
-            stdout: "ignore",
-            stderr: "ignore",
+            stdout: 'ignore',
+            stderr: 'ignore',
             env: runtimeEnv,
           },
         );
@@ -357,15 +345,14 @@ export class TutorContainer extends Container<TutorEnv> {
 
       await delay(10000);
 
-      let portProbe = "not-tested";
+      let portProbe = 'not-tested';
       if (appProcess) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 1500);
         try {
-          const response = await this.ctx.container.getTcpPort(3782).fetch(
-            "http://container/health",
-            { signal: controller.signal },
-          );
+          const response = await this.ctx.container
+            .getTcpPort(3782)
+            .fetch('http://container/health', { signal: controller.signal });
           portProbe = `http-${response.status}`;
         } catch (error) {
           portProbe = errorText(error);
@@ -378,11 +365,11 @@ export class TutorContainer extends Container<TutorEnv> {
         appProcessError: appProcessError || undefined,
         port3782: portProbe,
         snapshot: await run([
-          "python",
-          "-c",
+          'python',
+          '-c',
           [
-            "from pathlib import Path",
-            "def text(p):",
+            'from pathlib import Path',
+            'def text(p):',
             "    try: return Path(p).read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace').strip()",
             "    except Exception as exc: return f'<unavailable:{type(exc).__name__}>'",
             "print('tcp4:')",
@@ -391,32 +378,32 @@ export class TutorContainer extends Container<TutorEnv> {
             "print(text('/proc/net/tcp6'))",
             "print('processes:')",
             "for d in sorted(Path('/proc').iterdir(), key=lambda x: int(x.name) if x.name.isdigit() else 10**9):",
-            "    if d.name.isdigit():",
+            '    if d.name.isdigit():',
             "        cmd = text(str(d / 'cmdline'))",
             "        if cmd: print(d.name + ' ' + cmd[:700])",
-          ].join("\n"),
+          ].join('\n'),
         ]),
       };
 
       if (appProcess) await appProcess.exitCode;
 
       report.startupLog = await run([
-        "python",
-        "-c",
+        'python',
+        '-c',
         [
-          "from pathlib import Path",
+          'from pathlib import Path',
           "p=Path('/tmp/muri-start.log')",
           "data=p.read_text(encoding='utf-8', errors='replace')[-14000:] if p.exists() else '<no startup log>'",
           "blocked=('password=', 'secret=', 'token=', 'client_secret=', 'private_key=')",
-          "for line in data.splitlines():",
-          "    low=line.lower()",
+          'for line in data.splitlines():',
+          '    low=line.lower()',
           "    print('<redacted diagnostic line>' if any(x in low for x in blocked) else line)",
-        ].join("\n"),
+        ].join('\n'),
       ]);
     } finally {
       try {
         if (this.ctx.container.running) {
-          this.ctx.container.destroy("Murikah staging diagnostic complete");
+          this.ctx.container.destroy('Murikah staging diagnostic complete');
         }
       } catch (error) {
         report.cleanupError = errorText(error);
@@ -432,9 +419,9 @@ function edgeHealth(env: TutorEnv): Response {
     {
       ok: true,
       runtime: env.MURIKAH_TUTOR_RUNTIME,
-      note: "Edge Worker is available. This endpoint does not require Tutor to be warm.",
+      note: 'Edge Worker is available. This endpoint does not require Tutor to be warm.',
     },
-    { headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" } },
+    { headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } },
   );
 }
 
@@ -452,26 +439,26 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
     },
     {
       status: ready ? 200 : 503,
-      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+      headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
     },
   );
 }
 
 function startingShell(
-  message = "Preparing your learning space. You can stay on this page.",
+  message = 'Preparing your learning space. You can stay on this page.',
 ): Response {
   const safeMessage = message.replace(
     /[<>&]/g,
-    (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char,
+    (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char] || char,
   );
   return new Response(
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}header{height:80px;display:flex;align-items:center;padding:0 clamp(20px,4vw,40px);border-bottom:1px solid #dfe4e6;background:#fff}.brand{border-radius:12px;background:#1E2A30;color:#fff;padding:12px 20px;font-size:18px;font-weight:760}.brand span{color:#C59A39;margin:0 8px}main{width:min(900px,100%);min-height:calc(100dvh - 80px);margin:auto;padding:clamp(28px,5vw,52px) clamp(20px,4vw,40px);display:flex;flex-direction:column}h1{font-size:clamp(26px,4vw,38px);letter-spacing:-.035em;margin:0 0 12px}p{color:#66747b;line-height:1.6;margin:0}.bar{width:min(420px,100%);height:3px;margin-top:22px;border-radius:999px;overflow:hidden;background:#e1e5e7}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:12px;font-size:13px;color:#879298}.composer{margin-top:auto;border:1px solid #d8dee1;border-radius:30px;background:#fff;padding:20px;box-shadow:0 12px 40px rgba(30,42,48,.06)}.prompt{min-height:58px;color:#879298;font-size:18px}.tools{display:flex;align-items:center;justify-content:space-between;color:#66747b}.send{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#e7ebed;color:#1E2A30;font-size:23px}</style></head><body><header><div class="brand">Murikah <span>|</span> Tutor</div></header><main><section><h1>How can I help you learn today?</h1><p id="status">${safeMessage}</p><div class="bar"></div><div class="small" id="small">Preparing your guest workspace…</div></section><div class="composer"><div class="prompt">Ask anything…</div><div class="tools"><span>Chat</span><span class="send">↑</span></div></div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.workerSecretConfigured===false){document.getElementById('status').textContent='Tutor staging configuration is incomplete.';document.getElementById('small').textContent='The runtime secret binding needs attention.';return;}if(attempts>40){document.getElementById('status').textContent='Tutor is still starting.';document.getElementById('small').textContent='You can stay on this page; it will open automatically.';}}catch(e){}setTimeout(check,attempts<15?750:1500);}check();})();</script></body></html>`,
     {
       status: 200,
       headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
       },
     },
   );
@@ -485,7 +472,7 @@ async function safeStatus(
     return {
       running: false,
       ready: false,
-      error: "Required Tutor runtime secrets are not available to the Worker runtime.",
+      error: 'Required Tutor runtime secrets are not available to the Worker runtime.',
       workerSecretConfigured: false,
     };
   }
@@ -495,7 +482,7 @@ async function safeStatus(
     if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
     return { ...status, workerSecretConfigured: true };
   } catch (error) {
-    console.error("Murikah Tutor runtime RPC failed", error);
+    console.error('Murikah Tutor runtime RPC failed', error);
     return {
       running: false,
       ready: false,
@@ -530,19 +517,19 @@ export default {
     const url = new URL(request.url);
     const runtimeEnv = buildContainerEnv(env);
 
-    if (url.pathname === "/favicon.ico") return new Response(null, { status: 204 });
-    if (url.pathname === "/__muri/edge-health") return edgeHealth(env);
-    if (url.pathname === "/__muri/worker-config") return workerConfig(runtimeEnv, env);
+    if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 });
+    if (url.pathname === '/__muri/edge-health') return edgeHealth(env);
+    if (url.pathname === '/__muri/worker-config') return workerConfig(runtimeEnv, env);
 
-    if (url.pathname === "/__muri/container-diagnostics") {
+    if (url.pathname === '/__muri/container-diagnostics') {
       try {
         const diagnostic = getContainer(env.TUTOR_CONTAINER, DIAGNOSTIC_INSTANCE);
         const report = await diagnostic.isolatedStartupDiagnostics(runtimeEnv);
         return Response.json(report, {
-          headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+          headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
         });
       } catch (error) {
-        console.error("Murikah Tutor diagnostics RPC failed", error);
+        console.error('Murikah Tutor diagnostics RPC failed', error);
         return Response.json(
           {
             running: false,
@@ -551,7 +538,7 @@ export default {
           },
           {
             status: 503,
-            headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+            headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
           },
         );
       }
@@ -560,20 +547,23 @@ export default {
     const tutor = getContainer(env.TUTOR_CONTAINER, APP_INSTANCE);
     const status = await cachedStatus(tutor, runtimeEnv);
 
-    if (url.pathname === "/__muri/runtime-status") {
+    if (url.pathname === '/__muri/runtime-status') {
       return Response.json(status, {
-        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+        headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
       });
     }
 
     if (status.ready) {
       try {
         const response = await tutor.fetch(request);
-        if (response.status === 101 || request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        if (
+          response.status === 101 ||
+          request.headers.get('upgrade')?.toLowerCase() === 'websocket'
+        ) {
           return response;
         }
         const headers = new Headers(response.headers);
-        headers.set("x-murikah-tutor-runtime", "cloudflare-container");
+        headers.set('x-murikah-tutor-runtime', 'cloudflare-container');
         return new Response(response.body, {
           status: response.status,
           statusText: response.statusText,
@@ -581,15 +571,15 @@ export default {
         });
       } catch (error) {
         readyCacheUntil = 0;
-        console.error("Murikah Tutor proxy failed", error);
-        return startingShell("Reconnecting to your Tutor…");
+        console.error('Murikah Tutor proxy failed', error);
+        return startingShell('Reconnecting to your Tutor…');
       }
     }
 
-    if (url.pathname === "/health") {
+    if (url.pathname === '/health') {
       return Response.json(
         {
-          status: hasRequiredRuntimeSecrets(runtimeEnv) ? "starting" : "configuration-error",
+          status: hasRequiredRuntimeSecrets(runtimeEnv) ? 'starting' : 'configuration-error',
           runtime: env.MURIKAH_TUTOR_RUNTIME,
           workerSecretConfigured: hasRequiredRuntimeSecrets(runtimeEnv),
           containerState: status.state,
@@ -597,15 +587,15 @@ export default {
         },
         {
           status: 503,
-          headers: { "retry-after": "2", "cache-control": "no-store" },
+          headers: { 'retry-after': '2', 'cache-control': 'no-store' },
         },
       );
     }
 
     return startingShell(
       hasRequiredRuntimeSecrets(runtimeEnv)
-        ? "Preparing your learning space. You can stay on this page."
-        : "Tutor staging configuration is incomplete.",
+        ? 'Preparing your learning space. You can stay on this page.'
+        : 'Tutor staging configuration is incomplete.',
     );
   },
 };
