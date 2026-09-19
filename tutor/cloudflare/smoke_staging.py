@@ -58,12 +58,13 @@ def main() -> int:
         config_code != 200
         or config.get("adminPasswordConfigured") is not True
         or config.get("authSecretConfigured") is not True
+        or config.get("persistenceConfigured") is not True
     ):
-        print("Murikah Tutor staging smoke test: FAILED - required Worker secrets are not visible at runtime")
+        print("Murikah Tutor staging smoke test: FAILED - required Worker secrets or persistence bindings are not visible at runtime")
         print(f"Worker config status: HTTP {config_code} {config_body[:1000]}")
         return 1
 
-    print(" - Worker runtime can see the required admin and auth-signing secrets")
+    print(" - Worker runtime can see the required admin/auth secrets and D1/R2 persistence bindings")
     started = time.monotonic()
     last: dict = {}
 
