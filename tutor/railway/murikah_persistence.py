@@ -228,6 +228,9 @@ def _object_path(rel: str) -> str:
 
 def _upload(rel: str, data: bytes, *, mtime_ns: int, generation: str) -> None:
     sha = hashlib.sha256(data).hexdigest()
+    # JavaScript/D1 INTEGER values are transported through IEEE-754 numbers.
+    # Epoch nanoseconds exceed Number.MAX_SAFE_INTEGER, so persist milliseconds.
+    mtime_ms = max(0, int(mtime_ns) // 1_000_000)
     _request(
         "PUT",
         _object_path(rel),
@@ -235,7 +238,7 @@ def _upload(rel: str, data: bytes, *, mtime_ns: int, generation: str) -> None:
         content_type="application/octet-stream",
         extra_headers={
             "x-murikah-object-sha256": sha,
-            "x-murikah-object-mtime-ns": str(max(0, int(mtime_ns))),
+            "x-murikah-object-mtime-ms": str(mtime_ms),
             "x-murikah-object-generation": generation,
             "x-murikah-object-size": str(len(data)),
         },

@@ -68,6 +68,29 @@ class PersistenceClientTests(unittest.TestCase):
             finally:
                 restored.close()
 
+    def test_upload_uses_js_safe_millisecond_timestamp(self):
+        captured = {}
+        original = persistence._request
+
+        def fake_request(method, path, **kwargs):
+            captured.update(kwargs)
+            return 200, b"", {}
+
+        persistence._request = fake_request
+        try:
+            persistence._upload(
+                "users/u1/state.json",
+                b"{}",
+                mtime_ns=1_789_817_400_123_456_789,
+                generation="a" * 32,
+            )
+        finally:
+            persistence._request = original
+
+        headers = captured["extra_headers"]
+        self.assertEqual(headers["x-murikah-object-mtime-ms"], "1789817400123")
+        self.assertNotIn("x-murikah-object-mtime-ns", headers)
+
     def test_provider_catalog_and_auth_secret_are_not_checkpointed(self):
         self.assertTrue(persistence._skip("system/auth/auth_secret"))
         self.assertTrue(persistence._skip("user/settings/model_catalog.json"))
