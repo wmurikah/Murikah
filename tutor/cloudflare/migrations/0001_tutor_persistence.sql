@@ -47,10 +47,10 @@ CREATE TABLE IF NOT EXISTS guest_prompts (
 CREATE INDEX IF NOT EXISTS idx_guest_prompts_uid
   ON guest_prompts(uid);
 
--- Keep the migration intentionally trigger-free. Wrangler's D1 migration
--- execution path splits SQL statements and rejected the previous multi-
--- statement CREATE TRIGGER bodies with "incomplete input". Guest quota
--- admission is enforced atomically by a conditional INSERT in the Worker.
+-- Keep the migration intentionally free of trigger bodies. Wrangler's D1
+-- migration execution path rejected the previous multi-statement trigger
+-- definitions with "incomplete input". Guest quota admission is enforced
+-- atomically by a conditional INSERT in the Worker.
 INSERT INTO persistence_meta(key, value, updated_at)
 VALUES ('schema_version', '1', unixepoch())
 ON CONFLICT(key) DO UPDATE SET
