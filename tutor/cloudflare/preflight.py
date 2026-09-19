@@ -447,6 +447,7 @@ def main() -> int:
             'persistenceConfigured',
             '"/__muri/persistence-status"',
             'schemaVersion',
+            'learningJournalSchemaVersion',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             'MURIKAH_TUTOR_SMOKE_TIMEOUT',
