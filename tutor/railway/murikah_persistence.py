@@ -192,8 +192,12 @@ def learning_actor(
         {
             "actor_id": _learning_text(actor_id, 128),
             "actor_type": _learning_text(actor_type, 16),
-            "username": _learning_text(username, 254),
-            "guest_session_id": _learning_text(guest_session_id, 128),
+            "username": "" if actor_type == "guest" else _learning_text(username, 254),
+            "guest_session_id": (
+                _learning_text(guest_session_id or actor_id, 128)
+                if actor_type == "guest"
+                else ""
+            ),
         },
     )
 
