@@ -148,8 +148,10 @@ def _learning_summary(value: Any) -> str:
     current = []
     for char in text:
         current.append(char)
-        if char in ".!?" and len("".join(current)) >= 24:
-            pieces.append("".join(current).strip())
+        if char in ".!?":
+            sentence = "".join(current).strip()
+            if sentence:
+                pieces.append(sentence)
             current = []
             if len(pieces) >= 2:
                 break
