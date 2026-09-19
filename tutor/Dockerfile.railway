@@ -29,6 +29,7 @@ COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.p
 COPY tutor/railway/harden_guest_completion.py /opt/murikah/harden_guest_completion.py
 COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
 COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
+COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 COPY tutor/railway/apply_workspace_access.py /opt/murikah/apply_workspace_access.py
@@ -57,6 +58,7 @@ COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.ts
 COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
 COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
 RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_lane.py \
+    && cp /opt/murikah/murikah_persistence.py /src/DeepTutor/deeptutor/murikah_persistence.py \
     && cp /opt/murikah/murikah_diagram.py /src/DeepTutor/deeptutor/murikah_diagram.py \
     && cp /opt/murikah/murikah_er.py /src/DeepTutor/deeptutor/murikah_er.py \
     && python /opt/murikah/apply_branding.py /src/DeepTutor \
@@ -122,6 +124,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/app/service.py /app/deeptuto
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/api/main.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /app/deeptutor/agents/chat/capability.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py
 
 # The Python regression suite intentionally validates both installed runtime
 # modules and repository overlay sources. Copy the complete non-secret railway

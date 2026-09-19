@@ -159,7 +159,10 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v18"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v19"',
+            'binding = "TUTOR_DB"',
+            'migrations_dir = "migrations"',
+            'binding = "TUTOR_FILES"',
             'new_sqlite_classes = ["TutorContainer"]',
             '[secrets]',
             '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
@@ -178,6 +181,8 @@ def main() -> int:
             'def list_tutor_applications()',
             'def recycle_tutor_application()',
             'TRANSIENT_DEPLOY_ERRORS',
+            'def apply_persistence_migrations()',
+            '"d1", "migrations", "apply", "murikah-tutor-prod", "--remote"',
             'MURIKAH_CLOUDFLARE_IMAGE_REV',
             '"/__muri/container-diagnostics"',
             '"/__muri/runtime-status"',
@@ -193,8 +198,11 @@ def main() -> int:
             'MURIKAH_TUTOR_AUTH_SECRET',
             '/app/data/system/auth/auth_secret',
             'Stable Cloudflare auth signing secret restored.',
+            'python -m deeptutor.murikah_persistence restore',
             'python /app/murikah-tutor-bootstrap.py',
             'python /app/murikah-fast-lane-bootstrap.py',
+            'python -m deeptutor.murikah_persistence sync-once',
+            'python -m deeptutor.murikah_persistence sync-loop &',
             'MURIKAH_FAST_CHAT_MODEL',
             'export BACKEND_HOST=127.0.0.1',
             'export FRONTEND_HOST=0.0.0.0',
@@ -209,6 +217,8 @@ def main() -> int:
             'ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev',
             'LABEL com.murikah.tutor.cloudflare-image-rev=',
             'COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py',
+            'COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py',
             'COPY tutor/railway /opt/murikah/railway',
             'COPY tutor/tests /opt/murikah/tests',
             'RUN python -m unittest discover -s /opt/murikah/tests -v',
@@ -249,6 +259,11 @@ def main() -> int:
             "'/__muri/container-diagnostics'",
             "'/__muri/edge-health'",
             "'/__muri/worker-config'",
+            "PERSISTENCE_PREFIX = '/__muri/persist'",
+            'handlePersistence(request, env, url)',
+            'TUTOR_DB: PersistenceDatabase',
+            'TUTOR_FILES: PersistenceBucket',
+            'persistenceConfigured',
             'workerSecretConfigured',
             'authSecretConfigured',
             'geminiFastLaneConfigured',
@@ -350,6 +365,9 @@ def main() -> int:
         (
             '"/__muri/worker-config"',
             'adminPasswordConfigured',
+            'persistenceConfigured',
+            '"/__muri/persistence-status"',
+            'schemaVersion',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             'MURIKAH_TUTOR_SMOKE_TIMEOUT',
@@ -364,6 +382,30 @@ def main() -> int:
             "npm --prefix tutor/cloudflare run deploy:staging",
             "MURIKAH_TUTOR_AUTH_SECRET",
             "PERSISTENCE.md",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/migrations/0001_tutor_persistence.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS persistence_objects",
+            "CREATE TABLE IF NOT EXISTS persistence_replay",
+            "CREATE TABLE IF NOT EXISTS guest_sessions",
+            "CREATE TABLE IF NOT EXISTS guest_prompts",
+            "guest_prompt_guard",
+            "guest_prompt_charge",
+            "guest_prompt_release",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "source.backup(destination)",
+            "PERSIST_PREFIX = \"/__muri/persist\"",
+            "def restore()",
+            "def sync_once()",
+            "def sync_loop()",
+            "def guest_reserve(",
+            "def guest_status(",
         ),
     )
     require_markers(
@@ -411,7 +453,8 @@ def main() -> int:
     print(" - Worker bindings are passed explicitly into every Linux container start")
     print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
     print(" - readiness is determined by the real Tutor /health route")
-    print(" - user content persistence remains blocked on externalised /app/data storage")
+    print(" - D1-backed guest quotas and private R2 /app/data checkpoints are wired through the Worker bridge")
+    print(" - production persistence cutover remains gated on the destructive container-replacement acceptance test")
     return 0
 
 

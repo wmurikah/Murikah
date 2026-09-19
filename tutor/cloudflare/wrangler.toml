@@ -36,6 +36,7 @@ required = [
 binding = "TUTOR_DB"
 database_name = "murikah-tutor-prod"
 database_id = "e8916f9a-fc2e-4bc6-925f-76c6c401c95b"
+migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "TUTOR_FILES"
@@ -45,8 +46,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v18 renders ER diagrams from validated structured plans.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-16-v18" }
+# v19 activates D1-backed guest quotas and private R2 checkpoints for /app/data.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v19" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
