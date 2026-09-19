@@ -285,7 +285,11 @@ async def signup(body: Signup, request: Request, response: Response):
             try:
                 durable.guest_delete(record["id"])
             except durable.PersistenceError as exc:
-                raise HTTPException(503, "Account created, but guest cleanup is still pending. Please retry.") from exc
+                # The account write has already succeeded. Never turn a successful
+                # signup into a retry loop just because the obsolete guest ledger
+                # could not be deleted; it expires automatically and is no longer
+                # consulted for the signed-in account.
+                print(f"[Murikah Tutor] Guest ledger cleanup deferred: {type(exc).__name__}")
         else:
             with ledger() as db:
                 db.execute("DELETE FROM guests WHERE uid=?", (record["id"],))
