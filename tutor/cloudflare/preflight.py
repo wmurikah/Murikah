@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import sqlite3
 from pathlib import Path
 import tempfile
@@ -41,10 +42,11 @@ def validate_persistence_migration_fixture() -> None:
     content = require(relative)
     if not content:
         return
-    if "CREATE TRIGGER" in content.upper():
+    sql_without_line_comments = re.sub(r"(?m)--.*$", "", content)
+    if re.search(r"(?i)\\bCREATE\\s+TRIGGER\\b", sql_without_line_comments):
         failures.append(
-            f"{relative} contains CREATE TRIGGER; Wrangler D1 migrations previously rejected "
-            "multi-statement trigger bodies with SQLITE_ERROR incomplete input"
+            f"{relative} contains a trigger definition; Wrangler D1 migrations previously "
+            "rejected multi-statement trigger bodies with SQLITE_ERROR incomplete input"
         )
         return
     try:
