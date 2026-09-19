@@ -58,6 +58,11 @@ export MURIKAH_VIDEO_BASE_URL="${MURIKAH_VIDEO_BASE_URL:-https://dashscope-intl.
 export MURIKAH_VIDEO_LEARNING_PROVIDER="${MURIKAH_VIDEO_LEARNING_PROVIDER:-youtube}"
 export MURIKAH_VIDEO_LEARNING_TRANSCRIPT_PROVIDER="${MURIKAH_VIDEO_LEARNING_TRANSCRIPT_PROVIDER:-youtube_transcript_api}"
 
+# Restore durable user/application state before authentication or DeepTutor
+# settings are initialized. The Worker bridge is HMAC-authenticated with the
+# existing Tutor signing secret; D1/R2 credentials never enter this container.
+python -m deeptutor.murikah_persistence restore
+
 # DeepTutor signs login sessions with data/system/auth/auth_secret. Container
 # disk is disposable, so restore the same Cloudflare-managed signing secret
 # before any DeepTutor auth module can import and generate a replacement.
@@ -120,14 +125,23 @@ export DEEPTUTOR_API_BASE_URL="http://127.0.0.1:8001"
 
 backend_pid=""
 frontend_pid=""
+persistence_pid=""
 cleanup() {
   trap - TERM INT EXIT
   if [ -n "${frontend_pid}" ] && kill -0 "${frontend_pid}" 2>/dev/null; then kill -TERM "${frontend_pid}" 2>/dev/null || true; fi
   if [ -n "${backend_pid}" ] && kill -0 "${backend_pid}" 2>/dev/null; then kill -TERM "${backend_pid}" 2>/dev/null || true; fi
+  if [ -n "${persistence_pid}" ] && kill -0 "${persistence_pid}" 2>/dev/null; then kill -TERM "${persistence_pid}" 2>/dev/null || true; fi
   wait "${frontend_pid}" 2>/dev/null || true
   wait "${backend_pid}" 2>/dev/null || true
+  wait "${persistence_pid}" 2>/dev/null || true
 }
 trap cleanup TERM INT EXIT
+
+# Persist the bootstrapped baseline immediately, then maintain a bounded
+# background checkpoint. The loop performs a final checkpoint on TERM/INT.
+python -m deeptutor.murikah_persistence sync-once
+python -m deeptutor.murikah_persistence sync-loop &
+persistence_pid=$!
 
 echo "[Murikah Tutor] Starting Cloudflare runtime: backend 127.0.0.1:8001, frontend 0.0.0.0:3782"
 /app/start-backend.sh &
