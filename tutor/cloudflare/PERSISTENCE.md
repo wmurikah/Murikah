@@ -18,6 +18,20 @@ The Cloudflare account hosting `tutor.murikah.com` now has the following dedicat
 
 The bindings are repository-managed in `tutor/cloudflare/wrangler.toml`. No R2 access key or D1 credential is stored in the repository or passed into the Linux container.
 
+## Implemented persistence path
+
+The application integration is now repository-managed rather than a dashboard-only placeholder:
+
+- `tutor/cloudflare/migrations/0001_tutor_persistence.sql` creates the D1 manifest, replay-protection and guest-quota tables;
+- `deploy_staging.py` applies pending D1 migrations before every Worker/container deploy;
+- the Worker exposes only an HMAC-authenticated `/__muri/persist/*` bridge backed by `TUTOR_DB` and `TUTOR_FILES`;
+- the Linux container restores durable objects before DeepTutor/auth initialization and checkpoints `/app/data` in the background;
+- guest sessions and the seven-prompt ledger use D1 on Cloudflare instead of the container-local SQLite ledger;
+- active SQLite files are copied with Python's SQLite backup API before their private checkpoint object is written to R2;
+- Cloudflare-managed provider configuration and the auth signing secret are excluded from R2 checkpoints because their authoritative copies remain Worker Variables/Secrets.
+
+The existing `MURIKAH_TUTOR_AUTH_SECRET` authenticates this internal bridge with a separate HMAC request protocol, timestamp window and D1 replay nonce. No additional Cloudflare secret or API token is required.
+
 ## What DeepTutor currently places in `/app/data`
 
 The pinned DeepTutor runtime uses the tree for runtime settings and credentials, accounts/auth state, sessions/chat history, per-user workspaces, Memory, Books/Reading/Notebooks, Knowledge Bases, parse caches, generated outputs and logs. Some of that state is file/JSON oriented and some is SQLite-backed.
@@ -80,13 +94,13 @@ Cloudflare dashboard Variables remain authoritative for model/service configurat
 
 1. **Bind** `TUTOR_DB` and `TUTOR_FILES` to `murikah-tutor-container-staging` through `wrangler.toml`.
 2. **Inventory/snapshot** any existing `/app/data` that must be preserved before a destructive container replacement.
-3. **Create the persistence schema and Worker bridge** for structured state and private objects.
-4. **Externalise file stores** to R2 and verify read/write behavior without public bucket access.
-5. **Externalise or safely checkpoint transactional stores** into D1-backed durable state.
-6. **Import** the existing snapshot and reconcile record counts/checksums.
-7. **Run staging** through sleep/wake, redeploy and forced container replacement tests.
+3. **Create the persistence schema and Worker bridge** for structured state and private objects. Implemented in code.
+4. **Externalise file stores** to private R2 checkpoints with a D1 manifest. Implemented in code.
+5. **Externalise the guest quota ledger** into D1 and safely checkpoint SQLite-backed runtime state. Implemented in code.
+6. **Import** an existing snapshot only when one exists. The current production resources are empty, so the first successful checkpoint becomes the baseline.
+7. **Run staging/production verification** through sleep/wake, redeploy and one deliberate forced container replacement.
 8. **Verify** users, sessions, guest handoff, conversations, Knowledge Bases, Memory, uploads and generated outputs survive every lifecycle event.
-9. **Cut over** only after the durability tests pass; keep a rollback snapshot until acceptance is complete.
+9. **Cut over to multi-container sharding** only after the durability tests pass; keep a rollback checkpoint until acceptance is complete.
 
 ## Acceptance conditions
 

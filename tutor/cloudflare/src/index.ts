@@ -1,7 +1,35 @@
 import { Container, getContainer } from '@cloudflare/containers';
 
+type PersistenceRunResult = { meta?: { changes?: number } };
+type PersistenceStatement = {
+  bind(...values: unknown[]): PersistenceStatement;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<{ results?: T[] }>;
+  run(): Promise<PersistenceRunResult>;
+};
+type PersistenceDatabase = {
+  prepare(query: string): PersistenceStatement;
+  batch(statements: PersistenceStatement[]): Promise<PersistenceRunResult[]>;
+};
+type PersistenceR2Object = {
+  body: ReadableStream<Uint8Array>;
+  size: number;
+  customMetadata?: Record<string, string>;
+};
+type PersistenceBucket = {
+  put(
+    key: string,
+    value: ReadableStream<Uint8Array> | ArrayBuffer,
+    options?: { customMetadata?: Record<string, string> },
+  ): Promise<unknown>;
+  get(key: string): Promise<PersistenceR2Object | null>;
+  delete(key: string): Promise<void>;
+};
+
 type TutorEnv = {
   TUTOR_CONTAINER: DurableObjectNamespace<TutorContainer>;
+  TUTOR_DB: PersistenceDatabase;
+  TUTOR_FILES: PersistenceBucket;
   MURIKAH_TUTOR_RUNTIME: string;
   MURIKAH_PUBLIC_BASE_URL?: string;
   MURIKAH_GUEST_PROMPT_LIMIT?: string;
@@ -73,6 +101,9 @@ const APP_INSTANCE = 'murikah-tutor-staging-v7';
 const DIAGNOSTIC_INSTANCE = 'murikah-tutor-staging-diagnostics-v7';
 const CLOUDFLARE_ENTRYPOINT = '/app/murikah-cloudflare-entrypoint.sh';
 const READY_CACHE_MS = 5_000;
+const PERSISTENCE_PREFIX = '/__muri/persist';
+const PERSISTENCE_CLOCK_SKEW_SECONDS = 120;
+const PERSISTENCE_MAX_PATHS = 20_000;
 
 let readyCacheUntil = 0;
 let statusInFlight: Promise<RuntimeStatus> | null = null;
@@ -87,6 +118,354 @@ function errorText(error: unknown): string {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hexBytes(value: string): Uint8Array | null {
+  if (!/^[0-9a-f]{64}$/i.test(value)) return null;
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < value.length; index += 2) {
+    bytes[index / 2] = Number.parseInt(value.slice(index, index + 2), 16);
+  }
+  return bytes;
+}
+
+async function digestHex(buffer: ArrayBuffer): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+  return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function persistenceJson(payload: unknown, status = 200): Response {
+  return Response.json(payload, {
+    status,
+    headers: {
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    },
+  });
+}
+
+function safePersistencePath(url: URL): string | null {
+  const raw = (url.searchParams.get('path') || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  const parts = raw.split('/');
+  if (
+    !raw ||
+    raw.length > 1024 ||
+    parts.some((part) => !part || part === '.' || part === '..' || part.includes('\0'))
+  ) {
+    return null;
+  }
+  return parts.join('/');
+}
+
+function persistenceObjectKey(path: string): string {
+  return 'runtime/' + path.split('/').map((part) => encodeURIComponent(part)).join('/');
+}
+
+function validPersistenceId(value: unknown): string {
+  const text = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{3,128}$/.test(text) ? text : '';
+}
+
+async function verifyPersistenceRequest(
+  request: Request,
+  env: TutorEnv,
+  url: URL,
+): Promise<Response | null> {
+  const secret = optional(env.MURIKAH_TUTOR_AUTH_SECRET);
+  if (secret.length < 32) return persistenceJson({ error: 'persistence_unavailable' }, 503);
+
+  const timestamp = request.headers.get('x-murikah-persistence-timestamp') || '';
+  const nonce = request.headers.get('x-murikah-persistence-nonce') || '';
+  const contentSha = request.headers.get('x-murikah-content-sha256') || '';
+  const signature = request.headers.get('x-murikah-persistence-signature') || '';
+  const signatureBytes = hexBytes(signature);
+  const parsedTimestamp = Number(timestamp);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (
+    !Number.isInteger(parsedTimestamp) ||
+    Math.abs(now - parsedTimestamp) > PERSISTENCE_CLOCK_SKEW_SECONDS ||
+    !/^[0-9a-f]{32}$/i.test(nonce) ||
+    !/^[0-9a-f]{64}$/i.test(contentSha) ||
+    !signatureBytes
+  ) {
+    return persistenceJson({ error: 'persistence_unauthorized' }, 401);
+  }
+
+  if ((request.headers.get('content-type') || '').includes('application/json')) {
+    const actualSha = await digestHex(await request.clone().arrayBuffer());
+    if (actualSha !== contentSha) {
+      return persistenceJson({ error: 'persistence_body_mismatch' }, 401);
+    }
+  }
+
+  const canonical = [
+    timestamp,
+    nonce,
+    request.method.toUpperCase(),
+    url.pathname + url.search,
+    contentSha,
+  ].join('\n');
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  const verified = await crypto.subtle.verify(
+    'HMAC',
+    key,
+    signatureBytes,
+    new TextEncoder().encode(canonical),
+  );
+  if (!verified) return persistenceJson({ error: 'persistence_unauthorized' }, 401);
+
+  await env.TUTOR_DB.prepare('DELETE FROM persistence_replay WHERE expires_at <= ?')
+    .bind(now)
+    .run();
+  const replay = await env.TUTOR_DB.prepare(
+    'INSERT OR IGNORE INTO persistence_replay(nonce, expires_at) VALUES (?, ?)',
+  )
+    .bind(nonce, now + 300)
+    .run();
+  if ((replay.meta?.changes || 0) !== 1) {
+    return persistenceJson({ error: 'persistence_replay' }, 409);
+  }
+  return null;
+}
+
+async function requestJson(request: Request): Promise<Record<string, unknown>> {
+  try {
+    const value = await request.json();
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+async function handlePersistence(request: Request, env: TutorEnv, url: URL): Promise<Response> {
+  const denied = await verifyPersistenceRequest(request, env, url);
+  if (denied) return denied;
+
+  const route = url.pathname.slice(PERSISTENCE_PREFIX.length);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (route === '/manifest' && request.method === 'GET') {
+    const result = await env.TUTOR_DB.prepare(
+      'SELECT path, sha256, size_bytes, mtime_ns, updated_at FROM persistence_objects ORDER BY path',
+    ).all();
+    return persistenceJson({ items: result.results || [] });
+  }
+
+  if (route === '/object') {
+    const path = safePersistencePath(url);
+    if (!path) return persistenceJson({ error: 'invalid_path' }, 400);
+
+    if (request.method === 'GET') {
+      const row = await env.TUTOR_DB.prepare(
+        'SELECT object_key, sha256, size_bytes, mtime_ns FROM persistence_objects WHERE path = ?',
+      )
+        .bind(path)
+        .first<{
+          object_key: string;
+          sha256: string;
+          size_bytes: number;
+          mtime_ns: number;
+        }>();
+      if (!row) return persistenceJson({ error: 'not_found' }, 404);
+      const object = await env.TUTOR_FILES.get(row.object_key);
+      if (!object) return persistenceJson({ error: 'object_missing' }, 503);
+      return new Response(object.body, {
+        headers: {
+          'content-type': 'application/octet-stream',
+          'content-length': String(object.size),
+          'x-murikah-object-sha256': row.sha256,
+          'x-murikah-object-mtime-ns': String(row.mtime_ns),
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        },
+      });
+    }
+
+    if (request.method === 'PUT') {
+      const sha = request.headers.get('x-murikah-object-sha256') || '';
+      const signedContentSha = request.headers.get('x-murikah-content-sha256') || '';
+      const generation = request.headers.get('x-murikah-object-generation') || '';
+      const mtime = Number(request.headers.get('x-murikah-object-mtime-ns') || '0');
+      const size = Number(request.headers.get('x-murikah-object-size') || '0');
+      if (
+        !/^[0-9a-f]{64}$/i.test(sha) ||
+        sha !== signedContentSha ||
+        !/^[0-9a-f]{32}$/i.test(generation) ||
+        !Number.isSafeInteger(mtime) ||
+        mtime < 0 ||
+        !Number.isSafeInteger(size) ||
+        size < 0
+      ) {
+        return persistenceJson({ error: 'invalid_object_metadata' }, 400);
+      }
+      const key = persistenceObjectKey(path);
+      await env.TUTOR_FILES.put(key, request.body || new ArrayBuffer(0), {
+        customMetadata: { path, sha256: sha },
+      });
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ns, generation, updated_at) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?) ' +
+          'ON CONFLICT(path) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256, ' +
+          'size_bytes = excluded.size_bytes, mtime_ns = excluded.mtime_ns, generation = excluded.generation, ' +
+          'updated_at = excluded.updated_at',
+      )
+        .bind(path, key, sha, size, mtime, generation, now)
+        .run();
+      return persistenceJson({ ok: true });
+    }
+  }
+
+  if (route === '/commit' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const generation = String(body.generation || '');
+    const rawPaths = Array.isArray(body.paths) ? body.paths : [];
+    const paths = Array.from(new Set(rawPaths.map((value) => String(value || '')).filter(Boolean)));
+    if (!/^[0-9a-f]{32}$/i.test(generation) || paths.length > PERSISTENCE_MAX_PATHS) {
+      return persistenceJson({ error: 'invalid_commit' }, 400);
+    }
+    for (const path of paths) {
+      const probe = new URL('https://persist.invalid/');
+      probe.searchParams.set('path', path);
+      if (safePersistencePath(probe) !== path) {
+        return persistenceJson({ error: 'invalid_commit_path' }, 400);
+      }
+    }
+
+    const statements: PersistenceStatement[] = [];
+    for (let offset = 0; offset < paths.length; offset += 50) {
+      const chunk = paths.slice(offset, offset + 50);
+      const placeholders = chunk.map(() => '?').join(',');
+      statements.push(
+        env.TUTOR_DB.prepare(
+          'UPDATE persistence_objects SET generation = ?, updated_at = ? WHERE path IN (' +
+            placeholders +
+            ')',
+        ).bind(generation, now, ...chunk),
+      );
+    }
+    if (statements.length) await env.TUTOR_DB.batch(statements);
+
+    // Do not infer deletes from one container's missing local paths. During a
+    // Cloudflare rollout, old and new image generations can overlap briefly;
+    // treating either snapshot as globally authoritative could delete a newer
+    // object's durable copy. Explicit tombstones can be introduced after the
+    // single-container replacement test. Until then, orphaned objects are safer
+    // than data loss.
+    await env.TUTOR_DB.prepare(
+      "INSERT INTO persistence_meta(key, value, updated_at) VALUES ('last_generation', ?, ?) " +
+        'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+    )
+      .bind(generation, now)
+      .run();
+    return persistenceJson({ ok: true, pruned: 0 });
+  }
+
+  if (route === '/guest/session' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const uid = validPersistenceId(body.uid);
+    const expiresAt = Number(body.expires_at || 0);
+    const usedCount = Number(body.used_count || 0);
+    const promptLimit = Number(body.prompt_limit || 7);
+    if (
+      !uid ||
+      !Number.isSafeInteger(expiresAt) ||
+      expiresAt <= now ||
+      !Number.isSafeInteger(usedCount) ||
+      usedCount < 0 ||
+      !Number.isSafeInteger(promptLimit) ||
+      promptLimit < 1 ||
+      usedCount > promptLimit
+    ) {
+      return persistenceJson({ error: 'invalid_guest_session' }, 400);
+    }
+    await env.TUTOR_DB.prepare('DELETE FROM guest_sessions WHERE expires_at <= ?').bind(now).run();
+    await env.TUTOR_DB.prepare(
+      'INSERT INTO guest_sessions(uid, expires_at, used_count, prompt_limit, created_at, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET ' +
+        'expires_at = excluded.expires_at, used_count = MAX(guest_sessions.used_count, excluded.used_count), ' +
+        'prompt_limit = excluded.prompt_limit, updated_at = excluded.updated_at',
+    )
+      .bind(uid, expiresAt, usedCount, promptLimit, now, now)
+      .run();
+    return persistenceJson({ ok: true });
+  }
+
+  if (route === '/guest/session' && request.method === 'DELETE') {
+    const uid = validPersistenceId(url.searchParams.get('uid'));
+    if (!uid) return persistenceJson({ error: 'invalid_guest' }, 400);
+    await env.TUTOR_DB.prepare('DELETE FROM guest_sessions WHERE uid = ?').bind(uid).run();
+    return persistenceJson({ ok: true });
+  }
+
+  if (route === '/guest/status' && request.method === 'GET') {
+    const uid = validPersistenceId(url.searchParams.get('uid'));
+    if (!uid) return persistenceJson({ error: 'invalid_guest' }, 400);
+    const row = await env.TUTOR_DB.prepare(
+      'SELECT expires_at, used_count, prompt_limit FROM guest_sessions WHERE uid = ?',
+    )
+      .bind(uid)
+      .first<{ expires_at: number; used_count: number; prompt_limit: number }>();
+    const expired = !row || row.expires_at <= now;
+    const used = row?.used_count || 0;
+    const limit = row?.prompt_limit || 7;
+    return persistenceJson({
+      guest: true,
+      used,
+      limit,
+      remaining: expired ? 0 : Math.max(0, limit - used),
+      requires_auth: expired || used >= limit,
+    });
+  }
+
+  if (route === '/guest/reserve' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const uid = validPersistenceId(body.uid);
+    const requestId = validPersistenceId(body.request_id);
+    if (!uid || !requestId) return persistenceJson({ error: 'invalid_guest_prompt' }, 400);
+    try {
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO guest_prompts(uid, request_id, created_at) VALUES (?, ?, ?)',
+      )
+        .bind(uid, requestId, now)
+        .run();
+      return persistenceJson({ ok: true, charged: true });
+    } catch (error) {
+      const detail = errorText(error);
+      if (detail.includes('guest_prompt_limit')) {
+        return persistenceJson({ error: 'guest_prompt_limit' }, 403);
+      }
+      if (detail.includes('guest_session_expired')) {
+        return persistenceJson({ error: 'guest_session_expired' }, 403);
+      }
+      if (detail.includes('UNIQUE constraint failed')) {
+        return persistenceJson({ ok: true, charged: false });
+      }
+      console.error('Tutor D1 guest reserve failed', error);
+      return persistenceJson({ error: 'persistence_failed' }, 503);
+    }
+  }
+
+  if (route === '/guest/release' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const uid = validPersistenceId(body.uid);
+    const requestId = validPersistenceId(body.request_id);
+    if (!uid || !requestId) return persistenceJson({ error: 'invalid_guest_prompt' }, 400);
+    await env.TUTOR_DB.prepare('DELETE FROM guest_prompts WHERE uid = ? AND request_id = ?')
+      .bind(uid, requestId)
+      .run();
+    return persistenceJson({ ok: true });
+  }
+
+  return persistenceJson({ error: 'persistence_route_not_found' }, 404);
 }
 
 function buildContainerEnv(source: TutorEnv): Record<string, string> {
@@ -414,6 +793,36 @@ export class TutorContainer extends Container<TutorEnv> {
   }
 }
 
+async function persistenceStatus(env: TutorEnv): Promise<Response> {
+  try {
+    const objects = await env.TUTOR_DB.prepare(
+      'SELECT COUNT(*) AS count FROM persistence_objects',
+    ).first<{ count: number }>();
+    const guests = await env.TUTOR_DB.prepare(
+      'SELECT COUNT(*) AS count FROM guest_sessions WHERE expires_at > ?',
+    )
+      .bind(Math.floor(Date.now() / 1000))
+      .first<{ count: number }>();
+    const schema = await env.TUTOR_DB.prepare(
+      "SELECT value FROM persistence_meta WHERE key = 'schema_version'",
+    ).first<{ value: string }>();
+    const checkpoint = await env.TUTOR_DB.prepare(
+      "SELECT updated_at FROM persistence_meta WHERE key = 'last_generation'",
+    ).first<{ updated_at: number }>();
+    return persistenceJson({
+      ok: true,
+      schemaVersion: schema?.value || '',
+      durableObjectCount: objects?.count || 0,
+      activeGuestSessions: guests?.count || 0,
+      lastCheckpointAt: checkpoint?.updated_at || null,
+      r2PrivateBindingConfigured: Boolean(env.TUTOR_FILES),
+    });
+  } catch (error) {
+    console.error('Tutor persistence status failed', error);
+    return persistenceJson({ ok: false, error: 'persistence_unavailable' }, 503);
+  }
+}
+
 function edgeHealth(env: TutorEnv): Response {
   return Response.json(
     {
@@ -435,6 +844,7 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
       authSecretConfigured: hasAuthSecret(runtimeEnv),
       geminiFastLaneConfigured: Boolean(runtimeEnv.MURIKAH_GEMINI_API_KEY),
       fastChatModel: runtimeEnv.MURIKAH_FAST_CHAT_MODEL,
+      persistenceConfigured: Boolean(env.TUTOR_DB && env.TUTOR_FILES),
       appInstance: APP_INSTANCE,
     },
     {
@@ -520,6 +930,10 @@ export default {
     if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 });
     if (url.pathname === '/__muri/edge-health') return edgeHealth(env);
     if (url.pathname === '/__muri/worker-config') return workerConfig(runtimeEnv, env);
+    if (url.pathname === '/__muri/persistence-status') return persistenceStatus(env);
+    if (url.pathname.startsWith(PERSISTENCE_PREFIX)) {
+      return handlePersistence(request, env, url);
+    }
 
     if (url.pathname === '/__muri/container-diagnostics') {
       try {
