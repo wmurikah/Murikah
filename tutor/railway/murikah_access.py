@@ -232,6 +232,14 @@ async def guest_session(request: Request, response: Response):
                 used=legacy_used,
                 prompt_limit=LIMIT,
             )
+            # D1 represents a guest by its opaque workspace/session subject,
+            # never by the internal compatibility username shown by DeepTutor.
+            durable.learning_actor(
+                uid,
+                "guest",
+                username="",
+                guest_session_id=uid,
+            )
         except durable.PersistenceError as exc:
             raise HTTPException(503, "Guest access is temporarily unavailable. Please retry.") from exc
     else:
@@ -274,6 +282,21 @@ async def signup(body: Signup, request: Request, response: Response):
             raise HTTPException(409, "Guest session changed. Please reload and try again.")
         record = dict(record or {"id": identity.new_user_id(), "created_at": identity.utc_now()})
         record.update(hash=password_hash, role="user", preset="standard", disabled=False)
+        # D1 identity is updated before the local compatibility cache, so a
+        # successful account conversion never exists only on container disk.
+        durable_identity = _durable_guest_store()
+        if durable_identity is not None:
+            try:
+                durable_identity.learning_actor(
+                    record["id"],
+                    "member",
+                    username=username,
+                    guest_session_id="",
+                )
+            except durable_identity.PersistenceError as exc:
+                raise HTTPException(
+                    503, "Account storage is temporarily unavailable. Please retry."
+                ) from exc
         # Renaming keeps the workspace ID and all its conversations/files intact.
         if guest_name:
             users.pop(guest_name, None)
