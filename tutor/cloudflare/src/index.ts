@@ -292,11 +292,13 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
     if (request.method === 'PUT') {
       const sha = request.headers.get('x-murikah-object-sha256') || '';
+      const signedContentSha = request.headers.get('x-murikah-content-sha256') || '';
       const generation = request.headers.get('x-murikah-object-generation') || '';
       const mtime = Number(request.headers.get('x-murikah-object-mtime-ns') || '0');
       const size = Number(request.headers.get('x-murikah-object-size') || '0');
       if (
         !/^[0-9a-f]{64}$/i.test(sha) ||
+        sha !== signedContentSha ||
         !/^[0-9a-f]{32}$/i.test(generation) ||
         !Number.isSafeInteger(mtime) ||
         mtime < 0 ||
@@ -798,6 +800,36 @@ export class TutorContainer extends Container<TutorEnv> {
   }
 }
 
+async function persistenceStatus(env: TutorEnv): Promise<Response> {
+  try {
+    const objects = await env.TUTOR_DB.prepare(
+      'SELECT COUNT(*) AS count FROM persistence_objects',
+    ).first<{ count: number }>();
+    const guests = await env.TUTOR_DB.prepare(
+      'SELECT COUNT(*) AS count FROM guest_sessions WHERE expires_at > ?',
+    )
+      .bind(Math.floor(Date.now() / 1000))
+      .first<{ count: number }>();
+    const schema = await env.TUTOR_DB.prepare(
+      "SELECT value FROM persistence_meta WHERE key = 'schema_version'",
+    ).first<{ value: string }>();
+    const checkpoint = await env.TUTOR_DB.prepare(
+      "SELECT updated_at FROM persistence_meta WHERE key = 'last_generation'",
+    ).first<{ updated_at: number }>();
+    return persistenceJson({
+      ok: true,
+      schemaVersion: schema?.value || '',
+      durableObjectCount: objects?.count || 0,
+      activeGuestSessions: guests?.count || 0,
+      lastCheckpointAt: checkpoint?.updated_at || null,
+      r2PrivateBindingConfigured: Boolean(env.TUTOR_FILES),
+    });
+  } catch (error) {
+    console.error('Tutor persistence status failed', error);
+    return persistenceJson({ ok: false, error: 'persistence_unavailable' }, 503);
+  }
+}
+
 function edgeHealth(env: TutorEnv): Response {
   return Response.json(
     {
@@ -905,6 +937,7 @@ export default {
     if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 });
     if (url.pathname === '/__muri/edge-health') return edgeHealth(env);
     if (url.pathname === '/__muri/worker-config') return workerConfig(runtimeEnv, env);
+    if (url.pathname === '/__muri/persistence-status') return persistenceStatus(env);
     if (url.pathname.startsWith(PERSISTENCE_PREFIX)) {
       return handlePersistence(request, env, url);
     }
