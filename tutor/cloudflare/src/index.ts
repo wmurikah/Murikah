@@ -166,6 +166,51 @@ function validPersistenceId(value: unknown): string {
   return /^[A-Za-z0-9_-]{3,128}$/.test(text) ? text : '';
 }
 
+function learningText(value: unknown, limit: number): string {
+  return String(value || '').replace(/\0/g, '').slice(0, Math.max(0, limit));
+}
+
+async function textSha256(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, (item) => item.toString(16).padStart(2, '0')).join('');
+}
+
+async function upsertLearningActor(
+  env: TutorEnv,
+  *,
+  actorId: string,
+  actorType: string,
+  username: string,
+  guestSessionId: string,
+  now: number,
+): Promise<void> {
+  await env.TUTOR_DB.prepare(
+    'INSERT INTO tutor_actors(actor_id, actor_type, username, guest_session_id, created_at, updated_at, converted_at) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, NULL) ' +
+      'ON CONFLICT(actor_id) DO UPDATE SET ' +
+      'actor_type = excluded.actor_type, ' +
+      "username = CASE WHEN excluded.username <> '' THEN excluded.username ELSE tutor_actors.username END, " +
+      "guest_session_id = CASE WHEN excluded.guest_session_id <> '' THEN excluded.guest_session_id ELSE tutor_actors.guest_session_id END, " +
+      'updated_at = excluded.updated_at, ' +
+      "converted_at = CASE WHEN tutor_actors.actor_type = 'guest' AND excluded.actor_type <> 'guest' " +
+      'THEN COALESCE(tutor_actors.converted_at, excluded.updated_at) ELSE tutor_actors.converted_at END',
+  )
+    .bind(actorId, actorType, username, guestSessionId, now, now)
+    .run();
+  await env.TUTOR_DB.prepare(
+    'INSERT OR IGNORE INTO tutor_training_consent(actor_id, training_opt_in, research_opt_in, consent_version, consented_at, updated_at) ' +
+      "VALUES (?, 0, 0, '', NULL, ?)",
+  )
+    .bind(actorId, now)
+    .run();
+  await env.TUTOR_DB.prepare(
+    'INSERT OR IGNORE INTO tutor_actor_profiles(actor_id, updated_at) VALUES (?, ?)',
+  )
+    .bind(actorId, now)
+    .run();
+}
+
 async function verifyPersistenceRequest(
   request: Request,
   env: TutorEnv,
@@ -252,6 +297,214 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
   const route = url.pathname.slice(PERSISTENCE_PREFIX.length);
   const now = Math.floor(Date.now() / 1000);
+
+  if (route === '/learning/actor' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const actorType = learningText(body.actor_type, 16);
+    const username = learningText(body.username, 254);
+    const guestSessionId = learningText(body.guest_session_id, 128);
+    if (!actorId || !['guest', 'member', 'admin'].includes(actorType)) {
+      return persistenceJson({ error: 'invalid_learning_actor' }, 400);
+    }
+    try {
+      await upsertLearningActor(env, {
+        actorId,
+        actorType,
+        username: actorType === 'guest' ? '' : username,
+        guestSessionId: actorType === 'guest' ? (guestSessionId || actorId) : '',
+        now,
+      });
+      return persistenceJson({ ok: true });
+    } catch (error) {
+      console.error('Tutor D1 actor upsert failed', error);
+      return persistenceJson({ error: 'learning_actor_failed' }, 503);
+    }
+  }
+
+  if (route === '/learning/turn/start' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const turnId = validPersistenceId(body.turn_id);
+    const conversationId = validPersistenceId(body.conversation_id);
+    const actorId = validPersistenceId(body.actor_id);
+    const actorType = learningText(body.actor_type, 16);
+    const username = learningText(body.username, 254);
+    const guestSessionId = learningText(body.guest_session_id, 128);
+    const prompt = learningText(body.prompt, 120000);
+    const promptSummary = learningText(body.prompt_summary, 800);
+    const capability = learningText(body.capability || 'chat', 64) || 'chat';
+    const language = learningText(body.language, 24);
+    const modelProfileId = learningText(body.model_profile_id, 128);
+    const modelId = learningText(body.model_id, 256);
+    const regenerate = body.regenerate === true ? 1 : 0;
+    if (
+      !turnId ||
+      !conversationId ||
+      !actorId ||
+      !['guest', 'member', 'admin'].includes(actorType) ||
+      !prompt.trim()
+    ) {
+      return persistenceJson({ error: 'invalid_learning_turn' }, 400);
+    }
+    try {
+      await upsertLearningActor(env, {
+        actorId,
+        actorType,
+        username: actorType === 'guest' ? '' : username,
+        guestSessionId: actorType === 'guest' ? (guestSessionId || actorId) : '',
+        now,
+      });
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO tutor_conversations(conversation_id, actor_id, title, summary, surface, created_at, updated_at, message_count, last_turn_id) ' +
+          "VALUES (?, ?, ?, '', 'chat', ?, ?, 0, ?) " +
+          'ON CONFLICT(conversation_id) DO UPDATE SET actor_id = excluded.actor_id, updated_at = excluded.updated_at, last_turn_id = excluded.last_turn_id',
+      )
+        .bind(conversationId, actorId, promptSummary.slice(0, 100), now, now, turnId)
+        .run();
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO tutor_turns(turn_id, conversation_id, actor_id, status, capability, language, prompt_summary, response_summary, ' +
+          'model_profile_id, model_id, provider, first_token_ms, total_ms, error_code, error_text, retryable, regenerate, training_eligible, ' +
+          'created_at, updated_at, finished_at) ' +
+          "VALUES (?, ?, ?, 'running', ?, ?, ?, '', ?, ?, '', 0, 0, '', '', 0, ?, 0, ?, ?, NULL) " +
+          'ON CONFLICT(turn_id) DO UPDATE SET updated_at = excluded.updated_at',
+      )
+        .bind(
+          turnId,
+          conversationId,
+          actorId,
+          capability,
+          language,
+          promptSummary,
+          modelProfileId,
+          modelId,
+          regenerate,
+          now,
+          now,
+        )
+        .run();
+      const messageId = turnId + '_user';
+      const promptHash = await textSha256(prompt);
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO tutor_messages(message_id, conversation_id, turn_id, actor_id, role, content, content_summary, content_sha256, created_at) ' +
+          "VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?) " +
+          'ON CONFLICT(message_id) DO UPDATE SET content = excluded.content, content_summary = excluded.content_summary, content_sha256 = excluded.content_sha256',
+      )
+        .bind(messageId, conversationId, turnId, actorId, prompt, promptSummary, promptHash, now)
+        .run();
+      await env.TUTOR_DB.prepare(
+        'UPDATE tutor_conversations SET message_count = (SELECT COUNT(*) FROM tutor_messages WHERE conversation_id = ?), updated_at = ? WHERE conversation_id = ?',
+      )
+        .bind(conversationId, now, conversationId)
+        .run();
+      return persistenceJson({ ok: true });
+    } catch (error) {
+      console.error('Tutor D1 learning turn start failed', error);
+      return persistenceJson({ error: 'learning_turn_start_failed' }, 503);
+    }
+  }
+
+  if (route === '/learning/turn/finish' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const turnId = validPersistenceId(body.turn_id);
+    const status = learningText(body.status || 'completed', 16);
+    const response = learningText(body.response, 120000);
+    const responseSummary = learningText(body.response_summary, 800);
+    const provider = learningText(body.provider, 128);
+    const modelId = learningText(body.model_id, 256);
+    const firstTokenMs = Number(body.first_token_ms || 0);
+    const totalMs = Number(body.total_ms || 0);
+    const errorCode = learningText(body.error_code, 128);
+    const errorTextValue = learningText(body.error_text, 2000);
+    const retryable = body.retryable === true ? 1 : 0;
+    if (
+      !turnId ||
+      !['completed', 'failed', 'timed_out', 'cancelled'].includes(status) ||
+      !Number.isSafeInteger(firstTokenMs) ||
+      firstTokenMs < 0 ||
+      !Number.isSafeInteger(totalMs) ||
+      totalMs < 0
+    ) {
+      return persistenceJson({ error: 'invalid_learning_finish' }, 400);
+    }
+    try {
+      const turn = await env.TUTOR_DB.prepare(
+        'SELECT conversation_id, actor_id FROM tutor_turns WHERE turn_id = ?',
+      )
+        .bind(turnId)
+        .first<{ conversation_id: string; actor_id: string }>();
+      if (!turn) return persistenceJson({ error: 'learning_turn_not_found' }, 404);
+
+      if (response) {
+        const responseHash = await textSha256(response);
+        await env.TUTOR_DB.prepare(
+          'INSERT INTO tutor_messages(message_id, conversation_id, turn_id, actor_id, role, content, content_summary, content_sha256, created_at) ' +
+            "VALUES (?, ?, ?, ?, 'assistant', ?, ?, ?, ?) " +
+            'ON CONFLICT(message_id) DO UPDATE SET content = excluded.content, content_summary = excluded.content_summary, content_sha256 = excluded.content_sha256',
+        )
+          .bind(
+            turnId + '_assistant',
+            turn.conversation_id,
+            turnId,
+            turn.actor_id,
+            response,
+            responseSummary,
+            responseHash,
+            now,
+          )
+          .run();
+      }
+      await env.TUTOR_DB.prepare(
+        'UPDATE tutor_turns SET status = ?, response_summary = ?, provider = ?, ' +
+          "model_id = CASE WHEN ? <> '' THEN ? ELSE model_id END, first_token_ms = ?, total_ms = ?, " +
+          'error_code = ?, error_text = ?, retryable = ?, updated_at = ?, finished_at = ?, ' +
+          "training_eligible = CASE WHEN ? = 'completed' AND EXISTS (" +
+          'SELECT 1 FROM tutor_training_consent c WHERE c.actor_id = tutor_turns.actor_id AND c.training_opt_in = 1' +
+          ') THEN 1 ELSE 0 END WHERE turn_id = ?',
+      )
+        .bind(
+          status,
+          responseSummary,
+          provider,
+          modelId,
+          modelId,
+          firstTokenMs,
+          totalMs,
+          errorCode,
+          errorTextValue,
+          retryable,
+          now,
+          now,
+          status,
+          turnId,
+        )
+        .run();
+      await env.TUTOR_DB.prepare(
+        'UPDATE tutor_conversations SET summary = ?, message_count = (SELECT COUNT(*) FROM tutor_messages WHERE conversation_id = ?), ' +
+          'updated_at = ?, last_turn_id = ? WHERE conversation_id = ?',
+      )
+        .bind(responseSummary, turn.conversation_id, now, turnId, turn.conversation_id)
+        .run();
+      return persistenceJson({ ok: true });
+    } catch (error) {
+      console.error('Tutor D1 learning turn finish failed', error);
+      return persistenceJson({ error: 'learning_turn_finish_failed' }, 503);
+    }
+  }
+
+  if (route === '/learning/status' && request.method === 'GET') {
+    try {
+      const counts = await env.TUTOR_DB.prepare(
+        'SELECT ' +
+          '(SELECT COUNT(*) FROM tutor_actors) AS actors, ' +
+          '(SELECT COUNT(*) FROM tutor_conversations) AS conversations, ' +
+          '(SELECT COUNT(*) FROM tutor_turns) AS turns, ' +
+          '(SELECT COUNT(*) FROM tutor_messages) AS messages',
+      ).first<{ actors: number; conversations: number; turns: number; messages: number }>();
+      return persistenceJson({ ok: true, ...(counts || {}) });
+    } catch (error) {
+      return persistenceJson({ ok: false, error: 'learning_status_unavailable' }, 503);
+    }
+  }
 
   if (route === '/manifest' && request.method === 'GET') {
     const result = await env.TUTOR_DB.prepare(
@@ -831,9 +1084,17 @@ async function persistenceStatus(env: TutorEnv): Promise<Response> {
     const checkpoint = await env.TUTOR_DB.prepare(
       "SELECT updated_at FROM persistence_meta WHERE key = 'last_generation'",
     ).first<{ updated_at: number }>();
+    const learningSchema = await env.TUTOR_DB.prepare(
+      "SELECT value FROM persistence_meta WHERE key = 'learning_journal_schema_version'",
+    ).first<{ value: string }>();
+    const learningTurns = await env.TUTOR_DB.prepare(
+      'SELECT COUNT(*) AS count FROM tutor_turns',
+    ).first<{ count: number }>();
     return persistenceJson({
       ok: true,
       schemaVersion: schema?.value || '',
+      learningJournalSchemaVersion: learningSchema?.value || '',
+      learningTurnCount: learningTurns?.count || 0,
       durableObjectCount: objects?.count || 0,
       activeGuestSessions: guests?.count || 0,
       lastCheckpointAt: checkpoint?.updated_at || null,
