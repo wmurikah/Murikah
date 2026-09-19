@@ -121,6 +121,7 @@ class PersistenceClientTests(unittest.TestCase):
 
         self.assertEqual(captured["path"], "/__muri/persist/learning/actor")
         self.assertEqual(captured["payload"]["actor_type"], "guest")
+        self.assertEqual(captured["payload"]["username"], "")
         self.assertEqual(captured["payload"]["guest_session_id"], "u_guest_123")
 
     def test_learning_turn_start_carries_full_prompt_and_summary(self):
