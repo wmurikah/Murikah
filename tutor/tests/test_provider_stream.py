@@ -123,6 +123,38 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             ["user", "assistant", "user"],
         )
 
+    async def test_portable_followup_history_strips_provider_private_state(self):
+        messages = [
+            {"role": "system", "content": "Teach clearly.", "_provider_response_state": {"x": 1}},
+            {"role": "user", "content": "Teach me data science", "unexpected": "drop"},
+            {
+                "role": "assistant",
+                "content": "Data science combines programming and statistics.",
+                "reasoning_content": "private",
+                "thinking_blocks": [{"type": "thinking", "text": "private"}],
+            },
+            {"role": "tool", "content": "must not leak into ordinary fast chat"},
+            {"role": "user", "content": "Proceed"},
+        ]
+        portable = fast.portable_chat_messages(messages)
+        self.assertEqual([item["role"] for item in portable], ["system", "user", "assistant", "user"])
+        self.assertTrue(all(set(item) == {"role", "content"} for item in portable))
+        self.assertEqual(portable[-1]["content"], "Proceed")
+
+    async def test_portable_history_keeps_latest_turn_under_budget(self):
+        messages = [
+            {"role": "system", "content": "System instruction"},
+            {"role": "user", "content": "old-" + ("x" * 12000)},
+            {"role": "assistant", "content": "answer-" + ("y" * 12000)},
+            {"role": "user", "content": "latest follow-up"},
+        ]
+        portable = fast.portable_chat_messages(messages, max_chars=8000)
+        self.assertEqual(portable[-1], {"role": "user", "content": "latest follow-up"})
+        self.assertLessEqual(
+            sum(len(item["content"]) for item in portable if item["role"] != "system"),
+            8000,
+        )
+
     async def test_followup_history_is_valid_gemini_conversation(self):
         payload = fast._gemini_payload([
             {"role": "system", "content": "Teach clearly."},
