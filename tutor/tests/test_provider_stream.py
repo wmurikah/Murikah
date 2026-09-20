@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 root = Path(__file__).resolve().parents[1]
 source = root / "railway/murikah_fast_lane.py"
@@ -79,6 +80,48 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner.name, "fallback")
         await fast.close_stream(winner.stream)
+
+    def test_flash_lite_uses_minimal_thinking(self):
+        with patch.dict("os.environ", {"MURIKAH_FAST_CHAT_MODEL": "gemini-3.5-flash-lite"}):
+            payload = fast._gemini_payload(
+                [{"role": "user", "content": "Teach me data science"}],
+                600,
+            )
+        self.assertEqual(
+            payload["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "minimal",
+        )
+
+    def test_gemini_38_falls_back_to_low_thinking(self):
+        with patch.dict("os.environ", {"MURIKAH_FAST_CHAT_MODEL": "gemini-3.8-flash"}):
+            payload = fast._gemini_payload(
+                [{"role": "user", "content": "Explain regression"}],
+                600,
+            )
+        self.assertEqual(
+            payload["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "low",
+        )
+
+    def test_nvidia_fast_payload_disables_thinking(self):
+        with patch.dict(
+            "os.environ",
+            {"MURIKAH_LLM_TERTIARY_MODEL": "nvidia/nemotron-3.5-lightning-30b-a3b"},
+        ):
+            payload = fast._nvidia_payload(
+                [
+                    {"role": "user", "content": "Teach me data science"},
+                    {"role": "assistant", "content": "Start with Python."},
+                    {"role": "user", "content": "I am a novice."},
+                ],
+                600,
+            )
+        self.assertEqual(payload["model"], "nvidia/nemotron-3.5-lightning-30b-a3b")
+        self.assertEqual(payload["chat_template_kwargs"]["enable_thinking"], False)
+        self.assertEqual(
+            [item["role"] for item in payload["messages"]],
+            ["user", "assistant", "user"],
+        )
 
     async def test_followup_history_is_valid_gemini_conversation(self):
         payload = fast._gemini_payload([
