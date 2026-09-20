@@ -547,7 +547,7 @@ html.cms-overlay-open {
 
 @media (max-width: 639px) {
   .hero-product-frame {
-    max-height: 22rem;
+    max-height: clamp(9rem, 42vw, 13rem);
   }
 }
 
