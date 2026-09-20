@@ -50,7 +50,10 @@ test('public header is a 68px light bar with the same primary CTA treatment', as
   assert.doesNotMatch(header, /\bon-dark\b/);
   assert.doesNotMatch(header, /bg-header-bg/);
   assert.match(header, /height: 4\.25rem/);
-  assert.match(header, /<Button href=\{PRIMARY_CTA\.href\} variant="primary">/);
+  assert.match(
+    header,
+    /<Button[\s\S]*?href=\{PRIMARY_CTA\.href\}[\s\S]*?variant="primary"[\s\S]*?size="lg"[\s\S]*?rounded-\[12px\]/,
+  );
 
   assert.match(css, /--header-height: 4\.25rem/);
   assert.match(css, /> header \.btn-primary[\s\S]*?background: #071d35;/);
