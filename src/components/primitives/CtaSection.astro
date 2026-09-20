@@ -1,7 +1,7 @@
 ---
 /**
  * CtaSection, the closing call-to-action band. This is the page's "end" moment
- * (peak-end rule): a single, strong, gold primary action on a navy field.
+ * (peak-end rule): a clear paper field with one strong navy primary action.
  */
 import Section from './Section.astro';
 import Button from './Button.astro';
@@ -30,7 +30,7 @@ const {
 } = Astro.props;
 ---
 
-<Section tone="navy-rich" id={id} class="relative overflow-hidden">
+<Section tone="paper" id={id} class="relative overflow-hidden border-y border-hairline">
   {/* The signature light, placed once behind the closing statement. */}
   <div
     aria-hidden="true"
@@ -40,11 +40,11 @@ const {
   <div class="reveal relative mx-auto max-w-2xl text-center">
     {eyebrow && <p class="eyebrow is-centred">{eyebrow}</p>}
     <h2
-      class="mt-5 font-display text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.01em] text-balance text-white"
+      class="mt-5 font-display text-[length:var(--text-title)] leading-[1.06] font-semibold tracking-[-0.01em] text-balance text-navy"
     >
       {title}
     </h2>
-    {body && <p class="mx-auto mt-5 max-w-prose text-lg text-paper/80">{body}</p>}
+    {body && <p class="mx-auto mt-5 max-w-prose text-lg text-slate">{body}</p>}
     <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
       <Button href={primaryHref} variant="primary" size="lg">{primaryLabel}</Button>
       {
@@ -53,7 +53,7 @@ const {
             href={secondaryHref}
             variant="ghost"
             size="lg"
-            class="text-white ring-white/25 hover:bg-white/10 hover:ring-white/40"
+            class="ring-control-border"
           >
             {secondaryLabel}
           </Button>
