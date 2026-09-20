@@ -1,9 +1,24 @@
 """Regression checks for ordinary follow-up routing and D1 journaling."""
+import ast
 from pathlib import Path
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def assigned_string(source: str, name: str) -> str:
+    """Return a top-level string constant assigned to *name* in an overlay script."""
+    tree = ast.parse(source)
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+            continue
+        value = ast.literal_eval(node.value)
+        if isinstance(value, str):
+            return value
+    raise AssertionError(f"{name} string assignment not found")
 
 
 class FollowupChatTests(unittest.TestCase):
@@ -18,10 +33,12 @@ class FollowupChatTests(unittest.TestCase):
         self.assertIn("portable_chat_messages", source)
         self.assertNotIn("recover_with_standard_pipeline", source)
         self.assertNotIn("fast_lane_recovery", source)
-        # Ordinary fast chat must never recover into AgenticChatPipeline.
-        self.assertEqual(source.count("await prompt_pipeline.run(context, stream)"), 0)
-        # The one agent invocation that remains is the explicit deep-agent branch.
-        self.assertEqual(source.count("await pipeline.run(context, stream)"), 1)
+        # accelerate_chat.py is an overlay and deliberately contains OLD_RUN as
+        # well as NEW_RUN. Validate only the replacement runtime body; counting
+        # strings across the whole overlay also counts the legacy source fixture.
+        new_run = assigned_string(source, "NEW_RUN")
+        self.assertNotIn("await prompt_pipeline.run(context, stream)", new_run)
+        self.assertEqual(new_run.count("await pipeline.run(context, stream)"), 1)
 
     def test_inherited_source_metadata_does_not_promote_followup(self):
         source = (ROOT / "railway/accelerate_chat.py").read_text(encoding="utf-8")
