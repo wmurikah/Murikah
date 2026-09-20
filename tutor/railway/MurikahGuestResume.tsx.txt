@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
@@ -60,15 +60,15 @@ function importGuestConversation(state: StoredGuestState): Promise<string> {
   return request;
 }
 
-export default function MurikahGuestResume() {
+export default function MurikahGuestResume({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "restoring" | "error">("idle");
+  const [status, setStatus] = useState<"checking" | "idle" | "restoring" | "error">("checking");
   const [error, setError] = useState("");
   const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    const shouldResume = new URLSearchParams(window.location.search).get("resume_guest") === "1";
-    if (!shouldResume) return;
+    const requestedResume =
+      new URLSearchParams(window.location.search).get("resume_guest") === "1";
 
     let cancelled = false;
     let state: StoredGuestState | null = null;
@@ -91,8 +91,15 @@ export default function MurikahGuestResume() {
         )
       : [];
 
+    // The browser-retained guest state is authoritative. OAuth providers and
+    // local-login redirects may normalize the query string, so do not require
+    // resume_guest=1 when a signed-in learner has a real guest transcript.
     if (!state || messages.length === 0) {
-      router.replace("/chat");
+      if (state && messages.length === 0) {
+        window.localStorage.removeItem(GUEST_STATE_KEY);
+      }
+      setStatus("idle");
+      if (requestedResume) router.replace("/chat");
       return;
     }
 
@@ -108,7 +115,11 @@ export default function MurikahGuestResume() {
       .catch((reason) => {
         if (cancelled) return;
         setStatus("error");
-        setError(reason instanceof Error ? reason.message : "Your guest conversation could not be restored yet.");
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Your guest conversation could not be restored yet.",
+        );
       });
 
     return () => {
@@ -116,23 +127,18 @@ export default function MurikahGuestResume() {
     };
   }, [retryToken, router]);
 
-  if (status === "idle") return null;
+  // This component is a gate, not an overlay. ChatWorkspace must not mount
+  // until handoff finishes; otherwise it creates a blank /chat session and can
+  // navigate away before the guest transcript has been imported.
+  if (status === "idle") return <>{children}</>;
 
   return (
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-[var(--background)]/92 px-5 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-[var(--background)] px-5 py-8">
       <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center shadow-xl">
         <div className="mx-auto inline-flex items-center gap-2.5 rounded-lg bg-[#1E2A30] px-3 py-1.5 text-sm font-semibold text-white">
           <span>Murikah</span><span aria-hidden className="h-4 w-px bg-[#A9822E]" /><span>Tutor</span>
         </div>
-        {status === "restoring" ? (
-          <>
-            <div className="mx-auto mt-6 h-7 w-7 animate-spin rounded-full border-2 border-[#A9822E]/25 border-t-[#A9822E]" />
-            <h2 className="mt-4 text-xl font-semibold tracking-tight">Continuing your guest conversation</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
-              Restoring your chat and learning context. You will continue from where you stopped before signing in.
-            </p>
-          </>
-        ) : (
+        {status === "error" ? (
           <>
             <h2 className="mt-6 text-xl font-semibold tracking-tight">Your guest chat is still safe</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{error}</p>
@@ -143,6 +149,14 @@ export default function MurikahGuestResume() {
             >
               Try again
             </button>
+          </>
+        ) : (
+          <>
+            <div className="mx-auto mt-6 h-7 w-7 animate-spin rounded-full border-2 border-[#A9822E]/25 border-t-[#A9822E]" />
+            <h2 className="mt-4 text-xl font-semibold tracking-tight">Continuing your guest conversation</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+              Restoring your chat and learning context. You will continue from where you stopped before signing in.
+            </p>
           </>
         )}
       </div>
