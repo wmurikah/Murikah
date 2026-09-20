@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 root = Path(__file__).resolve().parents[1]
 source = root / "railway/murikah_fast_lane.py"
@@ -79,6 +80,80 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner.name, "fallback")
         await fast.close_stream(winner.stream)
+
+    def test_flash_lite_uses_minimal_thinking(self):
+        with patch.dict("os.environ", {"MURIKAH_FAST_CHAT_MODEL": "gemini-3.5-flash-lite"}):
+            payload = fast._gemini_payload(
+                [{"role": "user", "content": "Teach me data science"}],
+                600,
+            )
+        self.assertEqual(
+            payload["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "minimal",
+        )
+
+    def test_gemini_38_falls_back_to_low_thinking(self):
+        with patch.dict("os.environ", {"MURIKAH_FAST_CHAT_MODEL": "gemini-3.8-flash"}):
+            payload = fast._gemini_payload(
+                [{"role": "user", "content": "Explain regression"}],
+                600,
+            )
+        self.assertEqual(
+            payload["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "low",
+        )
+
+    def test_nvidia_fast_payload_disables_thinking(self):
+        with patch.dict(
+            "os.environ",
+            {"MURIKAH_LLM_TERTIARY_MODEL": "nvidia/nemotron-3.5-lightning-30b-a3b"},
+        ):
+            payload = fast._nvidia_payload(
+                [
+                    {"role": "user", "content": "Teach me data science"},
+                    {"role": "assistant", "content": "Start with Python."},
+                    {"role": "user", "content": "I am a novice."},
+                ],
+                600,
+            )
+        self.assertEqual(payload["model"], "nvidia/nemotron-3.5-lightning-30b-a3b")
+        self.assertEqual(payload["chat_template_kwargs"]["enable_thinking"], False)
+        self.assertEqual(
+            [item["role"] for item in payload["messages"]],
+            ["user", "assistant", "user"],
+        )
+
+    async def test_portable_followup_history_strips_provider_private_state(self):
+        messages = [
+            {"role": "system", "content": "Teach clearly.", "_provider_response_state": {"x": 1}},
+            {"role": "user", "content": "Teach me data science", "unexpected": "drop"},
+            {
+                "role": "assistant",
+                "content": "Data science combines programming and statistics.",
+                "reasoning_content": "private",
+                "thinking_blocks": [{"type": "thinking", "text": "private"}],
+            },
+            {"role": "tool", "content": "must not leak into ordinary fast chat"},
+            {"role": "user", "content": "Proceed"},
+        ]
+        portable = fast.portable_chat_messages(messages)
+        self.assertEqual([item["role"] for item in portable], ["system", "user", "assistant", "user"])
+        self.assertTrue(all(set(item) == {"role", "content"} for item in portable))
+        self.assertEqual(portable[-1]["content"], "Proceed")
+
+    async def test_portable_history_keeps_latest_turn_under_budget(self):
+        messages = [
+            {"role": "system", "content": "System instruction"},
+            {"role": "user", "content": "old-" + ("x" * 12000)},
+            {"role": "assistant", "content": "answer-" + ("y" * 12000)},
+            {"role": "user", "content": "latest follow-up"},
+        ]
+        portable = fast.portable_chat_messages(messages, max_chars=8000)
+        self.assertEqual(portable[-1], {"role": "user", "content": "latest follow-up"})
+        self.assertLessEqual(
+            sum(len(item["content"]) for item in portable if item["role"] != "system"),
+            8000,
+        )
 
     async def test_followup_history_is_valid_gemini_conversation(self):
         payload = fast._gemini_payload([

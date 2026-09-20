@@ -15,8 +15,11 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
+DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+DEFAULT_NVIDIA_API_ROOT = "https://integrate.api.nvidia.com/v1"
+DEFAULT_FAST_HISTORY_CHARS = 60000
 DEFAULT_HEDGE_DELAY_SECONDS = 2.5
 DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 12.0
 DEFAULT_OVERALL_FIRST_TOKEN_SECONDS = 20.0
@@ -47,6 +50,74 @@ def configured_gemini_model() -> str:
 
 def gemini_configured() -> bool:
     return bool(os.environ.get("MURIKAH_GEMINI_API_KEY", "").strip())
+
+
+def configured_nvidia_model() -> str:
+    return (
+        os.environ.get("MURIKAH_FAST_CHAT_NVIDIA_MODEL", "").strip()
+        or os.environ.get("MURIKAH_LLM_TERTIARY_MODEL", "").strip()
+        or DEFAULT_NVIDIA_FAST_MODEL
+    )
+
+
+def nvidia_configured() -> bool:
+    return bool(os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip())
+
+
+def portable_chat_messages(
+    messages: list[dict[str, Any]],
+    *,
+    max_chars: int = DEFAULT_FAST_HISTORY_CHARS,
+) -> list[dict[str, str]]:
+    """Keep only portable chat fields and a bounded recent conversation window.
+
+    DeepTutor history can carry provider-private state on assistant messages.
+    Passing those fields into another provider makes failover fragile,
+    especially on follow-up turns. Fast chat only needs role/content.
+    """
+    system: list[dict[str, str]] = []
+    conversation: list[dict[str, str]] = []
+    for item in messages:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            continue
+        content = _text_content(item.get("content")).strip()
+        if not content:
+            continue
+        row = {"role": role, "content": content}
+        if role == "system":
+            system.append(row)
+        else:
+            conversation.append(row)
+
+    budget = max(8000, int(max_chars))
+    selected: list[dict[str, str]] = []
+    used = 0
+    for item in reversed(conversation):
+        size = len(item["content"])
+        if selected and used + size > budget:
+            break
+        if not selected and size > budget:
+            item = {**item, "content": item["content"][-budget:]}
+            size = len(item["content"])
+        selected.append(item)
+        used += size
+    selected.reverse()
+
+    if system:
+        sys_budget = min(20000, max(4000, budget // 3))
+        latest = system[-1]["content"]
+        system = [{"role": "system", "content": latest[:sys_budget]}]
+    return [*system, *selected]
+
+
+def _gemini_thinking_level(model: str) -> str:
+    # Gemini 3.7/3.8 do not support minimal thinking. Flash-Lite does, and is
+    # the latency-critical default for normal Tutor chat.
+    normalized = model.strip().lower()
+    return "low" if normalized.startswith(("gemini-3.7", "gemini-3.8")) else "minimal"
 
 
 def _text_content(value: Any) -> str:
@@ -94,7 +165,7 @@ def _gemini_payload(messages: list[dict[str, Any]], max_tokens: int) -> dict[str
         "contents": contents,
         "generationConfig": {
             "maxOutputTokens": max(128, int(max_tokens)),
-            "thinkingConfig": {"thinkingLevel": "low"},
+            "thinkingConfig": {"thinkingLevel": _gemini_thinking_level(configured_gemini_model())},
         },
     }
     if system_parts:
@@ -167,6 +238,87 @@ async def gemini_stream(
                 text = _gemini_text(event)
                 if text:
                     yield text
+
+
+def _nvidia_payload(messages: list[dict[str, Any]], max_tokens: int) -> dict[str, Any]:
+    normalized_messages: list[dict[str, str]] = []
+    for message in portable_chat_messages(messages):
+        role = str(message.get("role") or "user").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        content = _text_content(message.get("content"))
+        if content:
+            normalized_messages.append({"role": role, "content": content})
+    if not normalized_messages:
+        raise RuntimeError("Fast chat has no user-visible conversation content.")
+    return {
+        "model": configured_nvidia_model(),
+        "messages": normalized_messages,
+        "stream": True,
+        "max_tokens": max(128, int(max_tokens)),
+        "temperature": 0.2,
+        "top_p": 0.7,
+        # Nemotron Lightning can answer directly without spending the user's
+        # latency budget on hidden reasoning for ordinary conversational turns.
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+
+
+async def nvidia_stream(
+    messages: list[dict[str, Any]],
+    *,
+    max_tokens: int = 1800,
+) -> AsyncIterator[str]:
+    """Stream the existing NVIDIA NIM fallback directly for low-latency chat."""
+    api_key = os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("NVIDIA NIM is not configured.")
+    base_url = (
+        os.environ.get("MURIKAH_NVIDIA_NIM_BASE_URL", "").strip()
+        or DEFAULT_NVIDIA_API_ROOT
+    ).rstrip("/")
+    model = configured_nvidia_model()
+    request_started = time.perf_counter()
+    timeout = httpx.Timeout(connect=5.0, read=None, write=15.0, pool=5.0)
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream(
+            "POST",
+            f"{base_url}/chat/completions",
+            headers={
+                "authorization": f"Bearer {api_key}",
+                "content-type": "application/json",
+                "accept": "text/event-stream",
+            },
+            json=_nvidia_payload(messages, max_tokens),
+        ) as response:
+            response.raise_for_status()
+            logger.info(
+                "MURIKAH_LATENCY route=fast provider=nvidia event=headers model=%s elapsed_ms=%s",
+                model,
+                latency_ms(request_started),
+            )
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                raw = line[5:].strip()
+                if not raw or raw == "[DONE]":
+                    continue
+                try:
+                    event = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("error"):
+                    raise RuntimeError("Tutor provider is temporarily unavailable.")
+                for choice in event.get("choices", []) or []:
+                    if not isinstance(choice, dict):
+                        continue
+                    delta = choice.get("delta")
+                    if not isinstance(delta, dict):
+                        continue
+                    text = delta.get("content")
+                    if isinstance(text, str) and text:
+                        yield text
 
 
 async def close_stream(stream: AsyncIterator[str] | None) -> None:

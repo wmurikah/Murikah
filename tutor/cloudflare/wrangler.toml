@@ -46,8 +46,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v21 keeps ordinary follow-ups on bounded fast chat and journals learner turns in D1.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v21" }
+# v22 races Gemini Flash-Lite with NVIDIA Nemotron Lightning for reliable follow-ups.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v22" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
@@ -67,4 +67,5 @@ new_sqlite_classes = ["TutorContainer"]
 MURIKAH_TUTOR_RUNTIME = "cloudflare-container-staging"
 MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"
 MURIKAH_GUEST_PROMPT_LIMIT = "7"
+MURIKAH_FAST_CHAT_MODEL = "gemini-3.5-flash-lite"
 TZ = "Africa/Nairobi"

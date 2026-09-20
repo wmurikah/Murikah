@@ -9,14 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 class FollowupChatTests(unittest.TestCase):
     def test_fast_lane_never_recovers_into_agent_loop(self):
         source = (ROOT / "railway/accelerate_chat.py").read_text(encoding="utf-8")
-        self.assertIn("MURIKAH_DUAL_LANE_CHAT_V3", source)
-        self.assertIn("terminal_first_token_timeout", source)
+        self.assertIn("MURIKAH_DUAL_LANE_CHAT_V4", source)
+        self.assertIn("terminal_provider_unavailable", source)
         self.assertIn("_FAST_TURN_TIMEOUT_SECONDS", source)
         self.assertNotIn("recover_with_standard_pipeline", source)
         self.assertNotIn("fast_lane_recovery", source)
-        # One invocation remains intentionally: the explicit deep-agent branch.
-        self.assertEqual(source.count("await prompt_pipeline.run(context, stream)"), 1)
-
+        self.assertNotIn("await prompt_pipeline.run(context, stream)", source)
+        self.assertIn("nvidia_stream(", source)
+        self.assertIn("Murikah is reconnecting…", source)
+        self.assertNotIn("Murikah fast chat timed out before the first visible response.", source)
+        self.assertNotIn("candidates[0]", source)
+        self.assertIn("terminal_stream_error", source)
     def test_inherited_source_metadata_does_not_promote_followup(self):
         source = (ROOT / "railway/accelerate_chat.py").read_text(encoding="utf-8")
         self.assertNotIn('if context.source_manifest:', source)

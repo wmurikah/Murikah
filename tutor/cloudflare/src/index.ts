@@ -768,7 +768,7 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
     MURIKAH_LLM_SECONDARY_MODEL: optional(source.MURIKAH_LLM_SECONDARY_MODEL),
     MURIKAH_LLM_TERTIARY_MODEL: optional(source.MURIKAH_LLM_TERTIARY_MODEL),
     MURIKAH_GEMINI_API_KEY: optional(source.MURIKAH_GEMINI_API_KEY),
-    MURIKAH_FAST_CHAT_MODEL: optional(source.MURIKAH_FAST_CHAT_MODEL) || 'gemini-3.8-flash',
+    MURIKAH_FAST_CHAT_MODEL: optional(source.MURIKAH_FAST_CHAT_MODEL) || 'gemini-3.5-flash-lite',
     MURIKAH_DASHSCOPE_API_KEY: optional(source.MURIKAH_DASHSCOPE_API_KEY),
     MURIKAH_DASHSCOPE_BASE_URL: optional(source.MURIKAH_DASHSCOPE_BASE_URL),
     MURIKAH_EMBEDDING_PROVIDER: optional(source.MURIKAH_EMBEDDING_PROVIDER),

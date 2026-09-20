@@ -11,7 +11,7 @@ from typing import Any
 CATALOG = Path("/app/data/user/settings/model_catalog.json")
 PROFILE_ID = "muri-llm-gemini"
 MODEL_ID = "muri-llm-gemini-fast"
-DEFAULT_MODEL = "gemini-3.8-flash"
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
