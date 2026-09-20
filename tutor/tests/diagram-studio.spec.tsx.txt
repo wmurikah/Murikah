@@ -48,6 +48,23 @@ describe("Diagram Design", () => {
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     expect(screen.getByRole("button", { name: "Download SVG" })).toBeEnabled();
   });
+  it("renders the diagram before any explanatory narrative", async () => {
+    const stream = streamResponse();
+    render(<MurikahDiagramStudio />);
+    await start();
+    await act(async () =>
+      stream.emit({
+        type: "done",
+        answer: `${svg}\n\nExplanation after the diagram.`,
+      }),
+    );
+    const frame = await screen.findByTitle("Murikah Tutor generated diagram");
+    const explanation = await screen.findByText("Explanation after the diagram.");
+    expect(
+      Boolean(frame.compareDocumentPosition(explanation) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+  });
+
   it("preserves the last diagram and brief after a failed redesign", async () => {
     let stream = streamResponse();
     render(<MurikahDiagramStudio />);

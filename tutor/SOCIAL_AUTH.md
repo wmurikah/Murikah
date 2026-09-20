@@ -2,7 +2,7 @@
 
 Murikah Tutor supports Google, Microsoft and Apple sign-in while retaining the existing local username/password flow for administrators and manually managed accounts.
 
-The application-side OAuth/OIDC flow is already implemented. Activating a provider requires registering the Murikah Tutor web application with that identity provider and storing the resulting credentials as GitHub Codespaces secrets. Provider credentials are runtime secrets: never commit them to this repository, `wrangler.toml`, Dockerfiles, Tutor data files or shell history.
+The application-side OAuth/OIDC flow is already implemented. Activating a provider requires registering the Murikah Tutor web application with that identity provider and storing the resulting credentials in the runtime secret store (Cloudflare Workers production secrets, or GitHub Codespaces secrets for the development environment). Provider credentials are runtime secrets: never commit them to this repository, `wrangler.toml`, Dockerfiles, Tutor data files or shell history.
 
 ## Production callback URLs
 
@@ -18,10 +18,12 @@ The runtime public base defaults to `https://tutor.murikah.com` and can be overr
 
 Create a Google OAuth web client for Murikah Tutor. Configure the production redirect URI exactly as shown above. Use the normal `openid profile email` scopes; no Google API data access is required by Tutor sign-in.
 
-Store the credentials as repository-scoped Codespaces secrets:
+Store the credentials as runtime secrets:
 
 - `MURIKAH_GOOGLE_CLIENT_ID`
 - `MURIKAH_GOOGLE_CLIENT_SECRET`
+
+For `tutor.murikah.com`, add both names in the Cloudflare Worker **Variables & Secrets** settings. The Worker already forwards them into the Tutor container; no client secret belongs in Git or `wrangler.toml`. Google is deliberately shown first on the account page whenever these two values are present.
 
 Google may require an OAuth consent screen, verified domain information and production verification depending on the audience and publication state of the OAuth app.
 
@@ -51,6 +53,10 @@ Store:
   - `MURIKAH_APPLE_PRIVATE_KEY_B64` — preferred for multiline `.p8` material in secret stores
 
 Do not expose or commit the `.p8` private key.
+
+## Cloudflare production activation
+
+The production Worker keeps provider credentials in Cloudflare Variables & Secrets. For Google, configure the two values above on the `murikah-tutor-container-staging` Worker and keep the redirect URI exactly `https://tutor.murikah.com/api/auth/oauth/google/callback`. The provider-discovery endpoint will expose Google only when both credentials are complete, preventing a dead sign-in button.
 
 ## Codespaces activation
 

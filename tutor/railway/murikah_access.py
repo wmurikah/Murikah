@@ -162,8 +162,11 @@ def check_origin(request):
 
 def set_session(response, username, uid):
     from deeptutor.services.auth import create_token
+    # Guests remain intentionally short-lived. Converted/signed-up members use
+    # the production 400-day window; /api/auth/status renews it during use.
+    session_max_age = 30 * 86400 if username.startswith(PREFIX) else 9600 * 3600
     response.set_cookie("dt_token", create_token(username, role="user", user_id=uid),
-                        max_age=30 * 86400, httponly=True, secure=True, samesite="lax", path="/")
+                        max_age=session_max_age, httponly=True, secure=True, samesite="lax", path="/")
     if username.startswith(PREFIX):
         # Keep a signed guest handle when the workspace JWT expires or is logged out.
         # The server ledger, not this cookie, remains the authority for the quota.
