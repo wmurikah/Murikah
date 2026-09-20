@@ -35,6 +35,7 @@ from deeptutor.murikah_fast_lane import (
     configured_nvidia_model,
     nvidia_configured,
     nvidia_stream,
+    portable_chat_messages,
     latency_ms,
     race_first_visible,
 )
@@ -142,6 +143,10 @@ NEW_RUN = '''    @staticmethod
             enabled_tools=[],
             include_tool_manifest=False,
         )
+
+        # Provider-private replay fields can poison second-turn failover.
+        # Keep only role/content and a bounded recent context for ordinary Chat.
+        messages = portable_chat_messages(messages)
 
         resolved: list[Any] = []
         seen: set[tuple[str, str]] = set()
