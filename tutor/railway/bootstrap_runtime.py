@@ -76,7 +76,23 @@ def service_shell(
     }
 
 
+def _member_session_hours() -> int:
+    """Long-lived member session, renewed while the learner uses Tutor.
+
+    Chromium-family browsers cap persistent cookies at roughly 400 days, so
+    9,600 hours is both durable and standards-compatible. The auth-status
+    overlay refreshes this cookie on normal signed-in use; explicit logout or
+    an administrator disabling/revoking the account still wins immediately.
+    """
+    try:
+        value = int(os.environ.get("MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS", "9600"))
+    except ValueError as exc:
+        raise RuntimeError("MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS must be an integer.") from exc
+    return min(max(value, 720), 9600)
+
+
 def bootstrap_auth() -> None:
+    expire_hours = _member_session_hours()
     if AUTH_PATH.exists():
         current = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
         if not bool(current.get("enabled")):
@@ -84,12 +100,24 @@ def bootstrap_auth() -> None:
                 "Existing /app/data/user/settings/auth.json has authentication disabled. "
                 "Refusing to start an Internet-facing Murikah Tutor deployment."
             )
+        changed = False
         if not bool(current.get("cookie_secure")):
             current["cookie_secure"] = True
+            changed = True
+        # Do not preserve an old 24h/7d setting forever. Production members
+        # receive the same long-lived session policy after every container
+        # replacement, including accounts created before this deployment.
+        if int(current.get("token_expire_hours") or 0) != expire_hours:
+            current["token_expire_hours"] = expire_hours
+            changed = True
+        if changed:
             atomic_write_json(AUTH_PATH, current)
-            print("[Murikah Tutor] Enforced secure authentication cookie on existing settings.")
+            print(
+                "[Murikah Tutor] Enforced secure sliding member session settings "
+                f"({expire_hours} hours)."
+            )
         else:
-            print("[Murikah Tutor] Existing authentication settings preserved.")
+            print("[Murikah Tutor] Persistent authentication settings already current.")
         return
 
     username = os.environ.get("MURIKAH_TUTOR_ADMIN_USERNAME", "admin").strip() or "admin"
@@ -98,12 +126,6 @@ def bootstrap_auth() -> None:
         raise RuntimeError(
             "MURIKAH_TUTOR_ADMIN_PASSWORD is required on first boot and must be at least 14 characters."
         )
-
-    try:
-        expire_hours = int(os.environ.get("MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS", "24"))
-    except ValueError as exc:
-        raise RuntimeError("MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS must be an integer.") from exc
-    expire_hours = min(max(expire_hours, 1), 168)
 
     from deeptutor.services.auth import hash_password
 
