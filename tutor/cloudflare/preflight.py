@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v22"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v23"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -219,6 +219,8 @@ def main() -> int:
             '"MURIKAH_TAVILY_API_KEY"',
             'MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"',
             'MURIKAH_GUEST_PROMPT_LIMIT = "7"',
+            'MURIKAH_FAST_CHAT_MODEL = "gemini-3.5-flash-lite"',
+            'MURIKAH_FAST_CHAT_QWEN_MODEL = "qwen3.8-flash"',
         ),
     )
     require_markers(
@@ -362,7 +364,7 @@ def main() -> int:
         "tutor/railway/bootstrap_fast_lane.py",
         (
             'PROFILE_ID = "muri-llm-gemini"',
-            'DEFAULT_MODEL = "gemini-3.8-flash"',
+            'DEFAULT_MODEL = "gemini-3.5-flash-lite"',
             'MURIKAH_GEMINI_API_KEY',
             'MURIKAH_FAST_CHAT_MODEL',
             '"api_format": "openai_chat"',
@@ -372,9 +374,14 @@ def main() -> int:
     require_markers(
         "tutor/railway/murikah_fast_lane.py",
         (
-            'DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"',
+            'DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"',
             'DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"',
             'def portable_chat_messages(',
+            'DEFAULT_QWEN_FAST_MODEL = "qwen3.8-flash"',
+            'def configured_qwen_fast_model(',
+            'def qwen_configured(',
+            'async def qwen_stream(',
+            '"enable_thinking": thinking',
             'thinkingLevel": "low"',
             'async def gemini_stream(',
             'async def nvidia_stream(',
@@ -386,12 +393,16 @@ def main() -> int:
     require_markers(
         "tutor/railway/accelerate_chat.py",
         (
-            'MURIKAH_DUAL_LANE_CHAT_V4',
+            'MURIKAH_DUAL_LANE_CHAT_V5',
             'def _agent_reason(',
             'force_agentic_chat',
             'race_first_visible(',
             'nvidia-fast:',
             'portable_chat_messages',
+            'qwen-fast:',
+            'qwen-retry:',
+            'nvidia-retry:',
+            'gemini-retry:',
             'terminal_first_token_timeout',
             '_FAST_TURN_TIMEOUT_SECONDS',
             'route=deep_agent',
@@ -587,7 +598,7 @@ def main() -> int:
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Gemini fast chat is additive and deep-task NVIDIA settings remain preserved")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
-    print(" - fast chat hedges native Gemini with an independent direct NVIDIA NIM fallback")
+    print(" - fast chat races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash with a transparent retry race")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
