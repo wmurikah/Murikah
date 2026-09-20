@@ -2,8 +2,8 @@
 export const prerender = true;
 
 /**
- * Pricing. The full indicative Assurance OS subscription tiers (validated on
- * enquiry, no invented numbers), with the capabilities each tier includes drawn
+ * Pricing. Published Assurance OS budget ranges, with the capabilities each tier
+ * includes drawn
  * from the Assurance OS page. The assurance bundle sits in its own section so it is
  * not mistaken for a fourth tier, the service lines carry a budget-focused note
  * rather than repeating their summaries, and the page has its own FAQ and a
@@ -16,7 +16,7 @@ import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
 import Faq from '@/components/primitives/Faq.astro';
 import FaqPageSchema from '@/components/schema/FaqPage.astro';
-import { SERVICES, PRICING } from '@/site.config';
+import { SERVICES, PRICING, PRIMARY_CTA } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
 const serviceLines = SERVICES.filter((s) => s.slug !== 'assurance-os');
@@ -67,7 +67,7 @@ const faqs: FaqItem[] = [
   {
     question: 'How does billing work?',
     answer:
-      'Assurance OS is a monthly subscription. The ranges on this page are indicative and validated against your size and setup before you commit, so the figure you agree is the figure you pay. Ask for the billing schedule, payment methods and any setup charges in your written quote.',
+      'Assurance OS is a monthly subscription. Starter is KES 15,000 to 35,000 a month, Growth is KES 45,000 to 120,000, and Enterprise starts at KES 150,000. Your final quote sits within or above those anchors depending on users, entities, onboarding or migration, support needs and agreed integrations.',
   },
   {
     question: 'Can we move between tiers as we grow?',
@@ -80,16 +80,16 @@ const faqs: FaqItem[] = [
       'The written agreement sets out the minimum term, renewal, cancellation notice and data export arrangements. Review these before subscribing.',
   },
   {
-    question: 'What happens after you validate the range on a call?',
+    question: 'What changes the price?',
     answer:
-      'We confirm the tier that fits, scope any service work with you, and give you a clear monthly number to take to your budget. No card is needed to get that figure, and there is no obligation to go ahead.',
+      'The main drivers are the number of users and entities, how much onboarding or migration help you need, the support level, and any agreed integrations or specialist requirements. The published ranges are there so you can budget before speaking to sales.',
   },
 ];
 ---
 
 <BaseLayout
   titleFull="Assurance OS pricing in Kenya | Murikah"
-  description="Indicative Assurance OS subscription tiers for mid-market teams, validated on enquiry. The service lines are scoped and quoted per engagement."
+  description="Published Assurance OS monthly budget ranges for mid-market teams, with the main price drivers explained before enquiry."
 >
   <FaqPageSchema slot="head" items={faqs} />
 
@@ -110,9 +110,9 @@ const faqs: FaqItem[] = [
         Pricing you can take to a budget.
       </h1>
       <p class="mt-6 max-w-2xl text-xl text-slate">
-        Assurance OS runs on a monthly subscription
-        with indicative tiers validated against your size and needs. Service lines are scoped and
-        quoted per engagement.
+        Assurance OS starts at KES 15,000 per month. Starter is KES 15,000 to 35,000, Growth is
+        KES 45,000 to 120,000, and Enterprise starts at KES 150,000. Service work is priced
+        separately.
       </p>
     </div>
   </Section>
@@ -128,13 +128,12 @@ const faqs: FaqItem[] = [
         Assurance OS subscription
       </h2>
       <p class="mt-4 text-lg text-slate">
-        These tiers cover the Assurance OS audit and risk workspace. Budget
-        for professional services separately, and confirm users, entities, onboarding and support
-        when requesting a quote.
+        These published ranges cover the Assurance OS audit and risk workspace. Your final price is
+        shaped mainly by users, entities, onboarding or migration, support needs and any agreed
+        integrations. Professional services are priced separately.
       </p>
       <p class="mt-3 text-sm text-slate">
-        Indicative monthly ranges. Final features, fees and contract terms are confirmed in your
-        written quote.
+        Use the ranges as budget anchors. Contract terms and the final scope are confirmed in writing.
       </p>
     </div>
 
@@ -218,7 +217,7 @@ const faqs: FaqItem[] = [
             </li>
           </ul>
           <div class="mt-6">
-            <Button href="/contact" variant="secondary">Discuss your requirements</Button>
+            <Button href={PRIMARY_CTA.href} variant="secondary">{PRIMARY_CTA.label}</Button>
           </div>
         </div>
       </div>
@@ -257,7 +256,7 @@ const faqs: FaqItem[] = [
       </div>
     </div>
     <div class="mt-10">
-      <Button href="/contact" variant="secondary">Discuss your requirements</Button>
+      <Button href={PRIMARY_CTA.href} variant="secondary">{PRIMARY_CTA.label}</Button>
     </div>
   </Section>
 
@@ -275,9 +274,11 @@ const faqs: FaqItem[] = [
 
   <CtaSection
     eyebrow="No card needed"
-    title="One call turns the range into your number"
-    body="Tell us your size and setup and we will validate the right tier on a call. No card, no obligation, and you leave with a figure you can take to your board."
-    secondaryLabel="Explore products"
-    secondaryHref="/products"
+    title="You can budget before you call"
+    body="Use the published ranges first. If you want a final quote, tell us the users, entities and onboarding support you need."
+    primaryLabel={PRIMARY_CTA.label}
+    primaryHref={PRIMARY_CTA.href}
+    secondaryLabel="Try Assurance OS"
+    secondaryHref="/assurance-os/sandbox"
   />
 </BaseLayout>
