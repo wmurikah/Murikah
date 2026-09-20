@@ -13,7 +13,7 @@ test('homepage hero is centred on the plan-to-board-pack promise', async () => {
   );
   assert.doesNotMatch(page, /Internal audit · Assurance OS/);
   assert.doesNotMatch(page, />Engagements<|>Open findings<|>Due actions<|>Sample data</);
-  assert.match(page, />Try with sample data →</);
+  assert.match(page, /Try with sample data →/);
   assert.match(page, /Guided by IIA Standards · ISO\/IEC 27001 · ISO\/IEC 42001/);
 });
 
