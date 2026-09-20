@@ -135,6 +135,7 @@ def main() -> None:
             "Design diagram",
             "max-h-[720px]",
             "overscroll-behavior:contain",
+            'border-t border-[var(--border)]',
         ),
     )
     require_markers(
@@ -200,6 +201,51 @@ def main() -> None:
             root / markdown_renderer,
             ("max-h-[70dvh] max-w-full object-contain",),
         )
+
+    require_markers(
+        root / "web/components/layout/AppShell.tsx",
+        (
+            'pathname === "/diagram-design"',
+            "overflow-y-auto overscroll-y-contain touch-pan-y",
+        ),
+    )
+    require_markers(
+        root / "web/hooks/useChatAutoScroll.ts",
+        (
+            "lastObservedScrollTopRef",
+            "current < previous - 1",
+        ),
+    )
+    require_markers(
+        root / "web/features/chat/components/ChatWorkspace.tsx",
+        (
+            "overflow-y-auto overscroll-y-contain touch-pan-y",
+            'data-chat-scroll-root="true"',
+        ),
+    )
+    require_markers(
+        root / "deeptutor/api/routers/auth.py",
+        (
+            "sliding: every normal auth-status read renews",
+            'not str(payload.username).startswith("guest_")',
+            "response.set_cookie(",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/agents/loop/agent_loop.py",
+        (
+            "_murikah_solve_repair_attempted",
+            "solve_final_repair",
+            "Finishing the solution",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/murikah_diagram.py",
+        (
+            "Return one complete SVG FIRST",
+            "Diagram Design is an artifact-first surface",
+        ),
+    )
 
     guest_router = root / "deeptutor/api/routers/murikah_guest.py"
     require_markers(

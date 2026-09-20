@@ -46,8 +46,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v24 preserves exhausted guest work through account handoff and keeps generated media within the viewport.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v24" }
+# v25 adds persistent member sessions, Math Animator runtime support, first-attempt Solve repair, and definitive scroll ownership.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v25" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4

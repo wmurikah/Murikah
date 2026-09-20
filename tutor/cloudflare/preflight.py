@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v24"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v25"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -271,6 +271,11 @@ def main() -> int:
             'COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py',
             'COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py',
             'python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor',
+            'COPY tutor/railway/harden_member_runtime.py /opt/murikah/harden_member_runtime.py',
+            'python /opt/murikah/harden_member_runtime.py /src/DeepTutor',
+            '"manim>=0.19.0,<0.20"',
+            'texlive-latex-base',
+            'dvisvgm',
             'python /opt/murikah/persist_learning_journal.py /src/DeepTutor',
             'python /opt/murikah/brand_chat_status.py /src/DeepTutor',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py',
@@ -347,6 +352,9 @@ def main() -> int:
         (
             'MODEL_CATALOG_PATH = SETTINGS_DIR / "model_catalog.json"',
             'VIDEO_LEARNING_PATH = SETTINGS_DIR / "video_learning.json"',
+            'def _member_session_hours()',
+            'MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS", "9600"',
+            '"token_expire_hours": expire_hours',
             'def bootstrap_cloudflare_model_catalog()',
             'def bootstrap_cloudflare_video_learning()',
             'MURIKAH_NVIDIA_NIM_API_KEY',
@@ -370,7 +378,32 @@ def main() -> int:
             'MURIKAH_GEMINI_API_KEY',
             'MURIKAH_FAST_CHAT_MODEL',
             '"api_format": "openai_chat"',
-            'llm["active_profile_id"] = PROFILE_ID',
+            'deep-task LLM selection preserved',
+        ),
+    )
+    require_markers(
+        "tutor/railway/harden_member_runtime.py",
+        (
+            "Sliding member auth",
+            "lastObservedScrollTopRef",
+            'pathname === "/diagram-design"',
+            "_murikah_solve_repair_attempted",
+            "solve_final_repair",
+            "Finishing the solution",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_diagram.py",
+        (
+            "Return one complete SVG FIRST",
+            "Diagram Design is an artifact-first surface",
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahSocialButtons.tsx.txt",
+        (
+            "google: 0",
+            "Continue with {provider.label}",
         ),
     )
     require_markers(
@@ -600,7 +633,7 @@ def main() -> int:
     print(" - stable auth signing secret is restored before DeepTutor auth imports")
     print(" - /app is fixed as the Python import root before runtime initialization")
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
-    print(" - Gemini fast chat is additive and deep-task NVIDIA settings remain preserved")
+    print(" - Gemini fast chat is additive; deep-task NVIDIA selection is preserved for Solve and Math Animator")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
     print(" - fast chat races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash with a transparent retry race")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
@@ -615,6 +648,10 @@ def main() -> int:
     print(" - D1-backed guest quotas and private R2 runtime checkpoints are wired through the Worker bridge")
     print(" - ordinary follow-ups use bounded portable history and cannot silently fall into the multi-agent pipeline")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
+    print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
+    print(" - Math Animator dependencies are installed and smoke-tested in the production image")
+    print(" - Diagram Design has a real page scroller and renders its SVG before explanation")
+    print(" - Deep Solve performs one hidden final repair before surfacing an empty-answer failure")
     print(" - production persistence cutover remains gated on the destructive container-replacement acceptance test")
     return 0
 

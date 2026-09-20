@@ -77,10 +77,16 @@ def main() -> None:
         ],
     }
     llm["profiles"] = [gemini_profile, *profiles]
-    llm["active_profile_id"] = PROFILE_ID
-    llm["active_model_id"] = MODEL_ID
+    # Keep the deep-task default selected by bootstrap_runtime.py (NVIDIA
+    # primary). Ordinary Chat uses the direct Gemini/NVIDIA/Qwen race in
+    # accelerate_chat.py and does not need Gemini to become the process-wide
+    # active profile. Leaving Gemini active here made Deep Solve and other
+    # multi-stage capabilities run on the latency-optimised Flash-Lite model.
     atomic_write(CATALOG, catalog)
-    print(f"[Murikah Tutor] Gemini fast lane enabled with model {model}.")
+    print(
+        f"[Murikah Tutor] Gemini fast lane enabled with model {model}; "
+        "deep-task LLM selection preserved."
+    )
 
 
 if __name__ == "__main__":
