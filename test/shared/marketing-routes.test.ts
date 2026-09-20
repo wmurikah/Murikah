@@ -6,6 +6,12 @@ import { NAV, SERVICES } from '../../src/site.config.ts';
 
 const routes = [
   {
+    label: 'Assurance OS',
+    from: '/audit-os',
+    to: '/assurance-os',
+    file: 'assurance-os.astro',
+  },
+  {
     label: 'Internal audit',
     from: '/assurance',
     to: '/internal-audit',
@@ -59,6 +65,7 @@ test('canonical service page files exist and legacy page files are removed', asy
   }
 
   for (const legacy of [
+    'audit-os.astro',
     'assurance.astro',
     'labs.astro',
     'academy.astro',
