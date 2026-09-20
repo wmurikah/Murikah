@@ -426,7 +426,7 @@ def main() -> int:
         (
             'MURIKAH_FAST_LANE_FAILOVER_V4',
             'trust_env=False',
-            'gemini_compat =',
+            'MURIKAH_DUAL_LANE_CHAT_V4',
             'service temporarily overloaded',
             'Provider returned a retryable error payload instead of guest output',
         ),
@@ -583,7 +583,7 @@ def main() -> int:
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Gemini fast chat is additive and deep-task NVIDIA settings remain preserved")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
-    print(" - fast chat uses native + OpenAI-compatible Gemini transports before NVIDIA fallback")
+    print(" - fast chat races Gemini Flash-Lite with NVIDIA Nemotron Lightning before catalog fallback")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
