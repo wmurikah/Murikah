@@ -26,6 +26,7 @@ COPY tutor/railway/refine_guest_experience.py /opt/murikah/refine_guest_experien
 COPY tutor/railway/polish_guest_shell.py /opt/murikah/polish_guest_shell.py
 COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.py
 COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
+COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py
 COPY tutor/railway/harden_guest_completion.py /opt/murikah/harden_guest_completion.py
 COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
 COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py
@@ -73,9 +74,10 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/harden_guest_completion.py /src/DeepTutor \
     && python /opt/murikah/accelerate_chat.py /src/DeepTutor \
     && python /opt/murikah/lock_guest_composer.py /src/DeepTutor \
-    && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
     && python /opt/murikah/apply_workspace_access.py /src/DeepTutor \
+    && python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor \
+    && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
     && python /opt/murikah/brand_chat_status.py /src/DeepTutor \
     && python /opt/murikah/hide_guest_account_ui.py /src/DeepTutor \
