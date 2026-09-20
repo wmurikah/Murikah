@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v21"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v22"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -362,7 +362,7 @@ def main() -> int:
         "tutor/railway/bootstrap_fast_lane.py",
         (
             'PROFILE_ID = "muri-llm-gemini"',
-            'DEFAULT_MODEL = "gemini-3.8-flash"',
+            'DEFAULT_MODEL = "gemini-3.5-flash-lite"',
             'MURIKAH_GEMINI_API_KEY',
             'MURIKAH_FAST_CHAT_MODEL',
             '"api_format": "openai_chat"',
@@ -372,9 +372,11 @@ def main() -> int:
     require_markers(
         "tutor/railway/murikah_fast_lane.py",
         (
-            'DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"',
-            'thinkingLevel": "low"',
+            'DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"',
+            '_gemini_thinking_level(configured_gemini_model())',
             'async def gemini_stream(',
+            'async def nvidia_stream(',
+            '"enable_thinking": False',
             'async def race_first_visible(',
             'MURIKAH_LATENCY route=fast',
         ),
@@ -382,11 +384,13 @@ def main() -> int:
     require_markers(
         "tutor/railway/accelerate_chat.py",
         (
-            'MURIKAH_DUAL_LANE_CHAT_V3',
+            'MURIKAH_DUAL_LANE_CHAT_V4',
             'def _agent_reason(',
             'force_agentic_chat',
             'race_first_visible(',
-            'terminal_first_token_timeout',
+            'terminal_provider_unavailable',
+            'Murikah is reconnecting…',
+            'nvidia_stream(',
             '_FAST_TURN_TIMEOUT_SECONDS',
             'route=deep_agent',
             'route=fast',
