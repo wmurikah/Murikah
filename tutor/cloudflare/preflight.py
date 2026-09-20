@@ -384,7 +384,7 @@ def main() -> int:
     require_markers(
         "tutor/railway/harden_member_runtime.py",
         (
-            "sliding member auth",
+            "Sliding member auth",
             "lastObservedScrollTopRef",
             'pathname === "/diagram-design"',
             "_murikah_solve_repair_attempted",
