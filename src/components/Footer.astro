@@ -4,15 +4,15 @@ import SubscribeForm from '@/components/SubscribeForm.astro';
 import { SITE, PRODUCTS, SOCIAL } from '@/site.config';
 const year = new Date().getFullYear();
 const link =
-  'inline-flex min-h-8 items-center text-sm text-paper/80 no-underline hover:text-paper hover:underline';
+  'inline-flex min-h-8 items-center text-sm text-slate no-underline hover:text-navy hover:underline';
 ---
 
-<footer class="compact-footer on-dark border-t border-paper/10 bg-header-bg text-paper/80">
+<footer class="compact-footer border-t border-hairline bg-paper-shade text-slate">
   <Container>
     <div class="footer-main flex flex-wrap items-center gap-x-6 gap-y-1">
       <a
         href="/"
-        class="inline-flex min-h-8 items-center text-base font-semibold tracking-widest text-paper no-underline"
+        class="inline-flex min-h-8 items-center text-base font-semibold tracking-widest text-navy no-underline"
         aria-label="Murikah, home">MURIKAH</a
       >
       <nav aria-label="Footer products" class="flex flex-wrap gap-x-4">
@@ -33,7 +33,7 @@ const link =
       </nav>
     </div>
     <div
-      class="footer-meta flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-paper/10 text-xs"
+      class="footer-meta flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-hairline text-xs"
     >
       <p>© {year} {SITE.legalName}</p>
       <a href="/privacy" class={link}>Privacy</a>
@@ -47,12 +47,12 @@ const link =
       }
       <a href={`mailto:${SITE.email}`} class={link}>{SITE.email}</a>
       <details class="newsletter ml-auto">
-        <summary class="min-h-8 cursor-pointer py-1.5 text-sm hover:text-paper">Newsletter</summary>
+        <summary class="min-h-8 cursor-pointer py-1.5 text-sm text-navy hover:underline">Newsletter</summary>
         <div class="newsletter-panel">
           <p class="mb-2 text-sm">Occasional notes on assurance and governance.</p>
           <SubscribeForm
             source="newsletter"
-            tone="dark"
+            tone="light"
             buttonLabel="Subscribe"
             successMessage="Thank you. We will send the occasional note, nothing more."
           />
@@ -80,8 +80,9 @@ const link =
     right: 0;
     width: min(24rem, calc(100vw - 3rem));
     padding: 1rem;
-    background: var(--color-header-bg);
-    border: 1px solid var(--color-slate);
+    background: var(--color-surface);
+    border: 1px solid var(--color-control-border);
+    color: var(--color-ink);
     border-radius: var(--radius-btn);
     z-index: 10;
   }
