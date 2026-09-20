@@ -13,9 +13,17 @@ Murikah is an AI-native assurance and governance company. It helps regulated mid
 - Training: training and certification, including CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses. https://murikah.com/training
 - Research: anonymised cross-client benchmarking and an annual flagship report, both forthcoming as the client base grows. https://murikah.com/research
 
+## Founder and proof
+
+Wilberforce L. Murikah is the founder of Murikah. Publicly stated credentials include CISA, ISO/IEC 27001:2022 Lead Auditor and ISO/IEC 42001:2023 Lead Auditor. He is a co-author of peer-reviewed research on AI ethics in auditing and algorithmic profiling. The site also publishes a redacted prior assurance report extract with quantified engagement metrics. https://murikah.com/proof/report-extract
+
 ## Who it is for
 
-Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. The first focus is SACCOs (regulated by SASRA), banks, microfinance institutions and fintechs (supervised by the Central Bank of Kenya), and donor-funded NGOs, with family-owned businesses that have active boards close behind.
+Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. Priority audience pages:
+- SACCOs: https://murikah.com/saccos
+- Banks and microfinance institutions: https://murikah.com/banks
+
+The wider audience also includes fintechs, donor-funded NGOs and family-owned businesses with active boards.
 
 ## Standards the work follows
 
@@ -26,6 +34,9 @@ Murikah works to the IIA Global Internal Audit Standards for its internal audit 
 - Home: https://murikah.com/
 - About: https://murikah.com/about
 - Insights (guides): https://murikah.com/insights
+- SACCOs: https://murikah.com/saccos
+- Banks and microfinance: https://murikah.com/banks
+- Redacted report proof: https://murikah.com/proof/report-extract
 - Contact: https://murikah.com/contact
 
 ## Top guides

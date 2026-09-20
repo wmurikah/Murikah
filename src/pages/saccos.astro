@@ -1,0 +1,117 @@
+---
+export const prerender = true;
+
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import Button from '@/components/primitives/Button.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import { PRIMARY_CTA } from '@/site.config';
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'SACCOs', href: '/saccos' },
+];
+
+const priorities = [
+  'A risk-based internal audit plan that can be explained to the board and audit committee.',
+  'Evidence, findings and management actions that stay linked through follow-up.',
+  'Technology, cyber, data-protection and operational reviews alongside financial controls.',
+  'Board reporting that shows what is open, overdue and high priority without rebuilding spreadsheets.',
+];
+---
+
+<BaseLayout
+  titleFull="Internal audit for SACCOs in Kenya | Murikah"
+  description="Internal audit and Assurance OS for regulated SACCOs in Kenya, with board-ready evidence, finding follow-up and technology assurance."
+>
+  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
+    <div class="max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">For SACCOs</p>
+      <h1
+        id="page-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-navy"
+      >
+        Internal audit evidence your board can follow.
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        Murikah supports regulated SACCOs with co-sourced internal audit, technology assurance and
+        Assurance OS, so findings move from fieldwork to owned action and board follow-up in one
+        evidence trail.
+      </p>
+      <div class="mt-8">
+        <Button href={PRIMARY_CTA.href} size="lg">{PRIMARY_CTA.label}</Button>
+      </div>
+    </div>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="sacco-priorities">
+    <div class="grid gap-10 lg:grid-cols-12">
+      <div class="lg:col-span-5">
+        <p class="eyebrow">What matters</p>
+        <h2 id="sacco-priorities" class="mt-5 font-serif text-3xl text-navy">
+          Built around governance, evidence and follow-up.
+        </h2>
+        <p class="mt-4 text-slate">
+          SASRA publishes corporate-governance and risk-management guidance for regulated SACCOs.
+          The practical audit question is whether the board can see the evidence, the risk and the
+          status of management action clearly.
+        </p>
+      </div>
+      <ul class="grid gap-3 lg:col-span-7">
+        {
+          priorities.map((item) => (
+            <li class="rounded-card bg-surface p-5 text-navy ring-1 ring-hairline">{item}</li>
+          ))
+        }
+      </ul>
+    </div>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="sacco-path" class="border-y border-hairline">
+    <div class="grid gap-6 md:grid-cols-3">
+      <article>
+        <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">1 · Assess</p>
+        <h2 id="sacco-path" class="mt-2 text-xl text-navy">Start with the risk and audit plan</h2>
+        <p class="mt-2 text-sm text-slate">Define the entities, branches, systems and regulatory priorities that need assurance.</p>
+      </article>
+      <article>
+        <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">2 · Evidence</p>
+        <h2 class="mt-2 text-xl text-navy">Run the work in one trail</h2>
+        <p class="mt-2 text-sm text-slate">Keep work papers, review notes, findings, owners and due dates connected.</p>
+      </article>
+      <article>
+        <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">3 · Report</p>
+        <h2 class="mt-2 text-xl text-navy">Give the committee a live position</h2>
+        <p class="mt-2 text-sm text-slate">Report the same findings and actions management is already updating rather than recreating the pack.</p>
+      </article>
+    </div>
+    <p class="mt-8 text-sm text-slate">
+      Regulatory reference:{' '}
+      <a
+        href="https://www.sasra.go.ke/download/guidance-notes-on-corporate-governance-for-regulated-saccos-in-kenya/"
+        class="font-medium text-blue"
+      >
+        SASRA corporate-governance guidance ↗
+      </a>
+      {' '}and{' '}
+      <a
+        href="https://www.sasra.go.ke/download/sasra_risk-management-guidelines/"
+        class="font-medium text-blue"
+      >
+        SASRA risk-management guidance ↗
+      </a>.
+    </p>
+  </Section>
+
+  <CtaSection
+    eyebrow="For SACCO audit leaders"
+    title="Start with your next audit cycle"
+    body="Bring the current plan, open findings and reporting pain points. We will identify the smallest useful starting scope."
+    primaryLabel={PRIMARY_CTA.label}
+    primaryHref={PRIMARY_CTA.href}
+    secondaryLabel="Try Assurance OS"
+    secondaryHref="/assurance-os/sandbox"
+  />
+</BaseLayout>
