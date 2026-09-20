@@ -1,0 +1,123 @@
+---
+export const prerender = true;
+
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import { PRIMARY_CTA } from '@/site.config';
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Proof', href: '/#proof' },
+  { label: 'Redacted report extract', href: '/proof/report-extract' },
+];
+---
+
+<BaseLayout
+  titleFull="Redacted internal audit report extract | Murikah"
+  description="A redacted reconstruction of a real prior assurance report page, showing quantified findings, prioritisation and management follow-up without identifying the organisation."
+>
+  <Section tone="surface" aria-labelledby="report-title" class="border-b border-hairline">
+    <div class="max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">Proof · Anonymised prior work</p>
+      <h1
+        id="report-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-navy"
+      >
+        A real report structure, with the identifying details removed.
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        This page reconstructs an executive report extract from prior assurance work led by
+        Murikah's founder. The engagement figures are real; the organisation, systems, countries,
+        dates and finding text are deliberately withheld.
+      </p>
+    </div>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="extract-title">
+    <article class="mx-auto max-w-4xl bg-white p-6 shadow-card ring-1 ring-hairline sm:p-10">
+      <header class="flex flex-col gap-5 border-b border-hairline pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold tracking-[0.14em] text-gold uppercase">
+            Internal audit · Executive report extract
+          </p>
+          <h2 id="extract-title" class="mt-2 font-serif text-3xl text-navy">
+            Multi-system technology assurance programme
+          </h2>
+          <p class="mt-2 text-sm text-slate">Client identity redacted · Prior practitioner engagement</p>
+        </div>
+        <span class="w-fit rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-navy ring-1 ring-hairline">
+          Redacted extract
+        </span>
+      </header>
+
+      <section class="mt-8" aria-labelledby="executive-summary">
+        <h3 id="executive-summary" class="text-xl text-navy">Executive summary</h3>
+        <p class="mt-3 max-w-3xl leading-relaxed text-ink">
+          The programme consolidated observations from several technology and control workstreams
+          into a single management follow-up view. The same action log was then used to support
+          board-level reporting rather than rebuilding the status position in a separate pack.
+        </p>
+      </section>
+
+      <section class="mt-8 grid gap-4 sm:grid-cols-3" aria-label="Engagement metrics">
+        <div class="rounded-card bg-surface p-5 ring-1 ring-hairline">
+          <p class="text-4xl font-semibold text-navy">93</p>
+          <p class="mt-2 text-sm text-slate">observations consolidated across the programme</p>
+        </div>
+        <div class="rounded-card bg-surface p-5 ring-1 ring-hairline">
+          <p class="text-4xl font-semibold text-navy">11</p>
+          <p class="mt-2 text-sm text-slate">observations in one critical-platform review</p>
+        </div>
+        <div class="rounded-card bg-surface p-5 ring-1 ring-hairline">
+          <p class="text-4xl font-semibold text-navy">5</p>
+          <p class="mt-2 text-sm text-slate">of those 11 assessed as high priority</p>
+        </div>
+      </section>
+
+      <section class="mt-9 border-t border-hairline pt-7" aria-labelledby="reporting-result">
+        <div class="grid gap-6 sm:grid-cols-12">
+          <div class="sm:col-span-4">
+            <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">Measurable result</p>
+            <h3 id="reporting-result" class="mt-2 text-xl text-navy">
+              One management position for 93 observations.
+            </h3>
+          </div>
+          <div class="sm:col-span-8">
+            <p class="leading-relaxed text-ink">
+              Instead of treating each workstream as a separate reporting exercise, the programme
+              brought the observations into one follow-up tracker for management response, action
+              ownership and board-pack preparation. No unsupported claim about hours or days saved
+              is made because that time saving was not measured.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="mt-9 border-t border-hairline pt-7" aria-labelledby="redactions">
+        <h3 id="redactions" class="text-lg text-navy">What is redacted</h3>
+        <p class="mt-3 text-sm leading-relaxed text-slate">
+          Client name, system names, countries, report dates, individual owners, detailed findings
+          and commercial information. The figures above are retained because they demonstrate the
+          scale and reporting method without identifying the organisation.
+        </p>
+      </section>
+
+      <footer class="mt-9 border-t border-hairline pt-5 text-xs text-slate">
+        Report extract · Page 1 of 1 · Public proof version
+      </footer>
+    </article>
+  </Section>
+
+  <CtaSection
+    eyebrow="See the workflow"
+    title="Follow the same evidence trail in Assurance OS"
+    body="Use the public sandbox to move from findings to actions and committee reporting without signing in."
+    primaryLabel="Try the public sandbox"
+    primaryHref="/assurance-os/sandbox"
+    secondaryLabel={PRIMARY_CTA.label}
+    secondaryHref={PRIMARY_CTA.href}
+  />
+</BaseLayout>
