@@ -6,7 +6,10 @@ import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
+import Faq from '@/components/primitives/Faq.astro';
+import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import { SERVICES, PRIMARY_CTA } from '@/site.config';
+import type { FaqItem } from '@/lib/types';
 
 const serviceLines = SERVICES.filter((service) => service.slug !== 'assurance-os');
 
@@ -38,6 +41,14 @@ const comparison: Record<string, { bestFor: string; output: string; start: strin
   },
 };
 
+const faqs: FaqItem[] = [
+  {
+    question: 'Can we use the software and services separately?',
+    answer:
+      'Yes. Assurance OS can be subscribed to on its own, and internal audit, advisory, training, automation or research work can be bought without a software subscription. If you want both, we can run the service work in Assurance OS so evidence, findings and follow-up stay in one system.',
+  },
+];
+
 const crumbs = [
   { label: 'Home', href: '/' },
   { label: 'Services', href: '/services' },
@@ -48,6 +59,7 @@ const crumbs = [
   titleFull="Compare internal audit, automation, advisory and training services | Murikah"
   description="Compare Murikah service lines by who they are for, the output you receive and how quickly each engagement can start."
 >
+  <FaqPageSchema slot="head" items={faqs} />
   <Section
     tone="surface"
     aria-labelledby="page-title"
@@ -125,6 +137,17 @@ const crumbs = [
         </tbody>
       </table>
     </div>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="services-faq" class="border-t border-hairline">
+    <p class="eyebrow">Question buyers ask</p>
+    <h2
+      id="services-faq"
+      class="mt-5 text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.015em] text-navy"
+    >
+      Software and services can stand alone.
+    </h2>
+    <Faq items={faqs} class="mt-7 max-w-3xl" />
   </Section>
 
   <CtaSection
