@@ -212,7 +212,7 @@ export default function AccessibilityAssistant() {
         ref={toggleRef}
         type="button"
         className="a11y__toggle"
-        aria-label="Accessibility tools"
+        aria-label="Accessibility options"
         aria-expanded={open}
         aria-haspopup="true"
         data-active={anyOn}
