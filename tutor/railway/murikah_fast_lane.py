@@ -15,10 +15,12 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 DEFAULT_NVIDIA_API_ROOT = "https://integrate.api.nvidia.com/v1"
+DEFAULT_QWEN_FAST_MODEL = "qwen3.8-flash"
+DEFAULT_DASHSCOPE_OPENAI_ROOT = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 DEFAULT_FAST_HISTORY_CHARS = 60000
 DEFAULT_HEDGE_DELAY_SECONDS = 2.5
 DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 12.0
@@ -62,6 +64,14 @@ def configured_nvidia_fast_model() -> str:
 
 def nvidia_configured() -> bool:
     return bool(os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip())
+
+
+def configured_qwen_fast_model() -> str:
+    return os.environ.get("MURIKAH_FAST_CHAT_QWEN_MODEL", "").strip() or DEFAULT_QWEN_FAST_MODEL
+
+
+def qwen_configured() -> bool:
+    return bool(os.environ.get("MURIKAH_DASHSCOPE_API_KEY", "").strip())
 
 
 def portable_chat_messages(
@@ -115,6 +125,13 @@ def portable_chat_messages(
     return [*system, *selected]
 
 
+def _gemini_thinking_level(model: str) -> str:
+    normalized = model.strip().lower()
+    if "flash-lite" in normalized:
+        return "minimal"
+    return "low"
+
+
 def _text_content(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -160,7 +177,7 @@ def _gemini_payload(messages: list[dict[str, Any]], max_tokens: int) -> dict[str
         "contents": contents,
         "generationConfig": {
             "maxOutputTokens": max(128, int(max_tokens)),
-            "thinkingConfig": {"thinkingLevel": "low"},
+            "thinkingConfig": {"thinkingLevel": _gemini_thinking_level(configured_gemini_model())},
         },
     }
     if system_parts:
@@ -235,28 +252,45 @@ async def gemini_stream(
                     yield text
 
 
-async def nvidia_stream(
+def _openai_chat_payload(
     messages: list[dict[str, Any]],
     *,
-    max_tokens: int = 1800,
-) -> AsyncIterator[str]:
-    """Stream the NVIDIA NIM fast fallback directly over OpenAI-compatible SSE."""
-    api_key = os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("NVIDIA NIM is not configured.")
-    base = (
-        os.environ.get("MURIKAH_NVIDIA_NIM_BASE_URL", "").strip()
-        or DEFAULT_NVIDIA_API_ROOT
-    ).rstrip("/")
-    url = f"{base}/chat/completions"
-    model = configured_nvidia_fast_model()
-    payload = {
+    model: str,
+    max_tokens: int,
+    thinking: bool | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "model": model,
         "messages": portable_chat_messages(messages),
         "max_tokens": max(128, int(max_tokens)),
-        "temperature": 0.4,
+        "temperature": 0.25,
+        "top_p": 0.9,
         "stream": True,
     }
+    if thinking is not None:
+        payload["chat_template_kwargs"] = {"enable_thinking": thinking}
+    return payload
+
+
+async def _openai_compatible_stream(
+    *,
+    provider: str,
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, Any]],
+    max_tokens: int,
+    thinking: bool | None = None,
+) -> AsyncIterator[str]:
+    if not api_key:
+        raise RuntimeError(f"{provider} is not configured.")
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    payload = _openai_chat_payload(
+        messages,
+        model=model,
+        max_tokens=max_tokens,
+        thinking=thinking,
+    )
     request_started = time.perf_counter()
     timeout = httpx.Timeout(connect=5.0, read=None, write=15.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
@@ -270,9 +304,18 @@ async def nvidia_stream(
             },
             json=payload,
         ) as response:
+            if response.status_code >= 400:
+                logger.warning(
+                    "MURIKAH_LATENCY route=fast provider=%s event=http_error model=%s status=%s elapsed_ms=%s",
+                    provider,
+                    model,
+                    response.status_code,
+                    latency_ms(request_started),
+                )
             response.raise_for_status()
             logger.info(
-                "MURIKAH_LATENCY route=fast provider=nvidia event=headers model=%s elapsed_ms=%s",
+                "MURIKAH_LATENCY route=fast provider=%s event=headers model=%s elapsed_ms=%s",
+                provider,
                 model,
                 latency_ms(request_started),
             )
@@ -292,9 +335,57 @@ async def nvidia_stream(
                     if not isinstance(choice, dict):
                         continue
                     delta = choice.get("delta") or {}
-                    text = delta.get("content") if isinstance(delta, dict) else ""
+                    if not isinstance(delta, dict):
+                        continue
+                    text = delta.get("content")
                     if isinstance(text, str) and text:
                         yield text
+
+
+async def nvidia_stream(
+    messages: list[dict[str, Any]],
+    *,
+    max_tokens: int = 1800,
+) -> AsyncIterator[str]:
+    """Stream Nemotron with hidden thinking disabled for interactive Tutor chat."""
+    api_key = os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip()
+    base = (
+        os.environ.get("MURIKAH_NVIDIA_NIM_BASE_URL", "").strip()
+        or DEFAULT_NVIDIA_API_ROOT
+    )
+    async for chunk in _openai_compatible_stream(
+        provider="nvidia",
+        base_url=base,
+        api_key=api_key,
+        model=configured_nvidia_fast_model(),
+        messages=messages,
+        max_tokens=max_tokens,
+        thinking=False,
+    ):
+        yield chunk
+
+
+async def qwen_stream(
+    messages: list[dict[str, Any]],
+    *,
+    max_tokens: int = 1800,
+) -> AsyncIterator[str]:
+    """Stream Qwen through DashScope as an independent third fast-chat provider."""
+    api_key = os.environ.get("MURIKAH_DASHSCOPE_API_KEY", "").strip()
+    base = (
+        os.environ.get("MURIKAH_DASHSCOPE_OPENAI_BASE_URL", "").strip()
+        or DEFAULT_DASHSCOPE_OPENAI_ROOT
+    )
+    async for chunk in _openai_compatible_stream(
+        provider="qwen",
+        base_url=base,
+        api_key=api_key,
+        model=configured_qwen_fast_model(),
+        messages=messages,
+        max_tokens=max_tokens,
+        thinking=None,
+    ):
+        yield chunk
 
 
 async def close_stream(stream: AsyncIterator[str] | None) -> None:

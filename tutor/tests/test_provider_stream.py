@@ -112,6 +112,40 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             8000,
         )
 
+    async def test_flash_lite_uses_minimal_thinking(self):
+        previous = fast.os.environ.get("MURIKAH_FAST_CHAT_MODEL")
+        try:
+            fast.os.environ["MURIKAH_FAST_CHAT_MODEL"] = "gemini-3.5-flash-lite"
+            payload = fast._gemini_payload([{"role": "user", "content": "Proceed"}], 128)
+            self.assertEqual(
+                payload["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+                "minimal",
+            )
+        finally:
+            if previous is None:
+                fast.os.environ.pop("MURIKAH_FAST_CHAT_MODEL", None)
+            else:
+                fast.os.environ["MURIKAH_FAST_CHAT_MODEL"] = previous
+
+    async def test_nvidia_fast_payload_disables_hidden_thinking(self):
+        payload = fast._openai_chat_payload(
+            [{"role": "user", "content": "Proceed"}],
+            model="nvidia/nemotron-3.5-lightning-30b-a3b",
+            max_tokens=128,
+            thinking=False,
+        )
+        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertEqual(payload["messages"][-1]["content"], "Proceed")
+
+    async def test_qwen_fast_model_is_pinned(self):
+        previous = fast.os.environ.get("MURIKAH_FAST_CHAT_QWEN_MODEL")
+        try:
+            fast.os.environ.pop("MURIKAH_FAST_CHAT_QWEN_MODEL", None)
+            self.assertEqual(fast.configured_qwen_fast_model(), "qwen3.8-flash")
+        finally:
+            if previous is not None:
+                fast.os.environ["MURIKAH_FAST_CHAT_QWEN_MODEL"] = previous
+
     async def test_followup_history_is_valid_gemini_conversation(self):
         payload = fast._gemini_payload([
             {"role": "system", "content": "Teach clearly."},
