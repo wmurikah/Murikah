@@ -40,11 +40,24 @@ class RuntimeExperienceTests(unittest.TestCase):
         self.assertIn("overscroll-y-contain touch-pan-y", overlay)
 
     def test_math_animator_is_a_built_image_contract(self):
-        dockerfile = (ROOT.parent / "Dockerfile.railway").read_text(encoding="utf-8")
-        self.assertIn('"manim>=0.19.0,<0.20"', dockerfile)
-        self.assertIn("texlive-latex-base", dockerfile)
-        self.assertIn("dvisvgm", dockerfile)
-        self.assertIn("assert shutil.which('ffmpeg')", dockerfile)
+        docker_path = ROOT / "Dockerfile.railway"
+        if docker_path.exists():
+            dockerfile = docker_path.read_text(encoding="utf-8")
+            self.assertIn('"manim>=0.19.0,<0.20"', dockerfile)
+            self.assertIn("texlive-latex-base", dockerfile)
+            self.assertIn("dvisvgm", dockerfile)
+            self.assertIn("assert shutil.which('ffmpeg')", dockerfile)
+            return
+
+        # In the final image only /opt/murikah/railway + tests are copied.
+        # Validate the installed runtime itself there, not a source fixture.
+        import importlib.util
+        import shutil
+
+        self.assertIsNotNone(importlib.util.find_spec("manim"))
+        self.assertIsNotNone(shutil.which("ffmpeg"))
+        self.assertIsNotNone(shutil.which("latex"))
+        self.assertIsNotNone(shutil.which("dvisvgm"))
 
 
 if __name__ == "__main__":
