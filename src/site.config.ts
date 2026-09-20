@@ -4,8 +4,8 @@
  * works to, pricing anchors, audience, social links and default SEO. Pull from
  * here rather than retyping copy across files.
  *
- * Murikah is a company and speaks as one ("we"). No named individual and no
- * personal qualifications appear anywhere in this file or on the site.
+ * Murikah speaks as a company ("we"), while founder credentials are shown
+ * explicitly where they provide relevant, verifiable trust evidence.
  *
  * Voice rules apply to every string in this file: no em dashes, plain English,
  * British and Kenyan spelling, no superlatives. Only confirmed details belong in public copy.
@@ -52,7 +52,31 @@ export interface PricingTier {
 export interface AudienceSegment {
   name: string;
   note: string;
+  href?: string;
 }
+
+export const FOUNDER = {
+  name: 'Wilberforce L. Murikah',
+  role: 'Founder, Murikah',
+  credentials: [
+    'CISA',
+    'ISO/IEC 27001:2022 Lead Auditor',
+    'ISO/IEC 42001:2023 Lead Auditor',
+  ],
+  research:
+    'Co-author of peer-reviewed research on AI ethics in auditing and algorithmic profiling.',
+  scholarUrl: 'https://scholar.google.com/citations?hl=en&user=KS1Vm5MAAAAJ',
+  papers: [
+    {
+      title: 'Bias and ethics of AI systems applied in auditing: a systematic review',
+      href: 'https://www.sciencedirect.com/science/article/pii/S2468227624002266',
+    },
+    {
+      title: 'Reconciling cultural values with algorithmic profiling',
+      href: 'https://www.sciencedirect.com/science/article/pii/S2772503026000290',
+    },
+  ],
+} as const;
 
 /** Canonical production URL. MUST stay in sync with `site` in astro.config.ts. */
 export const SITE_URL = 'https://murikah.com';
@@ -428,8 +452,8 @@ export const KNOWS_ABOUT = [
 ] as const;
 
 /**
- * Assurance OS indicative pricing, positioning anchors only. Always label as
- * indicative and validated on enquiry. Never present as a fixed quote.
+ * Assurance OS published budget ranges. They are not fixed quotes, but buyers
+ * should be able to budget from them without first speaking to sales.
  */
 export const PRICING: PricingTier[] = [
   {
@@ -456,11 +480,13 @@ export const PRICING: PricingTier[] = [
 export const AUDIENCE: AudienceSegment[] = [
   {
     name: 'SACCOs',
-    note: 'Regulated by SASRA, the SACCO Societies Regulatory Authority, which expects a board-level internal audit function.',
+    note: 'Regulated by SASRA, with governance, risk and internal-control expectations that need evidence at board level.',
+    href: '/saccos',
   },
   {
     name: 'Banks and microfinance',
-    note: 'Supervised by the Central Bank of Kenya, with demanding control and reporting expectations.',
+    note: 'Supervised by the Central Bank of Kenya, with demanding governance, internal-control and reporting expectations.',
+    href: '/banks',
   },
   {
     name: 'Fintechs',
