@@ -106,11 +106,14 @@ def main() -> None:
             "/api/murikah/guest-handoff",
             "Continuing your guest conversation",
             "resume_guest",
+            "children: ReactNode",
+            'status === "idle"',
+            "browser-retained guest state is authoritative",
         ),
     )
     require_markers(
         root / "web/app/(workspace)/chat/page.tsx",
-        ("MurikahGuestResume", "<ChatWorkspace />"),
+        ("MurikahGuestResume", "<MurikahGuestResume>", "<ChatWorkspace />"),
     )
     require_markers(
         root / "web/components/sidebar/nav-entries.ts",
@@ -130,12 +133,74 @@ def main() -> None:
             "Content-Security-Policy",
             "Download SVG",
             "Design diagram",
+            "max-h-[720px]",
+            "overscroll-behavior:contain",
         ),
     )
     require_markers(
         root / "web/app/(workspace)/diagram-design/page.tsx",
         ("MurikahDiagramStudio", "<MurikahDiagramStudio />"),
     )
+    require_markers(
+        root / "web/components/auth/MurikahGuestBanner.tsx",
+        (
+            "fixed inset-0 z-[200]",
+            "You've used all 7 guest interactions.",
+            "The guest composer is locked",
+            "guest_exhausted=1",
+        ),
+    )
+    require_markers(
+        root / "web/components/auth/MurikahAccountPage.tsx",
+        (
+            "preserveGuestConversation",
+            'const RESUME_NEXT = "/chat?resume_guest=1"',
+            "Your 7 guest interactions are complete.",
+            "resolveNext={continuationForAccountChange}",
+            "/api/murikah/access/signup",
+        ),
+    )
+    require_markers(
+        root / "web/components/auth/MurikahSocialButtons.tsx",
+        (
+            "resolveNext?: () => string | Promise<string>",
+            "event.preventDefault()",
+            "await resolveNext()",
+        ),
+    )
+    require_markers(
+        root / "web/components/Mermaid.tsx",
+        (
+            "[&>svg]:max-h-[70dvh]",
+            "overflow-auto overscroll-contain",
+        ),
+    )
+    require_markers(
+        root / "web/components/visualize/VisualizationViewer.tsx",
+        (
+            'maxHeight: "70dvh"',
+            "h-[clamp(280px,55dvh,640px)]",
+            "min-w-0 max-w-full space-y-3 overflow-hidden",
+            "[&>svg]:max-h-[70dvh]",
+        ),
+    )
+    require_markers(
+        root / "web/features/chat/messages/ChatMessageList.tsx",
+        (
+            "max-h-[70dvh] w-full max-w-full",
+            "sm:max-w-[min(520px,90%)]",
+            '<div className="min-w-0 max-w-full overflow-hidden">',
+        ),
+    )
+    for markdown_renderer in (
+        "web/components/common/SimpleMarkdownRenderer.tsx",
+        "web/components/common/RichMarkdownRenderer.tsx",
+    ):
+        require_markers(
+            root / markdown_renderer,
+            ("max-h-[70dvh] max-w-full object-contain",),
+        )
+
     guest_router = root / "deeptutor/api/routers/murikah_guest.py"
     require_markers(
         guest_router,

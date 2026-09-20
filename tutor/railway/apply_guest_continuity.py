@@ -41,10 +41,9 @@ def main() -> None:
         'import MurikahGuestResume from "@/components/chat/MurikahGuestResume";\n\n'
         'export default function ChatPage() {\n'
         '  return (\n'
-        '    <>\n'
-        '      <MurikahGuestResume />\n'
+        '    <MurikahGuestResume>\n'
         '      <ChatWorkspace />\n'
-        '    </>\n'
+        '    </MurikahGuestResume>\n'
         '  );\n'
         '}\n',
     )
