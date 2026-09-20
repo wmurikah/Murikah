@@ -35,7 +35,7 @@ function ProviderMark({ id }: { id: Provider["id"] }) {
   );
 }
 
-export default function MurikahSocialButtons({ next = "/chat" }: { next?: string }) {
+export default function MurikahSocialButtons({ next = "/chat", resolveNext }: { next?: string; resolveNext?: () => string | Promise<string> }) {
   const [providers, setProviders] = useState<Provider[]>([]);
 
   useEffect(() => {
@@ -66,6 +66,17 @@ export default function MurikahSocialButtons({ next = "/chat" }: { next?: string
         <a
           key={provider.id}
           href={`/api/auth/oauth/${provider.id}/start?next=${encodedNext}`}
+          onClick={
+            resolveNext
+              ? async (event) => {
+                  event.preventDefault();
+                  const resolved = await resolveNext();
+                  window.location.assign(
+                    `/api/auth/oauth/${provider.id}/start?next=${encodeURIComponent(resolved)}`,
+                  );
+                }
+              : undefined
+          }
           className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]/60"
         >
           <ProviderMark id={provider.id} />
