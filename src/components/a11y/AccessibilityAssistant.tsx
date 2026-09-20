@@ -128,7 +128,7 @@ export default function AccessibilityAssistant() {
   return (
     <div className="a11y" data-open={open}>
       {open && (
-        <div ref={panelRef} className="a11y__panel" role="group" aria-label="Accessibility tools">
+        <div ref={panelRef} className="a11y__panel" role="group" aria-label="Accessibility options">
           <div className="a11y__head">
             <p className="a11y__title">Accessibility</p>
             <button
