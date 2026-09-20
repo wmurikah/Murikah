@@ -161,14 +161,10 @@ def check_origin(request):
 
 
 def set_session(response, username, uid):
-    from deeptutor.services.auth import TOKEN_EXPIRE_HOURS, create_token
+    from deeptutor.services.auth import create_token
     # Guests remain intentionally short-lived. Converted/signed-up members use
-    # the same long-lived sliding member policy as the normal login/OAuth path.
-    session_max_age = (
-        30 * 86400
-        if username.startswith(PREFIX)
-        else max(30 * 86400, int(TOKEN_EXPIRE_HOURS) * 3600)
-    )
+    # the production 400-day window; /api/auth/status renews it during use.
+    session_max_age = 30 * 86400 if username.startswith(PREFIX) else 9600 * 3600
     response.set_cookie("dt_token", create_token(username, role="user", user_id=uid),
                         max_age=session_max_age, httponly=True, secure=True, samesite="lax", path="/")
     if username.startswith(PREFIX):
