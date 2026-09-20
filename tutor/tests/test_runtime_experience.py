@@ -15,7 +15,7 @@ class RuntimeExperienceTests(unittest.TestCase):
         self.assertIn("Sliding member auth", overlay)
         self.assertIn("response.set_cookie(", overlay)
         self.assertIn('not str(payload.username).startswith("guest_")', overlay)
-        self.assertIn("TOKEN_EXPIRE_HOURS", access)
+        self.assertIn("9600 * 3600", access)
 
     def test_google_is_first_social_provider_when_configured(self):
         social = (ROOT / "railway/MurikahSocialButtons.tsx.txt").read_text(encoding="utf-8")
