@@ -6,7 +6,7 @@ import Section from '@/components/primitives/Section.astro';
 import Button from '@/components/primitives/Button.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
-import { SITE, STANDARDS, PRODUCTS } from '@/site.config';
+import { SITE, STANDARDS, PRODUCTS, FOUNDER } from '@/site.config';
 
 const crumbs = [
   { label: 'Home', href: '/' },
@@ -69,6 +69,37 @@ const how = [
         {SITE.meaning} We help organisations run internal audit and AI governance with evidence, calm
         workflows and board-ready outputs.
       </p>
+    </div>
+  </Section>
+
+  <Section id="founder" tone="paper" aria-labelledby="founder-title" class="border-b border-hairline">
+    <div class="grid gap-8 lg:grid-cols-12 lg:items-start">
+      <div class="lg:col-span-4">
+        <p class="eyebrow">Founder</p>
+        <h2 id="founder-title" class="mt-5 font-serif text-3xl text-navy">{FOUNDER.name}</h2>
+        <p class="mt-2 text-slate">{FOUNDER.role}</p>
+      </div>
+      <div class="lg:col-span-8">
+        <ul class="flex flex-wrap gap-2" aria-label="Founder credentials">
+          {
+            FOUNDER.credentials.map((credential) => (
+              <li class="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-navy ring-1 ring-hairline">
+                {credential}
+              </li>
+            ))
+          }
+        </ul>
+        <p class="mt-5 max-w-2xl text-lg text-ink">{FOUNDER.research}</p>
+        <div class="mt-5 grid gap-2 text-sm">
+          {
+            FOUNDER.papers.map((paper) => (
+              <a href={paper.href} class="font-medium text-blue hover:underline">
+                {paper.title} ↗
+              </a>
+            ))
+          }
+        </div>
+      </div>
     </div>
   </Section>
 
