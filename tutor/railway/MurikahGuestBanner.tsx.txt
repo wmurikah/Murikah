@@ -11,22 +11,69 @@ export default function MurikahGuestBanner() {
     async function refresh() {
       try {
         const res = await fetch("/api/murikah/access/status", { cache: "no-store" });
-        if (res.ok) { const value = await res.json(); if (alive) setStatus(value); }
-      } catch { /* Keep the last confirmed allowance during a network interruption. */ }
+        if (res.ok) {
+          const value = await res.json();
+          if (alive) setStatus(value);
+        }
+      } catch {
+        /* Keep the last confirmed allowance during a network interruption. */
+      }
     }
     void refresh();
     const timer = window.setInterval(refresh, 2000);
     window.addEventListener("focus", refresh);
-    return () => { alive = false; clearInterval(timer); window.removeEventListener("focus", refresh); };
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
+
   if (!status?.guest || !status.requires_auth) return null;
+
   const next = encodeURIComponent(path || "/chat");
-  const preserveWork = () => window.dispatchEvent(new Event("murikah:account-navigation"));
-  return <div role="alert" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#A9822E]/25 bg-[#A9822E]/10 px-5 py-3 text-sm">
-    <div><p className="font-semibold">Continue your work</p><p>You've reached the free guest limit. Sign up to keep your guest workspace and continue, or sign in to your account.</p></div>
-    <div className="flex items-center gap-4">
-      <a onClick={preserveWork} href={`/login?next=${next}`} className="font-medium">Sign in</a>
-      <a onClick={preserveWork} href={`/register?next=${next}`} className="rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">Sign up</a>
+  const preserveWork = () =>
+    window.dispatchEvent(new Event("murikah:account-navigation"));
+
+  // A hard viewport gate replaces the workspace once the allowance is spent.
+  // The chat remains mounted behind it only long enough to preserve its state;
+  // pointer/keyboard interaction cannot reach the composer.
+  return (
+    <div
+      role="alert"
+      aria-modal="true"
+      className="fixed inset-0 z-[200] grid place-items-center overflow-y-auto bg-[var(--background)] px-5 py-8"
+    >
+      <div className="w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl sm:p-8">
+        <div className="mx-auto flex w-fit items-center gap-2.5 rounded-lg bg-[#1E2A30] px-4 py-2 text-sm font-semibold text-white">
+          <span>Murikah</span><span aria-hidden className="h-4 w-px bg-[#A9822E]" /><span>Tutor</span>
+        </div>
+        <div className="mt-6 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight">Continue your work</h1>
+          <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">
+            You've used all 7 guest interactions. Sign in or create an account to continue from this conversation. Your guest workspace is preserved.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <a
+            onClick={preserveWork}
+            href={`/login?guest_exhausted=1&next=${next}`}
+            className="rounded-xl border border-[var(--border)] px-4 py-3 text-center text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--muted)]/60"
+          >
+            Sign in
+          </a>
+          <a
+            onClick={preserveWork}
+            href={`/register?guest_exhausted=1&next=${next}`}
+            className="rounded-xl bg-[#1E2A30] px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90"
+          >
+            Sign up
+          </a>
+        </div>
+        <p className="mt-4 text-center text-xs leading-5 text-[var(--muted-foreground)]">
+          The guest composer is locked until you continue with an account.
+        </p>
+      </div>
     </div>
-  </div>;
+  );
 }
