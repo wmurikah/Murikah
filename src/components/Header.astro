@@ -1,10 +1,10 @@
 ---
 /**
  * Header, site chrome following familiar conventions (Jakob's Law): logo
- * top-left links home, three primary nav groups, the single gold CTA furthest
- * right. The nav is deliberately small (Hick's Law: Who we are, What we do,
- * News & Insights + one action). All three groups come straight from `NAV` in
- * site.config, so order and contents stay single-source.
+ * top-left links home, five primary navigation items, and one gold CTA furthest
+ * right. Solutions, Platform, Pricing, Insights and About come straight from
+ * `NAV` in site.config, so order and contents stay single-source. Dropdowns
+ * are capped at five destinations to keep choices short and clearly grouped.
  *
  * Desktop: each group's trigger is a real link to its hub that also reveals a
  * disclosure menu of the group's pages on hover and keyboard focus
@@ -61,8 +61,8 @@ const navLink =
       </a>
 
       {
-        /* Desktop primary nav, three groups mapped straight from NAV. Inline
-          text links, no enclosing pill, with calm spacing between groups. */
+        /* Desktop primary nav, five items mapped straight from NAV. Inline
+          text links, no enclosing pill, with calm spacing between items. */
       }
       <nav aria-label="Primary" class="site-primary-nav hidden items-center lg:flex">
         {
