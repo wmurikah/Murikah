@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_DUAL_LANE_CHAT_V3"
+MARKER = "MURIKAH_DUAL_LANE_CHAT_V4"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -30,9 +30,13 @@ from deeptutor.murikah_fast_lane import (
     HedgeCandidate,
     close_stream,
     configured_gemini_model,
+    configured_nvidia_fast_model,
     gemini_configured,
     gemini_stream,
     latency_ms,
+    nvidia_configured,
+    nvidia_stream,
+    portable_chat_messages,
     race_first_visible,
 )
 from deeptutor.runtime.request_contracts import get_capability_request_schema
@@ -42,7 +46,7 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_DUAL_LANE_CHAT_V3
+# MURIKAH_DUAL_LANE_CHAT_V4
 def _positive_seconds(name: str, default: float) -> float:
     try:
         value = float(os.environ.get(name, "") or default)
@@ -52,10 +56,10 @@ def _positive_seconds(name: str, default: float) -> float:
 
 
 _FIRST_TOKEN_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 12.0
+    "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 9.0
 )
 _OVERALL_FIRST_TOKEN_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 20.0
+    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 14.0
 )
 _STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
@@ -140,6 +144,10 @@ NEW_RUN = '''    @staticmethod
             include_tool_manifest=False,
         )
 
+        # Remove provider-private replay fields and bound recent history so
+        # follow-ups can move cleanly between Gemini and NVIDIA.
+        messages = portable_chat_messages(messages)
+
         resolved: list[Any] = []
         seen: set[tuple[str, str]] = set()
         for candidate in self._candidate_selections(context):
@@ -189,41 +197,54 @@ NEW_RUN = '''    @staticmethod
                 ),
             )
 
-        # Honour an explicitly selected non-Gemini model first. Otherwise Gemini
-        # is the normal interactive lane. After 2.5s a second provider is launched
-        # instead of waiting serially for a slow endpoint.
+        # Use redundant low-latency transports. Gemini stays immediate for
+        # ordinary Chat; NVIDIA Nemotron Lightning starts shortly after as a
+        # direct, independent NIM fallback. Remaining configured providers hedge
+        # later. This avoids one provider or one adapter stranding a follow-up.
         non_gemini = [config for config in resolved if str(config.model) != gemini_model]
-        if resolved and not selected_is_gemini:
-            hedges.append(deep_candidate(resolved[0], 0.0))
-            if gemini_on:
-                hedges.append(
-                    HedgeCandidate(
-                        name=f"gemini:{gemini_model}",
-                        delay_seconds=2.5,
-                        factory=lambda: gemini_stream(
-                            messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
+        nvidia_model = configured_nvidia_fast_model()
+        nvidia_on = nvidia_configured()
+
+        selected = resolved[0] if resolved else None
+        selected_is_other = bool(
+            selected
+            and str(getattr(selected, "model", "")) not in {gemini_model, nvidia_model}
+        )
+        if selected_is_other:
+            hedges.append(deep_candidate(selected, 0.0))
+
+        if gemini_on:
+            hedges.append(
+                HedgeCandidate(
+                    name=f"gemini:{gemini_model}",
+                    delay_seconds=0.0 if not selected_is_other else 0.75,
+                    factory=lambda: gemini_stream(
+                        messages,
+                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                    ),
                 )
-            remainder = [config for config in non_gemini if config is not resolved[0]]
-            for index, config in enumerate(remainder[:2]):
-                hedges.append(deep_candidate(config, 4.5 + (index * 2.0)))
-        else:
-            if gemini_on:
-                hedges.append(
-                    HedgeCandidate(
-                        name=f"gemini:{gemini_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: gemini_stream(
-                            messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
+            )
+
+        if nvidia_on:
+            hedges.append(
+                HedgeCandidate(
+                    name=f"nvidia-fast:{nvidia_model}",
+                    delay_seconds=0.75 if not selected_is_other else 1.0,
+                    factory=lambda: nvidia_stream(
+                        messages,
+                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                    ),
                 )
-            for index, config in enumerate(non_gemini[:3]):
-                delay = 2.5 + (index * 2.0) if gemini_on else index * 2.5
-                hedges.append(deep_candidate(config, delay))
+            )
+
+        remainder = [
+            config
+            for config in non_gemini
+            if config is not selected
+            and str(getattr(config, "model", "")) != nvidia_model
+        ]
+        for index, config in enumerate(remainder[:2]):
+            hedges.append(deep_candidate(config, 2.5 + (index * 1.5)))
 
         if not hedges:
             logger.warning("MURIKAH_LATENCY route=fast event=no_candidates")
@@ -284,7 +305,7 @@ NEW_RUN = '''    @staticmethod
             # Raising gives the turn runtime a terminal ERROR + DONE event and
             # releases the composer instead of leaving Reasoning spinning.
             raise TimeoutError(
-                "Murikah fast chat timed out before the first visible response."
+                "Murikah could not complete this response right now. Please retry."
             )
 
         answer_parts = [winner.first_chunk]
@@ -305,11 +326,13 @@ NEW_RUN = '''    @staticmethod
         )
 
         context.metadata["murikah_provider"] = winner.name
-        context.metadata["murikah_model"] = (
-            configured_gemini_model()
-            if winner.name.startswith("gemini")
-            else str((candidates[0].get("model_id") if candidates else "") or "")
-        )
+        if winner.name.startswith("gemini:"):
+            winner_model = configured_gemini_model()
+        elif winner.name.startswith("nvidia-fast:"):
+            winner_model = configured_nvidia_fast_model()
+        else:
+            winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
+        context.metadata["murikah_model"] = winner_model
         context.metadata["murikah_first_token_ms"] = winner.first_token_ms
         turn_deadline = request_started + max(15.0, _FAST_TURN_TIMEOUT_SECONDS)
 
