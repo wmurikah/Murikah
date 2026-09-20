@@ -18,8 +18,8 @@ describe("Guest limit prompt", () => {
     status({ guest: true, remaining: 0, requires_auth: true });
     render(<MurikahGuestBanner />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Continue your work");
-    expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/register?next=%2Fdiagram-design");
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?next=%2Fdiagram-design");
+    expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/register?guest_exhausted=1&next=%2Fdiagram-design");
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?guest_exhausted=1&next=%2Fdiagram-design");
     expect(screen.queryByText(/prompts remaining/)).toBeNull();
   });
   it("does not prompt signed-in users", async () => {
