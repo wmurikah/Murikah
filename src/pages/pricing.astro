@@ -19,7 +19,7 @@ import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import { SERVICES, PRICING } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
-const serviceLines = SERVICES.filter((s) => s.slug !== 'audit-os');
+const serviceLines = SERVICES.filter((s) => s.slug !== 'assurance-os');
 const lineNames = serviceLines.map((s) => s.name);
 const lineList = `${lineNames.slice(0, -1).join(', ')} and ${lineNames[lineNames.length - 1]}`;
 
@@ -88,7 +88,7 @@ const faqs: FaqItem[] = [
 ---
 
 <BaseLayout
-  titleFull="GRC and Assurance OS pricing in Kenya | Murikah"
+  titleFull="Assurance OS pricing in Kenya | Murikah"
   description="Indicative Assurance OS subscription tiers for mid-market teams, validated on enquiry. The service lines are scoped and quoted per engagement."
 >
   <FaqPageSchema slot="head" items={faqs} />
@@ -110,7 +110,7 @@ const faqs: FaqItem[] = [
         Pricing you can take to a budget.
       </h1>
       <p class="mt-6 max-w-2xl text-xl text-slate">
-        Assurance OS, delivered through the Murikah GRC workspace, runs on a monthly subscription
+        Assurance OS runs on a monthly subscription
         with indicative tiers validated against your size and needs. Service lines are scoped and
         quoted per engagement.
       </p>
@@ -118,17 +118,17 @@ const faqs: FaqItem[] = [
   </Section>
 
   {/* Assurance OS subscription tiers. */}
-  <Section tone="paper" aria-labelledby="audit-os-pricing">
+  <Section tone="paper" aria-labelledby="assurance-os-pricing">
     <div class="max-w-2xl">
       <p class="eyebrow">Assurance OS</p>
       <h2
-        id="audit-os-pricing"
+        id="assurance-os-pricing"
         class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.01em] text-navy"
       >
         Assurance OS subscription
       </h2>
       <p class="mt-4 text-lg text-slate">
-        These tiers cover the GRC audit and risk workspace within the Assurance OS offering. Budget
+        These tiers cover the Assurance OS audit and risk workspace. Budget
         for professional services separately, and confirm users, entities, onboarding and support
         when requesting a quote.
       </p>
