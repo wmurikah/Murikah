@@ -1,0 +1,85 @@
+---
+export const prerender = true;
+
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import PublicSandbox from '@/components/assurance-os/PublicSandbox';
+import { PRIMARY_CTA } from '@/site.config';
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Assurance OS', href: '/assurance-os' },
+  { label: 'Public sandbox', href: '/assurance-os/sandbox' },
+];
+---
+
+<BaseLayout
+  titleFull="Assurance OS public sandbox | Murikah"
+  description="Try Assurance OS with fictional sample audit data. Explore findings, action plans and board reporting without creating an account."
+>
+  <Section tone="surface" aria-labelledby="sandbox-title" class="border-b border-hairline">
+    <div class="max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">Assurance OS · Public sandbox</p>
+      <h1
+        id="sandbox-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-navy"
+      >
+        Try the audit workflow before you talk to sales.
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        Explore fictional findings, remediation actions and a committee summary. No sign-in, no
+        customer data and no changes to the live Assurance OS application.
+      </p>
+      <p class="mt-4 text-sm text-slate">
+        Already have access?{' '}
+        <a
+          href="https://grc.murikah.com"
+          class="font-medium text-blue no-underline hover:underline"
+        >
+          Open Assurance OS ↗
+        </a>
+      </p>
+    </div>
+  </Section>
+
+  <Section tone="paper" aria-label="Interactive Assurance OS sample workspace">
+    <PublicSandbox client:load />
+  </Section>
+
+  <Section tone="surface" aria-labelledby="notice-title" class="border-y border-hairline">
+    <div class="grid gap-6 lg:grid-cols-3">
+      <article>
+        <h2 id="notice-title" class="text-xl text-navy">Sample, not a live tenant</h2>
+        <p class="mt-3 text-sm text-slate">
+          Every name, finding and date in this sandbox is fictional and exists only to demonstrate
+          the workflow.
+        </p>
+      </article>
+      <article>
+        <h2 class="text-xl text-navy">Nothing is saved</h2>
+        <p class="mt-3 text-sm text-slate">
+          Status changes happen in your browser and reset on refresh. The sandbox sends no audit
+          records to the live application.
+        </p>
+      </article>
+      <article>
+        <h2 class="text-xl text-navy">The real product stays protected</h2>
+        <p class="mt-3 text-sm text-slate">
+          Customer workspaces keep their existing authentication and access controls. The sandbox
+          does not bypass or weaken them.
+        </p>
+      </article>
+    </div>
+  </Section>
+
+  <CtaSection
+    eyebrow="Next step"
+    title="Book a 20-minute call"
+    body="If the workflow fits the way your team audits, we can discuss scope, onboarding and the right subscription tier."
+    primaryLabel={PRIMARY_CTA.label}
+    primaryHref={PRIMARY_CTA.href}
+  />
+</BaseLayout>
