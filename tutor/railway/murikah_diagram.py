@@ -85,7 +85,11 @@ def validate_answer(answer):
         raise InvalidDiagram("Diagram contains malformed SVG") from exc
     if svg.tag.split("}")[-1] != "svg" or not svg.get("viewBox"):
         raise InvalidDiagram("Diagram is missing its viewBox")
-    return answer[:match.start()] + raw + answer[match.end():]
+    # Diagram Design is an artifact-first surface. Never let model preamble
+    # push the SVG below the fold: keep the validated SVG first, followed only
+    # by genuinely trailing explanation if one was produced.
+    trailing = answer[match.end():].strip()
+    return raw + (f"\n\n{trailing}" if trailing else "")
 
 
 async def collect_candidate(candidate, updates, reference, validator=validate_answer, structured=False):
@@ -148,7 +152,9 @@ async def diagram_events(prompt, system_prompt, scope, diagram_type="auto", styl
         yield event("status", message="Connecting to a design model…")
         async with asyncio.timeout(TOTAL_SECONDS):
             messages = [{"role": "system", "content": system_prompt +
-                "\nReturn a concise explanation and one complete fenced SVG. "
+                "\nReturn one complete SVG FIRST, with no prose, heading, or code fence before <svg>. "
+                "The diagram is the primary output. After </svg>, you may add only a short explanation "
+                "if it materially helps the learner. "
                 "Keep labels short, fit all elements inside the viewBox, and close every tag. "
                 "Escape ampersands in labels as &amp;. Do not include a reasoning trace."},
                 {"role": "user", "content": prompt}]
