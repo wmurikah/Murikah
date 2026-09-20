@@ -158,13 +158,13 @@
     inline-size: 1.75rem;
     block-size: 1px;
     flex: none;
-    background: linear-gradient(90deg, transparent, var(--color-gold));
+    background: linear-gradient(90deg, transparent, var(--color-brass));
   }
   .eyebrow.is-centred {
     justify-content: center;
   }
   .on-dark .eyebrow {
-    color: var(--color-brass);
+    color: var(--color-brass-on-dark);
   }
 
   /* Beam: a fine gold hairline, fading at both ends, as a structural accent. */
@@ -174,13 +174,13 @@
     background: linear-gradient(
       90deg,
       transparent,
-      color-mix(in srgb, var(--color-gold) 65%, transparent),
+      color-mix(in srgb, var(--color-brass) 65%, transparent),
       transparent
     );
   }
 
-  /* Rich navy surface, the premium dark field for hero, CTA and footer. A
-     barely-there gradient adds depth without reading as a SaaS gradient. */
+  /* Rich navy surface for the rare sections that deliberately need a dark
+     field. It is no longer the default closing CTA or footer treatment. */
   .navy-rich {
     background-color: var(--color-obsidian);
     background-image:
@@ -198,8 +198,8 @@
     border-radius: 9999px;
     background: radial-gradient(
       closest-side,
-      color-mix(in srgb, var(--color-gold) 26%, transparent) 0%,
-      color-mix(in srgb, var(--color-gold) 9%, transparent) 42%,
+      color-mix(in srgb, var(--color-brass) 26%, transparent) 0%,
+      color-mix(in srgb, var(--color-brass) 9%, transparent) 42%,
       transparent 72%
     );
     filter: blur(6px);
@@ -393,7 +393,7 @@
   }
 }
 
-/* On dark surfaces (the slate header, the cinematic hero, the CTA band) the one
+/* On dark surfaces (primarily the header and any deliberate dark feature) the one
    strong action is deep brass with white text: the single warm accent that pops
    against the dark, earned rather than loud. It keeps white text on hover and
    deepens its shadow to lift; the brass is held dark enough (a darkened form of
@@ -471,13 +471,15 @@ html.cms-overlay-open {
   --color-porcelain: #ffffff;
   --color-stone: #e9e5dd;
   --color-hairline: #d7d2c8;
+  --color-control-border: #737e89;
   --color-paper: #f7f5f0;
   --color-surface: #ffffff;
   --color-paper-shade: #efede7;
   --color-brass: #b78b32;
   --color-brass-deep: #7b5c1d;
   --color-brass-soft: #e4d2a4;
-  --color-gold: #8a671f;
+  --color-brass-on-dark: #d1aa58;
+  --color-gold: #7b5c1d;
   --color-gold-deep: #73561b;
   --color-champagne: #e4d2a4;
   --color-blue: #244660;
@@ -499,8 +501,7 @@ html.cms-overlay-open {
   box-shadow: 0 10px 30px rgba(7, 29, 53, 0.13);
 }
 
-.marketing-shell.ceramic-ink .desktop-nav-menu > div,
-.marketing-shell.ceramic-ink .newsletter-panel {
+.marketing-shell.ceramic-ink .desktop-nav-menu > div {
   background: #0c2946;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -577,7 +578,7 @@ html.cms-overlay-open {
 .marketing-shell.ceramic-ink .btn-ghost {
   color: #071d35;
   background: rgba(255, 255, 255, 0.74);
-  box-shadow: inset 0 0 0 1px #7d8791;
+  box-shadow: inset 0 0 0 1px var(--color-control-border);
 }
 
 .marketing-shell.ceramic-ink .btn-secondary:hover,
@@ -608,6 +609,7 @@ html.cms-overlay-open {
   --color-paper-shade: #edf3f7;
   --color-stone: #e2e9ee;
   --color-hairline: #617386;
+  --color-control-border: #56697d;
   --color-blue: #073f6b;
   --color-blue-deep: #062f50;
   background: #ffffff;

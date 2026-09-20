@@ -56,41 +56,47 @@ real token; the extended members carry a narrow role.
 
 ### Core
 
-| Role           | Name      | Hex       | Token                 | Use                                                                               |
-| -------------- | --------- | --------- | --------------------- | --------------------------------------------------------------------------------- |
-| Primary        | Ink Navy  | `#0B1733` | `--color-navy`        | Authority. Footer, one closing band per page, dark product chrome, the logo tile. |
-| Primary, deep  | Navy Deep | `#081026` | `--color-navy-deep`   | The far end of navy gradients only.                                               |
-| Canvas         | Paper     | `#F7F4EE` | `--color-paper`       | The dominant background. Warm, not clinical.                                      |
-| Canvas, raised | Surface   | `#FFFFFF` | `--color-surface`     | Cards and raised panels.                                                          |
-| Canvas, sunk   | Mist      | `#EFEAE0` | `--color-paper-shade` | Quiet fills, quotes, inset rows.                                                  |
+| Role | Name | Hex | Token | Use |
+| --- | --- | --- | --- | --- |
+| Brand anchor | Deep Navy | `#071D35` | `--color-navy` | Headings, primary actions and the persistent header. It is not the default page field. |
+| Brand depth | Navy Deep | `#041528` | `--color-navy-deep` | Hover/depth only. |
+| Canvas | Paper | `#F7F5F0` | `--color-paper` | Dominant reading field. |
+| Raised canvas | Surface | `#FFFFFF` | `--color-surface` | Cards, forms and report sheets. |
+| Quiet canvas | Mist | `#EFEDE7` | `--color-paper-shade` | Footer, table heads and inset rows. |
 
-### Structure neutrals (graphite and silver)
+### Structure neutrals
 
-| Role                | Name     | Hex       | Token              | Use                                                                          |
-| ------------------- | -------- | --------- | ------------------ | ---------------------------------------------------------------------------- |
-| Graphite, text      | Ink      | `#1B2230` | `--color-ink`      | Body text. Never pure black.                                                 |
-| Graphite, secondary | Slate    | `#5C6475` | `--color-slate`    | Secondary text, captions, meta.                                              |
-| Silver              | Hairline | `#D7DBE5` | `--color-hairline` | The workhorse divider. Grouping is done with hairlines and space, not boxes. |
+| Role | Name | Hex | Token | Use |
+| --- | --- | --- | --- | --- |
+| Primary text | Ink | `#17283B` | `--color-ink` | Body copy. |
+| Secondary text | Slate | `#56616D` | `--color-slate` | Captions and supporting copy; 5.79:1 on paper. |
+| Decorative divider | Hairline | `#D7D2C8` | `--color-hairline` | Dividers only. It is deliberately too quiet to identify controls. |
+| Functional boundary | Control | `#737E89` | `--color-control-border` | Inputs and functional outlines; 3.80:1 on paper and 4.14:1 on white. |
 
-### Accent and interactive
+### Gold and interaction roles
 
-| Role              | Name      | Hex       | Token               | Use                                                                                                            |
-| ----------------- | --------- | --------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Accent            | Gold      | `#C9A227` | `--color-gold`      | The single distinctive highlight. One primary action, the signature light, fine rules. Kept scarce on purpose. |
-| Accent, deep      | Gold Deep | `#AE8B1F` | `--color-gold-deep` | Gold hover and active only.                                                                                    |
-| Interactive       | Blue      | `#1E4FA3` | `--color-blue`      | Links and quiet actions, where spending gold would be wasteful.                                                |
-| Interactive, deep | Blue Deep | `#173C7C` | `--color-blue-deep` | Link hover.                                                                                                    |
+The same warm accent cannot safely do every job. Bright brass remains the visual
+signature; darker or lighter variants carry text depending on the surface.
 
-### Extended, optional (reserved roles)
+| Role | Name | Hex | Token | Use |
+| --- | --- | --- | --- | --- |
+| Decorative accent | Aged Brass | `#B78B32` | `--color-brass` | Fine rules, dots, logo details and dark-surface indicators. Never normal text on paper. |
+| Accent text, light | Brass Ink | `#7B5C1D` | `--color-gold`, `--color-brass-deep` | Gold-labelled text on paper/white; 5.68:1 on paper. |
+| Accent text, dark | Warm Gold | `#D1AA58` | `--color-brass-on-dark` | Eyebrows and text accents on navy; 7.77:1 on `#071D35`. |
+| Interactive | Blue | `#244660` | `--color-blue` | Links and quiet actions; 9.09:1 on paper. |
+| Interactive hover | Blue Deep | `#102F49` | `--color-blue-deep` | Link hover and active states. |
 
-These formalise the brief's palette without diluting the marketing look. They
-are product and material members, not new marketing colours.
+### Contrast contract
 
-| Role           | Name          | Hex       | Use                                                                                                                                           |
-| -------------- | ------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Verified state | Verified Teal | `#0E9C8E` | Product only. The "assured", "verified", "evidence complete" state in the SaaS. A calm, boardroom teal, never neon, never in marketing pages. |
-| Soft gold wash | Champagne     | `#E7D9A8` | A low-opacity gold tint for large light washes and the aperture glow, where solid gold would be too loud.                                     |
-| Cool silver    | Silver Mist   | `#C9CFDB` | Slightly deeper than Hairline, for product table rules and inactive controls.                                                                 |
+WCAG thresholds are treated as hard thresholds, not rounded targets. Normal
+text must be at least 4.5:1; large text and visual information needed to identify
+UI components must be at least 3:1. The marketing pair matrix is executable in
+`test/shared/marketing-contrast.test.ts`.
+
+Paper and white should carry roughly 90% of the public site. Deep navy is an
+anchor, not a field: the persistent header is dark, while the closing CTA and
+footer return to paper. This prevents a dark header + dark CTA + dark footer
+from making the whole page read as heavy.
 
 ### Product status (RAG), product surfaces only
 
