@@ -141,13 +141,12 @@ export const SERVICES: ServiceLine[] = [
 ];
 
 /**
- * Primary navigation: three groups (Hick's Law) that carry the whole site, so
- * the header reads as who we are, what we do and where to read our thinking.
- * The logo links home and the gold primary action is rendered separately
- * (Von Restorff). Each group opens a disclosure menu of its pages. Descriptions
- * are short, one line each. `match` lists the route prefixes that light a
- * group's active state, so a page cross-linked from another group (Intelligence
- * appears under both) is owned by exactly one group.
+ * Primary navigation follows a five-item information architecture: Solutions,
+ * Platform, Pricing, Insights and About. The logo links home and the single
+ * gold primary action is rendered separately. Dropdowns are intentionally
+ * capped at five destinations so services, software, pricing and research do
+ * not compete inside one menu. `match` lists the route prefixes that light
+ * each item's active state.
  */
 /** Existing applications; shared by desktop, mobile, homepage and footer. */
 export const PRODUCTS = [
@@ -195,15 +194,105 @@ export const PRODUCTS = [
 
 export const NAV: NavItem[] = [
   {
-    label: 'Products',
-    href: '/products',
+    label: 'Solutions',
+    href: '/services',
+    match: ['/services', '/assurance', '/labs', '/advisory', '/academy'],
     children: [
       {
-        label: 'All products',
-        href: '/products',
-        description: 'Choose the workspace for your task.',
+        label: 'Solutions overview',
+        href: '/services',
+        description: 'Connected assurance, automation, advisory and training services.',
       },
-      ...PRODUCTS,
+      {
+        label: 'Internal audit',
+        href: '/assurance',
+        description:
+          'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
+      },
+      {
+        label: 'Automation',
+        href: '/labs',
+        description: 'Automation, CRM, CMS and workflow builds.',
+      },
+      {
+        label: 'Advisory',
+        href: '/advisory',
+        description: 'AI strategy, governance roadmaps, analytics and board papers.',
+      },
+      {
+        label: 'Training',
+        href: '/academy',
+        description: 'CISA, ISO 42001, lead-auditor readiness and masterclasses.',
+      },
+    ],
+  },
+  {
+    label: 'Platform',
+    href: '/products',
+    match: ['/products', '/audit-os'],
+    children: [
+      {
+        label: 'Platform overview',
+        href: '/products',
+        description: 'Choose the Murikah workspace for your task.',
+      },
+      {
+        label: 'GRC · Assurance OS',
+        href: '/audit-os',
+        description: 'Plan audits, review evidence and track findings and action plans.',
+      },
+      {
+        label: 'CMS',
+        href: 'https://cms.murikah.com',
+        description: 'Manage leads, customer accounts, orders and service requests.',
+      },
+      {
+        label: 'Tutor',
+        href: 'https://tutor.murikah.com',
+        description: 'Learn, research, co-write and design diagrams with AI.',
+      },
+      {
+        label: 'ENGR',
+        href: 'https://engr.murikah.com',
+        description: 'Manage assets, maintenance schedules and work orders.',
+      },
+    ],
+  },
+  {
+    label: 'Pricing',
+    href: '/pricing',
+    match: ['/pricing'],
+  },
+  {
+    label: 'Insights',
+    href: '/insights',
+    match: ['/insights', '/intelligence'],
+    children: [
+      {
+        label: 'All insights',
+        href: '/insights',
+        description: 'Guides for assurance, governance, AI and data protection.',
+      },
+      {
+        label: 'AI governance',
+        href: '/insights#ai-governance',
+        description: 'ISO 42001, AI governance and readiness guidance.',
+      },
+      {
+        label: 'Internal audit',
+        href: '/insights#internal-audit',
+        description: 'Practical guidance for audit leaders and committees.',
+      },
+      {
+        label: 'Data protection',
+        href: '/insights#data-protection',
+        description: 'ODPC, controller and processor obligations, and privacy reviews.',
+      },
+      {
+        label: 'Research & benchmarking',
+        href: '/intelligence',
+        description: 'Murikah Intelligence reports and market benchmarks.',
+      },
     ],
   },
   {
@@ -235,102 +324,6 @@ export const NAV: NavItem[] = [
         label: 'What we stand for',
         href: '/about#what-we-stand-for',
         description: 'Independence, plain speaking and evidence over assertion.',
-      },
-    ],
-  },
-  {
-    label: 'Services',
-    href: '/services',
-    match: ['/services', '/pricing', ...SERVICES.map((s) => s.href)],
-    children: [
-      {
-        label: 'Services overview',
-        href: '/services',
-        description: 'Connected lines of assurance, systems and intelligence.',
-      },
-      {
-        label: 'Internal audit',
-        href: '/assurance',
-        description:
-          'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
-      },
-      {
-        label: 'GRC · Assurance OS',
-        href: '/audit-os',
-        description:
-          'The GRC workspace for work papers, findings, remediation and board reporting.',
-      },
-      {
-        label: 'Automation',
-        href: '/labs',
-        description: 'Automation, CRM, CMS and workflow builds.',
-      },
-      {
-        label: 'Advisory',
-        href: '/advisory',
-        description: 'AI strategy, governance roadmaps, analytics and board papers.',
-      },
-      {
-        label: 'Training',
-        href: '/academy',
-        description: 'CISA, ISO 42001, lead-auditor readiness and masterclasses.',
-      },
-      {
-        label: 'Research & benchmarks',
-        href: '/intelligence',
-        description: 'Benchmarking, research and cross-client intelligence.',
-      },
-      {
-        label: 'Pricing',
-        href: '/pricing',
-        description: 'Subscription tiers and scoped engagement pricing.',
-      },
-    ],
-  },
-  {
-    label: 'Insights',
-    href: '/insights',
-    match: ['/insights'],
-    children: [
-      {
-        label: 'All insights',
-        href: '/insights',
-        description: 'Guides for assurance, governance, AI and data protection.',
-      },
-      {
-        label: 'AI governance',
-        href: '/insights#ai-governance',
-        description: 'ISO 42001, AI governance and readiness guidance.',
-      },
-      {
-        label: 'Internal audit',
-        href: '/insights#internal-audit',
-        description: 'Practical guidance for audit leaders and committees.',
-      },
-      {
-        label: 'Data protection',
-        href: '/insights#data-protection',
-        description: 'ODPC, controller and processor obligations, and privacy reviews.',
-      },
-      {
-        label: 'Sector guides',
-        href: '/insights#sector-guides',
-        description: 'SACCOs, banks, NGOs, fintechs and regulated organisations.',
-      },
-      {
-        label: 'Audit software',
-        href: '/insights#audit-software',
-        description: 'Buyer guides, pricing explainers and platform guidance.',
-      },
-      {
-        label: 'Research & benchmarking',
-        href: '/intelligence',
-        description: 'Murikah Intelligence reports and market benchmarks.',
-      },
-      {
-        label: 'Newsletter and RSS',
-        href: '/insights#subscribe',
-        description: 'Occasional notes on assurance and governance. No noise.',
       },
     ],
   },
