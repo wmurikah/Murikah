@@ -1,0 +1,110 @@
+---
+export const prerender = true;
+
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Section from '@/components/primitives/Section.astro';
+import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
+import Button from '@/components/primitives/Button.astro';
+import CtaSection from '@/components/primitives/CtaSection.astro';
+import { PRIMARY_CTA } from '@/site.config';
+
+const crumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Banks and microfinance', href: '/banks' },
+];
+
+const priorities = [
+  'Independent internal audit with clear reporting to the appropriate board or audit-committee structure.',
+  'Operational, technology, cyber and data assurance that can sit alongside financial and compliance reviews.',
+  'A review trail that shows evidence, reviewer sign-off, finding ownership and remediation status.',
+  'Group and multi-entity visibility without losing the accountability of each regulated entity.',
+];
+---
+
+<BaseLayout
+  titleFull="Internal audit for banks and microfinance institutions in Kenya | Murikah"
+  description="Internal audit, technology assurance and Assurance OS for banks and microfinance institutions in Kenya, with controlled evidence and board-ready remediation reporting."
+>
+  <Section tone="surface" aria-labelledby="page-title" class="border-b border-hairline">
+    <div class="max-w-3xl">
+      <Breadcrumb items={crumbs} class="mb-7" />
+      <p class="eyebrow">For banks and microfinance</p>
+      <h1
+        id="page-title"
+        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-navy"
+      >
+        Audit evidence that survives regulatory and board scrutiny.
+      </h1>
+      <p class="mt-6 max-w-2xl text-xl text-slate">
+        Murikah combines specialist assurance with Assurance OS for institutions that need a clear
+        chain from risk assessment and fieldwork to finding ownership, remediation and committee
+        reporting.
+      </p>
+      <div class="mt-8">
+        <Button href={PRIMARY_CTA.href} size="lg">{PRIMARY_CTA.label}</Button>
+      </div>
+    </div>
+  </Section>
+
+  <Section tone="paper" aria-labelledby="bank-priorities">
+    <div class="grid gap-10 lg:grid-cols-12">
+      <div class="lg:col-span-5">
+        <p class="eyebrow">What matters</p>
+        <h2 id="bank-priorities" class="mt-5 font-serif text-3xl text-navy">
+          Strong internal control needs a visible third line.
+        </h2>
+        <p class="mt-4 text-slate">
+          CBK's published Prudential Guidelines place internal audit among the key internal-control
+          functions and require an effective internal audit department. The operating challenge is
+          keeping that independence while making evidence, review and follow-up easier to inspect.
+        </p>
+      </div>
+      <ul class="grid gap-3 lg:col-span-7">
+        {
+          priorities.map((item) => (
+            <li class="rounded-card bg-surface p-5 text-navy ring-1 ring-hairline">{item}</li>
+          ))
+        }
+      </ul>
+    </div>
+  </Section>
+
+  <Section tone="surface" aria-labelledby="bank-path" class="border-y border-hairline">
+    <div class="grid gap-6 md:grid-cols-3">
+      <article>
+        <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">1 · Govern</p>
+        <h2 id="bank-path" class="mt-2 text-xl text-navy">Protect independence and scope</h2>
+        <p class="mt-2 text-sm text-slate">Define the mandate, reporting line and risk-based plan before fieldwork starts.</p>
+      </article>
+      <article>
+        <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">2 · Test</p>
+        <h2 class="mt-2 text-xl text-navy">Keep evidence reviewable</h2>
+        <p class="mt-2 text-sm text-slate">Capture work papers, supporting evidence, review notes and sign-off in the same workflow.</p>
+      </article>
+      <article>
+        <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">3 · Follow up</p>
+        <h2 class="mt-2 text-xl text-navy">Make remediation visible</h2>
+        <p class="mt-2 text-sm text-slate">Track owners, dates, overdue actions and committee reporting from the same records.</p>
+      </article>
+    </div>
+    <p class="mt-8 text-sm text-slate">
+      Regulatory reference:{' '}
+      <a
+        href="https://www.centralbank.go.ke/policy-procedures/legislation-and-guidelines/"
+        class="font-medium text-blue"
+      >
+        CBK legislation and prudential guidelines ↗
+      </a>.
+    </p>
+  </Section>
+
+  <CtaSection
+    eyebrow="For regulated financial institutions"
+    title="Start with the assurance gap that needs attention"
+    body="Bring the current audit plan, open findings or specialist review need. We will scope the smallest useful starting point."
+    primaryLabel={PRIMARY_CTA.label}
+    primaryHref={PRIMARY_CTA.href}
+    secondaryLabel="Try Assurance OS"
+    secondaryHref="/assurance-os/sandbox"
+  />
+</BaseLayout>
