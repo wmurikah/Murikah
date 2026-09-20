@@ -27,7 +27,7 @@ test('pricing is a top-level destination and the header keeps one primary CTA', 
     ),
   );
   assert.deepEqual(PRIMARY_CTA, {
-    label: 'Discuss your requirements',
-    href: '/contact',
+    label: 'Book a 20-minute call',
+    href: '/contact?intent=call',
   });
 });
