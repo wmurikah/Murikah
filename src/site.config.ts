@@ -96,10 +96,10 @@ export const SERVICES: ServiceLine[] = [
     serviceType: 'Internal audit and assurance',
   },
   {
-    slug: 'audit-os',
+    slug: 'assurance-os',
     name: 'Assurance OS',
-    fullName: 'Assurance OS · Audit software',
-    href: '/audit-os',
+    fullName: 'Assurance OS',
+    href: '/assurance-os',
     summary:
       'The subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting, and an AI assistant.',
     serviceType: 'Internal audit management software',
@@ -161,8 +161,8 @@ export const PRODUCTS = [
     preview: ['Solar pump installation', 'Website enquiry', 'Owner assigned'],
   },
   {
-    label: 'GRC',
-    fullName: 'Audit & risk',
+    label: 'Assurance OS',
+    fullName: 'Internal audit & risk',
     href: 'https://grc.murikah.com',
     description: 'Plan audits, review evidence and track findings and action plans.',
     useCase: 'Turn an audit observation into an owned, dated remediation action.',
@@ -229,7 +229,7 @@ export const NAV: NavItem[] = [
   {
     label: 'Platform',
     href: '/products',
-    match: ['/products', '/audit-os'],
+    match: ['/products', '/assurance-os'],
     children: [
       {
         label: 'Platform overview',
@@ -237,8 +237,8 @@ export const NAV: NavItem[] = [
         description: 'Choose the Murikah workspace for your task.',
       },
       {
-        label: 'GRC · Assurance OS',
-        href: '/audit-os',
+        label: 'Assurance OS',
+        href: '/assurance-os',
         description: 'Plan audits, review evidence and track findings and action plans.',
       },
       {
