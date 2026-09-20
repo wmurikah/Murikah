@@ -399,6 +399,14 @@ NEW_RUN = '''    @staticmethod
                 latency_ms(request_started),
             )
             raise RuntimeError("Murikah could not complete that response. Please try again.") from exc
+        except Exception as exc:
+            logger.warning(
+                "MURIKAH_LATENCY route=fast event=terminal_stream_error provider=%s elapsed_ms=%s type=%s",
+                winner.name,
+                latency_ms(request_started),
+                type(exc).__name__,
+            )
+            raise RuntimeError("Murikah could not complete that response. Please try again.") from exc
         finally:
             await close_stream(winner.stream)
 
