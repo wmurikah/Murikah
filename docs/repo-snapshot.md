@@ -64,7 +64,7 @@ Trimmed; build output (`dist/`, `.astro/`, `.wrangler/`), `node_modules/`, and `
     ├── site.config.ts             # single source of truth (nav, services, SEO)
     ├── content.config.ts          # insights collection schema
     ├── components/
-    │   ├── islands/SandboxDemo.tsx        # STUBBED React island for /labs
+    │   ├── islands/SandboxDemo.tsx        # STUBBED React island for /automation
     │   ├── primitives/            # Section, Container, Button, Card, Stat,
     │   │                          # FeatureGrid, CtaSection, Faq, Prose, Breadcrumb
     │   ├── schema/                # Organization, Service, FaqPage (JSON-LD)
@@ -92,8 +92,8 @@ Trimmed; build output (`dist/`, `.astro/`, `.wrangler/`), `node_modules/`, and `
     │   │   └── subscribe.ts               # POST, prerender = false
     │   ├── index.astro
     │   ├── about.astro
-    │   ├── assurance.astro / audit-os.astro / labs.astro
-    │   ├── advisory.astro / academy.astro / intelligence.astro
+    │   ├── internal-audit.astro / audit-os.astro / automation.astro
+    │   ├── advisory.astro / training.astro / research.astro
     │   ├── contact.astro
     │   ├── insights/index.astro
     │   ├── insights/[...slug].astro
@@ -104,7 +104,7 @@ Trimmed; build output (`dist/`, `.astro/`, `.wrangler/`), `node_modules/`, and `
         └── global.css
 ```
 
-No `workers/`, no `wrangler.cron.jsonc`, no `src/lib/ai/`, no `src/lib/demo/`, no `src/components/labs/`, and no `/admin` exist on `main`.
+No `workers/`, no `wrangler.cron.jsonc`, no `src/lib/ai/`, no `src/lib/demo/`, no `src/components/automation/`, and no `/admin` exist on `main`.
 
 ---
 
@@ -212,12 +212,12 @@ export default defineConfig({
         // Priorities: home and service pages highest, guides next, legal lowest.
         const path = new URL(item.url).pathname.replace(/\/$/, '') || '/';
         const services = [
-          '/assurance',
+          '/internal-audit',
           '/audit-os',
-          '/labs',
+          '/automation',
           '/advisory',
-          '/academy',
-          '/intelligence',
+          '/training',
+          '/research',
         ];
         if (path === '/') item.priority = 1.0;
         else if (services.includes(path)) item.priority = 0.9;
@@ -378,12 +378,12 @@ PUBLIC_SITE_URL="http://localhost:4321"
 | ------------------ | -------------------------- | ----------------------------------------- |
 | `/`                | `src/pages/index.astro`    | Home                                      |
 | `/about`           | `about.astro`              | Company                                   |
-| `/assurance`       | `assurance.astro`          | Service line                              |
+| `/internal-audit`       | `internal-audit.astro`          | Service line                              |
 | `/audit-os`        | `audit-os.astro`           | Service line                              |
-| `/labs`            | `labs.astro`               | Service line + **stubbed** sandbox island |
+| `/automation`            | `automation.astro`               | Service line + **stubbed** sandbox island |
 | `/advisory`        | `advisory.astro`           | Service line                              |
-| `/academy`         | `academy.astro`            | Service line                              |
-| `/intelligence`    | `intelligence.astro`       | Service line                              |
+| `/training`         | `training.astro`            | Service line                              |
+| `/research`    | `research.astro`       | Service line                              |
 | `/contact`         | `contact.astro`            | Contact form                              |
 | `/insights`        | `insights/index.astro`     | Guides index                              |
 | `/insights/<slug>` | `insights/[...slug].astro` | Guide (5 entries)                         |
@@ -407,7 +407,7 @@ PUBLIC_SITE_URL="http://localhost:4321"
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Marketing pages + final copy | **Present.** All routes, final copy via `site.config.ts`, five Insights guides.                                                                                |
 | SEO / AI discoverability     | **Present.** JSON-LD emitters (Organization/Service/FaqPage), `robots.txt`, `llms.txt`, generated sitemap with priorities, RSS.                                |
-| Labs interactive demos       | **Stub only.** `/labs` embeds `src/components/islands/SandboxDemo.tsx`, a placeholder React island. The four real demos are on an unmerged branch (see below). |
+| Labs interactive demos       | **Stub only.** `/automation` embeds `src/components/islands/SandboxDemo.tsx`, a placeholder React island. The four real demos are on an unmerged branch (see below). |
 | Site-wide AI assistant       | **Not present** on `main`.                                                                                                                                     |
 | `/admin` area                | **Not present** on `main`.                                                                                                                                     |
 
@@ -469,7 +469,7 @@ One collection, `insights` (`src/content.config.ts`), loaded from `src/content/i
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Framework and design system       | **In place.** Astro 7 + Cloudflare adapter, Tailwind v4 `@theme` tokens, component primitives, layouts.                                                                                                          |
 | Page content and SEO/GEO          | **In place.** Final copy via `site.config.ts`, five Insights guides, JSON-LD, `robots.txt`, `llms.txt`, generated sitemap, RSS. Some legal/contact specifics remain as `{{PLACEHOLDER}}`/`[placeholder]` tokens. |
-| Labs demos and AI assistant       | **Not on `main`.** `/labs` shows a stubbed island; the real demos and the assistant live on an unmerged branch.                                                                                                  |
+| Labs demos and AI assistant       | **Not on `main`.** `/automation` shows a stubbed island; the real demos and the assistant live on an unmerged branch.                                                                                                  |
 | Admin and database-driven content | **Not built.**                                                                                                                                                                                                   |
 | Database scripts and seeding      | **Basic.** Apply + seed only, via Node `--experimental-strip-types`; the reworked CLI-free tooling is on an unmerged branch.                                                                                     |
 
@@ -556,7 +556,7 @@ Unfinished or to-confirm items found on `main`:
   - `src/site.config.ts`: `legalName` (`{{LEGAL: confirm the registered legal entity name}}`), `email` (`{{CONTACT: confirm the final public address}}`), `twitter` handle and social profile URLs (`{{SOCIAL: ...}}`).
   - `src/pages/privacy.astro` and `src/pages/terms.astro`: marked `{{LEGAL REVIEW REQUIRED}}` with several `{{LEGAL: ...}}` tokens (dates, retention periods, processors, cookie/analytics tooling, ODPC registration number, liability wording). Plain-English templates pending legal review.
   - `src/pages/audit-os.astro`: `{{DATA: confirm hosting region and data-residency commitments before launch}}`.
-  - `src/pages/academy.astro`: `{{ACADEMY: confirm upcoming dates}}`.
+  - `src/pages/training.astro`: `{{ACADEMY: confirm upcoming dates}}`.
   - `src/pages/insights/index.astro`: `{{ASSET: final ISO 42001 readiness checklist PDF to add (R2)}}`.
   - `db/seed.ts`: the sample lead message is marked `[placeholder]` (development data only).
 - **Infrastructure placeholders:** `CACHE` KV id (`REPLACE_WITH_KV_NAMESPACE_ID`) in `wrangler.jsonc`; the placeholder cron trigger with no handler; the adapter-injected `SESSION` KV binding; the R2 bucket and a custom domain to create.
