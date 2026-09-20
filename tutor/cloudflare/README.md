@@ -47,16 +47,16 @@ Required secrets:
 
 - `MURIKAH_TUTOR_ADMIN_PASSWORD`
 - `MURIKAH_TUTOR_AUTH_SECRET`
+- `MURIKAH_GOOGLE_CLIENT_ID`
+- `MURIKAH_GOOGLE_CLIENT_SECRET`
 - `MURIKAH_NVIDIA_NIM_API_KEY`
 - `MURIKAH_DASHSCOPE_API_KEY`
 - `MURIKAH_TAVILY_API_KEY`
 
 `MURIKAH_TUTOR_AUTH_SECRET` is the stable DeepTutor session-signing secret. It must be at least 32 characters and must remain unchanged across normal deployments. The Cloudflare runtime restores it to `data/system/auth/auth_secret` before DeepTutor imports its authentication module, so replacing a Container does not invalidate every existing signed session merely because the local disk was recreated.
 
-SSO when enabled:
+Optional additional SSO providers:
 
-- `MURIKAH_GOOGLE_CLIENT_ID`
-- `MURIKAH_GOOGLE_CLIENT_SECRET`
 - `MURIKAH_MICROSOFT_CLIENT_ID`
 - `MURIKAH_MICROSOFT_CLIENT_SECRET`
 - `MURIKAH_MICROSOFT_TENANT`
