@@ -13,6 +13,16 @@ export default defineConfig({
   // Canonical origin, drives sitemap.xml and canonical/OG URLs.
   site: SITE_URL,
 
+  // Preserve external bookmarks and search equity after the service URL cleanup.
+  // Astro's configured redirects are permanent for GET requests; explicit 301s
+  // keep that contract visible in code.
+  redirects: {
+    '/assurance': { status: 301, destination: '/internal-audit' },
+    '/labs': { status: 301, destination: '/automation' },
+    '/academy': { status: 301, destination: '/training' },
+    '/intelligence': { status: 301, destination: '/research' },
+  },
+
   // Default output is static: marketing pages are prerendered to HTML assets,
   // and only the API endpoints opt out via `export const prerender = false`,
   // so they run on-demand in the Worker. This keeps client JS near-zero.
@@ -39,7 +49,7 @@ export default defineConfig({
   integrations: [
     // MDX powers the insights/guides content collection.
     mdx(),
-    // React is wired for future interactive Labs islands (stubbed for now).
+    // React is wired for future interactive Automation islands (stubbed for now).
     react(),
     // Generates sitemap-index.xml + sitemap-0.xml at build, with sensible
     // priorities: home and service pages highest, guides next, legal lowest.
@@ -48,12 +58,12 @@ export default defineConfig({
         // Priorities: home and service pages highest, guides next, legal lowest.
         const path = new URL(item.url).pathname.replace(/\/$/, '') || '/';
         const services = [
-          '/assurance',
+          '/internal-audit',
           '/audit-os',
-          '/labs',
+          '/automation',
           '/advisory',
-          '/academy',
-          '/intelligence',
+          '/training',
+          '/research',
         ];
         if (path === '/') {
           item.priority = 1.0;

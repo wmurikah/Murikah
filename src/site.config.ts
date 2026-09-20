@@ -87,10 +87,10 @@ export const SITE = {
  */
 export const SERVICES: ServiceLine[] = [
   {
-    slug: 'assurance',
+    slug: 'internal-audit',
     name: 'Internal audit',
     fullName: 'Internal audit',
-    href: '/assurance',
+    href: '/internal-audit',
     summary:
       'Co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and ISO 42001 and AI-governance readiness.',
     serviceType: 'Internal audit and assurance',
@@ -105,10 +105,10 @@ export const SERVICES: ServiceLine[] = [
     serviceType: 'Internal audit management software',
   },
   {
-    slug: 'labs',
+    slug: 'automation',
     name: 'Automation',
     fullName: 'Automation',
-    href: '/labs',
+    href: '/automation',
     summary: 'Automation builds, CRM and CMS, workflow engineering, and custom automations.',
     serviceType: 'Automation and workflow engineering',
   },
@@ -122,19 +122,19 @@ export const SERVICES: ServiceLine[] = [
     serviceType: 'Advisory and analytics',
   },
   {
-    slug: 'academy',
+    slug: 'training',
     name: 'Training',
     fullName: 'Training',
-    href: '/academy',
+    href: '/training',
     summary:
       'Training and certification: CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses.',
     serviceType: 'Professional training and certification',
   },
   {
-    slug: 'intelligence',
-    name: 'Research & benchmarks',
-    fullName: 'Research & benchmarks',
-    href: '/intelligence',
+    slug: 'research',
+    name: 'Research',
+    fullName: 'Research',
+    href: '/research',
     summary: 'Anonymised cross-client benchmarking and an annual flagship report (forthcoming).',
     serviceType: 'Benchmarking and research',
   },
@@ -196,7 +196,7 @@ export const NAV: NavItem[] = [
   {
     label: 'Solutions',
     href: '/services',
-    match: ['/services', '/assurance', '/labs', '/advisory', '/academy'],
+    match: ['/services', '/internal-audit', '/automation', '/advisory', '/training'],
     children: [
       {
         label: 'Solutions overview',
@@ -205,13 +205,13 @@ export const NAV: NavItem[] = [
       },
       {
         label: 'Internal audit',
-        href: '/assurance',
+        href: '/internal-audit',
         description:
           'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
       },
       {
         label: 'Automation',
-        href: '/labs',
+        href: '/automation',
         description: 'Automation, CRM, CMS and workflow builds.',
       },
       {
@@ -221,7 +221,7 @@ export const NAV: NavItem[] = [
       },
       {
         label: 'Training',
-        href: '/academy',
+        href: '/training',
         description: 'CISA, ISO 42001, lead-auditor readiness and masterclasses.',
       },
     ],
@@ -266,7 +266,7 @@ export const NAV: NavItem[] = [
   {
     label: 'Insights',
     href: '/insights',
-    match: ['/insights', '/intelligence'],
+    match: ['/insights', '/research'],
     children: [
       {
         label: 'All insights',
@@ -289,9 +289,9 @@ export const NAV: NavItem[] = [
         description: 'ODPC, controller and processor obligations, and privacy reviews.',
       },
       {
-        label: 'Research & benchmarking',
-        href: '/intelligence',
-        description: 'Murikah Intelligence reports and market benchmarks.',
+        label: 'Research',
+        href: '/research',
+        description: 'Murikah research reports and market benchmarks.',
       },
     ],
   },
@@ -346,7 +346,7 @@ export const SOCIAL: SocialLink[] = [
  * compact columns mirror the primary architecture (Who we are, What we do,
  * News & Insights) but each shows only a few strategic links; Legal stays in
  * the thin bottom bar. Labels are short and premium ("About", "Services",
- * "RSS"), and "Automation Lab" aligns with the hero CTA. The full page list
+ * "RSS"), and "Automation" aligns with the hero CTA. The full page list
  * lives in the header navigation, so the footer can stay short and scannable.
  */
 export const FOOTER_GROUPS: { heading: string; links: { label: string; href: string }[] }[] = [
@@ -363,8 +363,8 @@ export const FOOTER_GROUPS: { heading: string; links: { label: string; href: str
     heading: 'What we do',
     links: [
       { label: 'Services', href: '/services' },
-      { label: 'Internal audit', href: '/assurance' },
-      { label: 'Automation Lab', href: '/labs' },
+      { label: 'Internal audit', href: '/internal-audit' },
+      { label: 'Automation', href: '/automation' },
       { label: 'Pricing', href: '/pricing' },
     ],
   },
