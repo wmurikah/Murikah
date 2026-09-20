@@ -3,7 +3,7 @@
  *
  * Deliberately contains no demo logic (out of scope for the framework build).
  * Its only job is to prove the React integration + hydration boundary works on
- * /labs. Real interactive demos arrive in a later prompt. Styling uses the same
+ * /automation. Real interactive demos arrive in a later prompt. Styling uses the same
  * Tailwind tokens as the rest of the site (global stylesheet is already loaded).
  */
 export default function SandboxDemo() {
