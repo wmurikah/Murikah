@@ -1,8 +1,8 @@
 # Murikah Tutor SSO / social sign-in
 
-Murikah Tutor supports Google, Microsoft and Apple sign-in while retaining the existing local username/password flow for administrators and manually managed accounts.
+Murikah Tutor uses Google as the primary production single sign-on option while retaining the existing local username/password flow. Microsoft and Apple remain supported optional providers.
 
-The application-side OAuth/OIDC flow is already implemented. Activating a provider requires registering the Murikah Tutor web application with that identity provider and storing the resulting credentials in the runtime secret store (Cloudflare Workers production secrets, or GitHub Codespaces secrets for the development environment). Provider credentials are runtime secrets: never commit them to this repository, `wrangler.toml`, Dockerfiles, Tutor data files or shell history.
+The application-side OAuth/OIDC flow is implemented. Google credentials are required for the production Tutor account experience; Microsoft and Apple are optional. Provider credentials live only in the runtime secret store (Cloudflare Workers production secrets, or GitHub Codespaces secrets for development). Never commit them to this repository, Dockerfiles, Tutor data files or shell history.
 
 ## Production callback URLs
 
@@ -56,7 +56,7 @@ Do not expose or commit the `.p8` private key.
 
 ## Cloudflare production activation
 
-The production Worker keeps provider credentials in Cloudflare Variables & Secrets. For Google, configure the two values above on the `murikah-tutor-container-staging` Worker and keep the redirect URI exactly `https://tutor.murikah.com/api/auth/oauth/google/callback`. The provider-discovery endpoint will expose Google only when both credentials are complete, preventing a dead sign-in button.
+The production Worker keeps provider credentials in Cloudflare Variables & Secrets. Google is now a required production secret pair. Configure the two values above on the `murikah-tutor-container-staging` Worker and keep the redirect URI exactly `https://tutor.murikah.com/api/auth/oauth/google/callback`. The provider-discovery endpoint exposes Google only when both credentials are complete, so a branded button can never lead to an unconfigured provider.
 
 ## Codespaces activation
 
