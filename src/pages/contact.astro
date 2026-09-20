@@ -14,6 +14,8 @@ const crumbs = [
 
 // No-JS feedback: the endpoint redirects to /contact?status=… on form posts.
 const status = Astro.url.searchParams.get('status');
+const intent = Astro.url.searchParams.get('intent');
+const isCallIntent = intent === 'call';
 const statusMap: Record<string, { kind: 'success' | 'error'; msg: string }> = {
   ok: { kind: 'success', msg: "Thanks, we'll be in touch shortly." },
   invalid: { kind: 'error', msg: 'Please check your details and try again.' },
@@ -28,8 +30,8 @@ const labelCls = 'block text-sm font-medium text-navy';
 ---
 
 <BaseLayout
-  titleFull="Contact Murikah | Request a demo or discuss your requirements"
-  description="Talk to Murikah about co-sourced internal audit, Assurance OS, AI governance or training. Tell us about your organisation and we respond within two working days."
+  titleFull={isCallIntent ? 'Book a 20-minute call | Murikah' : 'Contact Murikah | Request a demo'}
+  description="Talk to Murikah about internal audit, Assurance OS, AI governance, automation or training. Tell us what you need and we respond within two working days."
 >
   <Section
     tone="surface"
@@ -44,12 +46,14 @@ const labelCls = 'block text-sm font-medium text-navy';
         id="page-title"
         class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
       >
-        Request a demo or discuss your requirements
+        {isCallIntent ? 'Book a 20-minute call' : 'Talk to Murikah'}
       </h1>
       <p class="mt-6 max-w-2xl text-xl text-slate">
-        Tell us about your organisation and what you are trying to achieve, whether that is
-        co-sourced internal audit, Assurance OS, AI governance or training. We will read your
-        message and respond within two working days with the right next step, usually a short call.
+        {
+          isCallIntent
+            ? 'Tell us what you want to discuss and the context we should understand. We will confirm a suitable 20-minute slot and the right person for the conversation.'
+            : 'Tell us about your organisation and what you are trying to achieve, whether that is internal audit, Assurance OS, AI governance, automation or training. We will respond within two working days with the right next step.'
+        }
       </p>
     </div>
   </Section>
@@ -157,7 +161,7 @@ const labelCls = 'block text-sm font-medium text-navy';
           </div>
 
           <div class="flex items-center gap-4">
-            <Button type="submit" variant="primary" size="lg">Send message</Button>
+            <Button type="submit" variant="primary" size="lg">{isCallIntent ? 'Request call' : 'Send message'}</Button>
             <p class="text-sm text-slate">We respond within two working days.</p>
           </div>
         </form>
@@ -231,6 +235,9 @@ const labelCls = 'block text-sm font-medium text-navy';
     const message = form.querySelector<HTMLTextAreaElement>('[name="message"]');
     if (params.get('intent') === 'demo' && message && !message.value) {
       message.value = 'I would like a demonstration of Assurance OS. Our priorities are: ';
+    }
+    if (params.get('intent') === 'call' && message && !message.value) {
+      message.value = 'I would like to book a 20-minute call. I want to discuss: ';
     }
     const statusEl = document.querySelector<HTMLElement>('#form-status');
     const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
