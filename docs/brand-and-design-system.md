@@ -58,7 +58,7 @@ real token; the extended members carry a narrow role.
 
 | Role | Name | Hex | Token | Use |
 | --- | --- | --- | --- | --- |
-| Brand anchor | Deep Navy | `#071D35` | `--color-navy` | Headings, primary actions and the persistent header. It is not the default page field. |
+| Brand anchor | Deep Navy | `#071D35` | `--color-navy` | Headings, primary actions and product chrome. The public header itself stays on paper. |
 | Brand depth | Navy Deep | `#041528` | `--color-navy-deep` | Hover/depth only. |
 | Canvas | Paper | `#F7F5F0` | `--color-paper` | Dominant reading field. |
 | Raised canvas | Surface | `#FFFFFF` | `--color-surface` | Cards, forms and report sheets. |
@@ -94,9 +94,9 @@ UI components must be at least 3:1. The marketing pair matrix is executable in
 `test/shared/marketing-contrast.test.ts`.
 
 Paper and white should carry roughly 90% of the public site. Deep navy is an
-anchor, not a field: the persistent header is dark, while the closing CTA and
-footer return to paper. This prevents a dark header + dark CTA + dark footer
-from making the whole page read as heavy.
+anchor, not a field: the public header, closing CTA and footer all sit on light
+surfaces, while navy carries type, primary actions and deliberate product
+moments. This prevents the site chrome from cutting the page into dark bands.
 
 ### Product status (RAG), product surfaces only
 
@@ -189,10 +189,9 @@ happens to be interactive.
 
 - **Canvas.** Paper and white dominate. Sections alternate between paper,
   surface and a sunk mist, separated by hairlines and space rather than boxes.
-- **Hero.** A light field with the faintest wash of gold and blue in the
-  corners. A confident display headline, a calm lead, one gold primary action
-  and one quiet ghost action. Alongside it, a light product panel that shows one
-  real thread of the work rather than a screenshot dump.
+- **Hero.** A flat paper field, a two-line headline, concise lead, one navy
+  primary action and one outlined secondary action. A large Assurance OS trace
+  view sits below the copy and proves the plan-to-board-pack promise directly.
 - **The signature light.** One restrained gold motif recurs and is never
   scattered: a fine gold beam as a structural rule, and a single soft aperture
   glow behind one key headline per page. Used once, it reads as craft; used
@@ -202,8 +201,8 @@ happens to be interactive.
   recedes.
 - **Rhythm.** Large section padding, wide gaps between cards, a single clear
   idea per section with an eyebrow, a title, and room to breathe.
-- **Closing.** At most one navy band near the end, then the dark footer. The eye
-  should arrive at the call to action rested, not fatigued.
+- **Closing.** The closing CTA and footer remain light. Navy is reserved for
+  type, actions and deliberately contained product surfaces.
 
 ---
 
@@ -303,9 +302,10 @@ Ten rules that keep the multibillion-dollar feel intact. When in doubt, remove
 something.
 
 1. **White and paper lead.** Roughly 85 to 90 per cent of any surface is light.
-   Dark fields are moments, not backgrounds.
-2. **Gold is rationed.** One primary action per view, plus the fine signature
-   light. Gold is a highlight, never a fill or a mood.
+   Public navigation, CTA and footer chrome remain light; dark fields are
+   contained product moments, not page bands.
+2. **Gold is rationed.** Gold belongs to the mark and a fine structural accent.
+   Primary actions are navy; gold is never the dominant fill or mood.
 3. **Group with space and hairlines, not boxes.** If a border can become a
    hairline or a gap, it should.
 4. **One idea per view.** Every section and slide earns its place with a single
