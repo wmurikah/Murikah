@@ -58,12 +58,12 @@ export default defineConfig({
         // Priorities: home and service pages highest, guides next, legal lowest.
         const path = new URL(item.url).pathname.replace(/\/$/, '') || '/';
         const services = [
-          '/assurance',
+          '/internal-audit',
           '/audit-os',
-          '/labs',
+          '/automation',
           '/advisory',
-          '/academy',
-          '/intelligence',
+          '/training',
+          '/research',
         ];
         if (path === '/') {
           item.priority = 1.0;
