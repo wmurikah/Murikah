@@ -19,7 +19,7 @@ class FollowupChatTests(unittest.TestCase):
         self.assertIn("Murikah is reconnecting…", source)
         self.assertNotIn("Murikah fast chat timed out before the first visible response.", source)
         self.assertNotIn("candidates[0]", source)
-        self.assertIn("terminal_stream_error", source)\n
+        self.assertIn("terminal_stream_error", source)
     def test_inherited_source_metadata_does_not_promote_followup(self):
         source = (ROOT / "railway/accelerate_chat.py").read_text(encoding="utf-8")
         self.assertNotIn('if context.source_manifest:', source)
