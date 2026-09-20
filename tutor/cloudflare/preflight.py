@@ -378,6 +378,8 @@ def main() -> int:
             'async def gemini_stream(',
             'async def nvidia_stream(',
             '"enable_thinking": False',
+            'def portable_chat_messages(',
+            'DEFAULT_FAST_HISTORY_CHARS = 60000',
             'async def race_first_visible(',
             'MURIKAH_LATENCY route=fast',
         ),
@@ -392,6 +394,7 @@ def main() -> int:
             'terminal_provider_unavailable',
             'Murikah is reconnecting…',
             'nvidia_stream(',
+            'portable_chat_messages(messages)',
             '_FAST_TURN_TIMEOUT_SECONDS',
             'route=deep_agent',
             'route=fast',
@@ -409,10 +412,12 @@ def main() -> int:
     require_markers(
         "tutor/railway/persist_learning_journal.py",
         (
-            "MURIKAH_D1_LEARNING_JOURNAL_V1",
+            "MURIKAH_D1_LEARNING_JOURNAL_V2",
             "learning_turn_start",
             "learning_turn_finish",
             "learning_turn_fail",
+            "_murikah_public_error",
+            "content=_murikah_public_error",
         ),
     )
     require_markers(
