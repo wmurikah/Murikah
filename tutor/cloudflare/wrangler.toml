@@ -46,8 +46,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v23 races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash before any learner-visible failure.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v23" }
+# v24 preserves exhausted guest work through account handoff and keeps generated media within the viewport.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v24" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
