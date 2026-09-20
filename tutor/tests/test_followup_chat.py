@@ -18,8 +18,10 @@ class FollowupChatTests(unittest.TestCase):
         self.assertIn("portable_chat_messages", source)
         self.assertNotIn("recover_with_standard_pipeline", source)
         self.assertNotIn("fast_lane_recovery", source)
-        # One invocation remains intentionally: the explicit deep-agent branch.
-        self.assertEqual(source.count("await prompt_pipeline.run(context, stream)"), 1)
+        # Ordinary fast chat must never recover into AgenticChatPipeline.
+        self.assertEqual(source.count("await prompt_pipeline.run(context, stream)"), 0)
+        # The one agent invocation that remains is the explicit deep-agent branch.
+        self.assertEqual(source.count("await pipeline.run(context, stream)"), 1)
 
     def test_inherited_source_metadata_does_not_promote_followup(self):
         source = (ROOT / "railway/accelerate_chat.py").read_text(encoding="utf-8")
